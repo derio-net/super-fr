@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-12 skill wording only (fr-enabled, not vk-enabled); nothing this page describes changed
+reviewed: 2026-11-12 the journal gained a `lens` entry kind (spec and plan journals only, refused on debug); the debug journal this page describes is unchanged
 ---
 
 ## Overview: why "just try something" is the expensive path
