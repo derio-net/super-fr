@@ -82,11 +82,14 @@ rows:
       and a stale-base amendment is refused before merge or marks its row contested
     origin:
     - spec:2026-11-04-repo-feature-settings#R16
-    levels: {}
-    status: not-implemented
-    notes: 'built by plan 2026-11-12-acceptance-fragments (plan 2 of R29, #1379); its
-      scenario tests/scenarios/acceptance-fragments-amendments.sh is written by the
-      phase that builds the row'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_amend.py#test_set_status_on_a_merged_row_appends_amendments_and_leaves_its_owner_alone
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_fragments_amendments
+    status: ci
+    notes: amend ops, record amendment shape, stale-base refusal at check/deliver, contested
+      rows as debt
     scenario: tests/scenarios/acceptance-fragments-amendments.sh
     issues:
     - derio-net/super-fr#1379
