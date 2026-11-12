@@ -64,10 +64,10 @@ R2. The front page opens with a hero: a short eyebrow, a headline, a subline, an
 R3. The front page shows how a run goes as a strip of ordered steps, and marks the steps that are the operator's.
 R4. The front page has six to eight numbered sections; each has a problem the reader recognises, a headline, what the reader gains, how fr does it, and one link to the page that explains it. The build assigns the numbers ("01 / 07").
 R5. The front page lists every other page, grouped as Explainers, Guides and Reference under the anchors `#explainers`, `#guides` and `#reference`, links the acceptance report (`./acceptance/`), and ends with a closing call to action.
-R6. The front page uses the broadsheet identity: the same embedded fonts and the same palette as the other pages in dark mode, a light palette under `prefers-color-scheme: light`, no horizontal scrolling at a 390 px wide viewport, no JavaScript and no request to another host.
+R6. The front page uses the broadsheet identity: the embedded fonts and the dark palette are taken from a page the renderer produced in the same build, so they cannot differ from the other pages; it has a light palette under `prefers-color-scheme: light`, no horizontal scrolling at a 390 px wide viewport, no JavaScript and no request to another host.
 R7. The current essay is kept, with its content, as the explainer `docs/explainers/why-fr.md`; the front page links to it, and it no longer carries the list of every page.
 R8. Every page the build writes, the front page included, has the same top bar: the site name linking to the front page, links to the front page's Explainers, Guides and Reference anchors, and a link to the GitHub repository; its links are correct from every route (`x.html`, `guides/x.html`, `reference/x.html`).
-R9. The build fails (exit 1, naming the page and the defect) and writes no degraded page when: the front page's front matter lacks a required hero key; a section names an unknown kind; a numbered section lacks its problem, or its link; there are fewer than six or more than eight numbered sections; the top bar cannot be inserted at exactly one place in a rendered page; or the front page has no embedded font.
+R9. The build fails (exit 1, naming the page and the defect) and writes no degraded page when: the front page's front matter lacks a required hero key; `layout: landing` is set on a page that is not routed to `index.html`; a section names an unknown kind; a numbered section lacks its problem, or its link; there are fewer than six or more than eight numbered sections; the run strip is not exactly one ordered list; the page-list section lacks its marker; the top bar cannot be inserted at exactly one place in a rendered page; or the front page has no embedded font.
 R10. Every relative link on the front page, in its body and in its front matter, goes through the build's one link rule (another page's source becomes its route, another tracked file a GitHub link at the built commit, an untracked path fails the build).
 R11. A change to the front-page template deploys the site: `pages.yml` triggers on the template's directory, and the `site-build` CI job builds the front page on every pull request.
 R12. The repo's guidance for page authors (`.claude/rules/explainers-currency.md` and its generated mirror, `docs/docs-currency.md` where it describes the index) says how the front page is authored, and every claim on the front page is one an explainer or guide it links to already makes.
@@ -123,16 +123,20 @@ directly under a heading names the section's kind:
 
 Any other kind fails the build (R9). The section heading is the section's headline.
 Markdown is converted with python-markdown and the renderer's extension list
-(`fenced_code`, `codehilite`, `tables`, `sane_lists`); the build already depends on
-`markdown`.
+(`fenced_code`, `codehilite`, `tables`, `sane_lists`). `markdown` is present only in
+the isolated environment the deploy and the `site-build` job run the build in
+(`--with markdown`), not in the test environment, so `build-site.py` imports it
+lazily, inside the build, and every landing function takes the converter as an
+argument (`to_html`). Unit tests pass a stand-in converter and assert on structure,
+never on converted or highlighted markup; the real conversion is exercised by the
+`site-build` job.
 
 ### B. Rendering: `scripts/site/`
 
 - `scripts/site/landing.html` — the page skeleton with named placeholders.
-- `scripts/site/landing.css` — the landing styles: the broadsheet custom properties
-  copied by name and value for dark, a light set under
-  `@media (prefers-color-scheme: light)`, a fluid layout (single column under
-  ~720 px).
+- `scripts/site/landing.css` — the landing styles: a light set of the broadsheet
+  custom properties under `@media (prefers-color-scheme: light)` and a fluid layout
+  (single column under ~720 px). It does not define the dark palette.
 - `scripts/site/bar.css` — the top bar's styles, used on every page.
 
 `build-site.py` gains pure functions, tested without the renderer: parse the landing
@@ -142,9 +146,11 @@ HTML, assemble the page. The page list on the landing is built from the same
 `id="reference"` on the group headings. `fill_pages` keeps its Markdown behaviour for
 any other page that carries the marker.
 
-Fonts: the landing embeds the `@font-face` rules the blog-craft renderer emitted for
-another page of the same build (extracted from that page's HTML), so the two can
-never use different font files; `check_rendered` then applies to the landing as to
+Fonts and dark palette: the landing embeds the `@font-face` rules and the `:root`
+custom-property block the blog-craft renderer emitted for another page of the same
+build (extracted from that page's HTML; a page with neither fails the build), so the
+landing can never use different font files or different dark colours, also after the
+renderer pin moves; `check_rendered` then applies to the landing as to
 every page. The build renders the landing after the other pages for that reason.
 
 Links (R10): the body goes through `rewrite_markdown` before conversion, and each
@@ -152,10 +158,13 @@ front-matter `href` through `rewrite_href`, both with `index.md` as the linking 
 
 ### C. The top bar (R8)
 
-After a page is rendered (by blog-craft or by the landing renderer), the build
-inserts the bar's `<style>` before `</head>` and a `<nav class="site-bar">` directly
+Pages are rendered into a temporary directory, never straight into the output
+directory (today `render_page` writes the final file before `check_rendered` runs).
+After a page is rendered (by blog-craft or by the landing renderer) and has passed
+`check_rendered`, the build inserts the bar's `<style>` before `</head>` and a `<nav class="site-bar">` directly
 after the `<body>` open tag. If either anchor is not found exactly once the build
-fails (R9): a renderer change must not silently drop the bar. Links are relative to
+fails (R9): a renderer change must not silently drop the bar. Only then is the page
+written to its route, so a refused page leaves no file there. Links are relative to
 the page's route: home is `index.html` (or `../index.html`), the groups are
 `index.html#explainers` and so on, GitHub is `--repo-url`. The bar uses the page's
 own custom properties with fallbacks, so it matches both the dark article pages and
@@ -166,10 +175,14 @@ the landing in either scheme. It is not sticky and needs no JavaScript.
 ### D. The essay moves to `why-fr.md`
 
 `git mv docs/explainers/index.md docs/explainers/why-fr.md`, then a new `index.md`.
-`why-fr.md` keeps the essay's title, `tldr`, `covers` and body, drops the "Every
+`why-fr.md` keeps the essay's `tldr`, `covers` and body, is retitled "Why fr: the
+trustworthy agent" (the front page takes over the "fr: …" title), drops the "Every
 page" section and its marker, and has its `reviewed` stamp bumped. The question-round
-wording tripwire covers `why-fr.md` as well as `index.md`. Any link elsewhere in the
-repo that pointed to the index for the essay's content is re-pointed.
+wording tripwire covers `why-fr.md` as well as `index.md`. Links that pointed
+to the index for the essay's content are re-pointed: `README.md`'s "Start here" link
+to the published `index.html` ("the pipeline and why it is trustworthy") goes to
+`why-fr.html`. `docs/explainers/fr-isolation.md`'s closing "Back to the fr overview"
+link stays on `index.md`: the front page is the overview.
 
 ### E. Front-page copy
 
@@ -198,7 +211,8 @@ from the acceptance matrix.
   a valid landing with six to eight numbered sections whose links all resolve.
 - `.claude/rules/explainers-currency.md` describes the landing source format; its
   OpenCode mirror is regenerated with `scripts/sync-opencode.py`.
-  `docs/docs-currency.md` is updated where it describes the index.
+  `docs/docs-currency.md` is updated where it describes the index, and its `covers`
+  gains `scripts/site/**`, so a template change flags the guide that describes it.
 
 ### Non-goals
 
