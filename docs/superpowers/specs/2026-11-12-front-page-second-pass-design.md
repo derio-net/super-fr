@@ -284,3 +284,9 @@ gate: developer
 ## Test Plan
 
 1. [developer] After merge, wait for the "Deploy explainers to Pages" run on `main`. Open `https://derio-net.github.io/super-fr/`: the new front page loads with its terminal hero and two acts; the four diagrams are drawn; the exit-gates and wave-driver sections open their new pages, each showing its diagram; the top bar returns to the front page; `#explainers` lists both new pages.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-12-front-page-second-pass | `derio-net/super-fr` | `2026-11-12-front-page-second-pass` | — |
