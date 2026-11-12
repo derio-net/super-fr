@@ -103,6 +103,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "release",
     "settings",
     "docs",
+    "lenses",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
 not mutate them on their behalf.
@@ -170,7 +171,9 @@ merged PRs a post-merge gate still holds, and `release.py` runs it on the defaul
 which is no artifact kind, and commits nothing.
 `fr docs` (2026-11-11 docs-currency, R8) writes nothing: it reads `.fr/docs.yaml` (not a registered
 artifact kind, like `.fr/debt.yaml`), page files and read-only git, and must run in CI on a tree
-the gate would refuse."""
+the gate would refuse.
+`fr lenses` (2026-11-12 review-lenses, R3) writes nothing: it reads `.fr/lenses.yaml` (not a
+registered artifact kind) and the shipped lens manifests, and must run on a stale repo."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by

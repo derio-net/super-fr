@@ -137,7 +137,7 @@ artifacts` (preview), `fr migrate artifacts --yes` (apply) and
 
 **Exempt commands** are `migrate` plus the read-only commands in
 `fr.artifacts.trigger.READ_ONLY_COMMANDS` — `status`, `skills`, `isolation`, `init`,
-`validate`, `harness`, `triage`, `usage`, `services`, `cloud`, `debt`, `gate`, `release`, `settings` and `docs` at the time of writing, but the tuple is the source of
+`validate`, `harness`, `triage`, `usage`, `services`, `cloud`, `debt`, `gate`, `release`, `settings`, `docs` and `lenses` at the time of writing, but the tuple is the source of
 truth — along with `--help`, `--version` and `FR_SKIP_MIGRATION=1`. The criterion for
 membership is the tuple's own docstring: the command never mutates a registered artifact.
 `harness` meets it by only reading hook registrations; `triage` by never reading or
@@ -152,6 +152,7 @@ writes nothing (`status` reads tags and the forge, and `release.py` runs it on t
 `settings` mutates no registered artifact (`show`/`check` read `.fr/settings.yaml` from the default
 ref; `init` writes that file, which is no artifact kind, and commits nothing).
 `docs` writes nothing (it reads `.fr/docs.yaml`, page files and read-only git, none a registered artifact) and runs in CI on a tree the gate would refuse.
+`lenses` writes nothing (it reads `.fr/lenses.yaml`, no registered artifact, and the shipped lens manifests) and must work on a repo with stale artifacts.
 Two of those
 matter beyond tidiness: `fr status` is
 registered as never mutating and must not mutate by proxy, and `fr validate
