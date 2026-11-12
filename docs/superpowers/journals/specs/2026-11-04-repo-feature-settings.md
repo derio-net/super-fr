@@ -931,3 +931,8 @@ Quiet is its own requirement and row with its own scenario.
 ### phase-split-2026-11-12-placement-resolver-p4 · decision · ask: the stealth placement (R24, row placement-stealth)
 
 Stealth is its own requirement and row with its own scenario.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p5 created=2026-11-12T11:57:14+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p5 · decision · ask: merged status and archive outside repo (R25, R17's quiet/stealth clause)
+
+Shared by quiet and stealth, with its own row placement-merged-status.
