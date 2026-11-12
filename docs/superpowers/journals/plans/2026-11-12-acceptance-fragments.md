@@ -127,3 +127,102 @@ refused before it merges. The merged-ref notice is added per call, outside the m
 ### p1-r2-resolved · finding [fixed] · resolves p1-r2: The fold memo key omitted the merged-ref source, so the cached notice could be wrong (phase 1)
 
 4ec919d15: the notice is applied outside the cached value. Test test_the_no_default_ref_notice_is_not_served_from_the_cache_to_an_explicit_ref (red on the old code).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-row-count-before-after created=2026-11-12T04:08:45+00:00 phase=2 -->
+### p2-row-count-before-after · discovery · This repo's migration kept all 617 rows, by status, in 121 fragments (phase 2)
+
+Before (docs/acceptance/matrix.yaml at v5): 617 rows: ci 513, walk-owed 40, walked 40,
+not-implemented 21, manual 1, scheduled 1, unwired 1. After `fr migrate artifacts --yes`
+(commit "chore(fr): migrate artifacts"): `fr acceptance status --brief` reports the same
+617 by status, from 120 spec fragments plus legacy.yaml (the rows citing no single spec:
+debug journals, two-spec origins, code). `fr validate artifacts` and `fr acceptance check`
+pass; the three committed reports were deleted. One row
+(archive-retargets-matrix-refs) cited the deleted retarget tests and was re-pointed with
+`fr acceptance set-status`.
+
+<!-- fr:journal kind=decision scope=plan id=p2-anchor-repair-folded-into-split created=2026-11-12T04:08:45+00:00 phase=2 -->
+### p2-anchor-repair-folded-into-split · decision · The matrix name-anchor repair is unregistered; the split applies its conversion (phase 2)
+
+The runner runs repairs after schema steps, and the 5 -> 6 hop deletes the matrix, so the
+`matrix-name-anchors` Repair could never run again (and would be reported "skipped",
+i.e. already done, when it had not run). It is no longer registered; the split
+(`fr.artifacts.matrix_fragments.split_texts`) maps every ref through its `conversions`
+before converting refs to logical. Pinned by
+test_migration_matrix_fragments.py#test_the_split_converts_line_anchors.
+
+<!-- fr:journal kind=decision scope=plan id=p2-new-row-feature-resolution created=2026-11-12T04:08:45+00:00 phase=2 -->
+### p2-new-row-feature-resolution · decision · A new row's fragment is its one origin spec, else --feature, else the run's spec (phase 2)
+
+`fr acceptance add` writes a new row to the fragment of its one origin spec (a spec path
+origin is converted to `spec:<slug>` first); a row naming no single spec is refused unless
+`--feature <slug>` names the fragment (`legacy` for none). The record kind's shape is
+unchanged (phase 3 owns the 10 -> 11 bump), so `--feature` and `--repo` ride on
+`RecordTarget`, and a run record's new row with no single-spec origin goes to the run's
+spec fragment. `repo:` comes from a sibling fragment, else the origin remote, else
+`--repo`. `fr acceptance init` writes `docs/acceptance/features/.gitkeep` so the
+directory survives a clone; an empty matrix splits into no fragment.
+
+<!-- fr:journal kind=decision scope=plan id=p2-reports-not-written created=2026-11-12T04:08:45+00:00 phase=2 -->
+### p2-reports-not-written · decision · Writers and init write no report now; check's drift gate and report --deterministic stay for phase 4 (phase 2)
+
+add / set-status / record apply / init write only fragments (R20). The committed set is
+deleted by the migration, so check's existence-gated report-drift gate is inert in a
+migrated repo; `fr acceptance report --deterministic` still renders the set, through
+`fr.acceptance.logical.path_view` (logical refs shown as the paths they resolve to).
+Phase 4 finalises the report surfaces. test_tripwire_acceptance_report_sync now asserts
+no report (and no matrix) is tracked.
+
+<!-- fr:journal kind=finding scope=plan id=p2-interim-set-status-on-merged-row created=2026-11-12T04:08:45+00:00 phase=2 state=open review_scope=in -->
+### p2-interim-set-status-on-merged-row · finding [open] (reviewer: in scope) · Interim in-place set-status on a merged row is invisible to the fold (phase 2)
+
+phase-1's fold keeps a merged row's merged definition and adds a notice when the working
+tree edits it in place (decision fold-pending-is-the-working-tree). Until phase 3's
+amendments land, `set-status` on a merged row rewrites the owning fragment in place
+(test_acceptance_fragment_writes.py#test_interim_set_status_on_a_merged_row_edits_its_owning_fragment_in_place
+pins only the file), so every reader keeps the old status. With no default ref, HEAD
+stands in for merged history, so the same holds for rows committed on the branch
+(tests/scenarios/exit-gates-verify-without-section.sh now commits each rewrite).
+In this repo no fragment is on origin/main yet, so every row is pending and set-status
+is visible. Phase 3 (set-status on a merged row becomes an amendment) must land before
+this PR merges.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-suite-slower created=2026-11-12T04:08:45+00:00 phase=2 -->
+### p2-suite-slower · discovery · The acceptance-heavy tests got slower because every reader now folds over git (phase 2)
+
+load_effective runs a handful of git calls per fold (memoised per ref sha and
+working-tree digest, but the default-ref and toplevel probes run on every call), so
+tests that seed a fresh repo per case and call several readers pay for it. The full
+suite took 22 min on this host under a load average near 60 from other processes; it
+was not measured against a baseline, so the fold's share is unknown. Worth a timing
+pass (and maybe memoising the default-ref probe per root) before CI's time budget
+notices.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-12T04:08:45+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a frozen reader is a verbatim copy of the V4 pattern by rule; nothing may be factored out of a sha-pinned class
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-12T04:08:45+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the retiring branch is one early return beside the stamp path; folding it into the stamp path would make every existing hop take the new branch
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-12T04:08:45+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+the reader cutover replaced each call site in place through load_effective / has_fragments / path_view; the duplication left (fragment existence checks) is already one helper
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-11-12T04:08:45+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+the writer reuses edit.insert_row/replace_row unchanged on fragment text; the one new renderer (render_fragment) is shared with the migration
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t6 created=2026-11-12T04:08:45+00:00 phase=2 -->
+### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
+
+the fixture sweep went through one helper module (acceptance_helpers.write_fragments, write_matrix_fragments, fragments_text) and one scenario helper (matrix_fragment); no second copy to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t7 created=2026-11-12T04:08:45+00:00 phase=2 -->
+### no-refactor-p2-t7 · discovery · no-refactor-because P2.T7 (phase 2)
+
+data migration, rule and doc prose, and a scenario script; no code to clean
