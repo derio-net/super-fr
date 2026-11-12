@@ -7,4 +7,4 @@ emitted:
   pr: https://github.com/derio-net/super-fr/pull/1424
 evidence:
   tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/vk-compat-deliver2-suite.log
-  walk: none
+  walk: /Users/idermitzakis/.cache/fr/walks/2026-11-12-chore-remove-vk-compat/20261112T213643Z.log
