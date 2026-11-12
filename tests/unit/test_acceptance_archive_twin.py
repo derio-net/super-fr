@@ -91,9 +91,9 @@ def test_check_survives_debug_journal_archive(
 # ── R7: the reworded warning, and plan-dir refs stay errors ─────────────────
 
 
-def test_twin_warning_says_the_ref_survived_an_archive_fr_did_not_perform(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_twin_warning_names_no_removed_fix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review p2-r5: refs are resolved through the archive at read time, so the
+    warning says where the ref resolved and asks for no retarget (that step is gone)."""
     root = make_repo(tmp_path, row(origin='"own:docs/superpowers/specs/s.md"'))
     (root / "docs/superpowers/specs/s.md").rename(root / "docs/superpowers/implemented/specs/s.md")
     result = run_check(root, monkeypatch)
@@ -101,16 +101,30 @@ def test_twin_warning_says_the_ref_survived_an_archive_fr_did_not_perform(
     flat = " ".join(result.output.split())
     assert "names an archived path" in flat
     assert "docs/superpowers/implemented/specs/s.md" in flat
-    assert "survived an archive fr did not perform; retarget it" in flat
+    assert "retarget" not in flat
+    assert "did not perform" not in flat
 
 
-def test_a_stale_plan_dir_ref_is_still_an_error(
+def test_a_plan_dir_ref_resolves_at_its_archived_counterpart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = make_repo(tmp_path, row(origin='"own:docs/superpowers/plans/p1/_meta.yaml"'))
+    """Review p2-r5: `fr archive` moves a plan dir to implemented/plans/ and no
+    longer retargets rows, so a ref to the live plan path resolves there."""
+    root = make_repo(
+        tmp_path, row() + row(id="r2", origin='"own:docs/superpowers/plans/p1/_meta.yaml"')
+    )
     done = root / "docs/superpowers/implemented/plans/p1"
     done.mkdir(parents=True)
     (done / "_meta.yaml").write_text("x: 1\n")
+    result = run_check(root, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "docs/superpowers/implemented/plans/p1/_meta.yaml" in " ".join(result.output.split())
+
+
+def test_a_plan_dir_ref_with_no_counterpart_is_still_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row(origin='"own:docs/superpowers/plans/p1/_meta.yaml"'))
     result = run_check(root, monkeypatch)
     assert result.exit_code == 1, result.output
     assert "ref does not resolve" in result.output

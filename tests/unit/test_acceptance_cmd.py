@@ -229,7 +229,7 @@ def test_archived_ref_downgrades_to_warning(
     result = run_check(root, monkeypatch)
     assert result.exit_code == 0, result.output
     assert "names an archived path" in " ".join(result.output.split())
-    assert "retarget it" in " ".join(result.output.split())
+    assert "retarget" not in " ".join(result.output.split()), "no removed fix is named"
 
 
 def test_staleness_uncited_test_plan_spec_errors(

@@ -140,17 +140,40 @@ def _sibling_base(root: Path, sibling_root: str, repo: str) -> Path | None:
     return base if (base / ".git").exists() else None
 
 
+def archived_counterpart(path: str) -> str | None:
+    """Where `fr archive` moves `path`, or None (review p2-r5).
+
+    Refs are not retargeted at archive time any more (spec 2026-11-04 R18), so a
+    path ref into `docs/superpowers/{specs,journals,plans}/` is resolved at READ
+    time against its archived twin. The mapping is the archive's own, not
+    restated: `archive_twin` for specs and journals (derived from
+    `fr.journal.model`), and the plan roots `fr archive` moves between
+    (`fr.archive.PLANS_REL` → `fr.closeout.IMPLEMENTED_PLANS_REL`)."""
+    twin = archive_twin(path)
+    if twin is not None:
+        return twin
+    from fr.archive import PLANS_REL
+    from fr.closeout import IMPLEMENTED_PLANS_REL
+
+    live, done = f"{PLANS_REL.as_posix()}/", f"{IMPLEMENTED_PLANS_REL.as_posix()}/"
+    if path.startswith(live):
+        return done + path[len(live) :]
+    if path.startswith(done):
+        return live + path[len(done) :]
+    return None
+
+
 def _resolve_ref(row_id: str, ref: str, base: Path, result: CheckResult) -> None:
     _, path, frag = split_ref(ref)  # fragment stripped for existence (trap 3)
     if (base / path).exists():
         if frag and is_python(path):
             _check_python_anchor(row_id, ref, base / path, result)
         return
-    twin = archive_twin(path)
+    twin = archived_counterpart(path)
     if twin and (base / twin).exists():
         result.warnings.append(
-            f"row {row_id}: {ref} names an archived path (now {twin}) — it "
-            f"survived an archive fr did not perform; retarget it"
+            f"row {row_id}: {ref} names an archived path, resolved at {twin} — "
+            "refs are read through the archive, so nothing needs to change"
         )
         return
     result.errors.append(f"row {row_id}: ref does not resolve: {ref}")
