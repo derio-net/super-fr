@@ -3,7 +3,7 @@ run: 2026-11-12-feat-acceptance-fragments
 workflow: fr-goal@1
 branch: feat/acceptance-fragments
 started: '2026-11-12T00:15:08+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -32,8 +32,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-12T07:57:46+00:00'
+    state: done
+    at: '2026-11-12T08:44:04+00:00'
     members:
     - implement-phase
     - review-phase
@@ -148,13 +148,20 @@ steps:
           tests: p4-suite.log@f8c05ff6057f;tree=e7afb93ddf2aae3116e36ab245bf7c6000019319b077bf807bdf8d28c25257e4
           visual: none
       phase/4/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-12T07:57:46+00:00'
           agent: a7f88953ed11d8c36
           harness: claude-code
           model: claude-opus-5-5
           session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T08:44:04+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-4
+          reviewer: a7f88953ed11d8c36
+          visual: none
+          findings: p4-gitlab-pages-fail-open,p4-comment-marker-hijack,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7
   journal-check:
     state: pending
   deliver:

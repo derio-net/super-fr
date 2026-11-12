@@ -542,3 +542,90 @@ templates share the existing placeholder mechanism; the publish blocks are one c
 ### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
 
 docs, workflow and scenario edits only
+
+<!-- fr:journal kind=review scope=plan id=review-phase-4 created=2026-11-12T08:44:04+00:00 phase=4 -->
+### review-phase-4 · review · Phase 4 review (derived reports): seven in-scope findings, all fixed (phase 4)
+
+Independent reviewer over `git diff 46eead987..f9ed61e76`. Both security fixes held on
+review: GitLab `from_gitlab` maps only confirmed-access-control `private` (and `enabled` on a
+private/internal project) to controlled, everything else unknown, and `pages_allowed` refuses
+every non-controlled answer and exception; `fr acceptance comment` edits only a marker
+comment its own login wrote and posts fresh when the identity is unknown. Tracked-report
+refusal covers new and legacy paths; GitHub Pages jobs gate every later step on the check.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-12T08:44:04+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · Skipping a Pages deploy leaves the already-published site live; the explainer claimed a repo turned private keeps no public site, and the skip was only a warning (phase 4)
+
+R21's 'no wider than the repo' breaks silently once visibility narrows on a plan whose Pages stay public.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-12T08:44:04+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · Scaffolded GitLab pages job ran pages-check with no forge credential, so it could never pass (phase 4)
+
+Fails closed, but the scaffolded feature never works and nothing says why.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-12T08:44:04+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · RealGlabClient inferred gitlab.com (Pages access control confirmed) from host=None, which GITLAB_HOST or glab's default host can contradict (phase 4)
+
+A self-managed instance could be assumed to enforce Pages access control without proof.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-12T08:44:04+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · GitLab pages job had no needs on acceptance-report, so a failing matrix still published (phase 4)
+
+The GitHub job has needs: matrix.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-12T08:44:04+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · pages.yml rendered the folded report from a shallow checkout; the first merged amendment would make every deploy ship the placeholder (phase 4)
+
+fold raises FoldHistoryError on shallow history once a fragment carries amendments.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-12T08:44:04+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · Rows describing the removed committed-report behaviour stayed status ci with no retire/reword amendment (phase 4)
+
+Their refs are whole-file, so check could not see the behaviour inside surviving files was gone.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-12T08:44:04+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · Leftover committed-report references: .gitattributes LF block, report.py docstrings, stale .test_durations entries (phase 4)
+
+Describes machinery that no longer exists.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-file-level-refs-cannot-go-stale created=2026-11-12T08:44:04+00:00 phase=4 -->
+### p4-file-level-refs-cannot-go-stale · discovery · A file-level acceptance ref (no #name anchor) cannot go stale: check only resolves the file (phase 4)
+
+p4-r6's rows kept `status: ci` after their behaviour was removed because each ref named a
+whole test file that still exists. Name-anchored refs are caught (acceptance-ci-built-reports
+was). Worth a follow-up so a removed behaviour cannot hide behind a surviving file.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-12T08:44:04+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: Skipping a Pages deploy leaves the already-published site live; the explainer claimed a repo turned private keeps no public site, and the skip was only a warning (phase 4)
+
+d62e056b7: the pre-deploy re-check emits ::error:: naming how to unpublish by hand and exits 1 (GitHub template, GitLab pages script, this repo's pages.yml, where docs and report are one deployment so the refusal fails it whole); the explainer says the re-check stops new deploys and cannot unpublish.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-12T08:44:04+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: Scaffolded GitLab pages job ran pages-check with no forge credential, so it could never pass (phase 4)
+
+d62e056b7: the GitLab pages job sets GITLAB_TOKEN: $FR_PAGES_TOKEN; the init notice names the masked read_api variable and glab-in-image for self-managed hosts; goldens regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-12T08:44:04+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: RealGlabClient inferred gitlab.com (Pages access control confirmed) from host=None, which GITLAB_HOST or glab's default host can contradict (phase 4)
+
+2f32f77ca: access control is confirmed only when the project API answer's web_url host is gitlab.com; GITLAB_HOST/GL_HOST pointing elsewhere, or no web_url, gives unknown. The three new tests were confirmed red on the pre-fix client by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-12T08:44:04+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: GitLab pages job had no needs on acceptance-report, so a failing matrix still published (phase 4)
+
+d62e056b7: needs: [acceptance-report] on the GitLab pages job, asserted in tests.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-12T08:44:04+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: pages.yml rendered the folded report from a shallow checkout; the first merged amendment would make every deploy ship the placeholder (phase 4)
+
+d62e056b7: fetch-depth: 0 on pages.yml's checkout, asserted in test_pages_workflow.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-12T08:44:04+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: Rows describing the removed committed-report behaviour stayed status ci with no retire/reword amendment (phase 4)
+
+164a4a006, 0e83725d6, 2186d33b5 reword acceptance-report-formats, acceptance-report-dual, acceptance-report-drift-gate to the derived-report claims; 149b6c80a, db21de751, 221b1ebdb, 4ad379fca retire acceptance-report-dual-gate, acceptance-report-tracked, acceptance-report-cli-regen, acceptance-ci-built-reports; notes cite R20; fr acceptance check passes.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-12T08:44:04+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: Leftover committed-report references: .gitattributes LF block, report.py docstrings, stale .test_durations entries (phase 4)
+
+e9fdf227b: .gitattributes removed (it held only the report block), the aggregates=False path removed from report.py with docstrings rewritten, 137 stale .test_durations keys dropped (each verified absent from collection). Path constants and the migration's delete list keep naming the retired files on purpose.
