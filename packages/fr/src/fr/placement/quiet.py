@@ -221,11 +221,44 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
         raise SettingsError(f"placement quiet: {e}") from e
 
 
+_OWNED: set[tuple[str, str]] = set()
+"""(common dir, worktree path) pairs already verified this process."""
+
+
+def _check_owner(root: Path, path: Path) -> None:
+    """The worktree at *path* must be THIS repo's, on `fr`. The path is keyed by the
+    repo's directory name only, so two repos of the same name share it: reusing another
+    repo's worktree would commit this repo's artifacts to that repo's `fr` branch and
+    push them to its origin."""
+    mine = paths._common_dir(Path(root))
+    if mine is not None and (str(mine), str(path)) in _OWNED:
+        return
+    theirs = _git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    owner = Path(theirs.stdout.strip()).resolve() if theirs.returncode == 0 else None
+    if mine is None or owner is None or owner != mine.resolve():
+        owner_repo = owner.parent if owner is not None and owner.name == ".git" else owner
+        raise SettingsError(
+            f"placement quiet: {path} is the `{QUIET_BRANCH}` worktree of another repository "
+            f"({owner_repo or 'unknown'}), not of {Path(root).resolve()}: two repos with the "
+            "same directory name share that path. Move one of them (or that worktree) "
+            "away and retry"
+        )
+    head = _git(path, "symbolic-ref", "--quiet", "HEAD")
+    if head.returncode != 0 or head.stdout.strip() != QUIET_REF:
+        raise SettingsError(
+            f"placement quiet: {path} is a worktree of {Path(root).resolve()} but its HEAD is "
+            f"{head.stdout.strip() or 'detached'}, not {QUIET_REF}; fr writes artifacts only "
+            f"on `{QUIET_BRANCH}`. Switch it back (`git -C {path} switch {QUIET_BRANCH}`)"
+        )
+    _OWNED.add((str(mine), str(path)))
+
+
 def ensure_worktree(root: Path) -> Path:
     """The fr worktree, created on demand from `origin/fr` (a local `fr` branch tracking
     it), never with a force flag. Refuses a path that is there but is not it."""
     path = worktree_path(root)
     if (path / ".git").exists():
+        _check_owner(root, path)
         return path
     if path.exists() and any(path.iterdir()):
         raise SettingsError(
@@ -257,6 +290,7 @@ def fast_forward(root: Path) -> None:
     path = worktree_path(root)
     if not (path / ".git").exists():
         return
+    _check_owner(root, path)
     behind = _git(path, "merge-base", "--is-ancestor", "HEAD", paths.SWITCH_REF)
     if behind.returncode == 0:
         _git(path, "merge", "--ff-only", "--quiet", paths.SWITCH_REF)

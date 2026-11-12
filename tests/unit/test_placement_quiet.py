@@ -172,3 +172,26 @@ def test_settings_paths_prints_the_quiet_answers(
     # the worktree was created on demand from origin/fr, on a local `fr` branch
     assert (fr_root / "settings.yaml").is_file()
     assert git(fr_root, "symbolic-ref", "--short", "HEAD").strip() == "fr"
+
+
+def test_a_same_named_repo_never_reuses_another_repos_fr_worktree(tmp_path: Path) -> None:
+    """Two repos called `work` share `~/.cache/fr/worktrees/work/fr`: the second must
+    refuse rather than write its artifacts into the first one's `fr` branch."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    first = quiet_repo(tmp_path / "a")
+    assert space_for(first).placement == "quiet"  # creates the shared path for `a`
+    second = quiet_repo(tmp_path / "b")
+    with pytest.raises(SettingsError) as caught:
+        space_for(second)
+    message = str(caught.value)
+    assert str(tmp_path / "a") in message and str(tmp_path / "b") in message
+
+
+def test_a_worktree_at_the_path_not_on_fr_is_refused(tmp_path: Path, _home: Path) -> None:
+    root = quiet_repo(tmp_path)
+    path = _home / ".cache" / "fr" / "worktrees" / "work" / "fr"
+    path.parent.mkdir(parents=True)
+    git(root, "worktree", "add", "-q", "-b", "other", str(path), "main")
+    with pytest.raises(SettingsError, match="refs/heads/fr"):
+        space_for(root)
