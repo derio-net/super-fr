@@ -323,3 +323,11 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_fragments_equal_plain_pyyaml_builds
     why: the fragments split renamed the test
+  - row: matrix-parse-libyaml
+    op: set-status
+    base: 2
+    status: ci
+    notes: Unit tests in CI pin loader choice + pure fallback parse (test_yamlio), memoized
+      parse with per-caller deep copy, uncached errors and real-fragment equality (test_acceptance_parse_cache;
+      re-pointed after the fragments split renamed the test). Phase 1 of plan 2026-11-01-ci-speed.
+    why: re-pointed after the fragments split renamed the test
