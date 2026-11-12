@@ -130,6 +130,8 @@ steps:
           session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
   journal-check:
     state: pending
+  lens-review:
+    state: pending
   deliver:
     state: pending
 driver: standalone
