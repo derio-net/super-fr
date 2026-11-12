@@ -88,14 +88,23 @@ def test_github_pages_job_rechecks_before_every_deploy() -> None:
         assert "steps.visibility.outputs.allowed == 'true'" in s["if"], s
     assert "default_branch" in job["if"] and "matrix" in job["needs"]
     assert job["permissions"]["pages"] == "write"
+    # p4-r1: a refusal fails the job and names how to unpublish; it never just skips
+    check_run = steps[check]["run"]
+    assert "::error::" in check_run and "exit 1" in check_run and "pages" in check_run
+    assert "::warning::" not in check_run
     # the matrix job never gets it
     assert "pages" not in yaml.safe_load(text)["jobs"]["matrix"].get("permissions", {})
 
 
-def test_gitlab_pages_job_checks_first_and_may_fail_alone() -> None:
+def test_gitlab_pages_job_checks_first_and_fails_loudly() -> None:
     job = yaml.safe_load(render_workflow("gitlab-ci", debt=False, pages=True))["pages"]
-    assert job["script"][0] == "fr acceptance pages-check"
-    assert job["allow_failure"] is True
+    assert "fr acceptance pages-check" in job["script"][0]
+    assert "exit 1" in job["script"][0] and "unpublish" in job["script"][0]
+    assert "allow_failure" not in job
+    # p4-r2: the check reads the forge, so the job carries a credential
+    assert job["variables"]["GITLAB_TOKEN"] == "$FR_PAGES_TOKEN"
+    # p4-r4: a failing matrix must not publish
+    assert job["needs"] == ["acceptance-report"]
     assert job["artifacts"]["paths"] == ["public"]
 
 

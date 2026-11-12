@@ -196,8 +196,15 @@ goes to Pages from the default branch, but only where the site can be no more vi
 the repo: the repo is public, or the forge reports the Pages site as access-controlled.
 `fr acceptance pages-check` makes that call and fails closed: Gitea, a missing token or
 any failed read means no Pages job, and the README badge points at the latest CI run
-instead. The scaffolded job asks again before every deploy and skips the deploy when the
-answer is no, so a repo that later turns private does not keep a public site. With
+instead. The scaffolded job asks again before every deploy and, when the answer is no, fails the
+job with an error that says how to unpublish. The re-check stops new deploys but cannot
+unpublish a site that is already live, so a repo that later turns private keeps its
+published site until you delete it by hand (GitHub: the Pages site in the repo settings, or
+`DELETE /repos/{owner}/{repo}/pages` as an admin; GitLab: remove Pages in the project
+settings). The job exists only where Pages were allowed at init, so a refusal means the
+visibility changed and should be loud. On GitLab the job reads the forge with a masked CI
+variable `FR_PAGES_TOKEN` (`read_api` scope) you create yourself; a self-managed host also
+needs `glab` authenticated in the image. With
 `forge.report_comment: on` (and comments on) CI also keeps one PR comment with the Markdown
 report, found by its marker and edited in place only when this identity wrote it.
 

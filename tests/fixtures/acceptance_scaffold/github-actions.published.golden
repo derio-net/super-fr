@@ -83,8 +83,9 @@ jobs:
         run: fr acceptance comment --pr "${{ github.event.pull_request.number }}" --yes
 
   # Publishes the HTML report on Pages from the default branch. The site must be no wider
-  # than the repo (fr, spec R21): visibility is re-read before EVERY deploy, and the
-  # deploy is skipped, not failed, when it cannot be shown to be.
+  # than the repo (fr, spec R21): visibility is re-read before EVERY deploy. A refusal
+  # fails this job loudly (it was scaffolded only where Pages were allowed, so visibility
+  # changed) and cannot unpublish a live site: delete it by hand.
   pages:
     if: >-
       github.event_name == 'push' &&
@@ -119,7 +120,8 @@ jobs:
             echo "allowed=true" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Pages deploy skipped: visibility not shown to match the repo"
+            echo "::error::Pages deploy refused: visibility not shown to match the repo. A refusal here means the repo or site visibility changed after this job was scaffolded, and a skipped deploy does not unpublish what is already live. Unpublish by hand: delete the Pages site in the repo settings, or DELETE /repos/$GITHUB_REPOSITORY/pages as an admin."
+            exit 1
           fi
       - name: Render the report
         if: steps.visibility.outputs.allowed == 'true'

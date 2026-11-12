@@ -51,6 +51,15 @@ def test_triggers_cover_every_input_of_the_site() -> None:
     assert "workflow_dispatch" in on
 
 
+def test_the_checkout_is_full_history_and_a_refused_recheck_is_loud() -> None:
+    # p4-r5: the fold raises on shallow history once any fragment has amendments
+    first = next(s for s in _steps() if s.get("uses", "").startswith(CHECKOUT))
+    assert first["with"]["fetch-depth"] == 0
+    # p4-r1: the re-check refusing cannot unpublish a live site, so it fails the job
+    check = next(s["run"] for s in _steps() if "pages-check" in s.get("run", ""))
+    assert "::error::" in check and "exit 1" in check and "::warning::" not in check
+
+
 def test_render_step_is_sha_pinned_into_the_site() -> None:
     runs = [r for r in _runs() if r.startswith("fr acceptance report")]
     assert len(runs) == 1
@@ -259,8 +268,8 @@ def test_the_deploy_rechecks_visibility_before_building_or_publishing() -> None:
     assert step["id"] == "visibility"
     assert 'echo "allowed=true" >> "$GITHUB_OUTPUT"' in step["run"]
     assert 'echo "allowed=false" >> "$GITHUB_OUTPUT"' in step["run"]
-    # fail-soft: a refused check skips the deploy, it does not fail the step
-    assert "exit 1" not in step["run"]
+    # loud (p4-r1): a refused check cannot unpublish a live site, so it fails the step
+    assert "exit 1" in step["run"] and "::error::" in step["run"]
     install = _index(lambda s: s.get("run", "").strip() == "uv tool install ./packages/fr")
     assert install < check
     for i, s in enumerate(_steps()):

@@ -300,14 +300,17 @@ acceptance-report:
 
 # The R20-R22 publish steps, each a block included only when its condition holds
 # (`render_workflow`). Pages: the HTML report on the default branch, behind a visibility
-# re-check on EVERY deploy (spec 2026-11-04 R21) that skips the deploy, never fails it.
+# re-check on EVERY deploy (spec 2026-11-04 R21). A refusal cannot unpublish a site that is
+# already live, and the job exists only where Pages were allowed at init, so a later
+# refusal means visibility changed: the job fails loudly and names how to unpublish.
 # Gitea has no Pages, and neither it nor GitLab can post a PR comment through fr yet
 # (`comment_pr` is unsupported on both), so those blocks exist for GitHub alone.
 PAGES_STEP_GITHUB = """\
 
   # Publishes the HTML report on Pages from the default branch. The site must be no wider
-  # than the repo (fr, spec R21): visibility is re-read before EVERY deploy, and the
-  # deploy is skipped, not failed, when it cannot be shown to be.
+  # than the repo (fr, spec R21): visibility is re-read before EVERY deploy. A refusal
+  # fails this job loudly (it was scaffolded only where Pages were allowed, so visibility
+  # changed) and cannot unpublish a live site: delete it by hand.
   pages:
     if: >-
       github.event_name == 'push' &&
@@ -342,7 +345,8 @@ PAGES_STEP_GITHUB = """\
             echo "allowed=true" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Pages deploy skipped: visibility not shown to match the repo"
+            echo "::error::Pages deploy refused: visibility not shown to match the repo. A refusal here means the repo or site visibility changed after this job was scaffolded, and a skipped deploy does not unpublish what is already live. Unpublish by hand: delete the Pages site in the repo settings, or DELETE /repos/$GITHUB_REPOSITORY/pages as an admin."
+            exit 1
           fi
       - name: Render the report
         if: steps.visibility.outputs.allowed == 'true'
@@ -362,22 +366,29 @@ PAGES_STEP_GITHUB = """\
 PAGES_STEP_GITLAB = """\
 
 # The HTML report on Pages from the default branch. The site must be no wider than the
-# repo (fr, spec R21): visibility is re-read before EVERY deploy, and `allow_failure`
-# makes a failed check skip the deploy (an orange job) rather than block the pipeline.
+# repo (fr, spec R21): visibility is re-read before EVERY deploy. A refusal fails the job
+# loudly (it was scaffolded only where Pages were allowed, so visibility changed) and
+# cannot unpublish a live site. The check reads the forge, so it needs a token: create a
+# masked CI/CD variable FR_PAGES_TOKEN with the read_api scope.
 pages:
   stage: acceptance
   image: python:3.12
+  needs: [acceptance-report]
   variables:
     GIT_DEPTH: "0"
+    GITLAB_TOKEN: $FR_PAGES_TOKEN
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  allow_failure: true
   before_script:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
   script:
-    - fr acceptance pages-check
+    - |
+      fr acceptance pages-check || {
+        echo "Pages deploy refused: visibility not shown to match the repo. A skipped deploy does not unpublish a live site: remove Pages in the project settings (Deploy > Pages) by hand."
+        exit 1
+      }
     - mkdir -p public
     - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA" --out public/index.html
   artifacts:
@@ -564,6 +575,11 @@ def publish_plan(
         pages = allowed
         if pages_decision is not None and not allowed:
             notices.append(f"no Pages  {why}; the README badge points at the CI run instead")
+        if allowed and ci_type == "gitlab-ci":
+            notices.append(
+                "Pages  create a masked CI/CD variable FR_PAGES_TOKEN (read_api scope) for the "
+                "pages job; a self-managed host also needs glab authenticated in the job's image"
+            )
     forge = load_settings(root).settings.forge
     comment = False
     if forge.report_comment == "on":

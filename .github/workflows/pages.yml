@@ -4,7 +4,7 @@
 # blog-craft renderer pinned in .github/blog-craft.ref (spec 2026-11-11-docs-currency).
 # The acceptance report is derived from the folded fragments at deploy time (never
 # committed), and the deploy re-reads the site's visibility first: Pages publish only
-# where the site is no wider than the repo, and a check that cannot show it skips the
+# where the site is no wider than the repo, and a check that cannot show it refuses (fails) the
 # deploy (spec 2026-11-04-repo-feature-settings R20, R21).
 name: Deploy explainers to Pages
 on:
@@ -39,6 +39,8 @@ jobs:
       report: ${{ steps.report.outcome }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Read the renderer pin
         id: pin
         run: echo "sha=$(tr -d '[:space:]' < .github/blog-craft.ref)" >> "$GITHUB_OUTPUT"
@@ -52,7 +54,9 @@ jobs:
         run: uv tool install ./packages/fr
       # Re-read before EVERY deploy, never remembered from a scaffold-time answer: the
       # repo's visibility or the site's access setting may have changed since. A check
-      # that fails or cannot answer skips the deploy (R21); it does not fail the run.
+      # that fails or cannot answer refuses the deploy (R21) and fails the run: a skipped deploy
+# cannot unpublish a site that is already live, so a refusal must be loud and name how to
+# unpublish by hand. It gates the whole site (docs and report share one deployment).
       - name: Re-check that Pages is no wider than the repo
         id: visibility
         env:
@@ -62,7 +66,8 @@ jobs:
             echo "allowed=true" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Pages deploy skipped: visibility not shown to match the repo"
+            echo "::error::Pages deploy refused: visibility not shown to match the repo. A refusal here means the repo or site visibility changed after this job was scaffolded, and a skipped deploy does not unpublish what is already live. Unpublish by hand: delete the Pages site in the repo settings, or DELETE /repos/$GITHUB_REPOSITORY/pages as an admin."
+            exit 1
           fi
       - name: Build site from sources
         if: steps.visibility.outputs.allowed == 'true'

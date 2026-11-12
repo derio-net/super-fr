@@ -40,22 +40,29 @@ acceptance-report:
     expire_in: 90 days
 
 # The HTML report on Pages from the default branch. The site must be no wider than the
-# repo (fr, spec R21): visibility is re-read before EVERY deploy, and `allow_failure`
-# makes a failed check skip the deploy (an orange job) rather than block the pipeline.
+# repo (fr, spec R21): visibility is re-read before EVERY deploy. A refusal fails the job
+# loudly (it was scaffolded only where Pages were allowed, so visibility changed) and
+# cannot unpublish a live site. The check reads the forge, so it needs a token: create a
+# masked CI/CD variable FR_PAGES_TOKEN with the read_api scope.
 pages:
   stage: acceptance
   image: python:3.12
+  needs: [acceptance-report]
   variables:
     GIT_DEPTH: "0"
+    GITLAB_TOKEN: $FR_PAGES_TOKEN
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  allow_failure: true
   before_script:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
   script:
-    - fr acceptance pages-check
+    - |
+      fr acceptance pages-check || {
+        echo "Pages deploy refused: visibility not shown to match the repo. A skipped deploy does not unpublish a live site: remove Pages in the project settings (Deploy > Pages) by hand."
+        exit 1
+      }
     - mkdir -p public
     - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA" --out public/index.html
   artifacts:
