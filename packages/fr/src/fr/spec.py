@@ -150,7 +150,7 @@ def parse_spec(spec_path: Path) -> SpecMeta:
 def _resolve_local_plan_dir(plan_ref: PlanRef, repo_root: Path) -> Path | None:
     """Resolve the plan's File cell to a local directory, if same-repo.
 
-    Delegates to `vk.refs.resolve_plan_ref` (2026-06-06 spec-path-repair
+    Delegates to `fr.refs.resolve_plan_ref` (2026-06-06 spec-path-repair
     design): the cell may be a bare slug (canonical), an active /
     `implemented/` / legacy `archived-plans/` path, or a backticked
     annotated cell — every form resolves against every lifecycle root,

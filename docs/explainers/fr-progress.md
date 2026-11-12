@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 2, archive no longer retargets acceptance rows, which cite specs logically
+reviewed: 2026-11-12 docstring and comment wording only (fr where the old vk command was named); nothing this page describes changed
 ---
 
 ## Overview: nothing to sync

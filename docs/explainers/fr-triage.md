@@ -156,7 +156,7 @@ Several scopes can work one repo, so a scope **claims** each issue it plans to a
 `fr:claimed` label and a marker comment. Another scope's claim is hands-off. Taking one over
 (`fr triage claim take`) or releasing it is the operator's call, never yours. Runners, restarts
 and the cloud driver are covered in the [herdr guide](../herdr-control-sessions.md) and the
-[cloud guide](../cloud-setup.md).
+[cloud guide](../cloud-setup.md). [The wave driver](fr-wave-driver.md) walks through what one pass does and where you act.
 
 ## fr-origins: where did the bugs come from?
 

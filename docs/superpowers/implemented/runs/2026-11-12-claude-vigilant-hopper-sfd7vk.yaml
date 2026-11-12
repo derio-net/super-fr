@@ -1,0 +1,118 @@
+schema_version: 11
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+workflow: fr-goal-light@1
+branch: claude/vigilant-hopper-sfd7vk
+started: '2026-11-12T07:48:15+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-11-12T07:57:15+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-12-landing-front-page-design.md
+  plan:
+    state: done
+    at: '2026-11-12T07:58:40+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-12-landing-front-page
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-12T07:57:16+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T07:58:40+00:00'
+          outcome: done
+        evidence:
+          single-phase: phase 1
+  spec-plan-review:
+    state: done
+    at: '2026-11-12T08:04:22+00:00'
+    units:
+      step/spec-plan-review:
+        attempts:
+        - dispatched: '2026-11-12T07:58:40+00:00'
+          agent: aba237f594f419c92
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: opus
+          session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T08:04:22+00:00'
+          outcome: done
+        evidence:
+          review: spec-plan-review-1
+          reviewer: aba237f594f419c92
+          findings: r1,r2,r3,r4,r5,r6,r7,r8,r9
+  plan-review:
+    state: done
+    at: '2026-11-12T08:04:24+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-11-12T09:39:43+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T08:04:24+00:00'
+          agent: ac41a9459768eb4c9
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5-5
+          tier: standard
+          bound: sonnet
+          session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T09:34:33+00:00'
+          outcome: done
+        evidence:
+          visual: site-front-page-landing:6:5ea1b04363e5,site-top-bar-every-page:5:c69ac5e4ce96
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T09:34:33+00:00'
+          harness: claude-code
+          model: sonnet
+          session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T09:39:43+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: a5adc03559013d159
+          visual: site-front-page-landing:6:028c78f1d88c,site-top-bar-every-page:5:3a313ba204a8
+          findings: p1-r1,p1-r2
+  journal-check:
+    state: done
+    at: '2026-11-12T09:39:44+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: done
+    at: '2026-11-12T09:49:57+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1411
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-12T09:39:45+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T09:49:49+00:00'
+          outcome: done
+        evidence:
+          tests: ci:c9839f8bf1cd111e3b7ab11d579090ef8655ae62+unknown;tree=7d8c5d72e859c62978091e960f12f190403b99c419c8b157c88b547cfdd2e563
+          walk: 20261112T094708Z.log@dce1fcb11118
+          proportionality: e4cd964b4ded49f03fcf2a365657dfced2100578:9aeeefdaccececf0c522650b5507cb367155331ab54f649e53061317efa7241f
+          docs: e4cd964b4ded49f03fcf2a365657dfced2100578:45ccf4e865ae0f2834751531fa6ae930a84a06efbf357937ae6b1d360104b82f
+          visual: site-front-page-landing:6:028c78f1d88c,site-top-bar-every-page:5:3a313ba204a8
+fr_version: 6.2.0
+pr: https://github.com/derio-net/super-fr/pull/1411

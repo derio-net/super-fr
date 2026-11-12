@@ -1,4 +1,4 @@
-"""`fr plan ...` CLI subcommands — wraps vk.plan_ops."""
+"""`fr plan ...` CLI subcommands — wraps fr.plan_ops."""
 
 from __future__ import annotations
 

@@ -9,7 +9,7 @@ Conventions:
     commit. The caller (CLI) decides commit cadence.
   - All writers re-parse after writing to confirm the file still
     passes schema validation.
-  - `vk.plan.create` and `vk.plan.rework_create` additionally append
+  - `fr.plan.create` and `fr.plan.rework_create` additionally append
     a row to the spec's Implementation Plans table; the spec edit is
     staged in the same change so it lands in the same PR.
 """
@@ -149,7 +149,7 @@ def rewrite_phase_text(original: str, raw: dict[str, Any], *keys: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# vk.plan.create
+# fr.plan.create
 
 
 @dataclass(frozen=True)
@@ -644,7 +644,7 @@ def _append_spec_row(
 
 
 # ---------------------------------------------------------------------------
-# vk.plan.tick / vk.plan.complete_phase
+# fr.plan.tick / fr.plan.complete_phase
 
 
 def tick(
@@ -779,7 +779,7 @@ def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# vk.plan.rework_create / rework_add_origin / rework_list
+# fr.plan.rework_create / rework_add_origin / rework_list
 
 
 _REWORK_SUFFIX_RE = re.compile(r"-rework-(\d+)$")
@@ -1054,7 +1054,7 @@ def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[Rewo
 
 
 # ---------------------------------------------------------------------------
-# vk.plan.self_review (lints)
+# fr.plan.self_review (lints)
 
 # Agentic-purity gate (#252): a skipped (`state: '-'`) step in an AGENTIC
 # phase whose note defers it forward is a mis-scoped manual step — an

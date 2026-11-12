@@ -4,15 +4,15 @@ Three families of state:
 
 1. **Observed** — what GitHub actually says right now.
    - `GhState`, `PhaseObservation`, `PrObservation`
-   - Produced by `vk.observe.observe(plan, gh)`.
+   - Produced by `fr.observe.observe(plan, gh)`.
 
 2. **Rendered** — what GitHub *should* say, computed from
    `(plan, observed)`.
    - `RenderedState`, `RenderedIssue`, `Warning`
-   - Produced by `vk.render.render(plan, observed)`.
+   - Produced by `fr.render.render(plan, observed)`.
 
 3. **Diff / Apply** — the mutations needed to bring observed → rendered.
-   - Lives in `vk.diff` (next module).
+   - Lives in `fr.diff` (next module).
 
 **Frozen-vs-not asymmetry.** Leaf dataclasses with only hashable fields
 (`PrObservation`, `PhaseObservation`, `RenderedIssue`, `Warning`) are

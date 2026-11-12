@@ -1,6 +1,6 @@
 """Git subprocess wrappers.
 
-Thin wrappers around git commands used by the vk toolchain. The plain wrappers
+Thin wrappers around git commands used by the fr toolchain. The plain wrappers
 (`repo_root`, `add`, …) raise subprocess.CalledProcessError on failure.
 
 The fail-closed half (`git_answer`, `remote_name`, `remote_default_ref`) is the

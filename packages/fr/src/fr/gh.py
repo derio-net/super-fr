@@ -1,6 +1,6 @@
 """GitHub CLI subprocess wrappers.
 
-Thin wrappers around ``gh`` commands used by the vk toolchain.
+Thin wrappers around ``gh`` commands used by the fr toolchain.
 Functions raise GhError on failure.  No direct GitHub API usage —
 we leverage gh's existing auth.
 """

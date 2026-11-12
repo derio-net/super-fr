@@ -1,0 +1,116 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Figures on any page, and the wave-driver and exit-gates explainers (R6, R11)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - site-wave-driver-and-exit-gates-pages
+  skeleton: true
+  tier: standard
+  files:
+  - scripts/build-site.py
+  - scripts/site/*
+  - docs/explainers/*.md
+  - tests/unit/test_build_site.py
+  - tests/unit/test_tripwire_explainers_fresh.py
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Smoke, then the figure check (R6, R10, spec B)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      SMOKE + RED: in `tests/unit/test_build_site.py` add a trivial test that `scripts/site/figures/` exists and is a directory (fails: it does not exist), and tests for a new pure function `check_figure(svg_text, name)` in `scripts/build-site.py` that raises `BuildError` naming the figure and the defect when: the root `<svg>` lacks `role="img"`; its first child is not a non-empty `<title>`; the text contains `<script`, an `on*=` attribute, `<image` or `<foreignObject`; an `href`/`xlink:href` or `url(` value is not a same-document `#id`; a literal colour (`#hex`, `rgb(`, `hsl(`, or a named colour other than `none`, `currentColor`, `inherit`, `transparent`) is the value of `fill`, `stroke`, `stop-color`, `flood-color` or `color` in an attribute, a `style` attribute or a `<style>` element, with `url(#…)` paint references stripped before the colour scan (so `fill="url(#x--fade)"` passes); an `id` does not start with `<name>--` (for `<name>.narrow.svg` the prefix is `<name>-narrow--`). A valid fixture passes. See them fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create `scripts/site/figures/` with the first real figure (task 3 writes it; a placeholder file is not allowed, so do task 3's `gate-ledger.svg` first if needed) and implement `check_figure` and `load_figure(name)` (reads `scripts/site/figures/<name>.svg`, and `<name>.narrow.svg` when present; a missing wide file raises `BuildError`; each file goes through `check_figure`; returns the `<figure class="site-figure">…</figure>` HTML holding the wide `<svg>` with class `fig-wide` and, when present, the narrow one with class `fig-narrow`). See the tests pass. Push the branch and confirm CI starts (the smoke: the `test` and `site-build` jobs run on the draft PR the orchestrator opens).
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: one compiled-regex table for the figure checks, each entry carrying its refusal message; docstrings naming spec 2026-11-12-front-page-second-pass B and R10.
+- number: 2
+  title: The figure marker on article pages (R6, spec B)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests for `fill_figures(markdown_text, page)` returning `(text, inserted)`: a line holding only `<!-- site:figure <name> -->` (name `[a-z0-9-]+`, outside fenced code) is replaced by the figure HTML padded with one blank line on each side; `inserted` lists the exact `<svg …>…</svg>` strings inserted; a marker naming a missing figure raises `BuildError`; a marker inside a fenced block is left alone. Tests for `check_figures_survived(rendered_html, inserted, route)`: raises `BuildError` when any inserted `<svg>` string is not found verbatim in the rendered page. Tests that `insert_bar` (or a sibling `insert_figure_css`) adds `scripts/site/figures.css` to the page head only when the page has a figure, and that an article page built without a figure has the bar and no figure stylesheet (R9). See them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement both functions and wire them into `build()` for renderer-produced pages: figures are filled where `fill_pages` runs (after link rewriting, so `_refuse_unsupported`/`rewrite_markdown` never scan the SVG), the survival check runs on the rendered page before it is written, and `figures.css` is added with the bar. Write `scripts/site/figures.css`: the class vocabulary (`.fig-ink`, `.fig-muted`, `.fig-line`, `.fig-panel`, `.fig-accent`, `.fig-you`, `.fig-ok`, text-size classes) defined from `--fig-*` custom properties, each with a fallback to a broadsheet property that itself has a literal fallback; `.site-figure svg{color:…;fill:…;stroke:none}` from `--fig-ink` so an unclassed element is never default black; `.fig-narrow` shown and `.fig-wide` hidden at widths up to 600px, the reverse above; `.site-figure svg{width:100%;height:auto}`; any animation only inside `@media (prefers-reduced-motion: no-preference)` plus a `reduce` block setting `animation:none;transition:none`. Add a test that every `animation` declaration in `figures.css` sits inside a `no-preference` block and the `reduce` block exists. See the tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: `build()`'s per-page sequence (rewrite, fill pages, fill figures, render, check, survival check, bar, write) reads as one short function per page; no behaviour change, tests stay green.
+- number: 3
+  title: 'Two figures: gate ledger and wave of batches (R5, R6)'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: a test that iterates every `*.svg` in `scripts/site/figures/` through `check_figure`, and asserts `gate-ledger.svg` and `wave-of-batches.svg` exist. See it fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: before drawing, read the sources named in spec E so the figures are true. Author `gate-ledger.svg`: a merged pull request carrying `gate:tester` and `gate:devops` labels, each passed by a person (`fr gate pass` / `fr ops gate`), release candidates cut while a gate is held, the final release once none waits. Author `wave-of-batches.svg`: a ranked backlog grouped into batches, batches placed in waves (wave 1, wave 2), `after` dependencies, an in-flight cap, each batch ending in one pull request, the driver's pass (merge what is ready, close out, dispatch). Each: `viewBox`, `role="img"`, a `<title>` that states what the diagram shows, classes from `figures.css` only, ids prefixed. Add a `.narrow.svg` (stacked vertically) for each figure whose text would render under about 11px at a 390px viewport. See the test pass. Record `refactor: {P1.T3: "hand-authored SVG assets; nothing to restructure"}`.
+- number: 4
+  title: The two explainer pages (R11, spec E)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in `tests/unit/test_tripwire_explainers_fresh.py` add `docs/explainers/fr-wave-driver.md` and `docs/explainers/fr-exit-gates.md` to the set of pages asserted to be among the parsed pages. In `tests/unit/test_build_site.py` add a test that each of the two sources contains exactly one `<!-- site:figure … -->` marker naming an existing figure. See them fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: read end to end, before writing, `plugins/super-fr/skills/fr-triage/SKILL.md`, `packages/fr/src/fr/triage/batch_drive.py`, the `batch drive` command in `packages/fr/src/fr/commands/triage_batch_cmd.py`, `docs/cloud-setup.md`, `docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md`; and `packages/fr/src/fr/verification/exit.py`, `packages/fr/src/fr/commands/gate_cmd.py`, the release-gating part of `scripts/release.py`, `docs/verification-strategies.md`, `docs/exit-gates-release-walk.md`, `docs/gate-backfill.md`, `docs/explainers/fr-devops-gate.md`, `docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md`. Write `docs/explainers/fr-wave-driver.md` (what a batch and a wave are; `wave` and `after`; what one driver pass does, in order; the in-flight cap; when it merges and what it refuses; close-out and `post_merge`; that it keeps no state of its own and resumes; one driver per scope; where the operator acts; host and cloud drivers in a sentence, linking `../cloud-setup.md`) with figure `wave-of-batches`, and `docs/explainers/fr-exit-gates.md` (the six gates and which two hold a merge's close-out; how a run's gate is decided; the PR labels as the ledger; how each gate is passed; release candidates while a gate waits and the final release after; the unknown-state rule; gate backfill in a sentence, linking `../gate-backfill.md`; the DevOps stage linking `fr-devops-gate.md`) with figure `gate-ledger`. Voice: second person, concrete, explaining why each mechanism exists, for a reader who has never seen the repo; match `docs/explainers/fr-devops-gate.md`'s front matter (`title`, `date: 2026-11-12`, `draft: false`, `tldr`, `standalone: true`, `standalone_style: broadsheet`, `covers` listing the sources read, `reviewed: 2026-11-12 written`). Every claim must be true of the code read; where the code and an older spec disagree, the code wins. No third-party host, org or repo names. Add one sentence with a link to the new page in `docs/explainers/fr-triage.md` (to the wave driver) and `docs/explainers/fr-devops-gate.md` (to exit gates), bumping each one's `reviewed` stamp. Run `uv run fr docs check`, the tripwire and `tests/unit/test_build_site.py`; see them pass. Record `refactor: {P1.T4: "prose pages; no code to restructure"}`.
+  - id: P1.T4.S3
+    text: |-
+      VERIFY the real build: fetch the pinned renderer as the `site-build` CI job does (see `.github/workflows/ci.yml` `site-build` and `.github/blog-craft.ref`), run `uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py <out> --ref $(git rev-parse HEAD) --blog-craft <checkout>` from outside the repo, and confirm both new pages are written with their figure intact and `figures.css` in the head, and that an existing page without a figure is unchanged apart from nothing (diff it against a build of the base commit). If python-markdown wraps or alters the `<figure>` block, fix the insertion (not the check). Then take screenshots with Playwright of both new pages at 1280px and 390px wide, saved under a git-ignored directory in the worktree, and open every screenshot: the figure is drawn, readable on the dark article page, and legible at 390px without horizontal scrolling. Set rows with `uv run fr acceptance set-status --feature 2026-11-12-front-page-second-pass --id site-wave-driver-and-exit-gates-pages --status ci --level unit=super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_every_configured_page_parses_with_fr_docs --notes "<what proves it>"`. Refresh `.test_durations` only if `tests/unit/test_build_site.py` grew by more than a third.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-12T14:13:44+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T14:13:44+00:00'
+    note: null
+    observed_prs: []

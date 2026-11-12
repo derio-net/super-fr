@@ -83,8 +83,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     tree; `fr/run/observed.py`'s allowlist decides which walk command `deliver` will
     witness). `commands/verification_cmd.py` also owns `prerelease` (the
     `prerelease.yml` dispatch). The matrix rows carry `verify`, `scenario`,
-    `issues`, `harnesses` and `walks` (`fr/acceptance/walks.py`; matrix kind 4,
-    record kind 8). Author-facing doc: `docs/verification-strategies.md`; this
+    `issues`, `harnesses` and `walks` (`fr/acceptance/walks.py`).
+    Author-facing doc: `docs/verification-strategies.md`; this
     repo's own contract and scenarios are `.fr/candidate-install` and
     `tests/scenarios/`, run in CI by `tests/integration/test_scenarios.py`.
   - **`fr/run`** — the durable cursor (`docs/superpowers/runs/<run-id>.yaml`,
@@ -147,7 +147,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     committed by default, so it is NOT an artifact kind. This repo keeps a
     durable copy of its own scope's inputs and history (judgements, origins,
     subsystems, snapshots, the architecture fragments' sources) in
-    `docs/triage/`, moved by `docs/triage/sync.sh export|import`; the cache
+    `docs/triage/`; the cache
     stays the working copy (see `docs/triage/README.md`). `collect.py`'s
     `Forge` protocol (one implementation, `ClientForge` over the forge
     adapter) is the one place a second forge lands — that backend's adapter
@@ -402,7 +402,7 @@ uv run --no-project python scripts/bump-version.py --check   # version lockstep
 uv run pytest -n auto --no-cov --store-durations    # refresh .test_durations (pytest-split shard weights)
 ```
 
-The `test` job in CI is sharded 4 ways with pytest-split, balanced by the
+The `test` job in CI is sharded 6 ways with pytest-split, balanced by the
 committed `.test_durations` file. Refresh it with the command above after a
 test file grows or shrinks a lot — a stale file only makes the shards less
 balanced, never wrong; the CI time-budget watcher is what notices when the
@@ -425,20 +425,19 @@ fixture in `tests/conftest.py` (see `_fresh_vk_repo_cache`) rather than
 pinning tests to one worker.
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
-`test` (sharded x4), `coverage`, `validate-artifacts`, `opencode-plugin-test`,
-`version-sync`, `change-fragment` jobs) is the single source of truth for the
+`plan`, `collect`, `test` (sharded x6), `split-check`, `coverage`,
+`validate-artifacts`, `opencode-plugin-test`, `version-sync`, `change-fragment`,
+`docs-check`, `site-build`, `ci-ok` jobs) is the single source of truth for the
 gate; if this file and `ci.yml` ever disagree, trust `ci.yml` and fix this
 file. Run `ruff format` then `pytest` yourself before pushing — CI is slow to
 fail-loud.
 
 Inside an fr-isolation worktree, always `uv run fr ...`, never bare `fr` —
 the PATH `fr` is whatever was last installed globally (the base clone's
-install) and can be older than the worktree's own artifacts. Observed live
-on this repo's `run` cursor after the 4.x→schema_version:2 bump: the global
-4.4.0 `fr` refused to read it (`extra inputs are not permitted`) while
-`uv run fr` read it fine, because `RunState` is `extra="forbid"`. Any minor
-bump that changes an artifact's shape reproduces this for anyone whose
-global `fr` predates it — `uv run fr` from the worktree always matches the
+install) and can be older than the worktree's own artifacts. The models are
+`extra="forbid"`, so an older global `fr` refuses a cursor a newer one wrote
+(`extra inputs are not permitted`) after any bump that changes an artifact's
+shape — `uv run fr` from the worktree always matches the
 code you are testing.
 
 PATH order does not choose `fr` in a harness shell either (gh#746): the
@@ -460,7 +459,8 @@ tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
   `plugins/super-fr/rules/*.md` (currently `docs-currency.md`,
-  `fr-isolation-required.md`, `fr-plan-override.md`, `no-claude-p-batch.md`), plus the FOUR
+  `fr-isolation-required.md`, `fr-plan-override.md`, `fr-worktree-override.md`,
+  `no-claude-p-batch.md`), plus the FOUR
   repo-local-only rules with no plugin counterpart —
   `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`,
   `.claude/rules/explainers-currency.md` and
@@ -495,12 +495,8 @@ tripwire will catch drift anyway:
   `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
   one — `scripts/sync-hermes.py` is the second sync, guarded by
   `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill and running
-  only `sync-opencode.py` leaves that tripwire red, which is how it was found
-  (gh#434, phase 5: an unexplained "fourth" test failure in a PR that had
-  touched no Hermes file) — and again, independently, in gh#503 phase 6 (a GREEN
-  targeted tripwire run and a red full suite) and gh#428 phase 3 (both OpenCode
-  guards green while the Hermes one was red). THREE sessions hit the same trap
-  within days; run BOTH after any skill edit.
+  only `sync-opencode.py` leaves that tripwire red while both OpenCode guards
+  stay green; run BOTH after any skill edit.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —
@@ -526,7 +522,7 @@ tripwire will catch drift anyway:
 ## This repo dogfoods fr-isolation on itself
 
 super-fr is itself fr-enabled — `.devcontainer/dev` + `.devcontainer/admin`
-profiles exist, and `docs/superpowers/plans/` currently holds three live plans.
+profiles exist, and `docs/superpowers/plans/` holds its live plans.
 Either alone qualifies it. Both the Claude Code PreToolUse hook and
 the OpenCode 2 plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
 re-export of `packages/fr-opencode-plugin`) block file-writing tools
@@ -549,7 +545,7 @@ behavior adds a change fragment instead, and `main` assigns the number.** The
 installer caches by version, so a change that ships without a release is
 stranded on old clients until the number moves next; the fragment is how the
 release learns about it. (Spec
-`docs/superpowers/specs/2026-09-26-version-bump-churn-design.md`: every PR
+`docs/superpowers/implemented/specs/2026-09-26-version-bump-churn-design.md`: every PR
 used to bump the same lines, so every pair of open PRs conflicted.)
 
 A fragment is required if the PR changes any of: `plugins/*/skills/**`,

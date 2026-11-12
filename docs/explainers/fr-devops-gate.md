@@ -13,10 +13,12 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
+reviewed: 2026-11-12 front-page-second-pass phase 1 added a link to the exit gates page; nothing else changed
 ---
 
 ## Overview: why a delivered PR can still be unfinished
+
+The DevOps stage is one of two post-merge gates; [exit gates](fr-exit-gates.md) explains how a run gets a gate and how gates hold the release.
 
 Most runs end when the pull request is open and reviewed. A run whose plan carries
 **manual operations** does not. Maybe the deploy key must exist before CI can pass,
