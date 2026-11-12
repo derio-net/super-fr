@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.acceptance.amend import feature_flag
 from fr.git import GitUnavailableError, git_answer
 from fr.journal.model import (
     JournalParseError,
@@ -435,10 +436,11 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     if walked:
         strategy_of = _effective_strategy_of(repo_root, state)
         lines.append("  after each row's walk, record it (the row moves to `walked`):")
+        feature = feature_flag(repo_root, spec=spec_rel)
         lines.extend(
             f"    fr acceptance set-status --id {row.id} --status walked --walk <log> "
             f"--harness <harness> --model <model> --strategy {strategy_of(row)} "
-            '--walk-outcome pass --notes "<what the walk proved>"'
+            f'--walk-outcome pass --notes "<what the walk proved>" {feature}'
             for row in walked
         )
     return lines

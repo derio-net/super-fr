@@ -246,23 +246,52 @@ def test_set_status_on_a_merged_row_appends_amendments_and_leaves_its_owner_alon
     assert row.levels["unit"] == ()
 
 
-def test_set_status_on_a_merged_row_with_no_feature_appends_to_the_rows_own_fragment(
+def test_set_status_on_a_merged_row_with_no_feature_and_no_run_is_refused_naming_feature(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A post-merge walk or issue link runs with no feature in play: the amendment
-    goes to the row's own fragment, appended, never an in-place edit."""
+    """R16: a later feature appends an amendment to ITS OWN fragment. With no feature
+    in play there is no such fragment, so `set-status` refuses like `amend` does,
+    rather than writing into the row owner's merged fragment (review p3-r1)."""
     root = merged_repo(tmp_path, branch="closeout/a")
+    before = (root / FRAGMENTS_REL / f"{SLUG_A}.yaml").read_text()
 
     res = invoke(root, monkeypatch, "set-status", "--id", "r", "--issue", "acme/widget#7")
 
+    assert res.exit_code == 2, res.output
+    assert "--feature <spec-slug>" in res.output
+    assert (root / FRAGMENTS_REL / f"{SLUG_A}.yaml").read_text() == before
+    assert not (root / FRAGMENTS_REL / f"{SLUG_B}.yaml").exists()
+
+
+def test_set_status_on_a_merged_row_with_feature_appends_to_that_features_fragment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = merged_repo(tmp_path, branch="closeout/a")
+    before = (root / FRAGMENTS_REL / f"{SLUG_A}.yaml").read_text()
+
+    res = invoke(
+        root, monkeypatch, "set-status", "--id", "r", "--issue", "acme/widget#7",
+        "--feature", SLUG_B,
+    )  # fmt: skip
+
     assert res.exit_code == 0, res.output
-    frag = fragment(root, SLUG_A)
-    assert "issues" not in frag["rows"][0]
-    (entry,) = frag["amendments"]
+    assert (root / FRAGMENTS_REL / f"{SLUG_A}.yaml").read_text() == before
+    (entry,) = fragment(root, SLUG_B)["amendments"]
     assert (entry["op"], entry["issues"]) == ("set-status", ["acme/widget#7"])
-    clear_fold_cache()
-    (row,) = fold(root).matrix.rows
-    assert row.issues == ("acme/widget#7",)
+
+
+def test_feature_flag_names_the_spec_the_row_closes(tmp_path: Path) -> None:
+    """The `--feature` a printed post-merge command carries: the run's spec when the
+    printer knows it, else the spec the row's origin names, else a placeholder."""
+    from fr.acceptance.amend import feature_flag
+
+    root = merged_repo(tmp_path)
+
+    assert feature_flag(root, spec=f"docs/superpowers/specs/{SLUG_B}-design.md") == (
+        f"--feature {SLUG_B}"
+    )
+    assert feature_flag(root, "r") == f"--feature {SLUG_A}"
+    assert feature_flag(root, "nope") == "--feature <spec-slug>"
 
 
 def test_set_status_on_a_row_pending_on_this_branch_still_edits_in_place(

@@ -20,6 +20,8 @@ import shlex
 from pathlib import Path
 from typing import Any, Literal
 
+from fr.acceptance.amend import feature_flag
+
 _GATE_MARKER = re.compile(r"^<!-- fr-gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
 _PASSED_MARKER = re.compile(r"^<!-- fr-gate-passed:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
 
@@ -224,7 +226,7 @@ def discharge_command(key: str, *, repo_root: Path) -> str:
         return (
             f"fr acceptance set-status --id {shlex.quote(name)} --status walked "
             '--walk "<walk log>" --harness "<harness>" --model "<model>" '
-            '--strategy "<strategy>" --notes "<what passed>"'
+            '--strategy "<strategy>" --notes "<what passed>" ' + feature_flag(repo_root, name)
         )
     if kind == "spec" and n is not None:
         spec = find_spec(repo_root, name) or "<spec>"

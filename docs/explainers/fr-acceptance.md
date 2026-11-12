@@ -87,9 +87,10 @@ fr acceptance status
 ## Changing a row another feature merged
 
 Once a feature merges, its rows are history. A later feature never edits them in place:
-it appends an **amendment** to its own fragment, and the fold applies it. Rows are owned
-by the feature that wrote them, so two branches amending the same row touch two
-different files, and the order they merged in decides the result.
+it appends an **amendment** to its own fragment, and the fold applies it. Every amendment
+goes to the fragment of the feature making it, never to the row owner's, so two branches
+amending the same row touch two different files, and the order they merged in decides the
+result.
 
 ```bash
 fr acceptance amend --id webhook-rate-limit --op reword \
@@ -100,8 +101,10 @@ fr acceptance amend --id webhook-rate-limit --op reword \
 The five ops are `reword`, `set-status`, `add-level`, `drop-level` and `retire`.
 `set-status` on a merged row writes the same amendments for you, so the worked example
 above works either way. The fragment is your branch's feature: `--feature <spec-slug>`, or
-the spec of the run this branch carries. With neither (recording a walk after the merge,
-say), `set-status` appends to the row's own feature's fragment. An agent's step record says the same thing with
+the spec of the run this branch carries. With neither, `set-status` refuses, as `amend`
+does: a walk recorded after the merge belongs to the feature whose gate it closes, so the
+commands fr prints for one (the walk close-out, `fr gate pass --keep`, deliver's issue
+link) name that feature's `--feature` for you. An agent's step record says the same thing with
 an `acceptance:` entry `{row, op, why, ...}`.
 
 Each amendment records the row's **revision** it was written against: how many

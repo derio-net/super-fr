@@ -68,6 +68,51 @@ NO_FEATURE = (
 )
 
 
+FEATURE_PLACEHOLDER = "<spec-slug>"
+
+
+def _origin_feature(repo_root: Path, origins: tuple[str, ...]) -> str | None:
+    """The fragment slug of the one spec *origins* name, or None (none, or several)."""
+    from fr.acceptance.logical import is_logical, origin_spec_path, parse_logical
+
+    slugs: set[str] = set()
+    for origin in origins:
+        if is_logical(origin):
+            try:
+                ref = parse_logical(origin)
+            except AcceptanceError:
+                continue
+            if ref.kind == "spec":
+                slugs.add(fragment_slug_for_spec(ref.slug))
+            continue
+        path = origin_spec_path(origin, repo_root)
+        if path is not None:
+            slugs.add(fragment_slug_for_spec(path))
+    return slugs.pop() if len(slugs) == 1 else None
+
+
+def feature_flag(repo_root: Path, row_id: str | None = None, *, spec: str | None = None) -> str:
+    """The `--feature <slug>` every command fr PRINTS for a post-merge `set-status` or
+    `amend` carries (R16: an amendment goes to the fragment of the feature making it,
+    and a post-merge walk or link belongs to the feature whose gate or delivery it
+    closes): *spec*'s slug when the printer knows the run's spec, else the one spec
+    *row_id*'s origin names, else a placeholder the operator fills. Never the row
+    owner's fragment by default: that is the shared file R16 exists to avoid."""
+    import shlex
+
+    feature = fragment_slug_for_spec(spec) if spec else None
+    if feature is None and row_id is not None:
+        from fr.acceptance.fold import effective
+
+        try:
+            row = next((r for r in effective(repo_root).matrix.rows if r.id == row_id), None)
+        except AcceptanceError:
+            row = None
+        if row is not None:
+            feature = _origin_feature(repo_root, tuple(row.origin))
+    return f"--feature {shlex.quote(feature) if feature else FEATURE_PLACEHOLDER}"
+
+
 def default_ref_name(repo_root: Path) -> str | None:
     """`origin/main`-style name of the default ref, or None."""
     from fr.git import GitRefusal, GitUnavailableError, remote_default_ref
