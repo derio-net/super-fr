@@ -886,3 +886,8 @@ Reports, CI publishing, the Pages visibility check and report_comment are one as
 ### tier-2026-11-12-acceptance-fragments-p1 · decision · fold semantics are the design judgement every acceptance reader will rely on
 
 Ordering by first-parent introduction, pending vs merged, revisions and contested rows are decided here and read by check, status, debt, self-review, PR body and close-out.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-acceptance-fragments-p2 created=2026-11-12T00:28:49+00:00 -->
+### tier-2026-11-12-acceptance-fragments-p2 · decision · a migration every caller relies on, plus a change to the migration runner
+
+The retiring schema step changes fr/artifacts/runner.py, which every kind's migration uses, and the split must lose no row of 617.
