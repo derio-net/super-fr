@@ -3,11 +3,14 @@ run: 2026-11-12-feat-code-quality-steps
 workflow: fr-goal@1
 branch: feat/code-quality-steps
 started: '2026-11-12T14:45:47+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-12T14:45:57+00:00'
+    state: done
+    at: '2026-11-12T15:54:51+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-12-review-lenses-design.md
   spec-review:
     state: pending
   plan:
