@@ -634,3 +634,8 @@ e9fdf227b: .gitattributes removed (it held only the report block), the aggregate
 ### p3-stray-r1-records-dir-resolved-2 · finding [fixed] · resolves p3-stray-r1-records-dir: An empty untracked docs/superpowers/runs/r1.records/ sits in the workspace, created before phase 3 (phase 3)
 
 The empty untracked directory was removed from the workspace; it was never tracked, so nothing remains to file.
+
+<!-- fr:journal kind=decision scope=plan id=fold-retired-rows-keep-the-base-rule created=2026-11-12T09:18:08+00:00 phase=1 -->
+### fold-retired-rows-keep-the-base-rule · decision · Retired rows stay under R17's base rule: a stale retire marks the row contested, and a correctly based amendment on a retired row clears it (phase 1)
+
+Resolves pr1408-r1 and pr1408-r2 with one design. A retired row keeps its revision count, and every amendment that names it, pending or merged, goes through the same base check as a live row. A pending stale one is a stale-pending refusal (the normal check/deliver path), never a FoldError; a merged stale one marks the row contested (debt via DebtRow.retired). A correctly based amendment applies to the retired snapshot, counts a revision and clears contested; the row stays retired, because R16 has no op that un-retires. A retire is checked like any amendment and no longer clears contested unconditionally: a stale retire that merged leaves the row retired AND contested; a correctly based retire clears it. An amendment naming an unknown row is unchanged (pending raises, merged is a notice). Within R17 as written; no spec change.
