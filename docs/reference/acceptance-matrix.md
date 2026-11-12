@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 2 moves the rows into per-feature fragments read through a fold, and retires matrix.yaml and its committed reports
+reviewed: 2026-11-12 acceptance-fragments phase 4 documents report, pages-check and comment; reports are derived and `check` fails on a tracked one
 ---
 
 # The acceptance matrix
@@ -79,7 +79,9 @@ fr acceptance add --id ... --capability ... --acceptance ... --origin spec:<slug
 fr acceptance set-status --id ... --status ... --notes "why"                 # move a row, with a reason
 fr acceptance check                  # refs, staleness, statuses; exit 2 on any failing row
 fr acceptance status                 # the open debt, briefly (a session-start hook shows it)
-fr acceptance report                 # render a report locally (reports are never committed)
+fr acceptance report [--open]        # render the derived report locally (git-ignored, never committed; --format md)
+fr acceptance pages-check            # exit 0 only if a Pages site would be no wider than the repo (fails closed)
+fr acceptance comment --pr N --yes   # keep one PR comment with the Markdown report (forge.report_comment: on)
 ```
 
 Never edit a fragment by hand: `add` and `set-status` validate the row and commit only the
@@ -87,6 +89,11 @@ fragment they changed. A row whose origins name no single spec needs `--feature 
 (`legacy` for none). Test references are anchored on a test's name, for example
 `repo:tests/unit/test_x.py#test_y`, never a line number, because a line number slides onto
 whatever test lands there next.
+
+Reports are never committed. The scaffolded CI shows the report as a job summary (GitHub,
+Gitea) or an exposed artifact (GitLab), and publishes the HTML on Pages only when
+`fr acceptance pages-check` proves the site no wider than the repo; the Pages job re-checks
+before every deploy.
 
 The per-PR gate is `.github/workflows/acceptance-report.yml`, which on a weekly
 schedule also runs `fr debt issue`, keeping one "Technical debt" issue up to date (its

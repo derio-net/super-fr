@@ -58,7 +58,9 @@ one artifact kind.
 - `fr services`: Read-only: the resolved forge / ci / tracking services.
 - `fr acceptance`: Acceptance matrix: business-level acceptance tests × verification levels.
   - `fr acceptance check`: The gate: refs resolve, staleness, exit 2 on failing rows.
-  - `fr acceptance report`: Render the report set (or, with --check, verify it is in sync).
+  - `fr acceptance report`: Render the report from the folded matrix, to a file git ignores.
+  - `fr acceptance comment`: Keep ONE comment on a PR carrying the Markdown report (forge.report_comment: on).
+  - `fr acceptance pages-check`: Exit 0 when a Pages site for the report would be no wider than the repo, 1 when not.
   - `fr acceptance status`: Terminal nag: counts by status + the open acceptance debt rows.
   - `fr acceptance summary`: GitHub Actions-friendly Markdown summary: compact counts + collapsible debt.
   - `fr acceptance set-status`: Move an existing row's status, with a reason.

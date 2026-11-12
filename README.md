@@ -154,6 +154,14 @@ The site: **https://derio-net.github.io/super-fr/**
   [Hermes](https://derio-net.github.io/super-fr/reference/hermes.html),
   [components and requirements](https://derio-net.github.io/super-fr/reference/components.html).
 
+## Viewing the acceptance report
+
+The report is derived from the acceptance fragments and never committed. Render it on your
+machine with `fr acceptance report --open` (it writes the git-ignored
+`docs/acceptance/report.html`; `--format md` writes Markdown). CI shows it on every pull
+request as a job summary, and the published copy is at
+**https://derio-net.github.io/super-fr/acceptance/**.
+
 ## Contributing
 
 Working on super-fr itself: [`AGENTS.md`](AGENTS.md) covers the workflow, the release and

@@ -105,10 +105,14 @@ artifacts --yes` splits it.
   runs `fr acceptance status --brief` at session start** (Claude Code does it
   automatically via the super-fr SessionStart hook; other harnesses honor
   this line).
-- Reports are derived from the fold, never committed: `fr acceptance report`
-  renders one locally (`docs/acceptance/report.html`, gitignored), and the
-  migration to fragments deleted the committed set. (Plan
-  `2026-11-12-acceptance-fragments` phase 4 finalises the report surfaces.)
+- Reports are derived from the fold, never committed: `fr acceptance report
+  [--open] [--format md]` renders one locally (`docs/acceptance/report.html` or
+  `report.md`, both gitignored), and `fr acceptance check` fails on a tracked
+  report file. CI publishes it: a job summary, the report artifact, and the HTML
+  on Pages only where `fr acceptance pages-check` shows the site is no wider than
+  the repo (a public repo, or access-controlled Pages; it fails closed, and the
+  deploy re-checks every time). With `forge.report_comment: on`, `fr acceptance
+  comment --pr N --yes` keeps one marker comment on the PR.
 - Never hand-edit a fragment: `add` and `set-status` are the writers.
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and every push to main,
   writes a Markdown summary to each Actions run (PR, main), uploads the

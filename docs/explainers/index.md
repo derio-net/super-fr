@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 acceptance-fragments phase 3, still true after the fr-goal deliver note on acceptance amendments
+reviewed: 2026-11-12 acceptance-fragments phase 4, still true, the acceptance report is now derived and published behind a visibility check
 ---
 
 ## The premise

@@ -108,7 +108,7 @@ fr's own artifacts are cited **logically** — `spec:<slug>[#R<n>]` (the spec's 
 minus `-design.md`), `plan:<slug>` — so an archive never rewrites a row. Other refs are
 `<repo>:<path>[#anchor]`, siblings verified only where a checkout exists
 (`--sibling-root`, default `..`); a `.py` anchor names the test (`#TestX::test_y`), never
-`#L<n>`. `fr acceptance report` renders the HTML locally; `status` is the terminal nag;
+`#L<n>`. `fr acceptance report [--open] [--format md]` renders the derived report locally (git-ignored, never committed; `check` fails on a tracked one), `pages-check` says whether a Pages site would be no wider than the repo (it fails closed), `comment --pr N --yes` keeps the one PR report comment when `forge.report_comment` is on; `status` is the terminal nag;
 `digest` feeds the weekly "Acceptance debt" issue upsert.
 
 A row born from a spec's `## Requirements` list cites the requirement, not just

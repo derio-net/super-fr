@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 acceptance-fragments phase 3 adds amendments of merged rows, the stale-base refusal and contested rows as debt
+reviewed: 2026-11-12 acceptance-fragments phase 4 derives the reports (local, CI summary, Pages behind a visibility check, PR comment)
 ---
 
 ## Overview: claims, not tests
@@ -185,10 +185,24 @@ steers a second session in a neighbouring terminal. The rules that matter:
 
 ## Reports and the gate
 
-Reports are derived from the fold and never committed: `fr acceptance report` renders one
-locally whenever you want to look. CI runs the gate on every pull request and push to the
-default branch and keeps a weekly "Acceptance debt" issue up to date from
-`fr acceptance digest`.
+Reports are derived from the fold and never committed: `fr acceptance report --open`
+renders one locally whenever you want to look (it writes `docs/acceptance/report.html`,
+which git ignores, and `--format md` writes Markdown). `fr acceptance check` fails if a
+report file is ever tracked, because a committed copy is a second source that drifts.
+
+CI publishes the same render where people already look. Every pull request gets the
+summary in its job (GitHub and Gitea Actions) or an exposed artifact (GitLab CI). The HTML
+goes to Pages from the default branch, but only where the site can be no more visible than
+the repo: the repo is public, or the forge reports the Pages site as access-controlled.
+`fr acceptance pages-check` makes that call and fails closed: Gitea, a missing token or
+any failed read means no Pages job, and the README badge points at the latest CI run
+instead. The scaffolded job asks again before every deploy and skips the deploy when the
+answer is no, so a repo that later turns private does not keep a public site. With
+`forge.report_comment: on` (and comments on) CI also keeps one PR comment with the Markdown
+report, found by its marker and edited in place only when this identity wrote it.
+
+CI runs the gate on every pull request and push to the default branch and keeps a weekly
+"Acceptance debt" issue up to date from `fr acceptance digest`.
 
 ## Limits
 

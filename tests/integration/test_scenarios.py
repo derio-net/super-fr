@@ -188,6 +188,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
     on_disk = {p.stem for p in SCENARIOS.glob("*.sh") if not p.name.startswith("_")}
     here = {
         "triage-closed-recovery",
+        "acceptance-reports-derived-published",
         "herdr-closed-recovery-live",
         "verification-strategy-resolution",
         "shipped-verification-strategies",
@@ -490,3 +491,7 @@ def test_acceptance_matrix_migration(installed: Path, tmp_path: Path) -> None:
 
 def test_acceptance_fragments_amendments(installed: Path, tmp_path: Path) -> None:
     _scenario("acceptance-fragments-amendments", installed, tmp_path)
+
+
+def test_acceptance_reports_derived_published(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-reports-derived-published", installed, tmp_path)
