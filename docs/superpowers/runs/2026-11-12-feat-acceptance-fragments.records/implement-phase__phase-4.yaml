@@ -1,0 +1,21 @@
+schema_version: 11
+run: 2026-11-12-feat-acceptance-fragments
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T2.S1, P4.T2.S2, P4.T3.S1, P4.T3.S2, P4.T4.S1, P4.T4.S2]
+refactor:
+  P4.T1: "the committed-set machinery was deleted outright and the one local renderer (render_report) gained a format argument; nothing left to fold"
+  P4.T2: "pages.py is the one place the visibility decision lives and each client holds only its forge's read; no duplication"
+  P4.T3: "templates share the existing placeholder mechanism; the publish blocks are one constant per CI type, so nothing to factor"
+  P4.T4: "docs, workflow and scenario edits only"
+journal:
+  - {kind: decision, id: p4-comment-job-github-only, title: "The PR report comment job and the Pages job exist per forge capability (phase 4)", body: "A comment job is scaffolded for GitHub Actions only, because comment_pr is unsupported on the GitLab and Gitea clients (UnsupportedBatchOps); init prints a notice when report_comment is on elsewhere. A Pages job is scaffolded for GitHub Actions and GitLab CI only (Gitea has no visibility read). `pages_visibility(repo)` takes the same owner/repo string as the other client reads and answers controlled|public|unknown, never raising. The settings rule report-comment-needs-repo-placement is data, dormant until quiet/stealth can be served.", phase: 4}
+  - {kind: decision, id: p4-pages-fixtures-provenance, title: "Pages fixtures: one capture, the rest from the forge docs (phase 4)", body: "tests/fixtures/acceptance_pages/github-pages-public.json is a capture of GET /repos/{o}/{r}/pages on this public derio-net repo. The public:false, GitLab pages_access_level/visibility and Gitea shapes were not capturable (no private repo or GitLab/Gitea instance); the tests say so and cite the GitHub and GitLab API docs.", phase: 4}
+  - {kind: decision, id: p4-glab-repo-visibility, title: "RealGlabClient gained repo_visibility (phase 4)", body: "Without it a public GitLab repo could never satisfy pages_allowed (the generic reader raised unsupported). It reads the project's visibility from projects/:id, raising when unreadable as the GhClient contract says.", phase: 4}
+  - {kind: finding, id: p4-gitlab-pages-fail-open, title: "GitLab Pages visibility failed open on enabled and unconfirmed private (phase 4)", review_scope: in, body: "pages_access_level `enabled` means everyone with access to the project (everyone on a public project) and `private` holds only where the instance enforces Pages access control; the first cut treated both as controlled. Now private is controlled only with access control confirmed (gitlab.com always; a self-managed host is never proven by the API), enabled only with that AND a private or internal project, and everything else is unknown. Pinned by TestGitlab in test_acceptance_pages_visibility.py; shape source is the GitLab Projects API and Pages access-control docs.", phase: 4}
+  - {kind: finding, id: p4-comment-marker-hijack, title: "fr acceptance comment edited a marker comment from any author (phase 4)", review_scope: in, body: "The marker is public text, so anyone could plant it and have fr overwrite their comment. It now edits only a marker comment whose author is the credentials' own login (authenticated_login), or the workflow bot inside GitHub Actions when the forge will not name the identity; with no known identity it always posts fresh. Tests: foreign author, workflow bot, unknown identity in test_acceptance_scaffold_publish.py.", phase: 4}
+resolves:
+  - {id: p4-gitlab-pages-fail-open, state: fixed, body: "commit fix(acceptance): GitLab Pages are controlled only where access control is confirmed"}
+  - {id: p4-comment-marker-hijack, state: fixed, body: "commit fix(acceptance): the report comment edits only a comment its own identity wrote"}
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/31d40c59-91eb-4b4d-ab0c-fcbf9d042106/scratchpad/p4-suite.log}
