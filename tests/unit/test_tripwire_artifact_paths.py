@@ -4,9 +4,11 @@ R1: "One path resolver, keyed by kind and placement, produces every artifact pat
 tripwire refuses a hardcoded artifact path outside it." A literal `docs/superpowers/...`
 or `docs/acceptance/...` anywhere else is a path that does not move with the placement.
 
-Two forms are caught: a string constant that is not a docstring (f-string parts
-included), and a `/`-join chain of string constants, `"docs" / "superpowers"` or
-`"docs" / "acceptance"`. Docstrings and comments are prose, not paths.
+Caught: a string constant that is not a docstring (f-string parts included), and any
+join that puts `docs` straight before `superpowers` or `acceptance` — a `/` chain (also
+`root / "docs" / "superpowers/plans"`), `Path("docs") / ...`, `Path("docs", ...)`,
+`.joinpath("docs", ...)`, any call's positional arguments, and a tuple or list of
+segments. Docstrings and comments are prose, not paths.
 
 `PENDING` lists the modules still carrying a literal, which plan 3's phase 2 converts.
 It may only shrink: an entry with no violation left fails, so it is removed with the fix.
@@ -54,6 +56,7 @@ PENDING: tuple[str, ...] = (
     "fr/git_policy/ask.py",
     "fr/isolation/local.py",
     "fr/isolation/preserve.py",
+    "fr/isolation/rename.py",
     "fr/journal/model.py",
     "fr/migrate.py",
     "fr/models.py",
@@ -62,7 +65,9 @@ PENDING: tuple[str, ...] = (
     "fr/ops/profile.py",
     "fr/ops/trust.py",
     "fr/plan_ops.py",
+    "fr/plan_validator_wrapper.py",
     "fr/proportionality.py",
+    "fr/record/model.py",
     "fr/refs.py",
     "fr/repair.py",
     "fr/run/adopt.py",
@@ -76,9 +81,13 @@ PENDING: tuple[str, ...] = (
     "fr/triage/cursor.py",
     "fr/triage/drift.py",
     "fr/triage/ledger.py",
+    "fr/usage/backfill.py",
     "fr/usage/classify.py",
     "fr/usage/compare.py",
+    "fr/usage/file.py",
     "fr/verification/exit.py",
+    "fr/verification/resolve.py",
+    "fr/workflow/resolve.py",
     "fr_dispatch/__init__.py",
     "fr_herdr/managed.py",
 )
@@ -104,34 +113,72 @@ def _is_str(node: ast.AST, value: str | None = None) -> bool:
     )
 
 
-def _joins_docs(node: ast.AST) -> bool:
-    """`<...> / "docs"` or a bare `"docs"`: the left side of a docs-segment join."""
-    if _is_str(node, "docs"):
-        return True
-    return (
-        isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and _is_str(node.right, "docs")
-    )
+_PATH_CALLS = frozenset({"Path", "PurePath", "PurePosixPath", "PosixPath"})
+
+
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
+
+
+def _segments(node: ast.AST) -> list[str | None]:
+    """The path segments *node* spells, `None` for any segment not known statically.
+
+    A string splits on `/`; a `/`-join, a `Path(...)` and a `.joinpath(...)` concatenate
+    their parts. Anything else is one unknown segment."""
+    if _is_str(node):
+        assert isinstance(node, ast.Constant)
+        return [part for part in node.value.split("/") if part] or [None]
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return _segments(node.left) + _segments(node.right)
+    if isinstance(node, ast.Call):
+        name = _call_name(node)
+        if name == "joinpath" and isinstance(node.func, ast.Attribute):
+            return _segments(node.func.value) + _arg_segments(node)
+        if name in _PATH_CALLS:
+            return _arg_segments(node)
+    return [None]
+
+
+def _arg_segments(node: ast.Call) -> list[str | None]:
+    return [seg for arg in node.args for seg in _segments(arg)]
+
+
+def _artifact_join(segments: list[str | None]) -> str | None:
+    """`"docs" / <segment>` when *segments* hold `docs` then an artifact segment."""
+    for here, after in zip(segments, segments[1:]):
+        if here == "docs" and after in _SEGMENTS:
+            return f'"docs" / {after!r}'
+    return None
 
 
 def violations(source: str) -> list[tuple[int, str]]:
-    """`(line, what)` for every artifact-path literal in *source*."""
+    """`(line, what)` for every artifact-path literal in *source*, one per line.
+
+    Caught: a string constant that is not a docstring, and any join that puts `docs`
+    before an artifact segment: a `/` chain, `Path(...)`, `.joinpath(...)`, any call's
+    positional arguments (`os.path.join`) and a tuple or list of segments."""
     tree = ast.parse(source)
     docs = _docstring_ids(tree)
-    found: list[tuple[int, str]] = []
+    found: dict[int, str] = {}
     for node in ast.walk(tree):
+        what: str | None = None
         if _is_str(node) and id(node) not in docs:
             assert isinstance(node, ast.Constant)
             if any(n in node.value for n in _NEEDLES):
-                found.append((node.lineno, repr(node.value)))
-        elif (
-            isinstance(node, ast.BinOp)
-            and isinstance(node.op, ast.Div)
-            and any(_is_str(node.right, seg) for seg in _SEGMENTS)
-            and _joins_docs(node.left)
-        ):
-            assert isinstance(node.right, ast.Constant)
-            found.append((node.lineno, f'"docs" / {node.right.value!r}'))
-    return sorted(found)
+                what = repr(node.value)
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            what = _artifact_join(_segments(node))
+        elif isinstance(node, ast.Call):
+            what = _artifact_join(_segments(node)) or _artifact_join(_arg_segments(node))
+        elif isinstance(node, (ast.Tuple, ast.List)):
+            what = _artifact_join([seg for elt in node.elts for seg in _segments(elt)])
+        if what is not None:
+            found.setdefault(getattr(node, "lineno", 0), what)
+    return sorted(found.items())
 
 
 def _modules() -> dict[str, Path]:
@@ -197,5 +244,26 @@ def test_the_detector_finds_both_forms_and_skips_prose() -> None:
     assert lines == [6, 7, 12, 15]
 
 
+_PLANTED_OTHER_FORMS = """
+from pathlib import Path
+import os
+
+A = Path("docs") / "superpowers"
+B = Path("docs", "superpowers")
+C = root.joinpath("docs", "superpowers")
+D = ("docs", "superpowers", "plans")
+E = ["docs", "acceptance"]
+F = root / "docs" / "superpowers/plans"
+G = os.path.join(root, "docs", "acceptance")
+H = Path(root, "docs") / "acceptance" / "features"
+"""
+
+
+def test_the_detector_finds_every_other_join_form() -> None:
+    lines = [line for line, _ in violations(_PLANTED_OTHER_FORMS)]
+    assert lines == [5, 6, 7, 8, 9, 10, 11, 12]
+
+
 def test_a_docs_join_not_followed_by_an_artifact_segment_is_fine() -> None:
     assert violations('P = root / "docs" / "explainers"\nQ = "docs/reference/cli.md"\n') == []
+    assert violations('T = ("docs", "explainers")\nU = Path("docs", "reference")\n') == []
