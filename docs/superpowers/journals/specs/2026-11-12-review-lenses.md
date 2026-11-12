@@ -298,3 +298,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-review-lenses-p3 created=2026-11-12T17:16:56+00:00 -->
 ### phase-split-2026-11-12-review-lenses-p3 · decision · ask: the lens-review step and its evidence gate (R8-R11, R13) is its own ask and changes the gate every review step uses
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-review-lenses-p4 created=2026-11-12T17:17:05+00:00 -->
+### phase-split-2026-11-12-review-lenses-p4 · decision · ask: the PR section, skills, agents and docs (R12, R14) is its own ask
