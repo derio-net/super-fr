@@ -4,3 +4,21 @@ step: deliver
 outcome: done
 emitted: {pr: "https://github.com/derio-net/super-fr/pull/1411"}
 evidence: {tests: ci, walk: /root/.cache/fr/walks/2026-11-12-claude-vigilant-hopper-sfd7vk/20261112T094708Z.log}
+visual:
+  - row: site-front-page-landing
+    script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/capture.js
+    shots:
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/landing-hero-dark.png, shows: [desktop-dark]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/landing-hero-light.png, shows: [desktop-light]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/landing-390-top.png, shows: [phone-width-390]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/follow-primary-button.png, shows: [follow-primary-button]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/follow-numbered-section-link.png, shows: [follow-numbered-section-link]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/landing-explainers-anchor.png, shows: [jump-to-explainers-anchor]}
+  - row: site-top-bar-every-page
+    script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/capture.js
+    shots:
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/bar-explainer.png, shows: [explainer-page]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/bar-guide.png, shows: [guide-page]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/bar-reference.png, shows: [reference-page]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/bar-guide-390.png, shows: [phone-width-390]}
+      - {path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/deliver/shots/follow-bar-home-link-from-guide.png, shows: [bar-home-link-from-guide]}
