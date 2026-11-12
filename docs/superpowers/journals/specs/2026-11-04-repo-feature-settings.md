@@ -901,3 +901,8 @@ The stale-base refusal is a new deliver/CI gate and the record kind moves 10 -> 
 ### fragment-repo-identity · decision · Fragments carry the repo identity as a required repo: <org>/<repo>, agreed across fragments
 
 The retired matrix held org/repo. Code refs keep <repo>:<path>#<test> (R18), so the own-repo check needs the identity without depending on a remote; storing it in each fragment keeps it with the artifacts (philosophy 5) and the validator checks agreement.
+
+<!-- fr:journal kind=decision scope=spec id=logical-ref-forms created=2026-11-12T00:28:53+00:00 -->
+### logical-ref-forms · decision · Only spec: and plan: refs are logical; journal and code origins keep their path form and their rows go to legacy
+
+R18 names spec:<slug>#R<n> and plan:<slug>. Rows citing only debug journals or code have no single origin spec and R19 sends them to the legacy fragment.
