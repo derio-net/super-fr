@@ -103,16 +103,12 @@ presented in the PR body ("rows added since brainstorm", generated via
 
 ## Refs, requirement origins and post-merge rows
 
-fr's own artifacts are cited **logically** — `spec:<slug>[#R<n>]` (the slug is the
-spec's file name without `-design.md`) and `plan:<slug>` — so archiving or moving them
-never rewrites a row; `add` writes a spec or plan path in that form. Other refs are
-`<repo>:<path>[#anchor]` — own repo by its own name, sibling repos verified only where a
-checkout exists (`--sibling-root`, default `..`); a `.py` anchor names the test
-(`#TestX::test_y`), never a rotting `#L<n>`. A path ref to an archived spec
-auto-resolves (`specs/` ↔ `implemented/specs/`) — `check` warns, never errors.
-`fr acceptance report` renders the HTML locally;
-`fr acceptance status` is the terminal nag; `fr acceptance digest` feeds the
-weekly "Acceptance debt" issue upsert.
+fr's own artifacts are cited **logically** — `spec:<slug>[#R<n>]` (the spec's file name
+minus `-design.md`), `plan:<slug>` — so an archive never rewrites a row. Other refs are
+`<repo>:<path>[#anchor]`, siblings verified only where a checkout exists
+(`--sibling-root`, default `..`); a `.py` anchor names the test (`#TestX::test_y`), never
+`#L<n>`. `fr acceptance report` renders the HTML locally; `status` is the terminal nag;
+`digest` feeds the weekly "Acceptance debt" issue upsert.
 
 A row born from a spec's `## Requirements` list cites the requirement, not just
 the spec: `--origin spec:<slug>#R<n>` (repeat `--origin` for several ids).

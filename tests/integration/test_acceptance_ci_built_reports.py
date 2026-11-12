@@ -17,7 +17,8 @@ from tests.unit.acceptance_helpers import make_repo, row
 
 runner = CliRunner()
 IGNORE_ALL = "docs/acceptance/report*.html\ndocs/acceptance/report*.md\n"
-MATRIX = "docs/acceptance/matrix.yaml"
+MATRIX = "docs/acceptance/features/s.yaml"
+"""The fragment `make_repo`'s rows land in (spec 2026-11-04 R16: no matrix.yaml)."""
 
 
 def _git(root: Path, *args: str) -> str:
@@ -91,33 +92,17 @@ def test_acceptance_set_status_commits_without_ignored_reports(
     _assert_matrix_only(root, before)
 
 
-def test_the_archive_retarget_stages_the_matrix_and_no_ignored_report(tmp_path: Path) -> None:
-    from fr.archive import MoveLog
-    from fr.commands.archive_cmd import _ArchiveOpts, _retarget_matrix
+def test_the_split_of_a_v5_matrix_stages_no_ignored_report(tmp_path: Path) -> None:
+    """The archive retarget and the matrix anchor repair are gone (rows cite specs
+    logically; the matrix kind retired, spec 2026-11-04 R18, R19). What still touches
+    the reports is the 5 -> 6 split, which deletes only the reports it finds."""
+    from fr.artifacts.matrix_fragments import split_matrix
 
-    block_row = (
-        "  - id: target\n    capability: Cap\n    acceptance: X\n    origin:\n"
-        "    - own:docs/superpowers/specs/s.md\n    levels:\n      unit:\n"
-        "      - own:tests/test_a.py\n    status: ci\n    notes: n\n"
-    )
-    root = _repo(tmp_path, block_row)
-    src = Path("docs/superpowers/specs/s.md")
-    dst = Path("docs/superpowers/implemented/specs/s.md")
-    _git(root, "mv", str(src), str(dst))
-    _retarget_matrix(root, MoveLog(moves=[(src, dst)]), _ArchiveOpts())
-    staged = set(_git(root, "diff", "--cached", "--name-only").split())
-    assert MATRIX in staged
-    assert not staged & set(REPORT_SET)
+    from tests.unit.acceptance_helpers import RETIRED_MATRIX_REL, make_matrix_repo
 
-
-def test_matrix_anchor_repair_covers_no_ignored_report(tmp_path: Path) -> None:
-    from fr.artifacts.matrix_anchors import _fn, _report_paths
-
-    root = _repo(tmp_path, row(id="target", unit='"own:tests/test_a.py#L1"'))
-    matrix = root / MATRIX
-    assert _report_paths(matrix) == []
-    assert list(_fn(matrix)) == []
-    assert "#test_a" in matrix.read_text()
+    root = make_matrix_repo(tmp_path, row(id="target", status="not-implemented"))
+    changed = split_matrix(root / RETIRED_MATRIX_REL)
+    assert {p.relative_to(root).as_posix() for p in changed} == {MATRIX}
     assert not any((root / rel).exists() for rel in REPORT_SET)
 
 
