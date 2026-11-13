@@ -93,6 +93,12 @@ resolves:
 - id: p3-r8
   state: out-of-scope
   body: 'Pre-existing at the merge base. merge-protection.md fixed anyway in f52f33659. docs-currency.md left: its CI YAML fence sits under a 2-space bullet and re-indenting changes the fenced bytes the preserve check compares; item 6 breaks because of the build-script bug p3-build-site-marker, which is filed separately.'
+- id: p3-ops-seal-encrypt-help
+  state: out-of-scope
+  body: 'A fr CLI help defect (ops_cmd.py:535-536), not caused by a docs rewrite; the page now states the code behaviour. To be filed as an issue at deliver.'
+- id: p3-build-site-marker
+  state: out-of-scope
+  body: 'Pre-existing build-script bug, not caused by this change; to be filed as an issue at deliver.'
 evidence:
   review: review-p3
   reviewer: a526b8b16834e967b
