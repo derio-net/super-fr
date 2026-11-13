@@ -407,7 +407,7 @@ def tracking_root(space: paths.ArtifactSpace) -> Path:
 # --- what reaches the target -----------------------------------------------------------
 
 FR_OWNED_PATHS: Final = (
-    *(f"{paths.KIND_DIRS[k]}/" for k in ("superpowers", "acceptance")),
+    *(f"{d}/" for d in paths.ARTIFACT_TREES),
     ".fr/",
     ".fr-isolation",
     ".claude/agents/fr-",

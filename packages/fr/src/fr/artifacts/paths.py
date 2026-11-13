@@ -87,6 +87,10 @@ _TABLE: Final[tuple[tuple[str, str, str], ...]] = (
 KIND_DIRS: Mapping[str, str] = MappingProxyType({k: rel for k, rel, _ in _TABLE})
 """kind -> repo-relative POSIX path. The same relative path under every placement."""
 
+ARTIFACT_TREES: Final = (_SP, _ACC)
+"""The two repo-relative trees fr's artifacts live under (the stealth push refuses a
+commit touching one, R24)."""
+
 _SHELL_NAMES: Final[Mapping[str, str]] = MappingProxyType({k: f"FR_{v}" for k, _, v in _TABLE})
 
 
