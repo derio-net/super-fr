@@ -22,7 +22,7 @@ usable by one.
 |---|---|---|---|---|
 | `candidate` | pre-merge | agent | the PR's worktree | installs the PR's build into a throwaway prefix, runs each row's scenario in a fresh fixture repo |
 | `client-live` | pre-merge | operator | the PR's worktree | the same install; the operator drives the scenario inside a real client repo (`--client <path>`) |
-| `prerelease` | pre-merge | operator | an on-demand rc tag | installs from `fr verification prerelease --branch <b>`'s output. `fr verification walk` does not run it (it never runs a `source: prerelease` strategy). The PR body prints a manual route for each row instead |
+| `prerelease` | pre-merge | operator | an on-demand rc tag | installs from `fr verification prerelease --branch <b>`'s output. `fr verification walk` stops with an error on it (it never runs a `source: prerelease` strategy). The PR body prints a manual route for each row instead |
 | `live` | post-merge | operator | none | the released build, run by the operator after merge |
 
 `fr verification list` shows every strategy that resolves and where each came
@@ -159,7 +159,7 @@ Run it as a bare command (`fr` or `uv run
 fr`, no env prefix, pipe or redirect). `deliver` only trusts a log that it can tie to
 that command, to the run and strategy, and to the manifest's hash.
 
-`walk` does not run a strategy whose `source:` is `prerelease`, because it never installs
+`walk` stops with an error on a strategy whose `source:` is `prerelease`, because it never installs
 an rc. For those rows, the PR body's `## Pre-merge verification owed` section
 prints a manual route instead. Cut the rc with `fr verification prerelease`,
 install it through the install contract, and run the row's scenario in the client.
