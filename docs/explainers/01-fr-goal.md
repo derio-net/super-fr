@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 review-lenses phase 3, the lens-review step between journal-check and deliver
+reviewed: 2026-11-13 review-lenses phase 4, the lens-review step and the PR table it feeds, linked to the new guide
 ---
 
 ## Overview
@@ -971,7 +971,11 @@ examined and its findings, and the step will not close while a lens has no
 reviewer, a reviewer names a file the change never touched, or a finding is still
 open. The set is read again when the step closes, so a lens added during the review
 is owed too. When nobody added a lens and no rule matched, the step dispatches
-nobody and closes at once, and the record says no lens was requested.
+nobody and closes at once, and the record says no lens was requested. The pull
+request then carries a **Review lenses** table: each lens, why it was asked for,
+how many files its reviewer examined and how each finding closed. The
+[review lenses guide](../review-lenses.md) has the four texts fr ships and the
+config.
 
 ### 8. Keep delivery in draft until the checks pass (`deliver`)
 
