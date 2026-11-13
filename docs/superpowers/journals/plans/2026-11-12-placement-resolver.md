@@ -1460,3 +1460,8 @@ Record item from the adversarial review; inferred, not run. Check before the tes
 ### pr1431-n2 · finding [open] (reviewer: in scope) · _copy_quiet's read-tree --reset can discard pending writes in an existing fr worktree
 
 Record item: dirty_workspaces checks isolation states only, not the fr worktree or the tracking clone.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n3 created=2026-11-13T15:06:58+00:00 state=open review_scope=in -->
+### pr1431-n3 · finding [open] (reviewer: in scope) · HEADS records a head before it is pushed
+
+Record item: a refused push leaves the record on local fr; no false merged found.
