@@ -1410,3 +1410,8 @@ Unsafe owners are dropped with a notice that never echoes them, shas must be ful
 ### pr1431-r1 · finding [open] (reviewer: in scope) · Under stealth, fr push's drift refusal names migrate-branch, which commits a removal on the product branch and pushes without the stealth scan
 
 BLOCKER, reproduced by the independent adversarial review of PR #1431 at e4ca3869: the spec and a chore(placement) commit naming fr and stealth reach the target (R24). drift.py _into_outside calls _push_placement directly.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r2 created=2026-11-13T15:06:40+00:00 state=open review_scope=in -->
+### pr1431-r2 · finding [open] (reviewer: in scope) · A missing or unusable stealth marker falls back to repo while the isolation state still says stealth
+
+Reproduced: git clean -fdx removes .fr-isolation, fr journal add commits a debug journal on the product branch and fr push pushes it to the target. R24: no command run there falls back to repo.
