@@ -25,14 +25,20 @@ console = Console()
 
 
 def _default_branch(repo_root: Path) -> str:
+    """The product repo's default branch, read from its remote (review pr1431-r5). Never
+    the settings source ref: under quiet that is `origin/fr`, under stealth the tracking
+    repo's branch, and neither is a branch a PR merges into."""
+    from fr.git import GitRefusal, remote_default_ref, remote_name
     from fr.git_policy.push import PushRefusedError
-    from fr.settings import load_settings
 
-    ref = load_settings(repo_root).ref
-    if ref is None or not ref.startswith(("refs/remotes/", "refs/heads/")):
-        raise PushRefusedError("cannot tell the default branch to open the PR against; pass --base")
-    parts = ref.split("/")
-    return "/".join(parts[3:] if ref.startswith("refs/remotes/") else parts[2:])
+    ref = remote_default_ref(repo_root)
+    remote = remote_name(repo_root)
+    if ref is None or isinstance(ref, GitRefusal) or not isinstance(remote, str):
+        why = f" ({ref.reason})" if isinstance(ref, GitRefusal) else ""
+        raise PushRefusedError(
+            f"cannot tell the default branch to open the PR against{why}; pass --base"
+        )
+    return ref.removeprefix(f"{remote}/")
 
 
 def _refuse_recorded_pr(repo_root: Path, url: str | None) -> None:
