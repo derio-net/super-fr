@@ -79,3 +79,14 @@ rows:
     status: not-implemented
     notes: per-page accuracy reviews owed (phases 2-6)
     verify: none
+  - id: writing-standards-docs-accuracy-lens
+    capability: published-docs
+    acceptance: Every later change to a published page, made through an fr-goal run,
+      gets a review of that page against the code, so pages stay accurate.
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R15
+    - spec:2026-11-13-writing-standards-docs#R16
+    levels: {}
+    status: not-implemented
+    notes: lens and rule owed (phase 6)
+    verify: none
