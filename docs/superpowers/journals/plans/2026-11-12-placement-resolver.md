@@ -969,3 +969,8 @@ guard.ts's frEnabled became a re-export of marker.ts's, so there is one definiti
 ### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
 
 tripwire helpers are shared by the shell and TypeScript scans; the scenario and parity text need no cleanup
+
+<!-- fr:journal kind=decision scope=plan id=p6-plans-test-always created=2026-11-13T10:06:11+00:00 phase=6 decided_by=agent -->
+### p6-plans-test-always · decision · The plans-dir test runs whether or not fr resolves (phase 6)
+
+Spec §3.E says the OpenCode plugin falls back to the plans test only when `fr` is absent. Both engines (bash `_fr_is_enabled`, TS `frEnabled`) run it unconditionally, before asking `fr`. Kept deliberately (review p6-r7): the plans test can only ADD an fr-enabled answer, so running it always is the fail-closed reading. Running it only when `fr` is absent would let a failing, slow, garbled or lying `fr` turn a repo that has a plans dir in its checkout into 'not fr-enabled' and open the edit gate. The spec is not edited.
