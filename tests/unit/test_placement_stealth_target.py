@@ -236,3 +236,70 @@ def test_acceptance_init_names_the_stealth_placement(ws: tuple[Path, Path, Path]
     text = " ".join(done.output.split())
     assert done.exit_code == 0, done.output
     assert "under placement stealth" in text and "R24" in text and "quiet" not in text
+
+
+# --- lens l-security-r1: every commit the push adds, not only the first-parent line -----
+
+
+def test_push_refuses_an_fr_path_added_and_removed_on_a_merged_side_branch(
+    ws: tuple[Path, Path, Path],
+) -> None:
+    """A side branch that adds an fr file and then removes it, merged with --no-ff, puts
+    that file into the target's history although no first-parent commit touches it."""
+    root, _, origin = ws
+    git(root, "switch", "-qc", "side")
+    leak = root / "docs/superpowers/specs/leak.md"
+    leak.parent.mkdir(parents=True, exist_ok=True)
+    leak.write_text("secret\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "feat(s): leak")
+    git(root, "rm", "-q", "docs/superpowers/specs/leak.md")
+    git(root, "commit", "-qm", "feat(s): rm")
+    git(root, "switch", "-q", "feat/s")
+    (root / "b.txt").write_text("b\n")
+    git(root, "add", "b.txt")
+    git(root, "commit", "-qm", "feat(s): b")
+    git(root, "merge", "-q", "--no-ff", "side", "-m", "Merge side")
+    git(root, "branch", "-qD", "side")
+    result = _fr(root, "push")
+    assert result.exit_code == 2, result.output
+    assert "docs/superpowers/specs/leak.md" in " ".join(result.output.split())
+    assert "refs/heads/feat/s" not in git(origin, "show-ref")
+
+
+def test_a_stale_tracking_ref_cannot_hide_a_commit_from_the_stealth_scan(
+    ws: tuple[Path, Path, Path],
+) -> None:
+    """The exclusion is the remote's live tip: a local `origin/<x>` ref pointing at the
+    leaking side branch (stale, or forged) does not exempt its commits from the scan."""
+    root, _, origin = ws
+    git(root, "switch", "-qc", "side")
+    leak = root / ".fr/settings.yaml"
+    leak.parent.mkdir(parents=True, exist_ok=True)
+    leak.write_text("placement: repo\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "feat(s): leak")
+    git(root, "rm", "-q", ".fr/settings.yaml")
+    git(root, "commit", "-qm", "feat(s): rm")
+    git(root, "update-ref", "refs/remotes/origin/elsewhere", "HEAD")
+    git(root, "switch", "-q", "feat/s")
+    (root / "b.txt").write_text("b\n")
+    git(root, "add", "b.txt")
+    git(root, "commit", "-qm", "feat(s): b")
+    git(root, "merge", "-q", "--no-ff", "side", "-m", "Merge side")
+    git(root, "branch", "-qD", "side")
+    result = _fr(root, "push")
+    assert result.exit_code == 2, result.output
+    assert ".fr/settings.yaml" in " ".join(result.output.split())
+    assert "refs/heads/feat/s" not in git(origin, "show-ref")
+
+
+def test_the_stealth_scan_fails_closed_when_the_remote_cannot_be_read(
+    ws: tuple[Path, Path, Path],
+) -> None:
+    from fr.git_policy.push import PushRefusedError, commits_the_push_adds
+
+    root, _, _ = ws
+    git(root, "remote", "set-url", "origin", str(root.parent / "gone.git"))
+    with pytest.raises(PushRefusedError, match="cannot read"):
+        commits_the_push_adds(root, "origin", "feat/s")

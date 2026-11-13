@@ -203,17 +203,18 @@ def _record_pushed_head(repo_root: Path, space: Any) -> None:
         raise PushRefusedError(f"cannot record the pushed head in {path}: {outcome.reason}")
 
 
-def _refuse_fr_paths_under_stealth(repo_root: Path, commits: list[str]) -> None:
+def _refuse_fr_paths_under_stealth(repo_root: Path, remote: str, branch: str) -> None:
     """R24 "what reaches the target": under stealth only the code is pushed, so a commit
     carrying a path only fr writes (an artifact, `.claude/agents/fr-*.md`, `.fr/`, the
-    plan validator...) refuses the push, naming it (review p4-r3)."""
+    plan validator...) refuses the push, naming it (review p4-r3). Every commit the push
+    adds is scanned, side branches of a merge included (lens l-security-r1)."""
     from fr.artifacts.paths import STEALTH, outside_repo
-    from fr.git_policy.push import PushRefusedError
+    from fr.git_policy.push import PushRefusedError, commits_the_push_adds
     from fr.placement.stealth import fr_paths_in
 
     if outside_repo(repo_root) != STEALTH:
         return
-    found = fr_paths_in(repo_root, commits)
+    found = fr_paths_in(repo_root, commits_the_push_adds(repo_root, remote, branch))
     if found:
         raise PushRefusedError(
             f"under placement stealth no fr file reaches the target (R24), and the commits to "
@@ -252,7 +253,7 @@ def push_cmd() -> None:
                 still_current=push_still_current(repo_root, git_dir, branch, head),
             )
         rng = unpushed(repo_root, remote, branch)
-        _refuse_fr_paths_under_stealth(repo_root, [c.sha for c in rng.commits])
+        _refuse_fr_paths_under_stealth(repo_root, remote, branch)
         # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
         check_subjects(settings, rng.commits, issue)
         if settings.git.history == "squash-unpushed":

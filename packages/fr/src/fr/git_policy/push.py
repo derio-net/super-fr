@@ -113,7 +113,8 @@ class Range:
 
 
 def unpushed(root: Path, remote: str, branch: str) -> Range:
-    """The commits `fr push` may check and squash (see the module doc)."""
+    """The FIRST-PARENT commits `fr push` may check and squash (R13/R14; see the module
+    doc). Not the range a content scan reads: that is `commits_the_push_adds`."""
     listed = _git(root, "ls-remote", "--heads", remote, f"refs/heads/{branch}").split()
     remote_sha = listed[0] if listed else None
     exclude = [f"--remotes={remote}"]
@@ -132,6 +133,41 @@ def unpushed(root: Path, remote: str, branch: str) -> Range:
         exclude.append(remote_sha)
     shas = _git(root, "rev-list", "--first-parent", "--reverse", "HEAD", "--not", *exclude).split()
     return Range(tuple(_commit(root, s) for s in shas), remote_sha)
+
+
+def commits_the_push_adds(root: Path, remote: str, branch: str) -> list[str]:
+    """EVERY commit `git push <remote> <branch>` would add to the remote, oldest first:
+    `rev-list HEAD --not <remote tips>`, WITHOUT `--first-parent` (lens l-security-r1).
+
+    This is the range a content scan (stealth's "no fr file reaches the target", R24)
+    must read: a merged side branch that adds a file and later removes it puts that file
+    in the remote's history although no first-parent commit names it. `unpushed` is a
+    different question (which commits R13/R14 may check and squash) and stays
+    first-parent.
+
+    The exclusion is read LIVE from the remote with `ls-remote` (the target branch and
+    the remote's default `HEAD`), never from remote-tracking refs, which a stale fetch
+    or a hand-made ref could point past a commit the remote does not hold. Fails closed:
+    a remote it cannot read, or a remote tip this clone does not hold, refuses."""
+    done = run_git(root, ["ls-remote", remote, "HEAD", f"refs/heads/{branch}"])
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip()
+        raise PushRefusedError(
+            f"cannot read {remote}'s tips to decide which commits the push adds: {detail}"
+        )
+    tips: list[str] = []
+    for line in done.stdout.splitlines():
+        words = line.split()
+        if len(words) == 2 and words[0] not in tips:
+            tips.append(words[0])
+    for sha in tips:
+        if run_git(root, ["cat-file", "-e", f"{sha}^{{commit}}"]).returncode != 0:
+            raise PushRefusedError(
+                f"{remote} is at {sha[:12]}, which this clone does not have: run "
+                f"`git fetch {remote}` and try again"
+            )
+    exclude = ["--not", *tips] if tips else []
+    return _git(root, "rev-list", "--reverse", "HEAD", *exclude).split()
 
 
 def is_migration(settings: Settings, commit: Commit) -> bool:
