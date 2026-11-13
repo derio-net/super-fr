@@ -899,6 +899,8 @@ def prepare_resume(root: Path, ref: StealthRef, run_id: str) -> Resume:
     (reachable, private enough), the run found, the product branch fetched from the
     target's remote, and the recorded product head reconciled with it. A state that is
     ahead of the code refuses here, naming the missing commit."""
+    from fr.placement.merged import is_full_sha
+
     root = Path(root)
     check_reachable(ref, root)
     check_privacy(ref, origin_url(root), target_root=root)
@@ -909,6 +911,11 @@ def prepare_resume(root: Path, ref: StealthRef, run_id: str) -> Resume:
     branch = data.get("target_branch")
     if not isinstance(branch, str) or not branch:
         raise SettingsError(f"{path}: records no target_branch; cannot resume {run_id}")
+    if paths.unsafe_branch(branch) is not None:  # tracking-repo input (l-security-r2)
+        raise SettingsError(
+            f"{path}: its target_branch is no safe branch name "
+            f"({paths.unsafe_branch(branch)}); cannot resume {run_id}"
+        )
     fetched = network(
         ["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{branch}:"
          f"refs/remotes/origin/{branch}"],
@@ -920,5 +927,9 @@ def prepare_resume(root: Path, ref: StealthRef, run_id: str) -> Resume:
             f"({(fetched.stderr or 'git fetch failed').strip()}); resume needs the code"
         )
     recorded = data.get("product_head")
-    verdict = reconcile(root, recorded if isinstance(recorded, str) else None, branch)
+    if recorded is not None and not (isinstance(recorded, str) and is_full_sha(recorded)):
+        raise SettingsError(
+            f"{path}: its product_head is no full commit sha; cannot resume {run_id}"
+        )
+    verdict = reconcile(root, recorded, branch)
     return Resume(branch, path, verdict)

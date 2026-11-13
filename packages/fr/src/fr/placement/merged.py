@@ -39,6 +39,7 @@ and its ORDER come from its code branch's merge into the product's default ref.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
@@ -186,12 +187,22 @@ def append_record(
     return _append(merged_file(feature_root), record_text(sha, heads, pr))
 
 
+_FULL_SHA: Final = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
+"""A full SHA-1 or SHA-256 commit id: the only thing BASE, HEADS and a stealth
+placement file's `product_head` may hold. They are input from whoever can push to the
+placement's repo and reach git argv, so anything else is dropped (lens l-security-r2)."""
+
+
+def is_full_sha(text: str) -> bool:
+    return bool(_FULL_SHA.fullmatch(text))
+
+
 def _sha_lines(path: Path) -> list[str]:
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return []
-    return [line.strip() for line in text.splitlines() if line.strip()]
+    return [line.strip() for line in text.splitlines() if is_full_sha(line.strip())]
 
 
 def base_of(feature_root: Path) -> str | None:
@@ -225,7 +236,7 @@ def _stealth_heads(feature_root: Path) -> list[str]:
             head = json.loads(p.read_text()).get("product_head")
         except (OSError, ValueError, AttributeError):
             continue
-        if isinstance(head, str) and head:
+        if isinstance(head, str) and is_full_sha(head):
             out.append(head)
     return out
 

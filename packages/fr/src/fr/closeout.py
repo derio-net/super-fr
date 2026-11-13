@@ -17,6 +17,7 @@ one source of truth per layout, per AGENTS.md's artifact-versioning rule.
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -258,12 +259,18 @@ def _feature_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
                 continue
             sweep.merged_commits[name] = feature.sha
             if branch:
-                sweep.commands[name] = f"fr archive --branch {branch}"
+                sweep.commands[name] = archive_branch_command(branch)
             if complete:
                 sweep.archivable.append(name)
             else:
                 sweep.merged_manual_open.append((name, open_phases))
     return sweep
+
+
+def archive_branch_command(branch: str) -> str:
+    """`fr archive --branch <branch>`, with the branch shell-quoted: it comes from a
+    placement's OWNER file and is printed as a command to paste (lens l-security-r2)."""
+    return f"fr archive --branch {shlex.quote(branch)}"
 
 
 OwedKind = Literal["debug_journal", "plan", "spec", "orphan_journal", "orphan_run"]

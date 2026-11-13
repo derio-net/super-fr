@@ -386,12 +386,29 @@ def fast_forward(root: Path) -> None:
 
 
 def owner_of(fr_root: Path, fid: str) -> str | None:
-    """The branch the feature root *fid* records as its owner, or None when unrecorded."""
+    """The branch the feature root *fid* records as its owner, or None when unrecorded.
+
+    OWNER is input from whoever can push to the `fr` branch, and it is printed into
+    suggested commands (`fr archive --branch <owner>`): text that is no safe branch name
+    (`paths.unsafe_branch`: a space, a newline or another control character, a leading
+    `-`...) is ignored, with a notice that names the file but never echoes the text
+    (lens l-security-r2)."""
     try:
         text = (fr_root / paths.FEATURES_DIR / fid / paths.FEATURE_OWNER).read_text()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
-    return text.strip() or None
+    owner = text.strip()
+    if not owner:
+        return None
+    why = paths.unsafe_branch(owner)
+    if why is not None:
+        print(
+            f"fr: ignoring {paths.FEATURES_DIR}/{fid}/{paths.FEATURE_OWNER}: it does not "
+            f"hold a safe branch name ({why})",
+            file=sys.stderr,
+        )
+        return None
+    return owner
 
 
 def check_owner(fr_root: Path, fid: str, branch: str, placement: str = "quiet") -> None:
