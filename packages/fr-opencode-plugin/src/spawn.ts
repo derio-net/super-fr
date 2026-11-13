@@ -9,7 +9,12 @@ import { execFile, spawnSync } from "node:child_process";
 
 export type RunAnswer = { code: number | null; stdout: string; stderr?: string };
 
-export type RunOptions = { cwd?: string; timeoutMs: number };
+export type RunOptions = {
+  cwd?: string;
+  timeoutMs: number;
+  /** The child's whole environment; default: this process's. */
+  env?: Record<string, string | undefined>;
+};
 
 /** Run `cmd args` asynchronously. Never rejects. */
 export function run(cmd: string, args: string[], options: RunOptions): Promise<RunAnswer> {
@@ -18,7 +23,13 @@ export function run(cmd: string, args: string[], options: RunOptions): Promise<R
       execFile(
         cmd,
         args,
-        { cwd: options.cwd, timeout: options.timeoutMs, killSignal: "SIGKILL", windowsHide: true },
+        {
+          cwd: options.cwd,
+          env: options.env,
+          timeout: options.timeoutMs,
+          killSignal: "SIGKILL",
+          windowsHide: true,
+        },
         (error, stdout, stderr) => {
           // `error.code` is the exit status for a process that ran and exited
           // non-zero, a STRING ("ENOENT") when it never ran, and absent when it
@@ -43,6 +54,7 @@ export function runSync(cmd: string, args: string[], options: RunOptions): RunAn
   try {
     const out = spawnSync(cmd, args, {
       cwd: options.cwd,
+      env: options.env,
       timeout: options.timeoutMs,
       killSignal: "SIGKILL",
       windowsHide: true,

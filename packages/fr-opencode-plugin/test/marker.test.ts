@@ -2,7 +2,7 @@
 // isolated from the tool.execute.before wiring in index.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -277,6 +277,7 @@ describe("quiet and stealth are fr-enabled (R26)", () => {
   });
 
   test("fr settings paths --json names the placement", () => {
+    quietSwitch(repo, "placement: repo\n"); // the cheap precondition: an origin/fr ref
     withFr(`echo '{"FR_PLACEMENT": "quiet", "FR_PLANS_DIR": "/nowhere/plans"}'`, () => {
       expect(frPaths(repo)?.placement).toBe("quiet");
       expect(frEnabled(repo)).toBe(true);
@@ -285,6 +286,7 @@ describe("quiet and stealth are fr-enabled (R26)", () => {
 
   test("fr settings paths --json naming an existing plans dir makes the repo fr-enabled", () => {
     const plans = mkdtempSync(join(tmpdir(), "fr-opencode-plans-"));
+    quietSwitch(repo, "placement: repo\n");
     try {
       withFr(`echo '{"FR_PLACEMENT": "repo", "FR_PLANS_DIR": "${plans}"}'`, () => expect(frEnabled(repo)).toBe(true));
     } finally {
@@ -343,6 +345,7 @@ describe("fr resolution trusts only absolute PATH entries", () => {
     const savedPath = process.env.PATH;
     const savedCwd = process.cwd();
     try {
+      quietSwitch(repo, "placement: repo\n"); // so frEnabled would ask fr
       process.chdir(repo);
       for (const relative of [".", "bin", "", `bin${":"}.`]) {
         expect(resolveFr({ PATH: relative })).toBeNull();
@@ -356,5 +359,92 @@ describe("fr resolution trusts only absolute PATH entries", () => {
       process.env.PATH = savedPath;
       resetFrPaths();
     }
+  });
+});
+
+// Review p6 findings: no fr on a plain repo, a trusted and read-only fr otherwise, a
+// fail-closed read of the switch, and FR_REPO_ROOT pinned to the toplevel asked about.
+import { switchEnabled, switchRefMaybe } from "../src/marker";
+
+describe("review p6: what the plugin spawns, and when", () => {
+  test("a plain repo's decision spawns no fr (p6-r1)", () => {
+    const log = join(repo, "..", `calls-${process.pid}-plain`);
+    sh("git", ["remote", "add", "origin", "https://example.com/org/repo.git"], repo);
+    withFr(`echo "$*" >> ${log}; echo '{"FR_PLACEMENT": "quiet"}'`, () => {
+      expect(resolveMarker(join(repo, "README.md")).frEnabled).toBe(false);
+    });
+    expect(existsSync(log)).toBe(false);
+  });
+
+  test("fr is asked read-only, with --no-create (p6-r4)", () => {
+    const log = join(repo, "..", `calls-${process.pid}-nocreate`);
+    quietSwitch(repo, "placement: repo\n");
+    withFr(`echo "$*" >> ${log}; echo '{"FR_PLACEMENT": "repo"}'`, () => frEnabled(repo));
+    expect(readFileSync(log, "utf-8").trim()).toBe("settings paths --json --no-create");
+    rmSync(log, { force: true });
+  });
+
+  test("fr runs with FR_REPO_ROOT set to the toplevel, never an inherited one (p6-r9)", () => {
+    const saved = process.env.FR_REPO_ROOT;
+    process.env.FR_REPO_ROOT = "/somewhere/else.invalid";
+    try {
+      withFr(`echo "{\\"FR_PLACEMENT\\": \\"repo\\", \\"FR_PLANS_DIR\\": \\"$FR_REPO_ROOT\\"}"`, () => {
+        expect(frPaths(repo)?.plansDir).toBe(repo);
+      });
+    } finally {
+      if (saved === undefined) delete process.env.FR_REPO_ROOT;
+      else process.env.FR_REPO_ROOT = saved;
+    }
+  });
+
+  test("an absolute FR_HARNESS_FR path is preferred; an identity string is not a path (p6-r2)", async () => {
+    const { resolveFr } = await import("../src/fr");
+    const bin = mkdtempSync(join(tmpdir(), "fr-opencode-pin-"));
+    const pinned = join(bin, "fr");
+    writeFileSync(pinned, "#!/bin/sh\n", { mode: 0o755 });
+    try {
+      expect(resolveFr({ PATH: "/usr/bin:/bin", FR_HARNESS_FR: pinned })).toBe(realpathSync(pinned));
+      expect(resolveFr({ PATH: bin, FR_HARNESS_FR: `7.0.0 ${bin}` })).toBe(realpathSync(pinned));
+      expect(resolveFr({ PATH: "", FR_HARNESS_FR: "fr" })).toBeNull();
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  test("the switch ref is found on the filesystem: loose, packed, or not at all (p6-r8)", () => {
+    expect(switchRefMaybe(repo)).toBe(false);
+    quietSwitch(repo);
+    expect(switchRefMaybe(repo)).toBe(true);
+    sh("git", ["pack-refs", "--all"], repo);
+    expect(existsSync(join(repo, ".git", "refs", "remotes", "origin", "fr"))).toBe(false);
+    expect(switchRefMaybe(repo)).toBe(true);
+  });
+});
+
+const NON_CANONICAL_QUIET: Record<string, string> = {
+  "double-quoted": 'placement: "quiet"\n',
+  "single-quoted": "placement: 'quiet'\n",
+  "trailing-comment": "placement: quiet # c\n",
+  "flow-mapping": "{placement: quiet}\n",
+  indented: "  placement: quiet\n",
+  "quoted-key": '"placement": quiet\n',
+  "crlf-canonical": "placement: quiet\r\n",
+  "two-lines": "placement: repo\nplacement: quiet\n",
+  "quoted-repo": 'placement: "repo"\n',
+};
+
+describe("every spelling of a placement is fr-enabled without fr (p6-r3)", () => {
+  for (const [name, text] of Object.entries(NON_CANONICAL_QUIET)) {
+    test(name, () => {
+      expect(switchEnabled(text)).toBe(true);
+      quietSwitch(repo, text);
+      withoutFr(() => expect(resolveMarker(join(repo, "README.md")).frEnabled).toBe(true));
+    });
+  }
+
+  test("the canonical repo line, or no placement at all, is repo", () => {
+    expect(switchEnabled("placement: repo\n")).toBe(false);
+    expect(switchEnabled("schema: 1\n## placement: quiet is prose\n")).toBe(false);
+    expect(switchEnabled("placement: quiet\n")).toBe(true);
   });
 });

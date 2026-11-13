@@ -21,7 +21,7 @@
 // boundary. `setup` warns once at load when git is missing, so the fail-open
 // state is visible rather than silent.
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { resolveFr } from "./fr";
 import { git } from "./git";
@@ -67,7 +67,7 @@ function gitToplevel(dir: string): string | null {
   return out ? realpath(out) : null;
 }
 
-/** Bound for the one `fr settings paths --json` per toplevel. */
+/** Bound for the one `fr settings paths --json --no-create` per toplevel. */
 const FR_PATHS_TIMEOUT_MS = 5_000;
 
 /** The keys of `fr settings paths --json` this plugin reads (spec 2026-11-04
@@ -92,10 +92,13 @@ function stringKey(doc: Record<string, unknown>, key: string): string | undefine
 }
 
 /**
- * What `fr settings paths --json` says about this toplevel, cached per toplevel
- * (a failure is cached too: a hung or missing `fr` must not cost every edit its
- * timeout). `null` when `fr` is absent, fails, or answers something that is not a
- * JSON object: the caller then falls back to the direct checks, never to "no".
+ * What `fr settings paths --json --no-create` says about this toplevel, cached per
+ * toplevel (a failure is cached too: a hung or missing `fr` must not cost every edit its
+ * timeout). `--no-create` keeps it read-only: a hook never creates the quiet `fr` branch
+ * or worktree (review p6-r4). It runs with FR_REPO_ROOT set to *toplevel*, never an
+ * inherited one naming another repo (review p6-r9). `null` when `fr` is absent, fails,
+ * or answers something that is not a JSON object: the caller then falls back to the
+ * direct checks, never to "no".
  */
 export function frPaths(toplevel: string): FrPaths | null {
   if (pathsCache.has(toplevel)) return pathsCache.get(toplevel) ?? null;
@@ -104,7 +107,11 @@ export function frPaths(toplevel: string): FrPaths | null {
   const out =
     fr === null
       ? { code: null, stdout: "" }
-      : runSync(fr, ["settings", "paths", "--json"], { cwd: toplevel, timeoutMs: FR_PATHS_TIMEOUT_MS });
+      : runSync(fr, ["settings", "paths", "--json", "--no-create"], {
+          cwd: toplevel,
+          timeoutMs: FR_PATHS_TIMEOUT_MS,
+          env: { ...process.env, FR_REPO_ROOT: toplevel },
+        });
   if (out.code === 0) {
     try {
       const doc = JSON.parse(out.stdout) as unknown;
@@ -152,26 +159,96 @@ function isDir(path: string): boolean {
   }
 }
 
+/** The repository's common git dir, read from the filesystem (no subprocess): `.git` as
+ * a dir, or a `gitdir:` file (a linked worktree), then its `commondir`. */
+function commonDirOf(toplevel: string): string | null {
+  const dot = join(toplevel, ".git");
+  let gitDir: string;
+  try {
+    if (statSync(dot).isDirectory()) {
+      gitDir = dot;
+    } else {
+      const line = readFileSync(dot, "utf-8").split("\n")[0] ?? "";
+      if (!line.startsWith("gitdir: ")) return null;
+      gitDir = resolve(toplevel, line.slice("gitdir: ".length).trim());
+    }
+  } catch {
+    return null;
+  }
+  try {
+    return resolve(gitDir, readFileSync(join(gitDir, "commondir"), "utf-8").split("\n")[0]?.trim() ?? "");
+  } catch {
+    return gitDir;
+  }
+}
+
+/**
+ * Whether `refs/remotes/origin/fr` MAY exist, read from the filesystem with no
+ * subprocess (review p6-r8): a loose ref, a `packed-refs` line, a reftable store (not
+ * readable without git, so "maybe"), or a git dir that cannot be read. False only when
+ * the filesystem says positively that it does not. The precondition that keeps a plain
+ * repo's edit decision and nag from spawning git for the switch or `fr` at all (review
+ * p6-r1); it never decides fr-enabled by itself. Bash: `fr_switch_ref_maybe`.
+ */
+export function switchRefMaybe(toplevel: string): boolean {
+  const common = commonDirOf(toplevel);
+  if (common === null || !isDir(common)) return true;
+  if (existsSync(join(common, "refs", "remotes", "origin", "fr"))) return true;
+  if (isDir(join(common, "reftable"))) return true;
+  try {
+    return readFileSync(join(common, "packed-refs"), "utf-8")
+      .split("\n")
+      .some((line) => line.replace(/\r$/, "").endsWith(" refs/remotes/origin/fr"));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a switch's `settings.yaml` makes the repo fr-enabled (review p6-r3): fr
+ * accepts one spelling of `placement` only (`fr.placement.quiet.switch_spelling_problem`),
+ * the line `placement: <value>` at column 0, unquoted, no comment, the only live line
+ * naming placement. That line saying `quiet` is quiet; it saying `repo`, or no live
+ * line naming placement (the default), is repo; ANYTHING else fails closed, as
+ * fr-enabled. Bash: `_fr_switch_enabled`, line for line.
+ */
+export function switchEnabled(text: string): boolean {
+  let live = 0;
+  let canonical = "";
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (!line.includes("placement")) continue;
+    if (line.replace(/^\s+/, "").startsWith("#")) continue;
+    live += 1;
+    if (line === "placement: quiet" || line === "placement: repo") canonical = line;
+  }
+  if (live === 0) return false;
+  return !(live === 1 && canonical === "placement: repo");
+}
+
 /**
  * Whether the repo is on the quiet or stealth placement, found WITHOUT `fr`: the
  * marker records `placement` quiet or stealth, or the last fetched
- * `refs/remotes/origin/fr:settings.yaml` says `placement: quiet` and the repo has an
- * origin remote (R23). The shell library's `_fr_placement_enabled`, line for line.
+ * `refs/remotes/origin/fr:settings.yaml`, with an origin remote (R23), cannot be read
+ * positively as `repo` (`switchEnabled`). The shell library's `_fr_placement_enabled`,
+ * line for line.
  */
 export function placementEnabled(toplevel: string): boolean {
   const marker = readMarker(toplevel);
   if (marker && (marker.placement === "quiet" || marker.placement === "stealth")) return true;
   if (git(toplevel, "config", "--get", "remote.origin.url") === undefined) return false;
   const text = git(toplevel, "cat-file", "-p", "refs/remotes/origin/fr:settings.yaml");
-  return text !== undefined && /^placement:[ \t]*quiet[ \t]*$/m.test(text);
+  return text !== undefined && switchEnabled(text);
 }
 
 /**
- * The one "is this repo fr-enabled" (bash `_fr_is_enabled`, R26): a devcontainer
- * profile, a plans dir in the checkout, a quiet/stealth placement found directly, or
- * `fr settings paths --json` naming a quiet/stealth placement or an existing plans
- * dir. The direct checks come first and need no `fr`, so a missing, failing or
- * garbled `fr` can only fail to ADD a yes.
+ * The one "is this repo fr-enabled" (bash `_fr_is_enabled`, R26): the DIRECT checks, a
+ * devcontainer profile, a plans dir in the checkout (run whether or not `fr` resolves,
+ * plan-journal decision p6-plans-test-always), or a quiet/stealth placement found
+ * directly. Only then, and only when `refs/remotes/origin/fr` may exist (a plain repo
+ * spawns no `fr`, review p6-r1), `fr settings paths --json --no-create` naming a
+ * quiet/stealth placement or an existing plans dir. A missing, failing, slow or garbled
+ * `fr` can only fail to ADD a yes.
  */
 export function frEnabled(toplevel: string): boolean {
   // The same question the bash guard asks by globbing
@@ -185,6 +262,7 @@ export function frEnabled(toplevel: string): boolean {
   }
   if (isDir(`${toplevel}/docs/superpowers/plans`)) return true; // fr-paths-fallback
   if (placementEnabled(toplevel)) return true;
+  if (!switchRefMaybe(toplevel)) return false;
   const paths = frPaths(toplevel);
   if (paths === null) return false;
   if (paths.placement === "quiet" || paths.placement === "stealth") return true;

@@ -1,6 +1,6 @@
 // The acceptance nag (spec 2026-10-20-opencode-2-support R9).
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -240,6 +240,54 @@ describe("the nag's acceptance directory (R1, R26)", () => {
       process.env.PATH = savedPath;
       resetFrPaths();
       for (const d of [quiet, space, bin]) rmSync(d, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a plain repo's nag spawns nothing for the placement (review p6-r8)", () => {
+  test("no marker and no origin/fr ref on the filesystem: no git, no fr", async () => {
+    const { hasAcceptance } = await import("../src/nag");
+    const { resetFrPaths } = await import("../src/marker");
+    const bin = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-rec-")));
+    const log = join(bin, "calls.log");
+    for (const name of ["git", "fr"]) {
+      writeFileSync(join(bin, name), `#!/bin/sh\necho "${name} $*" >> ${log}\nexit 1\n`, { mode: 0o755 });
+    }
+    const saved = { PATH: process.env.PATH, FR_GIT_CANDIDATES: process.env.FR_GIT_CANDIDATES };
+    process.env.PATH = bin;
+    process.env.FR_GIT_CANDIDATES = join(bin, "git");
+    resetFrPaths();
+    try {
+      expect(hasAcceptance(repo)).toBe(true); // the checkout's own fragment
+      expect(existsSync(log)).toBe(false);
+      // and a marker file makes it look (the placement checks may spawn)
+      writeFileSync(join(repo, ".fr-isolation"), "{}");
+      hasAcceptance(repo);
+      expect(existsSync(log)).toBe(true);
+    } finally {
+      process.env.PATH = saved.PATH;
+      if (saved.FR_GIT_CANDIDATES === undefined) delete process.env.FR_GIT_CANDIDATES;
+      else process.env.FR_GIT_CANDIDATES = saved.FR_GIT_CANDIDATES;
+      resetFrPaths();
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  test("the default runner spawns only a trusted fr, never a relative PATH entry's (review p6-r2)", async () => {
+    const planted = join(repo, "planted-ran");
+    writeFileSync(join(repo, "fr"), `#!/bin/sh\ntouch ${planted}\necho 1 row unwired: planted\n`, { mode: 0o755 });
+    const saved = process.env.PATH;
+    const savedCwd = process.cwd();
+    process.env.PATH = ".";
+    process.chdir(repo);
+    try {
+      const event = ctxEvent("ses_rel");
+      await createNagHandler({ session: topLevel, directory: repo })(event);
+      expect(existsSync(planted)).toBe(false);
+      expect(event.system).toHaveLength(0);
+    } finally {
+      process.chdir(savedCwd);
+      process.env.PATH = saved;
     }
   });
 });
