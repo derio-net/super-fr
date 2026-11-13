@@ -102,9 +102,18 @@ rows:
     origin:
     - spec:2026-11-12-review-lenses#R12
     - spec:2026-11-12-review-lenses#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pr_body_lenses.py#test_a_rule_lens_and_an_agent_lens_render_a_table_with_states
+      - super-fr:tests/unit/test_pr_body_lenses.py#test_an_empty_set_says_no_lens_was_requested
+      - super-fr:tests/unit/test_pr_body_lenses.py#test_a_branch_changing_the_lens_config_says_so
+      - super-fr:tests/unit/test_pr_body_lenses.py#test_the_section_is_not_required_so_an_old_live_body_is_unchanged
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_review_lenses_shown_on_pr
+    status: ci
+    notes: the PR body renders the Review lenses table (rule and agent lens, files examined,
+      folded finding states), the empty-set line, the config-change line and the predates
+      line; skills, agents and docs/review-lenses.md carry the add-a-lens text, tripwire-checked
     verify: candidate
     scenario: tests/scenarios/review-lenses-shown-on-pr.sh
   - id: review-lenses-accumulate
