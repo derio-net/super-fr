@@ -233,6 +233,130 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
         typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
 
 
+def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
+    """`fr archive --branch <b>` under quiet and stealth (R25): append one `merged: <sha>`
+    record to the feature's `merged.yaml`, in ONE commit on the placement's branch, pushed
+    (quiet: a plain push of `fr`; stealth: compare-and-swap to the tracking ref), and move
+    nothing. The sha is the default ref's commit that merged the branch (R17's clause):
+    a branch that is not merged is refused, and a record that already agrees is not
+    written twice."""
+    from fr.artifacts.paths import FEATURES_DIR, feature_id
+    from fr.placement import merged as merged_status
+    from fr.placement.quiet import owner_of
+
+    evidence = merge_evidence(repo_root, fetch=True)
+    if evidence.ref is None:
+        err_console.print(
+            f"refusing to archive — no default ref: {evidence.ref_error}", soft_wrap=True
+        )
+        raise typer.Exit(2)
+    _branch_refs_or_exit(repo_root, branch, evidence.ref.ref.split("/", 1)[0])
+    _note_fetch_error(evidence)
+    space = space_for(repo_root)
+    fid = feature_id(branch)
+    froot = space.root / FEATURES_DIR / fid
+    if not froot.is_dir():
+        typer.echo(f"nothing to archive for {branch}: it has no feature path under {placement}")
+        return
+    owner = owner_of(space.root, fid)
+    if owner is not None and owner != branch:
+        err_console.print(
+            f"refusing to archive — the feature path {FEATURES_DIR}/{fid} belongs to "
+            f"{owner!r}, not {branch!r}",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    view = merged_status.merged_features(space, repo_root)
+    for notice in view.notices:
+        err_console.print(f"note: {escape(notice)}", soft_wrap=True)
+    feature = view.get(fid)
+    if feature is None:
+        err_console.print(
+            f"refusing to archive — {branch} is not merged into {view.ref or 'the default ref'}:"
+            " its head is not reachable from it (R17). Nothing was written",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    short = feature.sha[:12]
+    if feature.cached:
+        typer.echo(f"already recorded: {branch} merged at {short}; nothing to write")
+        return
+    path = merged_status.append_record(froot, feature.sha, feature.heads)
+    _commit_merged_record(
+        repo_root, space, placement, path, f"chore(fr): record {branch} merged at {short}"
+    )
+    typer.echo(
+        f"recorded: {branch} merged at {short} "
+        f"({FEATURES_DIR}/{fid}/{merged_status.MERGED_FILE}); nothing moved (R25)"
+    )
+
+
+def _commit_merged_record(
+    repo_root: Path, space: Any, placement: str, path: Path, message: str
+) -> None:
+    """Commit the one record and push it; on any failure put the file back and exit 2
+    (a push quiet's `fr` branch refused leaves the commit for `fr push` to retry)."""
+    from fr.artifacts.commit import CommitOutcome, StealthPushError, commit_paths
+    from fr.artifacts.paths import STEALTH
+    from fr.git_policy.push import PushRefusedError, atomic_push
+    from fr.placement import stealth
+    from fr.placement.quiet import QUIET_BRANCH, fr_worktree_lock, fr_worktree_problem
+    from fr.settings import SettingsError
+
+    def refuse(why: str, wt: Path) -> None:
+        stealth.restore_files(wt, [path])
+        err_console.print(f"refusing to archive — {escape(why)}", soft_wrap=True)
+        raise typer.Exit(2)
+
+    if placement == STEALTH:
+        found = stealth.marker_tracking(repo_root)
+        assert found is not None  # space_for resolved a stealth space
+        wt = stealth.tracking_root(space)
+
+        def tracking(w: Path, todo: Any, msg: str) -> CommitOutcome:
+            return commit_paths(w, todo, msg, tracking_branch=True)
+
+        try:
+            outcome = stealth.commit_and_push(
+                found[0],
+                wt,
+                [path],
+                message,
+                tracking,
+                target_remote=stealth.origin_url(repo_root),
+                target_root=repo_root,
+            )
+        except StealthPushError as e:  # the worktree is already restored
+            err_console.print(f"refusing to archive — {escape(str(e))}", soft_wrap=True)
+            raise typer.Exit(2) from e
+        except SettingsError as e:
+            refuse(str(e), wt)
+        else:
+            if not outcome.committed:
+                refuse(outcome.reason, wt)
+        return
+    fr_root = space.root
+    try:
+        with fr_worktree_lock(fr_root):
+            problem = fr_worktree_problem(fr_root, dirty=False)
+            if problem is not None:
+                refuse(problem, fr_root)
+            outcome = commit_paths(fr_root, [path], message)
+    except SettingsError as e:
+        refuse(str(e), fr_root)
+    if not outcome.committed:
+        refuse(outcome.reason, fr_root)
+    try:
+        atomic_push(repo_root, fr_root, "origin", QUIET_BRANCH, code=False)
+    except PushRefusedError as e:
+        err_console.print(
+            f"recorded on the local `{QUIET_BRANCH}` branch, but its push was refused: "
+            f"{escape(str(e))}; run `fr push` to retry",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+
+
 def _note_fetch_error(evidence: MergeEvidence) -> None:
     if evidence.fetch_error:
         err_console.print(
@@ -717,14 +841,17 @@ def archive_command(
     entirely. `--sweep-only` is the inverse: just the sweep, for finishing a
     close-out whose plan moves already landed.
     """
-    from fr.placement.quiet import refuse_under_quiet
+    from fr.artifacts.paths import outside_repo
+    from fr.settings import SettingsError
 
-    refuse_under_quiet(
-        resolve_repo_root(),
-        "fr archive",
-        "under quiet a merged feature is recorded with `merged:` on the `fr` branch, never "
-        "moved to implemented/ (R25), which this fr does not do yet",
-    )
+    placement = outside_repo(resolve_repo_root())
+    if placement is not None and branch is None:
+        raise SettingsError(
+            f"`fr archive` without --branch is not available under placement {placement}: "
+            "a merged feature is recorded, never moved (R25). Run `fr archive --branch "
+            "<branch>`, which appends `merged: <sha>` to its feature path and moves nothing. "
+            "Nothing was written"
+        )
     require_migrated_layout()
     if branch is not None:
         for conflicting, name in (
@@ -736,6 +863,9 @@ def archive_command(
             if conflicting:
                 err_console.print(f"--branch takes no {name} — it archives what the branch touched")
                 raise typer.Exit(2)
+        if placement is not None:
+            _record_merged(resolve_repo_root(), branch, placement)
+            return
         _archive_branch(resolve_repo_root(), branch, no_spec_sweep=no_spec_sweep)
         return
     if sweep_only:

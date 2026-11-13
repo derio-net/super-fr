@@ -5,7 +5,7 @@
 # (host worktree) records quiet; a plan, a journal entry and a run cursor land on `fr` under
 # features/feat__q/, a code commit stays on feat/q, and `fr push` pushes both. Then:
 # feat/q carries no fr path and no chore(fr) subject, every `fr` commit after the root
-# touches one feature path; acceptance rows land on `fr`, `fr archive` refuses, and a
+# touches one feature path; acceptance rows land on `fr`, `fr archive --all` refuses (R25: --branch), and a
 # `git add -A` code commit plus `fr push` puts no fr path or chore(fr) subject on origin's
 # main or feat/q; deleting `fr` on origin makes `fr run start` (its fetch) refuse, naming
 # both placements. Nothing reaches a forge.
@@ -80,7 +80,7 @@ require_exit 0 "$out"
 run_fr out acceptance set-status --id q-row --status unwired --notes m --feature legacy
 require_exit 0 "$out"
 run_fr out archive --all
-[ "$RC" -eq 2 ] || fail "fr archive did not refuse under quiet: $out"
+[ "$RC" -eq 2 ] || fail "fr archive --all did not refuse under quiet: $out"
 refuse_grep '.' "$(git status --porcelain)" "the product checkout is still clean"
 echo more > more.txt
 git add -A && git commit -qm "feat(q): more code" || fail "git add -A code commit"

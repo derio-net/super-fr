@@ -18,7 +18,7 @@ one source of truth per layout, per AGENTS.md's artifact-versioning rule.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -156,6 +156,12 @@ class PlanSweep:
     """Locally complete, not merged — or merge state unknown (`ref is None`)."""
     in_progress: list[str]
     """Everything else, a plan the working tree cannot parse included."""
+    commands: dict[str, str] = field(default_factory=dict)
+    """Plan name -> the command that archives it, when it is not `fr archive <plan dir>`
+    (under quiet and stealth: `fr archive --branch <b>`, R25)."""
+    merged_commits: dict[str, str] = field(default_factory=dict)
+    """Plan name -> the default ref's commit that merged it, when the sweep knows it
+    (under quiet and stealth, from `fr.placement.merged`)."""
 
 
 def _plan_merged(name: str, plan: Plan, evidence: MergeEvidence) -> bool:
@@ -174,6 +180,10 @@ def _plan_merged(name: str, plan: Plan, evidence: MergeEvidence) -> bool:
 def plan_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
     """Bucket every plan dir under `docs/superpowers/plans/` by `evidence`
     (already fetched by the caller — this never fetches)."""
+    from fr.artifacts.paths import outside_repo
+
+    if outside_repo(repo_root) is not None:
+        return _feature_sweep(repo_root, evidence)
     from fr.parser import PlanSchemaError, parse
     from fr.render import plan_locally_complete
 
@@ -201,6 +211,47 @@ def plan_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
             sweep.complete_unmerged.append(name)
         else:
             sweep.in_progress.append(name)
+    return sweep
+
+
+def _feature_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
+    """`plan_sweep` under quiet and stealth: every feature root's plans, merged when
+    their feature is (`fr.placement.merged`, R17's clause), and archived once a `merged:`
+    record agrees (R25: archive moves nothing, so the record is what "archived" means)."""
+    from fr.artifacts.paths import feature_roots, space_for
+    from fr.parser import PlanSchemaError, parse
+    from fr.placement.merged import merged_features
+    from fr.render import plan_locally_complete
+
+    space = space_for(repo_root)
+    view = merged_features(space, repo_root)
+    sweep = PlanSweep(evidence, [], [], [], [])
+    for froot in feature_roots(space):
+        feature = view.get(froot.name)
+        if feature is not None and feature.cached:
+            continue  # archived: its `merged:` record agrees with the default ref
+        plans_dir = below(froot, "plan")
+        if not plans_dir.is_dir():
+            continue
+        for plan_dir in sorted(p for p in plans_dir.iterdir() if (p / "_meta.yaml").exists()):
+            name = plan_dir.name
+            try:
+                plan = parse(plan_dir)
+            except PlanSchemaError:
+                sweep.in_progress.append(name)
+                continue
+            open_phases = [p.phase.number for p in plan.phases if not plan_locally_complete(p)]
+            complete = bool(plan.phases) and not open_phases
+            if feature is None:
+                (sweep.complete_unmerged if complete else sweep.in_progress).append(name)
+                continue
+            sweep.merged_commits[name] = feature.sha
+            if feature.branch:
+                sweep.commands[name] = f"fr archive --branch {feature.branch}"
+            if complete:
+                sweep.archivable.append(name)
+            else:
+                sweep.merged_manual_open.append((name, open_phases))
     return sweep
 
 
@@ -288,7 +339,7 @@ def _owed_plans(repo_root: Path, evidence: MergeEvidence) -> list[Owed]:
         Owed(
             kind="plan",
             path=PLANS_REL / name,
-            clear=f"fr archive {PLANS_REL / name}",
+            clear=sweep.commands.get(name, f"fr archive {PLANS_REL / name}"),
         )
         for name in sweep.archivable
     ]

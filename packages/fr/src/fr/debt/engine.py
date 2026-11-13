@@ -437,11 +437,15 @@ def compute(
 
     archivable = []
     for name in sweep.archivable:
-        merged = _last_commit(repo_root, ref, f"{PLANS_REL}/{name}") if ref else None
+        merged_sha = sweep.merged_commits.get(name)
+        if merged_sha is not None:  # quiet and stealth: the commit that merged its feature
+            merged = _last_commit(repo_root, merged_sha, None)
+        else:
+            merged = _last_commit(repo_root, ref, f"{PLANS_REL}/{name}") if ref else None
         archivable.append(
             ArchivablePlan(
                 name=name,
-                command=f"fr archive {PLANS_REL}/{name}",
+                command=sweep.commands.get(name, f"fr archive {PLANS_REL}/{name}"),
                 merged_at=merged.isoformat() if merged else None,
                 age_days=(now - merged).days if merged else None,
             )
