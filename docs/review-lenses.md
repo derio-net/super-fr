@@ -35,28 +35,34 @@ Each one ends the same way: a reviewer still reports a problem outside its lens,
 ordinary finding.
 
 - **security**: the lens looks for these problems:
-  - input that reaches a shell, a query, a path, a template or a deserialiser without
-    validation;
-  - secrets or tokens written to logs, errors, artifacts or the forge;
-  - authorisation checks that are absent, or made after the act they guard;
-  - new dependencies, and what they can reach;
-  - permissions wider than the change needs.
-- **tests**: whether the new tests would fail if the behaviour were wrong. The lens looks
-  for a test that restates the code under test, and one that covers only the easy input or
-  one kind of user. It also looks for a failure path with no test, and a mock in place of
-  the thing that the test must exercise. Not coverage numbers.
-- **simplicity**: the lens looks for these problems:
-  - a helper, layer, option or abstraction that the change does not need;
-  - code that duplicates something the repo already has, or that two phases each wrote;
-  - names that do not say what the thing is;
-  - a function that a reader cannot follow in one pass.
 
-  Not style that a formatter or linter owns.
+    - input that reaches a shell, a query, a path, a template or a deserialiser without
+      validation;
+    - secrets or tokens written to logs, errors, artifacts or the forge;
+    - authorisation checks that are absent, or made after the act they guard;
+    - new dependencies, and what they can reach;
+    - permissions wider than the change needs.
+
+- **tests**: whether the new tests would fail if the behaviour were wrong. The lens looks
+    for a test that restates the code under test, and one that covers only the easy input or
+    one kind of user. It also looks for a failure path with no test, and a mock in place of
+    the thing that the test must exercise. Not coverage numbers.
+
+- **simplicity**: the lens looks for these problems:
+
+    - a helper, layer, option or abstraction that the change does not need;
+    - code that duplicates something the repo already has, or that two phases each wrote;
+    - names that do not say what the thing is;
+    - a function that a reader cannot follow in one pass.
+
+    Not style that a formatter or linter owns.
+
 - **errors**: the lens looks for these problems:
-  - a failure that is swallowed, turned into a default, or reported without what a person
-    needs to act on it;
-  - a new failure path with no log or signal;
-  - a retry or fallback that hides the cause.
+
+    - a failure that is swallowed, turned into a default, or reported without what a person
+      needs to act on it;
+    - a new failure path with no log or signal;
+    - a retry or fallback that hides the cause.
 
 `fr lenses list` prints the set your repo has, and `fr lenses show <id>` prints one
 text in full.
@@ -158,9 +164,9 @@ is that it travels inside journal headers and finding ids. A path rule cannot as
 that the repo has disabled. `fr lenses check` fails a config that does.
 
 A branch is reviewed under the lenses that its default branch already has. It can add a
-lens and use it in the same pull request. But it can rewrite or disable a lens that the
-default branch has. Then its own review still uses the default branch's text, and fr says so
-in a warning. The change takes effect once it is merged. The author of a change does
+lens and use it in the same pull request. If it rewrites or disables a lens that the
+default branch has, its own review still uses the default branch's text. A warning
+from fr says so. The change takes effect once it is merged. The author of a change does
 not get to write the instructions that its reviewer gets.
 
 ## The commands
