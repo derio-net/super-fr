@@ -445,6 +445,104 @@ _fr_marker_valid() {
   esac
 }
 
+# --- the placement's own write targets (review pr1431-r6) -----------------
+#
+# Under quiet fr keeps a feature's artifacts in the repo's `fr` worktree, and under
+# stealth in the tracking clone (spec 2026-11-04 R1, R23, R24). Neither carries a marker,
+# and both can be fr-enabled (the `fr` worktree shares the quiet switch), so without this
+# the edit gate refused every edit-tool write where the artifacts live. They are allowed
+# by STRUCTURE, never by name alone, and only once the context is otherwise blocked:
+#   - quiet: a LINKED worktree at exactly the path `fr.placement.quiet.worktree_path`
+#     computes from its own common dir, `$HOME/.cache/fr/worktrees/<main checkout>/fr`,
+#     with HEAD `refs/heads/fr` and the switch reading canonically `placement: quiet`;
+#   - stealth: a CLONE named `stealth--*` beside a workspace whose `.fr-isolation`
+#     marker is valid, records `placement: stealth`, and names this clone's origin and
+#     HEAD branch as its `tracking.ref` (`fr.placement.stealth.ensure_worktree`'s check).
+# The OpenCode plugin's marker.ts `placementWriteTarget` is the same rule.
+
+# _fr_resolved_dir <dir> — `pwd -P` of an existing directory, or non-zero.
+_fr_resolved_dir() { (cd "$1" 2>/dev/null && pwd -P); }
+
+# _fr_quiet_worktree_path <resolved common dir> — the quiet `fr` worktree's path. Only a
+# common dir named `.git` names its main checkout; a bare or separate git dir names
+# whichever checkout asked (`repo_cache_name`), which the gate cannot know: no answer.
+_fr_quiet_worktree_path() {
+  case "$1" in */.git) ;; *) return 1 ;; esac
+  [ -n "${HOME:-}" ] || return 1
+  _fr_qmain=${1%/.git}
+  printf '%s\n' "$HOME/.cache/fr/worktrees/${_fr_qmain##*/}/fr"
+}
+
+# _fr_is_quiet_fr_worktree <resolved toplevel>
+_fr_is_quiet_fr_worktree() {
+  [ -f "$1/.git" ] || return 1 # a linked worktree, never a primary checkout
+  _fr_qcommon=$(_fr_common_dir_of "$1") || return 1
+  _fr_qcommon=$(_fr_resolved_dir "$_fr_qcommon") || return 1
+  _fr_qwant=$(_fr_quiet_worktree_path "$_fr_qcommon") || return 1
+  _fr_qwant=$(_fr_resolved_dir "$_fr_qwant") || return 1
+  [ "$_fr_qwant" = "$1" ] || return 1
+  fr_git_resolve || return 1
+  [ "$("$FR_GIT_BIN" -C "$1" symbolic-ref --quiet HEAD 2>/dev/null)" = "refs/heads/fr" ] ||
+    return 1
+  "$FR_GIT_BIN" -C "$1" config --get remote.origin.url >/dev/null 2>&1 || return 1
+  _fr_qswitch=$("$FR_GIT_BIN" -C "$1" cat-file -p refs/remotes/origin/fr:settings.yaml 2>/dev/null) ||
+    return 1
+  _fr_switch_enabled "$_fr_qswitch" || return 1
+  [ "$_fr_live" -eq 1 ] && [ "$_fr_canon" = "placement: quiet" ]
+}
+
+# _fr_same_repo <a> <b> — `fr.placement.stealth._same_repo`: two local paths are the same
+# directory; anything else compares as a string, trailing slash ignored. A relative path
+# cannot be resolved from a hook (no cwd of fr's to resolve it against): not the same.
+_fr_local_repo() {
+  case "$1" in /* | ./* | ../* | '~'* | file://*) return 0 ;; *:*) return 1 ;; esac
+  return 0
+}
+_fr_repo_dir() {
+  _fr_rp=${1#file://}
+  case "$_fr_rp" in '~'/*) _fr_rp="$HOME/${_fr_rp#'~'/}" ;; esac
+  case "$_fr_rp" in /*) _fr_resolved_dir "$_fr_rp" ;; *) return 1 ;; esac
+}
+_fr_same_repo() {
+  if _fr_local_repo "$1" && _fr_local_repo "$2"; then
+    _fr_ra=$(_fr_repo_dir "$1") || return 1
+    _fr_rb=$(_fr_repo_dir "$2") || return 1
+    [ "$_fr_ra" = "$_fr_rb" ]
+  else
+    [ "${1%/}" = "${2%/}" ]
+  fi
+}
+
+# _fr_is_stealth_clone <resolved toplevel>
+_fr_is_stealth_clone() {
+  [ -d "$1/.git" ] || return 1 # the tracking clone is a clone, never a worktree
+  case "${1##*/}" in stealth--?*) ;; *) return 1 ;; esac
+  fr_git_resolve || return 1
+  _fr_surl=$("$FR_GIT_BIN" -C "$1" config --get remote.origin.url 2>/dev/null) || return 1
+  _fr_shead=$("$FR_GIT_BIN" -C "$1" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 1
+  for _fr_sws in "${1%/*}"/*/; do
+    _fr_sws=${_fr_sws%/}
+    [ -f "$_fr_sws/.fr-isolation" ] || continue
+    [ "$(fr_json_file_field "$_fr_sws/.fr-isolation" placement)" = stealth ] || continue
+    _fr_sref=$(fr_json_file_field "$_fr_sws/.fr-isolation" tracking.ref) || continue
+    case "$_fr_sref" in __HOOK_PARSE_ERROR__ | "" | *@ | @*) continue ;; *@*) ;; *) continue ;; esac
+    _fr_sbranch=${_fr_sref##*@}
+    case "$_fr_sbranch" in *:* | -*) continue ;; esac
+    [ "$_fr_sbranch" = "$_fr_shead" ] || continue
+    _fr_same_repo "${_fr_sref%@*}" "$_fr_surl" || continue
+    _fr_swtop=$(_fr_resolved_dir "$_fr_sws") || continue
+    (_fr_marker_valid "$_fr_swtop") && return 0
+  done
+  return 1
+}
+
+# _fr_placement_write_target <resolved toplevel> — 0 for either target above.
+_fr_placement_write_target() {
+  _fr_is_quiet_fr_worktree "$1" && return 0
+  _fr_is_stealth_clone "$1" && return 0
+  return 1
+}
+
 # --- public decisions ------------------------------------------------------
 
 # fr_isolation_decide_cwd <dir>
@@ -633,8 +731,13 @@ fr_isolation_decide_edit() {
     return 0
   fi
 
-  # Blocked context — but `.fr-isolation-allow` can exempt specific paths.
+  # Blocked context — but the placement's own write targets (the quiet `fr` worktree, the
+  # stealth tracking clone) are allowed by structure (review pr1431-r6). A subshell keeps
+  # their globals from clobbering this function's.
   _fr_rtop=$(_fr_toplevel_of "$_fr_dir") || return 1
+  if (_fr_placement_write_target "$_fr_rtop"); then return 0; fi
+
+  # `.fr-isolation-allow` can exempt specific paths.
   _fr_allow="$_fr_rtop/.fr-isolation-allow"
   if [ -f "$_fr_allow" ]; then
     _fr_rdir=$(cd "$_fr_dir" 2>/dev/null && pwd -P) || _fr_rdir="$_fr_dir"

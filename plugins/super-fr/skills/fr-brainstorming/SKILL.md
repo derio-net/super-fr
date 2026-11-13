@@ -81,12 +81,12 @@ after brainstorm reads it: the spec is the contract.
 ## 2. Hand off
 
 The brainstorm's design document becomes the spec
-(`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`, committed in the
-worktree), with a `## Requirements` section before `## Design`: a plain
+(`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`, committed in the worktree;
+under quiet or stealth `$FR_SPECS_DIR/<YYYY-MM-DD-slug>-design.md`, see below), with a `## Requirements` section before `## Design`: a plain
 numbered list, one requirement per line — `R1. <text>`, `R2. <text>` — in the
 spec author's own words, with no quote, no source and no gate on its content.
 It is what the questions settled: a requirement the spec does not state is not
-built, and a spec defect is fixed in the spec. The Test Plan heading is exactly `## Test Plan` — unnumbered, no suffix, even when every other section is numbered: fr reads that line alone, and refuses a near-miss such as `## 6. Test Plan (post-merge)` (`fr validate artifacts`, `fr plan self-review`, archive, close-out). **Standalone:** resolve the cursor §0 started with its step
+built, and a spec defect is fixed in the spec. The Test Plan heading is exactly `## Test Plan` — unnumbered, no suffix, even when every other section is numbered: fr reads that line alone, and refuses a near-miss such as `## 6. Test Plan (post-merge)` (`fr validate artifacts`, `fr plan self-review`, archive, close-out). **Standalone:** resolve the cursor §0 started with its step **Where the files go (quiet and stealth).** Under the default `repo` placement fr's artifacts live in the checkout, at the `docs/superpowers/…` paths named here. Under quiet or stealth they do not: run `fr settings paths --shell` in the workspace and use its answers — `FR_SPECS_DIR`, `FR_PLANS_DIR`, `FR_PLAN_JOURNALS_DIR`, `FR_DEBUG_JOURNALS_DIR` and the rest — for every path a skill names below `docs/superpowers/`. They point into the repo's `fr` worktree (quiet) or the tracking clone (stealth), the two places outside the workspace where the edit gate lets you write. A file you write by hand there (the spec) is committed in that checkout, never in the product worktree, where `fr push` refuses it. fr's own commands (`fr plan create`, `fr journal add`, `fr run …`) already follow the placement.
 record — `emitted: {spec: <path>}`, each answer a `decision` in `journal:`,
 the brief from §1, each §3 row in `acceptance:` — in ONE `fr run
 resolve <run-id> --step brainstorm --record <file>`, then `fr run advance

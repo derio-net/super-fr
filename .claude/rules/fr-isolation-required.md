@@ -9,6 +9,10 @@ repo toplevel, checked by the marker's `mode`:
   linked worktree, with HEAD still on the marker's `branch` (a detached HEAD
   is fine; another branch checked out is drift: edits are denied, the shell
   stays open for `git switch <registered>`, and gc will not reap it).
+- under quiet or stealth, the placement's own write targets are allowed by
+  structure: the repo's `fr` worktree (linked, at the path fr computes, on branch
+  `fr`, the switch quiet) and a stealth tracking clone a valid stealth workspace's
+  marker names. `fr settings paths --shell` gives the directories.
 - `external` (preparer-adopted container) → toplevel match **plus** container
   evidence (`/.dockerenv`, `/run/.containerenv`, or `$KUBERNETES_SERVICE_HOST`),
   so a marker forged on a bare host or copied to the base clone never validates.

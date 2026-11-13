@@ -142,8 +142,17 @@ fail to add a "yes", never turn one into a "no", so the gate is never weaker for
 binary. The OpenCode plugin and the Hermes hook make the same decision (one shared
 definition each).
 
-Only a marker that clears every step allows the edit. There are three ways around the
-gate, all deliberate:
+Only a marker that clears every step allows the edit, with one structural exception. Under
+quiet and stealth, fr keeps a feature's spec, plan and journals outside the workspace: in the
+repo's own `fr` worktree, or in the clone of the tracking repo. Neither carries a marker, so
+the gate recognises them by their shape instead. The `fr` worktree must be a linked worktree
+of the same repository, at exactly the path fr gives it (`~/.cache/fr/worktrees/<repo>/fr`),
+on branch `fr`, while the switch says `placement: quiet`; a worktree of another repo parked at
+that path, or a branch named `fr` anywhere else, does not qualify. The tracking clone must be
+named `stealth--…`, sit beside a workspace whose marker is valid and says `placement: stealth`,
+and have the origin and branch that marker names. The skills ask `fr settings paths --shell`
+for the directories (`FR_SPECS_DIR`, `FR_PLANS_DIR` and the rest) rather than writing to
+`docs/superpowers/` in the workspace. There are three ways around the gate, all deliberate:
 
 - **`FR_BASE_OK=1`**: a one-shot environment override for a deliberate, knowing edit to the
   base clone.

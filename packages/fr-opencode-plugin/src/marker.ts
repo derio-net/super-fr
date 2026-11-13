@@ -21,7 +21,8 @@
 // boundary. `setup` warns once at load when git is missing, so the fail-open
 // state is visible rather than silent.
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { resolveFr } from "./fr";
 import { git } from "./git";
@@ -34,6 +35,11 @@ export interface MarkerResolution {
   frEnabled: boolean;
   /** True if a valid isolation marker allows edits at this toplevel. */
   hasValidMarker: boolean;
+  /**
+   * True when the toplevel is where the placement itself keeps artifacts: the repo's own
+   * quiet `fr` worktree, or a stealth tracking clone (review pr1431-r6). Allowed.
+   */
+  placementTarget?: boolean;
   /**
    * Set when a worktree-mode marker records a branch and HEAD is a different
    * branch (gh#553) — the marker is then invalid, and the deny names both.
@@ -378,6 +384,116 @@ function matchesAllowlist(toplevel: string, file: string): boolean {
   return false;
 }
 
+// The placement's own write targets (review pr1431-r6). Under quiet fr keeps a feature's
+// artifacts in the repo's `fr` worktree, and under stealth in the tracking clone (spec
+// 2026-11-04 R1, R23, R24). Neither carries a marker, and both can be fr-enabled, so the
+// gate allows them by STRUCTURE, never by name alone, once the context is otherwise
+// blocked. The shell library's `_fr_placement_write_target`, case for case.
+
+function resolvedDir(path: string): string | null {
+  return isDir(path) ? realpath(path) : null;
+}
+
+/** `fr.placement.quiet.worktree_path`: `$HOME/.cache/fr/worktrees/<main checkout>/fr`.
+ * Only a common dir named `.git` names its main checkout; a bare or separate git dir names
+ * whichever checkout asked (`repo_cache_name`), which the gate cannot know: no answer. */
+function quietWorktreePath(common: string): string | null {
+  if (basename(common) !== ".git") return null;
+  const home = process.env.HOME || homedir();
+  if (!home) return null;
+  return join(home, ".cache", "fr", "worktrees", basename(dirname(common)), "fr");
+}
+
+/** The repo's own quiet `fr` worktree: a LINKED worktree at exactly that path, HEAD on
+ * `refs/heads/fr`, the switch reading canonically `placement: quiet`. */
+function isQuietFrWorktree(toplevel: string): boolean {
+  try {
+    if (!statSync(join(toplevel, ".git")).isFile()) return false; // never a primary checkout
+  } catch {
+    return false;
+  }
+  const rawCommon = commonDirOf(toplevel);
+  const common = rawCommon === null ? null : resolvedDir(rawCommon);
+  if (common === null) return false;
+  const rawWant = quietWorktreePath(common);
+  const want = rawWant === null ? null : resolvedDir(rawWant);
+  if (want === null || want !== toplevel) return false;
+  if (git(toplevel, "symbolic-ref", "--quiet", "HEAD") !== "refs/heads/fr") return false;
+  if (git(toplevel, "config", "--get", "remote.origin.url") === undefined) return false;
+  const text = git(toplevel, "cat-file", "-p", "refs/remotes/origin/fr:settings.yaml");
+  return text !== undefined && switchIsQuiet(text);
+}
+
+/** The switch says canonically `placement: quiet` and nothing else (`switchEnabled`'s
+ * scan, strict: a spelling it fails closed on is not quiet here). */
+function switchIsQuiet(text: string): boolean {
+  const live = text
+    .split("\n")
+    .map((raw) => raw.replace(/\r$/, ""))
+    .filter((line) => line.includes("placement") && !line.replace(/^\s+/, "").startsWith("#"));
+  return live.length === 1 && live[0] === "placement: quiet";
+}
+
+/** `fr.placement.stealth.is_local`. */
+function localRepo(repo: string): boolean {
+  if (/^(\/|\.\/|\.\.\/|~|file:\/\/)/.test(repo)) return true;
+  return !repo.includes(":");
+}
+
+function repoDir(repo: string): string | null {
+  let p = repo.startsWith("file://") ? repo.slice("file://".length) : repo;
+  if (p.startsWith("~/")) p = join(process.env.HOME || homedir(), p.slice(2));
+  return isAbsolute(p) ? resolvedDir(p) : null;
+}
+
+/** `fr.placement.stealth._same_repo`; a relative path cannot be resolved from a hook. */
+function sameRepo(a: string, b: string): boolean {
+  if (localRepo(a) && localRepo(b)) {
+    const ra = repoDir(a);
+    return ra !== null && ra === repoDir(b);
+  }
+  return a.replace(/\/$/, "") === b.replace(/\/$/, "");
+}
+
+/** A stealth tracking clone: a CLONE named `stealth--*` beside a workspace whose marker is
+ * valid, records `placement: stealth`, and names this clone's origin and HEAD branch as
+ * its `tracking.ref` (`fr.placement.stealth.ensure_worktree`'s own check). */
+function isStealthClone(toplevel: string): boolean {
+  if (!isDir(join(toplevel, ".git"))) return false; // a clone, never a worktree
+  if (!/^stealth--./.test(basename(toplevel))) return false;
+  const url = git(toplevel, "config", "--get", "remote.origin.url");
+  const head = git(toplevel, "symbolic-ref", "--quiet", "--short", "HEAD");
+  if (url === undefined || head === undefined) return false;
+  const parent = dirname(toplevel);
+  let entries: string[];
+  try {
+    entries = readdirSync(parent);
+  } catch {
+    return false;
+  }
+  for (const entry of entries.sort()) {
+    const ws = join(parent, entry);
+    if (!existsSync(join(ws, ".fr-isolation"))) continue;
+    const marker = readMarker(ws) as { placement?: unknown; tracking?: { ref?: unknown } } | null;
+    if (!marker || marker.placement !== "stealth") continue;
+    const ref = marker.tracking?.ref;
+    if (typeof ref !== "string") continue;
+    const at = ref.lastIndexOf("@");
+    if (at <= 0 || at === ref.length - 1) continue;
+    const branch = ref.slice(at + 1);
+    if (branch.includes(":") || branch.startsWith("-") || branch !== head) continue;
+    if (!sameRepo(ref.slice(0, at), url)) continue;
+    const wsTop = resolvedDir(ws);
+    if (wsTop !== null && hasValidIsolationMarker(wsTop)) return true;
+  }
+  return false;
+}
+
+/** Whether *toplevel* is one of the placement's own write targets (review pr1431-r6). */
+export function placementWriteTarget(toplevel: string): boolean {
+  return isQuietFrWorktree(toplevel) || isStealthClone(toplevel);
+}
+
 /**
  * Resolve whether `file` may be edited: false only means "no verdict" (not
  * our concern — no toplevel, not fr-enabled). Callers combine this with
@@ -395,6 +511,7 @@ export function resolveMarker(file: string): MarkerResolution {
 
   const hasValidMarker = hasValidIsolationMarker(toplevel);
   if (hasValidMarker) return { toplevel, frEnabled: true, hasValidMarker };
+  if (placementWriteTarget(toplevel)) return { toplevel, frEnabled: true, hasValidMarker, placementTarget: true };
   const marker = existsSync(`${toplevel}/.fr-isolation`) ? readMarker(toplevel) : null;
   const drift =
     marker && (marker.mode ?? "worktree") === "worktree" ? branchDrift(toplevel, marker.branch) : undefined;

@@ -482,3 +482,136 @@ def test_a_plain_repos_placement_question_spawns_no_git(tmp_path: Path) -> None:
     quiet = quiet_repo(tmp_path / "q")
     assert enabled(quiet, env) == 0
     assert any("cat-file" in c for c in log.read_text().splitlines())
+
+
+# --- review pr1431-r6: the placement's own write targets ----------------------------
+#
+# Under quiet fr writes artifacts in the repo's `fr` worktree, and under stealth in the
+# tracking clone; neither carries a marker. The gate allows them by STRUCTURE: the path
+# `fr.placement.quiet.worktree_path` computes, HEAD on `fr`, the switch saying quiet; or a
+# clone recorded by a valid stealth workspace's marker. Never anything else.
+
+
+def quiet_fr_worktree(tmp_path: Path, home: Path, settings: str = "placement: quiet\n") -> Path:
+    """A quiet repo named `prod` and its `fr` worktree where fr puts it under *home*."""
+    (tmp_path / "q").mkdir(exist_ok=True)
+    repo = quiet_repo(tmp_path / "q", settings=settings)
+    repo = repo.rename(repo.parent / "prod")
+    wt = home / ".cache" / "fr" / "worktrees" / "prod" / "fr"
+    wt.parent.mkdir(parents=True)
+    _git(repo, "worktree", "add", "-q", "-b", "fr", str(wt), "refs/remotes/origin/fr")
+    return wt
+
+
+def spec_in(root: Path) -> Path:
+    return root / "features" / "feat__x" / "docs" / "superpowers" / "specs" / "x-design.md"
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_the_repos_own_quiet_fr_worktree_is_editable(
+    tmp_path: Path, env: dict[str, str] | None
+) -> None:
+    home = tmp_path / "home"
+    wt = quiet_fr_worktree(tmp_path, home)
+    assert decide(spec_in(wt), env={**(env or {}), "HOME": str(home)}) == 0
+
+
+def test_the_quiet_fr_worktree_is_editable_only_while_the_repo_is_quiet(tmp_path: Path) -> None:
+    """A `fr` worktree whose switch reads anything but canonical quiet is not allowed;
+    a non-canonical spelling stays fr-enabled (fail closed) and so is blocked."""
+    home = tmp_path / "home"
+    wt = quiet_fr_worktree(tmp_path, home, settings='placement: "quiet"\n')
+    assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_an_fr_worktree_at_another_repos_path_is_refused(tmp_path: Path) -> None:
+    """A worktree on branch `fr` of repo `other`, placed where `prod`'s fr worktree goes."""
+    home = tmp_path / "home"
+    (tmp_path / "o").mkdir()
+    other = quiet_repo(tmp_path / "o")
+    other = other.rename(other.parent / "other")
+    wt = home / ".cache" / "fr" / "worktrees" / "prod" / "fr"
+    wt.parent.mkdir(parents=True)
+    _git(other, "worktree", "add", "-q", "-b", "fr", str(wt), "refs/remotes/origin/fr")
+    assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_an_fr_worktree_somewhere_else_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (tmp_path / "q").mkdir()
+    repo = quiet_repo(tmp_path / "q")
+    wt = tmp_path / "elsewhere" / "fr"
+    _git(repo, "worktree", "add", "-q", "-b", "fr", str(wt), "refs/remotes/origin/fr")
+    assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_a_worktree_at_the_fr_path_on_another_branch_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    wt = quiet_fr_worktree(tmp_path, home)
+    _git(wt, "checkout", "-q", "-b", "not-fr")
+    assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_the_quiet_repos_primary_checkout_is_still_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    wt = quiet_fr_worktree(tmp_path, home)
+    prod = tmp_path / "q" / "prod"
+    assert decide(prod / "src.py", env={**NO_FR, "HOME": str(home)}) == 1
+    # even when the primary checkout itself sits on branch `fr`
+    _git(prod, "worktree", "remove", "--force", str(wt))
+    _git(prod, "checkout", "-q", "fr")
+    assert decide(prod / "x.md", env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def stealth_setup(tmp_path: Path, home: Path) -> tuple[Path, Path, Path]:
+    """A target workspace with a valid stealth marker, and its tracking clone beside it.
+    The tracking repo has a devcontainer profile, so the clone is fr-enabled on its own."""
+    tracking = fr_repo(tmp_path, name="tracking")  # fr-enabled: it has a profile
+    bare = tmp_path / "tracking.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(tracking), str(bare)], check=True)
+    target = fr_repo(tmp_path, name="target", fr_enabled=False)
+    parent = home / ".cache" / "fr" / "worktrees" / "target"
+    parent.mkdir(parents=True)
+    ws = parent / "feat__x"
+    _git(target, "worktree", "add", "-q", str(ws), "-b", "feat/x")
+    (ws / ".fr-isolation").write_text(
+        f'{{"toplevel": "{ws.resolve()}", "branch": "feat/x", "mode": "worktree", '
+        f'"placement": "stealth", "tracking": {{"ref": "{bare}@main", "target": "target"}}}}'
+    )
+    clone = parent / "stealth--local--tracking--main"
+    subprocess.run(
+        ["git", "clone", "-q", "--branch", "main", str(bare), str(clone)], check=True
+    )
+    return ws, clone, bare
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_the_stealth_tracking_clone_is_editable(
+    tmp_path: Path, env: dict[str, str] | None
+) -> None:
+    home = tmp_path / "home"
+    _ws, clone, _bare = stealth_setup(tmp_path, home)
+    assert decide(spec_in(clone / "target"), env={**(env or {}), "HOME": str(home)}) == 0
+
+
+def test_a_tracking_clone_without_a_valid_stealth_workspace_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    ws, clone, _bare = stealth_setup(tmp_path, home)
+    env = {**NO_FR, "HOME": str(home)}
+    # the marker copied into a primary checkout is not a valid workspace
+    marker = (ws / ".fr-isolation").read_text()
+    (ws / ".fr-isolation").write_text(marker.replace('"placement": "stealth"', '"placement": "repo"'))
+    assert decide(spec_in(clone / "target"), env=env) == 1
+    (ws / ".fr-isolation").write_text(marker.replace(str(ws.resolve()), "/elsewhere.invalid"))
+    assert decide(spec_in(clone / "target"), env=env) == 1
+
+
+def test_a_clone_of_another_repo_or_branch_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _ws, clone, _bare = stealth_setup(tmp_path, home)
+    env = {**NO_FR, "HOME": str(home)}
+    _git(clone, "checkout", "-q", "-b", "other")
+    assert decide(spec_in(clone / "target"), env=env) == 1
+    _git(clone, "checkout", "-q", "main")
+    _git(clone, "remote", "set-url", "origin", "https://example.com/org/other.git")
+    assert decide(spec_in(clone / "target"), env=env) == 1

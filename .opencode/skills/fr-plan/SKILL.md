@@ -13,7 +13,7 @@ start:** "I'm using fr-plan to create the implementation plan."
 
 ## Format (v2 plan-as-folder)
 
-A plan is a directory under `docs/superpowers/plans/<slug>/` containing:
+**Where the files go (quiet and stealth).** Under the default `repo` placement fr's artifacts live in the checkout, at the `docs/superpowers/…` paths named here. Under quiet or stealth they do not: run `fr settings paths --shell` in the workspace and use its answers — `FR_SPECS_DIR`, `FR_PLANS_DIR`, `FR_PLAN_JOURNALS_DIR`, `FR_DEBUG_JOURNALS_DIR` and the rest — for every path a skill names below `docs/superpowers/`. They point into the repo's `fr` worktree (quiet) or the tracking clone (stealth), the two places outside the workspace where the edit gate lets you write. A file you write by hand there (the spec) is committed in that checkout, never in the product worktree, where `fr push` refuses it. fr's own commands (`fr plan create`, `fr journal add`, `fr run …`) already follow the placement. A plan is a directory under `docs/superpowers/plans/<slug>/` (`$FR_PLANS_DIR/<slug>/` under quiet or stealth; `fr plan create` puts it there) containing:
 
 - `_meta.yaml` — schema_version, plan slug, spec ref, target_repo, fr_version,
   created date, optional rework metadata (`parent_plan`, `prior_rework`,
@@ -41,7 +41,7 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 2. Confirm scope. Decompose if too large.
 3. Propose 2-3 approaches with tradeoffs. Recommend one.
 4. Present plan structure section by section, get approval.
-5. Scaffold the plan folder:
+5. Scaffold the plan folder (under quiet or stealth, `--spec "$FR_SPECS_DIR/<spec-file>.md"`):
    ```bash
    fr plan create --slug <YYYY-MM-DD-slug> --target-repo <owner/repo> \
        --spec docs/superpowers/specs/<spec-file>.md \

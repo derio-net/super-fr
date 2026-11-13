@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { resolveMarker } from "../src/marker";
 
@@ -493,5 +493,132 @@ describe("the placement question spawns no git in a plain repo (pr1431-n6)", () 
       withoutFr(() => expect(placementEnabled(repo)).toBe(true));
       expect(placementCalls(log).some((c) => c.includes("cat-file"))).toBe(true);
     });
+  });
+});
+
+// Review pr1431-r6: the placement's own write targets are editable, by structure only.
+// bash `_fr_placement_write_target`, case for case (tests/unit/test_isolation_decision_core.py).
+import { placementWriteTarget } from "../src/marker";
+
+describe("the quiet fr worktree and the stealth tracking clone (pr1431-r6)", () => {
+  let root: string;
+  let savedHome: string | undefined;
+  beforeEach(() => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "fr-opencode-r6-")));
+    savedHome = process.env.HOME;
+    process.env.HOME = join(root, "home");
+  });
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function plainRepo(name: string): string {
+    const dir = join(root, name);
+    mkdirSync(dir, { recursive: true });
+    sh("git", ["init", "--quiet", "-b", "main"], dir);
+    sh("git", ["config", "user.email", "test@example.com"], dir);
+    sh("git", ["config", "user.name", "Test"], dir);
+    writeFileSync(join(dir, "README.md"), "x\n");
+    sh("git", ["add", "."], dir);
+    sh("git", ["commit", "--quiet", "-m", "init"], dir);
+    return dir;
+  }
+  function frWorktree(repoDir: string, at: string): string {
+    mkdirSync(dirname(at), { recursive: true });
+    sh("git", ["worktree", "add", "--quiet", "-b", "fr", at, "refs/remotes/origin/fr"], repoDir);
+    return realpathSync(at);
+  }
+  const spec = (r: string) => join(r, "features", "feat__x", "docs", "superpowers", "specs", "x-design.md");
+  const allowed = (file: string) => {
+    const r = resolveMarker(file);
+    return !r.toplevel || !r.frEnabled || r.hasValidMarker || r.placementTarget === true;
+  };
+  const quietPath = (name: string) => join(root, "home", ".cache", "fr", "worktrees", name, "fr");
+
+  test("the repo's own quiet fr worktree is editable, with or without fr", () => {
+    const prod = plainRepo("prod");
+    quietSwitch(prod);
+    const wt = frWorktree(prod, quietPath("prod"));
+    withoutFr(() => {
+      expect(placementWriteTarget(wt)).toBe(true);
+      expect(allowed(spec(wt))).toBe(true);
+    });
+    withFr("exit 3", () => expect(allowed(spec(wt))).toBe(true));
+    // and the primary checkout stays blocked
+    withoutFr(() => expect(allowed(join(prod, "src.ts"))).toBe(false));
+  });
+
+  test("only while the switch reads canonical quiet", () => {
+    const prod = plainRepo("prod");
+    quietSwitch(prod, 'placement: "quiet"\n');
+    const wt = frWorktree(prod, quietPath("prod"));
+    withoutFr(() => expect(allowed(spec(wt))).toBe(false));
+  });
+
+  test("another repo's fr worktree at this path, one elsewhere, or one off branch fr is refused", () => {
+    const other = plainRepo("other");
+    quietSwitch(other);
+    const foreign = frWorktree(other, quietPath("prod"));
+    withoutFr(() => expect(allowed(spec(foreign))).toBe(false));
+    sh("git", ["worktree", "remove", "--force", foreign], other);
+    sh("git", ["branch", "-D", "fr"], other);
+    const elsewhere = frWorktree(other, join(root, "elsewhere", "fr"));
+    withoutFr(() => expect(allowed(spec(elsewhere))).toBe(false));
+    sh("git", ["worktree", "remove", "--force", elsewhere], other);
+    sh("git", ["branch", "-D", "fr"], other);
+    const own = frWorktree(other, quietPath("other"));
+    withoutFr(() => expect(allowed(spec(own))).toBe(true));
+    sh("git", ["checkout", "--quiet", "-b", "not-fr"], own);
+    withoutFr(() => expect(allowed(spec(own))).toBe(false));
+  });
+
+  function stealthSetup(): { ws: string; clone: string } {
+    const tracking = plainRepo("tracking");
+    mkdirSync(join(tracking, ".devcontainer", "dev"), { recursive: true });
+    writeFileSync(join(tracking, ".devcontainer", "dev", "devcontainer.json"), "{}\n");
+    sh("git", ["add", "."], tracking);
+    sh("git", ["commit", "--quiet", "-m", "profile"], tracking);
+    const bare = join(root, "tracking.git");
+    sh("git", ["clone", "--quiet", "--bare", tracking, bare], root);
+    const target = plainRepo("target");
+    const parent = join(root, "home", ".cache", "fr", "worktrees", "target");
+    mkdirSync(parent, { recursive: true });
+    const ws = join(parent, "feat__x");
+    sh("git", ["worktree", "add", "--quiet", ws, "-b", "feat/x"], target);
+    writeFileSync(
+      join(ws, ".fr-isolation"),
+      JSON.stringify({
+        toplevel: realpathSync(ws),
+        branch: "feat/x",
+        mode: "worktree",
+        placement: "stealth",
+        tracking: { ref: `${bare}@main`, target: "target" },
+      })
+    );
+    const clone = join(parent, "stealth--local--tracking--main");
+    sh("git", ["clone", "--quiet", "--branch", "main", bare, clone], root);
+    return { ws, clone: realpathSync(clone) };
+  }
+
+  test("the stealth tracking clone recorded by a valid stealth workspace is editable", () => {
+    const { clone } = stealthSetup();
+    withoutFr(() => expect(allowed(spec(join(clone, "target")))).toBe(true));
+  });
+
+  test("a clone with no valid stealth workspace, or of another repo or branch, is refused", () => {
+    const { ws, clone } = stealthSetup();
+    const marker = readFileSync(join(ws, ".fr-isolation"), "utf-8");
+    writeFileSync(join(ws, ".fr-isolation"), marker.replace('"stealth"', '"repo"'));
+    withoutFr(() => expect(allowed(spec(join(clone, "target")))).toBe(false));
+    writeFileSync(join(ws, ".fr-isolation"), marker.replace(realpathSync(ws), "/elsewhere.invalid"));
+    withoutFr(() => expect(allowed(spec(join(clone, "target")))).toBe(false));
+    writeFileSync(join(ws, ".fr-isolation"), marker);
+    sh("git", ["checkout", "--quiet", "-b", "other"], clone);
+    withoutFr(() => expect(allowed(spec(join(clone, "target")))).toBe(false));
+    sh("git", ["checkout", "--quiet", "main"], clone);
+    sh("git", ["remote", "set-url", "origin", "https://example.com/org/other.git"], clone);
+    withoutFr(() => expect(allowed(spec(join(clone, "target")))).toBe(false));
   });
 });

@@ -179,3 +179,40 @@ def test_a_quiet_repo_blocks_a_base_clone_edit(tmp_path: Path) -> None:
     _git(repo, "checkout", "-q", "main")
     _git(repo, "branch", "-qD", "fr")
     assert blocked(run_hook(payload(repo / "src.py"), env={"PATH": "/usr/bin:/bin"}))
+
+
+# --- review pr1431-r6: the placement's own write targets, through the Hermes hook ---
+# The hook sources the shared decision library, so quiet's `fr` worktree and stealth's
+# tracking clone are allowed here exactly as in the Claude Code hook; a foreign `fr`
+# worktree and the quiet repo's primary checkout stay blocked.
+
+
+def test_hermes_allows_the_quiet_fr_worktree_and_the_stealth_clone(tmp_path: Path) -> None:
+    from tests.unit.test_isolation_decision_core import (
+        quiet_fr_worktree,
+        spec_in,
+        stealth_setup,
+    )
+
+    home = tmp_path / "home"
+    wt = quiet_fr_worktree(tmp_path, home)
+    env = {"HOME": str(home)}
+    assert allowed(run_hook(payload(spec_in(wt)), env))
+    assert blocked(run_hook(payload(tmp_path / "q" / "prod" / "src.py"), env))
+
+    shome = tmp_path / "shome"
+    (tmp_path / "s").mkdir()
+    _ws, clone, _bare = stealth_setup(tmp_path / "s", shome)
+    assert allowed(run_hook(payload(spec_in(clone / "target")), {"HOME": str(shome)}))
+
+
+def test_hermes_refuses_another_repos_fr_worktree(tmp_path: Path) -> None:
+    from tests.unit.test_isolation_decision_core import quiet_repo, spec_in
+
+    home = tmp_path / "home"
+    (tmp_path / "o").mkdir()
+    other = quiet_repo(tmp_path / "o")
+    wt = home / ".cache" / "fr" / "worktrees" / "prod" / "fr"
+    wt.parent.mkdir(parents=True)
+    _git(other, "worktree", "add", "-q", "-b", "fr", str(wt), "refs/remotes/origin/fr")
+    assert blocked(run_hook(payload(spec_in(wt)), {"HOME": str(home)}))

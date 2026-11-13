@@ -116,6 +116,10 @@ surfaces:
       hook cannot read positively as `placement: repo` counts as quiet. A plain
       repo spawns no `fr`; past an origin/fr ref, a bounded read-only `fr
       settings paths --no-create`, from an absolute PATH entry only, may add one.
+      The placement's own write targets are allowed by structure: the repo's
+      quiet `fr` worktree (a linked worktree at the path fr computes, on branch
+      `fr`, the switch canonically quiet) and a stealth tracking clone a valid
+      stealth workspace's marker names (review pr1431-r6).
     harnesses:
       claude-code: {state: enforced}
       opencode:
@@ -133,8 +137,10 @@ surfaces:
           switch on origin/fr and the marker's placement are read directly, and
           only past an origin/fr ref is `fr settings paths --json --no-create`
           asked, with FR_REPO_ROOT set to the toplevel; a missing `fr` is
-          logged once at load, never a weaker gate; test/marker.test.ts). A
-          model-driven 2.x session's refused edit is the post-merge walk.
+          logged once at load, never a weaker gate; test/marker.test.ts). The
+          quiet `fr` worktree and the stealth tracking clone are allowed by
+          marker.ts `placementWriteTarget`, the shell library's rule case for
+          case. A model-driven 2.x session's refused edit is the post-merge walk.
           OpenCode 1.x is not supported.
       hermes:
         state: partial
