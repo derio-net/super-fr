@@ -11,57 +11,63 @@ reviewed: 2026-11-13 placement-resolver phase 5 review, merged fragments frozen 
 
 # The acceptance matrix
 
-Passing unit tests do not tell you whether the product does what you promised. The
-acceptance matrix does: one row per business-level promise ("an operator can X"), the
-tests at each level that verify it, and a status that says how much you can trust it. The
-skill that drives it is [fr-acceptance](../explainers/fr-acceptance.md).
+Unit tests that pass do not tell you if the product does what you promised. The
+acceptance matrix tells you. It has one row for each business-level promise ("an operator
+can X"), the tests at each level that prove it, and a status. The status tells you how much
+you can trust the row. The skill that drives it is [fr-acceptance](../explainers/fr-acceptance.md).
 
 ## Where the rows live
 
-Each row belongs to the feature that created it, and lives in that feature's
+Each row belongs to the feature that created it. The row lives in that feature's
 **fragment**, `docs/acceptance/features/<spec-slug>.yaml`. A fragment names its feature
-(the file stem), the repo (`repo: <org>/<repo>`) and its rows; `legacy.yaml` holds the
-rows that cite no single spec, such as those born from a debug journal. The matrix you
-read is never stored: fr **folds** every fragment, in the order the default branch's
-history introduced them, and every reader (`check`, `status`, `fr debt`, plan
-self-review, the PR body, close-out) reads that fold. Two features editing their own
+(the file stem), the repo (`repo: <org>/<repo>`) and its rows. `legacy.yaml` holds the
+rows that cite no single spec, such as those born from a debug journal.
+
+The matrix you read is never stored. fr **folds** every fragment, in the order that the
+default branch's history added them. Every reader (`check`, `status`, `fr debt`, plan
+self-review, the PR body, close-out) reads that fold. Two features that edit their own
 fragments no longer touch the same file.
 
-Under the quiet and stealth placements the default branch holds no fragment: each
-feature's fragments sit in its own feature path, and a feature counts as merged when its
-code branch merged: a head of its own (past the `BASE` it claimed its path from) on the
-default branch, or, for a squash or rebase merge, the forge's merged pull request. Its
-amendments then apply in the order of the default branch's first-parent commit that
-merged it, read as they were pushed at that merge, and a feature not merged yet adds its
-own only to its own branch's view. An amendment the feature writes after its merge is
-pending on its branch, and an in-place edit of its merged row is refused by `fr
-acceptance check`. `fr acceptance status` lists the merged features in that order, and
-the unmerged ones with why. A row another merged feature created changes only by an
-amendment in your feature's fragment (`fr acceptance amend`, or `set-status`, which
-writes one).
+Under the quiet and stealth placements, the default branch holds no fragment. Each
+feature's fragments sit in its own feature path. A feature counts as merged when its code
+branch merged. The proof is a head of its own on the default branch, past the `BASE` that
+it claimed its path from. For a squash or rebase merge, the proof is the forge's merged pull
+request.
+
+The amendments of a merged feature apply in the order of the default branch's first-parent
+commit that merged it. They are read as they were pushed at that merge. A feature that is
+not merged yet adds its own amendments only to its own branch's view. An amendment that the
+feature writes after its merge is pending on its branch. `fr
+acceptance check` does not accept an in-place edit of its merged row.
+
+`fr acceptance status` lists the merged features in that order, and the unmerged ones with
+the reason why. A row that another merged feature created changes only by an amendment in
+your feature's fragment (`fr acceptance amend`, or `set-status`, which writes one).
 
 Rows cite fr's own artifacts **logically**: `spec:<slug>#R<n>` for a spec requirement,
-`plan:<slug>` for a plan. The slug is the spec's file name without `-design.md`, so it is
-the same before and after `fr archive` moves the spec, and an archive never rewrites a
-row. Code keeps its path form, `<repo>:<path>#<test>`.
+`plan:<slug>` for a plan. The slug is the spec's file name without `-design.md`. So the
+slug is the same before and after `fr archive` moves the spec, and an archive never
+rewrites a row. Code keeps its path form, `<repo>:<path>#<test>`.
 
-A repo that still has the single `docs/acceptance/matrix.yaml` of earlier fr versions is
-migrated by `fr migrate artifacts --yes`: the rows are split by origin spec, path
-references to specs and plans become logical, and the matrix and its committed reports
-are deleted.
+`fr migrate artifacts --yes` migrates a repo that still has the single
+`docs/acceptance/matrix.yaml` of earlier fr versions. It splits the rows by origin spec,
+and it makes the path references to specs and plans logical. Then it deletes the matrix and
+its committed reports.
 
-A branch that was still editing `matrix.yaml` when its base split it keeps the file
-through `git merge`. The next fr command splits it again, carrying over only what the
-fragments lack. A row they do not know goes to its spec's fragment, and a row they hold
-identically is dropped. A row they hold *differently* stops the migration, which names
-the row and leaves every file as it was. Put that row back as the fragments hold it, or
-delete it from `matrix.yaml`, run `fr migrate artifacts --yes`, and then re-apply your
-change with `fr acceptance set-status`.
+A branch that still edited `matrix.yaml` when its base split it keeps the file through
+`git merge`. The next fr command splits it again, and carries over only what the fragments
+do not have. A row that the fragments do not know goes to its spec's fragment. A row that
+they hold identically is dropped. A row that they hold *differently* stops the migration.
+The migration names the row and leaves every file as it was.
+
+To continue, put that row back as the fragments hold it, or delete it from `matrix.yaml`.
+Then run `fr migrate artifacts --yes`, and then apply your change again with
+`fr acceptance set-status`.
 
 A repo can turn the matrix off with `artifacts.acceptance: off` in `.fr/settings.yaml`
 (`fr settings show`). fr then writes no rows, reports or matrix CI. `fr acceptance add` and
-`set-status` refuse, naming the setting. `check`, `status`, `fr debt` and the session-start
-nag say "disabled by repo setting" instead of reporting debt.
+`set-status` stop and name the setting. `check`, `status`, `fr debt` and the session-start
+nag say "disabled by repo setting" and report no debt.
 
 ## Statuses
 
@@ -78,9 +84,9 @@ nag say "disabled by repo setting" instead of reporting debt.
 ## How rows are born and move
 
 Rows are proposed at brainstorm time, linked to plan phases through each phase's
-`acceptance:` list, and moved up the ladder as phases complete
-(`fr plan edit --complete-phase` warns about a phase that completes without moving its
-rows). A row added mid-flight is allowed and visible: `fr acceptance check --added-since <ref>`
+`acceptance:` list, and moved up the ladder as phases complete.
+`fr plan edit --complete-phase` warns about a phase that completes but does not move its
+rows. A row added mid-flight is allowed and visible: `fr acceptance check --added-since <ref>`
 lists it, and the PR body defends it.
 
 ## Commands
@@ -97,18 +103,18 @@ fr acceptance pages-check            # exit 0 only if a Pages site would be no w
 fr acceptance comment --pr N --yes   # keep one PR comment with the Markdown report (forge.report_comment: on)
 ```
 
-Never edit a fragment by hand: `add` and `set-status` validate the row and commit only the
-fragment they changed. A row whose origins name no single spec needs `--feature <slug>`
-(`legacy` for none). Test references are anchored on a test's name, for example
-`repo:tests/unit/test_x.py#test_y`, never a line number, because a line number slides onto
+Never edit a fragment by hand. `add` and `set-status` validate the row and commit only the
+fragment that they changed. A row whose origins name no single spec needs `--feature <slug>`
+(`legacy` for none). Test references are anchored on the name of a test, for example
+`repo:tests/unit/test_x.py#test_y`, never on a line number. A line number slides onto
 whatever test lands there next.
 
 Reports are never committed. The scaffolded CI shows the report as a job summary (GitHub,
-Gitea) or an exposed artifact (GitLab), and publishes the HTML on Pages only when
-`fr acceptance pages-check` proves the site no wider than the repo; the Pages job re-checks
-before every deploy.
+Gitea) or an exposed artifact (GitLab). It publishes the HTML on Pages only when
+`fr acceptance pages-check` proves that the site is no wider than the repo. The Pages job
+checks again before every deploy.
 
-The per-PR gate is `.github/workflows/acceptance-report.yml`, which on a weekly
-schedule also runs `fr debt issue`, keeping one "Technical debt" issue up to date (its
-Acceptance section lists the rows still owed). Rows can additionally name a verification strategy and a
-walk scenario; that is covered in the [verification strategies guide](../verification-strategies.md).
+The per-PR gate is `.github/workflows/acceptance-report.yml`. On a weekly schedule, it also
+runs `fr debt issue`, which keeps one "Technical debt" issue up to date. Its Acceptance
+section lists the rows still owed. Rows can also name a verification strategy and a walk
+scenario. The [verification strategies guide](../verification-strategies.md) covers them.

@@ -16,16 +16,16 @@ reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come f
 
 # Dispatch labels and the per-repo plan profile
 
-`fr apply --to <runner>` turns each phase of a merged plan into a tracking issue and hands
-ready phases to a runner, which opens one PR per phase. The walkthrough is in
-[fr-dispatch](../explainers/fr-dispatch.md); this page is the reference for what the
+`fr apply --to <runner>` turns each phase of a merged plan into a tracking issue. It hands
+ready phases to a runner, which opens one PR for each phase. The walkthrough is in
+[fr-dispatch](../explainers/fr-dispatch.md). This page is the reference for what the
 labels mean.
 
 ## The label lifecycle
 
 A runner is the program that picks up queued phases and works them (VibeKanban's `vk`
-adapter, for one). It wakes on a timer; each wake is a tick. A queued phase carries exactly
-one lifecycle label, derived from the issue and its PRs on every tick:
+adapter, for one). It wakes on a timer, and each wake is a tick. A queued phase carries
+exactly one lifecycle label. On every tick, the label is derived from the issue and its PRs:
 
 ```
 fr:ready ──→ fr:in-progress ──→ fr:pr-ready ──→ (issue closed)
@@ -33,46 +33,47 @@ fr:ready ──→ fr:in-progress ──→ fr:pr-ready ──→ (issue closed)
    └─ fr:blocked   while phases it depends on are not complete
 ```
 
-Two more labels are markers, not states. `fr:synced` is the bookkeeping stamp that says a
-phase was handed to the runner, so it is never handed over twice. `manual` marks a
-human-only phase, which is never routed to an agent. An issue created without `--to` is
+Two more labels are markers, not states. `fr:synced` is the record stamp that says a
+phase was handed to the runner, so the phase is never handed over twice. `manual` marks a
+human-only phase, which is never routed to an agent. An issue made without `--to` is
 tracking-only and carries no lifecycle label.
 
 All of this is what the defaults give you. A repo's forge settings (`.fr/settings.yaml`
 on its default branch, `fr settings show`) can switch writes off by kind:
 
-- **`forge.labels: off`**: the bridge writes none of these labels, including `fr:synced`.
-  The bridge's dedup snapshot is then the only thing that stops a phase being handed over
-  twice.
-- **`forge.issues: off`**: the bridge creates and closes no tracking issue, and its
+- **`forge.labels: off`**: the bridge writes none of these labels, and not `fr:synced`
+  either. The bridge's dedup snapshot is then the only thing that stops a second handover
+  of a phase.
+- **`forge.issues: off`**: the bridge makes and closes no tracking issue, and its
   close-on-merge backstop closes nothing.
 
-Under either setting, `fr apply --yes` refuses (exit 2) and names the setting.
+Under either of these two, `fr apply --yes` stops (exit 2) and names the setting.
 
-If the bridge cannot read a repo's settings, it refuses that repo's writes and reports
-the failure. It never falls back to the defaults.
+If the bridge cannot read the settings of a repo, it does not write to that repo, and it
+reports the failure. It never falls back to the defaults.
 
 ## The reachability gate
 
-`fr apply --yes --to <runner>` refuses unless the plan and its spec are merged to the
-default branch. The runner works from its own checkout of that branch, so anything not
-there would be invisible to it. The refusal exits 2 and lists the unreachable paths.
+`fr apply --yes --to <runner>` stops unless the plan and its spec are merged to the
+default branch. The runner works from its own checkout of that branch, so it cannot see
+anything that is not there. The command then exits 2 and lists the paths that the runner
+cannot reach.
 
 ## The optional plan profile
 
 A repo can add `docs/superpowers/plan-config.yaml` to set the plan filename pattern, the
-required headers and the allowed status values. Only `scripts/validate-plans.sh` reads it,
-and it falls back to defaults when the file is absent, so a repo works without one.
+required headers and the allowed status values. Only `scripts/validate-plans.sh` reads it.
+The script falls back to defaults when the file is absent, so a repo works without one.
 
-To add the file to several repos you already have checked out, without cloning anything:
+To add the file to several repos that you already have checked out, with no clone:
 
 ```bash
 fr repos sync owner/one owner/two          # dry-run preview (the default)
 fr repos sync owner/one owner/two --yes    # write plan-config.yaml in place
 ```
 
-Repos are found through `$FR_REPOS_DIR` or `~/repos/<name>` (a missing checkout is a
-warning, not a failure), or through a manifest at `$FR_REPOS_MANIFEST` or
-`~/.config/fr/repos.yaml`. With `--yes`, names you pass are appended to that manifest unless you
-add `--no-save`, and `--force` overwrites a file that already exists. `fr repair` and `fr migrate`
-also tidy this file, removing keys the toolchain no longer reads.
+fr finds repos through `$FR_REPOS_DIR` or `~/repos/<name>`, or through a manifest at
+`$FR_REPOS_MANIFEST` or `~/.config/fr/repos.yaml`. An absent checkout is a warning, not a
+failure. With `--yes`, the names that you pass are appended to that manifest, unless you
+add `--no-save`. `--force` overwrites a file that already exists. `fr repair` and `fr migrate`
+also tidy this file: they remove keys that the toolchain no longer reads.
