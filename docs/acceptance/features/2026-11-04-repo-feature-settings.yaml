@@ -604,3 +604,57 @@ amendments:
       and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
       with the pushed product head; scenario in CI. Not shown here: a real forge (row
       repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: set-status
+    base: 9
+    status: ci
+    notes: 'stealth placement built and reviewed: chosen per run and recorded in the
+      workspace, tracking worktree per target, fail-fast before writes, every state
+      write pushed compare-and-swap as a fast-forward only (a diverged clone is replayed
+      or refused, never forced), any state commit the tracking clone refuses or a push
+      it refuses is fatal (exit 2) with only this command''s commit and files rolled
+      back, privacy guard at every entry and the push seam (unknown visibility fails
+      closed, the target read through its own forge client), repo-configuration writers
+      and every forge write but the one minimal draft PR refused, fr push refuses commits
+      carrying fr paths, resume reconciled with the pushed product head; scenario in
+      CI. Not shown here: a real forge (row repo-settings-quiet-repo-live)'
+    why: 'stealth placement built and reviewed: chosen per run and recorded in the workspace,
+      tracking worktree per target, fail-fast before writes, every state write pushed
+      compare-and-swap as a fast-forward only (a diverged clone is replayed or refused,
+      never forced), any state commit the tracking clone refuses or a push it refuses
+      is fatal (exit 2) with only this command''s commit and files rolled back, privacy
+      guard at every entry and the push seam (unknown visibility fails closed, the target
+      read through its own forge client), repo-configuration writers and every forge
+      write but the one minimal draft PR refused, fr push refuses commits carrying fr
+      paths, resume reconciled with the pushed product head; scenario in CI. Not shown
+      here: a real forge (row repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 10
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_sync.py#test_a_diverged_clone_never_force_overwrites_another_hosts_push
+    why: 'stealth placement built and reviewed: chosen per run and recorded in the workspace,
+      tracking worktree per target, fail-fast before writes, every state write pushed
+      compare-and-swap as a fast-forward only (a diverged clone is replayed or refused,
+      never forced), any state commit the tracking clone refuses or a push it refuses
+      is fatal (exit 2) with only this command''s commit and files rolled back, privacy
+      guard at every entry and the push seam (unknown visibility fails closed, the target
+      read through its own forge client), repo-configuration writers and every forge
+      write but the one minimal draft PR refused, fr push refuses commits carrying fr
+      paths, resume reconciled with the pushed product head; scenario in CI. Not shown
+      here: a real forge (row repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 11
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_target.py#test_forge_writers_refuse_and_write_nothing
+    why: 'stealth placement built and reviewed: chosen per run and recorded in the workspace,
+      tracking worktree per target, fail-fast before writes, every state write pushed
+      compare-and-swap as a fast-forward only (a diverged clone is replayed or refused,
+      never forced), any state commit the tracking clone refuses or a push it refuses
+      is fatal (exit 2) with only this command''s commit and files rolled back, privacy
+      guard at every entry and the push seam (unknown visibility fails closed, the target
+      read through its own forge client), repo-configuration writers and every forge
+      write but the one minimal draft PR refused, fr push refuses commits carrying fr
+      paths, resume reconciled with the pushed product head; scenario in CI. Not shown
+      here: a real forge (row repo-settings-quiet-repo-live)'
