@@ -460,7 +460,16 @@ def fold_outside_with(root: Path, own: dict[str, str]) -> Effective:
     return _outside_fold(root, own)
 
 
-def _outside_fold(root: Path, own_texts: dict[str, str] | None = None) -> Effective:
+def fold_of_space(root: Path, space: ArtifactSpace) -> Effective:
+    """The quiet/stealth fold of the MERGED features below *space* (a placement root with
+    no feature of its own), judged against *root*'s default ref: what `fr placement move`
+    verifies a destination with before its switch makes it the placement (R27)."""
+    return _outside_fold(root, space=space)
+
+
+def _outside_fold(
+    root: Path, own_texts: dict[str, str] | None = None, *, space: ArtifactSpace | None = None
+) -> Effective:
     """The fold under quiet and stealth (R17's clause): every MERGED feature's fragments,
     their amendments in the order `fr.placement.merged` gives the features (the
     first-parent commit of the product's default ref that introduced each), then this
@@ -477,7 +486,7 @@ def _outside_fold(root: Path, own_texts: dict[str, str] | None = None) -> Effect
     "differs from the merged one" notice."""
     from fr.artifacts.paths import FEATURES_DIR, feature_root, space_for
 
-    space = space_for(root)
+    space = space if space is not None else space_for(root)
     view, frozen, notices = _merged_outside(root, space)
 
     def own() -> dict[str, str]:

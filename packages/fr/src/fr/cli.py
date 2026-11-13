@@ -45,6 +45,7 @@ from fr.commands.migrate_cmd import migrate_app
 from fr.commands.models_cmd import models_app
 from fr.commands.ops_cmd import ops_app
 from fr.commands.pickup_cmd import pickup_command
+from fr.commands.placement_cmd import placement_app
 from fr.commands.plan_cmd import plan_app
 from fr.commands.pr_cmd import pr_app
 from fr.commands.push_cmd import push_cmd
@@ -121,6 +122,7 @@ app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
 app.add_typer(debt_app, name="debt")
 app.add_typer(settings_app, name="settings")
+app.add_typer(placement_app, name="placement")
 app.add_typer(docs_app, name="docs")
 app.add_typer(lenses_app, name="lenses")
 app.add_typer(gate_app, name="gate")
