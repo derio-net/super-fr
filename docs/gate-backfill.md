@@ -29,8 +29,9 @@ where the gate ledger and the triage board look: a `gate:<g>` label on the merge
 4. **Collect and watch the board** — the triage driver's collect shows every merged PR whose
    `gate:tester` / `gate:devops` is held, in the Needs-you lanes.
 5. **Pass** — when the work is done, run the `fr gate pass --pr <n> --gate <g> --notes "..."` the
-   tracker body prints. If the pass does not finish every key, name each unfinished one with
-   `--keep <key>`.
+   tracker body prints (for `devops` it also carries `--run <id>` or `--no-run-evidence`). It
+   previews; add `--yes` to pass. If the pass does not finish every key, name each unfinished one
+   with `--keep <key>`.
 6. **Close** — once a tracked-only tracker's key is discharged, the next dry run lists it under
    `Trackers to close` and `--yes` closes it.
 
@@ -167,8 +168,9 @@ evidence, with no source but its own tracker holding it:
 
 An `issue:` key, a manifest-only key (one with no row, phase or outcome behind it) and anything
 unreadable (one unreadable journal or matrix is enough) are never discharged. With `--from`, a dry run
-and `--yes` both honour the manifest's claim on a key it names as a new item: that key does not close,
-and a close the plan had recorded for it is dropped with a note. Without `--from`, nothing marks a key
+and `--yes` both honour the manifest's claim on a key it names as a new item: that key does not close.
+A close the plan had recorded for it is dropped: `--yes` prints a note for it, and a dry run drops it
+from the rewritten plan file without one. Without `--from`, nothing marks a key
 as a manifest's, so one naming a real row, phase or step closes on that evidence, which the dry run
 shows; if the registry wrongly says done, correct the registry (`set-status walk-owed`, which the fold
 then holds). An open `owed` journal entry still holds its key: a step
