@@ -228,10 +228,12 @@ def push_cmd() -> None:
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
     from fr.git_policy.push import PushRefusedError, check_subjects, squash, unpushed
     from fr.git_policy.templates import run_issue
+    from fr.placement.drift import refuse
     from fr.settings import SettingsError, load_settings
 
     repo_root = resolve_repo_root()
     try:
+        refuse(repo_root, "fr push")  # R28: detection only; migrate-branch migrates
         settings = load_settings(repo_root).settings
         branch, head, git_dir = branch_context(repo_root)
         if on_default_branch(repo_root) is not None:

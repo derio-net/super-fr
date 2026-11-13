@@ -404,6 +404,39 @@ def _refuse(emit: Callable[[str], None], lines: Sequence[str]) -> typer.Exit:
     return typer.Exit(2)
 
 
+PLACEMENT_COMMAND: Final = "placement"
+"""`fr placement`: not exempt (it writes artifacts), but the drift check's remedy, so the
+drift refusal alone lets it through."""
+
+
+def _drifted(root: Path) -> bool:
+    from fr.placement.drift import marker_drift
+
+    try:
+        return marker_drift(root) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _refuse_drift(root: Path, emit: Callable[[str], None]) -> None:
+    """Refuse a workspace whose recorded placement the switch no longer names (the
+    filesystem-only check: no network, and no process without a marker and a switch)."""
+    from fr.placement.drift import marker_drift, refusal
+
+    try:
+        found = marker_drift(root)
+    except Exception:  # noqa: BLE001 — a check that cannot answer leaves it to the command
+        return
+    if found is not None:
+        raise _refuse(
+            emit,
+            [
+                f"fr: {refusal(found)}.",
+                "  run:  fr placement migrate-branch   (in this workspace)",
+            ],
+        )
+
+
 def ensure_artifacts_current(
     *,
     argv: Sequence[str] | None = None,
@@ -435,19 +468,35 @@ def ensure_artifacts_current(
     them.
     """
     environ = os.environ if env is None else env
+    emit = err if err is not None else _echo_err
+    resolved: list[Path] = []
+
+    def where() -> Path:
+        if not resolved:
+            if repo_root is not None:
+                resolved.append(repo_root)
+            else:
+                # Imported here, not at module scope: `fr.artifacts` is a lower layer
+                # than `fr.commands`, and the gate is the one place the two meet.
+                from fr.commands.common import resolve_repo_root
+
+                resolved.append(resolve_repo_root())
+        return resolved[0]
+
+    # Placement drift (spec 2026-11-04 R28): detection ONLY, before every non-exempt
+    # command and in every context (CI and FR_SKIP_MIGRATION included: it migrates
+    # nothing, so there is nothing to skip). `fr placement` is its remedy, so it passes.
+    if not is_exempt(argv=argv, invoked_subcommand=invoked_subcommand, env={}):
+        if invoked_subcommand == PLACEMENT_COMMAND:
+            if _drifted(where()):
+                return  # a drifted tree's artifacts are judged after migrate-branch
+        else:
+            _refuse_drift(where(), emit)
+
     if is_exempt(argv=argv, invoked_subcommand=invoked_subcommand, env=environ):
         return
 
-    emit = err if err is not None else _echo_err
-
-    if repo_root is not None:
-        root = repo_root
-    else:
-        # Imported here, not at module scope: `fr.artifacts` is a lower layer
-        # than `fr.commands`, and the gate is the one place the two meet.
-        from fr.commands.common import resolve_repo_root
-
-        root = resolve_repo_root()
+    root = where()
 
     try:
         stale = is_stale(root, registry=registry)

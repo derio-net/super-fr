@@ -7153,6 +7153,18 @@ def _gate_journals(read: Callable[[], _T_JOURNALS]) -> _T_JOURNALS:
         raise typer.Exit(2) from e
 
 
+def _deliver_placement_gate(repo_root: Path) -> None:
+    """Spec 2026-11-04 R28: `deliver` refuses a branch whose artifacts do not match the
+    repo's placement, naming `fr placement migrate-branch`; it never migrates."""
+    from fr.placement.drift import DriftError, refuse
+
+    try:
+        refuse(repo_root, "deliver")
+    except DriftError as e:
+        err_console.print(f"refused: {e}", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
 def _deliver_acceptance_gate(repo_root: Path) -> None:
     """Spec 2026-11-04 R16, R17: `deliver` fetches the default ref and refuses a
     branch amendment whose base is stale, and an in-place edit of a merged row —
@@ -7493,6 +7505,7 @@ def _resolve_body(
         # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
+        _deliver_placement_gate(repo_root)
         _deliver_acceptance_gate(repo_root)
         _deliver_leftovers_gate(repo_root, state)
         _deliver_pr_gate(repo_root, state, pr)
