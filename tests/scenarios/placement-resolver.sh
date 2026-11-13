@@ -6,6 +6,7 @@
 # same answer. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
+scenario_require_fresh_repo
 
 origin="$(mktemp -d)/origin.git"
 git init -q --bare -b main "$origin" || fail "bare origin"

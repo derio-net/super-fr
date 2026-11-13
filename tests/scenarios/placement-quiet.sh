@@ -11,6 +11,7 @@
 # both placements. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
+scenario_require_fresh_repo
 
 HOME="$(mktemp -d)" && export HOME           # the fr and feature worktrees live below it
 export FR_ISOLATION_TARGET=worktree

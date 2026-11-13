@@ -11,6 +11,7 @@
 # A stealth marker makes a workspace fr-enabled by the marker alone. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
+scenario_require_fresh_repo
 LIB="$here/../../plugins/super-fr/hooks/lib/fr-isolation-decision.sh"
 [ -r "$LIB" ] || fail "no decision library at $LIB"
 

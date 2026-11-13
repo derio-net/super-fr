@@ -16,6 +16,7 @@
 # (review p5-r3). Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
+scenario_require_fresh_repo
 
 HOME="$(mktemp -d)" && export HOME
 export FR_ISOLATION_TARGET=worktree
