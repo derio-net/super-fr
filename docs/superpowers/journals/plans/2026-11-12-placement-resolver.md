@@ -1530,3 +1530,8 @@ f7753b0ba: under quiet and stealth git.push: ask finds the debug journal at the 
 ### pr1431-n3-resolved · finding [deferred → derio-net/super-fr#1433] · resolves pr1431-n3: HEADS records a head before it is pushed
 
 Recording the head after the push needs a design choice (roll back local fr on a refused push, a second fr-only push, or readers ignoring unlanded heads); no false merged verdict today.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n4-resolved created=2026-11-13T15:47:07+00:00 state=fixed resolves=pr1431-n4 -->
+### pr1431-n4-resolved · finding [fixed] · resolves pr1431-n4: A whole-repo move to stealth pushes a branch and prints a PR naming fr and stealth on the target
+
+a03e602: recorded as decision pr1431-n4-decision (the whole-repo move to stealth names fr on the target once, by the operator's explicit command; runs started under stealth afterwards leave no trace).
