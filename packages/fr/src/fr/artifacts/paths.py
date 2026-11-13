@@ -247,13 +247,97 @@ def _marker_placement(repo_root: Path) -> str | None:
     "sticky"), or None for no marker. A marker an older fr wrote without the key was
     written before quiet existed, so it recorded `repo` (review p3-r5): a workspace made
     before the switch appeared refuses rather than silently moving."""
-    from fr.isolation.marker import marker_at
+    from fr.isolation.marker import MARKER, _read
+    from fr.settings import SettingsError
 
-    marker = marker_at(repo_root)
-    if not marker:
+    root = Path(repo_root)
+    path = root / MARKER
+    if not (path.exists() or path.is_symlink()):
+        return _state_without_marker(root)
+    # Review pr1431-r2: a marker that is there but cannot be validated is a refusal,
+    # never "no marker", which would read a stealth workspace as `repo`.
+    data = _read(root)
+    if isinstance(data, str):
+        raise SettingsError(
+            f"{data}: fr cannot tell this workspace's placement from it, and will not guess "
+            f"`repo`. {_REPAIR}"
+        )
+    placement = data.get("placement", REPO)
+    if not isinstance(placement, str):
+        raise SettingsError(
+            f"the {MARKER} marker at {root} records a placement that is not a string "
+            f"({placement!r}). {_REPAIR}"
+        )
+    return placement
+
+
+_REPAIR: Final = (
+    "Restore it with `fr isolation up --branch <branch>` (with `--stealth <repo>@<branch>` "
+    "for a stealth run) from the base clone"
+)
+
+_STATE_CACHE: dict[tuple[str, int], dict[str, tuple[str, str, str | None]]] = {}
+"""(state dir, its mtime) -> {resolved worktree: (placement, branch, tracking)}."""
+
+
+def _recorded_states(root: Path) -> dict[str, tuple[str, str, str | None]]:
+    """Every isolation state of the repo with a placement off the product branch, keyed
+    by its resolved worktree path. Filesystem only (no git), cached on the directory's
+    mtime: this runs on every artifact lookup in a checkout with no marker."""
+    common = _common_dir(root)
+    if common is None:
+        return {}
+    states = common / "fr" / "isolation"
+    try:
+        stamp = states.stat().st_mtime_ns
+    except OSError:
+        return {}
+    key = (str(states), stamp)
+    if key in _STATE_CACHE:
+        return _STATE_CACHE[key]
+    import json
+
+    found: dict[str, tuple[str, str, str | None]] = {}
+    for f in sorted(states.glob("*.json")):
+        try:
+            data = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        placement, worktree = data.get("placement"), data.get("worktree")
+        if placement in (QUIET, STEALTH) and isinstance(worktree, str):
+            tracking = data.get("tracking")
+            found[str(Path(worktree).resolve())] = (
+                placement,
+                str(data.get("branch", "")),
+                tracking if isinstance(tracking, str) else None,
+            )
+    _STATE_CACHE.clear()
+    _STATE_CACHE[key] = found
+    return found
+
+
+def _state_without_marker(root: Path) -> None:
+    """No marker: refuse when this checkout's isolation state records quiet or stealth
+    (review pr1431-r2: `git clean -fdx` removes the excluded marker, and the state is
+    the other record of the placement `up` chose); else there is no marker to speak of."""
+    from fr.isolation.marker import MARKER
+    from fr.settings import SettingsError
+
+    recorded = _recorded_states(root).get(str(root.resolve()))
+    if recorded is None:
         return None
-    placement = marker.get("placement", REPO)
-    return placement if isinstance(placement, str) else REPO
+    placement, branch, tracking = recorded
+    stealth = f" --stealth {tracking}" if placement == STEALTH and tracking else (
+        " --stealth <repo>@<branch>" if placement == STEALTH else ""
+    )  # fmt: skip
+    raise SettingsError(
+        f"this workspace's {MARKER} marker is missing, and its isolation state records "
+        f"placement {placement}: fr will not read it as `repo`. Restore the marker with "
+        f"`fr isolation up --branch {branch}{stealth}` from the base clone, then run the "
+        "command again"
+    )
 
 
 def sticky_refusal(recorded: str, current: str, source: str) -> SettingsError:

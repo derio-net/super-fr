@@ -123,7 +123,8 @@ def test_code_tree_ignores_uncommitted_changes(tmp_path: Path) -> None:
 
 def test_the_isolation_marker_is_never_code(tmp_path: Path) -> None:
     repo = _plain_repo(tmp_path)
-    (repo / ".fr-isolation").write_text("{}\n")
+    # A marker fr can read (pr1431-r2: one it cannot is a refusal, never "no marker").
+    (repo / ".fr-isolation").write_text(json.dumps({"toplevel": str(repo.resolve())}) + "\n")
 
     assert dirty_code_paths(repo) == []
 

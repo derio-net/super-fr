@@ -118,8 +118,12 @@ def _cursor_branch_line(name: str) -> re.Pattern[str]:
 def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePlan:
     """Read every key and refuse before anything is written (spec §B, R9, R10)."""
     from fr.artifacts.paths import outside_repo
+    from fr.settings import SettingsError
 
-    placement = outside_repo(Path(worktree)) or outside_repo(Path(repo_root))
+    try:
+        placement = outside_repo(Path(worktree)) or outside_repo(Path(repo_root))
+    except SettingsError as e:  # pr1431-r2: an unreadable placement is no `repo`
+        raise IsolationError(f"cannot rename {old}: {e}. Nothing was written") from e
     if placement is not None:
         # p3-r1: under quiet (and stealth) a branch rename moves the feature id, i.e. its
         # path below the placement's root, which needs its own design; refused first.
