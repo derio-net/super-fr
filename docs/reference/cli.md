@@ -53,10 +53,11 @@ The move does not start while any workspace has uncommitted work, and it never
 force-pushes. Out of `repo`, it removes the files through a pushed branch and a printed
 `fr pr create` command. `--run <id>`, in a stealth workspace, moves that one run.
 
-A branch left under the old placement is stopped by fr's CLI-entry gate (every command
-except the read-only ones, `fr migrate` and `fr placement`), `fr push`, `deliver` and `fr validate artifacts`. This continues until
-`fr placement migrate-branch`, run in its workspace, moves its files (one commit on each
-side, both pushed). Nothing else migrates it, CI included.
+A branch left under the old placement is stopped by fr's CLI-entry gate, `fr push`,
+`deliver` and `fr validate artifacts`. The gate covers every command except the read-only
+ones, `fr migrate` and `fr placement`. This continues until `fr placement migrate-branch`,
+run in its workspace, moves its files (one commit on each side, both pushed). Nothing else
+migrates it, CI included.
 
 ## Every command
 
