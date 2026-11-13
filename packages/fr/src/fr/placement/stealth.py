@@ -499,6 +499,19 @@ def https_form(repo: str) -> str | None:
     return f"https://{host}/{path.lstrip('/')}"
 
 
+_PINNABLE_BACKENDS: Final = frozenset({"github", "gitlab"})
+"""Backends whose client fr can point at a given host (`gh` GH_HOST, `glab` --hostname).
+`tea` resolves its own login, so a gitea visibility is unreadable here (fail closed)."""
+
+
+def _bare_host(host: str) -> str:
+    """Lowercased, any `user@` and `:port` dropped."""
+    host = host.strip().lower().rsplit("@", 1)[-1]
+    if host.startswith("["):
+        return host.split("]", 1)[0] + "]"
+    return host.split(":", 1)[0]
+
+
 def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
     """*repo*'s visibility from its forge, always asked on the host of *repo*'s own URL
     (the slug's host). With a *checkout* of it, its declared forge type picks the client
@@ -513,25 +526,29 @@ def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
     if slug is None:
         return None
     url = https_form(repo)
-    url_host = urlparse(url).hostname if url else None
+    url_host = (urlparse(url).hostname or "").lower() if url else ""
     if url is None or not url_host:
         return None
     try:
         from fr import _hosts, hostclient
 
         if checkout is None:
-            client = hostclient.client_for_url(url)
+            backend = _hosts.backend_for_url(url)
         else:
             # The slug is the remote's, so the host asked must be the remote's too: a
             # checkout whose forge names another host would answer for another repo of
-            # the same name (fail closed, unreadable).
-            resolved = _hosts.host_for(Path(checkout))
-            wanted = _hosts.self_hosted_hostname(url_host)
-            if (resolved or "").lower() != (wanted or "").lower():
+            # the same name (review p4-r7). Raw hostnames, never the SaaS-filtered ones.
+            root = Path(checkout)
+            raw = _hosts.declared_host(root) or _hosts.origin_hostname(root) or ""
+            if _bare_host(raw) != url_host:
                 return None
-            client = hostclient.client_for_backend(
-                _hosts.detect_backend(Path(checkout)), host=url_host
-            )
+            backend = _hosts.detect_backend(root)
+        saas = _hosts.DEFAULT_HOST_BACKENDS.get(url_host)
+        if saas is not None and saas != backend:
+            return None  # a SaaS host has one forge: any other client answers wrongly
+        if backend not in _PINNABLE_BACKENDS:
+            return None  # its client cannot be pinned to url_host (tea asks its own login)
+        client = hostclient.client_for_backend(backend, host=url_host)
     except Exception:  # noqa: BLE001 - an unbuildable client is "unreadable", which refuses
         return None
     return live_visibility(client, slug)
