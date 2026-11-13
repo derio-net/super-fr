@@ -1114,3 +1114,116 @@ Predates this branch; tracked by derio-net/super-fr#1429.
 ### p6-stray-stash-entry-resolved · finding [fixed] · resolves p6-stray-stash-entry: stash@{0} on this repo belongs to another branch (fix/opencode-edit-gate-closed) and is untouched (phase 6) (phase 6)
 
 Verified by the orchestrator: the worktree is clean, the unrelated stash entry is intact, and the one stray untracked file was removed.
+
+<!-- fr:journal kind=decision scope=plan id=p7-move-groups created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-move-groups · decision · A move out of repo groups artifacts into features by run branch, else by spec slug (moved/<key>) (phase 7)
+
+Repo artifacts carry no feature. A run's cursor, records and usage go to the run's own
+branch (feature id = its slug); a spec, its plans (via _meta.yaml spec:), journals and
+fragment go to `moved/<spec-slug>`; a debug journal to `moved/debug-<slug>`; anything
+else to `moved/repo`. Each group's head is the newest first-parent commit of the default
+ref touching its files, its BASE that commit's first parent; HEADS and a `merged:` record
+name the head. Verify catches any case the grouping cannot reproduce.
+
+<!-- fr:journal kind=decision scope=plan id=p7-move-backdated-fr-commits created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-move-backdated-fr-commits · decision · Each copied feature's fr commit carries its head's committer date (phase 7)
+
+merged.frozen_commit reads a merged feature's fragments from the last pushed fr commit
+at or before its merge commit's time. A copy made now would be after every merge, so no
+fragment would count as merged. Each feature is therefore one commit (R23: one feature
+path per commit) dated at its head, built with plumbing in a private index (no checkout
+touched), pushed plainly. Phase 5's freeze rule is unchanged.
+
+<!-- fr:journal kind=decision scope=plan id=p7-move-copy-pushes-before-switch created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-move-copy-pushes-before-switch · decision · Copy pushes the fr branch without the switch; verify reads it as a placement; switch adds settings.yaml (phase 7)
+
+The quiet fold reads what was pushed (origin/fr), so copy pushes `fr` with no
+settings.yaml (no switch, the repo stays repo) and verify folds that space explicitly
+(fold_of_space). Switch is the one commit adding `placement: quiet`. Leaving quiet
+writes `placement: repo` by a new commit. Into repo the copy is a pushed branch
+(chore/fr-placement-move-to-repo) that lands by PR; the switch pauses (exit 0, "paused")
+until its files are on the default ref. Out of quiet only merged features are copied,
+at their frozen commit; unmerged ones are live branches' and move with migrate-branch.
+
+<!-- fr:journal kind=decision scope=plan id=p7-remove-pushes-a-branch created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-remove-pushes-a-branch · decision · Remove pushes the removal branch (never the default branch) and prints fr pr create (phase 7)
+
+Out of repo, remove builds chore/fr-placement-move-to-<to> off the default ref with the
+copied files deleted, pushes that branch plainly (a PR needs it on the remote), writes
+the PR body under the git common dir and prints `git switch <branch> && fr pr create`.
+No PR is opened and the default branch is never pushed.
+
+<!-- fr:journal kind=decision scope=plan id=p7-stealth-whole-repo-one-way created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-stealth-whole-repo-one-way · decision · A whole-repo move to stealth is one-way; a stealth run comes back with --run (phase 7)
+
+Stealth is chosen per run (R24), so after a whole move to stealth no repo-side state
+says "stealth". The move puts every feature in the tracking repo (privacy guard and CAS
+push through commit_and_push), its switch step only turns quiet off when the source was
+quiet, and it prints `fr isolation up --stealth`. `--run <id>`, in a stealth workspace,
+moves that run to the repo's current placement (repo or quiet); its verify is files and
+validation (an unmerged run has no fold of its own to compare).
+
+<!-- fr:journal kind=decision scope=plan id=p7-drift-detection created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-drift-detection · decision · The gate checks marker-vs-switch drift only (filesystem); push, deliver and validate also check the branch tree (phase 7)
+
+marker_drift reads the marker and the switch ref from the filesystem (no process
+without both). The gate asks it before every non-exempt command, ignoring
+FR_SKIP_MIGRATION and CI (it migrates nothing), and lets `fr placement` through (it is
+the remedy; for a drifted tree the rest of the gate is skipped). branch_drift (git:
+placement-bound paths changed since the merge base, under quiet or stealth) is added by
+fr push, deliver (_deliver_placement_gate) and the validate CLI, which is how CI sees it.
+The validate check sits in commands/validate_cmd.py, not artifacts/validate.py, so the
+move's own validation over exported trees is not affected. sticky_refusal now names
+migrate-branch.
+
+<!-- fr:journal kind=decision scope=plan id=p7-security-feature-id created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-security-feature-id · decision · One checked feature id (paths.checked_feature_id) and one inside() check for every move write and unlink (security finding) (phase 7)
+
+A run cursor's branch is repo content. paths.unsafe_branch holds check-ref-format's
+rules without a process, and checked_feature_id refuses an id that is not one
+[A-Za-z0-9._-] segment or is all dots. quiet.check_feature_id (so quiet, stealth and
+merged spaces), archive --branch, migrate-branch and the move use it; the move also runs
+`git check-ref-format --branch` on each synthesised owner. move.inside() refuses any
+write or unlink leaving its feature root, and the stealth stale pass is limited to that
+root. Tests: crafted `..`/`../../escape` branches refused with exit 2 naming the branch,
+nothing written.
+
+<!-- fr:journal kind=decision scope=plan id=p7-security-no-symlinks created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-security-no-symlinks · decision · Moves and migrate-branch read sources from git and never follow a symlink (security finding) (phase 7)
+
+Sources are read with ls-tree/cat-file, never the working tree; a 120000 (symlink) or
+160000 (gitlink) entry among the copied paths refuses, naming it. Every write and unlink
+goes through move.inside(), which also refuses when any component from the root down is
+a symlink (lstat). Tests: a symlinked fragment pointing outside the repo is refused and
+its contents reach no destination; a symlinked directory on the target side is refused
+and nothing is written through it.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-scenario-first-run-flake created=2026-11-13T11:48:29+00:00 phase=7 -->
+### p7-scenario-first-run-flake · discovery · One early scenario run reported no state file after the interruption; four later runs passed (phase 7)
+
+The first passing build of the scenario followed a run that failed "no state file after
+the interruption" (exit 2 from the move). Not reproduced in four consecutive runs; the
+failure message now prints the move's output if it recurs.
+
+<!-- fr:journal kind=finding scope=plan id=p7-quiet-to-stealth-live-branches created=2026-11-13T11:48:29+00:00 phase=7 state=open review_scope=out -->
+### p7-quiet-to-stealth-live-branches · finding [open] (reviewer: out of scope) · After a quiet -> stealth whole move, live quiet workspaces migrate to repo, not stealth (phase 7)
+
+migrate-branch follows the switch; once quiet is off the switch says repo, so a live
+quiet workspace's branch is pulled back into the repo layout rather than into the
+tracking repo. Moving a live run into stealth needs a per-run stealth entry that R24
+leaves to `fr isolation up --stealth`; not addressed here.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t1 created=2026-11-13T11:48:29+00:00 phase=7 -->
+### no-refactor-p7-t1 · discovery · no-refactor-because P7.T1 (phase 7)
+
+new module fr/placement/move.py; the one fold change is a space parameter on _outside_fold (fold_of_space), so the move's destination fold runs the same body as every quiet/stealth reader
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t2 created=2026-11-13T11:48:29+00:00 phase=7 -->
+### no-refactor-p7-t2 · discovery · no-refactor-because P7.T2 (phase 7)
+
+new module fr/placement/drift.py; the gate, fr push, deliver and validate each call its one refuse(), and migrate-branch reuses commit_paths, _push_placement and atomic_push rather than a second push path
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t3 created=2026-11-13T11:48:29+00:00 phase=7 -->
+### no-refactor-p7-t3 · discovery · no-refactor-because P7.T3 (phase 7)
+
+scenario, row amendment and docs only; nothing to fold
