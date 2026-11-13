@@ -3,7 +3,8 @@
 # 2026-11-04-repo-feature-settings R2, R3, R23). In a fresh repo with a local bare
 # origin: `fr settings init --quiet` pushes the orphan `fr` branch; `fr isolation up`
 # (host worktree) records quiet; a plan, a journal entry and a run cursor land on `fr` under
-# features/feat__q/, a code commit stays on feat/q, and `fr push` pushes both. Then:
+# features/feat__q/, the cursor resolves brainstorm with a spec below FR_SPECS_DIR (its brief
+# naming a record template there), a code commit stays on feat/q, and `fr push` pushes both. Then:
 # feat/q carries no fr path and no chore(fr) subject, every `fr` commit after the root
 # touches one feature path; acceptance rows land on `fr`, `fr archive --all` refuses (R25: --branch), and a
 # `git add -A` code commit plus `fr push` puts no fr path or chore(fr) subject on origin's
@@ -48,6 +49,28 @@ require_exit 0 "$out"
 cursor="$(ls "$frwt"/features/feat__q/docs/superpowers/runs/*.yaml 2>/dev/null | head -1)"
 [ -n "$cursor" ] || fail "no run cursor below the feature path: $out"
 run_id="$(basename "$cursor" .yaml)"
+
+# The cursor through brainstorm (7.0.0rc3 live walk): the brief carries a record template
+# whose path is in the fr worktree, and a spec written below FR_SPECS_DIR resolves with
+# its logical spelling and is recorded as that spelling.
+run_fr out run advance "$run_id"
+require_exit 0 "$out"
+refuse_grep '"record": null' "$out" "the brainstorm brief carries a record template"
+expect_grep "\"path\": \"/[^\"]*/\.cache/fr/worktrees/$repo/fr/features/feat__q/docs/superpowers/runs/$run_id.records/brainstorm.yaml\"" \
+  "$out" "the brief names the record below the feature path"
+run_fr paths settings paths --shell
+require_exit 0 "$paths"
+eval "$paths"
+case "$FR_SPECS_DIR" in
+  */.cache/fr/worktrees/$repo/fr/features/feat__q/docs/superpowers/specs) ;;
+  *) fail "FR_SPECS_DIR is not the quiet feature's: $FR_SPECS_DIR" ;;
+esac
+mkdir -p "$FR_SPECS_DIR" && echo '# Q' > "$FR_SPECS_DIR/2026-11-12-q-design.md"
+run_fr out run resolve "$run_id" --step brainstorm --state done --answered-by agent \
+  --emitted spec=docs/superpowers/specs/2026-11-12-q-design.md
+require_exit 0 "$out"
+grep -q 'spec: docs/superpowers/specs/2026-11-12-q-design.md' "$cursor" \
+  || fail "the cursor does not record the logical spec path: $(cat "$cursor")"
 echo code > code.txt
 git add code.txt && git commit -qm "feat(q): a code change" || fail "code commit"
 refuse_grep '.' "$(git status --porcelain)" "the product checkout is clean"

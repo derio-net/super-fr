@@ -15,6 +15,7 @@ from collections.abc import Iterable, Set
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import emitted_path
 from fr.journal.model import JournalEntry
 from fr.ops.testplan import steps_gated
 from fr.spec import Step, StepGate
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 
 
 def _spec_file(repo_root: Path, spec_rel: str) -> Path | None:
-    live = repo_root / spec_rel
+    live = emitted_path(repo_root, spec_rel)
     if live.is_file():
         return live
     from fr.archive import resolve_local_spec

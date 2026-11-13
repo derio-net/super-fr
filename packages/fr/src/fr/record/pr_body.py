@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import emitted_path
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -893,7 +894,7 @@ def _proportionality(repo_root: Path, state: RunState) -> str:
     if plan_rel is None:
         return "No plan recorded for this run."
     try:
-        report = run_report(repo_root, parse(repo_root / plan_rel), None)
+        report = run_report(repo_root, parse(emitted_path(repo_root, plan_rel)), None)
     except (PlanSchemaError, OSError) as e:
         return _unavailable(repo_root, e)
     return f"```text\n{report.text.rstrip()}\n```"

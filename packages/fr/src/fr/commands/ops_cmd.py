@@ -46,7 +46,7 @@ def _refuse(message: str, verb: str = "status") -> NoReturn:
 def plan_of_current_branch(repo_root: Path) -> Path | None:
     """The plan dir recorded by the run whose `branch` is the one checked out
     here; `None` when there is no such run, or the runs disagree."""
-    from fr.artifacts.paths import artifact_root
+    from fr.artifacts.paths import artifact_root, emitted_path
     from fr.record.model import RUNS_REL
     from fr.run.adopt import current_branch
     from fr.run.model import RunStateError, parse_run_state
@@ -66,7 +66,7 @@ def plan_of_current_branch(repo_root: Path) -> Path | None:
         plans |= {
             r.emitted["plan"] for r in state.steps.values() if r.emitted and "plan" in r.emitted
         }
-    return repo_root / plans.pop() if len(plans) == 1 else None
+    return emitted_path(repo_root, plans.pop()) if len(plans) == 1 else None
 
 
 def render_text(rows: list[dict[str, object]], *, explain: bool) -> str:

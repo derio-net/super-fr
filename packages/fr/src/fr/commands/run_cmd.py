@@ -121,7 +121,7 @@ if TYPE_CHECKING:
     from fr.run.observed import ChildDispatch
     from fr.run.telemetry import Round
     from fr.verification.walk import WalkOwed
-from fr.artifacts.paths import KIND_DIRS, artifact_root
+from fr.artifacts.paths import KIND_DIRS, artifact_root, emitted_path
 from fr.run.provenance import cleared_gates, gates
 from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.units import UnitAttempt
@@ -790,7 +790,7 @@ def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
     from fr.parser import PlanSchemaError, parse
 
     try:
-        plan = parse(repo_root / plan_rel)
+        plan = parse(emitted_path(repo_root, plan_rel))
     except (PlanSchemaError, OSError):
         return None
     return next((p.phase.tier for p in plan.phases if p.phase.number == phase_n), None)
@@ -1591,20 +1591,45 @@ def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) 
 def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
     if name not in REPO_TRACKED_ARTIFACTS:
         return value
+    from fr.artifacts.paths import REPO, feature_root, space_for
+
+    # The artifact root, not the product checkout: under quiet or stealth the spec and
+    # plan live in the `fr` worktree or the tracking clone (R1), and a run records them
+    # relative to that root, the same layout as under `repo`. Readers resolve them back
+    # through `fr.artifacts.paths.emitted_path`.
+    space = space_for(repo_root)
+    base = feature_root(space)
     raw = Path(value)
-    target = raw if raw.is_absolute() else repo_root / raw
+    if raw.is_absolute():
+        candidates = [raw]
+    else:
+        # The logical spelling (`<kind dir>/<file>` below the feature root) first; off
+        # `repo`, also the same path spelled from the `fr` worktree or tracking root
+        # (`features/<id>/...`).
+        candidates = [base / raw]
+        if space.placement != REPO:
+            candidates.append(space.root / raw)
     # `resolve()` on BOTH sides (review r5-e2): an fr worktree lives under
     # `~/.cache`, which on macOS is reached through `/private/var/...` — so a
     # resolved artifact path and an unresolved repo root have no common
     # prefix and `relative_to` raises on a file that is plainly inside.
-    resolved_root = repo_root.resolve()
-    try:
-        rel = target.resolve().relative_to(resolved_root)
-    except ValueError as e:
+    resolved_root = base.resolve()
+    inside: list[Path] = []
+    for target in candidates:
+        try:
+            inside.append(target.resolve().relative_to(resolved_root))
+        except ValueError:
+            continue
+    if not inside:
+        if space.placement == REPO:
+            where, hint = "the repo", "a run records repo-relative artifact paths"
+        else:
+            where = f"this feature's {space.placement} artifact root"
+            hint = "a run records paths below it; `fr settings paths` names its directories"
         raise RunStateError(
-            f"--emitted {name}={value!r} is outside the repo ({resolved_root}) — "
-            "a run records repo-relative artifact paths"
-        ) from e
+            f"--emitted {name}={value!r} is outside {where} ({resolved_root}) — {hint}"
+        )
+    rel = next((r for r in inside if (resolved_root / r).exists()), inside[0])
     if not (resolved_root / rel).exists():
         raise RunStateError(
             f"--emitted {name}={value!r} does not exist ({resolved_root / rel}). "
@@ -2353,7 +2378,7 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
         )
         raise typer.Exit(2)
     try:
-        plan = parse(repo_root / plan_rel)
+        plan = parse(emitted_path(repo_root, plan_rel))
     except PlanSchemaError as e:
         err_console.print(
             f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
@@ -3789,11 +3814,20 @@ def _debt_phrase(record: StepRecord, key: str, lacking: tuple[str, ...]) -> str:
     return f"unevidenced: {', '.join(lacking)} (predates that obligation)"
 
 
-def _template_context(state: RunState) -> dict[str, str]:
+def _template_context(state: RunState, repo_root: Path | None = None) -> dict[str, str]:
+    """`{{ run.* }}` and `{{ artifacts.* }}` for a `kind: cli` step, which runs in the
+    product checkout. Under quiet or stealth a repo-tracked artifact (`spec`, `plan`) is
+    not there, so it is given as its absolute path below the artifact root; under `repo`
+    the recorded relative path already names it from the checkout."""
+    from fr.artifacts.paths import outside_repo
+
+    placed = repo_root is not None and outside_repo(repo_root) is not None
     ctx = {"run.id": state.run, "run.branch": state.branch}
     for record in state.steps.values():
         if record.emitted:
             for name, value in record.emitted.items():
+                if placed and repo_root is not None and name in REPO_TRACKED_ARTIFACTS:
+                    value = str(emitted_path(repo_root, value))
                 ctx[f"artifacts.{name}"] = value
     return ctx
 
@@ -4877,7 +4911,7 @@ def _manual_placement_errors(repo_root: Path, state: RunState) -> tuple[str | No
     if plan_rel is None:  # pragma: no cover — `_group_phases` refused first
         return None, []
     try:
-        plan = parse(repo_root / plan_rel)
+        plan = parse(emitted_path(repo_root, plan_rel))
     except PlanSchemaError:  # pragma: no cover — `_group_phases` refused first
         return plan_rel, []
     return plan_rel, [i.message for i in _manual_placement_issues(plan) if i.severity == "error"]
@@ -5199,7 +5233,7 @@ def _refuse_spec_policy(
     if not spec_rel:
         return
     try:
-        problems = spec_policy_problems(repo_root, repo_root / spec_rel)
+        problems = spec_policy_problems(repo_root, emitted_path(repo_root, spec_rel))
     except SettingsError as e:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
@@ -6328,7 +6362,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         return "brief"
 
     # kind == "cli"
-    context = _template_context(state)
+    context = _template_context(state, repo_root)
     try:
         command = _render_template(step.run or "", context, quote=True)
     except RunStateError as e:
@@ -7831,7 +7865,7 @@ def _refactor_gate(repo_root: Path, state: RunState, key: str, phase_n: int | No
     if plan_rel is None or phase_n is None:
         return
     try:
-        plan = parse(repo_root / plan_rel)
+        plan = parse(emitted_path(repo_root, plan_rel))
     except PlanSchemaError:
         return  # `_group_phases` already refused an unreadable plan
     gaps = refactor_gaps(plan, phase_n)

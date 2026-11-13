@@ -74,6 +74,17 @@ class Plan:
         except ValueError:
             return self.dir
 
+    @property
+    def artifact_root(self) -> Path | None:
+        """The artifact root this plan hangs from: by the layout rule (spec 2026-11-04
+        R1), the directory above its plans directory, live or archived, under every
+        placement. Under `repo` that is `repo_root`; under quiet or stealth it is the
+        feature root in the `fr` worktree or tracking clone, below `repo_root`. Falls
+        back to `repo_root` for a plan outside the layout."""
+        from fr.artifacts.paths import plan_layout_root
+
+        return plan_layout_root(self.dir) or self.repo_root
+
 
 def _find_repo_root(start: Path) -> Path | None:
     """Walk up from `start` looking for a `.git` directory.
@@ -247,7 +258,15 @@ def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
 
     spec_path: str | None = None
     if meta.spec and repo_root is not None and not is_cross_repo_spec(meta.spec):
-        res = refs.resolve_spec_ref(meta.spec, repo_root)
+        from fr.artifacts.paths import plan_layout_root
+
+        # Below the plan's own artifact root (a quiet or stealth feature root sits below
+        # the `fr` worktree's or tracking clone's toplevel), else the repo's placement.
+        root = plan_layout_root(plan_dir)
+        if root is not None and root.resolve() != repo_root.resolve():
+            res = refs.resolve_spec_ref_below(meta.spec, root.resolve())
+        else:
+            res = refs.resolve_spec_ref(meta.spec, repo_root)
         if res.path is not None:
             spec_path = res.path.relative_to(repo_root).as_posix()
 

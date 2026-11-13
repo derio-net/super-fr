@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from fr.artifacts.paths import emitted_path
 from fr.record.model import (
     RECORD_SCHEMA_VERSION,
     RecordError,
@@ -180,7 +181,7 @@ def _phase_steps(
     from fr.record.gates import refactor_gaps
 
     try:
-        plan = parse(repo_root / plan_rel)
+        plan = parse(emitted_path(repo_root, plan_rel))
     except PlanSchemaError:
         return [], []
     ph = next((p for p in plan.phases if p.phase.number == phase), None)
@@ -226,7 +227,10 @@ def record_brief(
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
-    rel = path.relative_to(repo_root).as_posix()
+    # Under quiet or stealth the records dir is in the `fr` worktree or tracking clone,
+    # outside the checkout: name it absolutely (`--record` takes either form). A
+    # `relative_to` here raised, and the brief went out with `record: null`.
+    rel = path.relative_to(repo_root).as_posix() if path.is_relative_to(repo_root) else str(path)
     plan_rel = next(
         (r.emitted["plan"] for r in state.steps.values() if r.emitted and "plan" in r.emitted),
         None,

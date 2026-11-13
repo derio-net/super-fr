@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import emitted_path
 from fr.verification.effective import effective_strategy, install_problem, is_post_merge
 from fr.verification.model import RESERVED, StrategyError
 from fr.verification.resolve import resolve_strategy
@@ -47,8 +48,8 @@ def spec_section_at(repo_root: Path, spec_rel: str | None) -> Section | None:
     if not spec_rel:
         return None
     for rel in (spec_rel, archive_twin(spec_rel)):
-        if rel and (repo_root / rel).is_file():
-            return parse_section((repo_root / rel).read_text())
+        if rel and emitted_path(repo_root, rel).is_file():
+            return parse_section(emitted_path(repo_root, rel).read_text())
     return None
 
 

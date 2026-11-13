@@ -142,6 +142,31 @@ def artifact_root(repo_root: Path) -> Path:
     return feature_root(space_for(repo_root))
 
 
+def emitted_path(repo_root: Path, rel: str) -> Path:
+    """The file or directory a run cursor's `emitted` spec or plan names, for the checkout
+    at *repo_root*. A run records it relative to its feature's artifact root (the same
+    relative layout under every placement), so it resolves there, never against the
+    product checkout, which under quiet or stealth holds no fr artifact (R1, R23)."""
+    return artifact_root(repo_root) / rel
+
+
+PLAN_HOME_KINDS: Final = ("plan", "plan-archived", "plan-legacy-archived")
+"""The directories a plan folder sits directly below, live or archived."""
+
+
+def plan_layout_root(plan_dir: Path) -> Path | None:
+    """The artifact root *plan_dir* hangs from, read from the layout alone: when it sits
+    directly below a plans directory (`<root>/<plans dir>/<slug>`), `<root>`, else None.
+    No placement read: the relative layout is the same under every placement, so this
+    names a quiet or stealth feature root from the plan's own path."""
+    parent = Path(plan_dir).parent
+    for kind in PLAN_HOME_KINDS:
+        rel = Path(KIND_DIRS[kind]).parts
+        if len(parent.parts) > len(rel) and parent.parts[-len(rel) :] == rel:
+            return Path(*parent.parts[: -len(rel)])
+    return None
+
+
 def kind_dir(kind: str, space: ArtifactSpace) -> Path:
     """The absolute path of *kind* in *space*; `KeyError` naming an unknown kind."""
     return feature_root(space) / _known(kind, KIND_DIRS)

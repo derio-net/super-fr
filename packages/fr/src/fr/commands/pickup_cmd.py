@@ -265,21 +265,37 @@ def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
     # The read-only resolver (spec 2026-10-05-run-upgrade-midflight §B): pickup
     # only reads the cursor, so a step drift is one warning naming `fr run
     # reshape`, not a refusal `_record_section` would swallow (gh#988).
-    from fr.artifacts.paths import artifact_root
+    from fr.artifacts.paths import artifact_root, feature_root, space_for
     from fr.commands.run_cmd import _resolve_manifest_for_read
     from fr.record.template import record_brief
     from fr.run.model import RUNS_REL, parse_run_state
 
     repo_root = getattr(plan, "repo_root", None)
-    rel = getattr(plan, "repo_relative_dir", None)
-    if repo_root is None or rel is None:
+    plan_root = getattr(plan, "artifact_root", None)
+    plan_dir = getattr(plan, "dir", None)
+    if repo_root is None or plan_root is None or plan_dir is None:
+        return None
+    # Under quiet or stealth the plan sits in the `fr` worktree or tracking clone, below
+    # its feature root; the run that emitted it records it relative to that root, and is
+    # read (and its brief built) from the product checkout whose artifact root it is.
+    try:
+        here = resolve_repo_root()
+        if feature_root(space_for(here, create=False)).resolve() == Path(plan_root).resolve():
+            repo_root = here
+    except Exception:  # noqa: BLE001, S110 — no checkout here: read beside the plan
+        pass
+    try:
+        rel = Path(plan_dir).resolve().relative_to(Path(plan_root).resolve()).as_posix()
+    except ValueError:
         return None
     for path in sorted((artifact_root(repo_root) / RUNS_REL).glob("*.yaml")):
         try:
             state = parse_run_state(path.read_text())
         except Exception:  # noqa: BLE001, S112 — an unreadable cursor is not this plan's
             continue
-        if not any(r.emitted and r.emitted.get("plan") == str(rel) for r in state.steps.values()):
+        if not any(
+            r.emitted and r.emitted.get("plan", "").rstrip("/") == rel for r in state.steps.values()
+        ):
             continue
         manifest = _resolve_manifest_for_read(repo_root, state)
         for group in manifest.steps:
