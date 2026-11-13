@@ -1520,3 +1520,8 @@ d8ad52635: fr pr create's default base comes from fr.git.remote_default_ref, nev
 ### pr1431-r9-resolved · finding [fixed] · resolves pr1431-r9: git.push ask approval looks for the debug journal on the product branch
 
 f7753b0ba: under quiet and stealth git.push: ask finds the debug journal at the feature root through artifact_root; tests under both placements.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n2-resolved created=2026-11-13T15:47:04+00:00 state=fixed resolves=pr1431-n2 -->
+### pr1431-n2-resolved · finding [fixed] · resolves pr1431-n2: _copy_quiet's read-tree --reset can discard pending writes in an existing fr worktree
+
+2377efeb2: dirty_workspaces also lists the quiet fr worktree and every stealth tracking clone of the repo, so a move refuses before read-tree --reset or a tracking commit.
