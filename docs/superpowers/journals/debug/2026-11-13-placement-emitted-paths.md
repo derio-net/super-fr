@@ -1,0 +1,32 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-13-placement-emitted-paths
+
+<!-- fr:journal kind=repro scope=debug id=a432b367799e created=2026-11-13T20:50:47+00:00 -->
+### a432b367799e · repro · quiet/stealth: run resolve --emitted spec= refused in every spelling
+
+tests/unit/test_placement_emitted_paths.py: under quiet, after run start, a spec written at <fr worktree>/features/feat__q/docs/superpowers/specs/x.md cannot be recorded by fr run resolve --step brainstorm --state done --emitted spec=...: the logical docs/superpowers/... and the features/<id>/... spellings are 'does not exist' (looked under the product workspace), the absolute path is 'outside the repo'. _repo_relative_artifact (run_cmd.py) judges against the product root only.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-emitted created=2026-11-13T20:59:00+00:00 -->
+### rc-emitted · root-cause · emitted spec/plan judged against the product root, not the artifact root
+
+_repo_relative_artifact resolved --emitted against the product checkout; under quiet/stealth the spec lives below the feature root (fr.artifacts.paths.feature_root). The cursor's convention (verification/exit.py already reads artifact_root / plan_rel) is artifact-root-relative, so the writer was the outlier, and ~12 readers joined the product root too (run_cmd plan/spec reads, record template/pr_body/apply, verification set/rows, ops holds, run visual/adopt, ops_cmd, cli-step {{ artifacts.* }} rendered for a cwd of the product checkout). Second layer: Plan.repo_root is the git toplevel of the plan dir (the fr worktree), so a quiet plan never resolved its spec and fr pickup matched features/<id>/docs/... against the recorded docs/...
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-operator created=2026-11-13T20:59:01+00:00 -->
+### rc-operator · root-cause · decision operator window opened at an entry of the same record
+
+record/apply.py _verify: since = [*existing, *new][-1].created. Every entry a record adds is stamped with the apply time, so the operator brief ahead of a brainstorm record's decisions moved the window past the question round and every answered_by: operator decision was refused. (verify_operator_claim is the finding-resolution path; the decision path is verify_operator_answer called from apply.py.) The existing test passed only because its answer was dated 2099.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-record-null created=2026-11-13T20:59:03+00:00 -->
+### rc-record-null · root-cause · brief record: null is placement-related
+
+record.template.record_brief computed path.relative_to(repo_root); under quiet/stealth the records dir is in the fr worktree or tracking clone, so it raised ValueError, which run_cmd._record_brief swallows into record: null. Fixed: an absolute path when the records dir is outside the checkout (--record accepts either).
+
+<!-- fr:journal kind=finding scope=debug id=fix-emitted-paths created=2026-11-13T21:25:36+00:00 state=fixed -->
+### fix-emitted-paths · finding [fixed] · emitted paths, plan root, brief record and decision window fixed
+
+Source: run_cmd._repo_relative_artifact records below feature_root (logical, absolute, fr-root spellings; outside refused); fr.artifacts.paths.emitted_path is the reader for every product-root join; _template_context renders absolute off repo; plan_layout_root/Plan.artifact_root + refs.resolve_spec_ref_below for a quiet/stealth plan's spec; pickup matches by the plan's artifact root; record_brief names the records path absolutely outside the checkout; apply._verify opens a decision window at the last entry on disk. Tests first: tests/unit/test_placement_emitted_paths.py (6), test_journal_decision_tokens.py::TestDecisionWindowInOneRecord, and placement-quiet.sh / placement-stealth.sh now drive brainstorm (both failed on the unfixed code at record: null).
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-11-13T21:37:32+00:00 -->
+### review-1 · review · independent adversarial review: no serious finding in 1-3; item 4 loosening accepted and stated
+
+Reviewer (fresh context, given the diff, not the conclusions). Raised: (a) the decision window now opens once per record, so one operator answer covers every operator-claimed decision in that record: accepted deliberately (a question round answers several decisions in one exchange, as the gate's own round attribution does; what is checked is that the operator answered in the window), stated in apply.py, and pinned by a negative test (no answer in the window refuses the whole record, nothing written). (b) no negative/escape tests: added (.., another feature, symlink). (c) pickup's artifact_root reads the placement with create=True after a create=False compare: commented; once matched it is the feature's own workspace. (d) usage/compare.py _plan_phase_count still joins the product root: left as a known gap, since usage is read-only and emitted_path creates/syncs the space; it shows '—' for a quiet/stealth run. Checked fine: path escape, repo placement unchanged, plan parse, record brief.

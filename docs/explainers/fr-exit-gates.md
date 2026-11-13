@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
 ---
 
 ## Overview: the work that cannot finish in the pull request

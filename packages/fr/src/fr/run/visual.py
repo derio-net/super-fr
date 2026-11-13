@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from fr.acceptance.model import Matrix, Row
+from fr.artifacts.paths import emitted_path
 from fr.record.model import VisualEvidence
 from fr.run.telemetry import parse_timestamp
 
@@ -297,7 +298,7 @@ def owed_for_unit(
             if plan_rel is None:
                 raise VisualRefusedError([f"{why} — no plan recorded yet"])
             try:
-                plan = parse(repo_root / plan_rel)
+                plan = parse(emitted_path(repo_root, plan_rel))
             except PlanSchemaError as e:
                 raise VisualRefusedError([f"{why} — plan {plan_rel} does not parse: {e}"]) from e
             linked = next((p.phase.acceptance for p in plan.phases if p.phase.number == phase), ())
@@ -314,7 +315,7 @@ def owed_for_unit(
         flat_plan: Plan | None = None
         if plan_rel is not None:
             try:
-                flat_plan = parse(repo_root / plan_rel)
+                flat_plan = parse(emitted_path(repo_root, plan_rel))
             except PlanSchemaError:
                 flat_plan = None
         return owed_rows(

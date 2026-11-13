@@ -4,7 +4,9 @@
 # and a separate local bare tracking repo: `fr settings init --stealth` pushes the target's
 # settings file to the tracking branch; `fr isolation up --stealth` (host worktree)
 # records stealth; a plan, a journal entry and a run cursor land in the tracking repo
-# under local--origin/features/feat__s/, a code commit goes to the target with `fr push`.
+# under local--origin/features/feat__s/, the cursor resolves brainstorm with a spec below
+# FR_SPECS_DIR (its brief naming a record template there), a code commit goes to the target
+# with `fr push`.
 # Then: the target's remote holds only the code commit (no fr path, no chore(fr)
 # subject, no commit body naming fr even after a squash, no fr ref); a second HOME resumes the run from the tracking repo; the tracking
 # repo removed mid-run makes the next resolve exit 2. Nothing reaches a forge.
@@ -56,8 +58,30 @@ run_fr out plan create --slug 2026-11-12-s --target-repo derio-net/s
 require_exit 0 "$out"
 run_fr out journal add --scope plan --slug 2026-11-12-s --kind discovery --title t --body b --global
 require_exit 0 "$out"
-run_fr out run start fr-goal --branch feat/s
+run_fr out run start fr-goal --branch feat/s --run-id r-s
 require_exit 0 "$out"
+# The cursor through brainstorm (7.0.0rc3 live walk): the brief carries a record template in
+# the tracking clone, and a spec written below FR_SPECS_DIR resolves by its absolute path and
+# is recorded relative to the feature root.
+sid=r-s
+run_fr out run advance "$sid"
+require_exit 0 "$out"
+refuse_grep '"record": null' "$out" "the brainstorm brief carries a record template"
+expect_grep "\"path\": \"/[^\"]*/\.cache/fr/worktrees/$repo/stealth--[^\"]*/local--origin/features/feat__s/docs/superpowers/runs/$sid.records/brainstorm.yaml\"" \
+  "$out" "the brief names the record in the tracking clone"
+run_fr paths settings paths --shell
+require_exit 0 "$paths"
+eval "$paths"
+case "$FR_SPECS_DIR" in
+  */local--origin/features/feat__s/docs/superpowers/specs) ;;
+  *) fail "FR_SPECS_DIR is not the stealth feature's: $FR_SPECS_DIR" ;;
+esac
+mkdir -p "$FR_SPECS_DIR" && echo '# S' > "$FR_SPECS_DIR/2026-11-12-s-design.md"
+run_fr out run resolve "$sid" --step brainstorm --state done --answered-by agent \
+  --emitted "spec=$FR_SPECS_DIR/2026-11-12-s-design.md"
+require_exit 0 "$out"
+grep -q 'spec: docs/superpowers/specs/2026-11-12-s-design.md' "$FR_RUNS_DIR/$sid.yaml" \
+  || fail "the cursor does not record the spec below the feature root: $(cat "$FR_RUNS_DIR/$sid.yaml")"
 # Repository configuration fr would scaffold is refused before it is written (R24, p4-r3).
 for cmd in "init agents" "init validator-wrapper" "settings init"; do
   run_fr out $cmd
@@ -111,7 +135,7 @@ expect_grep 'agree' "$(printf '%s' "$out" | tr '\n' ' ')" "resume reconciles equ
 HOME="$host_one" && export HOME
 cd "$wt" || fail "cd $wt"
 mv "$track" "$track.gone" || fail "remove the tracking repo"
-run_fr out run resolve "$run_id" --step brainstorm --state failed --reason "tracking gone"
+run_fr out run resolve "$run_id" --step spec-review --state failed --reason "tracking gone"
 [ "$RC" -eq 2 ] || fail "resolve did not exit 2 without its tracking repo (exit $RC): $out"
 expect_grep 'unreachable' "$(printf '%s' "$out" | tr '\n' ' ')" "the refusal names the unreachable tracking repo"
 echo "ok: placement-stealth"

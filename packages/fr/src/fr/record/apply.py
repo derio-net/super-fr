@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import emitted_path
 from fr.git import git_argv
 from fr.journal.model import (
     JournalEntry,
@@ -230,7 +231,7 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
     owner_emits = tuple(step.emits) or (tuple(parent.emits) if parent is not None else ())
     scope = journal_scope(owner_emits)
     plan_rel = run_cmd._emitted_plan(state) or record.emitted.get("plan")
-    plan_dir = repo_root / plan_rel if plan_rel else None
+    plan_dir = emitted_path(repo_root, plan_rel) if plan_rel else None
     slug: str | None = None
     if scope == "plan" and plan_dir is not None:
         slug = plan_dir.name
@@ -426,10 +427,17 @@ def _journal_writes(
             if entry.resolves is not None:
                 advisory = verify_operator_claim([*existing, *new], entry.resolves)
             else:
-                # A decision answers what was asked since the journal last moved;
-                # an empty journal opens the window at the session's start.
-                prior = [*existing, *new]
-                since = prior[-1].created if prior else None
+                # A decision answers what was asked since the journal last moved ON
+                # DISK; an empty journal opens the window at the session's start. Never
+                # at an entry this record adds: every one carries the apply time, after
+                # any answer the operator gave (the operator brief ahead of a brainstorm
+                # record's decisions refused every one of them, 7.0.0rc3 live walk).
+                # Deliberately, so one window serves every decision of the record: a
+                # question round answers several decisions in one exchange, as the gate's
+                # own attribution of a round's decisions does. What is checked is that
+                # the operator answered in the window, never which decision an answer
+                # was about; with no answer there, every claimed decision is refused.
+                since = existing[-1].created if existing else None
                 since_utc = journal_stamp_as_utc(since) if since else _SESSION_START
                 advisory = verify_operator_answer(
                     f"decision {entry.id}", since or "the session's start", since_utc

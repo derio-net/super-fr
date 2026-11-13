@@ -47,7 +47,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from fr.artifacts.paths import KIND_DIRS, artifact_root
+from fr.artifacts.paths import KIND_DIRS, artifact_root, emitted_path
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -305,7 +305,7 @@ def plan_phase_tags(repo_root: Path, plan_rel: str) -> dict[int, str]:
     (fail-closed, like every other unreadable-artifact path in this package).
     """
     try:
-        plan = parse(repo_root / plan_rel)
+        plan = parse(emitted_path(repo_root, plan_rel))
     except PlanSchemaError as e:
         raise AdoptError(f"{plan_rel} is not a parseable plan: {e}") from e
     return {p.phase.number: p.phase.tag for p in plan.phases}

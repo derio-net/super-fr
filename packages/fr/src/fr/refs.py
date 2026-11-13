@@ -89,16 +89,27 @@ def plan_slug(ref: str) -> str:
 
 
 def _resolve(
-    ref: str, repo_root: Path, roots: tuple[str, ...], *, is_dir: bool, suffix: str = ""
+    ref: str,
+    repo_root: Path,
+    roots: tuple[str, ...],
+    *,
+    is_dir: bool,
+    suffix: str = "",
+    below_root: bool = False,
 ) -> RefResolution:
     slug = plan_slug(ref)
     if not slug:
         return RefResolution(slug="", path=None, tried=(), matches=())
     if suffix and not slug.endswith(suffix):
         slug += suffix
-    from fr.artifacts.paths import kind_dir, space_for  # lazy: fr.artifacts imports this module
+    # lazy: fr.artifacts imports this module
+    from fr.artifacts.paths import below, kind_dir, space_for
 
-    sp = kind_dir("superpowers", space_for(repo_root))
+    sp = (
+        below(repo_root, "superpowers")
+        if below_root
+        else kind_dir("superpowers", space_for(repo_root))
+    )
     tried = tuple(sp.joinpath(*root.split("/")) / slug for root in roots)
     exists = Path.is_dir if is_dir else Path.is_file
     matches = tuple(p for p in tried if exists(p))
@@ -122,6 +133,12 @@ def resolve_spec_ref(ref: str, repo_root: Path) -> RefResolution:
     appended (the canonical form keeps the extension).
     """
     return _resolve(ref, repo_root, SPEC_ROOTS, is_dir=False, suffix=".md")
+
+
+def resolve_spec_ref_below(ref: str, root: Path) -> RefResolution:
+    """`resolve_spec_ref` below an artifact root already in hand (a plan's own, read
+    from its layout), with no placement read."""
+    return _resolve(ref, root, SPEC_ROOTS, is_dir=False, suffix=".md", below_root=True)
 
 
 def keeps_spec_ref_verbatim(value: str, repo_root: Path, res: RefResolution | None = None) -> bool:
