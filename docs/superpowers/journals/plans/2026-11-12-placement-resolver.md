@@ -1550,3 +1550,8 @@ fac91e3e4: the bash library and the OpenCode plugin read the marker, then the fi
 ### pr1431-r7-resolved · finding [fixed] · resolves pr1431-r7: validate-plans.sh depends on a healthy PATH fr and omits --no-create
 
 3749ee181: validate-plans.sh (and the wheel copy) resolves fr as the hooks do, asks --no-create, never evals, and falls back to the repo literals on every failure but an explicit placement refusal (PATHS_REFUSAL_PREFIX on fr settings paths); tests for broken, identity-refusing, unknown-option, missing and relative-PATH fr, and a real-fr quiet run creating no fr branch or worktree
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n1-resolved created=2026-11-13T17:38:15+00:00 state=fixed resolves=pr1431-n1 -->
+### pr1431-n1-resolved · finding [fixed] · resolves pr1431-n1: Devcontainer mode with quiet: in-container git worktree prune may deregister host worktrees
+
+fb881cd6c: real. The devcontainer bind-mounts only the common dir and its workspace; a scratch repo whose other worktree paths were hidden lost their registrations to git worktree prune (git 2.53: 'gitdir file points to non-existent location', then 'not a git repository'). ensure_worktree now removes only the fr worktree's own stale admin entry (unlocked), never a global prune; tests for an unmounted worktree surviving, a deleted fr worktree recreated, a locked entry kept
