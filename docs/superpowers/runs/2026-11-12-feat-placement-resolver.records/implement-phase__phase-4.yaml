@@ -102,4 +102,4 @@ resolves:
       without a privacy verdict. Tests: test_init_stealth_refuses_a_public_tracking_repo_for_a_private_target
       (exit 2, no worktree, tracking ref unmoved) and test_the_push_seam_itself_refuses_without_a_privacy_verdict;
       both failed with the guard removed.
-evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f5689a0b-c781-4953-bf5a-b20b350b4acf/scratchpad/p4-suite.log}
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f5689a0b-c781-4953-bf5a-b20b350b4acf/scratchpad/p4-suite-2.log}
