@@ -638,6 +638,7 @@ def _apply_rows(
     feature: str | None = None,
     repo: str | None = None,
     amend_feature: str | None = None,
+    origins: dict[str, tuple[str, ...]] | None = None,
 ) -> None:
     """A one-entry record through the step-record engine (spec 2026-09-25
     §5.C.6): the fragment edit, one commit holding only the fragment.
@@ -659,6 +660,7 @@ def _apply_rows(
                 acceptance_drops=drops or {},
                 acceptance_features={item.id: feature} if feature else {},  # type: ignore[attr-defined]
                 acceptance_repo=repo,
+                acceptance_origins=origins or {},
                 feature=amend_feature,
             ),
         )
@@ -937,6 +939,12 @@ def amend_cmd(
     why: str | None = typer.Option(None, "--why", help="Why the row changes (required)."),
     acceptance: str | None = typer.Option(None, "--acceptance", help="reword: the statement."),
     capability: str | None = typer.Option(None, "--capability", help="reword: the heading."),
+    origin: list[str] = typer.Option(
+        [],
+        "--origin",
+        help="reword, a row still PENDING on this branch only: its corrected origins "
+        "(repeatable; replaces them, in place). A merged row's origins are history.",
+    ),
     status: str | None = typer.Option(None, "--status", help="set-status: the new status."),
     notes: str | None = typer.Option(
         None, "--notes", help="set-status, retire: the row's note (required by both)."
@@ -997,6 +1005,12 @@ def amend_cmd(
         (lv, refs), *more = _parse_levels([level]).items()
         ref = refs[0]
     _load(root)
+    if origin and op == "reword" and acceptance is None and capability is None:
+        # An origin-only correction keeps the row's statement (the item needs one).
+        from fr.acceptance.fold import effective
+
+        current = next((r for r in effective(root).matrix.rows if r.id == row_id), None)
+        acceptance = current.acceptance if current is not None else None
     try:
         item = AmendmentItem(
             row=row_id, op=op, why=why, base=base, acceptance=acceptance,  # type: ignore[arg-type]
@@ -1009,10 +1023,13 @@ def amend_cmd(
     _apply_rows(
         root,
         item,
-        f"chore(fr): acceptance — amend {row_id} ({op})",
-        amend_feature=resolve_feature(root, feature),
+        f"chore(fr): acceptance — {'correct' if origin else 'amend'} {row_id} ({op})",
+        amend_feature=None if origin else resolve_feature(root, feature),
+        origins={row_id: tuple(origin)} if origin else None,
     )
-    typer.echo(f"{row_id}: {op} amendment written")
+    typer.echo(
+        f"{row_id}: origin corrected in place" if origin else f"{row_id}: {op} amendment written"
+    )
 
 
 def _rebase(root: Path) -> None:
@@ -1433,11 +1450,14 @@ def backfill_cmd() -> None:
             twin = archive_twin(path)
             if twin:
                 referenced.add(twin)
+    from fr.artifacts.paths import artifact_root
+
+    aroot = artifact_root(root)  # a quiet or stealth feature's specs live below it
     uncited = [
-        str(spec.relative_to(root))
+        str(spec.relative_to(aroot))
         for spec_dir in SPEC_DIRS
-        for spec in sorted((root / spec_dir).glob("*.md"))
-        if spec_test_plan(root, spec)[0] and str(spec.relative_to(root)) not in referenced
+        for spec in sorted((aroot / spec_dir).glob("*.md"))
+        if spec_test_plan(root, spec)[0] and str(spec.relative_to(aroot)) not in referenced
     ]
 
     unlinked_plans: list[str] = []

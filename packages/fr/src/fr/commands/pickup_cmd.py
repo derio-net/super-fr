@@ -72,6 +72,8 @@ def pickup_command(
             raise typer.Exit(2)
         repo_root = resolve_repo_root()
         path = run_path(repo_root, run)
+        if not path.exists():
+            repo_root, path = _feature_run(repo_root, run, path)
         if not path.exists():  # a present-but-unreadable file keeps its own error
             _missing_run_exit(repo_root, run, path)
         try:
@@ -183,6 +185,19 @@ def _commit_template_lines(repo_root: Path) -> list[str]:
         "Push with `fr push` (`uv run fr push` in a worktree), never `git push`.",
         "",
     ]
+
+
+def _feature_run(repo_root: Path, run_id: str, path: Path) -> tuple[Path, Path]:
+    """The run's own checkout and its path there (`fr.run.closeout.run_checkout`), or
+    *repo_root* and *path* unchanged."""
+    from fr.run.closeout import RunElsewhereError, run_checkout
+
+    try:
+        checkout = run_checkout(repo_root, run_id)
+    except RunElsewhereError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    return (checkout, run_path(checkout, run_id)) if checkout != repo_root else (repo_root, path)
 
 
 def _missing_run_exit(repo_root: Path, run_id: str, path: Path) -> NoReturn:

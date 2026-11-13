@@ -643,7 +643,7 @@ def stub(
         parsed = parse(plan_dir)
         if parsed.spec_path is None:
             _refuse("the plan has no spec to read", "stub")
-        spec = root / parsed.spec_path
+        spec = parsed.spec_file or root / parsed.spec_path
         if ops_none(plan_dir) is not None:
             _refuse("the plan's ops.yaml says `none:`; remove it first", "stub")
         existing = {lo.op.id for lo in load_ops(plan_dir, root).ops}

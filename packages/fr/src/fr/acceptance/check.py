@@ -46,7 +46,11 @@ def spec_test_plan(root: Path, spec: Path) -> tuple[bool, str | None]:
         return False, None
     if heading.exact:
         return True, None
-    rel = spec.relative_to(root).as_posix()
+    from fr.artifacts.paths import artifact_root
+
+    aroot = artifact_root(root)  # the spec's own root: a quiet feature's, below `fr`
+    base = aroot if spec.is_relative_to(aroot) else root
+    rel = spec.relative_to(base).as_posix()
     if not rel.startswith(LIVE_SPEC_DIR + "/"):
         return False, None
     return True, near_miss_message(heading, rel)
@@ -351,14 +355,21 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
 
     # R6: under `acceptance: off` there is no matrix to cite a Test Plan from.
     rows_off = disabled(root, "acceptance")
+    # Below this checkout's artifact root: under quiet and stealth its specs live in the
+    # feature root, never in the product checkout (debug journal
+    # 2026-11-13-placement-plan-paths). Only this feature's own: another in-flight
+    # feature's rows are not in this branch's fold.
+    from fr.artifacts.paths import artifact_root
+
+    aroot = artifact_root(root)
     for spec_dir in SPEC_DIRS:
-        for spec in sorted((root / spec_dir).glob("*.md")):
+        for spec in sorted((aroot / spec_dir).glob("*.md")):
             has_plan, problem = spec_test_plan(root, spec)
             if problem:
                 result.errors.append(f"test-plan heading: {problem}")
             if not has_plan or rows_off:
                 continue
-            rel = str(spec.relative_to(root))
+            rel = str(spec.relative_to(aroot))
             if rel not in referenced:
                 result.errors.append(
                     f"staleness: {rel} has a Test Plan but no matrix row cites it "

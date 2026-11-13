@@ -170,7 +170,9 @@ def keeps_spec_ref_verbatim(value: str, repo_root: Path, res: RefResolution | No
     # with an absolute ref.
     root = os.path.abspath(repo_root)
     target = os.path.abspath(os.path.join(root, token))
-    if os.path.commonpath([root, target]) != root:
+    if os.path.commonpath([root, target]) != root and not _below_artifact_root(
+        Path(repo_root), target
+    ):
         return True
     if res is None:
         res = resolve_spec_ref(value, repo_root)
@@ -185,6 +187,25 @@ def keeps_spec_ref_verbatim(value: str, repo_root: Path, res: RefResolution | No
         if not any(candidate.is_relative_to(r) for r in roots):
             return True
     return False
+
+
+def _below_artifact_root(repo_root: Path, target: str) -> bool:
+    """Does the absolute *target* sit below the checkout's artifact root while that root
+    is outside the checkout (quiet or stealth)? Such a ref is the spec where `fr settings
+    paths` says specs go (`$FR_SPECS_DIR/<file>`), not a pointer out of the repo, so it
+    canonicalizes like one written inside the checkout (debug journal
+    2026-11-13-placement-plan-paths)."""
+    from fr.artifacts.paths import REPO, feature_root, space_for  # lazy: see _resolve
+    from fr.settings import SettingsError
+
+    try:
+        space = space_for(repo_root, create=False)
+    except (SettingsError, OSError):
+        return False
+    if space.placement == REPO:
+        return False
+    froot = os.path.abspath(feature_root(space))
+    return os.path.commonpath([froot, target]) == froot
 
 
 def canonical_spec_ref(value: str, repo_root: Path, res: RefResolution | None = None) -> str:

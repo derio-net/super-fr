@@ -12,7 +12,9 @@
 # both placements. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
+. "$here/_placement_walk.sh"
 scenario_require_fresh_repo
+base="$PWD"
 
 HOME="$(mktemp -d)" && export HOME           # the fr and feature worktrees live below it
 export FR_ISOLATION_TARGET=worktree
@@ -118,6 +120,31 @@ for ref in main feat/q; do
 done
 expect_grep "^features/feat__q/docs/acceptance/features/legacy.yaml$" \
   "$(git --git-dir="$origin" ls-tree -r --name-only fr)" "origin fr holds the acceptance row"
+
+# Whole runs under quiet (debug journal 2026-11-13-placement-plan-paths): a fr-goal-light
+# run and a two-phase fr-goal run through every step, each closed out from the base clone.
+# The second amends the first's merged row.
+walk_fake_forge
+for b in feat/ql feat/qf; do
+  cd "$base" || fail "cd $base"
+  run_fr out isolation up --branch "$b"
+  require_exit 0 "$out"
+  cd "$HOME/.cache/fr/worktrees/$repo/${b//\//__}" || fail "no workspace for $b"
+  if [ "$b" = feat/ql ]; then
+    WALK_HOOK=: walk_run fr-goal-light "$b" 2026-11-13-ql rql 1
+    walk_closeout "$base" "$origin" "$b" rql
+  else
+    amend_light() {
+      run_fr out acceptance amend --id 2026-11-13-ql-r1 --op add-level \
+        --level "unit=$repo_id:tests/test_2026_11_13_qf_2.py#test_2" --why "requirement 2 also proves it" \
+        --feature 2026-11-13-qf
+      require_exit 0 "$out"
+    }
+    WALK_HOOK=amend_light walk_run fr-goal "$b" 2026-11-13-qf rqf 2
+    walk_closeout "$base" "$origin" "$b" rqf
+  fi
+done
+cd "$wt" || fail "cd $wt"
 
 # The switch deleted on origin's side only (review p3-r11): the local tracking ref still
 # says quiet, so only `run start`'s own fetch can notice, and it refuses, naming both.
