@@ -241,3 +241,98 @@ Both rows moved to `not-implemented` with a note naming the partial CI evidence;
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: fr journal add --kind lens commits and prints the placeholder id (phase 2)
 
 The subject uses `fr.record.apply.next_lens_id`; a repeat prints `already recorded`. Tests `test_the_same_lens_and_reason_twice_says_so_and_names_no_placeholder`, `test_the_commit_subject_names_the_assigned_id`.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-needs-without-journal-plan created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-needs-without-journal-plan · discovery · lens-review ships with needs: [spec, plan]: the spec's journal:plan in needs is a cycle with review-phase (phase 3)
+
+Spec §3.C's snippet (and the plan's test) give `needs: [spec, plan, journal:plan]`.
+`review-phase` also needs and emits `journal:plan`, so `fr workflow check` reports
+`cycle detected in needs/emits: lens-review -> review-phase -> lens-review` for both
+shipped shapes. The step ships `needs: [spec, plan]` with a manifest comment;
+`spec-review` is the precedent (it emits `journal:spec` and needs only `[spec]`).
+The step still reads the plan journal's lens entries through `lens_set`. Spec §3.C's
+snippet should be amended to match (the orchestrator's call; not edited here).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-feature-target-needs-review-evidence created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-feature-target-needs-review-evidence · discovery · the feature target applies to every flat journal:plan step; the lens set is computed only for one that declares review evidence (phase 3)
+
+The light shape's `plan` step emits `journal:plan` and declares only `single-phase`;
+giving it the feature target made its resolve compute a lens set and read the plan
+journal (refused: no plan recorded yet). `_reviews_the_feature(step, target)` (feature
+target AND any of review/reviewer/findings/lenses declared) gates the lens machinery.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-adoption-owes-lens-review created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-adoption-owes-lens-review · discovery · adoption never infers lens-review done; a plain adopt with an open PR now lands on lens-review, not deliver (phase 3)
+
+`build_run_state` inferred every step before an open PR's `deliver` cursor as done,
+lens-review included, with no evidence. `_owed_before` moves the cursor back to a step
+declaring `lenses` that the superseded run had not done, with a note. This also changes
+a plain adopt over an open PR: `test_run_adopt.py`'s open-PR test now expects
+`lens-review` (renamed, deliberately).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-this-runs-reshape created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-this-runs-reshape · discovery · this branch's run needed only fr run reshape --yes: added lens-review, nothing lost (phase 3)
+
+With lens-review in the shipped manifest the run drifted (`fr run status` warned).
+`fr run reshape 2026-11-12-feat-code-quality-steps` previewed `added: lens-review`;
+`--yes` wrote it in commit 535eb88a2 with the cursor still on `implement` and every
+unit kept. No adopt --supersede was needed.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-skill-and-explainer-sections created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-skill-and-explainer-sections · discovery · fr-goal SKILL.md and the fr-goal explainer got a short 7a. lens-review section ahead of phase 4 (phase 3)
+
+`tests/integration/test_fr_goal_shape.py`'s narration tripwire fails a manifest step the
+skill does not narrate, and `fr docs check` flagged the fr-goal explainer. Both got a
+short `### 7a. lens-review` section; the tripwire's header regex now accepts a lettered
+step so `### 8. deliver` (cited as §8 by prose and tests) keeps its number. Mirrors
+regenerated (sync-opencode, sync-hermes). Phase 4 (R14) owns the full skill prose and
+the operator page. index.md and why-fr.md got reviewed-stamp bumps only. The skill
+is at its 120-line cap: the section was paid for by joining three soft-wrapped lines
+of single paragraphs (§6 twice, §8 once), which renders identically; phase 4 has no
+free lines left in it.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-acceptance-check-origin-main-rows created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-acceptance-check-origin-main-rows · discovery · fr acceptance check --no-fetch reports 18 ERRORs, all for rows origin/main gained after this branch's base (phase 3)
+
+origin/main merged the vk-compat removal (#1424, archived #1425) and v7.0.0-rc.1
+after this branch's merge-base; the fold reads those fragments, whose specs and tests
+this branch does not have (`2026-11-12-remove-vk-compat`, `test_vk_compat_removed.py`,
+`test_migration_plan_vk_version.py`). None is a row of this feature. Merging
+origin/main into the branch should clear them; not done here (single-writer phase).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-no-remote-examined-files created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-no-remote-examined-files · discovery · with no remote there is no diff: a lens reviewer's examined files are checked to exist in the checkout (phase 3)
+
+`LensSet` now carries `merge_base` and `changed` (None with no remote). The returns
+check compares `examined:` against `changed`; with no remote it checks each named file
+is a file in the checkout, and the brief's note says there is no diff.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-lens-findings-any-phase created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-lens-findings-any-phase · discovery · lens findings are gated by id grammar whatever their phase tag (phase 3)
+
+The feature target's findings are every plan-journal finding whose id matches
+`l-<lens>-r<k>`, phase tag or not (fail-closed); the record writes them `global: true`
+by convention and the refusal's fix line says `--global`.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-resolve-tests-red-checked-after created=2026-11-13T00:25:26+00:00 phase=3 -->
+### p3-resolve-tests-red-checked-after · discovery · the task-3 resolve tests were first run after the gate existed; red confirmed by reverting run_cmd.py (phase 3)
+
+tests/unit/test_lenses_review_resolve.py was written before the gate code but first
+executed after it. Restoring HEAD's run_cmd.py made 20 of its 22 tests fail; the two
+that pass are refusals that hold either way (lenses= passed; open finding with an
+unreadable session). The file was then restored.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-13T00:25:26+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+The brief is one thin _lens_review_brief over fr.lenses.review.lens_review_brief, and the owed-evidence rule is one helper (owed_evidence) the template and the resolve both read; nothing duplicated to fold.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-11-13T00:25:26+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+Two small fixes (adoption's _owed_before, one reshape message); no second copy of anything was written.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t5 created=2026-11-13T00:25:26+00:00 phase=3 -->
+### no-refactor-p3-t5 · discovery · no-refactor-because P3.T5 (phase 3)
+
+The three scenarios share _lens_fixture.sh, whose lens_base / lens_review_repo split was made while writing them; the AGENTS.md lines and the row moves have nothing to clean.
