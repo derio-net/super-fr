@@ -1,0 +1,140 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'The lens-review step: brief, reviewer returns, evidence, in-flight runs
+    (R8-R11, R13)'
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - review-lenses-reviewer-return-checked
+  tier: hard
+  files:
+  - plugins/super-fr/workflows/*
+  - packages/fr/src/fr/workflows/*
+  - packages/fr/src/fr/workflow/*
+  - packages/fr/src/fr/run/*
+  - packages/fr/src/fr/lenses/*
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/*
+  - docs/superpowers/runs/*
+  - AGENTS.md
+  - tests/unit/test_run_*.py
+  - tests/unit/test_lenses_*.py
+  - tests/unit/test_review_return.py
+  - tests/unit/test_tripwire_shipped_workflows.py
+  - tests/unit/test_workflow_*.py
+  - tests/integration/test_scenarios.py
+  - tests/scenarios/review-lenses-*.sh
+  - tests/scenarios/_common.sh
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 1700
+tasks:
+- number: 1
+  title: 'Parsers: the review-lens block and a parameterised finding-id grammar (R9)'
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in the `review_return` tests: `parse_review_findings(text, id_re=LENS_FINDING_ID_RE)` accepts `l-security-r1 | in | ...` and refuses `p2-r1` with an error that names the lens grammar; the default grammar's behaviour and messages are unchanged (existing tests untouched and green). `tests/unit/test_lenses_review.py`: `parse_review_lens(text)` returns `(lens, files)` from the LAST fenced `review-lens` block (`lens: <id>` and `examined: a, b`), `None` with no block, and raises on an empty block, a missing line, two `lens:` lines, or an empty `examined`; `lens_finding_ids(lens)` builds the per-lens regex `^l-<lens>-r[1-9][0-9]*$`; `lens_review_rule(lens)` is the text a reviewer is given and contains both fences and the id prefix. See them fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: give `parse_review_findings` an `id_re` parameter (default the phase grammar) and an `id_hint` for its error text in `fr/run/review_return.py`; write `fr/lenses/review.py` with `LENS_FINDING_ID_RE = ^l-[a-z][a-z0-9-]*-r[1-9][0-9]*$`, `parse_review_lens`, `lens_finding_ids`, `lens_review_rule`. See them pass.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: the fence-extraction regex is built by one helper used for both fences.
+- number: 2
+  title: The step in both manifests and its brief (R8)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests that both shipped manifests hold `lens-review` between `journal-check` and `deliver` with `kind: agent`, `tier: standard`, `needs: [spec, plan, journal:plan]`, `emits: [journal:plan]`, `evidence: [lenses, review, reviewer, findings]`, pass `fr workflow check`, and that the wheel copies match. Brief tests over a fixture run at `lens-review`: `fr run advance` prints a brief whose `lens_review` key lists, per lens of `lens_set`, title, brief text, reasons or rule and file, the merge-base and `lens_review_rule(lens)`; with an empty set the key is `{"set": [], "note": ...}` telling the orchestrator to resolve at once; the record template for this step lists `review` and `reviewer` as owed only when the set is non-empty and never lists `lenses`; `review-phase` briefs are byte-identical to before (no lens text). See them fail.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: add the step, with a comment block in the manifest's own style citing spec 2026-11-12-review-lenses section 3.C, to `plugins/super-fr/workflows/fr-goal.yaml` and `fr-goal-light.yaml`; regenerate the wheel copies with the script that syncs them; add `_lens_review_brief(member, state)` beside `_review_findings_brief` in `commands/run_cmd.py` and merge it into the dispatch brief. `advance` itself is not changed: it briefs an agent step as always. See them pass.
+- number: 3
+  title: A feature-level evidence target; lenses, review, reviewer, findings (R10,
+    R11)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: resolve tests over fixture runs with a fake observed session (the fixtures the `review-phase` return tests use): (a) empty set: `done` with no review and no reviewer is accepted and records `lenses=none`; (b) a set of two with `reviewer: "security=<id1>,tests=<id2>"`, a global `kind=review` plan entry created after the step opened, and readable returns each ending in a `review-lens` block for its lens naming a file in the feature diff: accepted, recording `lenses=security=<n>:<ids>;tests=<n>:none`; refused, exit 2, with nothing written, when: a lens in the set has no id in the map; one id is named for two lenses; an id was not dispatched after the step opened; a named reviewer's return has no block, a block for another lens, no file, or a file outside the diff; a returned `l-<lens>-r<k>` id is missing from the plan journal, journalled with another scope tag, or carries a lens other than its reviewer's; any lens finding is effectively open; `--evidence lenses=...` is passed. A refusal over a lens prints that lens's brief text and rule, and for a rule lens the rule and file. (c) the set is computed at resolve: a `lens` entry added after the brief makes the resolve owe it. (d) unreadable returns: accepted with `lenses=security=unobserved:<journal ids>` and `unobserved=reviewer-return` noted, the reviewer-map and open-finding checks still enforced. (e) plan findings that are not lens findings do not gate this step, and phase units' behaviour is unchanged. See them fail.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: in `commands/run_cmd.py`, extend `_EvidenceTarget`/`_evidence_target` with the feature-level target (flat step emitting `journal:plan`: plan journal, no phase, `feature=True`); route `_verified_evidence`'s `review` rule (global entry created after the step opened), `reviewer` (parse the `<lens>=<id>` map for this target, verify each id as `_verify_reviewer` does), `_target_finding_states` (only ids matching `LENS_FINDING_ID_RE`), and a `_check_lens_returns` sibling of `_check_returned_findings` through it; register `lenses` in `fr.workflow.artifacts.DERIVED_EVIDENCE`, `_VERIFIABLE_EVIDENCE` and `_DERIVED_FROM` with its `derive("lenses", ...)` witness; skip `review`/`reviewer` as owed when the set is empty. Lens findings and the review entry are written `global: true` by the record. See them pass.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR + quality gate: `_check_lens_returns` and `_check_returned_findings` share the dispatch-walk and refusal plumbing through one helper instead of two copies; the three places that special-case the feature target read one predicate. Rerun every `review-phase` and `spec-review` resolve test to confirm no behaviour moved.
+- number: 4
+  title: Runs in flight (R13)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: tests over cursors written against the pre-lens step list: with the cursor on `implement` or `journal-check`, `fr run reshape <id> --yes` inserts `lens-review` pending and keeps every unit; with the cursor on `deliver`, reshape refuses naming `fr run adopt <plan-dir> --supersede`, and that command (with `--yes`) yields a run on the new shape with units and evidence carried and `lens-review` pending before `deliver`; a plan journal with no `lens` entry reads as an empty set. Expect most to pass on existing code; fix what does not.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: make whatever the tests above showed missing true (for example `adopt --supersede` treating the new flat step as pending rather than inferring it done), and reshape this branch's own run cursor with `uv run fr run reshape 2026-11-12-feat-code-quality-steps` (preview, then `--yes`) if the drift check now refuses it; record in the step record's journal what was needed.
+- number: 5
+  title: Scenarios and rows
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      Write `tests/scenarios/review-lenses-reviewer-return-checked.sh`: a fixture run at `lens-review` with two lenses and a stubbed observed session (extend the stub `_common.sh` or `_stub_opencode.sh` already provides for reviewer returns): complete returns resolve; a missing lens, a file outside the diff, and an undispatched reviewer id each exit 2 with the cursor unchanged; an empty-set fixture resolves with no reviewer and `lenses=none`. Extend `review-lenses-accumulate.sh` with the reshape and adopt cases and `review-lenses-path-rules.sh` with the lens-review resolve refusing while the rule lens has no reviewer. Register the new scenario in `tests/integration/test_scenarios.py`; run all three.
+  - id: P3.T5.S2
+    text: |-
+      Update `AGENTS.md`'s `fr/run` and workflow paragraphs (the new step, the feature-level evidence target, the `lenses` derived evidence). Move the three rows to `ci` with `uv run fr acceptance set-status --id <row> --status ci --notes "<what proves it>" --level unit=... --level int=...` using real test names. Run format, lint, mypy and the full suite into a log outside the repo, after the last code commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: '2026-11-13T00:25:26+00:00'
+      note: null
+  completion:
+    at: '2026-11-13T00:25:26+00:00'
+    note: null
+    observed_prs: []

@@ -30,7 +30,7 @@
 #    reviewer, so the plan is self-reviewed once more after the reviewer's
 #    fixes land.
 #
-# `implement`, `journal-check` and `deliver` are `fr-goal`'s, member for
+# `implement`, `journal-check`, `lens-review` and `deliver` are `fr-goal`'s, member for
 # member: the per-phase code review with a dispatched reviewer stays.
 workflow: fr-goal-light
 schema: 1
@@ -102,6 +102,23 @@ steps:
     kind: cli
     needs: [plan, journal:plan]
     run: fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews
+
+  - id: lens-review
+    kind: agent
+    # Review lenses (spec 2026-11-12-review-lenses §3.C): `fr-goal`'s step,
+    # member for member — one reviewer per lens in the feature's set over the
+    # whole diff; an empty set resolves at once with no reviewer.
+    skill:
+      - superpowers:requesting-code-review
+      - superpowers:receiving-code-review
+    tier: standard
+    # Not `journal:plan` in `needs`, though the step reads the plan journal's
+    # lens entries: `review-phase` also needs and emits it, so the checker sees
+    # `lens-review -> review-phase -> lens-review` as a cycle. `spec-review` is
+    # the precedent: it emits `journal:spec` and needs only `[spec]`.
+    needs: [spec, plan]
+    emits: [journal:plan]
+    evidence: [lenses, review, reviewer, findings]
 
   - id: deliver
     kind: agent

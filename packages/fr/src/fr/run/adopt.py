@@ -386,6 +386,21 @@ def build_run_state(
             f"`unit: run` shape such as {DEFAULT_WORKFLOW!r}."
         )
     cursor_index = ids.index(cursor)
+    owed = _owed_before(manifest, cursor_index, prior)
+    if owed is not None:
+        # The lens review (spec 2026-11-12-review-lenses R13) leaves no artifact a
+        # cursor could be inferred from, so adoption never calls it done: a run
+        # carried onto a shape that has it owes it before `deliver`.
+        cursor, cursor_index = ids[owed], owed
+        adoption = replace(
+            adoption,
+            cursor=cursor,
+            notes=adoption.notes
+            + (
+                f"{cursor!r} cannot be inferred from what is on disk, so the cursor "
+                f"lands there, before {ids[owed + 1] if owed + 1 < len(ids) else 'the end'!r}.",
+            ),
+        )
 
     emitted: dict[str, dict[str, str]] = {}
     for artifact, value in (("spec", adoption.spec), ("plan", adoption.plan), ("pr", adoption.pr)):
@@ -461,6 +476,23 @@ def build_run_state(
             prior=prior,
         )
     return state
+
+
+def _owed_before(
+    manifest: WorkflowManifest, cursor_index: int, prior: RunState | None
+) -> int | None:
+    """The index of the first step before the cursor that adoption may never infer
+    done — the lens review, which declares `lenses` evidence — unless the run being
+    superseded already did it; else None."""
+    from fr.lenses.review import LENS_EVIDENCE
+
+    for index, step in enumerate(manifest.steps[:cursor_index]):
+        if LENS_EVIDENCE not in step.evidence:
+            continue
+        did = prior is not None and step.id in prior.steps and prior.steps[step.id].state == "done"
+        if not did:
+            return index
+    return None
 
 
 def _infer_historical_reviews(

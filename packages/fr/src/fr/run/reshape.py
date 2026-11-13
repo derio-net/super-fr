@@ -74,7 +74,7 @@ def reshape(state: RunState, manifest: WorkflowManifest) -> RunState:
             raise ReshapeError(
                 f"step {step_id!r} was added to {name!r} at or behind this run's cursor "
                 f"({state.cursor!r}); the cursor only moves forward, so it would never "
-                "run. Use `fr run adopt --supersede` to rebuild from disk."
+                "run. Use `fr run adopt <plan-dir> --supersede` to rebuild from disk."
             )
 
     steps: dict[str, StepRecord] = {}

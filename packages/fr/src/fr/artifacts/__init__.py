@@ -65,6 +65,7 @@ from fr.artifacts import record_strategies as _record_strategies  # noqa: F401  
 from fr.artifacts import record_status_split as _record_status_split  # noqa: F401  (isort: skip)
 from fr.artifacts import record_exit_gates as _record_exit_gates  # noqa: F401  (isort: skip)
 from fr.artifacts import record_amendments as _record_amendments  # noqa: F401  (isort: skip)
+from fr.artifacts import record_lens as _record_lens  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_verify as _matrix_verify  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_visual as _matrix_visual  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_strategies as _matrix_strategies  # noqa: F401  (isort: skip)
@@ -75,6 +76,7 @@ from fr.artifacts import profiles_services as _profiles_services  # noqa: F401  
 from fr.artifacts import agents_kind as _agents_kind  # noqa: F401  (isort: skip)
 from fr.artifacts import journal_owed as _journal_owed  # noqa: F401  (isort: skip)
 from fr.artifacts import journal_op as _journal_op  # noqa: F401  (isort: skip)
+from fr.artifacts import journal_lens as _journal_lens  # noqa: F401  (isort: skip)
 from fr.artifacts import ops_none as _ops_none  # noqa: F401  (isort: skip)
 from fr.artifacts import spec_test_plan_heading as _spec_test_plan_heading  # noqa: F401  (isort: skip)
 

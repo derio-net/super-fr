@@ -86,7 +86,10 @@ So, when a change removes or moves a field:
    runner finish — the one legitimate use of the live model in a migration,
    because "is this already v5?" is a question only the v5 model can answer.
 5. **Assert every hop of the chain**, not just its endpoint
-   (`test_the_run_kind_is_reachable_all_the_way_from_version_one_to_eleven`). It is this repo's only guard against two branches allocating
+   (`test_the_run_kind_is_reachable_all_the_way_from_version_one_to_eleven`; for the record
+   kind `test_record_lens.py::test_the_record_chain_from_one_reaches_twelve_hop_by_hop`, for the
+   journal kind `test_journal_lens.py::test_the_journal_chain_from_one_reaches_four_hop_by_hop`).
+   It is this repo's only guard against two branches allocating
    the same version number, which has now happened twice.
 
 ## Retiring a kind — its last hop deletes it
@@ -137,7 +140,7 @@ artifacts` (preview), `fr migrate artifacts --yes` (apply) and
 
 **Exempt commands** are `migrate` plus the read-only commands in
 `fr.artifacts.trigger.READ_ONLY_COMMANDS` — `status`, `skills`, `isolation`, `init`,
-`validate`, `harness`, `triage`, `usage`, `services`, `cloud`, `debt`, `gate`, `release`, `settings` and `docs` at the time of writing, but the tuple is the source of
+`validate`, `harness`, `triage`, `usage`, `services`, `cloud`, `debt`, `gate`, `release`, `settings`, `docs` and `lenses` at the time of writing, but the tuple is the source of
 truth — along with `--help`, `--version` and `FR_SKIP_MIGRATION=1`. The criterion for
 membership is the tuple's own docstring: the command never mutates a registered artifact.
 `harness` meets it by only reading hook registrations; `triage` by never reading or
@@ -152,6 +155,7 @@ writes nothing (`status` reads tags and the forge, and `release.py` runs it on t
 `settings` mutates no registered artifact (`show`/`check` read `.fr/settings.yaml` from the default
 ref; `init` writes that file, which is no artifact kind, and commits nothing).
 `docs` writes nothing (it reads `.fr/docs.yaml`, page files and read-only git, none a registered artifact) and runs in CI on a tree the gate would refuse.
+`lenses` writes nothing (it reads `.fr/lenses.yaml`, no registered artifact, and the shipped lens manifests) and must work on a repo with stale artifacts.
 Two of those
 matter beyond tidiness: `fr status` is
 registered as never mutating and must not mutate by proxy, and `fr validate

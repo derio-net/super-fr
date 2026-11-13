@@ -1,0 +1,154 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'The lens set: shipped manifests, repo config, fr lenses list|show|check
+    (R1-R3)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - review-lenses-effective-set
+  skeleton: true
+  tier: standard
+  files:
+  - .changes/feat-code-quality-steps.yaml
+  - plugins/super-fr/lenses/*
+  - packages/fr/src/fr/lenses/*
+  - packages/fr/src/fr/lens_manifests/*
+  - packages/fr/src/fr/commands/lenses_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - packages/fr/src/fr/commands/skills_cmd.py
+  - packages/fr/pyproject.toml
+  - scripts/sync-lenses-data.py
+  - scripts/sync-readme.py
+  - README.md
+  - docs/reference/cli.md
+  - .claude/rules/artifact-versioning.md
+  - .opencode/instructions/*
+  - AGENTS.md
+  - tests/unit/test_lenses_*.py
+  - tests/unit/test_tripwire_shipped_lenses.py
+  - tests/unit/test_migration_trigger.py
+  - tests/unit/test_install_*.py
+  - tests/integration/test_scenarios.py
+  - tests/scenarios/review-lenses-effective-set.sh
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: 'Smoke: the branch reaches a green suite'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create the empty package `packages/fr/src/fr/lenses/__init__.py` and `tests/unit/test_lenses_model.py` with one trivial test importing `fr.lenses`. Add the change fragment `.changes/feat-code-quality-steps.yaml` with `bump: minor` and `summary: Review lenses - any agent can add a lens to a feature, and a lens review before deliver examines the whole change under each one`. Run `uv run pytest tests/unit/test_lenses_model.py -q --no-cov` and `uv run --no-project python scripts/check-change-fragment.py origin/main`; both pass.
+- number: 2
+  title: Manifest and config models (R1, R2, spec 3.A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_lenses_model.py`, tests for `fr.lenses.model`: `parse_lens(text)` accepts `{lens, title, brief}` and refuses an unknown key, an empty `brief`, and an id that does not match `^[a-z][a-z0-9-]*$`; `parse_config(text)` accepts `disable`, `lenses` (id to `{title, brief}`) and `require` (list of `{paths, lenses}`), all optional, and refuses an unknown top-level key, a rule with empty `paths` or `lenses`, and a non-mapping document. Run them and see them fail on the missing module.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: write `packages/fr/src/fr/lenses/model.py`: frozen pydantic models `Lens(id, title, brief, source)`, `LensConfig(disable, lenses, require)` and `PathRule(paths, lenses)`, all `extra="forbid"`, `LENS_ID_RE`, and a `LensError(ValueError)`; `parse_lens` and `parse_config` load with `fr._yaml`'s strict loader. See the tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: one `_require_id` helper used by both parsers; docstrings citing spec 2026-11-12-review-lenses R1-R2.
+- number: 3
+  title: The four shipped lenses and their wheel copy (R1)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: `tests/unit/test_tripwire_shipped_lenses.py`, modelled on `tests/unit/test_tripwire_shipped_verifications.py`: `plugins/super-fr/lenses/` holds exactly `security.yaml`, `tests.yaml`, `simplicity.yaml`, `errors.yaml`; each parses with `parse_lens` and its file stem equals its `lens`; each `brief` ends with the sentence telling the reviewer that a problem seen outside the lens is still reported as an ordinary finding; the wheel copy under `packages/fr/src/fr/lens_manifests/` is byte-identical (`scripts/sync-lenses-data.py --check` exits 0). See it fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: write the four manifests with the instruction texts of spec section 3.A (what to look for across the whole change, the "Not ..." line where the spec gives one, then the closing sentence). Write `scripts/sync-lenses-data.py` after `scripts/sync-verifications-data.py` (no flag writes, `--check` verifies), run it, add the package data glob to `packages/fr/pyproject.toml` the way the verifications copy is included, and add `fr/_shipped.py`-style lookup `shipped_lens_dir()` (env `FR_SHIPPED_LENSES_DIR` > wheel copy > marketplace clone). Extend the install drift guard the way `test_install_copies_workflows.py` covers workflows so `plugins/super-fr/lenses/` rides the marketplace rsync. See the tripwire pass.
+- number: 4
+  title: Effective lenses and the config check (R2, R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: `tests/unit/test_lenses_resolve.py` over a tmp repo: with no `.fr/lenses.yaml`, `effective_lenses(root)` is the four shipped lenses, each `source == "shipped"`; a config that disables `errors`, replaces `security` and adds `accessibility` yields three shipped-or-replaced plus one repo lens with sources `shipped`, `repo (replaces shipped)`, `repo`. `tests/unit/test_lenses_check.py`: `check_config(root)` returns no problem for no file and for a valid one, and one named problem each for unreadable YAML, an unknown key, a bad lens id, an empty brief, disabling a lens that does not exist, a rule requiring a lens that does not exist, and disabling a lens a rule in the same file requires. See them fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: write `fr/lenses/resolve.py` (`load_config(root)` reading `.fr/lenses.yaml` from the working tree, `effective_lenses(root) -> dict[str, Lens]`) and `fr/lenses/check.py` (`check_config(root) -> list[str]`, pure over the loaded text and the shipped set). See them pass.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: `check.py` reads the shipped ids through `resolve.py` only, so there is one place that knows where shipped lenses live.
+- number: 5
+  title: The CLI group (R3)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: `tests/unit/test_lenses_cmd.py` with typer's `CliRunner` over a tmp git repo: `fr lenses list` prints one line per effective lens with id, title and source; `fr lenses list --json` gives the same as data; `fr lenses show security` prints the brief and `show nope` exits 2 naming the effective ids; `fr lenses check` exits 0 with no config and 1 printing each problem for a broken one; none of the three changes `git status --porcelain`. In `tests/unit/test_migration_trigger.py`, add `lenses` to the literal exemption list assertion. See them fail.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: write `packages/fr/src/fr/commands/lenses_cmd.py` (`list`, `show`, `check`), register the group in `fr/cli.py`, add `"lenses"` to `fr.artifacts.trigger.READ_ONLY_COMMANDS` with its sentence in the docstring, add the group's line to `commands/skills_cmd.py`'s overview if that file lists CLI groups, and add the `lenses` sentence to the exempt-commands paragraph of `.claude/rules/artifact-versioning.md`. Run `scripts/sync-readme.py` and `scripts/sync-opencode.py` and `scripts/sync-hermes.py`. See the tests pass.
+- number: 6
+  title: Scenario, row, notes
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Write `tests/scenarios/review-lenses-effective-set.sh` after `tests/scenarios/docs-check-structure.sh` (source `_common.sh`): in a fresh fixture repo run the installed `fr lenses list` (four shipped), write a `.fr/lenses.yaml` that disables one, replaces one and adds one, assert `list`, `show` and `check` output, then a broken config and `check` exit 1, and that `git status --porcelain` is unchanged throughout. Register it in `tests/integration/test_scenarios.py` as `test_review_lenses_effective_set`. Run that test; it passes.
+  - id: P1.T6.S2
+    text: |-
+      Add the `fr/lenses` paragraph to `AGENTS.md`'s repo-shape list (package layout, shipped manifests not mirrored, read-only group). Move the row with `uv run fr acceptance set-status --id review-lenses-effective-set --status ci --notes "Unit tests and the installed-CLI scenario run in CI" --level unit=super-fr:tests/unit/test_lenses_cmd.py#test_list_prints_the_effective_lenses --level int=super-fr:tests/integration/test_scenarios.py#test_review_lenses_effective_set` (use the real test names written above). Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src`, then the full suite `uv run pytest -q --no-cov -n auto` into a log outside the repo.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-12T19:13:34+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T19:13:34+00:00'
+    note: null
+    observed_prs: []

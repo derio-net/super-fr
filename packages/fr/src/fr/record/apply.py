@@ -462,6 +462,14 @@ def _journal_writes(
         phase = item.phase if item.phase is not None else (None if item.is_global else ctx.phase)
         if item.is_global and scope != "plan":
             raise RecordRefusedError("`global` applies to plan-scope journals only")
+        if item.kind == "lens":
+            entry = _lens_entry(
+                item, scope, phase, record.step, stamp, [*existing, *new], repo_root
+            )
+            if entry is not None:
+                add(entry)
+            counts["lens"] = counts.get("lens", 0) + 1
+            continue
         if scope == "plan" and phase is None and not item.is_global:
             raise RecordRefusedError(
                 f"journal entry {item.title!r}: a plan-scope entry needs `phase` or "
@@ -572,6 +580,74 @@ def _journal_writes(
     if text is not None:
         overlay.put(path, text)
     return new, counts, notices
+
+
+def _lens_entry(
+    item: Any,
+    scope: str,
+    phase: int | None,
+    step: str | None,
+    created: str,
+    prior: list[JournalEntry],
+    repo_root: Path,
+) -> JournalEntry | None:
+    """A `lens` item as its journal entry (spec 2026-11-12-review-lenses §3.B): the
+    lens must be effective; fr assigns the id (`lens-<id>-<n>`, counting this
+    journal's entries for that lens) and stamps `step` from the record. In a plan
+    journal a lens added outside a phase unit is global. `None` when the same
+    addition is already in the journal (a retry of an interrupted apply)."""
+    from fr.lenses.model import LensError
+    from fr.lenses.resolve import effective_lenses
+
+    try:
+        effective = effective_lenses(repo_root)
+    except LensError as e:
+        raise RecordRefusedError(f"lens {item.lens!r}: the lens config is unreadable: {e}") from e
+    if item.lens not in effective:
+        raise RecordRefusedError(
+            f"lens {item.lens!r} is not an effective lens of this repo; effective: "
+            + (", ".join(sorted(effective)) or "none")
+        )
+    same = [e for e in prior if e.kind == "lens" and e.lens == item.lens]
+    eid = next_lens_id(item.lens, prior)
+    try:
+        entry = JournalEntry(
+            kind="lens",
+            scope=scope,  # type: ignore[arg-type]
+            id=eid,
+            created=created,
+            phase=phase if scope == "plan" else None,
+            title=item.title,
+            body=item.body,
+            lens=item.lens,
+            step=step,
+            # Carried so the entry model refuses what a lens cannot take.
+            state=item.state,
+            resolves=item.resolves,
+            review_scope=item.review_scope,
+            answered_by=item.answered_by,
+            tracked_by=item.tracked_by,
+            out_of_scope=item.out_of_scope,
+            input=item.input,
+            gate=item.gate,
+            narrows=item.narrows,
+            filed_as=item.filed_as,
+        )
+    except ValueError as e:
+        raise RecordRefusedError(f"invalid lens entry for {item.lens!r}: {e}") from e
+    if any(_same_entry(e, entry, ignore=_STAMP_AND_ID) for e in same):
+        return None
+    return entry
+
+
+def next_lens_id(lens: str, prior: list[JournalEntry]) -> str:
+    """The id the next `lens` entry for `lens` takes in a journal holding `prior`:
+    `lens-<id>-<n>`, n counting that lens's entries and skipping any id in use."""
+    n = sum(1 for e in prior if e.kind == "lens" and e.lens == lens) + 1
+    taken = {e.id for e in prior}
+    while f"lens-{lens}-{n}" in taken:
+        n += 1
+    return f"lens-{lens}-{n}"
 
 
 def _unique_id(base: str, taken: set[str]) -> str:

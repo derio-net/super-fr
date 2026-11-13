@@ -74,3 +74,20 @@ def test_an_id_repeated_within_one_block_is_malformed() -> None:
     text = "```review-findings\np2-r1 | in | a\np2-r1 | out | b\n```"
     with pytest.raises(ReviewFindingsBlockError, match="p2-r1.*more than once"):
         parse_review_findings(text)
+
+
+def test_a_lens_grammar_accepts_lens_ids_and_refuses_phase_ids() -> None:
+    """Spec 2026-11-12-review-lenses §3.C: the id grammar is an argument, the
+    phase grammar its default."""
+    from fr.lenses.review import LENS_FINDING_ID_RE
+
+    text = "```review-findings\nl-security-r1 | in | x\n```"
+    assert parse_review_findings(text, id_re=LENS_FINDING_ID_RE) == [("l-security-r1", "in", "x")]
+    with pytest.raises(ReviewFindingsBlockError, match="l-<lens>-r<k>"):
+        parse_review_findings(
+            "```review-findings\np2-r1 | in | x\n```",
+            id_re=LENS_FINDING_ID_RE,
+            id_hint="l-<lens>-r<k>",
+        )
+    with pytest.raises(ReviewFindingsBlockError, match="p<N>-r<k>"):
+        parse_review_findings(text)

@@ -1,0 +1,12 @@
+lens: tests
+title: Tests
+brief: |
+  Review the whole change for whether its tests would catch a wrong behaviour.
+  Look for:
+  - a new test that would still pass if the behaviour were wrong, because it
+    restates the code under test;
+  - a test that covers only the easy input, or only one kind of user;
+  - a failure path with no test;
+  - a mock standing in for the thing the test is meant to exercise.
+  Not coverage numbers.
+  A problem you see outside this lens is still reported, as an ordinary finding.

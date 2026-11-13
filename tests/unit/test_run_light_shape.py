@@ -39,6 +39,7 @@ LIGHT_IDS = [
     "plan-review",
     "implement",
     "journal-check",
+    "lens-review",
     "deliver",
 ]
 REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -114,6 +114,7 @@ The skills drive `fr`, and every step they take is a command you can run yoursel
 | `fr debt` | What this repo owes: acceptance, plans and owed actions (read-only). |
 | `fr settings` | Per-repo feature settings: init, show, check. |
 | `fr docs` | Docs currency: pages must keep up with the code they cover (read-only). |
+| `fr lenses` | Review lenses: the angles a feature is reviewed from (read-only). |
 | `fr gate` | Post-merge gates: record that a gate passed on its PR (the gate ledger). |
 | `fr ops` | Manual operations of a plan: check, apply, attest. |
 | `fr release` | Release gating: what still waits on a post-merge gate since the last final. |

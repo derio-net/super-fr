@@ -91,6 +91,10 @@ MIGRATIONS.register(rerender_migration(3, 4))
 """3 -> 4: `fr-phase-executor` pushes with `fr push`, never `git push` (spec
 2026-11-04-repo-feature-settings R12)."""
 
+MIGRATIONS.register(rerender_migration(4, 5))
+"""4 -> 5: both agents tell their reader it may add (or suggest) a review lens (spec
+2026-11-12-review-lenses R14)."""
+
 MIGRATIONS.register(
     Repair(
         kind=KIND,

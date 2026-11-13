@@ -14,6 +14,7 @@ from tests.unit.record_support import (
     commit_all,
     fr,
     implement_record,
+    resolve_empty_lens_review,
     snapshot,
     started_run,
     write_record,
@@ -54,7 +55,10 @@ def _at_deliver(tmp_path: Path) -> Path:
     rec = write_record(root, review)
     out = fr(root, [*step, "review-phase", "--item", "phase/1", "--record", str(rec)])
     assert out.exit_code == 0, out.output
-    # One call (R4): the same resolve runs journal-check and briefs deliver.
+    # One call (R4): the same resolve runs journal-check and briefs lens-review;
+    # its set is empty, so it resolves with no reviewer and briefs deliver.
+    assert load_run_state(root, RUN).steps["lens-review"].state == "running"
+    resolve_empty_lens_review(root)
     assert load_run_state(root, RUN).steps["deliver"].state == "running"
     account_seeded_row(root)
     commit_all(root, "at deliver")

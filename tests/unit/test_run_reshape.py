@@ -77,7 +77,7 @@ def test_a_step_added_after_the_cursor_is_inserted_pending_in_manifest_order() -
 def test_a_step_added_at_or_behind_the_cursor_refuses() -> None:
     manifest = _manifest()
     state = _without(_state(manifest, cursor="implement"), "spec-review")
-    with pytest.raises(ReshapeError, match=r"spec-review.*fr run adopt --supersede"):
+    with pytest.raises(ReshapeError, match=r"spec-review.*fr run adopt <plan-dir> --supersede"):
         reshape(state, manifest)
     at = _without(_state(manifest, cursor="journal-check"), "journal-check")
     with pytest.raises(ReshapeError, match=r"journal-check.*--supersede"):

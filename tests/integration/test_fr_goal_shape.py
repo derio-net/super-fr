@@ -41,7 +41,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_WORKFLOWS_DIR = REPO_ROOT / "plugins" / "super-fr" / "workflows"
 SKILL_MD = REPO_ROOT / "plugins" / "super-fr" / "skills" / "fr-goal" / "SKILL.md"
 
-_NUMBERED_HEADER_RE = re.compile(r"^### \d+\.\s+([a-z][a-z-]*)")
+# `\d+[a-z]?`: a step added between two numbered ones takes a letter (`7a.
+# lens-review`), so the sections other prose cites by number (`§8`) keep it.
+_NUMBERED_HEADER_RE = re.compile(r"^### \d+[a-z]?\.\s+([a-z][a-z-]*)")
 
 
 def _skill_step_order() -> list[str]:
@@ -590,7 +592,9 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
     )
     passed = _fr(root, ["run", "advance", "g1"])
     assert passed.exit_code == 0, passed.output
-    assert load_run_state(root, "g1").cursor == "deliver"
+    # The run proceeds to the lens review before `deliver` (spec
+    # 2026-11-12-review-lenses §3.C), which no review skipped can reach either.
+    assert load_run_state(root, "g1").cursor == "lens-review"
 
 
 @pytest.mark.usefixtures("complete_live_pr")
@@ -777,10 +781,21 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
     # journal-check is `kind: cli` and self-completes: the toy plan's steps
     # were never ticked, so no phase is locally-complete and none is "owed"
     # a review — `--require-reviews` has nothing to flag. The same advance
-    # goes on to brief `deliver` (spec 2026-09-29-fr-goal-light-path §B, R5).
+    # goes on to brief `lens-review` (spec 2026-09-29-fr-goal-light-path §B, R5).
     checked = _fr(root, ["run", "advance", "r1"])
     assert checked.exit_code == 0, checked.output
     assert "journal-check: done (exit 0)" in checked.output
+    assert load_run_state(root, "r1").cursor == "lens-review"
+    lens_brief = _walk_brief(checked.output)
+    assert lens_brief["step"] == "lens-review"
+    # No lens was added and no path rule matched: the set is empty, so the
+    # lens review resolves at once with no reviewer (spec 2026-11-12-review-lenses
+    # R11), and `deliver` is next.
+    assert lens_brief["lens_review"]["set"] == []
+    lensed = _fr(root, ["run", "resolve", "r1", "--step", "lens-review", "--state", "done"])
+    assert lensed.exit_code == 0, lensed.output
+    checked = _fr(root, ["run", "advance", "r1"])
+    assert checked.exit_code == 0, checked.output
     assert load_run_state(root, "r1").cursor == "deliver"
     assert _walk_brief(checked.output)["step"] == "deliver"
 

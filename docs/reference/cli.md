@@ -206,6 +206,11 @@ one artifact kind.
 - `fr docs`: Docs currency: pages must keep up with the code they cover (read-only).
   - `fr docs check`: Fail when a covered path changed and its page did not (exit 1).
   - `fr docs status`: List every page with its covered globs and its `reviewed` stamp.
+- `fr lenses`: Review lenses: the angles a feature is reviewed from (read-only).
+  - `fr lenses list`: Print the effective lenses and where each comes from.
+  - `fr lenses show`: Print one lens's instruction text.
+  - `fr lenses check`: Fail (exit 1) when .fr/lenses.yaml has a problem.
+  - `fr lenses status`: Print the feature's lens set: each lens with every reason and the step that added it, or the path rule that requires it and one matching file.
 - `fr gate`: Post-merge gates: record that a gate passed on its PR (the gate ledger).
   - `fr gate pass`: Comment why PR <n>'s gate <g> passed, then swap gate:<g> for gate:<g>-passed.
   - `fr gate backfill`: Bring pre-v6 owed work into the gate lanes.
