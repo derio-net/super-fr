@@ -88,8 +88,10 @@ the acceptance matrix, but not to run `/fr-goal`.
 `vibe_kanban` MCP entry. It also removes the OpenCode skills, commands, agents and plugin, and
 the Hermes hooks, rules and skills.
 
-It leaves the Claude Code plugin registration in `~/.claude/settings.json` and the `fr` CLI
-in place. Remove those by hand. If you installed with the one-liner and have no checkout,
+It leaves the Claude Code plugin registration in `~/.claude/settings.json` in place. It also
+leaves the marketplace entry in `~/.claude/plugins/known_marketplaces.json` and the
+marketplace clone `~/.claude/plugins/marketplaces/derio-net--super-fr/`. The managed clone
+`~/.cache/fr/src/super-fr` and the `fr` CLI stay too. Remove those by hand. If you installed with the one-liner and have no checkout,
 the script is in the managed clone:
 
 ```bash
