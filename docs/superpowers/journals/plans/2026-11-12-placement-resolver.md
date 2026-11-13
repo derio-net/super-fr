@@ -1360,3 +1360,48 @@ Follows from R28's wording, not this code; plan 3 may not change a requirement. 
 
 <!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-13T13:44:06+00:00 lens=security -->
 ### lens-security-1 · lens · Stealth and quiet are privacy guarantees enforced by new hooks, a forge guard and file movers; every phase drew security findings, so the whole diff is reviewed once for cross-phase gaps
+
+<!-- fr:journal kind=review scope=plan id=lens-review-security created=2026-11-13T14:36:14+00:00 -->
+### lens-review-security · review · Security lens review of the whole feature, f90986ffb..HEAD
+
+Reviewer ab68c1818d5096289 (opus) reviewed the whole diff through the security lens, added by the orchestrator (lens-security-1) because quiet and stealth are privacy guarantees enforced by new hooks, a forge guard and file movers. It found the forge guard, privacy check, hook fr resolution and settings-paths quoting clean, and raised two cross-phase findings (one reproduced) plus a non-security deliver crash under quiet and stealth. All three were fixed at 9f8f44764, 2d50806b5 and 4bb686fdb; the full suite (15923 passed) ran after the last code commit.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-13T14:36:14+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · The stealth fr-path push check scanned only the first-parent range
+
+A merged side branch that added then removed an fr file pushed its contents to the target's history (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-13T14:36:14+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · OWNER from the fr branch was printed unvalidated into fr archive --branch suggestions
+
+Whoever can push to fr could plant a shell command in the closeout, debt and status output.
+
+<!-- fr:journal kind=finding scope=plan id=lens-pr-body-quiet created=2026-11-13T14:36:14+00:00 state=open review_scope=in -->
+### lens-pr-body-quiet · finding [open] (reviewer: in scope) · deliver raised ValueError under quiet and stealth with forge.pr_body minimal
+
+The PR-body path lies outside the product checkout there; no test covered it.
+
+<!-- fr:journal kind=decision scope=plan id=lens-push-scan-separate-ranges created=2026-11-13T14:36:14+00:00 -->
+### lens-push-scan-separate-ranges · decision · The fr-path push scan and the R13/R14 commit checks use separate commit ranges
+
+commits_the_push_adds lists every commit the push sends (no --first-parent), excluding the remote's tips read live with ls-remote and refusing when they cannot be read; unpushed stays first-parent for the subject and squash rules. Quiet has no push-time fr-path scan (R23 is enforced where fr commits), so it had no such gap.
+
+<!-- fr:journal kind=decision scope=plan id=lens-bookkeeping-untrusted created=2026-11-13T14:36:14+00:00 -->
+### lens-bookkeeping-untrusted · decision · OWNER, BASE, HEADS and stealth state read from fr or tracking are untrusted input
+
+Unsafe owners are dropped with a notice that never echoes them, shas must be full hex, and every printed command shell-quotes the branch, since git allows characters a shell interprets.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-13T14:36:14+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: The stealth fr-path push check scanned only the first-parent range
+
+9f8f44764: commits_the_push_adds scans every pushed commit against live remote tips; regression tests for the merged add-then-remove, a stale tracking ref and an unreadable remote.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-13T14:36:14+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: OWNER from the fr branch was printed unvalidated into fr archive --branch suggestions
+
+2d50806b5: owner_of validates with unsafe_branch, BASE/HEADS/product_head must be full shas, archive_branch_command shell-quotes; tests in test_placement_bookkeeping_untrusted.py.
+
+<!-- fr:journal kind=finding scope=plan id=lens-pr-body-quiet-resolved created=2026-11-13T14:36:14+00:00 state=fixed resolves=lens-pr-body-quiet -->
+### lens-pr-body-quiet-resolved · finding [fixed] · resolves lens-pr-body-quiet: deliver raised ValueError under quiet and stealth with forge.pr_body minimal
+
+4bb686fdb: _deliver_pr_gate names the render with _shown_path and commits it through the run-writes seam; tested under quiet and stealth.
