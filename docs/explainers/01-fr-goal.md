@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 placement-resolver phase 5 review, merged status counts the feature's own commits past BASE, recorded HEADS, forge merges, frozen fragments
+reviewed: 2026-11-13 placement-resolver phase 7, fr placement move (copy, verify, switch, remove; restartable) and migrate-branch with drift refused everywhere
 ---
 
 ## Overview
@@ -1410,6 +1410,38 @@ again, a record that disagrees with the default branch is ignored and named in a
 and a record never makes an unmerged branch merged. A forge merge's record counts without
 the forge only when its head is one fr recorded for the feature and neither it nor its
 merge commit is in `BASE`.
+
+#### Moving between placements
+
+A repository is not stuck with the placement it started under. `fr placement move --to
+quiet` (or `--to repo`, or `--to stealth --tracking <repo>@<branch>`) moves every one of
+fr's files, archived features included, in four steps: **copy**, **verify**, **switch**,
+**remove**. Out of `repo`, the copy reads the default branch and gives each feature its
+own path, with an `OWNER`, a `BASE` and a `merged:` record worked out from the default
+branch's history, so a feature merged long ago still reads as merged, in the same order.
+Verify then re-reads the destination and refuses unless its files, its acceptance fold
+and its `fr validate artifacts` report are the same as the source's. Only then does the
+switch happen: the quiet switch commit on `fr`, or, moving back, `placement: repo` written
+there by a new commit, never a force push. Remove opens a branch that deletes the files
+from the default branch, pushes it, and prints the `fr pr create` command for its pull
+request; nothing is pushed to the default branch itself, and fr reminds you that git
+history still holds the files. Moving back into `repo` lands through a pull request too,
+so that move pauses after its copy and finishes when you run it again after the merge.
+
+Every step can be run again: a state file under the git directory records the steps
+done, so a move interrupted anywhere (a refused push, a closed terminal) completes when
+you re-run the same command, and a different move refuses until it does. A move refuses
+while any workspace of the repository has uncommitted work. Moving to stealth checks the
+tracking repository is reachable and no more visible than the target before it writes,
+and puts nothing of fr's on the target. `fr placement move --run <id>`, run in a stealth
+workspace, moves that one run out of its tracking repository.
+
+A branch that was live during the move is left as it was: its workspace recorded the old
+placement. From then on every fr command there, `fr push`, `deliver` and `fr validate
+artifacts` (which is how CI notices) refuse, naming `fr placement migrate-branch`. None of
+them moves anything. `fr placement migrate-branch`, run in that workspace, moves the
+branch's own files to where the placement keeps them, as one commit on each side, and
+pushes both.
 
 ## Try it yourself
 

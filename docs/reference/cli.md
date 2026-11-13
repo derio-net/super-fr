@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
+reviewed: 2026-11-13 placement-resolver phase 7, fr placement move and migrate-branch documented
 ---
 
 # The fr command line
@@ -38,6 +38,21 @@ Commands that write to the forge or rewrite many files at once (`fr apply`, `fr 
 do; add `--yes` to apply. Commands that make one named change (`fr plan create`,
 `fr plan edit`, `fr acceptance add`, `fr acceptance set-status`, `fr isolation up`) act at
 once. `fr skills` prints a short map of the skills and the commands each one drives.
+
+
+## Moving between placements
+
+`fr placement move --to repo|quiet|stealth [--tracking <repo>@<branch>]` moves a whole
+repository's fr files to another placement: copy, verify (files, acceptance fold and
+`fr validate artifacts` must agree), switch, remove. Each step is idempotent and the
+state lives under the git directory, so re-running the same command after an
+interruption finishes the move. It refuses while any workspace has uncommitted work, it
+never force-pushes, and out of `repo` it removes the files through a pushed branch and a
+printed `fr pr create` command. `--run <id>`, in a stealth workspace, moves that one run.
+A branch left under the old placement is refused by every fr command, `fr push`,
+`deliver` and `fr validate artifacts` until `fr placement migrate-branch`, run in its
+workspace, moves its files (one commit on each side, both pushed). Nothing else migrates
+it, CI included.
 
 ## Every command
 
@@ -204,6 +219,9 @@ one artifact kind.
   - `fr settings show`: Print the effective settings and each key's source.
   - `fr settings paths`: Print the artifact path resolver's answers, for hooks and plugins.
   - `fr settings check`: Validate the settings: schema, servable placement, coherence.
+- `fr placement`: Move fr's artifacts between placements: move, migrate-branch.
+  - `fr placement move`: Copy, verify, switch, then remove: every step idempotent and resumable.
+  - `fr placement migrate-branch`: Move this workspace branch's artifacts to the repo's current placement.
 - `fr docs`: Docs currency: pages must keep up with the code they cover (read-only).
   - `fr docs check`: Fail when a covered path changed and its page did not (exit 1).
   - `fr docs status`: List every page with its covered globs and its `reviewed` stamp.
