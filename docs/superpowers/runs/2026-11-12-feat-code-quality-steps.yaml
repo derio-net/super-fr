@@ -207,6 +207,14 @@ steps:
           findings: l-security-r1,l-security-r2,l-security-r3,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4
           lenses: errors=18:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4;security=18:l-security-r1,l-security-r2,l-security-r3
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-13T03:41:58+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-13T03:41:58+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
 driver: standalone
 fr_version: 6.4.0rc3
