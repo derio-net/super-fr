@@ -777,7 +777,8 @@ def test_iter_paths_of_yields_the_same_files_on_this_repo(name: str) -> None:
         and p.is_file()
     ]
     assert list(iter_paths_of(_REPO, kind)) == before
-    if name in ("plan", "journal", "spec", "acceptance-fragment"):
+    # Not "plan": between features every plan is archived, so none is live.
+    if name in ("journal", "spec", "acceptance-fragment"):
         assert before, f"this repo has live {name} artifacts"
 
 
