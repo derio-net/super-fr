@@ -1435,3 +1435,8 @@ Under quiet it is fr, under stealth the tracking branch's name; it must be the t
 ### pr1431-r6 · finding [open] (reviewer: in scope) · Under quiet and stealth the edit gate blocks the fr worktree and tracking clone, and no skill says to ask fr settings paths
 
 Bash reproduced, TypeScript by reading; quiet cannot run an fr-goal as shipped. Covers the bash hooks, the OpenCode plugin and the Hermes hook.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r7 created=2026-11-13T15:06:49+00:00 state=open review_scope=in -->
+### pr1431-r7 · finding [open] (reviewer: in scope) · validate-plans.sh depends on a healthy PATH fr and omits --no-create
+
+Inferred from the diff: a broken or identity-refusing fr turns the plan validator red for repo users, and under quiet a validator run creates the fr branch and worktree.
