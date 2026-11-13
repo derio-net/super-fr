@@ -455,3 +455,43 @@ a new page plus two stamp and link edits; nothing to restructure
 ### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
 
 a scenario script, a registration and a status move; nothing to restructure
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-11-13T03:25:05+00:00 phase=4 -->
+### review-p4 · review · Phase 4 review: agents bump, mirrors, guide and skill text sound; the PR section misreported two cases, fixed (phase 4)
+
+A separate reviewer read the phase's diff against spec R12 and R14. Sound: every
+step of the agents 4->5 procedure, the three mirror checks, `fr docs check`, the
+guide against the code, the empty-set sentence, the LensError path. Four findings
+(three in scope, one out), all fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-13T03:25:05+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · lens table cells are not escaped: a pipe in a reason breaks the table (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-13T03:25:05+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · a lens review that has not run, or a lens added after it, renders as not observable (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-13T03:25:05+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · lens sentences appended onto unrelated bullets in three skills; two suggestion formats (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-13T03:25:05+00:00 phase=4 state=open review_scope=out -->
+### p4-r4 · finding [open] (reviewer: out of scope) · lens_set's warnings (a disabled journalled lens, no remote) are not shown in the PR section (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-13T03:25:05+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: lens table cells are not escaped: a pipe in a reason breaks the table (phase 4)
+
+`_cell` escapes a pipe and folds whitespace in every cell of the lens table. Tests: test_a_pipe_in_a_reason_stays_inside_its_cell, test_a_cell_is_one_line.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-13T03:25:05+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: a lens review that has not run, or a lens added after it, renders as not observable (phase 4)
+
+`_lens_examined`: "not reviewed yet" (with a line under the table) while lens-review is not done, "not reviewed" for a lens absent from the evidence, "not observable" only for `unobserved`. Two tests.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-13T03:25:05+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: lens sentences appended onto unrelated bullets in three skills; two suggestion formats (phase 4)
+
+The sentence is its own bullet in fr-brainstorming, fr-execute and fr-plan (all at the 120-line cap); fr-goal's phase-reviewer suggestion uses the spec reviewer's `suggested lenses:` format. Mirrors re-synced.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-13T03:25:05+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: lens_set's warnings (a disabled journalled lens, no remote) are not shown in the PR section (phase 4)
+
+Cheap and in the same function, so fixed here: each `lens_set` warning is printed as a `Note:` line under the section, including under the empty-set sentence. Test: test_a_lens_the_repo_disabled_is_named_under_the_section.
