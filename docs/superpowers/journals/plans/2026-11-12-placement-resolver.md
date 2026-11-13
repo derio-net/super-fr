@@ -1485,3 +1485,8 @@ Record item: _fr_placement_enabled and placementEnabled run git config and git c
 ### pr1431-n4-decision · decision · A whole-repo move to stealth names fr on the target, once, by the operator's explicit choice
 
 fr placement move --to stealth removes fr's files from the target's default branch through a pushed branch chore/fr-placement-move-to-stealth whose commit subject and printed PR text name the placement. Accepted as is: the target already carried fr's files and their history before the move, the move is an explicit operator command run from the base clone (no stealth marker, so the one product pusher's stealth scan does not apply to it), and it is the last fr act the target sees; every run started under stealth afterwards leaves no trace (pr1431-r1, r4, n5). Making the removal anonymous would only hide a change whose files remain in the target's history anyway (review pr1431-n4).
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r1-resolved created=2026-11-13T15:46:54+00:00 state=fixed resolves=pr1431-r1 -->
+### pr1431-r1-resolved · finding [fixed] · resolves pr1431-r1: Under stealth, fr push's drift refusal names migrate-branch, which commits a removal on the product branch and pushes without the stealth scan
+
+5e105abd9: every product-branch push goes through fr.git_policy.product.push_product_branch (stealth path and message scan, quiet R23 check and atomic push); a tripwire pins every other git push site; under stealth migrate-branch only copies into the tracking repo and names the unpushed commits plus a filter-branch command, or says the files already reached the target; the stealth drift refusal no longer offers migrate-branch. Reviewer's reproduction is tests/unit/test_placement_product_push.py.
