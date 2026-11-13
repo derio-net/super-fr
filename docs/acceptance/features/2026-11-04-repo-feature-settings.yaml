@@ -761,3 +761,11 @@ amendments:
     why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
       destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
       and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 9
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move_hardening.py#test_a_move_killed_between_a_commit_and_its_push_completes_on_rerun
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
