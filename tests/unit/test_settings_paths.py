@@ -28,7 +28,7 @@ def _lines(output: str) -> dict[str, str]:
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = make_repo(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     return root
 
 
@@ -51,7 +51,7 @@ def test_shell_values_round_trip_through_eval_with_a_space(
     spaced = tmp_path / "with space"
     spaced.mkdir()
     root = make_repo(spaced)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(app, ["settings", "paths", "--shell"])
     assert result.exit_code == 0, result.output
     script = f'{result.output}\nprintf "%s\\n" "$FR_ARTIFACT_ROOT" "$FR_PLANS_DIR"'
@@ -69,7 +69,7 @@ def test_json_prints_the_same_keys_as_an_object(repo: Path) -> None:
 def test_outside_a_git_repo_the_placement_is_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("VK_REPO_ROOT", raising=False)
+    monkeypatch.delenv("FR_REPO_ROOT", raising=False)
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["settings", "paths", "--shell"])

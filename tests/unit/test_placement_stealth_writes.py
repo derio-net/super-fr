@@ -65,7 +65,7 @@ def _fr(ws: tuple[IsolationState, Path, Path], *argv: str):
     state, _, shipped = ws
     env = {
         **os.environ,
-        "VK_REPO_ROOT": str(state.worktree),
+        "FR_REPO_ROOT": str(state.worktree),
         "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
     }
     result = CliRunner().invoke(app, list(argv), env=env)

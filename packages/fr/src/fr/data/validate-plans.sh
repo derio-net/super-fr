@@ -13,11 +13,11 @@ PROFILE=""
 # too old to answer; phase 6 of the placement plan owns the rest of the shell surfaces.
 # A refusal from `fr` (exit 2: an unservable placement, an invalid switch) is NOT a reason to
 # fall back: that would validate the wrong directory. Only an absent `fr`, or one without the
-# subcommand ("No such command"), falls back. `fr`'s toplevel prefers $VK_REPO_ROOT, so it is
+# subcommand ("No such command"), falls back. `fr`'s toplevel prefers $FR_REPO_ROOT, so it is
 # unset for the call and `fr` runs from $REPO_ROOT, the toplevel this script already uses.
 if command -v fr >/dev/null 2>&1; then
   FR_ERR="$(mktemp)"
-  if FR_PATHS="$(cd "$REPO_ROOT" && env -u VK_REPO_ROOT fr settings paths --shell 2>"$FR_ERR")"; then
+  if FR_PATHS="$(cd "$REPO_ROOT" && env -u FR_REPO_ROOT fr settings paths --shell 2>"$FR_ERR")"; then
     eval "$FR_PATHS"
   elif ! grep -q "No such command" "$FR_ERR"; then
     cat "$FR_ERR" >&2

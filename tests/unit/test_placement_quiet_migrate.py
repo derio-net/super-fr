@@ -86,7 +86,7 @@ def test_migrate_artifacts_reports_another_features_stale_artifact(
 
     wt, fr_root = ws
     _stale_plan(fr_root, "feat__other", "2026-11-12-b")
-    env = {**os.environ, "VK_REPO_ROOT": str(wt)}
+    env = {**os.environ, "FR_REPO_ROOT": str(wt)}
     result = CliRunner().invoke(app, ["migrate", "artifacts", "--yes"], env=env)
     flat = " ".join(result.output.split())
     assert "another feature's, not migrated here" in flat and "2026-11-12-b" in flat, flat
@@ -98,7 +98,7 @@ def test_validate_artifacts_sees_a_stale_plan_in_the_fr_worktree(ws: tuple[Path,
 
     wt, fr_root = ws
     _stale_plan(fr_root, "feat__other", "2026-11-12-b")
-    env = {**os.environ, "VK_REPO_ROOT": str(wt)}
+    env = {**os.environ, "FR_REPO_ROOT": str(wt)}
     result = CliRunner().invoke(app, ["validate", "artifacts"], env=env)
     assert result.exit_code != 0, result.output
     assert "2026-11-12-b" in result.output

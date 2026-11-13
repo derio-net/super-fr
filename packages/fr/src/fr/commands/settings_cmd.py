@@ -246,10 +246,10 @@ def show_cmd(
 
 def _toplevel() -> Path | None:
     """The repo the paths are asked for, or None outside a git repo (hooks call
-    `paths` everywhere). `$VK_REPO_ROOT` wins, as in `resolve_repo_root`."""
+    `paths` everywhere). `$FR_REPO_ROOT` wins, as in `resolve_repo_root`."""
     from fr.git import GitUnavailableError, git_answer
 
-    override = os.environ.get("VK_REPO_ROOT")
+    override = os.environ.get("FR_REPO_ROOT")
     if override:
         return Path(override).resolve()
     try:

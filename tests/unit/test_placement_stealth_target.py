@@ -32,7 +32,7 @@ def ws(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Pat
 
 
 def _fr(root: Path, *argv: str):
-    return CliRunner().invoke(app, list(argv), env={**os.environ, "VK_REPO_ROOT": str(root)})
+    return CliRunner().invoke(app, list(argv), env={**os.environ, "FR_REPO_ROOT": str(root)})
 
 
 def _files(root: Path) -> set[str]:

@@ -89,7 +89,7 @@ def test_run_start_with_stealth_records_it(tmp_path: Path, monkeypatch: pytest.M
     result = CliRunner().invoke(
         app,
         ["run", "start", "fr-goal", "--branch", "feat/s", "--stealth", f"{track}@main"],
-        env={**os.environ, "VK_REPO_ROOT": str(target), "FR_ISOLATION_TARGET": "worktree"},
+        env={**os.environ, "FR_REPO_ROOT": str(target), "FR_ISOLATION_TARGET": "worktree"},
     )
     assert result.exit_code == 0, result.output
     state = load_state(target, "feat/s")

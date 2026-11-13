@@ -27,7 +27,7 @@ STATE = "local--origin/features/feat__s/docs/superpowers/runs/r1.stealth.json"
 
 def _fr(root: Path, *argv: str, env: dict[str, str] | None = None):
     return CliRunner().invoke(
-        app, list(argv), env={**os.environ, "VK_REPO_ROOT": str(root), **(env or {})}
+        app, list(argv), env={**os.environ, "FR_REPO_ROOT": str(root), **(env or {})}
     )
 
 

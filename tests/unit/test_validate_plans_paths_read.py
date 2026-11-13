@@ -32,7 +32,7 @@ def _run(repo: Path, bindir: Path | None) -> subprocess.CompletedProcess[str]:
     path = f"{bindir}:" if bindir else ""
     # /usr/bin:/bin keeps git/sed; a real `fr` is never on it.
     env = {"PATH": path + "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin", "HOME": str(repo)}
-    env.pop("VK_REPO_ROOT", None)
+    env.pop("FR_REPO_ROOT", None)
     return subprocess.run(
         ["bash", str(SCRIPT)], cwd=repo, env=env, capture_output=True, text=True, check=False
     )
@@ -64,7 +64,7 @@ def test_a_working_fr_supplies_the_directories(repo: Path, tmp_path: Path) -> No
         tmp_path / "bin",
         f"echo \"FR_PLANS_DIR='{other}/plans'\"\n"
         f"echo \"FR_PLAN_CONFIG_FILE='{other}/none.yaml'\"\n"
-        "if [ -n \"${VK_REPO_ROOT:-}\" ]; then echo 'VK_REPO_ROOT leaked' >&2; exit 5; fi\n",
+        "if [ -n \"${FR_REPO_ROOT:-}\" ]; then echo 'FR_REPO_ROOT leaked' >&2; exit 5; fi\n",
     )
     res = _run(repo, tmp_path / "bin")
     assert res.returncode == 0, res.stderr

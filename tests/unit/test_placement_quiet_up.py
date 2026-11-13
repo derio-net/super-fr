@@ -109,16 +109,19 @@ def test_a_state_file_written_before_placement_still_loads() -> None:
     assert state.placement is None
 
 
-def test_run_start_refuses_an_unreachable_origin(tmp_path: Path) -> None:
+def test_run_start_refuses_an_unreachable_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from fr.cli import app
     from typer.testing import CliRunner
 
     repo = make_repo(tmp_path)
+    monkeypatch.chdir(repo)  # never the checkout under test: it may be a workspace itself
     _unreachable(repo, tmp_path)
     result = CliRunner().invoke(
         app,
         ["run", "start", "fr-goal", "--branch", "feat/s"],
-        env={**os.environ, "VK_REPO_ROOT": str(repo), "FR_ISOLATION_TARGET": "worktree"},
+        env={**os.environ, "FR_REPO_ROOT": str(repo), "FR_ISOLATION_TARGET": "worktree"},
     )
     assert result.exit_code == 2, result.output
     flat = " ".join(result.output.split())
@@ -126,7 +129,7 @@ def test_run_start_refuses_an_unreachable_origin(tmp_path: Path) -> None:
 
 
 def test_run_start_in_an_existing_workspace_fetches_and_refuses_unreachable(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`up` already ran, so only `run start`'s own fetch can notice the origin is gone."""
     from fr.cli import app
@@ -134,11 +137,12 @@ def test_run_start_in_an_existing_workspace_fetches_and_refuses_unreachable(
 
     repo = make_repo(tmp_path)
     state = _target(repo).up(profile=None, branch="feat/s")
+    monkeypatch.chdir(state.worktree)
     _unreachable(repo, tmp_path)
     result = CliRunner().invoke(
         app,
         ["run", "start", "fr-goal", "--branch", "feat/s"],
-        env={**os.environ, "VK_REPO_ROOT": str(state.worktree)},
+        env={**os.environ, "FR_REPO_ROOT": str(state.worktree)},
     )
     assert result.exit_code == 2, result.output
     assert "origin is unreachable" in " ".join(result.output.split())
@@ -158,7 +162,7 @@ def test_up_again_on_a_quiet_workspace_with_a_plan_needs_no_validator_wrapper(
     made = CliRunner().invoke(
         app,
         ["plan", "create", "--slug", "2026-11-12-q", "--target-repo", "derio-net/q"],
-        env={**os.environ, "VK_REPO_ROOT": str(state.worktree)},
+        env={**os.environ, "FR_REPO_ROOT": str(state.worktree)},
     )
     assert made.exit_code == 0, made.output
     assert not (state.worktree / "scripts/validate-plans.sh").exists()

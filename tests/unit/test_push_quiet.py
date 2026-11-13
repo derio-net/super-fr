@@ -79,7 +79,7 @@ def _other_feature_pushes(tmp_path: Path, origin: Path, rel: str, text: str = "y
 
 
 def _push(wt: Path) -> object:
-    env = {**os.environ, "VK_REPO_ROOT": str(wt)}
+    env = {**os.environ, "FR_REPO_ROOT": str(wt)}
     return CliRunner().invoke(app, ["push"], env=env)
 
 

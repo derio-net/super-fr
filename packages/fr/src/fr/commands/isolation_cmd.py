@@ -268,7 +268,9 @@ def _stealth_request(
     return repo, {}
 
 
-def _prepare_resume(repo: Path, extra: dict[str, Any], run_id: str, branch: str) -> tuple[Any, str]:
+def _prepare_resume(
+    repo: Path, extra: dict[str, Any], run_id: str, branch: str | None
+) -> tuple[Any, str]:
     """R24 "resume": the run's branch from the tracking repo, reconciled with the target's
     pushed code BEFORE any worktree is made (a state ahead of the code refuses here)."""
     from fr.placement.stealth import prepare_resume
@@ -280,7 +282,7 @@ def _prepare_resume(repo: Path, extra: dict[str, Any], run_id: str, branch: str)
         found = prepare_resume(repo, extra["stealth"], run_id)
     except SettingsError as e:
         raise IsolationError(str(e)) from e
-    if branch != DEFAULT_BRANCH and branch != found.branch:
+    if branch is not None and branch != found.branch:
         raise IsolationError(
             f"run {run_id} works on {found.branch!r}, not {branch!r}; omit --branch to resume it"
         )
@@ -320,7 +322,9 @@ def up(
     profile: str | None = typer.Option(
         None, help="Devcontainer profile (default: repo's configured default)."
     ),
-    branch: str = typer.Option(..., help="Branch for the worktree."),
+    branch: str | None = typer.Option(
+        None, help="Branch for the worktree (required, except with --resume)."
+    ),
     path: Path | None = typer.Option(
         None,
         help="Worktree path (default: ~/.cache/fr/worktrees/<main-checkout>/<branch>).",
@@ -378,11 +382,16 @@ def up(
     is the worktree path — the contract a WorktreeCreate hook relies on — and
     the human-facing lines move to stderr.
     """
+    if branch is None and resume is None:
+        # Required (no implicit default branch), except that --resume takes the run's
+        # branch from the tracking repo (R24).
+        raise typer.BadParameter("missing option '--branch'", param_hint="'--branch'")
     try:
         repo, extra = _stealth_request(repo, stealth, target_repo)
         resumed = None
         if resume is not None:
             resumed, branch = _prepare_resume(repo, extra, resume, branch)
+        assert branch is not None
         state = _target(repo).up(
             profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch, **extra
         )

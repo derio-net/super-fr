@@ -27,12 +27,12 @@ from tests.unit.test_placement_quiet import QUIET, push_fr_branch
 
 @pytest.fixture(autouse=True)
 def _sandbox_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Some commands read the cwd, not VK_REPO_ROOT: never let one reach this checkout."""
+    """Some commands read the cwd, not FR_REPO_ROOT: never let one reach this checkout."""
     monkeypatch.chdir(tmp_path)
 
 
 def _invoke(cwd: Path, *argv: str) -> tuple[int, str]:
-    env = {**os.environ, "VK_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
+    env = {**os.environ, "FR_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
     back = Path.cwd()
     os.chdir(cwd)
     try:

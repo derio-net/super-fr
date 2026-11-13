@@ -87,14 +87,14 @@ def test_check_and_run_start_refuse_an_explicit_contrary_forge_value(
     result = CliRunner().invoke(
         app,
         ["settings", "check"],
-        env={**os.environ, "VK_REPO_ROOT": str(state.worktree)},
+        env={**os.environ, "FR_REPO_ROOT": str(state.worktree)},
     )
     assert result.exit_code == 2
     assert "stealth-forge-explicit" in result.output
     result = CliRunner().invoke(
         app,
         ["run", "start", "fr-goal", "--branch", "feat/s"],
-        env={**os.environ, "VK_REPO_ROOT": str(state.worktree)},
+        env={**os.environ, "FR_REPO_ROOT": str(state.worktree)},
     )
     assert result.exit_code == 2, result.output
     assert "forge.labels" in " ".join(result.output.split())
@@ -107,7 +107,7 @@ def test_init_stealth_writes_and_pushes_the_target_file(
 
     target, track = stealth_pair(tmp_path)
     monkeypatch.chdir(target)
-    env = {**os.environ, "VK_REPO_ROOT": str(target)}
+    env = {**os.environ, "FR_REPO_ROOT": str(target)}
     result = CliRunner().invoke(app, ["settings", "init", "--stealth", f"{track}@main"], env=env)
     assert result.exit_code == 0, result.output
     assert "local--origin/settings.yaml" in tracked_files(track)
@@ -129,7 +129,7 @@ def test_init_stealth_refuses_a_missing_branch_before_writing(
     result = CliRunner().invoke(
         app,
         ["settings", "init", "--stealth", f"{track}@nope"],
-        env={**os.environ, "VK_REPO_ROOT": str(target)},
+        env={**os.environ, "FR_REPO_ROOT": str(target)},
     )
     assert result.exit_code == 2
     assert "no branch 'nope'" in " ".join(result.output.split())

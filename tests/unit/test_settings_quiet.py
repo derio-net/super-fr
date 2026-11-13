@@ -20,7 +20,7 @@ from tests.unit.test_placement_quiet import push_fr_branch
 
 
 def _fr(repo: Path, *argv: str):  # type: ignore[no-untyped-def]
-    return CliRunner().invoke(app, list(argv), env={**os.environ, "VK_REPO_ROOT": str(repo)})
+    return CliRunner().invoke(app, list(argv), env={**os.environ, "FR_REPO_ROOT": str(repo)})
 
 
 @pytest.fixture

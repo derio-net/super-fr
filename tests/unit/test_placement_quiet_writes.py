@@ -21,7 +21,7 @@ FEATURE = "feat__q"
 
 
 def _fr(cwd: Path, *argv: str) -> str:
-    env = {**os.environ, "VK_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
+    env = {**os.environ, "FR_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
     result = CliRunner().invoke(app, list(argv), env=env)
     assert result.exit_code == 0, result.output
     return result.output
@@ -32,7 +32,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pa
     repo = make_repo(tmp_path)
     push_fr_branch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
-    # Some commands read the cwd, not VK_REPO_ROOT: never let one reach this checkout.
+    # Some commands read the cwd, not FR_REPO_ROOT: never let one reach this checkout.
     monkeypatch.chdir(state.worktree)
     fr_root = Path(os.environ["HOME"]) / ".cache" / "fr" / "worktrees" / "work" / "fr"
     return state.worktree, fr_root
@@ -145,7 +145,7 @@ def test_fr_never_commits_an_artifact_path_on_the_product_branch(
 
 
 def _invoke(cwd: Path, *argv: str) -> tuple[int, str]:
-    env = {**os.environ, "VK_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
+    env = {**os.environ, "FR_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
     result = CliRunner().invoke(app, list(argv), env=env)
     return result.exit_code, " ".join(result.output.split())
 

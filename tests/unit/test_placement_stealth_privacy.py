@@ -97,7 +97,7 @@ def test_init_stealth_refuses_a_public_tracking_repo_for_a_private_target(
     result = CliRunner().invoke(
         app,
         ["settings", "init", "--stealth", f"{track}@main"],
-        env={**os.environ, "VK_REPO_ROOT": str(target)},
+        env={**os.environ, "FR_REPO_ROOT": str(target)},
     )
     assert result.exit_code == 2, result.output
     assert "R24 privacy" in " ".join(result.output.split())
@@ -157,7 +157,7 @@ def ws(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Pat
 
 
 def _fr(root: Path, *argv: str):
-    return CliRunner().invoke(app, list(argv), env={**os.environ, "VK_REPO_ROOT": str(root)})
+    return CliRunner().invoke(app, list(argv), env={**os.environ, "FR_REPO_ROOT": str(root)})
 
 
 def test_pr_create_opens_one_minimal_draft_and_nothing_else(
