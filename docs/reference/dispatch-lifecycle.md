@@ -41,11 +41,13 @@ tracking-only and carries no lifecycle label.
 All of this is what the defaults give you. A repo's forge settings (`.fr/settings.yaml`
 on its default branch, `fr settings show`) can switch writes off by kind:
 
-- **`forge.labels: off`**: neither `fr apply` nor the bridge writes any of these labels,
-  including `fr:synced`. The bridge's dedup snapshot is then the only thing that stops a
-  phase being handed over twice.
-- **`forge.issues: off`**: no tracking issue is created or closed, and the bridge's
+- **`forge.labels: off`**: the bridge writes none of these labels, including `fr:synced`.
+  The bridge's dedup snapshot is then the only thing that stops a phase being handed over
+  twice.
+- **`forge.issues: off`**: the bridge creates and closes no tracking issue, and its
   close-on-merge backstop closes nothing.
+
+Under either setting, `fr apply --yes` refuses (exit 2) and names the setting.
 
 If the bridge cannot read a repo's settings, it refuses that repo's writes and reports
 the failure. It never falls back to the defaults.
@@ -71,6 +73,6 @@ fr repos sync owner/one owner/two --yes    # write plan-config.yaml in place
 
 Repos are found through `$FR_REPOS_DIR` or `~/repos/<name>` (a missing checkout is a
 warning, not a failure), or through a manifest at `$FR_REPOS_MANIFEST` or
-`~/.config/fr/repos.yaml`. Names you pass are appended to that manifest unless you add
-`--no-save`, and `--force` overwrites a file that already exists. `fr repair` and `fr migrate`
+`~/.config/fr/repos.yaml`. With `--yes`, names you pass are appended to that manifest unless you
+add `--no-save`, and `--force` overwrites a file that already exists. `fr repair` and `fr migrate`
 also tidy this file, removing keys the toolchain no longer reads.
