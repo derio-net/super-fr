@@ -208,6 +208,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "placement-quiet",
         "placement-stealth",
         "placement-merged-status",
+        "placement-fr-enabled",
         "opencode-store-v2",
         "opencode-plugin-v2",
         "closeout-owed",
@@ -332,6 +333,10 @@ def test_placement_stealth(installed: Path, tmp_path: Path) -> None:
 
 def test_placement_merged_status(installed: Path, tmp_path: Path) -> None:
     _scenario("placement-merged-status", installed, tmp_path)
+
+
+def test_placement_fr_enabled(installed: Path, tmp_path: Path) -> None:
+    _scenario("placement-fr-enabled", installed, tmp_path)
 
 
 def test_repo_settings_git_policy(installed: Path, tmp_path: Path) -> None:

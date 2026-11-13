@@ -2,7 +2,7 @@
 // isolated from the tool.execute.before wiring in index.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -328,5 +328,33 @@ describe("quiet and stealth are fr-enabled (R26)", () => {
     }
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("no `fr` found");
+  });
+});
+
+describe("fr resolution trusts only absolute PATH entries", () => {
+  test("a relative or empty PATH entry holding an executable fr is never chosen or spawned", async () => {
+    const { resolveFr } = await import("../src/fr");
+    const marker = join(repo, "planted-ran");
+    // a planted `fr` inside the repo being edited, reachable by `.`, `bin` and ``
+    mkdirSync(join(repo, "bin"));
+    for (const dir of [repo, join(repo, "bin")]) {
+      writeFileSync(join(dir, "fr"), `#!/bin/sh\ntouch ${marker}\necho '{"FR_PLACEMENT": "quiet"}'\n`, { mode: 0o755 });
+    }
+    const savedPath = process.env.PATH;
+    const savedCwd = process.cwd();
+    try {
+      process.chdir(repo);
+      for (const relative of [".", "bin", "", `bin${":"}.`]) {
+        expect(resolveFr({ PATH: relative })).toBeNull();
+      }
+      process.env.PATH = `.:bin::${savedPath}`;
+      resetFrPaths();
+      expect(frEnabled(repo)).toBe(false); // the planted fr said quiet; it must not be asked
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      process.chdir(savedCwd);
+      process.env.PATH = savedPath;
+      resetFrPaths();
+    }
   });
 });

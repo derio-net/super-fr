@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-12 placement-resolver phase 4, up records the stealth placement and its tracking ref (--stealth, --target, --resume)
+reviewed: 2026-11-13 placement-resolver phase 6, quiet and stealth are fr-enabled in the hooks, the OpenCode plugin and Hermes (R26)
 ---
 
 ## Overview: two boundaries and a bridge
@@ -124,6 +124,16 @@ hook points; the shell is judged by a sibling guard while a pipeline is live.)
    drifted: a `git checkout -b` inside it leaves fr's state describing one branch while you
    edit another. A detached HEAD, as in the middle of a rebase, still passes, and the way
    back (`git switch <registered branch>`) is never blocked.
+
+Before step 1 the hook asks whether the repo is fr-enabled at all, and that answer is not
+only "has a devcontainer profile or a plans directory". A repo on the **quiet** placement
+keeps neither in its checkout, so the hook also reads the switch directly: the last fetched
+`origin/fr` carrying `placement: quiet` (and a repo with an origin remote), or a workspace
+whose marker records `placement: quiet` or `stealth`. These direct reads need no `fr`; when
+`fr` resolves, `fr settings paths` adds the placement's own plans directory. A missing,
+failing or garbled `fr` can therefore only fail to add a "yes", never turn one into a "no",
+so the gate is never weaker for lack of the binary. The OpenCode plugin and the Hermes hook
+make the same decision (one shared definition each).
 
 Only a marker that clears every step allows the edit. There are three ways around the
 gate, all deliberate:

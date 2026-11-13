@@ -23,6 +23,7 @@ so a future exemption is named here, with its reason, and removed with its fix.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -420,3 +421,130 @@ def test_the_join_detector_finds_raw_roots_and_spares_the_resolver() -> None:
     assert constants == {"RUNS_REL"}
     lines = [line for line, _ in raw_root_joins(_PLANTED_JOINS, constants)]
     assert lines == [10, 15, 18]
+
+
+# --- the shell hooks and the OpenCode plugin (plan 3 phase 6, R1 shell side) -------------
+#
+# The hooks and the TypeScript plugin cannot import `fr.artifacts.paths`: they ask
+# `fr settings paths --shell|--json`. A literal `docs/superpowers` or `docs/acceptance`
+# there is a path that does not move with the placement, so it is allowed only on the
+# documented `fr`-absent fallback line, which says so: `# fr-paths-fallback` (shell) or
+# `// fr-paths-fallback` (TypeScript), on the line itself or the one above it. Comments
+# are prose, not paths.
+
+_FALLBACK_MARK = "fr-paths-fallback"
+_SEGMENT_JOIN = re.compile(r"""["']docs["']\s*,\s*["'](?:superpowers|acceptance)["']""")
+
+
+def _shell_code(source: str) -> list[tuple[int, str]]:
+    """`(line, text)` of each shell line with whole-line comments dropped."""
+    return [
+        (i, line)
+        for i, line in enumerate(source.splitlines(), 1)
+        if not line.lstrip().startswith("#")
+    ]
+
+
+def _ts_code(source: str) -> list[tuple[int, str]]:
+    """`(line, text)` with `//` line comments, `/* */` blocks and JSDoc lines dropped
+    (a line is kept, blanked, so numbering holds)."""
+    source = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)
+    out = []
+    for i, line in enumerate(source.splitlines(), 1):
+        out.append((i, re.sub(r"(^|\s)//.*$", "", line)))
+    return out
+
+
+def _fallback_violations(source: str, lines: list[tuple[int, str]]) -> list[int]:
+    """Lines spelling an artifact path and not marked as the `fr`-absent fallback."""
+    raw = source.splitlines()
+    found = []
+    for number, text in lines:
+        if not (any(n in text for n in _NEEDLES) or _SEGMENT_JOIN.search(text)):
+            continue
+        here = raw[number - 1] if number <= len(raw) else ""
+        above = raw[number - 2] if number >= 2 else ""
+        # the marker on the line itself, or alone on a comment line just above it
+        above_alone = above.lstrip().startswith(("#", "//")) and _FALLBACK_MARK in above
+        if _FALLBACK_MARK in here or above_alone:
+            continue
+        found.append(number)
+    return found
+
+
+def shell_violations(source: str) -> list[int]:
+    return _fallback_violations(source, _shell_code(source))
+
+
+def ts_violations(source: str) -> list[int]:
+    return _fallback_violations(source, _ts_code(source))
+
+
+def _hook_scripts() -> list[Path]:
+    return sorted((REPO_ROOT / "plugins" / "super-fr" / "hooks").rglob("*.sh"))
+
+
+def _plugin_sources() -> list[Path]:
+    return sorted((REPO_ROOT / "packages" / "fr-opencode-plugin" / "src").rglob("*.ts"))
+
+
+def test_no_hook_spells_an_artifact_path_outside_the_fallback() -> None:
+    offenders = {
+        path.relative_to(REPO_ROOT).as_posix(): shell_violations(path.read_text())
+        for path in _hook_scripts()
+    }
+    offenders = {rel: lines for rel, lines in offenders.items() if lines}
+    assert not offenders, (
+        "artifact paths spelled in a hook (ask `fr settings paths --shell`; the fr-absent "
+        f"fallback line carries `# {_FALLBACK_MARK}`): {offenders}"
+    )
+
+
+def test_no_plugin_source_spells_an_artifact_path_outside_the_fallback() -> None:
+    offenders = {
+        path.relative_to(REPO_ROOT).as_posix(): ts_violations(path.read_text())
+        for path in _plugin_sources()
+    }
+    offenders = {rel: lines for rel, lines in offenders.items() if lines}
+    assert not offenders, (
+        "artifact paths spelled in the OpenCode plugin (ask `fr settings paths --json`; the "
+        f"fr-absent fallback line carries `// {_FALLBACK_MARK}`): {offenders}"
+    )
+
+
+def test_the_fallback_lines_exist_in_both_engines() -> None:
+    """The marker is not decoration: each engine still has the lines it names."""
+    hooks = "".join(p.read_text() for p in _hook_scripts())
+    plugin = "".join(p.read_text() for p in _plugin_sources())
+    assert f"# {_FALLBACK_MARK}" in hooks
+    assert f"// {_FALLBACK_MARK}" in plugin
+
+
+_PLANTED_SHELL = """\
+# a comment naming docs/superpowers/plans is prose
+[ -d "$1/docs/superpowers/plans" ] && return 0  # fr-paths-fallback
+x="$root/docs/acceptance/features"
+# fr-paths-fallback
+y="$root/docs/acceptance"
+z="$root/docs/superpowers"
+"""
+
+
+def test_the_shell_detector_allows_only_marked_lines() -> None:
+    assert shell_violations(_PLANTED_SHELL) == [3, 6]
+
+
+_PLANTED_TS = """\
+// a comment naming docs/superpowers/plans is prose
+/** and so is a docblock naming docs/acceptance */
+const a = join(root, "docs", "acceptance"); // fr-paths-fallback
+const b = `${root}/docs/superpowers/plans`;
+const c = join(
+  root, "docs", "superpowers", "plans");
+// fr-paths-fallback
+const d = "docs/acceptance";
+"""
+
+
+def test_the_ts_detector_allows_only_marked_lines() -> None:
+    assert ts_violations(_PLANTED_TS) == [4, 6]
