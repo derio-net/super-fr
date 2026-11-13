@@ -500,9 +500,10 @@ def https_form(repo: str) -> str | None:
 
 
 def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
-    """*repo*'s visibility from its forge: through the client *checkout* resolves (its
-    declared forge and host, review p4-r7) when fr has a checkout of it, else a client
-    for the remote's own host. None when it cannot be read (which refuses)."""
+    """*repo*'s visibility from its forge, always asked on the host of *repo*'s own URL
+    (the slug's host). With a *checkout* of it, its declared forge type picks the client
+    (review p4-r7), and a checkout whose forge names a different host is unreadable.
+    None when it cannot be read (which refuses)."""
     from fr._hosts import slug_from_url
     from fr.triage.privacy import live_visibility
 
@@ -511,16 +512,26 @@ def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
     slug = slug_from_url(repo)
     if slug is None:
         return None
+    url = https_form(repo)
+    url_host = urlparse(url).hostname if url else None
+    if url is None or not url_host:
+        return None
     try:
-        from fr import hostclient
+        from fr import _hosts, hostclient
 
-        if checkout is not None:
-            client = hostclient.client_for(Path(checkout))
-        else:
-            url = https_form(repo)
-            if url is None:
-                return None
+        if checkout is None:
             client = hostclient.client_for_url(url)
+        else:
+            # The slug is the remote's, so the host asked must be the remote's too: a
+            # checkout whose forge names another host would answer for another repo of
+            # the same name (fail closed, unreadable).
+            resolved = _hosts.host_for(Path(checkout))
+            wanted = _hosts.self_hosted_hostname(url_host)
+            if (resolved or "").lower() != (wanted or "").lower():
+                return None
+            client = hostclient.client_for_backend(
+                _hosts.detect_backend(Path(checkout)), host=url_host
+            )
     except Exception:  # noqa: BLE001 - an unbuildable client is "unreadable", which refuses
         return None
     return live_visibility(client, slug)

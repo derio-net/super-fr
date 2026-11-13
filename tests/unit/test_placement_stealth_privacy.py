@@ -237,23 +237,50 @@ def test_an_scp_remote_is_parsed_to_its_host(monkeypatch: pytest.MonkeyPatch) ->
     assert built[-1] == "https://git.example/acme/widget.git"
 
 
-def test_the_targets_visibility_uses_the_checkouts_own_client(
+def test_the_targets_visibility_uses_the_checkouts_own_forge_on_the_remotes_host(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A self-hosted target is read by the client its checkout resolves (its declared
-    forge and host), never a GitHub client guessed from the URL."""
+    """A self-hosted target is read by its checkout's declared forge type, on the host of
+    the remote the slug came from, never a GitHub client guessed from the URL."""
+    import fr._hosts as hosts
     import fr.hostclient as hostclient
 
     forge = _VisForge("internal")
-    roots: list[Path] = []
-    monkeypatch.setattr(hostclient, "client_for", lambda root: roots.append(root) or forge)
+    built: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(hosts, "detect_backend", lambda root: "gitlab")
+    monkeypatch.setattr(hosts, "host_for", lambda root: "git.example")
+    monkeypatch.setattr(
+        hostclient, "client_for_backend", lambda b, host=None: built.append((b, host)) or forge
+    )
     monkeypatch.setattr(
         hostclient, "client_for_url", lambda url: pytest.fail(f"guessed a client for {url}")
     )
     checkout = tmp_path / "target"
     assert stealth._forge_visibility("git@git.example:acme/widget.git", checkout) == "internal"
-    assert roots == [checkout]
+    assert built == [("gitlab", "git.example")]
     assert forge.asked == ["acme/widget"]
+
+
+def test_a_checkout_naming_another_forge_host_is_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The checkout's forge says forge-a.example, the remote is on forge-b.example: asking
+    forge-a about `acme/widget` would answer for another repo, so fr refuses."""
+    import fr._hosts as hosts
+    import fr.hostclient as hostclient
+
+    wrong = _VisForge("private")
+    monkeypatch.setattr(hosts, "detect_backend", lambda root: "gitlab")
+    monkeypatch.setattr(hosts, "host_for", lambda root: "forge-a.example")
+    monkeypatch.setattr(hostclient, "client_for_backend", lambda b, host=None: wrong)
+    monkeypatch.setattr(hostclient, "client_for_url", lambda url: wrong)
+    remote = "git@forge-b.example:acme/widget.git"
+    assert stealth._forge_visibility(remote, tmp_path) is None
+    assert wrong.asked == []
+    ref = stealth.parse_ref("/srv/track.git@main")
+    with pytest.raises(SettingsError, match="cannot read the visibility"):
+        stealth.check_privacy(ref, remote, target_root=tmp_path)
+    assert wrong.asked == []
 
 
 def test_check_privacy_passes_the_target_checkout(
