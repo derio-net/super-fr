@@ -1237,3 +1237,8 @@ Under quiet, `branch_drift` accepts a branch whose added fr files are a subset o
 ### p7-r1-recopy · decision · A source that moved after the copy is copied again, never refused (phase 7)
 
 At verify and at switch the move compares a digest of the source (the default ref's placement-bound tree, or the merged features' flat content from `fr`) with the one recorded at copy; a difference resets the move to copy (idempotent by content), at most 3 times per invocation, then refuses naming the re-run. Into repo, the re-copy is one more commit on the move's own copy branch (only when the state's copy_sha is its ancestor).
+
+<!-- fr:journal kind=decision scope=plan id=p7-r4-dest-validation created=2026-11-13T12:23:54+00:00 phase=7 -->
+### p7-r4-dest-validation · decision · Verify validates the destination feature roots one by one, plus a bookkeeping lint (phase 7)
+
+Each destination feature root (OWNER/BASE/HEADS/merged.yaml included) is laid out and validated with `validate_repo` per root, which is how `iter_paths_of` reaches kinds under quiet and stealth; the destination may report no issue the source lacks and check no fewer artifacts. `bookkeeping_problems` checks the four files as their readers need them, and the bytes must equal what the move synthesised.
