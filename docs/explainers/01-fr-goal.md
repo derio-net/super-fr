@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 placement-resolver phase 5, merged status and archive under quiet and stealth (merged by the code branch's merge, merged.yaml a cache, archive moves nothing)
+reviewed: 2026-11-13 placement-resolver phase 5 review, merged status counts the feature's own commits past BASE, recorded HEADS, forge merges, frozen fragments
 ---
 
 ## Overview
@@ -1350,23 +1350,43 @@ shapes of different granularity.
 #### Merged status under quiet and stealth
 
 Under both placements the default branch carries none of fr's files, so "this feature
-merged" cannot mean "its plan is on `main`". It means its code branch merged: a feature
-is merged when every live ref of its branch (local and on `origin`) is reachable from the
-default branch, and its place in the order is the first-parent commit of the default
-branch that brought it in. The acceptance fold applies merged features' amendments in
-that order, so `fr acceptance status` shows a feature's amendment the moment its code
-merges, and lists the merged features; `fr status` and `fr debt` read the same answer for
-plans. A feature that has not merged counts only in its own branch's view.
+merged" cannot mean "its plan is on `main`". It means its code branch merged. When a
+feature's first fr commit claims its path, fr writes `OWNER` (the branch) and `BASE`
+(the commit the branch started from), and only commits past `BASE` are the feature's:
+a branch fresh from the default branch, or behind it, is never merged, however reachable
+its head is. Each `fr push` also appends the head it pushes to `HEADS` in the feature
+path, in the same atomic push. A feature is merged when one of its heads, a live ref of
+its branch or one recorded in `HEADS` (under stealth, the product head each run
+recorded), holds a commit of its own and is reachable from the default branch; its place
+in the order is the first-parent commit of the default branch that brought it in. That
+answer only grows: a commit after the merge, or a branch deleted after it, never
+un-merges a feature. A squash or rebase merge leaves no head on the default branch, so
+`fr archive --branch` and `fr acceptance status` also ask the forge for the branch's
+merged pull request (a read, which stealth allows) and take its merge commit, when that
+commit is on the default branch's first-parent line; with the forge unreadable, they say
+that no merge was found and that a squash or rebase merge needs the forge.
+
+The acceptance fold applies merged features' amendments in merge order, reading each
+merged feature's fragments as they were at its merge: from the last pushed fr commit of
+its path at or before the merge commit. An amendment written after the merge, or a
+change never pushed, does not count as merged; on the feature's own branch it is pending,
+and an in-place edit of a merged row there is refused by `fr acceptance check`, as on the
+default branch under `repo`. `fr acceptance status` shows a feature's amendment the
+moment its code merges, and lists the merged features; `fr status` and `fr debt` read the
+same answer for plans, dating a plan by the history of its path in the fr worktree. A
+feature that has not merged counts only in its own branch's view.
 
 Archiving moves nothing. `fr archive --branch <branch>` checks that the branch is
-merged, then appends one record, `merged: <sha>` with the head it verified, to
-`features/<feature-id>/merged.yaml`, in one commit on `fr` that it pushes (under
-stealth, on the tracking branch, compare-and-swap); running it again writes nothing.
-`fr archive <plan>` and `fr archive --all` refuse, naming `--branch`. The record is a
-cache, never the truth: every read checks it again, a record that disagrees with the
-default branch is ignored and named in a note, and a record never makes an unmerged
-branch merged. It does keep the answer when the branch is deleted after its merge,
-because the head it carries is checked again on every read.
+merged, then appends one record, `merged: <sha>` with the head it verified (and the pull
+request, for a forge merge), to `features/<feature-id>/merged.yaml`, in one commit on
+`fr` that it pushes (under stealth, on the tracking branch, compare-and-swap); running it
+again writes nothing, except that a record whose push was refused is pushed then. It
+works for a branch deleted after its merge. `fr archive <plan>` and `fr archive --all`
+refuse, naming `--branch`. The record is a cache, never the truth: every read checks it
+again, a record that disagrees with the default branch is ignored and named in a note,
+and a record never makes an unmerged branch merged. A forge merge's record counts without
+the forge only when its head is one fr recorded for the feature and neither it nor its
+merge commit is in `BASE`.
 
 ## Try it yourself
 

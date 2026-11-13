@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-13 placement-resolver phase 5, the fold under quiet and stealth orders merged features by their code branch's merge
+reviewed: 2026-11-13 placement-resolver phase 5 review, merged fragments frozen at the merge, in-place edits refused under quiet
 ---
 
 # The acceptance matrix
@@ -29,10 +29,14 @@ fragments no longer touch the same file.
 
 Under the quiet and stealth placements the default branch holds no fragment: each
 feature's fragments sit in its own feature path, and a feature counts as merged when its
-code branch's head is on the default branch. Its amendments then apply in the order of
-the default branch's first-parent commit that merged it, and a feature not merged yet
-adds its own only to its own branch's view. `fr acceptance status` lists the merged
-features in that order. A row another merged feature created changes only by an
+code branch merged: a head of its own (past the `BASE` it claimed its path from) on the
+default branch, or, for a squash or rebase merge, the forge's merged pull request. Its
+amendments then apply in the order of the default branch's first-parent commit that
+merged it, read as they were pushed at that merge, and a feature not merged yet adds its
+own only to its own branch's view. An amendment the feature writes after its merge is
+pending on its branch, and an in-place edit of its merged row is refused by `fr
+acceptance check`. `fr acceptance status` lists the merged features in that order, and
+the unmerged ones with why. A row another merged feature created changes only by an
 amendment in your feature's fragment (`fr acceptance amend`, or `set-status`, which
 writes one).
 
