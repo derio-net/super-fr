@@ -80,8 +80,11 @@ acceptance matrix, but not to run `/fr-goal`.
 
 ## Uninstall
 
-`scripts/install.sh --uninstall` removes what the installer added for each harness. If you
-installed with the one-liner and have no checkout, the script is in the managed clone:
+`scripts/install.sh --uninstall` removes the Claude Code rules, fr's worktree hooks and the
+`vibe_kanban` MCP entry, the OpenCode skills, commands, agents and plugin, and the Hermes
+hooks, rules and skills. It leaves the Claude Code plugin registration in
+`~/.claude/settings.json` and the `fr` CLI in place; remove those by hand. If you installed
+with the one-liner and have no checkout, the script is in the managed clone:
 
 ```bash
 bash ~/.cache/fr/src/super-fr/scripts/install.sh --uninstall
