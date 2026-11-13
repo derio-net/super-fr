@@ -56,3 +56,58 @@ a prose rule edit plus its generated mirror; nothing to restructure
 ### ws-terms-effect-2 · discovery · .writing-standard-terms after review: 19 terms, 63 warnings removed (phase 1)
 
 Supersedes ws-terms-effect's numbers. Review findings p1-r3 and p1-r4: dropped landing (it also exempted the verb at docs/gate-backfill.md:138) and JSON (it removed no warning on any page). 19 terms remain: 14 abbreviations (API, CI, CLI, HEAD, HTML, ID, PATH, PR, README, REST, SSH, UI, URL, YAML) and 5 -ing fr nouns (debugging, finding, pending, sibling, warning). WARN totals with the file: guides 223, reference 46, explainers 545 (814; 877 without it, so 63 removed). FAIL totals are unchanged (137 / 22 / 1). The two landing warnings (gate-backfill.md:138, docs-currency.md:227) are left to their rewrite in phase 3.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-11-13T22:23:55+00:00 phase=1 -->
+### review-p1 · review · phase 1 review: 5 findings, all in scope, all fixed (phase 1)
+
+Independent reviewer (separate context, read-only) over spec, plan and diff 63764b8..HEAD; ran the pytest set (225 passed), sync-opencode --check, fr docs check, the script (exit 1 as expected pre-rewrite), probed relative paths and cwd. Fixes in 84fd6de8d, 995ec8038; ci-ok green on 89950d2. Suggested lenses: tests (already in the set), shell (not a lens this repo defines; its concerns were covered by p1-r1/p1-r2).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-13T22:23:55+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · tests pinned script substrings, not behaviour (exit aggregation, relative path, toplevel cd) (phase 1)
+
+Raised by the phase 1 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-13T22:23:55+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · script took the toplevel from the caller's cwd; `|| exit 2` was dead (phase 1)
+
+Raised by the phase 1 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-13T22:23:55+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · `landing` term exempted verb uses too, contrary to R4 (phase 1)
+
+Raised by the phase 1 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-13T22:23:55+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · `JSON` term removed no warning (R4) (phase 1)
+
+Raised by the phase 1 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-13T22:23:55+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · redundant smoke and string-pin tests (phase 1)
+
+Raised by the phase 1 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-13T22:23:55+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: tests pinned script substrings, not behaviour (exit aggregation, relative path, toplevel cd) (phase 1)
+
+84fd6de8d; test_the_script_runs_every_group_from_the_toplevel_and_exits_with_the_highest_code, test_the_script_exits_zero_when_every_group_passes, test_a_fail_in_either_group_fails_the_script (mutations exit 0 / no realpath now fail)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-13T22:23:55+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: script took the toplevel from the caller's cwd; `|| exit 2` was dead (phase 1)
+
+84fd6de8d; test_the_script_checks_its_own_repo_whatever_the_callers_directory
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-13T22:23:55+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: `landing` term exempted verb uses too, contrary to R4 (phase 1)
+
+995ec8038; term removed; the two hidden warnings return for the phase-3 rewrite (checker run, no unit test: CI has no blog-craft checkout)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-13T22:23:55+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: `JSON` term removed no warning (R4) (phase 1)
+
+995ec8038; term removed
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-13T22:23:55+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: redundant smoke and string-pin tests (phase 1)
+
+84fd6de8d; both deleted, replaced by the behaviour tests
