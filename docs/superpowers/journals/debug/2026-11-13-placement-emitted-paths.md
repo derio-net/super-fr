@@ -10,3 +10,8 @@ tests/unit/test_placement_emitted_paths.py: under quiet, after run start, a spec
 ### rc-emitted · root-cause · emitted spec/plan judged against the product root, not the artifact root
 
 _repo_relative_artifact resolved --emitted against the product checkout; under quiet/stealth the spec lives below the feature root (fr.artifacts.paths.feature_root). The cursor's convention (verification/exit.py already reads artifact_root / plan_rel) is artifact-root-relative, so the writer was the outlier, and ~12 readers joined the product root too (run_cmd plan/spec reads, record template/pr_body/apply, verification set/rows, ops holds, run visual/adopt, ops_cmd, cli-step {{ artifacts.* }} rendered for a cwd of the product checkout). Second layer: Plan.repo_root is the git toplevel of the plan dir (the fr worktree), so a quiet plan never resolved its spec and fr pickup matched features/<id>/docs/... against the recorded docs/...
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-operator created=2026-11-13T20:59:01+00:00 -->
+### rc-operator · root-cause · decision operator window opened at an entry of the same record
+
+record/apply.py _verify: since = [*existing, *new][-1].created. Every entry a record adds is stamped with the apply time, so the operator brief ahead of a brainstorm record's decisions moved the window past the question round and every answered_by: operator decision was refused. (verify_operator_claim is the finding-resolution path; the decision path is verify_operator_answer called from apply.py.) The existing test passed only because its answer was dated 2099.
