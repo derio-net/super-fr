@@ -1,0 +1,18 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: brainstorm
+outcome: done
+journal:
+  - {kind: decision, id: d-standards, title: "Guides and reference follow ste; explainers plain-language; why-fr elements-of-style; landing page none", body: "Operator chose the recommended mapping."}
+  - {kind: decision, id: d-scope, title: "Rewrite every page in this feature, explainers' warnings included; CI fails on any FAIL", body: "Operator chose the full rewrite over failures-only or gate-only."}
+  - {kind: decision, id: d-verification, title: "CI plus per-page fact checks; strategy none; no post-merge gate", body: "Checker in site-build fails the PR on FAIL; each page passes --preserve-from origin/main and a fact-keeper review recorded in the plan journal."}
+acceptance:
+  - {id: writing-standards-docs-groups, capability: published-docs, acceptance: "Each published page is held to its group's writing standard: guides and reference to STE, explainers to plain language, why-fr to Elements of Style, the landing page to none.", origin: ["spec:2026-11-13-writing-standards-docs#R1", "spec:2026-11-13-writing-standards-docs#R2", "spec:2026-11-13-writing-standards-docs#R3", "spec:2026-11-13-writing-standards-docs#R4"], status: not-implemented, verify: none}
+  - {id: writing-standards-docs-ci-gate, capability: published-docs, acceptance: "A pull request that leaves a published page failing its writing standard fails CI, against the pinned blog-craft checker, and every page still renders.", origin: ["spec:2026-11-13-writing-standards-docs#R5", "spec:2026-11-13-writing-standards-docs#R6", "spec:2026-11-13-writing-standards-docs#R11"], status: not-implemented, verify: none}
+  - {id: writing-standards-docs-guides, capability: published-docs, acceptance: "Every guide and reference page reads to STE with every fact, command, link and number of the previous version kept.", origin: ["spec:2026-11-13-writing-standards-docs#R7", "spec:2026-11-13-writing-standards-docs#R8", "spec:2026-11-13-writing-standards-docs#R9"], status: not-implemented, verify: none}
+  - {id: writing-standards-docs-explainers, capability: published-docs, acceptance: "Every explainer reads to plain language (why-fr to Elements of Style) with every fact, command, link and number kept, and any remaining warning justified.", origin: ["spec:2026-11-13-writing-standards-docs#R7", "spec:2026-11-13-writing-standards-docs#R8", "spec:2026-11-13-writing-standards-docs#R9"], status: not-implemented, verify: none}
+  - {id: writing-standards-docs-authoring-rule, capability: published-docs, acceptance: "An author editing a published page can find which standard it follows and run the same check CI runs.", origin: ["spec:2026-11-13-writing-standards-docs#R10"], status: not-implemented, verify: none}
+emitted:
+  spec: docs/superpowers/specs/2026-11-13-writing-standards-docs-design.md
+evidence:
+  answered_by: operator
