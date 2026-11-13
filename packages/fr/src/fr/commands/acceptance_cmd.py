@@ -405,6 +405,8 @@ def status_cmd(
     if contested:
         summary += f"; contested: {len(contested)}"
     typer.echo(f"acceptance: {summary}")
+    if not brief:
+        _echo_merged_features(root)
     opens = open_rows(matrix, contested, retired)
     if not opens:
         typer.echo("no acceptance debt.")
@@ -415,6 +417,21 @@ def status_cmd(
         typer.echo(f"  {r.id} [{tag}] {r.acceptance} — {r.notes}")
     if brief and len(opens) > len(shown):
         typer.echo(f"  … +{len(opens) - len(shown)} more (fr acceptance status)")
+
+
+def _echo_merged_features(root: Path) -> None:
+    """Under quiet and stealth, which features the fold took as merged, in merge order
+    (R17's clause), and every `merged:` record it ignored. Nothing under `repo`."""
+    from fr.artifacts.paths import outside_repo, space_for
+    from fr.placement.merged import merged_features
+
+    if outside_repo(root) is None:
+        return
+    view = merged_features(space_for(root), root)
+    listed = ", ".join(f"{f.feature} at {f.sha[:12]}" for f in view.features) or "none"
+    typer.echo(f"merged: {listed}")
+    for notice in view.notices:
+        typer.echo(f"note: {notice}")
 
 
 @acceptance_app.command("summary")

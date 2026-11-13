@@ -361,10 +361,14 @@ def fold_texts(working: dict[str, str]) -> Effective:
 def has_fragments(repo_root: Path) -> bool:
     """Whether *repo_root*'s working tree holds at least one fragment: the one
     "this repo keeps acceptance rows" test every reader and hook shares (R19)."""
-    from fr.artifacts.paths import artifact_root
+    from fr.artifacts.paths import search_roots
 
-    folder = artifact_root(Path(repo_root)) / FRAGMENTS_DIR
-    return folder.is_dir() and any(p.is_file() for p in folder.glob("*.yaml"))
+    # Under quiet and stealth every feature root: the repo keeps rows when any feature does.
+    return any(
+        (top / FRAGMENTS_DIR).is_dir()
+        and any(p.is_file() for p in (top / FRAGMENTS_DIR).glob("*.yaml"))
+        for top in search_roots(Path(repo_root), FRAGMENTS_REL)
+    )
 
 
 def load_effective(repo_root: Path, *, ref: str | None = None) -> Matrix:
@@ -400,13 +404,11 @@ def effective(repo_root: Path, *, ref: str | None = None) -> Effective:
     root = Path(repo_root)
     froot = _quiet_root(root)
     if froot is not None:
-        # Under quiet this feature's fragments sit in its root on the `fr` branch, and the
-        # product's default ref holds none (R23): they are folded as pending entries over
-        # no merged history. Merged status under quiet (R25) is plan 3 phase 5's.
+        # Under quiet and stealth the product's default ref holds no fragment (R23, R24):
+        # a feature's merged status and order come from its code branch's merge (R17).
         if ref is not None:
             return _empty()
-        quiet_working = _working_fragments(froot)
-        return fold_texts(quiet_working) if quiet_working else _empty()
+        return _outside_fold(root)
     if ref is not None:
         return fold(root, ref=ref, include_pending=False)
     working = _working_fragments(root)
@@ -445,12 +447,55 @@ def _empty() -> Effective:
     )
 
 
+def _outside_fold(root: Path) -> Effective:
+    """The fold under quiet and stealth (R17's clause): every MERGED feature's fragments,
+    their amendments in the order `fr.placement.merged` gives the features (the
+    first-parent commit of the product's default ref that introduced each), then this
+    branch's own entries when its feature is not merged. A feature never merged
+    contributes to its own branch's view only. Keys are `features/<id>/<fragment path>`,
+    so two features' fragments never share one."""
+    from fr.artifacts.paths import FEATURES_DIR, feature_root, space_for
+    from fr.placement.merged import merged_features
+
+    space = space_for(root)
+    view = merged_features(space, root)
+    merged: dict[str, Fragment] = {}
+    intro: dict[tuple[str, int], int] = {}
+    for feature in view.features:
+        for path, text in _working_fragments(feature.root).items():
+            key = f"{FEATURES_DIR}/{feature.feature}/{path}"
+            frag = parse_fragment(text, source=key)
+            merged[key] = frag
+            for k in range(len(frag.amendments)):
+                intro[(key, k)] = feature.position
+    working: dict[str, str] = {}
+    if space.feature is not None and view.get(space.feature) is None:
+        own = feature_root(space)
+        working = {
+            f"{FEATURES_DIR}/{space.feature}/{path}": text
+            for path, text in _working_fragments(own).items()
+        }
+    if not merged and not working:
+        return replace(_empty(), notices=view.notices)
+    result = _fold_from(merged, intro, working)
+    return replace(result, notices=(*view.notices, *result.notices))
+
+
 def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
-    notices: list[str] = []
     merged = _tip_fragments(run, sha) if sha else {}
     amended = any(f.amendments for f in merged.values())
     intro = _introductions(run, sha, merged) if amended else {}
+    return _fold_from(merged, intro, working)
 
+
+def _fold_from(
+    merged: dict[str, Fragment],
+    intro: dict[tuple[str, int], int],
+    working: dict[str, str],
+) -> Effective:
+    """The fold of *merged* fragments (their amendments ordered by *intro*, the
+    introducing position of each `(path, index)`) and the branch's *working* ones."""
+    notices: list[str] = []
     rows: dict[str, tuple[Row, str, int]] = {}  # id -> (row, defining path, index)
     owners: dict[str, str] = {}
 
