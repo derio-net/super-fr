@@ -1,0 +1,10 @@
+schema_version: 12
+run: 2026-11-12-feat-placement-resolver
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1431
+evidence:
+  tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f5689a0b-c781-4953-bf5a-b20b350b4acf/scratchpad/deliver-suite-2.log
+  walk: /Users/idermitzakis/.cache/fr/walks/2026-11-12-feat-placement-resolver/20261113T184009Z.log
