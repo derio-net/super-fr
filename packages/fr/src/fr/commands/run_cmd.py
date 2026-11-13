@@ -1696,26 +1696,23 @@ def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
     """Which journal `step`'s review evidence names — or `None` when fr can
     locate none. A phase unit reviews its phase; a flat step reviews the spec
     journal only when the manifest says it writes it (`emits: [journal:spec]`,
-    which is what `spec-review` is). Anything else has nothing to check an id
-    against, and fr says so rather than guess."""
+    which is what `spec-review` is), and the whole feature only when it is the
+    lens review: it writes the plan journal AND declares `lenses`. Anything
+    else has nothing to check an id against, and fr says so rather than guess
+    (review p3-r1: any other flat `journal:plan` step keeps that refusal)."""
     if phase is not None:
         return _EvidenceTarget("plan", phase)
     if "journal:spec" in step.emits:
         return _EvidenceTarget("spec", None)
-    if "journal:plan" in step.emits:
+    if "journal:plan" in step.emits and "lenses" in step.evidence:
         return _EvidenceTarget("plan", None, feature=True)
     return None
 
 
-def _reviews_the_feature(step: Step, target: _EvidenceTarget | None) -> bool:
-    """Whether `step` is a review of the whole feature (the lens review): the
-    feature target AND review evidence declared. The light shape's `plan` emits
-    `journal:plan` too, and owes no lens set (it declares only `single-phase`)."""
-    return (
-        target is not None
-        and target.feature
-        and any(name in _PHASE_EVIDENCE for name in step.evidence)
-    )
+def _reviews_the_feature(target: _EvidenceTarget | None) -> bool:
+    """Whether the unit is a review of the whole feature (the lens review). Only
+    a step declaring `lenses` gets that target (`_evidence_target`)."""
+    return target is not None and target.feature
 
 
 def _ci_configured(repo_root: Path | None) -> bool:
@@ -1971,7 +1968,7 @@ def _verified_evidence(
     # during the review, or a rule a fix newly matched, is owed before it closes.
     lenses = (
         _lens_set_or_exit(key, repo_root, state)
-        if _reviews_the_feature(step, target) and (state_value == "done" or offered)
+        if _reviews_the_feature(target) and (state_value == "done" or offered)
         else None
     )
     walk_owed = None
@@ -2493,8 +2490,6 @@ def _verify_reviewer(
     `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
     is refused (review p4-f2) — every spelling `agent_name` folds matches.
     """
-    from fr.run.observed import observed_session
-    from fr.run.telemetry import parse_timestamp
 
     phase = target.phase
     # The review unit's own holders are reviewers by construction: a reviewer
@@ -2522,9 +2517,7 @@ def _verify_reviewer(
         raise typer.Exit(2)
     # Through the session protocol (spec 2026-10-02-opencode-observe-2 §A):
     # the dispatch named by the id, among those since the review opened.
-    start = parse_timestamp(opened)
-    view = observed_session(os.environ) if start is not None else None
-    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    dispatched = _dispatches_since(opened)
     observed: ChildDispatch | Literal[False] | None = (
         None
         if dispatched is None
@@ -2668,7 +2661,8 @@ def _check_returned_findings(
 
 def _dispatches_since(since: str | None) -> list[ChildDispatch] | None:
     """The subagents this session dispatched since `since`, or None where fr cannot
-    read the session. The one dispatch walk both reviewer-return checks read."""
+    read the session. The one dispatch walk the reviewer check and both
+    reviewer-return checks read."""
     from fr.run.observed import observed_session
     from fr.run.telemetry import parse_timestamp
 

@@ -266,3 +266,94 @@ def test_a_plan_finding_that_is_not_a_lens_finding_does_not_gate(tmp_path: Path)
 
     assert result.exit_code == 0, result.output
     assert lens_evidence(repo)["findings"] == "l-security-r1"
+
+
+# --- review p3-r1, p3-r4: what else must refuse ------------------------------------
+
+DISABLED_RULE_LENS = "disable: [security]\nrequire:\n  - paths: [src/**]\n    lenses: [security]\n"
+
+
+@pytest.mark.parametrize("evidence", ["findings", "review, reviewer, findings"])
+def test_a_flat_plan_journal_step_without_lenses_is_not_a_feature_review(
+    tmp_path: Path, evidence: str
+) -> None:
+    """Only the step declaring `lenses` is reviewed against the feature: any other
+    flat step keeps the refusal it had, so open plan findings never pass it."""
+    from tests.unit.lens_review_support import LENS_SHAPE
+
+    shape = LENS_SHAPE.replace("[lenses, review, reviewer, findings]", f"[{evidence}]")
+    repo, shipped, _ = at_lens_review(tmp_path, shape=shape)
+
+    result = _resolve(repo, shipped, {"FR_HARNESS": None})
+
+    assert result.exit_code == 2, result.output
+    assert "names no phase" in _squash(result.output)
+    assert load_run_state(repo, "r1").steps["lens-review"].state == "running"
+
+
+@pytest.mark.parametrize("state", ["done", "failed"])
+def test_a_lens_set_fr_cannot_compute_refuses_the_resolve(tmp_path: Path, state: str) -> None:
+    from tests.unit.lens_review_support import commit_paths
+
+    repo, shipped, env = _ready(tmp_path)
+    commit_paths(repo, {".fr/lenses.yaml": DISABLED_RULE_LENS}, "a rule on a disabled lens")
+
+    argv = [*RESOLVE, "--state", state, "--evidence", "review=lens-rev", "--evidence", MAP]
+    result = _invoke_as_harness(repo, shipped, argv, env)
+
+    assert result.exit_code == 2, result.output
+    assert "security" in _squash(result.output)
+    _not_done(repo)
+
+
+def test_a_review_entry_older_than_the_step_is_refused(tmp_path: Path) -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+    from tests.unit.lens_review_support import PLAN
+
+    repo, shipped, env = _ready(tmp_path)
+    append_journal_entry(
+        journal_path(repo, "plan", PLAN),
+        PLAN,
+        JournalEntry(
+            kind="review", scope="plan", id="old-rev", title="an earlier review",
+            created="2020-01-01T00:00:00+00:00",
+        ),
+    )  # fmt: skip
+
+    result = _resolve(repo, shipped, env, "review=old-rev", MAP)
+
+    assert result.exit_code == 2, result.output
+    assert "old-rev" in _squash(result.output)
+    _not_done(repo)
+
+
+def test_a_named_reviewer_still_running_is_noted_unobserved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reviewer fr sees dispatched but whose return it cannot read yet: the
+    block check is skipped for it, and the record says so."""
+    from fr.commands import run_cmd
+    from fr.run.observed import ChildDispatch
+
+    repo, shipped, env = _ready(tmp_path)
+    real = run_cmd._dispatches_since
+
+    def _tests_reviewer_has_not_returned(since: str | None):
+        found = real(since)
+        assert found is not None
+        return [
+            ChildDispatch(d.agent_id, d.agent_type, d.started, None)
+            if d.agent_id == "ses_gen2"
+            else d
+            for d in found
+        ]
+
+    monkeypatch.setattr(run_cmd, "_dispatches_since", _tests_reviewer_has_not_returned)
+
+    result = _resolve(repo, shipped, env, "review=lens-rev", MAP)
+
+    assert result.exit_code == 0, result.output
+    evidence = lens_evidence(repo)
+    assert evidence["lenses"] == "security=2:l-security-r1;tests=unobserved:none"
+    assert "reviewer-return" in evidence["unobserved"].split(",")

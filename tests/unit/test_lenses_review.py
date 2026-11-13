@@ -70,3 +70,11 @@ def test_the_rule_names_both_fences_and_the_id_prefix() -> None:
     # the example in the rule parses with the lens's own grammar
     assert parse_review_lens(rule) is not None
     assert parse_review_findings(rule, id_re=lens_finding_ids("security")) is not None
+
+
+def test_a_file_named_twice_is_examined_once() -> None:
+    from fr.lenses.review import parse_review_lens
+
+    text = "```review-lens\nlens: tests\nexamined: src/app.py, src/app.py, src/b.py\n```\n"
+
+    assert parse_review_lens(text) == ("tests", ("src/app.py", "src/b.py"))

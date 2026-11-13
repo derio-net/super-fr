@@ -131,3 +131,24 @@ def test_a_journal_with_no_lens_entry_reads_as_an_empty_set(tmp_path: Path) -> N
     )  # fmt: skip
 
     assert lens_set_for(root, spec_slug=None, plan_slug="p").lenses == ()
+
+
+def test_a_superseded_run_that_did_the_lens_review_does_not_owe_it_again() -> None:
+    from fr.run.adopt import _owed_before
+
+    manifest = _manifest()
+    ids = [s.id for s in manifest.steps]
+    deliver, lens = ids.index("deliver"), ids.index("lens-review")
+    prior = _cursor_before_lenses("deliver")
+    did = prior.model_copy(
+        update={"steps": {**prior.steps, "lens-review": StepRecord(state="done")}}
+    )
+    skipped = prior.model_copy(
+        update={"steps": {**prior.steps, "lens-review": StepRecord(state="pending")}}
+    )
+
+    assert _owed_before(manifest, deliver, did) is None
+    assert _owed_before(manifest, deliver, skipped) == lens
+    assert _owed_before(manifest, deliver, prior) == lens
+    assert _owed_before(manifest, deliver, None) == lens
+    assert _owed_before(manifest, lens, None) is None

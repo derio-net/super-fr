@@ -75,7 +75,8 @@ def parse_review_lens(text: str) -> tuple[str, tuple[str, ...]] | None:
     lens = fields["lens"]
     if not LENS_ID_RE.match(lens):
         raise ReviewLensBlockError(f"{FENCE} block lens {lens!r} is not a lens id")
-    files = tuple(f.strip() for f in fields["examined"].split(",") if f.strip())
+    # A file named twice is one file examined (review p3-r7).
+    files = tuple(dict.fromkeys(f.strip() for f in fields["examined"].split(",") if f.strip()))
     if not files:
         raise ReviewLensBlockError(
             f"{FENCE} block `examined:` names no file — list the changed files you read"

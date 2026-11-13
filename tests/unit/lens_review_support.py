@@ -104,6 +104,7 @@ def at_lens_review(
     lenses: tuple[str, ...] = (),
     config: str | None = None,
     remote: bool = True,
+    shape: str = LENS_SHAPE,
 ) -> tuple[Path, Path, str]:
     """`lens-review` opened (its brief printed) with `lenses` added in the plan
     journal and `config` committed as `.fr/lenses.yaml` on the branch. Returns
@@ -114,7 +115,7 @@ def at_lens_review(
     if remote:
         with_remote(repo)
     shipped = tmp_path / "shipped"
-    _write_shape(shipped, "lensed", LENS_SHAPE)
+    _write_shape(shipped, "lensed", shape)
     files = {rel: f"# {rel}\n" for rel in CHANGED}
     if config is not None:
         files[".fr/lenses.yaml"] = config

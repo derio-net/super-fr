@@ -234,10 +234,17 @@ naming the rule, the lens and the file, when such a lens is not effective.
       - superpowers:requesting-code-review
       - superpowers:receiving-code-review
     tier: standard
-    needs: [spec, plan, journal:plan]
+    needs: [spec, plan]
     emits: [journal:plan]
     evidence: [lenses, review, reviewer, findings]
 ```
+
+`journal:plan` is not in `needs`: `review-phase` both needs and emits it, so
+naming it here is a cycle `fr workflow check` refuses (`lens-review ->
+review-phase -> lens-review`). The step's place after `journal-check` orders
+it, as `spec-review`'s place does for the spec journal. Only a flat step that
+emits `journal:plan` and declares `lenses` is reviewed against the feature; any
+other flat step declaring review evidence is refused, as before.
 
 **Advance.** `fr run advance` is not changed: it prints the step's brief, as
 for any agent step. The brief's `lens_review` key holds the set. For each lens:

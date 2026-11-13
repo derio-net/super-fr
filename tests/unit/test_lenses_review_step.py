@@ -75,7 +75,10 @@ def test_the_brief_lists_each_lens_with_its_text_reasons_and_return_rule(
     assert entry["return_rule"] == lens_review_rule("security")
     assert "lenses" not in brief["evidence"]
     template = brief["record"]["template"]  # type: ignore[index]
-    assert "#   owed: review: <id>, reviewer: <id>\n" in template
+    assert (
+        '#   owed: review: <id>, reviewer: "<lens>=<dispatch-id>,<lens>=<dispatch-id>"\n'
+        in template
+    )
     assert "lenses:" not in template
 
 
@@ -102,7 +105,7 @@ def test_an_empty_set_says_so_and_owes_no_reviewer(tmp_path: Path) -> None:
     assert review["set"] == []  # type: ignore[index]
     assert "resolve" in review["note"]  # type: ignore[index]
     template = brief["record"]["template"]  # type: ignore[index]
-    assert "review: <id>" not in template and "reviewer: <id>" not in template
+    assert "owed:" not in template
     assert "lenses:" not in template
 
 

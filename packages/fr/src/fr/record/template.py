@@ -129,7 +129,11 @@ def render_template(
     owed = [n for n in evidence if n not in DERIVED_EVIDENCE]
     lines.append("evidence: {}")
     if owed:
-        lines.append(f"#   owed: {', '.join(f'{n}: <id>' for n in owed)}")
+        # The lens review names one reviewer PER LENS (spec 2026-11-12-review-lenses R10).
+        per_lens = "lenses" in evidence
+        hints = {"reviewer": '"<lens>=<dispatch-id>,<lens>=<dispatch-id>"'} if per_lens else {}
+        named = [f"{n}: {hints.get(n, '<id>')}" for n in owed]
+        lines.append(f"#   owed: {', '.join(named)}")
     if "visual" in evidence:
         # 2026-09-28-ui-visual-evidence §B/§C: fr derives `visual` from this
         # section for every `visual` row the unit owes (none owed: leave it out).
