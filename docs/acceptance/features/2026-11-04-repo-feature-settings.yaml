@@ -809,3 +809,11 @@ amendments:
     why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
       destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
       and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 15
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift_hardening.py#test_in_ci_a_shallow_checkout_refuses_naming_fetch_depth
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
