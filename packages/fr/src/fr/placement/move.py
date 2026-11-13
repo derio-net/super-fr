@@ -639,14 +639,26 @@ def _flat_print(flat: Mapping[str, bytes]) -> str:
 
 
 def dirty_workspaces(root: Path) -> list[str]:
-    """Every workspace of the repo (and the checkout fr runs in) with uncommitted work."""
+    """Every workspace of the repo (and the checkout fr runs in) with uncommitted work,
+    and fr's own clones a move writes through (review pr1431-n2): quiet's `fr` worktree,
+    whose index the copy resets, and every stealth tracking clone of this repo."""
     from fr.isolation.types import list_states
+    from fr.placement import quiet, stealth
 
     seen: set[Path] = set()
     out: list[str] = []
-    places = [(Path(root), None), *((s.worktree, s.branch) for s in list_states(Path(root)))]
+    places: list[tuple[Path, str | None]] = [
+        (Path(root), None),
+        *((s.worktree, s.branch) for s in list_states(Path(root))),
+    ]
+    frwt = quiet.worktree_path(root)
+    places.append((frwt, quiet.QUIET_BRANCH))
+    if frwt.parent.is_dir():
+        places += [
+            (p, "tracking clone") for p in sorted(frwt.parent.glob(f"{stealth.WORKTREE_PREFIX}*"))
+        ]
     for where, branch in places:
-        if not where.is_dir():
+        if not where.is_dir() or not (where / ".git").exists():
             continue
         real = where.resolve()
         if real in seen:
