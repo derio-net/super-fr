@@ -197,3 +197,49 @@ describe("acceptance nag", () => {
     await expect(throwing(ctxEvent())).resolves.toBeUndefined();
   });
 });
+
+describe("the nag's acceptance directory (R1, R26)", () => {
+  test("under the quiet placement the fragments live where fr settings paths says", async () => {
+    // A repo with no fragment in its checkout, but the quiet switch on origin/fr and an
+    // `fr` that names the acceptance directory elsewhere.
+    const { hasAcceptance } = await import("../src/nag");
+    const { resetFrPaths } = await import("../src/marker");
+    const { execFileSync } = await import("node:child_process");
+    const quiet = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-quiet-")));
+    const space = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-space-")));
+    const bin = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-bin-")));
+    const savedPath = process.env.PATH;
+    try {
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: quiet, stdio: "pipe" });
+      git("init", "--quiet");
+      git("remote", "add", "origin", "https://example.com/org/repo.git");
+      const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: quiet, input: "placement: quiet\n" })
+        .toString()
+        .trim();
+      const tree = execFileSync("git", ["mktree"], { cwd: quiet, input: `100644 blob ${blob}\tsettings.yaml\n` })
+        .toString()
+        .trim();
+      const commit = execFileSync("git", ["commit-tree", tree, "-m", "s"], {
+        cwd: quiet,
+        env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" },
+      })
+        .toString()
+        .trim();
+      git("update-ref", "refs/remotes/origin/fr", commit);
+      mkdirSync(join(space, "features"), { recursive: true });
+      writeFileSync(join(space, "features", "f.yaml"), "rows:\n");
+      writeFileSync(join(bin, "fr"), `#!/bin/sh\necho '{"FR_ACCEPTANCE_DIR": "${space}"}'\n`, { mode: 0o755 });
+      process.env.PATH = `${bin}:${savedPath}`;
+      resetFrPaths();
+      expect(hasAcceptance(quiet)).toBe(true);
+      // and the same repo with no fr falls back to the checkout's layout: nothing there
+      writeFileSync(join(bin, "fr"), "#!/bin/sh\nexit 3\n", { mode: 0o755 });
+      resetFrPaths();
+      expect(hasAcceptance(quiet)).toBe(false);
+    } finally {
+      process.env.PATH = savedPath;
+      resetFrPaths();
+      for (const d of [quiet, space, bin]) rmSync(d, { recursive: true, force: true });
+    }
+  });
+});

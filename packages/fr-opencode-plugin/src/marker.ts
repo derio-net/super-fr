@@ -20,10 +20,12 @@
 // knows nothing about, and it is a discipline backstop, not a security
 // boundary. `setup` warns once at load when git is missing, so the fail-open
 // state is visible rather than silent.
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative } from "node:path";
 
+import { resolveFr } from "./fr";
 import { git } from "./git";
+import { runSync } from "./spawn";
 
 export interface MarkerResolution {
   /** Absolute, symlink-resolved git toplevel of the target file's repo. */
@@ -65,17 +67,128 @@ function gitToplevel(dir: string): string | null {
   return out ? realpath(out) : null;
 }
 
-function isFrEnabled(toplevel: string): boolean {
-  if (existsSync(`${toplevel}/docs/superpowers/plans`)) return true;
-  // The same question the bash guard asks by globbing
-  // `.devcontainer/*/devcontainer.json`, without a subprocess on the edit path.
+/** Bound for the one `fr settings paths --json` per toplevel. */
+const FR_PATHS_TIMEOUT_MS = 5_000;
+
+/** The keys of `fr settings paths --json` this plugin reads (spec 2026-11-04
+ * repo-feature-settings R1: one resolver names every artifact directory). */
+export interface FrPaths {
+  placement?: string;
+  plansDir?: string;
+  acceptanceDir?: string;
+}
+
+const pathsCache = new Map<string, FrPaths | null>();
+
+/** Test seam: forget what `fr` answered. */
+export function resetFrPaths(): void {
+  pathsCache.clear();
+  announcedMissingFr = false;
+}
+
+function stringKey(doc: Record<string, unknown>, key: string): string | undefined {
+  const value = doc[key];
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
+ * What `fr settings paths --json` says about this toplevel, cached per toplevel
+ * (a failure is cached too: a hung or missing `fr` must not cost every edit its
+ * timeout). `null` when `fr` is absent, fails, or answers something that is not a
+ * JSON object: the caller then falls back to the direct checks, never to "no".
+ */
+export function frPaths(toplevel: string): FrPaths | null {
+  if (pathsCache.has(toplevel)) return pathsCache.get(toplevel) ?? null;
+  let result: FrPaths | null = null;
+  const fr = resolveFr();
+  const out =
+    fr === null
+      ? { code: null, stdout: "" }
+      : runSync(fr, ["settings", "paths", "--json"], { cwd: toplevel, timeoutMs: FR_PATHS_TIMEOUT_MS });
+  if (out.code === 0) {
+    try {
+      const doc = JSON.parse(out.stdout) as unknown;
+      if (doc !== null && typeof doc === "object" && !Array.isArray(doc)) {
+        const d = doc as Record<string, unknown>;
+        result = {
+          placement: stringKey(d, "FR_PLACEMENT"),
+          plansDir: stringKey(d, "FR_PLANS_DIR"),
+          acceptanceDir: stringKey(d, "FR_ACCEPTANCE_DIR"),
+        };
+      }
+    } catch {
+      result = null;
+    }
+  }
+  pathsCache.set(toplevel, result);
+  return result;
+}
+
+let announcedMissingFr = false;
+
+/**
+ * Say once, at load, that `fr` does not resolve: the artifact directories then come
+ * from the checkout's own layout (the plans test) plus the direct quiet/stealth
+ * detection, so the edit gate is not weakened, but a placement `fr` could name that
+ * the direct checks cannot see is not consulted. Returns whether it warned.
+ */
+export function warnIfFrUnresolved(): boolean {
+  if (announcedMissingFr) return false;
+  if (resolveFr() !== null) return false;
+  announcedMissingFr = true;
+  console.error(
+    "super-fr: no `fr` found on PATH; fr-enabled detection falls back to the plans dir, a " +
+      "devcontainer profile, the quiet switch on origin/fr and the workspace marker's placement. " +
+      "Install fr to resolve artifact paths from the placement."
+  );
+  return true;
+}
+
+function isDir(path: string): boolean {
   try {
-    return readdirSync(`${toplevel}/.devcontainer`).some((entry) =>
-      existsSync(`${toplevel}/.devcontainer/${entry}/devcontainer.json`)
-    );
+    return statSync(path).isDirectory();
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether the repo is on the quiet or stealth placement, found WITHOUT `fr`: the
+ * marker records `placement` quiet or stealth, or the last fetched
+ * `refs/remotes/origin/fr:settings.yaml` says `placement: quiet` and the repo has an
+ * origin remote (R23). The shell library's `_fr_placement_enabled`, line for line.
+ */
+export function placementEnabled(toplevel: string): boolean {
+  const marker = readMarker(toplevel);
+  if (marker && (marker.placement === "quiet" || marker.placement === "stealth")) return true;
+  if (git(toplevel, "config", "--get", "remote.origin.url") === undefined) return false;
+  const text = git(toplevel, "cat-file", "-p", "refs/remotes/origin/fr:settings.yaml");
+  return text !== undefined && /^placement:[ \t]*quiet[ \t]*$/m.test(text);
+}
+
+/**
+ * The one "is this repo fr-enabled" (bash `_fr_is_enabled`, R26): a devcontainer
+ * profile, a plans dir in the checkout, a quiet/stealth placement found directly, or
+ * `fr settings paths --json` naming a quiet/stealth placement or an existing plans
+ * dir. The direct checks come first and need no `fr`, so a missing, failing or
+ * garbled `fr` can only fail to ADD a yes.
+ */
+export function frEnabled(toplevel: string): boolean {
+  // The same question the bash guard asks by globbing
+  // `.devcontainer/*/devcontainer.json`, without a subprocess on the edit path.
+  try {
+    for (const entry of readdirSync(`${toplevel}/.devcontainer`)) {
+      if (existsSync(`${toplevel}/.devcontainer/${entry}/devcontainer.json`)) return true;
+    }
+  } catch {
+    // no profiles
+  }
+  if (isDir(`${toplevel}/docs/superpowers/plans`)) return true; // fr-paths-fallback
+  if (placementEnabled(toplevel)) return true;
+  const paths = frPaths(toplevel);
+  if (paths === null) return false;
+  if (paths.placement === "quiet" || paths.placement === "stealth") return true;
+  return paths.plansDir !== undefined && isAbsolute(paths.plansDir) && isDir(paths.plansDir);
 }
 
 function gitDirsDiffer(toplevel: string): boolean {
@@ -116,7 +229,9 @@ function branchDrift(toplevel: string, markerBranch: string | undefined): Branch
   return head !== markerBranch ? { marker: markerBranch, head } : undefined;
 }
 
-function readMarker(toplevel: string): { toplevel?: string; mode?: string; branch?: string } | null {
+function readMarker(
+  toplevel: string
+): { toplevel?: string; mode?: string; branch?: string; placement?: string } | null {
   try {
     return JSON.parse(readFileSync(`${toplevel}/.fr-isolation`, "utf-8"));
   } catch {
@@ -193,8 +308,8 @@ export function resolveMarker(file: string): MarkerResolution {
   const toplevel = gitToplevel(dir);
   if (!toplevel) return { toplevel: null, frEnabled: false, hasValidMarker: false };
 
-  const frEnabled = isFrEnabled(toplevel);
-  if (!frEnabled) return { toplevel, frEnabled: false, hasValidMarker: false };
+  const enabled = frEnabled(toplevel);
+  if (!enabled) return { toplevel, frEnabled: false, hasValidMarker: false };
 
   const hasValidMarker = hasValidIsolationMarker(toplevel);
   if (hasValidMarker) return { toplevel, frEnabled: true, hasValidMarker };

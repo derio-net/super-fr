@@ -2,7 +2,7 @@
 // isolated from the tool.execute.before wiring in index.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -194,5 +194,139 @@ describe("fail-open when git is unreachable (gh#1221)", () => {
       else process.env.FR_GIT_CANDIDATES = savedCandidates;
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+});
+
+// R26 (spec 2026-11-04-repo-feature-settings): quiet and stealth are fr-enabled, and the
+// plugin has one definition of that, which asks `fr settings paths --json`.
+import { frEnabled as guardFrEnabled } from "../src/guard";
+import { frEnabled, frPaths, placementEnabled, resetFrPaths, warnIfFrUnresolved } from "../src/marker";
+
+function quietSwitch(dir: string, settings = "placement: quiet\n"): void {
+  sh("git", ["remote", "add", "origin", "https://example.com/org/repo.git"], dir);
+  const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: dir, input: settings }).toString().trim();
+  const tree = execFileSync("git", ["mktree"], { cwd: dir, input: `100644 blob ${blob}\tsettings.yaml\n` })
+    .toString()
+    .trim();
+  const commit = execFileSync("git", ["commit-tree", tree, "-m", "switch"], { cwd: dir }).toString().trim();
+  sh("git", ["update-ref", "refs/remotes/origin/fr", commit], dir);
+}
+
+/** A stub `fr` first on PATH answering `settings paths --json` with *json* (exit *code*). */
+function withFr<T>(body: string, run: () => T): T {
+  const bin = mkdtempSync(join(tmpdir(), "fr-opencode-frbin-"));
+  writeFileSync(join(bin, "fr"), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}:${saved}`;
+  resetFrPaths();
+  try {
+    return run();
+  } finally {
+    process.env.PATH = saved;
+    resetFrPaths();
+    rmSync(bin, { recursive: true, force: true });
+  }
+}
+
+function withoutFr<T>(run: () => T): T {
+  const saved = process.env.PATH;
+  // keep git, drop any `fr`: a directory holding only a `git` symlink
+  const bin = mkdtempSync(join(tmpdir(), "fr-opencode-nofr-"));
+  const gitBin = execFileSync("sh", ["-c", "command -v git"]).toString().trim();
+  execFileSync("ln", ["-s", gitBin, join(bin, "git")]);
+  process.env.PATH = bin;
+  resetFrPaths();
+  try {
+    return run();
+  } finally {
+    process.env.PATH = saved;
+    resetFrPaths();
+    rmSync(bin, { recursive: true, force: true });
+  }
+}
+
+describe("quiet and stealth are fr-enabled (R26)", () => {
+  test("guard.ts and marker.ts share one frEnabled", () => {
+    expect(guardFrEnabled).toBe(frEnabled);
+  });
+
+  test("the quiet switch makes a profile-less, plans-less repo fr-enabled, with or without fr", () => {
+    quietSwitch(repo);
+    withoutFr(() => {
+      expect(placementEnabled(repo)).toBe(true);
+      expect(resolveMarker(join(repo, "README.md")).frEnabled).toBe(true);
+    });
+    withFr("exit 3", () => expect(resolveMarker(join(repo, "README.md")).frEnabled).toBe(true));
+  });
+
+  test("an fr branch without the switch is not fr-enabled", () => {
+    quietSwitch(repo, "placement: repo\n");
+    withoutFr(() => expect(resolveMarker(join(repo, "README.md")).frEnabled).toBe(false));
+  });
+
+  test("a stealth marker makes the workspace fr-enabled", () => {
+    writeFileSync(
+      join(repo, ".fr-isolation"),
+      JSON.stringify({ toplevel: repo, branch: "main", mode: "worktree", placement: "stealth" }),
+    );
+    withoutFr(() => {
+      const result = resolveMarker(join(repo, "README.md"));
+      expect(result.frEnabled).toBe(true);
+      expect(result.hasValidMarker).toBe(false); // the primary tree: a copied marker never validates
+    });
+  });
+
+  test("fr settings paths --json names the placement", () => {
+    withFr(`echo '{"FR_PLACEMENT": "quiet", "FR_PLANS_DIR": "/nowhere/plans"}'`, () => {
+      expect(frPaths(repo)?.placement).toBe("quiet");
+      expect(frEnabled(repo)).toBe(true);
+    });
+  });
+
+  test("fr settings paths --json naming an existing plans dir makes the repo fr-enabled", () => {
+    const plans = mkdtempSync(join(tmpdir(), "fr-opencode-plans-"));
+    try {
+      withFr(`echo '{"FR_PLACEMENT": "repo", "FR_PLANS_DIR": "${plans}"}'`, () => expect(frEnabled(repo)).toBe(true));
+    } finally {
+      rmSync(plans, { recursive: true, force: true });
+    }
+  });
+
+  test("a failing or garbled fr falls back to the direct checks, never to no", () => {
+    quietSwitch(repo);
+    withFr(`echo 'not json {'; exit 0`, () => {
+      expect(frPaths(repo)).toBeNull();
+      expect(frEnabled(repo)).toBe(true);
+    });
+    withFr(`echo '[1,2]'`, () => expect(frPaths(repo)).toBeNull());
+    withFr(`echo '{"FR_PLACEMENT": "repo"}'; exit 4`, () => expect(frPaths(repo)).toBeNull());
+  });
+
+  test("frPaths caches its answer per toplevel", () => {
+    const counter = join(repo, "..", `count-${process.pid}`);
+    withFr(`echo x >> ${counter}; echo '{"FR_PLACEMENT": "repo"}'`, () => {
+      frPaths(repo);
+      frPaths(repo);
+      expect(readFileSync(counter, "utf-8").trim().split("\n")).toHaveLength(1);
+    });
+    rmSync(counter, { force: true });
+  });
+
+  test("with no fr the plugin says so once, and still falls back to the plans test", () => {
+    mkdirSync(join(repo, "docs", "superpowers", "plans"), { recursive: true });
+    const lines: string[] = [];
+    const real = console.error;
+    console.error = (m: string) => void lines.push(String(m));
+    try {
+      withoutFr(() => {
+        expect(warnIfFrUnresolved()).toBe(true);
+        expect(warnIfFrUnresolved()).toBe(false);
+        expect(frEnabled(repo)).toBe(true);
+      });
+    } finally {
+      console.error = real;
+    }
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("no `fr` found");
   });
 });

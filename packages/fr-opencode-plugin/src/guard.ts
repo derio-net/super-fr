@@ -40,6 +40,7 @@ import {
   sentinelUnlock,
 } from "./sentinel";
 import { git } from "./git";
+import { frEnabled } from "./marker";
 
 /** POSIX [[:space:]] — not JS `\s`, which also matches Unicode spaces. */
 const S = "[ \\t\\n\\v\\f\\r]";
@@ -75,30 +76,8 @@ function resolveFrom(base: string, path: string): string {
   return realDir(isAbsolute(path) ? path : join(base, path)) ?? path;
 }
 
-/** bash `_fr_is_enabled`: a devcontainer profile, or an fr plans dir. */
-export function frEnabled(toplevel: string): boolean {
-  try {
-    const profiles = join(toplevel, ".devcontainer");
-    for (const name of readdirSafe(profiles)) {
-      try {
-        if (statSync(join(profiles, name, "devcontainer.json")).isFile()) return true;
-      } catch {
-        // not a profile
-      }
-    }
-  } catch {
-    // no profiles
-  }
-  return realDir(join(toplevel, "docs", "superpowers", "plans")) !== undefined;
-}
-
-function readdirSafe(dir: string): string[] {
-  try {
-    return readdirSync(dir);
-  } catch {
-    return [];
-  }
-}
+/** bash `_fr_is_enabled`: marker.ts's `frEnabled`, the plugin's one definition. */
+export { frEnabled };
 
 /** bash `fr_isolation_marker_valid`: dir's toplevel carries a VALID marker.
  * Branch drift is deliberately NOT part of validity here (the shell must stay

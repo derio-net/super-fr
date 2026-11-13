@@ -19,21 +19,34 @@
 //     artifact refusal, which says why the nag is missing;
 //   - NEVER THROWS.
 import { existsSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { frPaths, placementEnabled } from "./marker";
 import { run, type RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-/** Whether the repo keeps acceptance rows: a fragment under docs/acceptance/features/
+/** The acceptance directory: the placement's answer (`fr settings paths --json`) on a
+ * quiet or stealth repo (R1, R26: it is not in the checkout there), else the checkout's own
+ * layout, which is also the fallback when `fr` gives no usable answer. */
+function acceptanceDirOf(root: string): string {
+  if (placementEnabled(root)) {
+    const named = frPaths(root)?.acceptanceDir;
+    if (named !== undefined && isAbsolute(named)) return named;
+  }
+  return join(root, "docs", "acceptance"); // fr-paths-fallback
+}
+
+/** Whether the repo keeps acceptance rows: a fragment under <acceptance dir>/features/
  * (spec 2026-11-04-repo-feature-settings R16), or the retired matrix still waiting
  * for its migration (R19), so `fr` can say it is stale. Never throws. */
 export function hasAcceptance(root: string): boolean {
   try {
-    const features = join(root, "docs", "acceptance", "features");
+    const dir = acceptanceDirOf(root);
+    const features = join(dir, "features");
     if (existsSync(features) && readdirSync(features).some((name) => name.endsWith(".yaml"))) {
       return true;
     }
-    return existsSync(join(root, "docs", "acceptance", "matrix.yaml"));
+    return existsSync(join(dir, "matrix.yaml"));
   } catch {
     return false;
   }

@@ -67,7 +67,7 @@ import { createClaimHandler, sharedClaimed } from "./claim";
 import { resolveGit } from "./git";
 import { decideShell } from "./guard";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
-import { matchesAllowlist, resolveMarker } from "./marker";
+import { matchesAllowlist, resolveMarker, warnIfFrUnresolved } from "./marker";
 import { createNagHandler, sharedServed } from "./nag";
 import { createPinHandler, type ShellCreateEvent } from "./pin";
 import { decidePush } from "./push";
@@ -255,6 +255,7 @@ const plugin: Plugin.Plugin = {
   id: "super-fr",
   async setup(ctx) {
     warnIfGitUnresolved();
+    warnIfFrUnresolved();
     const directory = ctx.location.directory;
     const claimChild = createClaimHandler({
       session: ctx.session,
