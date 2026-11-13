@@ -38,7 +38,7 @@ Before execution, review and keep:
   fragment consumption, staged-tree checks or the full staged suite. If a faithful
   rehearsal cannot run without a change to these, stop and revise the plan for review.
 - The authorized workflow event and inputs. A push can trigger publication too.
-  Under setup-only permission, do not enable or seed workflows that trigger themselves.
+  Under setup-only permission, do not enable or seed workflows that an event (such as a push) starts automatically.
   Disable unrelated fixture workflows, and set a limit on the expected runs/cost beforehand.
 
 Walk the normal path against real GitHub state:
