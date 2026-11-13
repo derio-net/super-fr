@@ -1445,3 +1445,8 @@ Inferred from the diff: a broken or identity-refusing fr turns the plan validato
 ### pr1431-r8 · finding [open] (reviewer: in scope) · An unrelated origin/fr with a root settings.yaml refuses every fr command, and placement move --to quiet adopts a foreign origin/fr
 
 Reproduced: a settings.yaml without a placement line fails the closed schema; the hooks read it as repo.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r9 created=2026-11-13T15:06:53+00:00 state=open review_scope=in -->
+### pr1431-r9 · finding [open] (reviewer: in scope) · git.push ask approval looks for the debug journal on the product branch
+
+Inferred: under quiet and stealth the debug journal is not there, so the push can never be approved.
