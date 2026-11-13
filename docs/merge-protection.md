@@ -14,7 +14,7 @@ reviewed: 2026-11-11 docs-currency phase 3
 This repo's `main` can require the `ci-ok` check and an up-to-date branch. The
 release workflow still has to push the release commit, so it does that as a
 GitHub App, `derio-fr-automation`, which the ruleset lets bypass. Spec:
-`docs/superpowers/specs/2026-10-11-merge-train-safety-design.md` §F.
+`docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md` §F.
 
 ## Why an app
 
@@ -50,14 +50,15 @@ The release token is a ruleset bypass actor, so it can push to `main` past the
 rules. It is scoped to this repo with contents and issues write only, minted
 per job and revoked when the job ends, never persisted in the checkout's git
 config, and withheld from the staged test run (`release.py` strips every forge
-token from that subprocess and authenticates only its two `git push` calls).
+token from that subprocess). The token authenticates the two `git push` calls and the `gh release`
+and `gh issue` writes; every other git command runs credential-free.
 Anything else that can run in the release job could still read it, so the job
 runs only trusted code from `main`.
 
 ## Operator steps, in order
 
 1. **Install the app.** In the org, install `derio-fr-automation` on the repo
-   with contents write access. Generate a private key in the app's settings
+   with contents write and issues write access. Generate a private key in the app's settings
    (the one step that needs the web UI).
 2. **Store the key.** `gh secret set FR_AUTOMATION_APP_KEY < key.pem`, then
    delete the file. Nothing in the script below reads it.
