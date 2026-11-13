@@ -412,6 +412,28 @@ def _refuse_unrelated_local(root: Path) -> None:
     )
 
 
+def _forget_own_stale_entry(root: Path, path: Path) -> None:
+    """Clear the registration of the fr worktree at *path* when its directory is gone
+    (else `worktree add` refuses a "missing but already registered worktree"), and no
+    other. Never a global `git worktree prune` (review pr1431-n1): in a devcontainer the
+    host's other worktrees are not mounted, so prune would deregister every one of them.
+    A locked entry is left alone, as prune leaves it."""
+    import shutil
+
+    common = paths._common_dir(Path(root))
+    if common is None:
+        return
+    want = (path / ".git").resolve()
+    for entry in sorted((common / "worktrees").glob("*")):
+        try:
+            recorded = Path((entry / "gitdir").read_text().strip())
+        except OSError:
+            continue
+        if recorded.resolve() != want or recorded.exists() or (entry / "locked").exists():
+            continue
+        shutil.rmtree(entry, ignore_errors=True)
+
+
 def ensure_worktree(root: Path) -> Path:
     """The fr worktree, created on demand from `origin/fr` (a local `fr` branch tracking
     it), never with a force flag. Refuses a path that is there but is not it."""
@@ -425,7 +447,7 @@ def ensure_worktree(root: Path) -> Path:
             "move it away and retry"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
-    _git(root, "worktree", "prune")
+    _forget_own_stale_entry(root, path)
     local = _git(root, "rev-parse", "--verify", "--quiet", f"{QUIET_REF}^{{commit}}")
     if local.returncode == 0:
         _refuse_unrelated_local(root)
