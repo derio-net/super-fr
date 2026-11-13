@@ -128,7 +128,10 @@ def _read(root: Path) -> Switch | None:
 
     text = show_at_commit(root, sha, paths.SWITCH_SETTINGS)
     result: Switch | None = None
-    if text is not None:
+    # Review pr1431-r8: a file with no live `placement` line is not a switch (an
+    # unrelated branch that happens to be named `fr`), so it reads as `repo`, as the
+    # hooks read it, and its schema is nobody's business here.
+    if text is not None and names_placement(text):
         settings = parse_settings_text(text, source=_SOURCE, servable=False)
         problem = switch_spelling_problem(text, yaml_of(text, _SOURCE))
         if problem is not None:
@@ -148,6 +151,33 @@ def _read(root: Path) -> Switch | None:
 _CANONICAL_PLACEMENT: Final = re.compile(r"placement: [a-z]+")
 
 
+def _live_placement_lines(text: str) -> list[str]:
+    return [
+        line
+        for line in text.splitlines()
+        if "placement" in line and not line.lstrip().startswith("#")
+    ]
+
+
+def names_placement(text: str) -> bool:
+    """Does a root `settings.yaml` on `fr` have a live line naming `placement`? Only
+    such a file is a switch, quiet or repo (review pr1431-r8); the hooks ask the same."""
+    return bool(_live_placement_lines(text))
+
+
+def is_switch_branch(root: Path) -> bool:
+    """`origin/fr` (as last fetched) is fr's switch branch: its root `settings.yaml`
+    names a placement. False when it is absent or is some other branch named `fr`."""
+    from fr.settings.load import show_at_commit
+
+    common = paths._common_dir(Path(root))
+    sha = _ref_sha(common, paths.SWITCH_REF) if common is not None else None
+    if sha is None:
+        return False
+    text = show_at_commit(Path(root), sha, paths.SWITCH_SETTINGS)
+    return text is not None and names_placement(text)
+
+
 def switch_spelling_problem(text: str, data: object) -> str | None:
     """Why the switch's `placement` is not spelled canonically, or None (review p6-r3).
 
@@ -158,11 +188,7 @@ def switch_spelling_problem(text: str, data: object) -> str | None:
     a quoted or escaped key) is refused here, and the hooks treat it as fr-enabled, so
     neither side reads it as `repo`. `fr settings init --quiet` writes the canonical
     line. A file naming no placement at all is fine (the default, `repo`)."""
-    live = [
-        line
-        for line in text.splitlines()
-        if "placement" in line and not line.lstrip().startswith("#")
-    ]
+    live = _live_placement_lines(text)
     if len(live) == 1 and _CANONICAL_PLACEMENT.fullmatch(live[0]):
         return None
     if not live and not (isinstance(data, dict) and "placement" in data):

@@ -1355,6 +1355,26 @@ def _current(root: Path) -> str:
     return paths.QUIET if read_switch(root) is not None else paths.REPO
 
 
+def _refuse_foreign_fr_branch(root: Path) -> None:
+    """Review pr1431-r8: a move to quiet adopts an existing `origin/fr` as the parent of
+    its commits, so one that is not fr's switch branch (no root `settings.yaml` naming a
+    placement: some other branch that happens to be named `fr`) refuses, naming it."""
+    from fr.placement import quiet
+
+    remote = _remote_branch(root, "fr")
+    if remote is None:
+        return
+    _git(root, "fetch", "--quiet", "--no-tags", "origin", quiet.FETCH_REFSPEC)
+    quiet._CACHE.clear()
+    if not quiet.is_switch_branch(root):
+        raise MoveError(
+            f"fr placement move --to quiet: origin/fr ({remote[:12]}) exists and is not an fr "
+            f"switch branch (its root {paths.SWITCH_SETTINGS} names no placement), and quiet "
+            "keeps its artifacts on a branch named `fr`. Rename or remove that branch on "
+            "origin first; nothing was written"
+        )
+
+
 def _start(
     root: Path, to: str, tracking: str | None, run: str | None, emit: Callable[[str], None]
 ) -> Ctx | None:
@@ -1410,6 +1430,7 @@ def _start(
 
         if not _has_origin(root):
             raise MoveError("fr placement move --to quiet: this repository has no `origin`")
+        _refuse_foreign_fr_branch(root)
     state = {
         "to": to,
         "from": current,
