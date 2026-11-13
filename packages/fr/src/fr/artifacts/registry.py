@@ -423,7 +423,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # R20), migration `fr.artifacts.journal_owed` — stamp-only.
             # 3: the `op` entry kind (spec `2026-10-22-fr-ops-design` §D, R17),
             # migration `fr.artifacts.journal_op` — stamp-only.
-            current_version=3,
+            # 4: the `lens` entry kind (spec `2026-11-12-review-lenses-design`
+            # §3.B, R4), migration `fr.artifacts.journal_lens` — stamp-only.
+            current_version=4,
             locator=repo_glob("journal", "**/*.md"),
             stamp="`<!-- fr:journal-schema=N -->` header comment",
             read_stamp=_read_journal_stamp,
@@ -582,8 +584,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `fr.artifacts.record_exit_gates`, stamp only; 10 -> 11 for the
             # `acceptance:` section's amendment item (spec
             # `2026-11-04-repo-feature-settings-design` R16, R19, §5), migration
-            # `fr.artifacts.record_amendments`, stamp only.
-            current_version=11,
+            # `fr.artifacts.record_amendments`, stamp only; 11 -> 12 for the
+            # `lens` journal item (spec `2026-11-12-review-lenses-design` §3.B,
+            # R4), migration `fr.artifacts.record_lens`, stamp only.
+            current_version=12,
             locator=repo_glob("run", f"*{RECORDS_SUFFIX}/*.yaml"),
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,
@@ -627,7 +631,8 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 2: fr-spec-reviewer checks the `## Test Plan` heading (#1315).
             # 3: fr-spec-reviewer reviews against the repo's settings (repo-feature-settings R15).
             # 4: fr-phase-executor pushes with `fr push` (repo-feature-settings R12).
-            current_version=4,
+            # 5: both agents say a lens can be added or suggested (review-lenses R14).
+            current_version=5,
             locator=".claude/agents/fr-*.md",
             stamp=f"`{AGENTS_STAMP_KEY}` in the agent's front matter",
             read_stamp=_read_agents_stamp,

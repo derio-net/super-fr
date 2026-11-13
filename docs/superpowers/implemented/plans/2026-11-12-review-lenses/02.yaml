@@ -1,0 +1,148 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'Adding lenses: the lens journal entry, path rules, the lens set, fr lenses
+    status (R4-R7)'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - review-lenses-accumulate
+  - review-lenses-path-rules
+  tier: hard
+  files:
+  - packages/fr/src/fr/journal/*
+  - packages/fr/src/fr/record/*
+  - packages/fr/src/fr/artifacts/*
+  - packages/fr/src/fr/lenses/*
+  - packages/fr/src/fr/commands/lenses_cmd.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/git.py
+  - docs/superpowers/journals/*
+  - docs/superpowers/runs/*
+  - .claude/rules/artifact-versioning.md
+  - .opencode/instructions/*
+  - AGENTS.md
+  - tests/unit/test_journal_*.py
+  - tests/unit/test_record_*.py
+  - tests/unit/test_migration_*.py
+  - tests/unit/test_lenses_*.py
+  - tests/unit/test_validate_artifacts.py
+  - tests/integration/test_scenarios.py
+  - tests/scenarios/review-lenses-accumulate.sh
+  - tests/scenarios/review-lenses-path-rules.sh
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: The `lens` journal entry kind and journal version 4 (R4, R5, spec 3.B)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in `tests/unit/test_journal_model.py` (or a new `test_journal_lens.py`): a `JournalEntry(kind="lens", lens="security", step="implement-phase", title="parses untrusted input", ...)` round-trips through render and parse with header tokens `lens=security step=implement-phase`; `lens=` or `step=` on any other kind is refused; a `lens` entry with no `lens`, an empty title, a `state`, or a `resolves` is refused; a journal stamped 3 refuses a `lens` write and one stamped 4 accepts it (the `_STAMPING_KINDS` rule `owed` and `op` follow). In `tests/unit/test_migration_*.py`, after the `journal_op` tests: the journal kind's `current_version` is 4, a 3 -> 4 stamp-only migration is registered, the chain from 1 reaches 4 hop by hop, and a v3 journal migrates byte-identically apart from its stamp. See them fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `"lens"` to `JournalKind`, the optional `lens` and `step` fields, their `_HEADER_FIELDS` tokens (appended last, serialized only when set) and validators in `packages/fr/src/fr/journal/model.py`; add `lens` to `_STAMPING_KINDS` at version 4. Move the journal kind to `current_version=4` in `fr/artifacts/registry.py`, add `fr/artifacts/journal_lens.py` after `journal_op.py` (stamp-only `SchemaMigration`), import it from `fr/artifacts/__init__.py`, and extend the journal structure validator to accept the new kind and tokens. See the tests pass.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: fold the three "token valid on one kind only" checks (`input`, `lens`, `step`) into one table-driven validator if that shortens the model; otherwise record why not in the step record's `refactor:`.
+- number: 2
+  title: 'Record kind 12: a step record can add a lens (R4, R5)'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in the record tests: a record whose `journal:` holds `{kind: lens, lens: security, title: "the retry path builds a shell command"}` applies to the step's journal scope as a `lens` entry with id `lens-security-1`, `step=` stamped from the record's own `step`, `phase=` from a phase unit and global otherwise; a second addition of the same lens becomes `lens-security-2` and both are kept; `lens` on another kind, a lens that is not effective, an empty title, and an agent-supplied `id` or `step` on a lens item are refused with nothing written; `RECORD_SCHEMA_VERSION == 12`; a v11 record migrates to 12 by stamp and the record chain is asserted hop by hop to 12; the frozen-reader rule holds (the 11 -> 12 hop validates with the model it migrates from, per `.claude/rules/artifact-versioning.md`). See them fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add the optional `lens` field to `JournalItem` in `fr/record/model.py` with its kind coupling, bump `RECORD_SCHEMA_VERSION` to 12, register the 11 -> 12 migration beside the existing record hops and import it from `fr/artifacts/__init__.py`, extend the record validator, update the record template text in `fr/record/template.py` to show the lens line (`#   - {kind: lens, lens: <id>, title: <why, one line>}`), and in `fr/record/apply.py` build the entry (id assignment by counting existing `lens-<id>-*` entries in the target journal, step and phase stamping, effective-lens check via `fr.lenses.resolve`). See them pass.
+  - id: P2.T2.S3
+    text: |-
+      GREEN (CLI path): `fr journal add --kind lens --lens <id> --title "<why>"` in `commands/journal_cmd.py` goes through the same builder (a one-entry record, as the other kinds do), records no step, and keeps the existing `--scope plan` rule (`--phase N` or `--global`). Add its unit test (accepted, unknown lens refused exit 2, missing `--lens` refused) and see it pass.
+  - id: P2.T2.S4
+    text: |-
+      Run `uv run fr migrate artifacts --yes` in the worktree so this repo's own journals and any live record move to the new versions, commit the result as its own commit, and confirm `uv run fr validate artifacts` passes. Update `.claude/rules/artifact-versioning.md` where it names record kind 11 or the journal chain's endpoint test, then `scripts/sync-opencode.py` and `scripts/sync-hermes.py`.
+- number: 3
+  title: Path rules in force and the lens set (R6, R7)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: `tests/unit/test_lenses_rules.py`: `rules_in_force(base_text, head_text)` is the union of both files' `require` rules (duplicates collapsed), a HEAD file that drops a base rule still yields it, and `base_text=None` (no default ref) yields HEAD's; `matched(rules, changed_files)` returns, per required lens, the rule's globs and the first matching file, with `*` spanning `/` as in `fr.proportionality`. `tests/unit/test_lenses_accumulate.py` over a tmp repo with a spec journal, a plan journal and a diff: `lens_set(root, run)` holds lenses from `lens` entries in both journals with every reason and adding step, plus rule-required lenses with rule and file, each lens once; a journalled lens that is now disabled is dropped and reported in `warnings`; fr's own artifact paths (`docs/superpowers/**`, `docs/acceptance/**`) never match a rule; an empty journal and no rule gives an empty set. Add to `test_lenses_check.py`: a HEAD config disabling a lens that a base-only rule requires is a problem. See them fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: write `fr/lenses/rules.py` (`rules_in_force`, `matched`; the default-ref read mirrors `fr.run.ci_evidence.declared_gates`: `git show <default-ref>:.fr/lenses.yaml` through `fr.git`, absent file or ref -> None) and `fr/lenses/accumulate.py` (`LensSet`, `LensEntry(lens, reasons, rule, file)`, `lens_set(root, run)`; the diff comes from the function `fr.proportionality` uses for merge-base..HEAD with `EXEMPT_PREFIXES`, lifted to a shared helper rather than copied). Extend `check_config` to take the rules in force. See them pass.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: `fr.proportionality` and `fr.lenses.accumulate` call one `feature_diff(root, base)` helper; rerun `tests/unit/test_proportionality*.py` to confirm it is unchanged in behaviour.
+- number: 4
+  title: '`fr lenses status`, scenarios, rows'
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED then GREEN: unit test for `fr lenses status [--run <id>] [--json]` (the branch's run by default): one line per lens in the set with each reason and adding step, or the rule and a matching file; "no lens requested" for an empty set; warnings for dropped lenses; writes nothing. Implement it in `commands/lenses_cmd.py`.
+  - id: P2.T4.S2
+    text: |-
+      Write `tests/scenarios/review-lenses-accumulate.sh`: in a fixture repo with a started run, add a lens through a step record at one step and through `fr journal add --kind lens` from the command line, assert `fr lenses status` shows both with reasons, assert an unknown lens and an empty reason are refused with the journal unchanged. (Its reshape and adopt cases are added in phase 3, where the step exists.) Write `tests/scenarios/review-lenses-path-rules.sh`: a fixture whose default branch holds a rule for `src/auth/**`, a branch that changes `src/auth/x.py` with no agent addition shows `security` in `fr lenses status` with the rule and file; a branch that deletes the rule from its `.fr/lenses.yaml` still shows it; `fr lenses check` exits 1 on a branch config that disables `security`. Register both in `tests/integration/test_scenarios.py` and see them pass.
+  - id: P2.T4.S3
+    text: |-
+      Update `AGENTS.md` (journal kind 4 and the `lens` entry under `fr journal`; record kind 12 under `fr/record`). Add unit-level refs to both rows with `uv run fr acceptance set-status --id <row> --status unwired --notes "Unit tests and the first scenario cases exist; the row is complete once the lens review step lands in phase 3" --level unit=...` using the real test names. Run format, lint, mypy and the full suite into a log outside the repo, after the last code commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-11-12T21:42:59+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T21:42:59+00:00'
+    note: null
+    observed_prs: []

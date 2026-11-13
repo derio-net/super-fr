@@ -21,9 +21,22 @@ FINDING_ID_RE = re.compile(r"^p[1-9][0-9]*[a-z]?-r[1-9][0-9]*$")
 """The brief-prescribed id: `p<N>-r<k>`, or `p<N><letter>-r<k>` when several
 reviewers share a phase (one letter each, assigned in the dispatch prompt)."""
 
-_BLOCK_RE = re.compile(
-    rf"^[ \t]*```{FENCE}[ \t]*\r?\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE
-)
+_PHASE_ID_HINT = "the brief's p<N>-r<k> (or p<N><letter>-r<k> with several reviewers)"
+
+
+def fence_re(fence: str) -> re.Pattern[str]:
+    """The regex that finds every fenced ```<fence> block; group 1 is its body.
+    The one fence extractor for `review-findings` and `review-lens`."""
+    return re.compile(
+        rf"^[ \t]*```{re.escape(fence)}[ \t]*\r?\n(.*?)^[ \t]*```[ \t]*$",
+        re.DOTALL | re.MULTILINE,
+    )
+
+
+def last_block(text: str, fence: str) -> str | None:
+    """The body of the LAST ```<fence> block in `text`, or None when there is none."""
+    blocks = list(fence_re(fence).finditer(text))
+    return blocks[-1].group(1) if blocks else None
 
 
 class ReviewFindingsBlockError(ValueError):
@@ -31,15 +44,22 @@ class ReviewFindingsBlockError(ValueError):
     id that is not the brief's `p<N>(<letter>)?-r<k>`."""
 
 
-def parse_review_findings(text: str) -> list[tuple[str, str, str]] | None:
+def parse_review_findings(
+    text: str,
+    *,
+    id_re: re.Pattern[str] = FINDING_ID_RE,
+    id_hint: str = _PHASE_ID_HINT,
+) -> list[tuple[str, str, str]] | None:
     """The `(id, scope, summary)` rows of the LAST ```review-findings block in
     `text` — `[]` for the single line `none`, `None` when the text carries no
     block. Raises `ReviewFindingsBlockError` naming the first line it cannot
-    read."""
-    blocks = list(_BLOCK_RE.finditer(text))
-    if not blocks:
+    read. `id_re` is the id grammar (the phase review's by default; the lens
+    review passes its own, spec 2026-11-12-review-lenses §3.C) and `id_hint`
+    the grammar's name in the error."""
+    body = last_block(text, FENCE)
+    if body is None:
         return None
-    lines = [line.strip() for line in blocks[-1].group(1).splitlines() if line.strip()]
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
     if not lines:
         raise ReviewFindingsBlockError(
             f"{FENCE} block is empty — one line per finding, or the single line `none`"
@@ -53,11 +73,8 @@ def parse_review_findings(text: str) -> list[tuple[str, str, str]] | None:
             raise ReviewFindingsBlockError(
                 f"{FENCE} block line {line!r} is not `<id> | in|out | <summary>`"
             )
-        if FINDING_ID_RE.match(parts[0]) is None:
-            raise ReviewFindingsBlockError(
-                f"{FENCE} block id {parts[0]!r} is not the brief's p<N>-r<k> "
-                "(or p<N><letter>-r<k> with several reviewers)"
-            )
+        if id_re.match(parts[0]) is None:
+            raise ReviewFindingsBlockError(f"{FENCE} block id {parts[0]!r} is not {id_hint}")
         if any(parts[0] == row[0] for row in rows):
             raise ReviewFindingsBlockError(
                 f"{FENCE} block lists {parts[0]!r} more than once — one line per finding"

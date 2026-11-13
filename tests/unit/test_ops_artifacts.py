@@ -117,16 +117,19 @@ def test_the_ops_validator_accepts_none_at_version_two(tmp_path: Path) -> None:
 # --- journal kind 3 ------------------------------------------------------------
 
 
-def test_the_journal_kind_moved_to_version_three() -> None:
-    assert ARTIFACT_KINDS["journal"].current_version == 3
+def test_the_journal_kind_moved_past_version_three() -> None:
+    # 4 since the `lens` entry kind (spec 2026-11-12-review-lenses §3.B);
+    # test_journal_lens pins the current version and the whole chain.
+    assert ARTIFACT_KINDS["journal"].current_version >= 3
 
 
 def test_the_journal_kind_is_reachable_from_version_two() -> None:
     chain = MIGRATIONS.chain("journal", 2)
-    assert [m.from_version for m in chain] == [2]
-    assert [m.to_version for m in chain] == [3]
+    assert [m.from_version for m in chain][:1] == [2]
+    assert [m.to_version for m in chain][:1] == [3]
+    assert chain[0].fn.__module__ == "fr.artifacts.journal_op"
     full = MIGRATIONS.chain("journal", 1)
-    assert [m.from_version for m in full] == [1, 2]
+    assert [m.from_version for m in full][:2] == [1, 2]
 
 
 def test_the_journal_migration_to_three_is_stamp_only(tmp_path: Path) -> None:
@@ -140,7 +143,8 @@ def test_the_journal_migration_to_three_is_stamp_only(tmp_path: Path) -> None:
     path.write_text("<!-- fr:journal-schema=2 -->\n" + body)
     report = run_migrations(tmp_path, dry_run=False)
     assert report.ok, report.failed
-    assert path.read_text() == "<!-- fr:journal-schema=3 -->\n" + body
+    current = ARTIFACT_KINDS["journal"].current_version
+    assert path.read_text() == f"<!-- fr:journal-schema={current} -->\n" + body
 
 
 def test_a_version_two_journal_with_an_op_entry_is_refused(tmp_path: Path) -> None:
@@ -179,7 +183,7 @@ def test_appending_an_op_entry_to_an_older_journal_stamps_it(tmp_path: Path) -> 
     path.parent.mkdir(parents=True)
     path.write_text("<!-- fr:journal-schema=2 -->\n# Journal: p\n")
     append_journal_entry(path, "p", _op_entry())
-    assert ARTIFACT_KINDS["journal"].read_version(path) == 3
+    assert ARTIFACT_KINDS["journal"].read_version(path) == ARTIFACT_KINDS["journal"].current_version
     assert validate_journal(path) == []
 
 

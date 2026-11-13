@@ -21,6 +21,7 @@ from tests.unit.record_support import (
     commit_all,
     fr,
     implement_record,
+    resolve_empty_lens_review,
     started_run,
     write_record,
 )
@@ -84,6 +85,7 @@ def _at_deliver_with_leftovers(tmp_path: Path) -> Path:
     rec = write_record(root, review)
     out = fr(root, [*step, "review-phase", "--item", "phase/1", "--record", str(rec)])
     assert out.exit_code == 0, out.output
+    resolve_empty_lens_review(root)  # no lens added, no path rule: an empty set
     commit_all(root, "at deliver")
     (root / "suite.log").write_text("n passed\n")
     return root

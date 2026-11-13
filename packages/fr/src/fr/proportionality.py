@@ -114,13 +114,12 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
                 f"proportionality: could not determine a base ({why}); pass --base <ref>.\n",
             )
         base = found
-    mb = git_answer(repo_root, "merge-base", "HEAD", base)
-    if mb.returncode != 0 or not mb.stdout.strip():
+    merge_base = feature_merge_base(repo_root, base)
+    if merge_base is None:
         return Report(
             None,
             f"proportionality: no merge-base between HEAD and {base!r}; pass --base <ref>.\n",
         )
-    merge_base = mb.stdout.strip()
 
     phases = _phases_at_head(repo_root, plan)
     if phases is None:
@@ -129,7 +128,7 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
             f"proportionality: the plan {_rel(repo_root, plan.dir)} is not committed at "
             "HEAD; commit it, then rerun.\n",
         )
-    changes = [c for c in _changes(repo_root, merge_base) if not _exempt(c.path)]
+    changes = feature_diff(repo_root, merge_base)
     globs = [g for ph in phases for g in ph.files]
     estimates = [ph.estimate_lines for ph in phases if ph.estimate_lines is not None]
 
@@ -266,6 +265,22 @@ def _spec_at_head(repo_root: Path, ref: str) -> tuple[str, str] | None:
         if text is not None:
             return rel, text
     return None
+
+
+def feature_merge_base(repo_root: Path, base: str) -> str | None:
+    """`git merge-base HEAD <base>`, or None when there is none. Raises
+    `GitUnavailableError` when git could not be run."""
+    mb = git_answer(repo_root, "merge-base", "HEAD", base)
+    if mb.returncode != 0 or not mb.stdout.strip():
+        return None
+    return mb.stdout.strip()
+
+
+def feature_diff(repo_root: Path, merge_base: str) -> list[_Change]:
+    """The feature's diff: every path `merge_base..HEAD` changed, minus fr's own
+    artifacts (`EXEMPT_PREFIXES`). The one definition the proportionality report
+    and the lens set (`fr.lenses.accumulate`) read."""
+    return [c for c in _changes(repo_root, merge_base) if not _exempt(c.path)]
 
 
 def _changes(repo_root: Path, merge_base: str) -> list[_Change]:

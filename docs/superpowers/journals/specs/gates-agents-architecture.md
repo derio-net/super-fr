@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=3 -->
+<!-- fr:journal-schema=4 -->
 # Journal: gates-agents-architecture
 
 <!-- fr:journal kind=discovery scope=spec id=brief created=2026-10-23T04:58:11+00:00 input=true -->

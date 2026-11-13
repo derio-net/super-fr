@@ -146,14 +146,15 @@ def test_an_amendment_with_no_feature_is_refused(tmp_path: Path) -> None:
         )
 
 
-def test_the_record_kind_is_at_version_eleven() -> None:
-    assert RECORD_SCHEMA_VERSION == 11
-    assert artifact_kind("record").current_version == 11
+def test_the_record_kind_is_at_least_version_eleven() -> None:
+    # 11 -> 12 follows; test_record_lens pins the current version and the chain.
+    assert RECORD_SCHEMA_VERSION >= 11
+    assert artifact_kind("record").current_version == RECORD_SCHEMA_VERSION
 
 
 def test_the_chain_from_one_reaches_eleven_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    assert [s.to_version for s in chain][:10] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     hop = MIGRATIONS.chain("record", 10)[0]
     assert (hop.from_version, hop.to_version) == (10, 11)
     assert hop.fn.__module__ == "fr.artifacts.record_amendments"
@@ -165,8 +166,9 @@ def test_a_v10_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == _V10.replace("schema_version: 10\n", "schema_version: 11\n")
-    assert parse_record(path.read_text()).schema_version == 11
+    stamp = f"schema_version: {RECORD_SCHEMA_VERSION}\n"
+    assert path.read_text() == _V10.replace("schema_version: 10\n", stamp)
+    assert parse_record(path.read_text()).schema_version == RECORD_SCHEMA_VERSION
 
 
 def test_an_unreadable_v10_record_is_refused_and_left_alone(tmp_path: Path) -> None:
@@ -180,7 +182,7 @@ def test_an_unreadable_v10_record_is_refused_and_left_alone(tmp_path: Path) -> N
 
 
 def test_the_validator_accepts_an_amendment_item(tmp_path: Path) -> None:
-    text = _V10.replace("schema_version: 10", "schema_version: 11").replace(
+    text = _V10.replace("schema_version: 10", f"schema_version: {RECORD_SCHEMA_VERSION}").replace(
         "{id: x, status: ci, notes: wired}", "{row: r, op: retire, notes: n, why: w}"
     )
     path = _record_file(tmp_path, text)

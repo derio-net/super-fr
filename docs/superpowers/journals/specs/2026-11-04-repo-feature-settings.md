@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=3 -->
+<!-- fr:journal-schema=4 -->
 # Journal: 2026-11-04-repo-feature-settings
 
 <!-- fr:journal kind=discovery scope=spec id=brief created=2026-11-04T13:49:51+00:00 input=true -->

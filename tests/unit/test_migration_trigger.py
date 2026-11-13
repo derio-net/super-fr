@@ -141,6 +141,9 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
 
     `docs` was added by 2026-11-11 docs-currency phase 1 (R8): `fr docs` reads
     `.fr/docs.yaml`, page files and read-only git and writes nothing.
+
+    `lenses` was added by 2026-11-12 review-lenses phase 1 (R3): `fr lenses` reads
+    `.fr/lenses.yaml` and the shipped lens manifests and writes nothing.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
@@ -161,6 +164,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "release",
             "settings",
             "docs",
+            "lenses",
         }
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
@@ -183,6 +187,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "release",
         "settings",
         "docs",
+        "lenses",
         "FR_SKIP_MIGRATION=1",
     )
 

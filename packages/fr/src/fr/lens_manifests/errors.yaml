@@ -1,0 +1,9 @@
+lens: errors
+title: Error handling
+brief: |
+  Review the whole change for how it fails. Look for:
+  - a failure that is swallowed, turned into a default, or reported without
+    what a person needs to act on it;
+  - a new failure path with no log or signal;
+  - a retry or fallback that hides the cause.
+  A problem you see outside this lens is still reported, as an ordinary finding.

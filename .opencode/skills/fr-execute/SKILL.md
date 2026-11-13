@@ -105,6 +105,7 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
 - Stop if blocked — report what's missing.
 - A dispatch instruction is a BLOCKER, never a tick or a skip (step 4).
 - Step IDs: `P<n>.T<n>.S<n>`.
+- **Lenses.** When the work gives you a reason to want the whole feature examined under a concern (shipped: `security`, `tests`, `errors`, `simplicity`; `fr lenses list` shows the repo's set), add one in your step record: `journal: [{kind: lens, lens: <id>, title: "<why, one line>"}]`. A lens is never removed, and the lens review before `deliver` examines the whole diff under each one.
 
 ## v1 plan migration
 

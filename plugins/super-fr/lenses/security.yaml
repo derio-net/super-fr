@@ -1,0 +1,11 @@
+lens: security
+title: Security
+brief: |
+  Review the whole change for security problems. Look for:
+  - input that reaches a shell, a query, a path, a template or a deserialiser
+    without validation;
+  - secrets or tokens written to logs, errors, artifacts or the forge;
+  - authorisation checks that are missing, or made after the act they guard;
+  - new dependencies, and what they can reach;
+  - permissions wider than the change needs.
+  A problem you see outside this lens is still reported, as an ordinary finding.

@@ -45,6 +45,10 @@ JournalKind = Literal[
     # `key: value` body lines (`op_body`), folded latest-wins by `fr ops status`.
     # Written only by `fr ops`, never through a step record. Journal kind 3.
     "op",
+    # A review lens a step added to the feature (spec 2026-11-12-review-lenses
+    # R4, R5): header `lens=<id>` and, through a step record, `step=<step-id>`;
+    # the title is the reason. Nothing resolves it. Journal kind 4.
+    "lens",
 ]
 JournalScope = Literal["spec", "plan", "debug"]
 FindingState = Literal["fixed", "refuted", "open"]
@@ -86,7 +90,7 @@ OP_RESULTS = ("done", "na", "open", "failed", "attested", "proof")
 `na_if`; it closes the op only while the op carries `na_if`."""
 # Entry kinds a journal stamped below the current version cannot hold: the write
 # that appends one stamps the journal in the same write (`_at_current_stamp`).
-_STAMPING_KINDS = frozenset({"owed", "op"})
+_STAMPING_KINDS = frozenset({"owed", "op", "lens"})
 
 JOURNALS_REL = Path(KIND_DIRS["journal"])
 IMPLEMENTED_JOURNALS_REL = Path(KIND_DIRS["journal-archived"])
@@ -181,6 +185,32 @@ class JournalEntry(BaseModel):
     narrows: tuple[str, ...] = ()
     decided_by: AnsweredBy | None = None
     remainder_tracked_by: str | None = None
+    # A `lens` entry's lens id and, when it came through a step record, the step
+    # that added it (fr stamps it from the record, never from the agent). Header
+    # tokens `lens=` and `step=`, appended last, serialized only when set.
+    lens: str | None = None
+    step: str | None = None
+
+    @model_validator(mode="after")
+    def _one_kind_tokens(self) -> JournalEntry:
+        """Tokens valid on one entry kind only (`input`, `lens`, `step`), from one table."""
+        for token, (kind, scope, why) in _ONE_KIND_TOKENS.items():
+            if getattr(self, token) in (None, False):
+                continue
+            if self.kind != kind or (scope is not None and self.scope != scope):
+                raise ValueError(f"`{token}` is only valid on {why}")
+        if self.kind == "lens":
+            from fr.lenses.model import LENS_ID_RE
+
+            if self.lens is None:
+                raise ValueError("a `lens` entry names its lens (`lens=<id>`)")
+            if not LENS_ID_RE.match(self.lens):
+                raise ValueError(f"lens id {self.lens!r} must match {LENS_ID_RE.pattern}")
+            if not self.title.strip():
+                raise ValueError("a `lens` entry's title is the reason, and it is empty")
+            if self.step is not None and (not self.step or any(c.isspace() for c in self.step)):
+                raise ValueError(f"`step` must be a whitespace-free step id, got {self.step!r}")
+        return self
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -279,11 +309,6 @@ class JournalEntry(BaseModel):
                 "`out_of_scope` is only valid on an `open` resolution record that is not "
                 "a deferral: it says the finding is true but not this change's"
             )
-        if self.input and (self.kind != "discovery" or self.scope != "spec"):
-            raise ValueError(
-                "`input` is only valid on a spec-scope `discovery` entry: it holds the "
-                "operator's input, which only a spec journal carries"
-            )
         if self.review_scope is not None and (self.kind != "finding" or self.resolves):
             raise ValueError(
                 "`review_scope` is only valid on a `finding` entry that is not a "
@@ -301,6 +326,19 @@ class JournalEntry(BaseModel):
                 f"journal id must be a non-empty whitespace-free token, got {self.id!r}"
             )
         return self
+
+
+_ONE_KIND_TOKENS: dict[str, tuple[str, str | None, str]] = {
+    "input": (
+        "discovery",
+        "spec",
+        "a spec-scope `discovery` entry: it holds the operator's input, which only a "
+        "spec journal carries",
+    ),
+    "lens": ("lens", None, "a `lens` entry: it names the lens the entry adds"),
+    "step": ("lens", None, "a `lens` entry: it names the step that added the lens"),
+}
+"""Token → (the one kind it is valid on, the one scope or `None` for any, the reason)."""
 
 
 def journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
@@ -369,6 +407,8 @@ _HEADER_FIELDS = (
     "narrows",
     "decided_by",
     "remainder_tracked_by",
+    "lens",
+    "step",
 )
 
 
@@ -480,6 +520,8 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 narrows=_narrows_token(fields.get("narrows")),
                 decided_by=_answered_by_token(fields.get("decided_by")),
                 remainder_tracked_by=fields.get("remainder_tracked_by"),
+                lens=fields.get("lens"),
+                step=fields.get("step"),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")

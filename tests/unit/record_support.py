@@ -29,6 +29,7 @@ __all__ = [
     "git",
     "head",
     "implement_record",
+    "resolve_empty_lens_review",
     "snapshot",
     "started_run",
     "write_record",
@@ -185,3 +186,22 @@ def write_record(root: Path, data: dict[str, object], name: str | None = None) -
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(data, sort_keys=False))
     return path
+
+
+def resolve_empty_lens_review(root: Path) -> None:
+    """Resolve the shipped `lens-review` with an empty lens set — no reviewer, no
+    review (spec 2026-11-12-review-lenses R11) — through its record, which
+    advances to brief `deliver`."""
+    record = write_record(
+        root, {"schema_version": _record_version(), "run": RUN, "step": "lens-review",
+               "outcome": "done"},
+    )  # fmt: skip
+    commit_all(root, "lens-review record")
+    out = fr(root, ["run", "resolve", RUN, "--step", "lens-review", "--record", str(record)])
+    assert out.exit_code == 0, out.output
+
+
+def _record_version() -> int:
+    from fr.record.model import RECORD_SCHEMA_VERSION
+
+    return RECORD_SCHEMA_VERSION
