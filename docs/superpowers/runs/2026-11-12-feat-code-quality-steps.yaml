@@ -3,7 +3,7 @@ run: 2026-11-12-feat-code-quality-steps
 workflow: fr-goal@1
 branch: feat/code-quality-steps
 started: '2026-11-12T14:45:47+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -184,8 +184,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-13T03:29:38+00:00'
+    state: done
+    at: '2026-11-13T03:41:57+00:00'
     units:
       step/lens-review:
         attempts:
@@ -199,6 +199,13 @@ steps:
           harness: claude-code
           model: claude-fable-5-2
           session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
+          returned: '2026-11-13T03:41:57+00:00'
+          outcome: done
+        evidence:
+          review: review-lenses
+          reviewer: security=aa12fd6dce2d0c01e,errors=a106aa25d32f7f246
+          findings: l-security-r1,l-security-r2,l-security-r3,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4
+          lenses: errors=18:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4;security=18:l-security-r1,l-security-r2,l-security-r3
   deliver:
     state: pending
 driver: standalone

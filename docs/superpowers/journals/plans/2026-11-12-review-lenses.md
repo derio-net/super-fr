@@ -501,3 +501,68 @@ Cheap and in the same function, so fixed here: each `lens_set` warning is printe
 
 <!-- fr:journal kind=lens scope=plan id=lens-errors-1 created=2026-11-13T03:29:31+00:00 lens=errors -->
 ### lens-errors-1 · lens · every unreadable input (lens config, default ref, session transcript) must refuse or be noted, never read as an empty set
+
+<!-- fr:journal kind=review scope=plan id=review-lenses created=2026-11-13T03:41:56+00:00 -->
+### review-lenses · review · Lens review (security, errors): three fixed, four refuted with reasons
+
+One reviewer per lens read the whole diff. Security found that a branch could
+rewrite the brief of a lens its base requires; that is now structural: a feature
+is reviewed under its default branch's lenses. Errors found a silent empty
+shipped set. The rest restate decisions the spec makes on purpose or follow the
+sibling migrations' pattern.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-13T03:41:56+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · a branch's .fr/lenses.yaml can replace the brief of a rule-required lens, or disable an agent-added one
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-13T03:41:56+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · examined: is accepted on any one changed file, and with no remote on any existing path
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-13T03:41:56+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · with unobservable returns the lens return check is skipped, with a weak audit marker
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-13T03:41:56+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · shipped_lenses() returns {} silently when no shipped lens directory exists
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-13T03:41:56+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · lens_set silently ignores a missing spec/plan journal or slug
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-13T03:41:56+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · pr_body._review_lenses turns a LensError into PR-body prose with no refusal
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-13T03:41:56+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · the journal 3->4 hop reads a parse error as no lens entries
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-13T03:41:56+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: a branch's .fr/lenses.yaml can replace the brief of a rule-required lens, or disable an agent-added one
+
+`fr.lenses.resolve.review_lenses`: a lens effective on the default branch keeps that branch's definition and cannot be disabled by the branch under review; `LensSet.definitions` is what the brief and refusals print; a warning names the lens. Spec 3.A/3.B and the guide amended. Tests in test_lenses_accumulate.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-13T03:41:56+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: examined: is accepted on any one changed file, and with no remote on any existing path
+
+With no remote an examined file must be a git-tracked path of the checkout (test_with_no_remote_an_examined_file_must_be_tracked_here). Accepting a subset of the changed files is the spec's decision (R9): the count is recorded and shown on the PR; fr cannot prove a reading, as the guide says.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-13T03:41:56+00:00 state=refuted resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [refuted] · resolves l-security-r3: with unobservable returns the lens return check is skipped, with a weak audit marker
+
+The record already carries `unobserved=reviewer-return` beside `lenses=<lens>=unobserved:...` (test_unreadable_returns_are_noted_and_the_map_still_checked) and the PR section prints "not observable". Refusing on a harness that cannot expose returns would make the step unresolvable there; the phase review takes the same posture (spec 3.C).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-13T03:41:56+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: shipped_lenses() returns {} silently when no shipped lens directory exists
+
+`shipped_lenses` raises LensError naming where it looked. Test: test_no_shipped_lens_set_is_a_broken_install_not_an_empty_one.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-13T03:41:56+00:00 state=refuted resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [refuted] · resolves l-errors-r2: lens_set silently ignores a missing spec/plan journal or slug
+
+A journal that does not exist holds no lens entry: a spec journal is created by its first entry, and `fr lenses status` is legitimately run before a plan exists. A lost plan journal cannot reach the lens review: `journal-check --require-reviews` fails first, and the resolve refuses a missing plan journal.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-13T03:41:56+00:00 state=refuted resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [refuted] · resolves l-errors-r3: pr_body._review_lenses turns a LensError into PR-body prose with no refusal
+
+The body states the failure and the LensError's own remedy on the surface a reviewer reads; the same failure already refused `lens-review` and its brief. Raising here would turn a rendering of state into a second, later refusal of `deliver` with a traceback.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-13T03:41:56+00:00 state=refuted resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [refuted] · resolves l-errors-r4: the journal 3->4 hop reads a parse error as no lens entries
+
+Identical to the sibling hops `journal_op` and `journal_owed`, by design: an unparseable journal is reported by `fr validate artifacts` (the structure validator), and CI runs it. Changing one hop alone would make the chain inconsistent.
