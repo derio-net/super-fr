@@ -1357,3 +1357,6 @@ b0f803ae2, c6ec70d17: in CI a shallow checkout or a missing default ref refuses 
 ### p7-r8-resolved · finding [out-of-scope] · resolves p7-r8: migrate-branch's own removal commit leaves fr files and chore(fr) commits in branch history (phase 7)
 
 Follows from R28's wording, not this code; plan 3 may not change a requirement. Tracked by derio-net/super-fr#1430 for a spec decision.
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-13T13:44:06+00:00 lens=security -->
+### lens-security-1 · lens · Stealth and quiet are privacy guarantees enforced by new hooks, a forge guard and file movers; every phase drew security findings, so the whole diff is reviewed once for cross-phase gaps
