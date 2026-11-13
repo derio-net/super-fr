@@ -12,7 +12,6 @@ CLI
 HEAD
 HTML
 ID
-JSON
 PATH
 PR
 README
@@ -23,11 +22,10 @@ URL
 YAML
 
 # fr nouns that end in -ing. Each names a thing (a journal entry kind, a check
-# severity, a status, a page layout, a skill), not an action, so no verb can
+# severity, a status, a skill), not an action, so no verb can
 # replace it.
 debugging
 finding
-landing
 pending
 sibling
 warning
