@@ -148,7 +148,7 @@ is the one way to defeat this gate, and no tool can stop it.
   ```
 
   Fetch the checkout's full history (`fetch-depth: 0`). A shallow clone cannot compute the merge
-  base, and the check then says so; it does not pass. Add the job to the aggregate check that your
+  base, and the check then says so; it does not pass. Add the job to any aggregate check that your
   repo needs.
 
 `fr docs` never writes and runs even when the repo's artifacts are stale, so it works as the very
