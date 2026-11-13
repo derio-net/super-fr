@@ -1262,3 +1262,8 @@ fixed with review finding p7-r6 in b0f803ae2 and 65b6a59bd: a quiet-to-stealth m
 ### p7-r5-git-like-spellings · decision · p7-r5 refuses .git-like components as git's verify_path reads them, on top of the case-sensitive allowlist (phase 7)
 
 Extends decision p7-r5-artifact-only after a security review: `placement_bound` stays the allowlist, matched exactly and case-sensitively, and `move.git_like` adds a refusal for any component that is `.git*` once NFC-normalised, stripped of HFS-ignorable codepoints and trailing dots/spaces, and casefolded, or that is an NTFS short name (`git~1`, `gitmod~1`, `gi<hex4>~n`). Ordinary artifacts that merely name git (`...-gitops-design.md`) stay allowed.
+
+<!-- fr:journal kind=decision scope=plan id=p7-r5-git-names-exact created=2026-11-13T13:04:54+00:00 phase=7 -->
+### p7-r5-git-names-exact · decision · git_like refuses exactly .git, .gitmodules and .gitattributes, not every .git* name (phase 7)
+
+Narrows decision p7-r5-git-like-spellings: a `.git*` prefix also refused `.gitkeep`, a plain placeholder the acceptance tree carries, which the move then left on the default branch. The refused set is the names git acts on in a tree (`.git`, `.gitmodules`, `.gitattributes`) and their NTFS short names, each after NFC, HFS-ignorable removal, trailing dot/space stripping and casefolding.
