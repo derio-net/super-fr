@@ -721,3 +721,86 @@ fr/placement/forge_guard.py wraps every client from client_for and client_for_ba
 ### p4-r9-resolved · finding [fixed] · resolves p4-r9: Stealth refusals in fr acceptance init named placement quiet and R23 (phase 4)
 
 6ffbbf8c2: the messages name placement stealth and R24.
+
+<!-- fr:journal kind=decision scope=plan id=merged-heads-and-cache created=2026-11-13T04:40:53+00:00 phase=5 -->
+### merged-heads-and-cache · decision · A feature's heads are its branch's live refs, else the head its last merged record verified, else stealth's recorded product heads (phase 5)
+
+R17's clause needs "the code branch's head, recorded with the feature". The feature
+path names its branch in OWNER; its heads are `refs/heads/<b>` and
+`refs/remotes/origin/<b>` in the product repo, and every one must be reachable from
+the default ref (unpushed work after a merge is not merged). With neither ref (the
+branch was deleted after its merge), the head the last `merged.yaml` record carries,
+else every `product_head` in the feature's `<run-id>.stealth.json` files. The record
+is `- merged: <sha>` plus `head: <sha>`, appended; it is a cache hit only when its sha
+is on the default ref's first-parent history, every head is its ancestor, and none
+is an ancestor of the first-parent commit before it. Order is that commit's position
+(binary search over the first-parent list), ties by feature id. A record never makes
+a feature merged: even its head is re-verified on every read.
+
+<!-- fr:journal kind=decision scope=plan id=archive-outside-repo-branch-only created=2026-11-13T04:40:53+00:00 phase=5 -->
+### archive-outside-repo-branch-only · decision · Under quiet and stealth only `fr archive --branch` runs; plan-dir, --all and --sweep-only refuse naming it (phase 5)
+
+R25: archive moves nothing outside `repo`. `fr archive --branch <b>` fetches like the
+repo path, requires the branch to resolve, refuses an unmerged branch (exit 2,
+nothing written), writes nothing when an agreeing record exists, else appends one
+record and commits it on the placement's branch: quiet in the fr worktree under its
+lock, then a plain `fr` push (`atomic_push(code=False)`; a refused push leaves the
+commit for `fr push`, exit 2); stealth through `stealth.commit_and_push` (privacy
+guard, CAS push, rollback). The move-based forms refuse before writing, naming
+`--branch`. Close-out's plan sweep and `fr debt` read merged status through
+`merged_features`: a plan of a merged feature with no agreeing record is archivable
+with `fr archive --branch <b>`, and one with an agreeing record counts as archived.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-cross-feature-amendments created=2026-11-13T04:40:53+00:00 phase=5 -->
+### quiet-cross-feature-amendments · decision · Under quiet and stealth a row another merged feature defines changes by amendment, validated against the cross-feature fold (phase 5)
+
+The scenario needs feature b to amend feature a's row. The record writer
+(`record/apply.py`) refused a feature with no fragment folder, treated no row as
+merged (`default_ref_fold` is None outside repo) and validated the written fragments
+alone, so the amendment named an unknown row. Outside repo it now proceeds when any
+feature root has fragments (the folder is made by the first write), takes rows the
+fold knows but this branch's fragments do not define as merged (so `set-status`
+writes an amendment, R16), takes the repo identity from the fold, and validates with
+`fold.fold_outside_with` (this branch's fragments replaced by the ones being written).
+
+<!-- fr:journal kind=discovery scope=plan id=merge-fallout-vk-removal created=2026-11-13T04:40:53+00:00 phase=5 -->
+### merge-fallout-vk-removal · discovery · Merging origin/main (#1424) left this branch on VK_REPO_ROOT and isolation's removed DEFAULT_BRANCH (phase 5)
+
+Five placement tests failed before any phase 5 change: main renamed VK_REPO_ROOT to
+FR_REPO_ROOT and made `fr isolation up --branch` required, removing DEFAULT_BRANCH,
+which `_prepare_resume` still named (a NameError on `up --resume`), and the tests
+then read the caller's cwd, a live workspace. Fixed in 9205ca8b3: FR_REPO_ROOT in
+settings_cmd, validate-plans.sh (both copies) and 15 test modules; `--branch`
+optional only with `--resume` (a usage error otherwise, as main's test pins); two
+quiet_up tests now chdir into their sandbox. The first full suite then caught main's
+new `fr/artifacts/plan_vk_version.py` spelling its archive locator as a literal (the
+artifact-path tripwire); it is `repo_glob("plan-archived", ...)` now (28a534b17).
+
+<!-- fr:journal kind=discovery scope=plan id=p5-red-order created=2026-11-13T04:40:53+00:00 phase=5 -->
+### p5-red-order · discovery · merged.py was drafted before its tests; RED taken by holding the module out (phase 5)
+
+fr/placement/merged.py was written ahead of tests/unit/test_placement_merged.py. RED
+was taken with the module held aside (collection fails on the import) and, with it
+restored, the five fold tests failed on the unchanged fold. Tasks 2 and 3 were RED
+first (8 archive/sweep/debt tests, then the scenario on the amend refusal, the
+cross-feature amend test, and the debt-dating test).
+
+<!-- fr:journal kind=finding scope=plan id=p5-debt-stale-quiet-fr-history created=2026-11-13T04:40:53+00:00 phase=5 state=open review_scope=out -->
+### p5-debt-stale-quiet-fr-history · finding [open] (reviewer: out of scope) · fr debt's staleness under quiet reads plan activity from the product history, which holds no fr file (phase 5)
+
+For a quiet or stealth plan, `_last_commit(repo_root, ref, plans/<name>)` asks the
+product's git history, where no plan lives (R23), so the only activity is the code
+branch's (now named through OWNER, 3645eb29a). A plan whose bookkeeping moved on
+`fr` while its code branch sat idle reads as stale. Reading the fr worktree's (or
+tracking branch's) history for the feature path would fix it; it is debt's
+staleness, not merged status, so outside this phase.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-13T04:40:53+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+new module fr/placement/merged.py; the fold change split _fold into _fold (git tip) and _fold_from (shared), so repo and quiet/stealth run one fold body; nothing duplicated left
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-11-13T04:40:53+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+the archive record reuses the commit seams as they are (commit_paths in the fr worktree under its lock, atomic_push for quiet, stealth.commit_and_push); the sweep's quiet branch is one function beside plan_sweep, and debt reads its new maps with the repo path as default

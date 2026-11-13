@@ -169,7 +169,7 @@ steps:
           visual: none
           findings: stealth-init-skipped-privacy,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9
       phase/5/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-13T02:30:11+00:00'
           agent: a42b7d86a930ae4e3
@@ -179,6 +179,11 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
+          returned: '2026-11-13T04:40:54+00:00'
+          outcome: done
+        evidence:
+          tests: p5-suite.log@ae9ed80d5d24;tree=5e45f6028177493012ace269d6eb4c31b9d645f7a434e56fae2dc69ddd0b8550
+          visual: none
   journal-check:
     state: pending
   deliver:
