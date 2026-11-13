@@ -1272,3 +1272,88 @@ Narrows decision p7-r5-git-like-spellings: a `.git*` prefix also refused `.gitke
 ### p7-r5-ntfs-streams · decision · p7-r5 refuses any path component holding a colon, and .gitignore with its short name (phase 7)
 
 Extends decisions p7-r5-artifact-only, p7-r5-git-like-spellings and p7-r5-git-names-exact after a second security review: a component containing `:` is refused outright (NTFS alternate data streams such as `.git::$INDEX_ALLOCATION` and `.gitattributes:s` resolve to the real names, and no fr artifact name needs a colon). The refused git names are `.git`, `.gitmodules`, `.gitattributes` and `.gitignore`, plus `git~N`, `gitmod~N`, `gitatt~N`, `gitign~N` and the hashed `gi<hex4>~N` forms, compared after NFC, HFS-ignorable removal, trailing dot/space stripping and casefolding. `.gitkeep` stays allowed because fr's acceptance tree carries `docs/acceptance/features/.gitkeep`. The case-sensitive `placement_bound` allowlist remains the primary gate.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-7 created=2026-11-13T13:43:33+00:00 phase=7 -->
+### review-phase-7 · review · Phase 7 (placement moves and drift) review, range 91fc8ddc9..da9e43d35 (phase 7)
+
+Reviewer a15b49e54527c00f8 (opus) returned not ready with seven in-scope findings and one spec-level one, three reproduced (a resumed move losing a feature merged meanwhile, a move killed between the switch commit and its push stuck for good, drift refusing the move's own PRs and deadlocking quiet to repo). It confirmed no force push, nothing pushed to the default branch, synthesised merged records that cannot mark an unmerged feature merged, and the feature-id and symlink fixes. All seven were fixed at 65b6a59bd..dc8382478 with two automated security follow-ups (case-insensitive and NTFS-stream .git spellings); the full suite (15909 passed) ran after the last code commit.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=in -->
+### p7-r1 · finding [open] (reviewer: in scope) · A move resumed after the default ref moved lost the features merged meanwhile (phase 7)
+
+source_sha was pinned at copy and never re-checked (reproduced: a gamma row missing from the quiet fold).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=in -->
+### p7-r2 · finding [open] (reviewer: in scope) · A step killed between its commit and its push could not be completed by a re-run (phase 7)
+
+The switch re-committed from origin/fr and failed for good; migrate-branch left commits unpushed (reproduced for the switch).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=in -->
+### p7-r3 · finding [open] (reviewer: in scope) · branch_drift refused the move's own removal and copy-to-repo branches in CI (phase 7)
+
+Deletions counted as drift; the move from quiet to repo deadlocked (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=in -->
+### p7-r4 · finding [open] (reviewer: in scope) · Verify's validation leg compared identical bytes (phase 7)
+
+The destination layout and its synthesised bookkeeping were never validated, against R27.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=in -->
+### p7-r5 · finding [open] (reviewer: in scope) · migrate-branch and --run copied any path from fr or the tracking repo into the product branch (phase 7)
+
+A planted workflow or .gitattributes would be committed and pushed.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=in -->
+### p7-r6 · finding [open] (reviewer: in scope) · A quiet-to-stealth move left live quiet branches to migrate-branch, which pushed their fr files to the target (phase 7)
+
+Against R24; supersedes the executor's out-of-scope p7-quiet-to-stealth-live-branches.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=in -->
+### p7-r7 · finding [open] (reviewer: in scope) · Drift detection failed open silently in a CI checkout without origin/fr or the default ref (phase 7)
+
+A shallow checkout checked nothing.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8 created=2026-11-13T13:43:33+00:00 phase=7 state=open review_scope=out -->
+### p7-r8 · finding [open] (reviewer: out of scope) · migrate-branch's own removal commit leaves fr files and chore(fr) commits in branch history (phase 7)
+
+Follows from R28's wording against R23/R24; a spec decision, tracked by derio-net/super-fr#1430.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=fixed resolves=p7-r1 -->
+### p7-r1-resolved · finding [fixed] · resolves p7-r1: A move resumed after the default ref moved lost the features merged meanwhile (phase 7)
+
+65b6a59bd: the copy records its source digest; verify and switch re-copy when it moved (bounded, then refuse naming the re-run); the removal branch covers the final copy.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=fixed resolves=p7-r2 -->
+### p7-r2-resolved · finding [fixed] · resolves p7-r2: A step killed between its commit and its push could not be completed by a re-run (phase 7)
+
+65b6a59bd, b0f803ae2: the switch decides from the local fr and pushes an existing switch commit; migrate-branch pushes pending commits and records repo only when nothing is unpushed; kill tests inside each step.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=fixed resolves=p7-r3 -->
+### p7-r3-resolved · finding [fixed] · resolves p7-r3: branch_drift refused the move's own removal and copy-to-repo branches in CI (phase 7)
+
+b0f803ae2: --diff-filter=d; the copy branch into repo recognised structurally against the merged features on fr (decision p7-r3-return-copy-structural).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=fixed resolves=p7-r4 -->
+### p7-r4-resolved · finding [fixed] · resolves p7-r4: Verify's validation leg compared identical bytes (phase 7)
+
+65b6a59bd: verify validates each destination feature root plus a bookkeeping check whose bytes must equal what the move synthesised; a corrupted merged.yaml fails verify.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=fixed resolves=p7-r5 -->
+### p7-r5-resolved · finding [fixed] · resolves p7-r5: migrate-branch and --run copied any path from fr or the tracking repo into the product branch (phase 7)
+
+65b6a59bd, b0f803ae2, 016cf4e3f, bb102f5df, 5a8ed3b2c: only placement_bound paths copied, exact and case-sensitive; .git-like components refused as git's verify_path reads them (case, HFS-ignorables, NTFS short names, any colon), in every direction.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=fixed resolves=p7-r6 -->
+### p7-r6-resolved · finding [fixed] · resolves p7-r6: A quiet-to-stealth move left live quiet branches to migrate-branch, which pushed their fr files to the target (phase 7)
+
+65b6a59bd, b0f803ae2: quiet-to-stealth refuses while any quiet feature is unmerged (checked before state and at switch); _into_repo refuses a stealth workspace and a move to stealth in progress.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=fixed resolves=p7-r7 -->
+### p7-r7-resolved · finding [fixed] · resolves p7-r7: Drift detection failed open silently in a CI checkout without origin/fr or the default ref (phase 7)
+
+b0f803ae2, c6ec70d17: in CI a shallow checkout or a missing default ref refuses naming fetch-depth: 0, elsewhere a warning; the validate-artifacts job fetches full history.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8-resolved created=2026-11-13T13:43:33+00:00 phase=7 state=open resolves=p7-r8 out_of_scope=true -->
+### p7-r8-resolved · finding [out-of-scope] · resolves p7-r8: migrate-branch's own removal commit leaves fr files and chore(fr) commits in branch history (phase 7)
+
+Follows from R28's wording, not this code; plan 3 may not change a requirement. Tracked by derio-net/super-fr#1430 for a spec decision.
