@@ -253,7 +253,8 @@ def _marker_placement(repo_root: Path) -> str | None:
     root = Path(repo_root)
     path = root / MARKER
     if not (path.exists() or path.is_symlink()):
-        return _state_without_marker(root)
+        _refuse_a_lost_marker(root)
+        return None
     # Review pr1431-r2: a marker that is there but cannot be validated is a refusal,
     # never "no marker", which would read a stealth workspace as `repo`.
     data = _read(root)
@@ -318,7 +319,7 @@ def _recorded_states(root: Path) -> dict[str, tuple[str, str, str | None]]:
     return found
 
 
-def _state_without_marker(root: Path) -> None:
+def _refuse_a_lost_marker(root: Path) -> None:
     """No marker: refuse when this checkout's isolation state records quiet or stealth
     (review pr1431-r2: `git clean -fdx` removes the excluded marker, and the state is
     the other record of the placement `up` chose); else there is no marker to speak of."""
@@ -327,7 +328,7 @@ def _state_without_marker(root: Path) -> None:
 
     recorded = _recorded_states(root).get(str(root.resolve()))
     if recorded is None:
-        return None
+        return
     placement, branch, tracking = recorded
     stealth = f" --stealth {tracking}" if placement == STEALTH and tracking else (
         " --stealth <repo>@<branch>" if placement == STEALTH else ""
