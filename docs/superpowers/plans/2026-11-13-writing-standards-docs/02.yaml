@@ -8,6 +8,7 @@ phase:
   tracking_issue: null
   acceptance:
   - writing-standards-docs-guides
+  - writing-standards-docs-accuracy
   tier: standard
   files:
   - docs/reference/*.md
@@ -17,26 +18,42 @@ tasks:
   title: 'Batch A: acceptance-matrix, components, dispatch-lifecycle, hermes'
   steps:
   - id: P2.T1.S1
-    text: |-
-      [RED] Show the standard fails today and capture the baseline: run `bash scripts/check-writing-standards.sh /home/user/blog-craft` scoped to this batch — `uv run --isolated --no-project --with pyyaml python /home/user/blog-craft/tools/validate_writing_standard.py --default ste --stats docs/reference/acceptance-matrix.md docs/reference/components.md docs/reference/dispatch-lifecycle.md docs/reference/hermes.md` — and record each page's FAIL/WARN counts and sentence stats. Write each page's baseline version (`git show $BASE:./<path>`, BASE = the merge base recorded in the plan journal) to a per-run scratch directory outside the repository, keeping the repo-relative path, for the fact review.
+    text: "[ACCURACY] Before any language change: the orchestrator's brief carries an accuracy review per page (claims checked against the code the page `covers:` and names). Verify each finding against\
+      \ the code yourself; correct the true ones in ONE content commit per page (`docs(<page>): correct <what>`), and journal each claim (discovery, phase-tagged): claim, page line, code file:line, correction\
+      \ \u2014 or refuted with the code evidence. That commit is the page's baseline for the rest of this task (no corrections \u2192 the merge-base baseline from the plan journal). [RED] Show the standard\
+      \ fails today and capture the baseline: run `bash scripts/check-writing-standards.sh /home/user/blog-craft` scoped to this batch \u2014 `uv run --isolated --no-project --with pyyaml python /home/user/blog-craft/tools/validate_writing_standard.py\
+      \ --default ste --stats docs/reference/acceptance-matrix.md docs/reference/components.md docs/reference/dispatch-lifecycle.md docs/reference/hermes.md` \u2014 and record each page's FAIL/WARN counts\
+      \ and sentence stats. Write each page's baseline version (`git show $BASE:./<path>`, BASE = the page's baseline: its accuracy commit, else the merge base recorded in the plan journal) to a per-run\
+      \ scratch directory outside the repository, keeping the repo-relative path, for the fact review."
   - id: P2.T1.S2
-    text: |-
-      [GREEN] Rewrite each page in place to `ste`, language only, following blog-craft's skills/apply-writing-standard/SKILL.md and standards/ste.md at /home/user/blog-craft: keep front matter keys and values (title/tldr prose may be reworded), section order, fenced code, inline code, link targets, numerals and HTML comment markers. A heading other pages link to keeps its anchor, or its inbound links are updated in the batch. Then run the checker with `--default ste --preserve-from $BASE --stats docs/reference/acceptance-matrix.md docs/reference/components.md docs/reference/dispatch-lifecycle.md docs/reference/hermes.md` until no FAIL and no `preserve` hit; fix every warning you can and journal each one kept with its reason (R9).
+    text: '[GREEN] Rewrite each page in place to `ste`, language only, following blog-craft''s skills/apply-writing-standard/SKILL.md and standards/ste.md at /home/user/blog-craft: keep front matter keys
+      and values (title/tldr prose may be reworded), section order, fenced code, inline code, link targets, numerals and HTML comment markers. A heading other pages link to keeps its anchor, or its inbound
+      links are updated in the batch. Then run the checker with `--default ste --preserve-from <page baseline> --stats docs/reference/acceptance-matrix.md docs/reference/components.md docs/reference/dispatch-lifecycle.md
+      docs/reference/hermes.md` until no FAIL and no `preserve` hit; fix every warning you can and journal each one kept with its reason (R9).'
   - id: P2.T1.S3
-    text: |-
-      [REFACTOR] Run the wording tripwires on the batch: `uv run pytest -q --no-cov tests/unit/test_tripwire_fr_goal_question_rounds.py tests/unit/test_hermes_docs.py tests/unit/test_build_site.py tests/unit/test_writing_standards_docs.py tests/unit/test_tripwire_explainers_fresh.py`, and `uv run fr docs check`; fix what fails. Journal per page: sentences and average before -> after, checker result, kept warnings with reasons, the baseline path written in S1. Commit and push; CI on the pushed head is the evidence (tests: ci).
+    text: '[REFACTOR] Run the wording tripwires on the batch: `uv run pytest -q --no-cov tests/unit/test_tripwire_fr_goal_question_rounds.py tests/unit/test_hermes_docs.py tests/unit/test_build_site.py
+      tests/unit/test_writing_standards_docs.py tests/unit/test_tripwire_explainers_fresh.py`, and `uv run fr docs check`; fix what fails. Journal per page: sentences and average before -> after, checker
+      result, kept warnings with reasons, the baseline path written in S1. Commit and push; CI on the pushed head is the evidence (tests: ci).'
 - number: 2
   title: 'Batch B: install, plan-model, workflow-shapes, cli.md''s hand-written prose'
   steps:
   - id: P2.T2.S1
-    text: |-
-      [RED] Show the standard fails today and capture the baseline: run `bash scripts/check-writing-standards.sh /home/user/blog-craft` scoped to this batch — `uv run --isolated --no-project --with pyyaml python /home/user/blog-craft/tools/validate_writing_standard.py --default ste --stats docs/reference/install.md docs/reference/plan-model.md docs/reference/workflow-shapes.md docs/reference/cli.md` — and record each page's FAIL/WARN counts and sentence stats. Write each page's baseline version (`git show $BASE:./<path>`, BASE = the merge base recorded in the plan journal) to a per-run scratch directory outside the repository, keeping the repo-relative path, for the fact review.
+    text: "[ACCURACY] Before any language change: the orchestrator's brief carries an accuracy review per page (claims checked against the code the page `covers:` and names). Verify each finding against\
+      \ the code yourself; correct the true ones in ONE content commit per page (`docs(<page>): correct <what>`), and journal each claim (discovery, phase-tagged): claim, page line, code file:line, correction\
+      \ \u2014 or refuted with the code evidence. That commit is the page's baseline for the rest of this task (no corrections \u2192 the merge-base baseline from the plan journal). [RED] Show the standard\
+      \ fails today and capture the baseline: run `bash scripts/check-writing-standards.sh /home/user/blog-craft` scoped to this batch \u2014 `uv run --isolated --no-project --with pyyaml python /home/user/blog-craft/tools/validate_writing_standard.py\
+      \ --default ste --stats docs/reference/install.md docs/reference/plan-model.md docs/reference/workflow-shapes.md docs/reference/cli.md` \u2014 and record each page's FAIL/WARN counts and sentence\
+      \ stats. Write each page's baseline version (`git show $BASE:./<path>`, BASE = the page's baseline: its accuracy commit, else the merge base recorded in the plan journal) to a per-run scratch directory\
+      \ outside the repository, keeping the repo-relative path, for the fact review."
   - id: P2.T2.S2
-    text: |-
-      [GREEN] Rewrite each page in place to `ste`, language only, following blog-craft's skills/apply-writing-standard/SKILL.md and standards/ste.md at /home/user/blog-craft: keep front matter keys and values (title/tldr prose may be reworded), section order, fenced code, inline code, link targets, numerals and HTML comment markers. A heading other pages link to keeps its anchor, or its inbound links are updated in the batch. Then run the checker with `--default ste --preserve-from $BASE --stats docs/reference/install.md docs/reference/plan-model.md docs/reference/workflow-shapes.md docs/reference/cli.md` until no FAIL and no `preserve` hit; fix every warning you can and journal each one kept with its reason (R9).
+    text: '[GREEN] Rewrite each page in place to `ste`, language only, following blog-craft''s skills/apply-writing-standard/SKILL.md and standards/ste.md at /home/user/blog-craft: keep front matter keys
+      and values (title/tldr prose may be reworded), section order, fenced code, inline code, link targets, numerals and HTML comment markers. A heading other pages link to keeps its anchor, or its inbound
+      links are updated in the batch. Then run the checker with `--default ste --preserve-from <page baseline> --stats docs/reference/install.md docs/reference/plan-model.md docs/reference/workflow-shapes.md
+      docs/reference/cli.md` until no FAIL and no `preserve` hit; fix every warning you can and journal each one kept with its reason (R9).'
   - id: P2.T2.S3
-    text: |-
-      [REFACTOR] Run the wording tripwires on the batch: `uv run pytest -q --no-cov tests/unit/test_tripwire_fr_goal_question_rounds.py tests/unit/test_hermes_docs.py tests/unit/test_build_site.py tests/unit/test_writing_standards_docs.py tests/unit/test_tripwire_explainers_fresh.py`, and `uv run fr docs check`; fix what fails. Journal per page: sentences and average before -> after, checker result, kept warnings with reasons, the baseline path written in S1. Commit and push; CI on the pushed head is the evidence (tests: ci).
+    text: '[REFACTOR] Run the wording tripwires on the batch: `uv run pytest -q --no-cov tests/unit/test_tripwire_fr_goal_question_rounds.py tests/unit/test_hermes_docs.py tests/unit/test_build_site.py
+      tests/unit/test_writing_standards_docs.py tests/unit/test_tripwire_explainers_fresh.py`, and `uv run fr docs check`; fix what fails. Journal per page: sentences and average before -> after, checker
+      result, kept warnings with reasons, the baseline path written in S1. Commit and push; CI on the pushed head is the evidence (tests: ci).'
 state:
   steps:
     P2.T1.S1:

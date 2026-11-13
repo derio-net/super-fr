@@ -42,6 +42,11 @@ build (`.github/blog-craft.ref`), and its `site-build` CI job already checks it 
 3. **Verification: CI plus per-page fact checks.** The checker runs in CI and fails the
    PR on any FAIL. Each rewritten page passes `--preserve-from` against `origin/main` and
    a fact-keeper review. No live walk and no post-merge gate.
+4. **Accuracy, now and later.** Asked whether the rewrite works from the code or the
+   prose, the operator chose: "I want the documents to be (and stay) accurate". So every
+   page is first checked against the code it covers and corrected, as its own visible
+   step, before its language is rewritten; and a repo review lens keeps later changes to
+   a page honest against the code.
 
 ## Requirements
 
@@ -51,12 +56,16 @@ R3. A page that departs from its group's standard says so in its own front matte
 R4. Product terms the docs legitimately use (for example `worktree`, `devcontainer`, `fr`, `PR`, `CI`) are listed once in `.writing-standard-terms` at the repo root, which the checker reads; a term is listed only when the standard would otherwise flag a word the page cannot avoid.
 R5. `.github/blog-craft.ref` points at a blog-craft commit that ships the checker and the three standards, and every page still renders: CI's `site-build` job passes.
 R6. CI's `site-build` job runs `scripts/check-writing-standards.sh` against the pinned blog-craft checkout and fails on any FAIL.
-R7. Every page with a standard is rewritten to it, language only: front matter keys (apart from R3's added key) and their values (apart from `title` and `tldr` prose), section order, fenced code, inline code, link targets, numerals and HTML comment markers stay, and the page passes `validate_writing_standard.py --preserve-from <baseline>` with no FAIL and no `preserve` hit, where `<baseline>` is the merge base of the branch and `origin/main`, recorded once in the plan journal.
-R8. Every rewritten page gets a fact-keeper review, a read-only agent given only the page at the baseline and the rewrite, and no fact it reports `lost`, `changed` or `added` stays unresolved: each is fixed, or the journal records why the rewrite is right; the result is recorded in the plan journal per page.
+R7. Every page with a standard is rewritten to it, language only: front matter keys (apart from R3's added key) and their values (apart from `title` and `tldr` prose), section order, fenced code, inline code, link targets, numerals and HTML comment markers stay, and the page passes `validate_writing_standard.py --preserve-from <page baseline>` with no FAIL and no `preserve` hit. A page's baseline is its accuracy commit (R14), or, when R13 found nothing to correct, the merge base of the branch and `origin/main` recorded once in the plan journal.
+R8. Every rewritten page gets a fact-keeper review, a read-only agent given only the page at its baseline and the rewrite, and no fact it reports `lost`, `changed` or `added` stays unresolved: each is fixed, or the journal records why the rewrite is right; the result is recorded in the plan journal per page.
 R9. After the rewrite, no page FAILs its standard, and a page keeps a warning only when the plan journal names the warning and the reason it stays; this holds for every standard, the `ste` and `elements-of-style` pages included.
 R10. `.claude/rules/explainers-currency.md` says which standard each page group follows, how to run the check locally, and replaces its "second person, concrete, unhurried" voice line with the standards (the explainers keep explaining why a mechanism exists); its Enforcement list names the new check, and its generated mirror `.opencode/instructions/explainers-currency.md` is regenerated.
 R11. A unit test pins the `site-build` step, the script's page-group mapping, and the three front-matter exceptions.
 R12. The rewrite keeps every test that pins page wording or markers green, among them `tests/unit/test_tripwire_fr_goal_question_rounds.py`, `tests/unit/test_hermes_docs.py` and `tests/unit/test_build_site.py`; the full unit suite passes in CI after every batch.
+R13. Before a page's language is rewritten, an accuracy review reads it against the code its front matter `covers:` and every file, command, option, default or behaviour it names, and lists each claim that is wrong or stale, with file:line evidence for each.
+R14. Each confirmed inaccuracy is corrected in one content commit per page, made before that page's language rewrite, and the plan journal records each claim, its evidence and the correction; a flagged claim the code turns out to support is recorded as refuted with its evidence.
+R15. A repo review lens `docs-accuracy`, defined in `.fr/lenses.yaml`, asks its reviewer to check every claim a change adds to, changes on or leaves on a published page against the code, and a path rule there requires it for any change to a page `.fr/docs.yaml` names.
+R16. `.claude/rules/explainers-currency.md` tells authors that a page must stay true to the code it covers, that fr-goal runs review page changes under the `docs-accuracy` lens, and that a page edited outside a run is checked against its `covers:` code by hand.
 
 ## Design
 
@@ -150,7 +159,57 @@ Under `ste`, a page's headings may change. A heading that other pages link to ke
 its anchor, or its inbound links are updated in the same batch. The explainers keep
 their purpose: they explain why a mechanism exists, in plain language.
 
-### 4. The authoring rule (R10)
+### 3a. Accuracy first (R13, R14)
+
+A language-only rewrite keeps whatever the page says, true or not, and `fr docs check`
+only asks whether a page was touched when its covered code changed. So each batch starts
+with an accuracy pass, kept apart from the rewrite so both stay reviewable:
+
+1. **Review.** For each page, a dispatched read-only agent reads the page and the code
+   its `covers:` names, plus anything else the page cites: CLI verbs and options
+   (`packages/fr/src/fr/commands/`), defaults, file paths, workflow and config names. It
+   returns each claim that is wrong or stale, with the page line, the code's file:line,
+   and the correct statement. It does not judge style. A phase executor cannot dispatch
+   agents, so the orchestrator runs these reviews before dispatching the phase, and the
+   executor's brief carries their findings.
+2. **Correct.** The executor verifies each finding against the code and fixes the true
+   ones in one content commit per page (`docs(<page>): correct …`), before any language
+   change. A finding the code does not support is recorded as refuted. Each correction
+   goes in the plan journal as a discovery: claim, evidence, correction (R14).
+3. **Rewrite.** The language rewrite of §3 then runs with that commit as the page's
+   baseline, so `--preserve-from` and the fact-keeper judge only the language step.
+
+The phase review sees two kinds of change and checks both: the accuracy commits against
+the code, and the rewrite against its baseline.
+
+### 3b. Staying accurate (R15, R16)
+
+`.fr/lenses.yaml` gains a repo lens and a path rule:
+
+```yaml
+lenses:
+  docs-accuracy:
+    title: Docs accuracy
+    brief: |
+      Review every published page this change touches for whether what it says is true
+      of the code. Check each claim the change adds or edits, and each claim on a touched
+      page whose covered code (`covers:`) the change also touched, against that code:
+      commands and options, defaults, file paths, behaviour, order of steps. Report each
+      false or stale claim with the page line and the code's file:line.
+      A problem you see outside this lens is still reported, as an ordinary finding.
+require:
+  - paths: ["docs/explainers/*.md", "docs/*.md", "docs/reference/*.md"]
+    lenses: [docs-accuracy]
+```
+
+With `fr docs check` (a code change must touch its page), this means: a code change that
+makes a page stale must edit the page, and every fr-goal change that edits a page gets an
+accuracy review of that page against the code. A rule the branch adds is in force for the
+branch itself, so this feature's own `lens-review` reviews all 31 pages under it. `fr
+lenses check` validates the file. Outside an fr-goal run there is no lens review; the
+authoring rule says to check a page against its `covers:` code by hand (R16).
+
+### 4. The authoring rule (R10, R16)
 
 `.claude/rules/explainers-currency.md` gains a short section:
 - the group-to-standard mapping, and the two exceptions;
@@ -158,7 +217,10 @@ their purpose: they explain why a mechanism exists, in plain language.
   same blog-craft checkout recipe the rule already gives for previews;
 - a pointer to each standard's reference file in blog-craft for the rules themselves;
 - a new Enforcement bullet for `scripts/check-writing-standards.sh` in `site-build` and
-  its unit test.
+  its unit test;
+- an accuracy paragraph (R16): a page stays true to the code it covers; fr-goal runs
+  review page changes under the `docs-accuracy` lens; a page edited outside a run is
+  checked against its `covers:` code by hand.
 
 The rule is listed in `scripts/sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`, so the edit
 is followed by `scripts/sync-opencode.py` and the regenerated
@@ -193,6 +255,8 @@ strategy: none
 - writing-standards-docs-guides: none — CI site-build check over the rewritten guides and reference pages; per-page preserve and fact-keeper evidence in the plan journal
 - writing-standards-docs-explainers: none — CI site-build check over the rewritten explainers; per-page preserve and fact-keeper evidence in the plan journal
 - writing-standards-docs-authoring-rule: none — reviewed in the PR; the rule's commands are the ones CI runs
+- writing-standards-docs-accuracy: none — per-page accuracy reviews and corrections recorded in the plan journal, re-checked by each phase review and by this feature's own docs-accuracy lens review
+- writing-standards-docs-accuracy-lens: none — `fr lenses check` and `fr lenses status` in CI-run unit test; the lens review of this feature exercises it
 
 ## Test Plan
 
@@ -214,7 +278,12 @@ Per batch, before it is accepted (recorded in the plan journal):
 
 At the end, in review:
 
-8. `.claude/rules/explainers-currency.md` names each group's standard and the three
+8. Per page, the plan journal holds the accuracy review's claims and each one's outcome
+   (corrected with its commit, or refuted with evidence) (R13, R14).
+9. `uv run fr lenses check` passes, and `uv run fr lenses status` on this branch lists
+   `docs-accuracy` as required by the path rule; a unit test pins the lens and its rule
+   (R15).
+10. `.claude/rules/explainers-currency.md` names each group's standard and the three
    exceptions, its local command is the one the CI step runs, and its OpenCode mirror is
    in sync (`test_tripwire_opencode_instructions_sync.py`).
 
