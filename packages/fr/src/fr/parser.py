@@ -72,7 +72,17 @@ class Plan:
         try:
             return self.dir.relative_to(self.repo_root)
         except ValueError:
-            return self.dir
+            pass
+        # A quiet or stealth plan sits below its artifact root, outside the product
+        # checkout: name it relative to that root, as `spec_path` is (review F1 of
+        # PR #1437: the absolute fallback put the operator's path in Issue bodies).
+        root = self.artifact_root
+        if root is not None:
+            try:
+                return self.dir.relative_to(root)
+            except ValueError:
+                pass
+        return self.dir
 
     @property
     def artifact_root(self) -> Path | None:

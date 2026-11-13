@@ -158,7 +158,13 @@ def pickup_command(
     lines.extend(_record_section(plan, phase))
     lines.append("---")
     lines.append("")
-    lines.append(f"For plan-level context, read `{plan.repo_relative_dir}/_prose.md`.")
+    # A local brief: a quiet or stealth plan sits outside the checkout the agent works
+    # in, so it is named by the path the agent can read.
+    inside = plan.repo_root is not None and plan.dir.resolve().is_relative_to(
+        plan.repo_root.resolve()
+    )
+    prose_dir = plan.repo_relative_dir if inside else plan.dir
+    lines.append(f"For plan-level context, read `{prose_dir}/_prose.md`.")
     # Disable Rich markup parsing — the PR title contains literal "[repo]"
     # which Rich would otherwise interpret as a tag and strip.
     typer.echo("\n".join(lines))

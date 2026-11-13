@@ -126,6 +126,9 @@ def test_a_quiet_plan_belongs_to_the_product_checkout(
         assert plan.artifact_root == feature
         assert plan.spec_path == f"{KIND_DIRS['spec']}/{SPEC}"
         assert plan.spec_file == feature / KIND_DIRS["spec"] / SPEC
+        # Review F1: the Issue body's `📋 Plan:` line names the plan by this path; it is
+        # relative to the artifact root, never the operator's absolute one.
+        assert plan.repo_relative_dir == Path(KIND_DIRS["plan"]) / SLUG
 
 
 def test_plan_self_review_passes_a_quiet_plan_whose_rows_cite_the_spec_logically(
@@ -264,3 +267,29 @@ def test_moving_a_rows_origin_keeps_the_fragments_amendments(quiet: tuple[Path, 
     assert [a["row"] for a in kept["amendments"]] == ["q-hello"], kept
     rows = yaml.safe_load((frags / f"{SLUG}.yaml").read_text())["rows"]
     assert "q-typo" in {r["id"] for r in rows}
+
+
+def test_a_quiet_issue_body_names_no_local_path(quiet: tuple[Path, Path], tmp_path: Path) -> None:
+    """Review F1: `fr apply --yes` (tracking, allowed under quiet) renders `📋 Plan:` from
+    `repo_relative_dir`, which fell back to the absolute plan dir."""
+    from fr import render
+    from fr.parser import parse
+
+    worktree, _ = quiet
+    plan = parse(_create(worktree, tmp_path, SPEC))
+    body = render.render_body(plan.phases[0], plan)
+    plan_line = next(line for line in body.splitlines() if "Plan:" in line)
+    assert str(Path.home()) not in plan_line and str(tmp_path) not in plan_line, plan_line
+    assert f"{KIND_DIRS['plan']}/{SLUG}" in plan_line, plan_line
+
+
+def test_pickup_names_a_quiet_plans_prose_by_a_readable_path(
+    quiet: tuple[Path, Path], tmp_path: Path
+) -> None:
+    worktree, _ = quiet
+    plan_dir = _create(worktree, tmp_path, SPEC)
+    code, out = _fr(worktree, "pickup", str(plan_dir), "--phase", "1")
+    assert code == 0, out
+    flat = " ".join(out.split())
+    assert f"read `{plan_dir}/_prose.md`" in flat.replace("\n", ""), out
+    assert (plan_dir / "_prose.md").is_file()
