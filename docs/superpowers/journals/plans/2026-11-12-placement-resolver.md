@@ -1545,3 +1545,8 @@ f60886a05: under stealth fr pr create refuses a title or body naming fr (commit 
 ### pr1431-n6-resolved · finding [fixed] · resolves pr1431-n6: The hooks spawn git in plain repos before the switch-ref precondition
 
 fac91e3e4: the bash library and the OpenCode plugin read the marker, then the filesystem switch-ref precondition, before any git call for placement; recording-git tests in both engines
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r7-resolved created=2026-11-13T17:35:31+00:00 state=fixed resolves=pr1431-r7 -->
+### pr1431-r7-resolved · finding [fixed] · resolves pr1431-r7: validate-plans.sh depends on a healthy PATH fr and omits --no-create
+
+3749ee181: validate-plans.sh (and the wheel copy) resolves fr as the hooks do, asks --no-create, never evals, and falls back to the repo literals on every failure but an explicit placement refusal (PATHS_REFUSAL_PREFIX on fr settings paths); tests for broken, identity-refusing, unknown-option, missing and relative-PATH fr, and a real-fr quiet run creating no fr branch or worktree
