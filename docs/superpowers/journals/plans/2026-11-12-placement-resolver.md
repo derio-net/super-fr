@@ -1570,3 +1570,8 @@ Out of scope: branch_slug predates this change; filed as #1419.
 ### p6-relative-path-git-and-bare-fr-resolved-2 · finding [deferred → derio-net/super-fr#1429] · resolves p6-relative-path-git-and-bare-fr: The git lookup and two bare fr spawns still trust relative PATH entries
 
 Out of scope: the git lookup and bare fr spawns predate this branch; filed as #1429.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8-resolved-2 created=2026-11-13T19:18:54+00:00 state=open resolves=p7-r8 tracked_by=derio-net/super-fr#1430 -->
+### p7-r8-resolved-2 · finding [deferred → derio-net/super-fr#1430] · resolves p7-r8: migrate-branch's own removal commit leaves fr files and chore(fr) commits in branch history
+
+Spec-level: follows from R28's wording against R23/R24; plan 3 may not change a requirement; filed as #1430 for a spec decision.
