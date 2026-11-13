@@ -1455,3 +1455,8 @@ Inferred: under quiet and stealth the debug journal is not there, so the push ca
 ### pr1431-n1 · finding [open] (reviewer: in scope) · Devcontainer mode with quiet: in-container git worktree prune may deregister host worktrees
 
 Record item from the adversarial review; inferred, not run. Check before the tester walk.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n2 created=2026-11-13T15:06:57+00:00 state=open review_scope=in -->
+### pr1431-n2 · finding [open] (reviewer: in scope) · _copy_quiet's read-tree --reset can discard pending writes in an existing fr worktree
+
+Record item: dirty_workspaces checks isolation states only, not the fr worktree or the tracking clone.
