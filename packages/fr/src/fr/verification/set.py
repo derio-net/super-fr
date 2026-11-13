@@ -14,6 +14,7 @@ import datetime as _dt
 from dataclasses import dataclass
 from pathlib import Path
 
+from fr.artifacts.paths import emitted_path
 from fr.verification.baseline import (
     Lowering,
     change_block,
@@ -104,7 +105,7 @@ def exit_change(
     spec_rel = run_spec(state)
     if spec_rel is None:
         raise SetRefusedError(f"run {run_id!r} has not emitted a spec yet")
-    spec = repo_root / spec_rel
+    spec = emitted_path(repo_root, spec_rel)
     if not spec.is_file():
         raise SetRefusedError(f"{spec_rel} is not in the working tree (archived?)")
     original = spec.read_text()

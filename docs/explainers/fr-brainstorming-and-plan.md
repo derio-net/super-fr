@@ -15,7 +15,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-12 placement-resolver phase 3, plan create and pickup read and write the fr branch under quiet
+reviewed: 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
 ---
 
 ## Overview: why the idea gets written down twice

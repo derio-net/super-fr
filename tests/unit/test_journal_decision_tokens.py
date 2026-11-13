@@ -323,3 +323,98 @@ class TestAdd:
         assert res.exit_code == 2, res.output
         assert "no answered question" in res.output
         assert _journal(root) == before
+
+
+class TestDecisionWindowInOneRecord:
+    """Live walk of 7.0.0rc3: a brainstorm record carrying the operator brief and then
+    the operator's decisions refused every `answered_by: operator`, because the window
+    opened at the brief this SAME record was adding, stamped with the apply time, after
+    the question round. The window opens where the journal on disk last moved."""
+
+    def test_an_earlier_entry_of_the_same_record_does_not_close_the_window(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from fr.record import apply as engine
+        from fr.record.model import JournalItem, StepRecord
+
+        from tests.unit.transcript_sessions import asked_at
+
+        root = _repo(tmp_path, monkeypatch)
+        answered = (datetime.now(UTC) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        asked_at(tmp_path / "projects", answered, session_id="s-q")
+        monkeypatch.setenv("FR_HARNESS", "claude-code")
+        monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
+        monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-q")
+        path = root / "docs/superpowers/journals/specs/s.md"
+        record = StepRecord(
+            journal=(
+                JournalItem(kind="discovery", id="brief", title="brief", body="b"),
+                JournalItem(
+                    kind="decision", id="d1", title="chose x", body="b", answered_by="operator"
+                ),
+                JournalItem(
+                    kind="decision", id="d2", title="chose y", body="b", answered_by="operator"
+                ),
+            )
+        )
+        outcome = engine.apply_record(
+            root,
+            None,
+            record,
+            target=engine.RecordTarget(
+                journal_scope="spec", journal_slug="s", journal_file=path, message="m"
+            ),
+        )
+        assert {e.id for e in outcome.entries} == {"brief", "d1", "d2"}
+        assert _journal(root).count("decided_by=operator") == 2
+
+    def test_a_record_of_operator_decisions_with_no_answer_in_the_window_is_refused(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The window still closes: with the journal on disk newer than the only answer,
+        a many-entry record claiming the operator is refused, and nothing is written."""
+        from fr.record import apply as engine
+        from fr.record.model import JournalItem, StepRecord
+
+        from tests.unit.transcript_sessions import asked_at
+
+        root = _repo(tmp_path, monkeypatch)
+        first = runner.invoke(
+            app,
+            [
+                *("journal", "add", "--scope", "spec", "--slug", "s", "--kind"),
+                *("discovery", "--id", "x0", "--title", "earlier"),
+            ],
+        )
+        assert first.exit_code == 0, first.output
+        before = _journal(root)
+        asked_at(tmp_path / "projects", "2000-01-01T00:00:00.000Z", session_id="s-q")
+        monkeypatch.setenv("FR_HARNESS", "claude-code")
+        monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
+        monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-q")
+        record = StepRecord(
+            journal=(
+                JournalItem(kind="discovery", id="brief", title="brief", body="b"),
+                JournalItem(
+                    kind="decision", id="d1", title="chose x", body="b", answered_by="operator"
+                ),
+                JournalItem(
+                    kind="decision", id="d2", title="chose y", body="b", answered_by="operator"
+                ),
+            )
+        )
+        with pytest.raises(engine.RecordRefusedError, match="no answered question"):
+            engine.apply_record(
+                root,
+                None,
+                record,
+                target=engine.RecordTarget(
+                    journal_scope="spec",
+                    journal_slug="s",
+                    journal_file=root / "docs/superpowers/journals/specs/s.md",
+                    message="m",
+                ),
+            )
+        assert _journal(root) == before
