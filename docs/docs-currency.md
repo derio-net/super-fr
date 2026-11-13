@@ -105,7 +105,8 @@ Exit 0 is clean, 1 is findings, 2 is a usage or environment error. It never writ
 | `uncovered` | a `must_cover` file that no page covers |
 
 The diff is from the merge base to HEAD. With no `--base`, the base is the remote's default branch,
-read from the local `origin/HEAD` without any network call. With no `--base` on the default branch
+read locally without any network call: from `origin/HEAD`, or else from the first of `origin/main`,
+`master`, `trunk` or `develop` that exists. With no `--base` on the default branch
 itself, or whenever HEAD is the merge base, there is no diff to judge, so only the structural checks (`bad-page`, `dead-glob`,
 `uncovered`) run.
 
@@ -187,18 +188,18 @@ fenced block is left alone). The build inlines the file as a `<figure class="sit
 renderer runs, and fails the page if the renderer changes the SVG or the file is missing. Each file
 carries `role="img"` and a non-empty `<title>` as its first child, runs no script, refers to nothing
 outside the page, and takes every colour from a class in `scripts/site/figures.css` (`fig-ink`,
-`fig-muted`, `fig-line`, `fig-panel`, `fig-accent`, `fig-you`, `fig-ok`, `fig-text`, `fig-small`,
-`fig-big`), never a literal colour. Every `id` starts with the file's name and two hyphens
+`fig-muted`, `fig-line`, `fig-panel`, `fig-panel-fill`, `fig-accent`, `fig-accent-line`, `fig-you`,
+`fig-you-line`, `fig-ok`, `fig-ok-line`, `fig-flow`, `fig-text`, `fig-small`, `fig-big`), never a literal colour. Every `id` starts with the file's name and two hyphens
 (`gate-ledger--arrow`). A figure whose text would fall below about 11 px on a phone has a second
 file, `<name>.narrow.svg`, with ids starting `<name>-narrow--`; the stylesheet shows it up to 860 px
-wide. Only a page with a figure gets `figures.css`.
+wide, or up to 1079 px inside an article page. Only a page with a figure gets `figures.css`.
 
 ### Writing a page that builds
 
 - Use inline Markdown links. A relative image, a reference-style link definition and a raw HTML
   `href` fail the build. Absolute URLs are fine.
 - Fence all code, and name the language. Link to sibling pages with relative `.md` paths.
-- The build drops a leading `# H1` in a guide because the renderer prints the title itself; keep it
+- The build drops a leading `# H1` from every article page because the renderer prints the title itself; keep it
   in the source so the file reads well on GitHub.
 - To preview, build into a directory outside the repo:
 
