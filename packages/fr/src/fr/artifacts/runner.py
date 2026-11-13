@@ -3,7 +3,10 @@
 A node's installed `fr` changes whenever the plugin updates; the artifacts on
 disk do not change with it. This module is what closes that gap: migrations
 register themselves here, and the runner walks every LIVE artifact, works out
-what each one needs, and applies it.
+what each one needs, and applies it. Archived artifacts are never migrated, with
+one exception: a `Repair` may name `extra_locators`, and the one that does,
+`drop-vk-version` (`fr.artifacts.plan_vk_version`, spec 2026-11-12-remove-vk-compat
+R11), reaches archived plans repair-only through `_scan_extra`.
 
 Two shapes of migration, because not every version bump changes a shape:
 
@@ -48,6 +51,7 @@ Three invariants the rest of the framework leans on:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -140,6 +144,16 @@ class Repair:
     fn: Callable[[Path], Iterable[Path] | None]
     description: str = ""
     companions: Callable[[Path], Iterable[Path]] | None = None
+    extra_locators: tuple[str, ...] = ()
+    """Globs, relative to the repo root, this repair ALSO reaches beyond its
+    kind's live locator: the archive, for the one repair the operator authorised
+    to touch it (`fr.artifacts.plan_vk_version`). Those paths are repaired only:
+    no stamp read, no schema chain, no structure validation. Empty for every
+    other repair, so `CEILING_REPAIR` still skips the archive."""
+    check: Callable[[Path], object] | None = None
+    """A dry run of `fn` that raises when `fn` would refuse, writing nothing.
+    Asked of `extra_locators` paths only: one it fails is reported as
+    unrepairable and never counts as stale (R12)."""
 
     @property
     def summary(self) -> str:
@@ -191,6 +205,11 @@ class MigrationReport:
     """Planned, then found unnecessary at apply time — another writer got there
     first. Recorded rather than dropped: it is the visible half of invariant 2."""
     failed: tuple[FailedAction, ...] = ()
+    unrepairable: tuple[FailedAction, ...] = ()
+    """`Repair.extra_locators` paths (archived plans) the repair cannot read or
+    rewrite. Reported, left byte-identical, and never a failure: they do not
+    make `ok` false and so never hold the CLI-entry gate (spec
+    2026-11-12-remove-vk-compat R12)."""
 
     @property
     def changed_paths(self) -> tuple[Path, ...]:
@@ -314,13 +333,15 @@ def plan_migrations(
 ) -> tuple[PlannedAction, ...]:
     """Everything that needs doing under `repo_root`, without doing any of it.
 
-    Reads only. Archived artifacts are excluded by construction (`iter_paths_of`).
+    Reads only. Archived artifacts are excluded by construction (`iter_paths_of`),
+    except the repairable paths a repair's `extra_locators` reach (`_scan_extra`).
     """
     reg = registry if registry is not None else MIGRATIONS
     actions: list[PlannedAction] = []
     for name, kind in _ordered_kinds(reg):
         for path in iter_paths_of(repo_root, kind):
             actions.extend(_actions_for(reg, name, kind, path)[0])
+    actions.extend(t.action for t in _scan_extra(repo_root, reg).repairable)
     return tuple(actions)
 
 
@@ -342,7 +363,10 @@ def is_stale(repo_root: Path, *, registry: MigrationRegistry | None = None) -> b
             actions, failures = _actions_for(reg, name, kind, path)
             if actions or failures:
                 return True
-    return False
+    # An extra-locator path counts only when it is repairable: one whose
+    # predicate or rewrite check raises is reported by `fr migrate artifacts`
+    # and holds nothing (spec 2026-11-12-remove-vk-compat R12).
+    return bool(_scan_extra(repo_root, reg, first_only=True).repairable)
 
 
 def inspection_failures(
@@ -359,9 +383,75 @@ def inspection_failures(
     reg = registry if registry is not None else MIGRATIONS
     failures: list[FailedAction] = []
     for name, kind in _ordered_kinds(reg):
+        # Live paths only: an extra-locator (archived) path never makes the
+        # tree stale, so it can never be why the gate refuses.
         for path in iter_paths_of(repo_root, kind):
             failures.extend(_actions_for(reg, name, kind, path)[1])
     return tuple(failures)
+
+
+@dataclass(frozen=True)
+class _ExtraTarget:
+    """One extra-locator path a repair will rewrite."""
+
+    name: str
+    repair: Repair
+    path: Path
+
+    @property
+    def action(self) -> PlannedAction:
+        return PlannedAction(
+            kind=self.name, path=self.path, summary=self.repair.summary, repair=self.repair.name
+        )
+
+
+@dataclass(frozen=True)
+class _ExtraScan:
+    """What the registered repairs' `extra_locators` reach under one repo."""
+
+    repairable: tuple[_ExtraTarget, ...] = ()
+    unrepairable: tuple[FailedAction, ...] = ()
+
+
+def _scan_extra(repo_root: Path, reg: MigrationRegistry, *, first_only: bool = False) -> _ExtraScan:
+    """Classify every path a repair's `extra_locators` reach: repairable (its
+    predicate is true and its dry check passes), unrepairable (either raised),
+    or clean (left out). The ONE walk of those paths; all four runner walks
+    read it.
+
+    No stamp, no schema chain, no structure validation: these paths are
+    repaired only. A path the kind's own locator also reaches is left to the
+    live walk. `first_only` stops at the first repairable path (`is_stale`).
+    """
+    repairable: list[_ExtraTarget] = []
+    unrepairable: list[FailedAction] = []
+    for name, kind in _ordered_kinds(reg):
+        extra = [r for r in reg.repairs(name) if r.extra_locators]
+        if not extra:
+            continue
+        live = set(iter_paths_of(repo_root, kind))
+        for r in extra:
+            paths = {p for loc in r.extra_locators for p in repo_root.glob(loc)}
+            for path in sorted(p for p in paths if p.is_file() and p not in live):
+                try:
+                    if not r.applies(path):
+                        continue
+                    if r.check is not None:
+                        r.check(path)
+                    # The write replaces the file through its directory. One that
+                    # cannot be written would pass every check, fail every apply,
+                    # and keep the repo stale for good (review p2-r1).
+                    if not os.access(path.parent, os.W_OK):
+                        raise PermissionError(f"{path.parent} is not writable")
+                except Exception as e:
+                    unrepairable.append(
+                        FailedAction(name, path, r.summary, f"{type(e).__name__}: {e}")
+                    )
+                    continue
+                repairable.append(_ExtraTarget(name, r, path))
+                if first_only:
+                    return _ExtraScan(tuple(repairable), tuple(unrepairable))
+    return _ExtraScan(tuple(repairable), tuple(unrepairable))
 
 
 def _ordered_kinds(reg: MigrationRegistry) -> list[tuple[str, ArtifactKind]]:
@@ -538,11 +628,33 @@ def run_migrations(
                 continue
             planned.append((name, kind, path, actions))
 
+    # Extra-locator paths (the archive): repair-only, held by the veto like any
+    # path, and an unrepairable one reported apart from `failed` (R12).
+    scan = _scan_extra(repo_root, reg)
+    unrepairable: list[FailedAction] = list(scan.unrepairable)
+    extra: list[_ExtraTarget] = []
+    for target in scan.repairable:
+        held = (
+            _held(reg, target.name, target.path, [target.action], veto)
+            if veto is not None
+            else None
+        )
+        if held is not None:
+            failed.append(
+                FailedAction(target.name, target.path, f"{target.name} migration held back", held)
+            )
+            continue
+        extra.append(target)
+
     if dry_run:
         return MigrationReport(
             dry_run=True,
-            applied=tuple(a for _, _, _, actions in planned for a in actions),
+            applied=(
+                *(a for _, _, _, actions in planned for a in actions),
+                *(t.action for t in extra),
+            ),
             failed=_distinct(failed),
+            unrepairable=tuple(unrepairable),
         )
 
     applied: list[PlannedAction] = []
@@ -568,11 +680,36 @@ def run_migrations(
             a for a in actions if _key(a) not in applied_keys and a.path not in abandoned
         )
 
+    for target in extra:
+        outcome = _repair_extra(target)
+        if isinstance(outcome, FailedAction):
+            unrepairable.append(outcome)
+        elif outcome is None:
+            skipped.append(target.action)
+        else:
+            applied.append(outcome)
+
     return MigrationReport(
         dry_run=False,
         applied=tuple(applied),
         skipped=tuple(skipped),
         failed=_distinct(failed),
+        unrepairable=tuple(unrepairable),
+    )
+
+
+def _repair_extra(target: _ExtraTarget) -> PlannedAction | FailedAction | None:
+    """Apply one extra-locator repair, re-deciding immediately before the write
+    (invariant 2). `None` when another writer got there first."""
+    r = target.repair
+    try:
+        if not r.applies(target.path):
+            return None
+        wrote = tuple(r.fn(target.path) or ())
+    except Exception as e:
+        return FailedAction(target.name, target.path, r.summary, f"{type(e).__name__}: {e}")
+    return PlannedAction(
+        kind=target.name, path=target.path, summary=r.summary, repair=r.name, also_wrote=wrote
     )
 
 

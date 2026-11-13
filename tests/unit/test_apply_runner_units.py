@@ -25,7 +25,7 @@ def _invoke_apply(tmp_path, monkeypatch, runner: str):
     plans = tmp_path / "docs" / "superpowers" / "plans"
     (plans / "some-plan").mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     forge_calls: list[str] = []
 
     def _no_forge() -> Any:

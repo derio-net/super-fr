@@ -224,7 +224,8 @@ fr-goal §2's cross-repo agents are a different case: each needs a workspace in 
 **different** repo, which no dispatch argument gives it — the Claude Code flag
 above cuts a worktree of the *current* repo (`fr-worktree-create.sh` files
 `agent-*` worktrees of it under `~/.cache/fr/agent-worktrees/`). So each
-agent enters isolation in its own repo itself, `fr isolation up --repo <path>`,
+agent enters isolation in its own repo itself,
+`fr isolation up --repo <path> --branch <branch>`,
 as fr-goal §2 says.
 
 ## Rollout (two-file pattern)

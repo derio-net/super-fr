@@ -50,7 +50,7 @@ def _run_install(tmp_path: Path, repo: Path) -> subprocess.CompletedProcess[str]
     env = {
         "HOME": str(home),
         "PATH": f"{home / 'bin'}:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
-        "VK_INSTALL_SKIP_PREFLIGHT": "",
+        "FR_INSTALL_SKIP_PREFLIGHT": "",
     }
     return subprocess.run(
         ["bash", str(repo / "scripts" / "install.sh")], capture_output=True, text=True, env=env

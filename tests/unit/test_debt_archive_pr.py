@@ -53,7 +53,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     _git(work, "config", f"url.{bare}.insteadOf", f"https://github.com/{SLUG}.git")
     gh = FakeGhClient()
     box = {"report": _report(("old-plan", 30), ("held-plan", 30), ("young-plan", 3), ("odd", None))}
-    monkeypatch.setenv("VK_REPO_ROOT", str(work))
+    monkeypatch.setenv("FR_REPO_ROOT", str(work))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     monkeypatch.delenv("FR_DEBT_TOKEN", raising=False)
     monkeypatch.setattr(debt_cmd, "_client", lambda root: gh)

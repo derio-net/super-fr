@@ -266,7 +266,7 @@ def _invoke_gated(monkeypatch: pytest.MonkeyPatch, repo: Path, argv: list[str]) 
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: False)
     monkeypatch.chdir(repo)
-    result = CliRunner().invoke(app, argv, env={"VK_REPO_ROOT": str(repo)})
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(repo)})
     return result.exit_code, result.output
 
 

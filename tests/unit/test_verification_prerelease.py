@@ -60,7 +60,7 @@ class _Recorder:
 def _invoke(root: Path, argv: list[str], client: Any = None, monkeypatch=None):
     if client is not None:
         monkeypatch.setattr("fr.hostclient.client_for", lambda _root: client)
-    return runner.invoke(app, argv, env={**os.environ, "VK_REPO_ROOT": str(root)})
+    return runner.invoke(app, argv, env={**os.environ, "FR_REPO_ROOT": str(root)})
 
 
 def test_dry_run_prints_the_argv_the_rc_tag_and_the_install_source(repo, monkeypatch) -> None:

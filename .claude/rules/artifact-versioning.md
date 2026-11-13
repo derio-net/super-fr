@@ -262,3 +262,13 @@ Archived artifacts under `docs/superpowers/implemented/`. They record what
 shipped and are frozen (spec §2 non-goals): no locator reaches them, no
 migration rewrites them, and `fr validate artifacts` does not check them. A
 migration that "fixes" history is a bug, not a courtesy.
+
+**The single exception** is the `drop-vk-version` plan repair
+(`fr.artifacts.plan_vk_version`, spec `2026-11-12-remove-vk-compat-design.md`
+R11), authorised by the operator. It removes one retired key from archived
+`_meta.yaml` files through `Repair.extra_locators`, so archived plans stay
+readable by `fr status` and gate backfill. It is repair-only (no stamp, no
+validation), and an archived file it cannot rewrite is reported by
+`fr migrate artifacts`, left byte-identical, and holds nothing: it never makes
+the repo stale. A second archive-reaching repair needs the same explicit
+decision.

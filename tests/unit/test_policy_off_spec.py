@@ -25,7 +25,7 @@ def _spec(root: Path, text: str) -> Path:
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = make_repo(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     return root
 
 

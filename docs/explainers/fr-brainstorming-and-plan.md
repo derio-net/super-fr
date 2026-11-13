@@ -15,7 +15,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-13 review-lenses phase 4, each skill gained one sentence on adding a lens; nothing this page describes changed
+reviewed: 2026-11-13 review-lenses phase 4, each skill gained one sentence on adding a lens, and the fr-plan skill no longer lists the retired vk_version key; nothing this page describes changed
 ---
 
 ## Overview: why the idea gets written down twice

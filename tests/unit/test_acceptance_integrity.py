@@ -37,7 +37,7 @@ runner = CliRunner()
 
 
 def _invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     return runner.invoke(app, ["acceptance", *args])
 
 

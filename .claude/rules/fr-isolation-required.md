@@ -65,7 +65,8 @@ Bash/Edit call is denied, yet the dispatch succeeds, so the run looks healthy
 while nothing happens (super-fr#420). fr-goal §2's cross-repo agents are a
 different case: each needs a workspace in a *different* repo, which no dispatch
 argument gives it (the Claude Code flag cuts a worktree of the current repo), so
-each enters isolation there itself with `fr isolation up --repo <path>`.
+each enters isolation there itself with
+`fr isolation up --repo <path> --branch <branch>`.
 
 **Harness — subagent worktree:** On Claude Code the second worktree is the Agent
 tool's `isolation: "worktree"` argument: dispatch the executor without it, and

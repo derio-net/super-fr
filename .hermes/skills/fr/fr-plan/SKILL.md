@@ -15,7 +15,7 @@ start:** "I'm using fr-plan to create the implementation plan."
 
 A plan is a directory under `docs/superpowers/plans/<slug>/` containing:
 
-- `_meta.yaml` — schema_version, plan slug, spec ref, target_repo, vk_version,
+- `_meta.yaml` — schema_version, plan slug, spec ref, target_repo, fr_version,
   created date, optional rework metadata (`parent_plan`, `prior_rework`,
   `origin_items`).
   - **`spec` ref notation:** a same-repo spec is the bare filename (`<file>.md`;

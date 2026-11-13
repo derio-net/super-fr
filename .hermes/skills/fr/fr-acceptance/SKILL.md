@@ -75,7 +75,7 @@ works.
    record the **driver** as the harness, and the test goes green on the
    wrong thing. Check the new terminal's env for every harness's detection
    keys and for `FR_HARNESS`, and set neither. Export only fixture plumbing
-   (`FR_SHIPPED_WORKFLOWS_DIR`, `VK_REPO_ROOT`, a redacted `FR_HOSTNAME`).
+   (`FR_SHIPPED_WORKFLOWS_DIR`, `FR_REPO_ROOT`, a redacted `FR_HOSTNAME`).
 4. **Start the target and give it a closed command list** ("run exactly
    these, one at a time; edit nothing"). With herdr:
    `herdr agent start <name> --kind <kind> --pane <id> -- <args>`, then

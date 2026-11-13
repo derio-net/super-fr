@@ -130,9 +130,7 @@ def _enforce_fr_version(plan_dir: Path, declared: object) -> None:
     Takes the raw declared value rather than a validated `PlanMeta` so it can
     run before schema validation — see `parse`. A non-string (or absent)
     value is left to `PlanMeta` to reject with a type error; this function
-    only answers the version question. The legacy `vk_version` field is inert
-    (it constrains a tool that no longer exists — labels-are-data doctrine
-    applied to plan files; see the super-fr split design).
+    only answers the version question.
     """
     if not declared:
         return
@@ -175,8 +173,7 @@ def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
       - `plan_dir` is not a directory
       - missing `_meta.yaml` (looks like a v1 plan)
       - `_meta.yaml` fails schema validation
-      - `fr_version` is malformed or unsatisfiable by the installed fr
-        (legacy `vk_version` is inert metadata — never enforced), and
+      - `fr_version` is malformed or unsatisfiable by the installed fr, and
         `enforce_fr_version` is True
       - any `NN.yaml` is malformed yaml or fails schema validation
 
@@ -187,8 +184,10 @@ def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
     `fr pickup`); it must never apply to a purely historical read.
     `fr.spec.compute_status` is the one caller that passes `False`, so an
     archived plan (which records what shipped, under whatever `fr` shipped
-    it — spec §2 non-goal: archives are never migrated) still reports its
-    real state instead of `PlanSchemaError` degrading it to `state="Missing"`.
+    it — spec §2 non-goal: archives are never migrated, save the one
+    `drop-vk-version` repair, `fr.artifacts.plan_vk_version`) still reports
+    its real state instead of `PlanSchemaError` degrading it to
+    `state="Missing"`.
     """
     plan_dir = Path(plan_dir).resolve()
     if not plan_dir.is_dir():

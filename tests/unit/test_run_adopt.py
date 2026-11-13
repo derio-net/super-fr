@@ -162,7 +162,7 @@ def _commit_all(repo: Path) -> None:
 
 
 def _invoke(repo: Path, shipped: Path, argv: list[str]):
-    env = {**os.environ, "VK_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
     return runner_cli.invoke(app, argv, env=env)
 
 

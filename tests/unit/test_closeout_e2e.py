@@ -75,7 +75,7 @@ def _git_out(root: Path, *args: str) -> str:
 
 
 def _invoke(repo: Path, shipped: Path, argv: list[str]):
-    env = {**os.environ, "VK_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
     return runner_cli.invoke(app, argv, env=env)
 
 
@@ -276,7 +276,7 @@ def test_squash_merged_delivery_leaves_no_hazard_fr_caused(
     # --- 2. `fr archive <plan-dir>` does not refuse as dirty ---
     monkeypatch.setattr(archive_cmd, "_make_gh_client", lambda: FakeGhClient())
     monkeypatch.chdir(base)
-    monkeypatch.setenv("VK_REPO_ROOT", str(base))
+    monkeypatch.setenv("FR_REPO_ROOT", str(base))
     archived_plan_dir = base / "docs" / "superpowers" / "plans" / SLUG
     archive = runner_cli.invoke(app, ["archive", str(archived_plan_dir)])
     assert "dirty" not in archive.output.lower(), archive.output

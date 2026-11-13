@@ -157,7 +157,7 @@ def _in_container(monkeypatch: pytest.MonkeyPatch, value: bool = True) -> None:
 
 
 def _run_status(repo: Path):
-    return runner.invoke(app, ["run", "status", "r"], env={"VK_REPO_ROOT": str(repo)})
+    return runner.invoke(app, ["run", "status", "r"], env={"FR_REPO_ROOT": str(repo)})
 
 
 def test_fr_run_inside_a_devcontainer_workspace_is_refused(
@@ -180,7 +180,7 @@ def test_fr_usage_is_refused_the_same_way(tmp_path: Path, monkeypatch: pytest.Mo
     _marker(repo, "worktree", "devcontainer")
     _in_container(monkeypatch)
     result = runner.invoke(
-        app, ["usage", "report", "--session", "s"], env={"VK_REPO_ROOT": str(repo)}
+        app, ["usage", "report", "--session", "s"], env={"FR_REPO_ROOT": str(repo)}
     )
     assert result.exit_code == 2
     assert "harness host" in " ".join(result.output.split())
@@ -196,13 +196,13 @@ def test_fr_usage_checks_the_repo_its_repo_option_names(
     _in_container(monkeypatch)
 
     refused = runner.invoke(
-        app, ["usage", "backfill", "--repo", str(marked)], env={"VK_REPO_ROOT": str(plain)}
+        app, ["usage", "backfill", "--repo", str(marked)], env={"FR_REPO_ROOT": str(plain)}
     )
     assert refused.exit_code == 2
     assert "harness host" in " ".join(refused.output.split())
 
     allowed = runner.invoke(
-        app, ["usage", "backfill", "--repo", str(plain)], env={"VK_REPO_ROOT": str(marked)}
+        app, ["usage", "backfill", "--repo", str(plain)], env={"FR_REPO_ROOT": str(marked)}
     )
     assert "harness host" not in allowed.output, allowed.output
 

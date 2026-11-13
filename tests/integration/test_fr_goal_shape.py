@@ -198,7 +198,7 @@ def _fr(root: Path, argv: list[str]):
         argv,
         env={
             **os.environ,
-            "VK_REPO_ROOT": str(root),
+            "FR_REPO_ROOT": str(root),
             "FR_SHIPPED_WORKFLOWS_DIR": str(SHIPPED_WORKFLOWS_DIR),
         },
     )
@@ -546,7 +546,7 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
     (root / plan_rel / "04.yaml").write_text(
         phase_3.read_text().replace("P3.", "P4.").replace("number: 3", "number: 4")
     )
-    # Absolute: `_fr` sets VK_REPO_ROOT but does not chdir, so a repo-relative
+    # Absolute: `_fr` sets FR_REPO_ROOT but does not chdir, so a repo-relative
     # plan path would resolve against the real cwd.
     tick = _fr(root, ["plan", "edit", str(root / plan_rel), "--tick", "P4.T1.S1"])
     assert tick.exit_code == 0, tick.output

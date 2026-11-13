@@ -641,7 +641,7 @@ def test_archive_write_back_matches_the_journal_resolve_path(tmp_path: Path) -> 
     old = os.getcwd()
     os.chdir(tmp_path / "a")
     try:
-        os.environ["VK_REPO_ROOT"] = str(tmp_path / "a")
+        os.environ["FR_REPO_ROOT"] = str(tmp_path / "a")
         res = CliRunner().invoke(
             app,
             ["journal", "resolve", "--scope", "plan", "--slug", "p1", "--id", "f1",
@@ -649,7 +649,7 @@ def test_archive_write_back_matches_the_journal_resolve_path(tmp_path: Path) -> 
         )  # fmt: skip
     finally:
         os.chdir(old)
-        os.environ.pop("VK_REPO_ROOT", None)
+        os.environ.pop("FR_REPO_ROOT", None)
     assert res.exit_code == 0, res.output
 
     end = OpenEnd("plan", "p1", "f1", "first", "body of f1", "open", paths[1])

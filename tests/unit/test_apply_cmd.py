@@ -154,7 +154,7 @@ def test_apply_legacy_layout_hard_stops_before_archived_refusal(tmp_path, monkey
     archived = tmp_path / "docs" / "superpowers" / "archived-plans" / "2026-05-10-done"
     archived.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
 
     result = CliRunner().invoke(app, ["apply", "docs/superpowers/archived-plans/2026-05-10-done"])
     assert result.exit_code == 2, result.output
@@ -308,7 +308,7 @@ def test_apply_to_unknown_runner_exits_2(tmp_path, monkeypatch):
     sp = tmp_path / "docs" / "superpowers" / "plans"
     sp.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     result = CliRunner().invoke(app, ["apply", "--all", "--to", "nope"])
     assert result.exit_code == 2
     combined = result.output + (result.stderr or "")
@@ -335,7 +335,7 @@ def test_apply_to_requires_fr_dispatch(tmp_path, monkeypatch):
     sp = tmp_path / "docs" / "superpowers" / "plans"
     sp.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     result = CliRunner().invoke(app, ["apply", "--all", "--to", "vk"])
     assert result.exit_code == 2
     assert "requires fr-dispatch" in (result.output + (result.stderr or ""))

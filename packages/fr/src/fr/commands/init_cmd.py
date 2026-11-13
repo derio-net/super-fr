@@ -8,7 +8,6 @@ from typing import Any
 
 import typer
 
-from fr.isolation.migrate import SECRETS_BLOCK, migrate_repo
 from fr.isolation.scaffold import KNOWN_TOOLS, scaffold_profile
 from fr.isolation.types import IsolationError
 from fr.plan_validator_wrapper import (
@@ -147,29 +146,6 @@ def _ensure_approval_label(repo_root: Path) -> None:
         ensure_approval_label(client, slug, lambda line: typer.echo(line, err=True), seen=set())
     except Exception as err:  # noqa: BLE001 — a scaffold never fails on the forge
         typer.echo(f"warning: cannot ensure the approved-fr label on {slug}: {err}", err=True)
-
-
-@init_app.command()
-def migrate(
-    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
-    yes: bool = typer.Option(False, "--yes", help="Apply (default is a dry-run preview)."),
-) -> None:
-    """Rewrite this repo's vk spellings to fr (#272): profiles yaml, devcontainer
-    mounts/customizations, isolation state dir. Prints the host secrets-move
-    block — never executes it."""
-    try:
-        actions = migrate_repo(repo.resolve(), yes=yes)
-    except IsolationError as err:
-        typer.echo(f"error: {err}")
-        raise typer.Exit(2) from err
-    if not actions:
-        typer.echo("nothing to migrate — repo already on fr spellings")
-        return
-    verb = "applied" if yes else "would apply (re-run with --yes)"
-    typer.echo(f"{verb}:")
-    for action in actions:
-        typer.echo(f"  - {action}")
-    typer.echo(SECRETS_BLOCK)
 
 
 @init_app.command("agents")

@@ -79,5 +79,5 @@ if [ -n "$drift" ]; then
   emit_block "fr-isolation: edit to '$file' blocked — $drift"
   exit 0
 fi
-emit_block "fr-isolation: edit to '$file' blocked — not inside an fr-isolation workspace. Enter isolation ('fr isolation up' / fr-goal) and edit in the worktree; or add the path to '.fr-isolation-allow'; or set FR_BASE_OK=1 for a deliberate base-clone edit."
+emit_block "fr-isolation: edit to '$file' blocked — not inside an fr-isolation workspace. Enter isolation ('fr isolation up --branch <branch>' / fr-goal) and edit in the worktree; or add the path to '.fr-isolation-allow'; or set FR_BASE_OK=1 for a deliberate base-clone edit."
 exit 0

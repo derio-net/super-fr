@@ -228,7 +228,7 @@ runner = CliRunner()
 
 
 def _check(monkeypatch, root: Path, client: _Client):
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     monkeypatch.setattr("fr.hostclient.client_for", lambda r: client)
     return runner.invoke(app, ["acceptance", "pages-check"])
 
@@ -246,7 +246,7 @@ def test_pages_check_exit_1_when_not_allowed_and_says_why(tmp_path, monkeypatch)
 
 
 def test_pages_check_exit_2_on_usage(tmp_path, monkeypatch):
-    monkeypatch.setenv("VK_REPO_ROOT", str(_root(tmp_path)))
+    monkeypatch.setenv("FR_REPO_ROOT", str(_root(tmp_path)))
     assert runner.invoke(app, ["acceptance", "pages-check", "--nope"]).exit_code == 2
 
 

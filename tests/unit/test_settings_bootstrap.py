@@ -27,7 +27,7 @@ def test_acceptance_init_works_on_a_never_fetched_remote(
     root = tmp_path / "own"
     root.mkdir()
     _bootstrap(root)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(app, ["acceptance", "init"])
     assert result.exit_code == 0, (result.output, result.exception)
     assert (root / "docs" / "acceptance" / "features").is_dir()
@@ -37,7 +37,7 @@ def test_acceptance_add_works_on_a_never_fetched_remote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _bootstrap(make_repo(tmp_path, row(), git=False))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(
         app,
         [
