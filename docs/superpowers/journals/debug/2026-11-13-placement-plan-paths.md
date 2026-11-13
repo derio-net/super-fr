@@ -10,3 +10,8 @@ Scratch quiet fixture (settings init --quiet, isolation up feat/q, fr-goal-light
 ### rc-plan-root · root-cause · Plan.repo_root is the fr worktree (or tracking clone) under quiet/stealth, and Plan.spec_path is relative to it
 
 fr.parser.parse sets repo_root to the git toplevel of the plan dir. Under quiet that is the fr worktree, whose space_for has feature=None, so every reader handed plan.repo_root as 'the checkout' (load_effective/has_fragments, journal_path, workflow_for_plan, .fr/ repo config, candidate-install) reads <fr worktree>/docs/... or <fr worktree>/.fr/..., which never exist. spec_path = res.path.relative_to(repo_root) gives features/<id>/docs/superpowers/specs/x.md, which no logical origin matches (origin_fragment requires a spec dir prefix) and which differs from the run cursor's artifact-root-relative convention (#1435). Separately refs.keeps_spec_ref_verbatim judges 'escapes the repo' against the product checkout only, so an absolute $FR_SPECS_DIR path is kept verbatim in _meta.yaml.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-deliver-heads created=2026-11-13T22:32:39+00:00 -->
+### rc-deliver-heads · root-cause · deliver's proportionality and the commit lines read the product HEAD for artifacts that live on fr
+
+proportionality._phases_at_head/_meta_at_head/_spec_at_head and the journal reads took the plan path relative to the product checkout (ValueError: not in the subpath) and read 'HEAD:' there; under quiet/stealth the plan, spec and journals are committed in the fr worktree or tracking clone. Its Phases section also folded acceptance at the product HEAD, which holds no fragment (R23). record/apply's one-line sha and run_cmd's 'cursor committed as <sha>' named the product HEAD, not the commit fr made.
