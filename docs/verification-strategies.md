@@ -97,8 +97,8 @@ on an agent-driven pre-merge strategy also needs a `scenario:` on its matrix row
 ### Example: a `staging` strategy
 
 Verify the PR's build against a staging backend, driven by an operator. The
-install comes from the PR's worktree build (`{worktree}`; `source: worktree`,
-unless the manifest says otherwise). The walk still requires a `scenario:` on
+install comes from the PR's worktree build (`{worktree}`), so the manifest sets
+`source: worktree`; a manifest that omits `source:` gets `none`. The walk still requires a `scenario:` on
 every row it covers and runs that scenario after the install and smoke, so the
 scenario is what reaches staging; the operator supplies the staging-wired
 client with `--client`:
@@ -165,5 +165,5 @@ A scenario is an executable script, one per row (`tests/scenarios/<row>.sh` in
 this repo). It runs with the installed tool first on `PATH` and a fresh git
 fixture as its working directory, asserts with `grep` on the tool's output, and
 exits non-zero on the first failed assertion. It never reaches a forge. See
-`tests/scenarios/` for six worked ones, and `tests/integration/test_scenarios.py`
+`tests/scenarios/` for worked ones, and `tests/integration/test_scenarios.py`
 for how CI installs a candidate and runs them.
