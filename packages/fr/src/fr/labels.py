@@ -3,12 +3,12 @@ descriptions, and dynamic templates. Consumed by `fr apply` (which calls
 `ensure_labels` on the target repo before it touches Issues).
 
 Color scheme (lifecycle gradient, board reads visually as a progression):
-  vk-ready     blue    queued for an agent to pick up
+  fr:ready     blue    queued for an agent to pick up
   in-progress  orange  agent is actively working
   pr-ready     green   PR is open, awaiting review
 
-manual is gray (human-only). vk-synced is olive (system metadata, set by
-the vk-issue-bridge). plan:<slug> is dark red (already in the wild,
+manual is gray (human-only). fr:synced is olive (system metadata, set by
+the dispatch bridge). plan:<slug> is dark red (already in the wild,
 preserved for compat). phase:<n> is yellow (attribute, not state).
 """
 

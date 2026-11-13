@@ -80,7 +80,7 @@ def merged_repo(tmp_path: Path, *, branch: str = "feat/b") -> Path:
 
 
 def invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     clear_fold_cache()
     return runner.invoke(app, ["acceptance", *args])
 

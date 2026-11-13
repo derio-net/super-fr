@@ -98,8 +98,8 @@ call for a non-GitHub forge.
 committed the profile, because `fr isolation up` builds from the committed tree. Add
 `--no-commit` to write the files only, for example when you must open a pull request to
 get them onto a protected branch. In a stealth workspace (a run whose records live in a
-separate tracking repository) `fr init scaffold`, `fr init agents`, `fr init
-validator-wrapper` and `fr init migrate --yes` refuse before writing anything: no fr file
+separate tracking repository) `fr init scaffold`, `fr init agents` and `fr init
+validator-wrapper` refuse before writing anything: no fr file
 may reach a stealth target.
 
 ## Services: forge, CI, tracking

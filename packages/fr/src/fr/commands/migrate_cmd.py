@@ -149,7 +149,9 @@ def artifacts_cmd(
     Walks the artifact registry (plans, journals, runs, the acceptance matrix,
     specs), applies each registered migration whose guard says it is needed,
     and reports what it did. Archived artifacts under `implemented/` are never
-    touched — they record what shipped.
+    touched — they record what shipped — except by the one repair that removes
+    the retired vk key from archived plans (`drop-vk-version`; an archived file
+    it cannot rewrite is reported and left as it is).
 
     Dry-run by default, like every other fr mutation. **This verb never
     commits** (spec §3.D; review r5-e9): committing is the CLI-entry gate's
@@ -200,8 +202,21 @@ def artifacts_cmd(
                 f"    it had already written {_rel(companion, repo_root)} (uncommitted)", err=True
             )
 
+    for left in report.unrepairable:
+        # An archived file the repair cannot read or rewrite: reported, left
+        # byte-identical, and never a failure (spec 2026-11-12-remove-vk-compat R12).
+        typer.echo(
+            f"  not repaired (archived, left as it is): {_rel(left.path, repo_root)}"
+            f" · {left.error}",
+            err=True,
+        )
+
     if not report.applied and not report.failed:
-        typer.echo("every artifact is already current.")
+        if report.unrepairable:
+            n = len(report.unrepairable)
+            typer.echo(f"nothing to migrate; {n} archived file(s) left as they are.")
+        else:
+            typer.echo("every artifact is already current.")
         _offer_adoption(repo_root, adopt=adopt, yes=yes)
         return
     if not yes:

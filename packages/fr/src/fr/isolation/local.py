@@ -295,6 +295,9 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
     return "\n".join(lines)
 
 
+# The one remedy every "no workspace" message offers (`--branch` is required).
+_UP_REMEDY = "`fr isolation up --branch <branch>`"
+
 # `fr archive` (fr/archive.py) `git mv`s a finished run's fr artifacts from
 # docs/superpowers/<kind>/<rest> to docs/superpowers/implemented/<kind>/<rest>
 # (plans/<dir>, specs/<file>, journals/<scope-dir>/<file>, runs/<id>.yaml,
@@ -1235,7 +1238,7 @@ class LocalWorktreeDevcontainerTarget:
                     f"profile {name!r} is written in the base repo but not committed, so the "
                     f"worktree can't see it — run `fr init scaffold --profile {name} --force` "
                     "(which commits; add `--tracking none` if the repo has no recognised "
-                    "remote) or commit .devcontainer/ yourself, then retry `fr isolation up`."
+                    f"remote) or commit .devcontainer/ yourself, then retry {_UP_REMEDY}."
                 )
         # Record BEFORE the side effect that can fail (gh#578): a failing
         # postCreate used to leave a worktree and a container that neither
@@ -1509,7 +1512,7 @@ class LocalWorktreeDevcontainerTarget:
             )
         return (
             f"{state.branch} stopped ({container}) — worktree, state and bindings kept; "
-            "`fr isolation up`, `restart` or the next `exec` resumes it."
+            f"{_UP_REMEDY}, `restart` or the next `exec` resumes it."
         )
 
     def _ps_parts_strict(self, state: IsolationState) -> list[str]:
@@ -1546,7 +1549,7 @@ class LocalWorktreeDevcontainerTarget:
         parts = self._ps_parts_strict(state)
         if not parts:
             raise IsolationError(
-                f"no container for {state.branch} — {nothing} (run `fr isolation up` first)."
+                f"no container for {state.branch} — {nothing} (run {_UP_REMEDY} first)."
             )
         return parts[0], parts[1]
 
@@ -2621,7 +2624,7 @@ class LocalWorktreeDevcontainerTarget:
     def _ensure_validator_wrapper_in_ref(self, ref: str) -> None:
         """Plan repos need the wrapper in the ref used for worktree add.
 
-        `fr isolation up` creates/reuses a linked worktree from git state, not
+        `fr isolation up --branch <branch>` creates/reuses a linked worktree from git state, not
         the base checkout's uncommitted files. A filesystem-only wrapper check
         would let an untracked wrapper pass, then the isolated worktree would
         still lack the validator entry point.
@@ -2641,14 +2644,14 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"plan repo has {KIND_DIRS['plan']} in {ref} but no "
                 f"scripts/validate-plans.sh there; run `{REPAIR_COMMAND}` from the repo "
-                "root, commit it to the isolation start ref, then retry `fr isolation up`."
+                f"root, commit it to the isolation start ref, then retry {_UP_REMEDY}."
             )
         mode = line.split(maxsplit=1)[0]
         if mode != "100755":
             raise IsolationError(
                 f"plan repo has scripts/validate-plans.sh in {ref} but it is not executable; "
                 "run `chmod +x scripts/validate-plans.sh`, commit it to the isolation "
-                "start ref, then retry `fr isolation up`."
+                f"start ref, then retry {_UP_REMEDY}."
             )
 
     def _ensure_validator_wrapper_in_worktree(self, worktree: Path) -> None:
@@ -2663,7 +2666,7 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"existing isolation worktree {worktree} is missing executable "
                 f"scripts/validate-plans.sh; run `{REPAIR_COMMAND}`, commit it on the worktree "
-                "branch, then retry `fr isolation up`."
+                f"branch, then retry {_UP_REMEDY}."
             )
 
     def _git_worktree_add(
@@ -2997,9 +3000,8 @@ class LocalWorktreeDevcontainerTarget:
         """Ensure the env-file the profile's devcontainer.json mounts exists.
 
         Mount-following (#272): the committed config is the source of truth —
-        the fr file is created so docker can read it. An unmigrated repo that
-        still mounts the legacy vk secrets path hard-errors, pointing at
-        `fr init migrate`; no --env-file in runArgs → nothing to ensure.
+        the file is created so docker can read it. No --env-file in runArgs →
+        nothing to ensure.
         """
         try:
             run_args = json.loads(config.read_text()).get("runArgs", [])
@@ -3009,12 +3011,6 @@ class LocalWorktreeDevcontainerTarget:
             if flag != "--env-file":
                 continue
             env_file = Path(value.replace("${localEnv:HOME}", str(_home())))
-            if "/.config/vk/secrets/" in str(env_file):
-                raise IsolationError(
-                    f"{config} still mounts the legacy vk secrets path ({env_file}) — "
-                    "run `fr init migrate` to rewrite the --env-file mount to "
-                    "~/.config/fr/secrets."
-                )
             if not env_file.is_file():
                 env_file.parent.mkdir(parents=True, exist_ok=True)
                 env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")

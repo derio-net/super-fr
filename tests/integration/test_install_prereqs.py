@@ -53,7 +53,7 @@ def _run(script: Path, tmp_path: Path, farm: Path) -> subprocess.CompletedProces
     env = {
         "HOME": str(home),
         "PATH": str(farm),
-        "VK_INSTALL_SKIP_PREFLIGHT": "1",
+        "FR_INSTALL_SKIP_PREFLIGHT": "1",
         "FR_SRC_DIR": str(tmp_path / "src"),
         "FR_SRC_REMOTE": str(tmp_path / "no-such-remote"),
     }

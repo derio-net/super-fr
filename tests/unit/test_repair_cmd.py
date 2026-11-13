@@ -52,7 +52,7 @@ def _git_seed(repo: Path) -> None:
 
 def _invoke(monkeypatch, repo: Path, argv: list[str]):
     monkeypatch.chdir(repo)
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     return CliRunner().invoke(app, argv)
 
 

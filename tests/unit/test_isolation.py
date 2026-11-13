@@ -623,9 +623,10 @@ def test_up_mount_resolves_common_git_even_without_normalization(
     assert f"source={main_git},target={main_git}" in " ".join(up)
 
 
-def test_up_legacy_vk_mount_hard_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unmigrated repo: committed devcontainer.json still mounts the vk path —
-    up() now hard-errors pointing at `fr init migrate` and creates no vk file."""
+def test_up_creates_env_file_at_the_mounted_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mount-following: whatever path the committed config mounts is created."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo = make_repo(
         tmp_path,
@@ -634,10 +635,9 @@ def test_up_legacy_vk_mount_hard_errors(tmp_path: Path, monkeypatch: pytest.Monk
         env_file_mount="${localEnv:HOME}/.config/vk/secrets/repo/dev.env",
     )
     target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
-    with pytest.raises(IsolationError, match="fr init migrate"):
-        target.up(profile=None, branch="vk-iso/test")
+    target.up(profile=None, branch="vk-iso/test")
     env = tmp_path / "home" / ".config" / "vk" / "secrets" / "repo" / "dev.env"
-    assert not env.exists()
+    assert env.is_file()
 
 
 def test_up_no_env_file_mount_creates_nothing(

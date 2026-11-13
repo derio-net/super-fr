@@ -31,7 +31,6 @@ def _write_two_ready_phase_plan(plan_dir: Path) -> None:
             schema_version: 2
             plan: dispatch-parity-fixture
             target_repo: {REPO}
-            vk_version: ">=2.0.0,<3.0.0"
             created: "2026-08-14"
             """
         )

@@ -314,7 +314,7 @@ class _Forge:
 
 def _comment_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, forge: _Forge, settings: str):
     root = _real_repo(tmp_path, settings)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     monkeypatch.setattr("fr.hostclient.client_for", lambda r: forge)
     return root
 

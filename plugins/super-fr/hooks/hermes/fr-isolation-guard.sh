@@ -96,6 +96,6 @@ is_mutation() {
 }
 
 if is_mutation "$command"; then
-  emit_block "fr-isolation: git/gh mutation blocked — cwd is an fr-enabled base clone, not an isolation worktree. Enter isolation ('fr isolation up' / fr-goal) and run it from the worktree ('cd <worktree> && …'); or set FR_BASE_OK=1 for a deliberate base-clone command."
+  emit_block "fr-isolation: git/gh mutation blocked — cwd is an fr-enabled base clone, not an isolation worktree. Enter isolation ('fr isolation up --branch <branch>' / fr-goal) and run it from the worktree ('cd <worktree> && …'); or set FR_BASE_OK=1 for a deliberate base-clone command."
 fi
 exit 0

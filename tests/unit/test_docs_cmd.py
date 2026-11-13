@@ -52,7 +52,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     git(root, "fetch", "-q", "origin")
     git(root, "remote", "set-head", "origin", "main")
     git(root, "checkout", "-q", "-b", "feature")
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     return root
 
@@ -63,7 +63,7 @@ def porcelain(root: Path) -> str:
 
 def test_no_config_is_nothing_to_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     r = runner.invoke(app, ["docs", "check"])
     assert r.exit_code == 0, r.output
     assert "nothing to check" in r.output

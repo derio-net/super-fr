@@ -98,7 +98,7 @@ def test_run_start_refuses_an_incoherent_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _land_on_main(repo, "forge:\n  comments: off\n  report_comment: on\n")
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     result = CliRunner().invoke(app, ["run", "start", "fr-goal", "--branch", "feat/x"])
     assert result.exit_code == 2
     assert "report_comment" in result.output
@@ -110,7 +110,7 @@ def test_run_start_refuses_an_invalid_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _land_on_main(repo, "nope: 1\n")
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     result = CliRunner().invoke(app, ["run", "start", "fr-goal", "--branch", "feat/x"])
     assert result.exit_code == 2
     assert "nope" in result.output

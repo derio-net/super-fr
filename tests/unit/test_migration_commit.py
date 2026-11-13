@@ -312,7 +312,7 @@ def test_the_cli_entry_gate_commits_the_migration_it_made(
     argv = ["models", "get", "--harness", "claude-code"]
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: True)
-    result = CliRunner().invoke(app, argv, env={"VK_REPO_ROOT": str(root)})
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(root)})
 
     assert result.exit_code == 0, result.output
     assert "claude-code" in result.output, "the typed command must still run"
@@ -447,7 +447,7 @@ def test_the_gate_never_commits_the_operators_edit_to_a_migrated_artifact(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: True)
-    result = CliRunner().invoke(app, argv, env={"VK_REPO_ROOT": str(root)})
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(root)})
 
     assert result.exit_code == 2, "a held-back artifact is a refusal, not a silent skip"
     assert _git(root, "rev-parse", "HEAD") == before_head, "nothing was committed"
@@ -468,7 +468,7 @@ def test_the_gate_never_commits_on_the_default_branch(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: True)
-    result = CliRunner().invoke(app, argv, env={"VK_REPO_ROOT": str(root)})
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(root)})
 
     assert result.exit_code == 2
     assert _git(root, "rev-parse", "HEAD") == before_head
@@ -897,3 +897,49 @@ def test_a_path_neither_on_disk_nor_in_the_index_never_reaches_git_add(tmp_path:
 
     assert outcome.committed, outcome.reason
     assert _committed_paths(root) == ["docs/acceptance/features/x.yaml"]
+
+
+# --- archived plans, which the vk_version repair reaches -----------------
+
+_ARCHIVED_CARRIER = "schema_version: 2\nplan: {0}\nvk_version: '1.0'\n"
+
+
+def _archived(root: Path, slug: str) -> Path:
+    p = root / "docs" / "superpowers" / "implemented" / "plans" / slug / "_meta.yaml"
+    p.parent.mkdir(parents=True)
+    p.write_text(_ARCHIVED_CARRIER.format(slug))
+    return p
+
+
+def test_live_and_archived_repairs_land_in_one_commit(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    _archived(root, "old")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "archive")
+    before = _git(root, "rev-list", "--count", "HEAD")
+
+    outcome = commit_migration(root, _migrate(root))
+
+    assert outcome.committed
+    assert int(_git(root, "rev-list", "--count", "HEAD")) == int(before) + 1
+    assert _committed_paths(root) == [
+        "docs/superpowers/implemented/plans/old/_meta.yaml",
+        "docs/superpowers/plans/p/_meta.yaml",
+    ]
+    assert _git(root, "status", "--porcelain") == ""
+
+
+def test_an_ignored_archived_file_is_repaired_and_left_out_of_the_commit(tmp_path: Path) -> None:
+    # `git add` refuses an ignored path; one refusal used to lose the whole commit.
+    root = _repo(tmp_path)
+    (root / ".gitignore").write_text("docs/superpowers/implemented/plans/local/\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "ignore")
+    ignored = _archived(root, "local")
+
+    outcome = commit_migration(root, _migrate(root))
+
+    assert outcome.committed, outcome.reason
+    assert _committed_paths(root) == ["docs/superpowers/plans/p/_meta.yaml"]
+    assert "vk_version" not in ignored.read_text()
+    assert _git(root, "status", "--porcelain") == ""

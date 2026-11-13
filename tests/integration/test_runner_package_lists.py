@@ -64,7 +64,7 @@ def stub_env(tmp_path: Path) -> dict[str, str]:
     return {
         "HOME": str(home),
         "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
-        "VK_INSTALL_SKIP_PREFLIGHT": "1",
+        "FR_INSTALL_SKIP_PREFLIGHT": "1",
         "FR_INSTALL_RETRY_SLEEP": "0",
         "UV_STUB_TOOLDIR": str(tmp_path / "uv-tools"),
         "UV_STUB_LOG": str(tmp_path / "uv-argv"),

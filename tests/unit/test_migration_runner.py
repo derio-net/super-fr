@@ -514,7 +514,10 @@ def test_this_repos_own_artifacts_plan_only_safe_actions() -> None:
     """
     actions = plan_migrations(REPO_ROOT)
     for a in actions:
-        assert "implemented" not in a.path.relative_to(REPO_ROOT).parts
+        if "implemented" in a.path.relative_to(REPO_ROOT).parts:
+            # The one archive-reaching repair (spec 2026-11-12-remove-vk-compat R11).
+            assert a.repair == "drop-vk-version", a
+            continue
         assert a.kind == "plan", f"nothing but plans has a migration in 4.0.0, got {a.kind}"
         assert a.from_version is None, "the only 4.0.0 migration is a repair, not a schema bump"
 

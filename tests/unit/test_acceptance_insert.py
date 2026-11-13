@@ -122,7 +122,7 @@ def test_rendered_order_of_existing_rows_is_unchanged(tmp_path: Path) -> None:
 def test_add_cli_inserts_by_capability(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, "", header="")
     (matrix_path,) = write_matrix_fragments(root, BASE)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(
         app,
         [

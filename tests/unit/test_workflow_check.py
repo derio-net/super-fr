@@ -14,7 +14,7 @@ classes — parse-time `WorkflowError` and semantic `check_workflow` errors,
 including "unknown schema" — surface uniformly as an exit-1 report; that
 half is exercised at the bottom of this file via the `fr.cli` app directly
 (no MCP/subprocess — `resolve_workflow`'s `shipped_root` and
-`resolve_repo_root`'s `$VK_REPO_ROOT` override are both test-friendly).
+`resolve_repo_root`'s `$FR_REPO_ROOT` override are both test-friendly).
 """
 
 from __future__ import annotations
@@ -142,7 +142,7 @@ def _invoke(monkeypatch: object, repo: Path, shipped: Path, argv: list[str]):
 
     from fr.cli import app
 
-    env = {**os.environ, "VK_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
     return runner_cli.invoke(app, argv, env=env)
 
 

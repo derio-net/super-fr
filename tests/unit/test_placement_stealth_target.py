@@ -50,7 +50,6 @@ def _files(root: Path) -> set[str]:
         ("init", "validator-wrapper"),
         ("init", "scaffold", "--profile", "dev", "--purpose", "p", "--ci", "none",
          "--tracking", "none"),
-        ("init", "migrate", "--yes"),
         ("settings", "init"),
         ("settings", "init", "--quiet"),
     ],

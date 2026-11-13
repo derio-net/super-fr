@@ -51,8 +51,6 @@ _runner = subprocess_runner
 # library default is a no-op. Module seam so tests never fork a real sweep.
 _gc_spawner = _detached_gc_spawn
 
-DEFAULT_BRANCH = "vk-iso/work"
-
 
 def _target(repo: Path) -> Target:
     """Select the isolation backend where NO workspace exists yet — `up`, `gc`'s
@@ -196,9 +194,10 @@ def _resolve_single(root: Path, branch: str | None) -> IsolationState:
     if state is None:
         _fail(
             IsolationError(
-                f"no isolation workspace for branch {branch!r} — run `fr isolation up` first."
+                f"no isolation workspace for branch {branch!r} — "
+                "run `fr isolation up --branch <branch>` first."
                 if branch
-                else "no isolation workspace — run `fr isolation up` first."
+                else "no isolation workspace — run `fr isolation up --branch <branch>` first."
             )
         )
     return state  # type: ignore[return-value]
@@ -321,7 +320,7 @@ def up(
     profile: str | None = typer.Option(
         None, help="Devcontainer profile (default: repo's configured default)."
     ),
-    branch: str = typer.Option(DEFAULT_BRANCH, help="Branch for the worktree."),
+    branch: str = typer.Option(..., help="Branch for the worktree."),
     path: Path | None = typer.Option(
         None,
         help="Worktree path (default: ~/.cache/fr/worktrees/<main-checkout>/<branch>).",
@@ -438,9 +437,8 @@ def exec(  # noqa: A001 - typer command name
     """
     root = _resolve_repo(repo)
     # super-fr#299 part 3: with --branch omitted, resolve to the single active
-    # workspace instead of a hardcoded vk-iso/work default — so `exec` after an
-    # `up --branch feat/x` targets the workspace the operator actually has,
-    # never a phantom default. Mirrors `status`/`down`'s no-branch handling.
+    # workspace — so `exec` after an `up --branch feat/x` targets the workspace
+    # the operator actually has. Mirrors `status`/`down`'s no-branch handling.
     state = _resolve_single(root, branch)
     argv = list(ctx.args)
     if argv and argv[0] == "--":
@@ -533,7 +531,7 @@ def stop(
     """Stop a workspace's devcontainer to free its resources, keeping the rest.
 
     The worktree, state, marker and session bindings are kept — only the
-    container halts. `fr isolation up`, `restart` or the next `exec` resumes it.
+    container halts. `fr isolation up --branch <branch>`, `restart` or the next `exec` resumes it.
     Already stopped is a no-op; host-worktree mode has no container (no-op);
     external mode refuses.
     """
@@ -1008,7 +1006,11 @@ def verify_merge(
     reaped = False
     if state is None:
         if branch is None:
-            _fail(IsolationError("no isolation workspace — run `fr isolation up` first."))
+            _fail(
+                IsolationError(
+                    "no isolation workspace — run `fr isolation up --branch <branch>` first."
+                )
+            )
             return
         reaped = True
     # A live workspace follows its recorded mode (gh#569); a reaped one has

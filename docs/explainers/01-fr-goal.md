@@ -1297,7 +1297,7 @@ The target receives only your code and one draft pull request with a plain summa
 writes (its artifact trees, `.fr/`, `.claude/agents/fr-*.md`, the plan validator), and
 `fr pr create` refuses a body that carries fr's markers. The commands that would write
 repository configuration into the target (`fr init scaffold`, `fr init agents`,
-`fr init validator-wrapper`, `fr init migrate --yes`, `fr settings init`) refuse before
+`fr init validator-wrapper`, `fr settings init`) refuse before
 writing, and so does every forge write but that one draft: `fr apply --yes`,
 `fr gate pass --yes`, `fr debt issue --yes` and the rest exit 2, and the forge clients
 themselves refuse an issue, a label or a comment there. Stealth sets `forge.labels`, `forge.comments` and `forge.issues`

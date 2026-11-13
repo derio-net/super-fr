@@ -195,7 +195,7 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
         - merged PR is the operator's "I accepted the work" signal
       Either alone is insufficient. Setting `completion.at` without a merged
       PR keeps the Issue OPEN (renderer projects pr-ready when a PR exists,
-      vk-ready otherwise) so the work surfaces correctly until merge.
+      fr:ready otherwise) so the work surfaces correctly until merge.
 
       Exception (#246): once the Issue is already CLOSED and `completion.at`
       is set with no open linked PR, treat the phase as complete even without

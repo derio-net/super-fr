@@ -10,7 +10,7 @@ Design rules baked into every model:
                                     in Phase 2 relies on this for purity.
   - `extra="forbid"`             -- closed-world schema. Adding any field
                                     in v2.x is intentionally a "must update
-                                    your vk_version" event because new
+                                    your fr_version" event because new
                                     fields typically come with new logic
                                     (the renderer treats them as inputs).
                                     Operators bump the constraint when they
@@ -48,10 +48,6 @@ class PlanMeta(BaseModel):
     plan: str
     spec: str | None = None
     target_repo: str
-    # Legacy constraint for the retired `vk` tool — parsed but NEVER
-    # enforced (inert metadata; plans in the wild keep it). The enforced
-    # constraint is `fr_version` (super-fr split, v3).
-    vk_version: str | None = None
     fr_version: str | None = None
     created: str  # YYYY-MM-DD; not parsed to date for round-trip stability
     parent_plan: str | None = None

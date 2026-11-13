@@ -29,7 +29,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     write_matrix_fragments(
         tmp_path, yaml.safe_dump({"schema_version": 5, "org": "o", "repo": "r", "rows": rows})
     )
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     monkeypatch.setattr(debt_cmd, "_now", lambda: datetime(2026, 10, 11, tzinfo=UTC))
     return tmp_path

@@ -65,9 +65,7 @@ def is_super_fr_validator_wrapper(path: Path) -> bool:
     if not path.exists() or not path.is_file():
         return False
     text = path.read_text(errors="ignore")
-    return any(delegate in text for delegate in _DELEGATE_PATHS) and (
-        "superpowers-for-vk" in text or "super-fr" in text
-    )
+    return any(delegate in text for delegate in _DELEGATE_PATHS) and "super-fr" in text
 
 
 def ensure_validator_wrapper(repo_root: Path) -> bool:
