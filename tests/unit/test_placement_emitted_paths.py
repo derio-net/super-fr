@@ -183,7 +183,11 @@ def test_readers_of_the_emitted_paths_follow_the_artifact_root(
 
     plan = parse(feature / plan_rel)
     assert plan.artifact_root == feature
-    assert plan.spec_path is not None and (plan.repo_root / plan.spec_path).is_file()
+    # The plan belongs to the product checkout; its spec path is artifact-root relative,
+    # the cursor's convention (debug journal 2026-11-13-placement-plan-paths).
+    assert plan.repo_root == worktree.resolve()
+    assert plan.spec_path == f"{KIND_DIRS['spec']}/{SPEC}"
+    assert plan.spec_file is not None and plan.spec_file.is_file()
     code, out = _fr(worktree, "plan", "self-review", str(feature / plan_rel))
     assert code == 0 and "does not resolve" not in out, out
 

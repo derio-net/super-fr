@@ -236,3 +236,31 @@ def test_the_staleness_guard_sees_a_quiet_features_uncited_spec(
     code, out = _fr(worktree, "acceptance", "check", "--no-fetch")
     assert code != 0, out
     assert f"staleness: {KIND_DIRS['spec']}/2026-11-13-uncited-design.md" in out, out
+
+
+def test_moving_a_rows_origin_keeps_the_fragments_amendments(quiet: tuple[Path, Path]) -> None:
+    """Review: a fragment emptied of rows by an origin correction still holds the
+    feature's amendments, so it is kept (only its row moves), never deleted."""
+    worktree, feature = quiet
+    frags = feature / KIND_DIRS["acceptance-fragment"]
+    code, out = _fr(
+        worktree, "acceptance", "add", "--id", "q-typo", "--capability", "hello",
+        "--acceptance", "a typo'd origin", "--origin", "spec:2026-11-13-qq#R1",
+        "--status", "not-implemented", "--notes", "n",
+    )  # fmt: skip
+    assert code == 0, out
+    code, out = _fr(
+        worktree, "acceptance", "amend", "--id", "q-hello", "--op", "reword",
+        "--acceptance", "the tool says hello, loudly", "--why", "w", "--feature", "2026-11-13-qq",
+    )  # fmt: skip
+    assert code == 0, out
+    code, out = _fr(
+        worktree, "acceptance", "amend", "--id", "q-typo", "--op", "reword",
+        "--origin", f"spec:{SLUG}#R1", "--why", "the origin was mistyped",
+    )  # fmt: skip
+    assert code == 0, out
+    kept = yaml.safe_load((frags / "2026-11-13-qq.yaml").read_text())
+    assert not kept.get("rows"), kept
+    assert [a["row"] for a in kept["amendments"]] == ["q-hello"], kept
+    rows = yaml.safe_load((frags / f"{SLUG}.yaml").read_text())["rows"]
+    assert "q-typo" in {r["id"] for r in rows}

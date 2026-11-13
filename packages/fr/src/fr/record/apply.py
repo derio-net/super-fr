@@ -1113,6 +1113,7 @@ def _reword_pending(
     texts: dict[Path, str],
     amending: Any,
     rel: Any,
+    deleted: set[Path],
 ) -> str:
     """A `reword` that corrects a row's `origin` (debug journal
     2026-11-13-placement-plan-paths): only a row still pending on this branch, in the
@@ -1159,10 +1160,14 @@ def _reword_pending(
     # naming another spec moves it to that spec's fragment, still pending here.
     from fr.acceptance.edit import insert_row, remove_row, render_fragment
 
-    if any(r.id != item.row for r in frags[owner].rows):
+    if target in frags and any(r.id == item.row for r in frags[target].rows):
+        raise RecordRefusedError(f"{where}: {rel(target)} already holds a row {item.row}")
+    if any(r.id != item.row for r in frags[owner].rows) or frags[owner].amendments:
+        # Other rows, or this feature's amendments of merged rows, stay where they are.
         texts[owner] = remove_row(texts[owner], item.row)
     else:
-        texts[owner] = None  # type: ignore[assignment]  # its last row: the file goes
+        del texts[owner]  # nothing else in it: the file goes (flushed by the caller)
+        deleted.add(owner)
     if target not in texts:
         texts[target] = (
             target.read_text()
@@ -1237,6 +1242,7 @@ def _acceptance_writes(
         if t is not None:
             texts[p] = t
     before = dict(texts)
+    deleted: set[Path] = set()  # fragments a moved row emptied
 
     froot = artifact_root(repo_root)
 
@@ -1295,7 +1301,7 @@ def _acceptance_writes(
 
     for item in record.acceptance:
         if isinstance(item, AmendmentItem) and (origins or {}).get(item.row):
-            lines.append(_reword_pending(item, origins, parsed(), texts, amending, rel))
+            lines.append(_reword_pending(item, origins, parsed(), texts, amending, rel, deleted))
             counts["row moved"] = counts.get("row moved", 0) + 1
             continue
         if isinstance(item, AmendmentItem):
@@ -1455,13 +1461,15 @@ def _acceptance_writes(
             lines.append(f"{row.id}: {describe_move(existing, row)}")
             counts["row moved"] = counts.get("row moved", 0) + 1
     try:
-        written = {rel(p): t for p, t in texts.items() if t is not None}
+        written = {rel(p): t for p, t in texts.items()}
         fold_outside_with(repo_root, written) if outside else fold_texts(written)
     except AcceptanceError as e:
         raise RecordRefusedError(f"the rows would leave invalid fragments: {e}") from e
     for p, t in texts.items():
         if before.get(p) != t:
             overlay.put(p, t)
+    for p in deleted:
+        overlay.put(p, None)
     return counts, lines
 
 

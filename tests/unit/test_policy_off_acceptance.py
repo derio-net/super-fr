@@ -132,6 +132,7 @@ def test_self_review_and_proportionality_say_disabled(repo: Path) -> None:
     plan: Any = SimpleNamespace(
         repo_root=repo,
         spec_path="docs/superpowers/specs/s.md",
+        spec_file=spec,  # `Plan.spec_file`: the spec below the plan's artifact root
         meta=SimpleNamespace(spec=""),
         phases=[],
     )
