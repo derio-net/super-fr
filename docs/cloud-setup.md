@@ -124,5 +124,5 @@ another branch. It never switches a clone that has local changes; it does not ac
 
 A close-out session starts on the default branch, because the batch branch was deleted
 when its PR merged. A session whose start failed (its `last_init_error`) shows as blocked,
-with the error as its note, never as active. A pass that restored the state from its ref
+with the error as its note, never as "working". A pass that restored the state from its ref
 says so.
