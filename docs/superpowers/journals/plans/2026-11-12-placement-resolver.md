@@ -1525,3 +1525,8 @@ f7753b0ba: under quiet and stealth git.push: ask finds the debug journal at the 
 ### pr1431-n2-resolved · finding [fixed] · resolves pr1431-n2: _copy_quiet's read-tree --reset can discard pending writes in an existing fr worktree
 
 2377efeb2: dirty_workspaces also lists the quiet fr worktree and every stealth tracking clone of the repo, so a move refuses before read-tree --reset or a tracking commit.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n3-resolved created=2026-11-13T15:47:06+00:00 state=open resolves=pr1431-n3 tracked_by=derio-net/super-fr#1433 -->
+### pr1431-n3-resolved · finding [deferred → derio-net/super-fr#1433] · resolves pr1431-n3: HEADS records a head before it is pushed
+
+Recording the head after the push needs a design choice (roll back local fr on a refused push, a second fr-only push, or readers ignoring unlanded heads); no false merged verdict today.
