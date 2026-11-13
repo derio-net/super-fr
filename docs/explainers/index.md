@@ -38,7 +38,7 @@ covers:
   - packages/fr/src/fr/commands/gate_cmd.py
   - packages/fr/src/fr/triage/batch_drive.py
   - scripts/release.py
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
 ---
 
 ## How a run goes
