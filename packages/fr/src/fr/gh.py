@@ -43,7 +43,6 @@ def _rest() -> RealGhRestClient | None:
     return RealGhRestClient(host=_HOST.get())
 
 
-
 def _stealth_refuses(fn: Callable[..., T]) -> Callable[..., T]:
     """A forge write helper refused under stealth, before any call (review p4-r5)."""
     import functools
@@ -56,6 +55,7 @@ def _stealth_refuses(fn: Callable[..., T]) -> Callable[..., T]:
         return fn(*a, **kw)
 
     return inner
+
 
 def _records(value: Any) -> list[dict[str, object]]:
     return list(value)

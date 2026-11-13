@@ -55,8 +55,9 @@ _PUSH_ATTEMPTS: Final = 3
 Network = Callable[[list[str], Path], "subprocess.CompletedProcess[str]"]
 """Runs one git argv (cwd given) that talks to the tracking repo, bounded, never
 prompting."""
-Visibility = Callable[[str], "str | None"]
-"""A repo (URL or local path) -> `private` | `internal` | `public`, or None unreadable."""
+Visibility = Callable[[str, "Path | None"], "str | None"]
+"""A repo (URL or local path), and a checkout of it when fr has one -> `private` |
+`internal` | `public`, or None unreadable."""
 
 
 @dataclass(frozen=True)
@@ -483,7 +484,25 @@ def fr_paths_in(root: Path, commits: Sequence[str]) -> list[str]:
 # --- privacy ------------------------------------------------------------------------
 
 
-def _forge_visibility(repo: str) -> str | None:
+def https_form(repo: str) -> str | None:
+    """The `https://<host>/<path>` form of a forge remote: a URL (any scheme, its user and
+    port dropped) or an scp-like `user@host:path` (review p4-r7); None when no host."""
+    if "://" in repo:
+        parsed = urlparse(repo)
+        if not parsed.hostname:
+            return None
+        return f"https://{parsed.hostname}/{parsed.path.lstrip('/')}"
+    hostpart, sep, path = repo.partition(":")
+    host = hostpart.rsplit("@", 1)[-1]
+    if not sep or not host or not path:
+        return None
+    return f"https://{host}/{path.lstrip('/')}"
+
+
+def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
+    """*repo*'s visibility from its forge: through the client *checkout* resolves (its
+    declared forge and host, review p4-r7) when fr has a checkout of it, else a client
+    for the remote's own host. None when it cannot be read (which refuses)."""
     from fr._hosts import slug_from_url
     from fr.triage.privacy import live_visibility
 
@@ -493,9 +512,15 @@ def _forge_visibility(repo: str) -> str | None:
     if slug is None:
         return None
     try:
-        from fr.hostclient import client_for_url
+        from fr import hostclient
 
-        client = client_for_url(repo if "://" in repo else f"https://{repo.split('@')[-1]}")
+        if checkout is not None:
+            client = hostclient.client_for(Path(checkout))
+        else:
+            url = https_form(repo)
+            if url is None:
+                return None
+            client = hostclient.client_for_url(url)
     except Exception:  # noqa: BLE001 - an unbuildable client is "unreadable", which refuses
         return None
     return live_visibility(client, slug)
@@ -505,10 +530,13 @@ visibility: Visibility = _forge_visibility
 """The visibility port (tests replace it; nothing here calls a forge in a test)."""
 
 
-def check_privacy(ref: StealthRef, target_remote: str | None) -> None:
+def check_privacy(
+    ref: StealthRef, target_remote: str | None, *, target_root: Path | None = None
+) -> None:
     """R24 privacy: refuse a tracking repo more visible than the target, and either
     visibility unreadable (fail closed, naming the repo). A local path is private, so a
-    local pair passes."""
+    local pair passes. *target_root*, the target's checkout, has its visibility read by
+    its own forge client (review p4-r7)."""
     from fr.triage.privacy import more_visible
 
     target = target_remote or "."
@@ -516,7 +544,8 @@ def check_privacy(ref: StealthRef, target_remote: str | None) -> None:
         return
     seen: dict[str, str] = {}
     for repo in (ref.repo, target):
-        answer = "private" if repo == "." else visibility(repo)
+        checkout = target_root if repo == target and repo != ref.repo else None
+        answer = "private" if repo == "." else visibility(repo, checkout)
         if answer is None:
             raise SettingsError(
                 f"placement stealth: cannot read the visibility of {repo}; fr refuses to put "
@@ -543,7 +572,7 @@ def enter(root: Path, branch: str, ref: StealthRef) -> dict[str, str]:
 
     root = Path(root)
     check_reachable(ref, root)
-    check_privacy(ref, origin_url(root))
+    check_privacy(ref, origin_url(root), target_root=root)
     fid = check_feature_id(root, branch, STEALTH)
     target = target_dir(root)
     wt = ensure_worktree(root, ref)
@@ -678,6 +707,7 @@ def commit_and_push(
     commit: Callable[[Path, Sequence[Path], str], CommitOutcome],
     *,
     target_remote: str | None,
+    target_root: Path | None = None,
 ) -> CommitOutcome:
     """R24: commit *files* in the tracking worktree *wt*, then push that commit
     compare-and-swap. A push that does not land rolls the worktree back to its bytes
@@ -690,7 +720,7 @@ def commit_and_push(
     from fr.artifacts.commit import CommitOutcome
     from fr.placement.quiet import fr_worktree_lock
 
-    check_privacy(ref, target_remote)
+    check_privacy(ref, target_remote, target_root=target_root)
     with fr_worktree_lock(wt):
         stray = _dirty_elsewhere(wt, files)
         if stray:
@@ -839,7 +869,7 @@ def prepare_resume(root: Path, ref: StealthRef, run_id: str) -> Resume:
     ahead of the code refuses here, naming the missing commit."""
     root = Path(root)
     check_reachable(ref, root)
-    check_privacy(ref, origin_url(root))
+    check_privacy(ref, origin_url(root), target_root=root)
     ensure_worktree(root, ref)
     _REACHED.add(ref.text)
     path = find_run(root, ref, run_id)

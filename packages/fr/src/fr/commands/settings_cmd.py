@@ -191,7 +191,7 @@ def init_stealth(root: Path, text: str) -> str:
     # R24 privacy, before the tracking worktree is cloned or anything is pushed (the
     # push seam holds the same guard again).
     target_remote = stealth.origin_url(root)
-    stealth.check_privacy(ref, target_remote)
+    stealth.check_privacy(ref, target_remote, target_root=root)
     target = stealth.target_dir(root)
     wt = stealth.ensure_worktree(root, ref)
     path = wt / target / stealth.TARGET_SETTINGS

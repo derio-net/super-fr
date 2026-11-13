@@ -27,7 +27,9 @@ __all__ = ["stealth_home"]
 
 
 def _visibility(monkeypatch: pytest.MonkeyPatch, answers: dict[str, str | None]) -> None:
-    monkeypatch.setattr(stealth, "visibility", lambda repo: answers.get(repo, "private"))
+    monkeypatch.setattr(
+        stealth, "visibility", lambda repo, checkout=None: answers.get(repo, "private")
+    )
 
 
 def test_visibility_ordering() -> None:
@@ -207,3 +209,63 @@ def test_push_sends_the_code_only(ws: tuple[Path, Path, Path]) -> None:
     names = git(origin, "ls-tree", "-r", "--name-only", "feat/s").splitlines()
     assert not [n for n in names if n.startswith("docs/")]
     assert "local--origin/features/feat__s/docs/superpowers/runs/r1.yaml" in tracked_files(track)
+
+
+# --- review p4-r7: the target's visibility is read through its own forge client ----------
+
+
+class _VisForge:
+    def __init__(self, answer: str) -> None:
+        self.answer = answer
+        self.asked: list[str] = []
+
+    def repo_visibility(self, repo: str) -> str:
+        self.asked.append(repo)
+        return self.answer
+
+
+def test_an_scp_remote_is_parsed_to_its_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    import fr.hostclient as hostclient
+
+    built: list[str] = []
+    forge = _VisForge("private")
+    monkeypatch.setattr(hostclient, "client_for_url", lambda url: built.append(url) or forge)
+    assert stealth._forge_visibility("git@git.example:acme/widget.git", None) == "private"
+    assert built == ["https://git.example/acme/widget.git"]
+    assert forge.asked == ["acme/widget"]
+    stealth._forge_visibility("ssh://git@git.example:2222/acme/widget.git", None)
+    assert built[-1] == "https://git.example/acme/widget.git"
+
+
+def test_the_targets_visibility_uses_the_checkouts_own_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A self-hosted target is read by the client its checkout resolves (its declared
+    forge and host), never a GitHub client guessed from the URL."""
+    import fr.hostclient as hostclient
+
+    forge = _VisForge("internal")
+    roots: list[Path] = []
+    monkeypatch.setattr(hostclient, "client_for", lambda root: roots.append(root) or forge)
+    monkeypatch.setattr(
+        hostclient, "client_for_url", lambda url: pytest.fail(f"guessed a client for {url}")
+    )
+    checkout = tmp_path / "target"
+    assert stealth._forge_visibility("git@git.example:acme/widget.git", checkout) == "internal"
+    assert roots == [checkout]
+    assert forge.asked == ["acme/widget"]
+
+
+def test_check_privacy_passes_the_target_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[tuple[str, Path | None]] = []
+
+    def answer(repo: str, checkout: Path | None = None) -> str:
+        seen.append((repo, checkout))
+        return "private"
+
+    monkeypatch.setattr(stealth, "visibility", answer)
+    ref = stealth.parse_ref("git@track.example:me/track.git@main")
+    stealth.check_privacy(ref, "git@git.example:acme/widget.git", target_root=tmp_path)
+    assert ("git@git.example:acme/widget.git", tmp_path) in seen

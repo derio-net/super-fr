@@ -264,7 +264,9 @@ def test_a_privacy_refusal_at_the_seam_is_exit_2(
     state, track, _ = ws
     stealth.reset_caches()
     monkeypatch.setattr(
-        stealth, "visibility", lambda repo: "public" if repo == str(track) else "private"
+        stealth,
+        "visibility",
+        lambda repo, checkout=None: "public" if repo == str(track) else "private",
     )
     result = _fr(ws, "plan", "create", "--slug", "2026-11-12-s", "--target-repo", "derio-net/s")
     assert result.exit_code == 2, result.output

@@ -872,23 +872,24 @@ def _commit_paths(
             from fr.placement.stealth import origin_url, restore_files
 
             try:
-                done = commit_and_push(
+                pushed = commit_and_push(
                     stealthy,
                     fr_root,
                     files,
                     message,
                     tracking,
                     target_remote=origin_url(repo_root),
+                    target_root=repo_root,
                 )
             except StealthPushError:
                 raise  # R24: fatal, the caller exits 2 (the worktree is already restored)
             except SettingsError as e:
-                done = CommitOutcome(
+                pushed = CommitOutcome(
                     committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}"
                 )
-            if not done.committed and owner is not None:
+            if not pushed.committed and owner is not None:
                 restore_files(fr_root, [owner])  # commit_paths restores the rest, p4-r2
-            return done
+            return pushed
 
         # p3-r8: every workspace of the repo shares this worktree and its index.
         try:
