@@ -165,7 +165,8 @@ A language-only rewrite keeps whatever the page says, true or not, and `fr docs 
 only asks whether a page was touched when its covered code changed. So each batch starts
 with an accuracy pass, kept apart from the rewrite so both stay reviewable:
 
-1. **Review.** For each page, a dispatched read-only agent reads the page and the code
+1. **Review.** A dispatched read-only agent (one per batch; each page reviewed and
+   reported on its own) reads the page and the code
    its `covers:` names, plus anything else the page cites: CLI verbs and options
    (`packages/fr/src/fr/commands/`), defaults, file paths, workflow and config names. It
    returns each claim that is wrong or stale, with the page line, the code's file:line,
