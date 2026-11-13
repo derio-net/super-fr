@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import IO, Any, ClassVar, cast
 
 from fr._hosts import detect_backend
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import CommandRunner
 from fr.hostclient import FORGE_ERRORS, client_for
 from fr.isolation import preserve as _preserve
@@ -2652,7 +2652,10 @@ class LocalWorktreeDevcontainerTarget:
             )
 
     def _ensure_validator_wrapper_in_worktree(self, worktree: Path) -> None:
-        plans = kind_dir("plan", space_for(worktree))
+        # The wrapper is owed by a product branch that holds plans. Under quiet or stealth
+        # the plans live on `fr` or in the tracking repo (review p4-r4), so only plans in
+        # the product tree itself count, as in `_ensure_validator_wrapper_in_ref`.
+        plans = worktree / KIND_DIRS["plan"]
         if not plans.is_dir():
             return
         wrapper = worktree / "scripts" / "validate-plans.sh"

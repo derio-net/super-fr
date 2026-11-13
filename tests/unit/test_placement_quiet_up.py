@@ -142,3 +142,24 @@ def test_run_start_in_an_existing_workspace_fetches_and_refuses_unreachable(
     )
     assert result.exit_code == 2, result.output
     assert "origin is unreachable" in " ".join(result.output.split())
+
+
+def test_up_again_on_a_quiet_workspace_with_a_plan_needs_no_validator_wrapper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p4-r4: a quiet feature's plans are on `fr`, so the product branch owes no
+    scripts/validate-plans.sh and re-entering the workspace does not demand one."""
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    repo = _quiet_origin(tmp_path)
+    state = _target(repo).up(profile=None, branch="feat/q")
+    monkeypatch.chdir(state.worktree)
+    made = CliRunner().invoke(
+        app,
+        ["plan", "create", "--slug", "2026-11-12-q", "--target-repo", "derio-net/q"],
+        env={**os.environ, "VK_REPO_ROOT": str(state.worktree)},
+    )
+    assert made.exit_code == 0, made.output
+    assert not (state.worktree / "scripts/validate-plans.sh").exists()
+    assert _target(repo).up(profile=None, branch="feat/q").worktree == state.worktree

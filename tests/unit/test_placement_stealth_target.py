@@ -89,3 +89,18 @@ def test_push_sends_a_code_only_commit(ws: tuple[Path, Path, Path]) -> None:
     git(root, "commit", "-qm", "feat(s): code")
     assert _fr(root, "push").exit_code == 0
     assert "refs/heads/feat/s" in git(origin, "show-ref")
+
+
+def test_up_again_on_a_stealth_workspace_with_a_plan_needs_no_validator_wrapper(
+    ws: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    """Review p4-r4: the plans live in the tracking repo, so the product branch owes no
+    scripts/validate-plans.sh, and re-entering the workspace does not demand one."""
+    root, track, _ = ws
+    made = _fr(root, "plan", "create", "--slug", "2026-11-12-s", "--target-repo", "derio-net/s")
+    assert made.exit_code == 0, made.output
+    assert not (root / "scripts/validate-plans.sh").exists()
+    again = HostWorktreeTarget(tmp_path / "work").up(
+        profile=None, branch="feat/s", stealth=stealth.parse_ref(f"{track}@main")
+    )
+    assert again.worktree == root
