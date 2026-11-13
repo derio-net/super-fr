@@ -63,6 +63,7 @@ def approval_journal(repo_root: Path) -> ApprovalJournal | str:
     fr-debugging session (no run, no spec), the one debug journal the branch added
     since it left the default branch. A string says why there is none."""
     from fr.archive import spec_slug_of
+    from fr.artifacts.paths import artifact_root, outside_repo
     from fr.git import GitRefusal, remote_default_ref
     from fr.git_policy.ask import ApprovalJournal
     from fr.git_policy.push import run_git
@@ -73,6 +74,13 @@ def approval_journal(repo_root: Path) -> ApprovalJournal | str:
         spec = run_spec(state)
         if spec:
             return ApprovalJournal("spec", spec_slug_of(Path(spec)))
+    slugs: list[str]
+    if outside_repo(repo_root) is not None:
+        # Review pr1431-r9: under quiet or stealth the journal lives at this feature's
+        # root, never on the product branch, and every journal there is this branch's.
+        debug = artifact_root(repo_root) / JOURNALS_REL / SCOPE_DIRS["debug"]
+        slugs = sorted(p.stem for p in debug.glob("*.md")) if debug.is_dir() else []
+        return _one_debug_journal(slugs)
     default = remote_default_ref(repo_root)
     if default is None or isinstance(default, GitRefusal):
         why = default.reason if isinstance(default, GitRefusal) else "no default ref"
@@ -87,6 +95,12 @@ def approval_journal(repo_root: Path) -> ApprovalJournal | str:
     if base.returncode != 0 or added.returncode != 0:
         return "this branch has no spec-driven run, and fr cannot read its debug journals"
     slugs = sorted(Path(p).stem for p in added.stdout.splitlines() if p.endswith(".md"))
+    return _one_debug_journal(slugs)
+
+
+def _one_debug_journal(slugs: list[str]) -> ApprovalJournal | str:
+    from fr.git_policy.ask import ApprovalJournal
+
     if len(slugs) == 1:
         return ApprovalJournal("debug", slugs[0])
     if not slugs:
