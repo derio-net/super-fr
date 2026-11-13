@@ -247,6 +247,48 @@ def _copy_identity(root: Path, path: Path) -> None:
             _git(path, "config", key, value.stdout.strip())
 
 
+def _is_ancestor(path: Path, a: str, b: str) -> bool:
+    return _git(path, "merge-base", "--is-ancestor", a, b).returncode == 0
+
+
+def _replay(path: Path, onto: str) -> bool:
+    """Rebase this clone's unpushed commits onto *onto* (features' paths are disjoint, so
+    a conflict means something is wrong); a rebase that fails is aborted. Whether it
+    landed."""
+    if _git(path, "rebase", "--quiet", onto).returncode == 0:
+        return True
+    _git(path, "rebase", "--abort")
+    return False
+
+
+def sync(path: Path, ref: StealthRef) -> None:
+    """Bring the tracking clone at *path* to the tracking ref's tip (review p4-r1), the
+    caller holding its lock: fetch, then fast-forward a clone that is behind, keep one
+    that is only ahead (its unpushed commits ride the next push, a fast-forward), and
+    replay unpushed commits onto a tip that moved meanwhile. A fast-forward or a replay
+    that cannot run refuses: a stale clone is never read, or pushed, as the state."""
+    _fetch(path, ref)
+    remote = _remote_ref(ref)
+    if _is_ancestor(path, "HEAD", remote):
+        done = _git(path, "merge", "--ff-only", "--quiet", remote)
+        if done.returncode != 0:
+            raise SettingsError(
+                f"placement stealth: cannot bring the tracking worktree {path} to the tip of "
+                f"{ref.text}: {(done.stderr or done.stdout or 'git merge failed').strip()}. "
+                "Resolve it there (fr will not read a stale clone as the state) and retry"
+            )
+        return
+    if _is_ancestor(path, remote, "HEAD"):
+        return
+    if not _replay(path, remote):
+        raise SettingsError(
+            f"placement stealth: the tracking worktree {path} holds unpushed commits that "
+            f"do not replay on the tip of {ref.text} (another host pushed meanwhile). fr "
+            "refuses rather than read or push them as the state: inspect them there "
+            f"(`git log {remote}..HEAD`), then drop or rebase them and retry"
+        )
+
+
 def ensure_worktree(root: Path, ref: StealthRef) -> Path:
     """The tracking worktree for *ref*: cloned on demand, else checked (it is a clone of
     the tracking repo, on the branch), fetched and fast-forwarded. Never a force flag."""
@@ -260,10 +302,10 @@ def ensure_worktree(root: Path, ref: StealthRef) -> Path:
                 f"origin is {url or 'unset'}, its branch {head or 'detached'}). Move it away "
                 "and retry"
             )
-        _fetch(path, ref)
-        behind = _git(path, "merge-base", "--is-ancestor", "HEAD", _remote_ref(ref))
-        if behind.returncode == 0:
-            _git(path, "merge", "--ff-only", "--quiet", _remote_ref(ref))
+        from fr.placement.quiet import fr_worktree_lock
+
+        with fr_worktree_lock(path):
+            sync(path, ref)
         return path
     if path.exists() and any(path.iterdir()):
         raise SettingsError(
@@ -339,7 +381,11 @@ def stealth_space(root: Path) -> paths.ArtifactSpace:
             f"`fr isolation up --stealth {ref.text}` (R24 fail-fast)"
         )
     if ref.text not in _REACHED:
+        from fr.placement.quiet import fr_worktree_lock
+
         check_reachable(ref, wt)
+        with fr_worktree_lock(wt):
+            sync(wt, ref)  # p4-r1: never read an unpushed or stale clone as the state
         _REACHED.add(ref.text)
     branch = branch_of(root)
     if branch is None:
@@ -460,14 +506,21 @@ def _rollback(wt: Path, old: str) -> None:
 
 
 def _push(wt: Path, ref: StealthRef) -> None:
-    """Push HEAD to the tracking branch compare-and-swap; on a lost race fetch, replay
-    this commit on the new tip (features' paths are disjoint) and retry, bounded. Any
-    other failure raises `StealthPushError`."""
+    """Push HEAD to the tracking branch compare-and-swap, and only as a fast-forward of
+    the tip fr last saw (a HEAD beside that tip is replayed onto it first, p4-r1); on a
+    lost race fetch, replay this commit on the new tip (features' paths are disjoint)
+    and retry, bounded. Any other failure raises `StealthPushError`."""
     from fr.artifacts.commit import StealthPushError
     from fr.triage.gitseam import GitError, PushRefusedError, push_ref_cas
 
     for _ in range(_PUSH_ATTEMPTS):
         old = _git(wt, "rev-parse", "--verify", "--quiet", _remote_ref(ref)).stdout.strip()
+        if old and not _is_ancestor(wt, old, "HEAD") and not _replay(wt, old):
+            # p4-r1: the lease alone would force HEAD over a tip it does not descend from
+            raise StealthPushError(
+                f"placement stealth: cannot replay this state commit on the tip of "
+                f"{ref.text}; the step is NOT recorded (R24)"
+            )
         head = _git(wt, "rev-parse", "HEAD").stdout.strip()
         try:
             landed = push_ref_cas(
@@ -485,7 +538,7 @@ def _push(wt: Path, ref: StealthRef) -> None:
             _fetch(wt, ref)
         except SettingsError as e:
             raise StealthPushError(f"{e}; the step is NOT recorded (R24)") from e
-        if _git(wt, "rebase", "--quiet", _remote_ref(ref)).returncode != 0:
+        if not _replay(wt, _remote_ref(ref)):
             raise StealthPushError(
                 f"placement stealth: cannot replay this state commit on the new tip of "
                 f"{ref.text}; the step is NOT recorded (R24)"
