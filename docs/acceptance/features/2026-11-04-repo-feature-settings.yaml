@@ -220,10 +220,22 @@ rows:
       moves nothing
     origin:
     - spec:2026-11-04-repo-feature-settings#R25
-    levels: {}
-    status: not-implemented
-    notes: added at planning (plan 3); scenario tests/scenarios/placement-merged-status.sh
-      is built by plan 2026-11-12-placement-resolver
+    levels:
+      unit:
+      - super-fr:tests/unit/test_placement_merged.py#test_merged_amendments_apply_in_merge_order
+      - super-fr:tests/unit/test_placement_merged.py#test_a_record_for_an_unmerged_feature_never_makes_it_merged
+      - super-fr:tests/unit/test_placement_merged.py#test_stealth_merged_status_comes_from_the_targets_default_ref
+      - super-fr:tests/unit/test_placement_merged_archive.py#test_archive_branch_records_merged_and_moves_nothing
+      - super-fr:tests/unit/test_placement_merged_archive.py#test_stealth_archive_records_in_the_tracking_repo_only
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_placement_merged_status
+    status: ci
+    notes: 'built in plan 2026-11-12-placement-resolver phase 5: under quiet and stealth
+      merged status and order come from the code branch''s merge into the default ref
+      (merged.yaml a cache, re-verified on every read), the fold orders merged features''
+      amendments by it, fr archive --branch appends merged in one pushed commit and
+      moves nothing, close-out and fr debt read it; the quiet scenario and the unit
+      tests (stealth included) run in CI'
     scenario: tests/scenarios/placement-merged-status.sh
   - id: placement-fr-enabled
     capability: repo-feature-settings
