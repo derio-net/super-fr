@@ -307,3 +307,10 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-review-lenses-p3 created=2026-11-12T17:17:25+00:00 -->
 ### tier-2026-11-12-review-lenses-p3 · decision · hard: changes the evidence gate in run_cmd.py that every review step resolves through
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-13T04:37:01+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: n/a
+
+Step: [developer] No post-merge step exists: every row is proven on a candidate build before merge. At close-out, record this step as not applicable (`fr closeout outcome --step 1 --na`).
+
+Reason: No post-merge step exists: every row is proven on a candidate build before merge.
