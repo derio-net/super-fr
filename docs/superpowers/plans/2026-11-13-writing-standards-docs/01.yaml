@@ -1,0 +1,98 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Checker wiring, pin, terms and authoring rule (no gate yet)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - writing-standards-docs-groups
+  - writing-standards-docs-authoring-rule
+  skeleton: true
+  tier: standard
+  files:
+  - scripts/check-writing-standards.sh
+  - .writing-standard-terms
+  - .github/blog-craft.ref
+  - docs/explainers/why-fr.md
+  - docs/explainers/index.md
+  - docs/reference/cli.md
+  - .claude/rules/explainers-currency.md
+  - .opencode/instructions/explainers-currency.md
+  - tests/unit/test_writing_standards_docs.py
+  estimate_lines: 320
+tasks:
+- number: 1
+  title: 'Smoke: CI green on a trivial test'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create tests/unit/test_writing_standards_docs.py with one test that `scripts/check-writing-standards.sh` will exist (mark xfail until P1.T2) — or simply a trivial assert on .fr/docs.yaml's three page globs. Run `uv run pytest -q --no-cov tests/unit/test_writing_standards_docs.py`. Commit, push, and confirm CI's `ci-ok` is green on the pushed head (tests: ci).
+- number: 2
+  title: The script and its test (R2, R11)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      [RED] In tests/unit/test_writing_standards_docs.py: the script exists and is executable; it runs `--default ste` over docs/*.md and docs/reference/*.md and `--default plain-language` over docs/explainers/*.md (parse the script text); those globs equal .fr/docs.yaml's `pages:` globs; it cds to the git toplevel and runs the checker via `uv run --isolated --no-project --with pyyaml`; only why-fr.md (`elements-of-style`), index.md (`none`) and cli.md (`none`) carry a `writing_standard` front-matter key. Run the test: RED.
+  - id: P1.T2.S2
+    text: |-
+      [GREEN] Write scripts/check-writing-standards.sh exactly as spec §1 shows (set -uo pipefail; run every group; exit with the highest code), add `writing_standard: elements-of-style` to docs/explainers/why-fr.md, `writing_standard: none` to docs/explainers/index.md and docs/reference/cli.md (front matter only). Test green. Also run `uv run pytest -q --no-cov tests/unit/test_build_site.py tests/unit/test_tripwire_explainers_fresh.py` (the extra key must not break the landing page or page parsing).
+  - id: P1.T2.S3
+    text: |-
+      [REFACTOR] Keep the mapping in one place in the script (one line per group). Tests green.
+- number: 3
+  title: Pin, terms file and baseline (R4, R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Move .github/blog-craft.ref to 3b0c7d0851f3512bc6bc413af5b5652cf79bd502. Run `uv run pytest -q --no-cov tests/unit/test_pages_workflow.py`. Build the site locally with the pinned renderer as the explainers-currency rule shows (blog-craft at /home/user/blog-craft is already that commit): `uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py <scratch>/site --blog-craft /home/user/blog-craft` — must exit 0.
+  - id: P1.T3.S2
+    text: |-
+      Record the rewrite baseline: `git merge-base HEAD origin/main` → a plan-journal decision `baseline` (global) naming the sha. Run `bash scripts/check-writing-standards.sh /home/user/blog-craft` and journal the per-group FAIL/WARN totals as the starting point.
+  - id: P1.T3.S3
+    text: |-
+      Create .writing-standard-terms at the repo root: one term per line, `#` comment headers grouping why each is there (fr vocabulary: worktree, devcontainer, …; abbreviations the docs must use: CI, PR, CLI, …). Only terms the standards would otherwise flag on a word a page cannot avoid (R4). Re-run the script and journal how many warnings the terms removed.
+- number: 4
+  title: Authoring rule and mirror (R10)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Edit .claude/rules/explainers-currency.md per spec §4: a section naming each group's standard and the three exceptions, the local command `bash scripts/check-writing-standards.sh <blog-craft-dir>` with the blog-craft checkout recipe, pointers to blog-craft's standards/*.md; replace the 'Match the existing voice: second person, concrete, unhurried' paragraph (keep: explain why, for a newcomer); add an Enforcement bullet for the script and its test. Run `python3 scripts/sync-opencode.py` and commit the regenerated .opencode/instructions/explainers-currency.md. Run `uv run pytest -q --no-cov tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_tripwire_skill_tool_neutrality.py`. Commit, push; CI green on the pushed head is the evidence (tests: ci).
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

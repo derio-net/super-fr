@@ -222,3 +222,4 @@ At the end, in review:
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-11-13-writing-standards-docs | `derio-net/super-fr` | `2026-11-13-writing-standards-docs` | — |
