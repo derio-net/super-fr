@@ -35,6 +35,9 @@ def test_visibility_ordering() -> None:
     assert more_visible("public", "internal")
     assert not more_visible("private", "private") and not more_visible("private", "public")
     assert more_visible("unknown", "public") is False and more_visible("unknown", "private")
+    # review p4-r8: an unrecognised TARGET visibility is read as private (fail closed)
+    assert more_visible("public", "secret-ish") and more_visible("internal", "")
+    assert more_visible("weird", "odd")
 
 
 @pytest.mark.parametrize("tracking", ["public", "internal"])
