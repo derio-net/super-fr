@@ -76,6 +76,7 @@ def test_a_working_fr_supplies_the_directories(repo: Path, tmp_path: Path) -> No
 
 # --- review pr1431-r7: only an explicit placement refusal is fatal ------------------
 
+
 def _repo_with_a_plan(root: Path) -> Path:
     """A repo-placement checkout holding one plan with no header, so the validator must
     actually read the literal plans dir to fail: `exit 1` proves it validated."""

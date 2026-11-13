@@ -579,16 +579,12 @@ def stealth_setup(tmp_path: Path, home: Path) -> tuple[Path, Path, Path]:
         f'"placement": "stealth", "tracking": {{"ref": "{bare}@main", "target": "target"}}}}'
     )
     clone = parent / "stealth--local--tracking--main"
-    subprocess.run(
-        ["git", "clone", "-q", "--branch", "main", str(bare), str(clone)], check=True
-    )
+    subprocess.run(["git", "clone", "-q", "--branch", "main", str(bare), str(clone)], check=True)
     return ws, clone, bare
 
 
 @pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
-def test_the_stealth_tracking_clone_is_editable(
-    tmp_path: Path, env: dict[str, str] | None
-) -> None:
+def test_the_stealth_tracking_clone_is_editable(tmp_path: Path, env: dict[str, str] | None) -> None:
     home = tmp_path / "home"
     _ws, clone, _bare = stealth_setup(tmp_path, home)
     assert decide(spec_in(clone / "target"), env={**(env or {}), "HOME": str(home)}) == 0
@@ -600,7 +596,9 @@ def test_a_tracking_clone_without_a_valid_stealth_workspace_is_refused(tmp_path:
     env = {**NO_FR, "HOME": str(home)}
     # the marker copied into a primary checkout is not a valid workspace
     marker = (ws / ".fr-isolation").read_text()
-    (ws / ".fr-isolation").write_text(marker.replace('"placement": "stealth"', '"placement": "repo"'))
+    (ws / ".fr-isolation").write_text(
+        marker.replace('"placement": "stealth"', '"placement": "repo"')
+    )
     assert decide(spec_in(clone / "target"), env=env) == 1
     (ws / ".fr-isolation").write_text(marker.replace(str(ws.resolve()), "/elsewhere.invalid"))
     assert decide(spec_in(clone / "target"), env=env) == 1
