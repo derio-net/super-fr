@@ -26,7 +26,7 @@ reviewed: 2026-11-11 docs-currency phase 5
 
 `plugins/super-fr` and `plugins/super-fr-dispatch` are the Claude Code plugins that carry the
 skills, rules and hooks; `plugins/super-fr/hooks/hermes/` holds the Hermes ports of the
-isolation guards. Runners register through the `fr.runners` entry-point group, so adding one
+isolation guards and the merged-PR push guard. Runners register through the `fr.runners` entry-point group, so adding one
 does not mean editing `fr-dispatch`.
 
 ## Requirements
@@ -43,8 +43,10 @@ does not mean editing `fr-dispatch`.
 - `git`, `jq` and `rsync`: the installer checks for them first and names any that is missing.
 - The `devcontainer` CLI, for the default isolation. The installer tries to install it with
   `npm` when it is absent.
-- The [VibeKanban](https://github.com/BloopAI/vibe-kanban) MCP server, only if you dispatch
-  to the `vk` runner (`npx vibe-kanban@latest --mcp`).
+- The [VibeKanban](https://github.com/derio-net/vibe-kanban) MCP server, only if you dispatch
+  to the `vk` runner. The installer registers `~/bin/vibe-kanban-mcp` when that binary is
+  present and skips the MCP setup with a warning when it is not; without the binary on `PATH`,
+  `fr-vk` falls back to `npx -y vibe-kanban@latest --mcp`.
 
 ## Services
 
@@ -61,7 +63,9 @@ supported yet.
 For a self-hosted GitLab, declare `forge: {type: gitlab}` and nothing else: the host comes
 from the repo's own git remote. Add `host:` only when the remote's hostname is not the API
 host you want. fr passes the resolved host to `glab` as `GITLAB_HOST`, so
-`glab auth login --hostname <host>` must already hold a token for it. `gh` and `tea` are not
-pointed at a self-hosted host yet, and fr warns instead of pretending. Where no repo exists
+`glab auth login --hostname <host>` must already hold a token for it. fr passes a declared GitHub
+Enterprise `host:` to `gh` as `GH_HOST`, and refuses a host `gh` is not logged into. `tea` is
+not pointed at a self-hosted host yet: fr warns when a Gitea `host:` is declared and leaves the
+host to `tea`. Where no repo exists
 to read config from, fr reads the forge off a bare URL's path (`/-/merge_requests/` is GitLab,
 `/pulls/` Gitea, `/pull/` GitHub); a bare `/issues/N` stays ambiguous by design.
