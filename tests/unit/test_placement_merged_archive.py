@@ -184,3 +184,17 @@ def test_stealth_archive_records_in_the_tracking_repo_only(stealthy: Product) ->
     # nothing reached the target: its refs are exactly as before
     assert git(target_origin, "for-each-ref", "--format=%(refname) %(objectname)") == refs_before
     assert not list(stealthy.feature_root("a").rglob("implemented"))
+
+
+def test_debt_dates_an_unmerged_feature_plan_by_its_branch(quiet: Product) -> None:
+    """An unmerged feature's plan is dated by its code branch (named in OWNER), never
+    listed with an unknown age because the product's history holds no fr file."""
+    from fr.debt.engine import compute
+
+    quiet.feature("a")
+    plan = _complete_plan(quiet.feature_root("a"))
+    phase = yaml.safe_load((plan / "01.yaml").read_text())
+    phase["state"]["completion"]["at"] = None
+    (plan / "01.yaml").write_text(yaml.safe_dump(phase, sort_keys=False))
+    report = compute(quiet.root, forge=None, now=datetime.now(UTC), stale_days=30)
+    assert [p.name for p in report.plans.stale] == []  # active today, by feat/a's commit

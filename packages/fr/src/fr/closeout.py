@@ -159,6 +159,9 @@ class PlanSweep:
     commands: dict[str, str] = field(default_factory=dict)
     """Plan name -> the command that archives it, when it is not `fr archive <plan dir>`
     (under quiet and stealth: `fr archive --branch <b>`, R25)."""
+    branches: dict[str, str] = field(default_factory=dict)
+    """Plan name -> the code branch its feature path names (`OWNER`), under quiet and
+    stealth, where no run cursor of another feature is in this checkout's view."""
     merged_commits: dict[str, str] = field(default_factory=dict)
     """Plan name -> the default ref's commit that merged it, when the sweep knows it
     (under quiet and stealth, from `fr.placement.merged`)."""
@@ -221,6 +224,7 @@ def _feature_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
     from fr.artifacts.paths import feature_roots, space_for
     from fr.parser import PlanSchemaError, parse
     from fr.placement.merged import merged_features
+    from fr.placement.quiet import owner_of
     from fr.render import plan_locally_complete
 
     space = space_for(repo_root)
@@ -233,8 +237,11 @@ def _feature_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
         plans_dir = below(froot, "plan")
         if not plans_dir.is_dir():
             continue
+        branch = owner_of(space.root, froot.name)
         for plan_dir in sorted(p for p in plans_dir.iterdir() if (p / "_meta.yaml").exists()):
             name = plan_dir.name
+            if branch:
+                sweep.branches[name] = branch
             try:
                 plan = parse(plan_dir)
             except PlanSchemaError:
@@ -246,8 +253,8 @@ def _feature_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
                 (sweep.complete_unmerged if complete else sweep.in_progress).append(name)
                 continue
             sweep.merged_commits[name] = feature.sha
-            if feature.branch:
-                sweep.commands[name] = f"fr archive --branch {feature.branch}"
+            if branch:
+                sweep.commands[name] = f"fr archive --branch {branch}"
             if complete:
                 sweep.archivable.append(name)
             else:

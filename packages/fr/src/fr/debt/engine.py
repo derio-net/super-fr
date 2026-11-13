@@ -454,7 +454,8 @@ def compute(
     forge_ok = forge is not None
     forge_why = f"{forge_why or 'offline'}: staleness comes from git alone" if forge is None else ""
     forge_note = ""
-    branches = _run_branches(repo_root)
+    owned = {n: b for n, b in sweep.branches.items() if _safe_branch(repo_root, b)}
+    branches = {**owned, **_run_branches(repo_root)}  # quiet/stealth: OWNER names it
     stale = []
     for name in [*sweep.in_progress, *sweep.complete_unmerged]:
         rel = f"{PLANS_REL}/{name}"
