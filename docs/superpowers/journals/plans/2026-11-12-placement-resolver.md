@@ -616,3 +616,108 @@ the product-head write is one _RunWrites hook; resume is prepare/finish around t
 ### no-refactor-p4-t6 · discovery · no-refactor-because P4.T6 (phase 4)
 
 skills, mirrors, a scenario, docs and the row move; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-4 created=2026-11-13T02:30:09+00:00 phase=4 -->
+### review-phase-4 · review · Phase 4 (stealth) review, range c730b11b7..b224b27cf (phase 4)
+
+Reviewer a69ecb483d71aace6 (opus) returned "not ready" with nine in-scope findings, most reproduced in scratch repos (a CAS overwrite of another host's state, a refused commit that exited 0, fr agents delivered to the target origin). All nine were fixed at 9b012fd4d..66f4529f2, together with three automated security-review follow-ups (NUL-safe, case-folded fr-path check on fr push; forge writes refused at the client layer; visibility asked only of the remote URL's own host and backend).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · Stealth push force-with-lease without ancestry check; ensure_worktree ignores a failed fast-forward (phase 4)
+
+A diverged tracking clone force-overwrote another writer's state (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · A commit refused in the tracking clone was a warning with exit 0 (phase 4)
+
+The cursor moved locally while the tracking ref did not, against R24 (reproduced with fr run advance).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · fr init agents and scaffolds wrote fr files into the target under stealth (phase 4)
+
+git add -A plus fr push delivered .claude/agents to the target origin (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · Re-running fr isolation up on a stealth workspace demanded scripts/validate-plans.sh on the product branch (phase 4)
+
+space_for saw the tracking repo's plans.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · fr apply --yes gated the forge against the tracking clone (phase 4)
+
+forge.issues and labels read as on, so issues would reach the target forge.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · The uncommitted-edit veto ignored the tracking clone (phase 4)
+
+The migration gate could commit a half-edited artifact there.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · Visibility could never be read for self-hosted or scp-style targets (phase 4)
+
+_forge_visibility built https://host:path and picked GitHub.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · more_visible treated an unknown target visibility as public (phase 4)
+
+Fail-open for a public tracking repo.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-11-13T02:30:09+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · Stealth refusals in fr acceptance init named placement quiet and R23 (phase 4)
+
+Wrong placement in the message.
+
+<!-- fr:journal kind=decision scope=plan id=stealth-gitea-unreadable created=2026-11-13T02:30:09+00:00 phase=4 -->
+### stealth-gitea-unreadable · decision · A Gitea target or tracking repo is unreadable for the privacy guard, so stealth refuses it (phase 4)
+
+The tea client cannot be pinned to the remote URL's host, so fr cannot be sure which forge answered the visibility question. R24's guard fails closed on unreadable visibility; an explicit Gitea path is follow-up work, not this plan's.
+
+<!-- fr:journal kind=decision scope=plan id=stealth-forge-guard-at-client created=2026-11-13T02:30:09+00:00 phase=4 -->
+### stealth-forge-guard-at-client · decision · Under stealth, forge writes are refused at the client layer, except the one minimal draft PR (phase 4)
+
+fr/placement/forge_guard.py wraps every client from client_for and client_for_backend, so a new command cannot skip the R24 guard; commands keep their own earlier refusals for a better message. Stealth is decided from the checkout and the process cwd, so a triage or release forge write started inside a stealth workspace is refused too.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: Stealth push force-with-lease without ancestry check; ensure_worktree ignores a failed fast-forward (phase 4)
+
+9b012fd4d: push requires ancestry (replays onto the seen tip); stealth.sync() under fr_worktree_lock fetches, fast-forwards, rebases unpushed commits or refuses.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: A commit refused in the tracking clone was a warning with exit 0 (phase 4)
+
+90e6b5ed8, 151f9ad56: any non-committed stealth outcome raises StealthPushError (exit 2) after restoring only this call's files; rollback is a soft reset, never reset --hard; other features' pending files are ignored; row note and explainers corrected.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: fr init agents and scaffolds wrote fr files into the target under stealth (phase 4)
+
+99f6c64e5, 2870a7b98: repo-config writers refuse under stealth before writing; fr push refuses commits carrying fr-owned paths, read with diff-tree -z and core.quotePath=false, case-folded; the scenario asserts the target origin holds no fr path.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: Re-running fr isolation up on a stealth workspace demanded scripts/validate-plans.sh on the product branch (phase 4)
+
+1d3926be1: the existing-worktree check counts only product-tree plans, for quiet and stealth.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: fr apply --yes gated the forge against the tracking clone (phase 4)
+
+2870a7b98: fr apply --yes refuses under stealth; forge policy read from the cwd workspace; forge_guard refuses every write but create_pr; tests show zero write calls.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: The uncommitted-edit veto ignored the tracking clone (phase 4)
+
+06276a412: the veto covers the tracking clone.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: Visibility could never be read for self-hosted or scp-style targets (phase 4)
+
+600e05500, ab698827d, 7fe6442f7: scp/ssh remotes parsed; the checkout's raw host must equal the URL's host; a SaaS host must be asked by its own backend; Gitea unreadable.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: more_visible treated an unknown target visibility as public (phase 4)
+
+99e7d92c2: unknown target visibility is private, unknown tracking visibility public.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-11-13T02:30:09+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: Stealth refusals in fr acceptance init named placement quiet and R23 (phase 4)
+
+6ffbbf8c2: the messages name placement stealth and R24.
