@@ -301,6 +301,11 @@ SP = "docs/superpowers/specs"
         f"{SP}/.GitModules",
         f"{SP}/gitmod~1",
         ".GIT/hooks/x",
+        f"{SP}/.git::$INDEX_ALLOCATION/x",
+        f"{SP}/.gitattributes:s",
+        f"{SP}/2026-01-01-a:b-design.md",
+        f"{SP}/gitign~1",
+        f"{SP}/.GitIgnore",
     ],
     ids=[
         "upper",
@@ -314,6 +319,11 @@ SP = "docs/superpowers/specs"
         "modules-mixed",
         "modules-short",
         "top-level",
+        "ntfs-index-allocation",
+        "ntfs-stream",
+        "colon",
+        "ignore-short",
+        "ignore-mixed",
     ],
 )
 def test_a_git_like_component_is_refused_in_every_spelling(rel: str) -> None:

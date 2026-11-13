@@ -157,10 +157,11 @@ _HFS_IGNORABLE: Final = frozenset(
     [*range(0x200C, 0x2010), *range(0x202A, 0x202F), *range(0x206A, 0x2070), 0xFEFF]
 )
 """Codepoints HFS+ ignores in a name (git's `is_hfs_dotgit` list): `.g\u200cit` IS `.git`."""
-_GIT_NAMES: Final = frozenset({".git", ".gitmodules", ".gitattributes"})
+_GIT_NAMES: Final = frozenset({".git", ".gitmodules", ".gitattributes", ".gitignore"})
 """The names git itself acts on in a tree: the repository, its submodules, its
-attributes (filters and diff drivers). `.gitkeep` and the like are plain files."""
-_NTFS_SHORT: Final = re.compile(r"(?:git|gitmod|gitatt)~\d+|gi[0-9a-f]{4}~\d+")
+attributes (filters and diff drivers), its ignore rules. `.gitkeep` is a plain file,
+and fr's acceptance tree carries one (`docs/acceptance/features/.gitkeep`), so it stays."""
+_NTFS_SHORT: Final = re.compile(r"(?:git|gitmod|gitatt|gitign)~\d+|gi[0-9a-f]{4}~\d+")
 """NTFS 8.3 short names git refuses for those (`git~1`, `gitmod~1`, and the hashed
 `gi7eba~1` forms)."""
 
@@ -169,9 +170,14 @@ def git_like(component: str) -> bool:
     """Is one path component `.git`, `.gitmodules` or `.gitattributes` on SOME
     filesystem? Read as git's `verify_path` reads it (review p7-r5, security
     follow-up): NFC-normalised, HFS-ignorable codepoints removed, trailing dots and
-    spaces stripped (NTFS), casefolded (APFS, HFS+, NTFS); and the NTFS short names."""
+    spaces stripped (NTFS), casefolded (APFS, HFS+, NTFS); and the NTFS short names.
+    A component holding `:` is refused outright: on NTFS `.git::$INDEX_ALLOCATION` and
+    `.gitattributes:s` are alternate streams of the real names, and no fr artifact name
+    needs a colon."""
     import unicodedata
 
+    if ":" in component:
+        return True
     name = unicodedata.normalize("NFC", component)
     name = "".join(ch for ch in name if ord(ch) not in _HFS_IGNORABLE)
     name = name.rstrip(". ").casefold()
