@@ -256,3 +256,76 @@ def test_p2_r6_no_matrix_exits_before_spawning_fr(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
     assert not calls.exists(), calls.read_text()
+
+
+def test_nag_reads_the_acceptance_dir_the_placement_names(tmp_path: Path) -> None:
+    """R1/R26: under quiet or stealth the fragments are not in the checkout; the nag asks
+    `fr settings paths --shell` for FR_ACCEPTANCE_DIR instead of assuming docs/acceptance."""
+    repo = tmp_path / "plain"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    for args in (
+        ["remote", "add", "origin", "https://example.com/org/repo.git"],
+        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i"],
+    ):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    settings = subprocess.run(
+        ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+        input="placement: quiet\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "mktree"],
+        input=f"100644 blob {settings}\tsettings.yaml\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    commit = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit-tree",
+            tree,
+            "-m",
+            "s",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/fr", commit], check=True
+    )
+    elsewhere = tmp_path / "space" / "acceptance"
+    (elsewhere / "features").mkdir(parents=True)
+    (elsewhere / "features" / "x.yaml").write_text("rows: []\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "fr"
+    stub.write_text(
+        "#!/bin/bash\n"
+        'case "$*" in\n'
+        f'  "settings paths --shell") echo "FR_ACCEPTANCE_DIR={elsewhere}" ;;\n'
+        '  "settings show --json") echo "{}" ;;\n'
+        '  "acceptance status --brief") echo "1 row unwired: stub-row" ;;\n'
+        "esac\n"
+    )
+    stub.chmod(0o755)
+    payload = json.dumps({"session_id": "s", "cwd": str(repo), "hook_event_name": "SessionStart"})
+    result = subprocess.run(
+        ["bash", str(SCRIPT)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "stub-row" in result.stdout

@@ -183,13 +183,49 @@ _fr_toplevel_of() {
   (cd "$_fr_t" 2>/dev/null && pwd -P) || return 1
 }
 
-# Return 0 if the given resolved toplevel is fr-enabled (devcontainer profile or
-# an fr plans dir), else 1.
+# Return 0 if the given resolved toplevel is fr-enabled, else 1 (spec 2026-11-04
+# repo-feature-settings R26). fr-enabled is any of:
+#   - a devcontainer profile, or an fr plans dir in the checkout (the legacy test);
+#   - the QUIET switch: the last fetched `refs/remotes/origin/fr:settings.yaml` says
+#     `placement: quiet` and the repo has an origin remote (R23: no origin is `repo`);
+#   - a workspace whose `.fr-isolation` marker records `placement` quiet or stealth;
+#   - `fr settings paths --shell` (when `fr` resolves) names an existing FR_PLANS_DIR
+#     or a FR_PLACEMENT of quiet/stealth.
+# The direct checks run FIRST and need no `fr`, so a missing, failing or garbled `fr`
+# can only fail to ADD an enabled answer, never remove one: it falls back to them.
+# Quiet and stealth keep no plans dir in the checkout, so without the direct checks a
+# missing `fr` would call such a repo "not fr-enabled" and open the edit gate.
 _fr_is_enabled() {
   for _fr_cfg in "$1"/.devcontainer/*/devcontainer.json; do
     [ -f "$_fr_cfg" ] && return 0
   done
-  [ -d "$1/docs/superpowers/plans" ] && return 0
+  [ -d "$1/docs/superpowers/plans" ] && return 0  # fr-paths-fallback
+  _fr_placement_enabled "$1" && return 0
+  _fr_paths_enabled "$1" && return 0
+  return 1
+}
+
+# The marker's `placement` (quiet or stealth) or the quiet switch, read directly.
+_fr_placement_enabled() {
+  if [ -f "$1/.fr-isolation" ]; then
+    _fr_pl=$(fr_json_file_field "$1/.fr-isolation" placement 2>/dev/null) || _fr_pl=""
+    case "$_fr_pl" in quiet | stealth) return 0 ;; esac
+  fi
+  fr_git_resolve || return 1
+  "$FR_GIT_BIN" -C "$1" config --get remote.origin.url >/dev/null 2>&1 || return 1
+  "$FR_GIT_BIN" -C "$1" cat-file -p refs/remotes/origin/fr:settings.yaml 2>/dev/null |
+    grep -Eq '^placement:[[:space:]]*quiet[[:space:]]*$'
+}
+
+# Ask the resolver. Never evals its output: two keys are read by name and a value
+# that does not look like a plain path is ignored.
+_fr_paths_enabled() {
+  command -v fr >/dev/null 2>&1 || return 1
+  _fr_out=$(FR_REPO_ROOT="$1" fr settings paths --shell 2>/dev/null) || return 1
+  _fr_val() { printf '%s\n' "$_fr_out" | sed -n "s/^$1=//p" | head -n 1 | sed -e "s/^'//" -e "s/'\$//"; }
+  case "$(_fr_val FR_PLACEMENT)" in quiet | stealth) return 0 ;; esac
+  _fr_plans=$(_fr_val FR_PLANS_DIR)
+  case "$_fr_plans" in /*) [ -d "$_fr_plans" ] && return 0 ;; esac
   return 1
 }
 

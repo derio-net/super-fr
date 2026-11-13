@@ -215,3 +215,126 @@ def test_switching_back_to_the_marker_branch_restores_edits(tmp_path: Path) -> N
     _git(wt, "checkout", "-q", "-b", "chore/elsewhere")
     _git(wt, "switch", "-q", "feat/x")
     assert decide(wt / "src.py") == 0
+
+
+# --- R26: quiet and stealth are fr-enabled -----------------------------------
+#
+# A repo whose `refs/remotes/origin/fr:settings.yaml` says `placement: quiet`, or a
+# workspace whose marker records `placement: stealth`, keeps no devcontainer profile and
+# no plans dir in its checkout, so the legacy two-part test called it "not fr-enabled".
+
+
+def quiet_repo(
+    tmp_path: Path, settings: str | None = "placement: quiet\n", origin: bool = True
+) -> Path:
+    """A plain repo (no profile, no plans dir) whose last fetched `origin/fr` carries
+    *settings* (None: no `fr` branch at all)."""
+    repo = fr_repo(tmp_path, fr_enabled=False)
+    if origin:
+        _git(repo, "remote", "add", "origin", "https://example.com/org/repo.git")
+    if settings is not None:
+        _git(repo, "checkout", "-q", "--orphan", "fr")
+        _git(repo, "rm", "-rqf", ".")
+        (repo / "settings.yaml").write_text(settings)
+        _git(repo, "add", "settings.yaml")
+        _git(repo, "commit", "-qm", "switch")
+        _git(repo, "update-ref", "refs/remotes/origin/fr", "fr")
+        _git(repo, "checkout", "-q", "main")
+        _git(repo, "branch", "-qD", "fr")
+    return repo
+
+
+def enabled(repo: Path, env: dict[str, str] | None = None) -> int:
+    script = f'. "{LIB}"; _fr_is_enabled "{repo.resolve()}"'
+    return subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        env={**os.environ, **(env or {})},
+    ).returncode
+
+
+NO_FR = {"PATH": "/usr/bin:/bin"}  # no `fr` on the path: the direct checks alone decide
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_a_quiet_repo_is_fr_enabled(tmp_path: Path, env: dict[str, str] | None) -> None:
+    repo = quiet_repo(tmp_path)
+    assert enabled(repo, env) == 0
+    assert decide(repo / "src.py", env=env) == 1
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_an_fr_branch_without_the_switch_is_not_fr_enabled(
+    tmp_path: Path, env: dict[str, str] | None
+) -> None:
+    repo = quiet_repo(tmp_path, settings="placement: repo\n")
+    assert enabled(repo, env) == 1
+    assert decide(repo / "src.py", env=env) == 0
+
+
+def test_the_switch_needs_an_origin_remote(tmp_path: Path) -> None:
+    """R23: no origin is `repo`; a stale tracking ref speaks for nobody."""
+    repo = quiet_repo(tmp_path, origin=False)
+    assert enabled(repo, NO_FR) == 1
+
+
+def test_no_fr_branch_at_all_is_not_fr_enabled(tmp_path: Path) -> None:
+    repo = quiet_repo(tmp_path, settings=None)
+    assert enabled(repo, NO_FR) == 1
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_a_stealth_marker_makes_the_workspace_fr_enabled(
+    tmp_path: Path, env: dict[str, str] | None
+) -> None:
+    repo = fr_repo(tmp_path, fr_enabled=False)
+    wt = linked_worktree(repo)
+    (wt / ".fr-isolation").write_text(
+        f'{{"toplevel": "{wt.resolve()}", "branch": "feat/x", "mode": "worktree", '
+        '"placement": "stealth", "tracking": {"ref": "x", "target": "y"}}'
+    )
+    assert enabled(wt, env) == 0
+    # and the same marker, forged on the base clone, is fr-enabled AND not valid: a deny
+    (repo / ".fr-isolation").write_text(
+        f'{{"toplevel": "{repo.resolve()}", "branch": "main", "mode": "worktree", '
+        '"placement": "stealth"}'
+    )
+    assert decide(repo / "src.py", env=env) == 1
+
+
+def test_a_valid_stealth_workspace_allows_its_edits(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path, fr_enabled=False)
+    wt = linked_worktree(repo)
+    (wt / ".fr-isolation").write_text(
+        f'{{"toplevel": "{wt.resolve()}", "branch": "feat/x", "mode": "worktree", '
+        '"placement": "stealth"}'
+    )
+    assert decide(wt / "src.py", env=NO_FR) == 0
+
+
+def test_a_garbled_fr_answer_never_turns_a_direct_yes_into_no(tmp_path: Path) -> None:
+    """A failing or garbled `fr settings paths` falls back to the direct checks."""
+    repo = quiet_repo(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "fr"
+    stub.write_text("#!/bin/bash\necho 'FR_PLANS_DIR=\\\\\\garbled'\nexit 3\n")
+    stub.chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin"}
+    assert enabled(repo, env) == 0
+    plain = fr_repo(tmp_path, name="plain", fr_enabled=False)
+    assert enabled(plain, env) == 1
+
+
+def test_fr_paths_name_a_plans_dir_the_direct_test_cannot_see(tmp_path: Path) -> None:
+    """When `fr` resolves, FR_PLANS_DIR is the plans directory the placement names."""
+    repo = fr_repo(tmp_path, fr_enabled=False)
+    plans = tmp_path / "elsewhere" / "plans"
+    plans.mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "fr"
+    stub.write_text(f"#!/bin/bash\necho 'FR_PLACEMENT=repo'\necho 'FR_PLANS_DIR={plans}'\n")
+    stub.chmod(0o755)
+    assert enabled(repo, {"PATH": f"{bin_dir}:/usr/bin:/bin"}) == 0

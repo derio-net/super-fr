@@ -20,11 +20,26 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 
 repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 # The cheap early exit, before any `fr` process: no acceptance fragment
-# (docs/acceptance/features/*.yaml, spec 2026-11-04-repo-feature-settings R16),
+# (<acceptance dir>/features/*.yaml, spec 2026-11-04-repo-feature-settings R16),
 # nothing to nag about. A repo still holding the retired matrix.yaml is let
-# through, so `fr` can say its artifacts are stale (R19).
-set -- "$repo_root"/docs/acceptance/features/*.yaml
-[ -f "$1" ] || [ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
+# through, so `fr` can say its artifacts are stale (R19). Under quiet or stealth
+# (R1/R26, found without `fr`: the switch on origin/fr or the marker's placement)
+# the directory is the placement's answer, `fr settings paths --shell`
+# FR_ACCEPTANCE_DIR; everywhere else, and when `fr` gives no usable answer, it is
+# the checkout's own layout, so a missing `fr` loses nothing the old test caught.
+acceptance_dir="$repo_root/docs/acceptance" # fr-paths-fallback
+lib="$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
+if [ -r "$lib" ] && command -v fr >/dev/null 2>&1; then
+  # shellcheck source=lib/fr-isolation-decision.sh
+  . "$lib"
+  if _fr_placement_enabled "$repo_root"; then
+    answered=$(cd "$repo_root" && FR_REPO_ROOT="$repo_root" fr settings paths --shell 2>/dev/null |
+      sed -n 's/^FR_ACCEPTANCE_DIR=//p' | head -n 1 | sed -e "s/^'//" -e "s/'\$//") || answered=""
+    case "$answered" in /*) acceptance_dir=$answered ;; esac
+  fi
+fi
+set -- "$acceptance_dir"/features/*.yaml
+[ -f "$1" ] || [ -f "$acceptance_dir/matrix.yaml" ] || exit 0
 command -v fr >/dev/null 2>&1 || exit 0
 
 # Repo setting `artifacts.acceptance: off` (spec 2026-11-04-repo-feature-settings R6): say

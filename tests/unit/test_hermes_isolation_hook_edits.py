@@ -158,3 +158,24 @@ def test_drifted_checkout_blocks_naming_both_branches(tmp_path: Path) -> None:
     assert blocked(result)
     reason = json.loads(result.stdout)["reason"]
     assert "feat/x" in reason and "fr isolation up --branch chore/elsewhere" in reason
+
+
+def test_a_quiet_repo_blocks_a_base_clone_edit(tmp_path: Path) -> None:
+    """R26: `refs/remotes/origin/fr` saying `placement: quiet` makes the repo fr-enabled
+    with no profile and no plans dir."""
+    repo = tmp_path / "quiet"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    (repo / "README.md").write_text("x\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "init")
+    _git(repo, "remote", "add", "origin", "https://example.com/org/repo.git")
+    _git(repo, "checkout", "-q", "--orphan", "fr")
+    _git(repo, "rm", "-rqf", ".")
+    (repo / "settings.yaml").write_text("placement: quiet\n")
+    _git(repo, "add", "settings.yaml")
+    _git(repo, "commit", "-qm", "switch")
+    _git(repo, "update-ref", "refs/remotes/origin/fr", "fr")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "branch", "-qD", "fr")
+    assert blocked(run_hook(payload(repo / "src.py"), env={"PATH": "/usr/bin:/bin"}))

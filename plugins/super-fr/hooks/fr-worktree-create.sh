@@ -98,7 +98,9 @@ no_link_under() {
   [ ! -e "$p" ]
 }
 has_profile() { ls -d "$root"/.devcontainer/*/ >/dev/null 2>&1; }
-fr_enabled() { [ -d "$root/docs/superpowers/plans" ] || has_profile; }
+# One definition of "fr-enabled" (R26: quiet and stealth count), shared with the edit gate.
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 
 # Serialize per repo+worktree name, BEFORE any branch that creates one.
 # install.sh registers this script in settings.json as well as the plugin's
@@ -124,7 +126,7 @@ trap 'rm -rf "$lock"' EXIT
 echo $$ > "$lock/pid"
 
 case "$name" in agent-*) agent_worktree ;; esac
-if ! fr_enabled || ! command -v fr >/dev/null 2>&1; then mimic_default; fi
+if ! _fr_is_enabled "$root" || ! command -v fr >/dev/null 2>&1; then mimic_default; fi
 
 branch="$name"; case "$name" in */*) ;; *) branch="wt/$name" ;; esac
 if [ -z "${FR_ISOLATION_TARGET:-}" ] && ! has_profile; then

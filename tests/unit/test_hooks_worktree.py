@@ -127,7 +127,8 @@ def logged(env: dict[str, str]) -> list[str]:
     log = Path(env["FR_STUB_LOG"])
     if not log.exists():
         return []
-    return log.read_text().splitlines()
+    # `settings paths` is the decision library's fr-enabled probe, not an isolation call
+    return [ln for ln in log.read_text().splitlines() if not ln.startswith("settings paths")]
 
 
 def logged_env(env: dict[str, str]) -> list[str]:
@@ -321,6 +322,29 @@ class TestWorktreeCreate:
         assert last_line(result.stdout) == str(expected)
         assert expected.is_dir()
         assert logged(stub_fr) == []
+
+    # R26: the hook asks the decision library, which knows quiet (and stealth)
+    def test_it_uses_the_librarys_fr_enabled_not_a_private_copy(self) -> None:
+        text = CREATE.read_text()
+        assert "fr_enabled()" not in text
+        assert "_fr_is_enabled" in text
+        assert "lib/fr-isolation-decision.sh" in text
+
+    def test_a_quiet_repo_is_an_fr_workspace(
+        self, plain_repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        _git(plain_repo, "remote", "add", "origin", "https://example.com/org/repo.git")
+        _git(plain_repo, "checkout", "-q", "--orphan", "fr")
+        _git(plain_repo, "rm", "-rqf", ".")
+        (plain_repo / "settings.yaml").write_text("placement: quiet\n")
+        _git(plain_repo, "add", "settings.yaml")
+        _git(plain_repo, "commit", "-qm", "switch")
+        _git(plain_repo, "update-ref", "refs/remotes/origin/fr", "fr")
+        _git(plain_repo, "checkout", "-q", "main")
+        _git(plain_repo, "branch", "-qD", "fr")
+        result = run_hook(CREATE, create_payload("feature-auth", plain_repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        assert len(logged(stub_fr)) == 1  # `isolation up`, not the default-shape mimic
 
     # (e) cwd not a git repo -> exit 1 (a registered hook cannot decline)
     def test_non_git_cwd_exits_1(self, tmp_path: Path, stub_fr: dict[str, str]) -> None:
