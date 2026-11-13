@@ -430,9 +430,26 @@ def test_the_join_detector_finds_raw_roots_and_spares_the_resolver() -> None:
 # there is a path that does not move with the placement, so it is allowed only on the
 # documented `fr`-absent fallback line, which says so: `# fr-paths-fallback` (shell) or
 # `// fr-paths-fallback` (TypeScript), on the line itself or the one above it. Comments
-# are prose, not paths.
+# are prose, not paths. The marker is not self-asserting (review p6-r6): each exempt line
+# is PINNED below, by file and exact text, so a new marked line fails until it is argued
+# for in a diff to this map.
 
 _FALLBACK_MARK = "fr-paths-fallback"
+FALLBACK_LINES: dict[str, list[str]] = {
+    "plugins/super-fr/hooks/fr-acceptance-nag.sh": [
+        'acceptance_dir="$repo_root/docs/acceptance" # fr-paths-fallback',
+    ],
+    "plugins/super-fr/hooks/lib/fr-isolation-decision.sh": [
+        '[ -d "$1/docs/superpowers/plans" ] && return 0  # fr-paths-fallback',
+    ],
+    "packages/fr-opencode-plugin/src/marker.ts": [
+        "if (isDir(`${toplevel}/docs/superpowers/plans`)) return true; // fr-paths-fallback",
+    ],
+    "packages/fr-opencode-plugin/src/nag.ts": [
+        'return join(root, "docs", "acceptance"); // fr-paths-fallback',
+    ],
+}
+"""Every line the fallback marker may exempt, stripped of indentation."""
 _SEGMENT_JOIN = re.compile(r"""["']docs["']\s*,\s*["'](?:superpowers|acceptance)["']""")
 
 
@@ -446,18 +463,63 @@ def _shell_code(source: str) -> list[tuple[int, str]]:
 
 
 def _ts_code(source: str) -> list[tuple[int, str]]:
-    """`(line, text)` with `//` line comments, `/* */` blocks and JSDoc lines dropped
-    (a line is kept, blanked, so numbering holds)."""
-    source = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)
-    out = []
-    for i, line in enumerate(source.splitlines(), 1):
-        out.append((i, re.sub(r"(^|\s)//.*$", "", line)))
-    return out
+    """`(line, text)` with `//` line comments and `/* */` blocks (JSDoc too) dropped, by
+    a string-aware scan (review p6-r6): a `//` or `/*` inside a '…', "…" or `…` literal
+    (a URL) is code, not a comment. Every line is kept, blanked where it was comment, so
+    numbering holds."""
+    lines: list[str] = []
+    cur: list[str] = []
+    state: str | None = None  # None, a quote character, or "block"
+    i, n = 0, len(source)
+    while i < n:
+        c = source[i]
+        if c == "\n":
+            lines.append("".join(cur))
+            cur = []
+            if state in ("'", '"'):
+                state = None  # an unterminated plain string ends with its line
+            i += 1
+            continue
+        if state == "block":
+            if source.startswith("*/", i):
+                state = None
+                i += 2
+            else:
+                i += 1
+            continue
+        if state is not None:
+            cur.append(c)
+            if c == "\\" and i + 1 < n and source[i + 1] != "\n":
+                cur.append(source[i + 1])
+                i += 2
+                continue
+            if c == state:
+                state = None
+            i += 1
+            continue
+        if source.startswith("//", i):
+            j = source.find("\n", i)
+            i = n if j == -1 else j
+            continue
+        if source.startswith("/*", i):
+            state = "block"
+            i += 2
+            continue
+        if c in "'\"`":
+            state = c
+        cur.append(c)
+        i += 1
+    lines.append("".join(cur))
+    return list(enumerate(lines, 1))
 
 
-def _fallback_violations(source: str, lines: list[tuple[int, str]]) -> list[int]:
-    """Lines spelling an artifact path and not marked as the `fr`-absent fallback."""
+def _fallback_violations(
+    source: str, lines: list[tuple[int, str]], allowed: list[str]
+) -> list[int]:
+    """Lines spelling an artifact path that are not a PINNED fallback line (*allowed*,
+    stripped texts) carrying the marker on the line or alone on the comment line above."""
     raw = source.splitlines()
+    pinned = set(allowed)
     found = []
     for number, text in lines:
         if not (any(n in text for n in _NEEDLES) or _SEGMENT_JOIN.search(text)):
@@ -466,18 +528,18 @@ def _fallback_violations(source: str, lines: list[tuple[int, str]]) -> list[int]
         above = raw[number - 2] if number >= 2 else ""
         # the marker on the line itself, or alone on a comment line just above it
         above_alone = above.lstrip().startswith(("#", "//")) and _FALLBACK_MARK in above
-        if _FALLBACK_MARK in here or above_alone:
+        if (_FALLBACK_MARK in here or above_alone) and here.strip() in pinned:
             continue
         found.append(number)
     return found
 
 
-def shell_violations(source: str) -> list[int]:
-    return _fallback_violations(source, _shell_code(source))
+def shell_violations(source: str, allowed: list[str]) -> list[int]:
+    return _fallback_violations(source, _shell_code(source), allowed)
 
 
-def ts_violations(source: str) -> list[int]:
-    return _fallback_violations(source, _ts_code(source))
+def ts_violations(source: str, allowed: list[str]) -> list[int]:
+    return _fallback_violations(source, _ts_code(source), allowed)
 
 
 def _hook_scripts() -> list[Path]:
@@ -490,8 +552,9 @@ def _plugin_sources() -> list[Path]:
 
 def test_no_hook_spells_an_artifact_path_outside_the_fallback() -> None:
     offenders = {
-        path.relative_to(REPO_ROOT).as_posix(): shell_violations(path.read_text())
+        rel: shell_violations(path.read_text(), FALLBACK_LINES.get(rel, []))
         for path in _hook_scripts()
+        for rel in [path.relative_to(REPO_ROOT).as_posix()]
     }
     offenders = {rel: lines for rel, lines in offenders.items() if lines}
     assert not offenders, (
@@ -502,8 +565,9 @@ def test_no_hook_spells_an_artifact_path_outside_the_fallback() -> None:
 
 def test_no_plugin_source_spells_an_artifact_path_outside_the_fallback() -> None:
     offenders = {
-        path.relative_to(REPO_ROOT).as_posix(): ts_violations(path.read_text())
+        rel: ts_violations(path.read_text(), FALLBACK_LINES.get(rel, []))
         for path in _plugin_sources()
+        for rel in [path.relative_to(REPO_ROOT).as_posix()]
     }
     offenders = {rel: lines for rel, lines in offenders.items() if lines}
     assert not offenders, (
@@ -512,12 +576,13 @@ def test_no_plugin_source_spells_an_artifact_path_outside_the_fallback() -> None
     )
 
 
-def test_the_fallback_lines_exist_in_both_engines() -> None:
-    """The marker is not decoration: each engine still has the lines it names."""
-    hooks = "".join(p.read_text() for p in _hook_scripts())
-    plugin = "".join(p.read_text() for p in _plugin_sources())
-    assert f"# {_FALLBACK_MARK}" in hooks
-    assert f"// {_FALLBACK_MARK}" in plugin
+def test_every_pinned_fallback_line_exists_exactly_once() -> None:
+    """The pin is not stale: each exempt line is still in its file, once, marked."""
+    for rel, texts in FALLBACK_LINES.items():
+        lines = [line.strip() for line in (REPO_ROOT / rel).read_text().splitlines()]
+        for text in texts:
+            assert _FALLBACK_MARK in text, (rel, text)
+            assert lines.count(text) == 1, f"{rel}: pinned fallback line not found once: {text}"
 
 
 _PLANTED_SHELL = """\
@@ -530,8 +595,19 @@ z="$root/docs/superpowers"
 """
 
 
+_PLANTED_SHELL_PINNED = [
+    '[ -d "$1/docs/superpowers/plans" ] && return 0  # fr-paths-fallback',
+    'y="$root/docs/acceptance"',
+]
+
+
 def test_the_shell_detector_allows_only_marked_lines() -> None:
-    assert shell_violations(_PLANTED_SHELL) == [3, 6]
+    assert shell_violations(_PLANTED_SHELL, _PLANTED_SHELL_PINNED) == [3, 6]
+
+
+def test_a_marked_line_that_is_not_pinned_is_a_violation() -> None:
+    """Review p6-r6: the marker alone exempts nothing."""
+    assert shell_violations(_PLANTED_SHELL, []) == [2, 3, 5, 6]
 
 
 _PLANTED_TS = """\
@@ -546,5 +622,26 @@ const d = "docs/acceptance";
 """
 
 
+_PLANTED_TS_PINNED = [
+    'const a = join(root, "docs", "acceptance"); // fr-paths-fallback',
+    'const d = "docs/acceptance";',
+]
+
+
 def test_the_ts_detector_allows_only_marked_lines() -> None:
-    assert ts_violations(_PLANTED_TS) == [4, 6]
+    assert ts_violations(_PLANTED_TS, _PLANTED_TS_PINNED) == [4, 6]
+    assert ts_violations(_PLANTED_TS, []) == [3, 4, 6, 8]
+
+
+_PLANTED_TS_STRINGS = """\
+const u = "https://example.com/x"; const p = `${root}/docs/acceptance`;
+const v = 'a // b'; const q = join(root, "docs", "superpowers");
+const w = "/* not a comment */ docs/acceptance";
+/* a block naming docs/acceptance
+   over two lines */ const r = 1;
+"""
+
+
+def test_the_ts_scan_keeps_comment_markers_inside_strings() -> None:
+    """Review p6-r6: a `//` or `/*` inside a string literal does not start a comment."""
+    assert ts_violations(_PLANTED_TS_STRINGS, []) == [1, 2, 3]
