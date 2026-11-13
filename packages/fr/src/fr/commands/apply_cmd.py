@@ -268,6 +268,12 @@ def _apply_one(
         # (gh#804): fr has no checkout of `target_repo` to read one from, and
         # the plan repo is the one that declared where its work is tracked.
         plan_root = resolve_repo_root(plan_dir.resolve())
+        from fr.artifacts.paths import outside_repo
+
+        if outside_repo(resolve_repo_root()) is not None:
+            # quiet/stealth: the plan dir is on `fr` or in the tracking clone; the forge
+            # policy is the workspace's (review p4-r5)
+            plan_root = resolve_repo_root()
         require_forge(plan_root, "issues")
         require_forge(plan_root, "labels")  # the runner reads its queue from the labels
     except ServicesError as e:
@@ -517,6 +523,12 @@ def apply_command(
     """
     if to is not None:
         _refuse_dispatch_outside_repo()  # first: it must not create the fr worktree (p3-r10)
+    if yes:
+        # R24, review p4-r5: before any forge call, and read from the WORKSPACE (the plan
+        # dir of a stealth run sits in the tracking clone, which has no marker).
+        from fr.placement.stealth import refuse_forge_writes
+
+        refuse_forge_writes(resolve_repo_root(), "`fr apply --yes`")
     require_migrated_layout()
     if all_plans and plan_dir is not None:
         err_console.print("--all and plan_dir are mutually exclusive")

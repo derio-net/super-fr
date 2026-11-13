@@ -149,6 +149,15 @@ def issue_cmd(
     from fr.settings import forge_block
 
     root = resolve_repo_root()
+    if yes:
+        from fr.placement.stealth import refuse_forge_writes
+        from fr.settings import SettingsError
+
+        try:
+            refuse_forge_writes(root, "`fr debt issue --yes`")  # R24, review p4-r5
+        except SettingsError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(2) from e
     try:
         off = forge_block(root, "issues")
         comments_off = forge_block(root, "comments")

@@ -104,3 +104,123 @@ def test_up_again_on_a_stealth_workspace_with_a_plan_needs_no_validator_wrapper(
         profile=None, branch="feat/s", stealth=stealth.parse_ref(f"{track}@main")
     )
     assert again.worktree == root
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "docs/superpowers/plans/ünïcode \"quoted\".md",  # C-quoted by default
+        "docs/superpowers/new\nline.md",  # a newline inside the name
+        "Docs/Superpowers/plans/case.md",  # a case variant of fr's tree
+        ".FR/settings.yaml",
+    ],
+)
+def test_push_refuses_fr_paths_however_they_are_spelled(
+    ws: tuple[Path, Path, Path], rel: str
+) -> None:
+    root, _, origin = ws
+    path = root / rel
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x\n")
+    except OSError:
+        pytest.skip(f"this filesystem cannot hold {rel!r}")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "feat(s): code")
+    result = _fr(root, "push")
+    assert result.exit_code == 2, result.output
+    assert "no fr file reaches the target" in " ".join(result.output.split())
+    assert "refs/heads/feat/s" not in git(origin, "show-ref")
+
+
+# --- review p4-r5: no forge write but the one draft PR reaches a stealth target ---------
+
+
+class _RecordingForge:
+    """Answers every read with nothing and records every call; a write is a trace."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def create_pr(self, repo: str, **kw: object) -> dict[str, object]:
+        self.calls.append("create_pr")
+        return {"number": 7, "url": "https://example.com/acme/widget/pull/7"}
+
+    def __getattr__(self, name: str) -> object:
+        def call(*a: object, **kw: object) -> object:
+            self.calls.append(name)
+            return None
+
+        return call
+
+
+@pytest.fixture
+def forge(monkeypatch: pytest.MonkeyPatch) -> _RecordingForge:
+    """The fake BELOW the guard: every factory (`client_for`, `client_for_url`) builds it
+    through `client_for_backend`, so what reaches it is what the guard let through."""
+    import fr.hostclient as hostclient
+
+    fake = _RecordingForge()
+    monkeypatch.setattr(hostclient, "_client_for_backend", lambda backend, host=None: fake)
+    return fake
+
+
+def _writes(forge: _RecordingForge) -> list[str]:
+    from fr.placement.forge_guard import WRITE_METHODS
+
+    return [c for c in forge.calls if c in WRITE_METHODS]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("apply", "{plan}", "--yes"),
+        ("undispatch", "{plan}", "--yes"),
+        ("gate", "pass", "--pr", "1", "--gate", "tester", "--notes", "n", "--repo",
+         "acme/widget", "--host", "example.com", "--yes"),
+        ("gate", "backfill", "--yes"),
+        ("debt", "issue", "--yes"),
+        ("acceptance", "comment", "--pr", "1", "--yes"),
+    ],
+)  # fmt: skip
+def test_forge_writers_refuse_and_write_nothing(
+    ws: tuple[Path, Path, Path], forge: _RecordingForge, argv: tuple[str, ...]
+) -> None:
+    root, _, _ = ws
+    made = _fr(root, "plan", "create", "--slug", "2026-11-12-s", "--target-repo", "acme/widget")
+    assert made.exit_code == 0, made.output
+    from fr.artifacts.paths import artifact_root
+
+    plan = artifact_root(root) / "docs/superpowers/plans/2026-11-12-s"
+    result = _fr(root, *(a.replace("{plan}", str(plan)) for a in argv))
+    assert result.exit_code == 2, result.output
+    assert _writes(forge) == []
+
+
+def test_the_client_layer_refuses_every_write_but_the_draft_pr(
+    ws: tuple[Path, Path, Path], forge: _RecordingForge
+) -> None:
+    from fr import gh
+    from fr.hostclient import client_for, client_for_url
+    from fr.placement.forge_guard import StealthForgeWriteError
+
+    root, _, _ = ws
+    for client in (client_for(root), client_for_url("https://example.com/acme/widget")):
+        for write in ("create_issue", "comment_pr", "edit_pr_labels", "ensure_labels", "edit_pr"):
+            with pytest.raises(StealthForgeWriteError, match="R24"):
+                getattr(client, write)("acme/widget")
+        assert client.create_pr("acme/widget", draft=True)["number"] == 7  # the one draft
+        client.pr_view("acme/widget", 1)  # reads pass
+    with pytest.raises(StealthForgeWriteError):
+        gh.create_issue(repo="acme/widget", title="t", body="b", labels=[])
+    assert _writes(forge) == ["create_pr", "create_pr"]
+
+
+def test_outside_stealth_the_client_is_not_wrapped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, forge: _RecordingForge
+) -> None:
+    from fr.hostclient import client_for
+
+    target, _ = stealth_pair(tmp_path)
+    monkeypatch.chdir(target)
+    assert client_for(target) is forge

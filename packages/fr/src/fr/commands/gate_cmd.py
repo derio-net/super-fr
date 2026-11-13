@@ -289,6 +289,18 @@ def resolve_target(repo: str | None, host: str | None, root: Path) -> tuple[str,
     return repo, DEFAULT_HOST
 
 
+def _refuse_under_stealth(command: str) -> None:
+    """R24, review p4-r5: a stealth target's forge takes no label and no comment."""
+    from fr.placement.stealth import refuse_forge_writes
+    from fr.settings import SettingsError
+
+    try:
+        refuse_forge_writes(Path.cwd(), command)
+    except SettingsError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+
+
 @gate_app.command("pass")
 def pass_command(
     pr: Annotated[int, typer.Option("--pr", help="The merged PR whose gate passed.")],
@@ -328,6 +340,8 @@ def pass_command(
     yes: Annotated[bool, typer.Option("--yes", help="Write to the forge.")] = False,
 ) -> None:
     """Comment why PR <n>'s gate <g> passed, then swap gate:<g> for gate:<g>-passed (R14)."""
+    if yes:
+        _refuse_under_stealth("`fr gate pass --yes`")
     kept = list(dict.fromkeys(keep or []))
     if gate not in GATES:
         _refuse(f"unknown gate {gate!r}: one of {', '.join(sorted(GATES))}")
@@ -471,6 +485,8 @@ def backfill_command(
         typer.echo(f"fr gate backfill: {message}", err=True)
         raise typer.Exit(code=2)
 
+    if yes:
+        _refuse_under_stealth("`fr gate backfill --yes`")
     root = _repo_root()
     if root is None:
         refuse("run this from the repo's checkout")

@@ -435,25 +435,47 @@ def refuse_repo_config(repo_root: Path, command: str, what: str) -> None:
 def refuse_forge_writes(repo_root: Path, command: str) -> None:
     """R24 "what reaches the target": only the code and one minimal draft PR. A command
     that writes issues, labels or comments to the target's forge refuses under stealth,
-    exit 2, before any forge call (review p4-r5)."""
-    if paths.outside_repo(Path(repo_root)) != STEALTH:
+    exit 2, before any forge call (review p4-r5). The forge clients refuse the same
+    writes underneath (`fr.placement.forge_guard`); this names the command."""
+    from fr.placement.forge_guard import StealthForgeWriteError, in_stealth
+
+    if not in_stealth(Path(repo_root)):
         return
-    raise SettingsError(
+    raise StealthForgeWriteError(
         f"{command} is not available under placement stealth: it writes to the target's "
         "forge, which receives only the code and one minimal draft PR (R24). Nothing was "
         "written"
     )
 
 
+def _is_fr_owned(rel: str) -> bool:
+    """Case-folded: on a case-insensitive filesystem `Docs/Superpowers/` IS fr's tree, and a
+    case-sensitive one gains nothing from telling them apart here."""
+    folded = rel.casefold()
+    return folded.startswith(tuple(p.casefold() for p in FR_OWNED_PATHS))
+
+
 def fr_paths_in(root: Path, commits: Sequence[str]) -> list[str]:
-    """The paths among *commits*' changes that only fr writes (`FR_OWNED_PATHS`)."""
+    """The paths among *commits*' changes that only fr writes (`FR_OWNED_PATHS`). Read
+    NUL-separated with quoting off, so no path is C-quoted or split at a newline in it."""
+    from fr.git import git_argv
+
     found: list[str] = []
     for sha in commits:
-        done = _git(
-            Path(root), "diff-tree", "--no-commit-id", "--name-only", "-r", "-m", "--root", sha
-        )
-        for rel in done.stdout.splitlines():
-            if rel.startswith(FR_OWNED_PATHS) and rel not in found:
+        argv = git_argv(
+            Path(root),
+            "-c", "core.quotePath=false", "diff-tree", "-z", "--no-commit-id", "--name-only",
+            "-r", "-m", "--root", sha,
+        )  # fmt: skip
+        done = subprocess.run(argv, cwd=root, capture_output=True, check=False)
+        if done.returncode != 0:  # fail closed: a commit fr cannot read is not pushed
+            raise SettingsError(
+                f"placement stealth: cannot list the paths of commit {sha}: "
+                f"{done.stderr.decode(errors='replace').strip()}"
+            )
+        for raw in done.stdout.split(b"\0"):
+            rel = raw.decode("utf-8", "surrogateescape")
+            if rel and _is_fr_owned(rel) and rel not in found:
                 found.append(rel)
     return found
 
