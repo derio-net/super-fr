@@ -282,3 +282,57 @@ def test_quiet_to_stealth_moves_once_every_feature_merged(tmp_path: Path) -> Non
     _run(root, "stealth", tracking=f"{bare}@main")
     assert quiet.read_switch(root) is None
     assert before.matrix.rows
+
+
+SP = "docs/superpowers/specs"
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        f"{SP}/.GIT/hooks/post-checkout",
+        f"{SP}/.Git/config",
+        f"{SP}/git~1/hooks/x",
+        f"{SP}/.git./hooks/x",
+        f"{SP}/.git /hooks/x",
+        f"{SP}/.g‌it/hooks/x",
+        f"{SP}/.gi﻿t/hooks/x",
+        f"{SP}/.GITATTRIBUTES",
+        f"{SP}/.GitModules",
+        f"{SP}/gitmod~1",
+        ".GIT/hooks/x",
+    ],
+    ids=[
+        "upper",
+        "mixed",
+        "ntfs-short",
+        "trailing-dot",
+        "trailing-space",
+        "hfs-zwnj",
+        "hfs-bom",
+        "attributes-upper",
+        "modules-mixed",
+        "modules-short",
+        "top-level",
+    ],
+)
+def test_a_git_like_component_is_refused_in_every_spelling(rel: str) -> None:
+    """Review p7-r5 (security follow-up): on a case-insensitive filesystem, or one that
+    ignores some codepoints or trailing dots, each of these IS `.git`/`.gitmodules`/
+    `.gitattributes`, so the check reads a component the way git's `verify_path` does."""
+    assert move.foreign(rel)
+    with pytest.raises(move.MoveError) as e:
+        move.refuse_foreign([rel], "the test")
+    assert rel in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "rel", [f"{SP}/2026-01-01-gitops-design.md", f"{SP}/git-notes.md", f"{FRAG}/x.yaml"]
+)
+def test_an_ordinary_fr_artifact_naming_git_is_kept(rel: str) -> None:
+    assert not move.foreign(rel)
+
+
+def test_the_allowlist_is_case_sensitive() -> None:
+    assert move.foreign("Docs/Superpowers/specs/x.md")
+    assert move.foreign("DOCS/acceptance/features/x.yaml")

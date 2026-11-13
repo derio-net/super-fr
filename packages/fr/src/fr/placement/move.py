@@ -153,12 +153,36 @@ def refuse_links(entries: Mapping[str, tuple[str, str]], where: str) -> None:
             )
 
 
+_HFS_IGNORABLE: Final = frozenset(
+    [*range(0x200C, 0x2010), *range(0x202A, 0x202F), *range(0x206A, 0x2070), 0xFEFF]
+)
+"""Codepoints HFS+ ignores in a name (git's `is_hfs_dotgit` list): `.g\u200cit` IS `.git`."""
+_NTFS_SHORT: Final = re.compile(r"(?:git|gitmod|gitatt|gitign)~\d+|gi[0-9a-f]{4}~\d+")
+"""NTFS 8.3 short names git refuses for `.git`, `.gitmodules`, `.gitattributes` and
+`.gitignore` (`git~1`, `gitmod~1`, and the hashed `gi7eba~1` forms)."""
+
+
+def git_like(component: str) -> bool:
+    """Is one path component `.git` (or `.gitmodules`, `.gitattributes`, any `.git*`) on
+    SOME filesystem? Read as git's `verify_path` reads it (review p7-r5, security
+    follow-up): NFC-normalised, HFS-ignorable codepoints removed, trailing dots and
+    spaces stripped (NTFS), casefolded (APFS, HFS+, NTFS); and the NTFS short names."""
+    import unicodedata
+
+    name = unicodedata.normalize("NFC", component)
+    name = "".join(ch for ch in name if ord(ch) not in _HFS_IGNORABLE)
+    name = name.rstrip(". ").casefold()
+    return name.startswith(".git") or bool(_NTFS_SHORT.fullmatch(name))
+
+
 def foreign(rel: str) -> bool:
-    """Is *rel* (a repo-layout path) something other than an fr artifact? Only paths
-    `paths.placement_bound` names are fr's to copy, and never one with a `.git*` component
-    (`.gitattributes`, `.gitmodules`), which configures git rather than holding fr state."""
+    """Is *rel* (a repo-layout path) something other than an fr artifact? An allowlist
+    first: only paths `paths.placement_bound` names, matched exactly and case-sensitively,
+    are fr's to copy. Then, on top of it, never one with a `.git`-like component in any
+    spelling a filesystem would honour (`git_like`): `.gitattributes`, `.GIT/hooks/`,
+    `git~1/`, which configure git rather than holding fr state."""
     parts = PurePosixPath(rel).parts
-    return not paths.placement_bound(rel) or any(p.startswith(".git") for p in parts)
+    return not paths.placement_bound(rel) or any(git_like(p) for p in parts)
 
 
 def refuse_foreign(rels: Iterable[str], where: str) -> None:
