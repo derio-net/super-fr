@@ -34,7 +34,14 @@ steps:
           findings: s1,s2,s3,s4,s5,s6,s7,s8,s1-help-lines
           unobserved: reviewer
   plan:
-    state: pending
+    state: running
+    at: '2026-11-13T21:47:32+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-13T21:47:32+00:00'
+          harness: claude-code
+          session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
   plan-review:
     state: pending
   implement:
