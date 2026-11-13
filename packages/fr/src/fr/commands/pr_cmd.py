@@ -41,6 +41,26 @@ def _default_branch(repo_root: Path) -> str:
     return ref.removeprefix(f"{remote}/")
 
 
+def _refuse_fr_naming_under_stealth(repo_root: Path, title: str, body: str) -> None:
+    """R24 "what reaches the target" (review pr1431-n5): under stealth the PR's title
+    and body name nothing of fr. fr's markers are refused under `pr_body: minimal`; this
+    adds the title and the prose (fr's commit scopes, its commands, the placement)."""
+    from fr.artifacts.paths import STEALTH, outside_repo
+    from fr.git_policy.push import PushRefusedError
+    from fr.placement.stealth import fr_naming
+
+    if outside_repo(repo_root) != STEALTH:
+        return
+    for what, text in (("title", title), ("body", body)):
+        found = fr_naming(text)
+        if found:
+            raise PushRefusedError(
+                f"under placement stealth the PR reaching the target names nothing of fr "
+                f"(R24), and its {what} does: {'; '.join(found[:3])}. Write it as a plain "
+                "summary of the code change"
+            )
+
+
 def _refuse_recorded_pr(repo_root: Path, url: str | None) -> None:
     """A run records one PR (review p4-r4): `fr pr create` never replaces it. OPEN
     means it exists already; MERGED or CLOSED means this branch is spent."""
@@ -113,6 +133,7 @@ def create_cmd(
                     f"summary, and {body_file} carries fr markers ({'; '.join(markers)}); "
                     "pass a plain summary instead"
                 )
+        _refuse_fr_naming_under_stealth(repo_root, title, body)
         if settings.git.pr == "ask":
             require_approval(
                 repo_root,
