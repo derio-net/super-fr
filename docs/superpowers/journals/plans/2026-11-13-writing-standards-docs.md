@@ -226,3 +226,8 @@ Baseline: 30f0f6a4a2322c28f247c56c27004a96d33692c2; baseline file: /tmp/claude-0
 ### p2-ws-totals · discovery · phase 2 writing-standard totals: 30 FAIL -> 0 over the 8 reference pages (phase 2)
 
 Measured on the accuracy-corrected baselines: 26 FAIL over the 7 gated pages plus 4 in cli.md's prose (opted out) -> 0. WARN 50 -> 8 on the gated pages (all 8 kept with reasons in p2-ws-*). Wording tripwires (test_tripwire_fr_goal_question_rounds, test_hermes_docs, test_build_site, test_writing_standards_docs, test_tripwire_explainers_fresh, test_tripwire_readme_sync): 502 passed; `fr docs check`: 32 pages current. Fact-keeper reviews are owed in review-phase (plan-fact-keeper-in-review), against the baseline files under scratchpad/baselines/docs/reference/.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-baseline-paths created=2026-11-13T22:48:32+00:00 phase=2 -->
+### p2-baseline-paths · discovery · phase 2 baselines: the recorded scratchpad paths are session-local; the sha is authoritative (phase 2)
+
+The baseline file paths in the p2-ws-* entries (/tmp/claude-0/.../scratchpad/baselines/...) are session-local and not authoritative; they may not exist later. Each page's baseline is `git show <sha>:<page>`, with the sha named in the same p2-ws-* entry: acceptance-matrix 63764b87921b4f741414cff4def0d5ee205547c9 (merge base), components 4d47e37f3efedbb299d4ef54130382ec115127fc, dispatch-lifecycle e610913551192927a389cc320ea1445726f834d6, hermes a057184df8ee0829a6268b9d91c5b5a1ba065e04, install cb73793da178bddff5a92f9ebf398bbac63032c9, plan-model 5c634cd8402351b4f770b357c414696dbf7cb6ad, workflow-shapes cf7a68a21bbef7cc959aaeefbe275514badea268, cli 30f0f6a4a2322c28f247c56c27004a96d33692c2. Later phases record the sha only. (Review finding p2-r6.)
