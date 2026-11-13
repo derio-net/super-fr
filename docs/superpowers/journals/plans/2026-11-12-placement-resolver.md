@@ -1540,3 +1540,8 @@ a03e602: recorded as decision pr1431-n4-decision (the whole-repo move to stealth
 ### pr1431-n5-resolved · finding [fixed] · resolves pr1431-n5: PR title and prose under stealth are marker-checked only
 
 f60886a05: under stealth fr pr create refuses a title or body naming fr (commit scopes, fr commands, the placement) before any forge call, beside the marker check.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n6-resolved created=2026-11-13T17:31:41+00:00 state=fixed resolves=pr1431-n6 -->
+### pr1431-n6-resolved · finding [fixed] · resolves pr1431-n6: The hooks spawn git in plain repos before the switch-ref precondition
+
+fac91e3e4: the bash library and the OpenCode plugin read the marker, then the filesystem switch-ref precondition, before any git call for placement; recording-git tests in both engines
