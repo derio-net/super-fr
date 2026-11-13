@@ -14,7 +14,8 @@ from fr.artifacts.paths import KIND_DIRS
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.test_acceptance_amend import SLUG_A, invoke
+from tests.unit.acceptance_helpers import FRAGMENTS_REL
+from tests.unit.test_acceptance_amend import SLUG_A, committed, fragment, git, invoke, merged_repo
 from tests.unit.test_placement_merged import ROW, Product, _row
 from tests.unit.test_placement_merged import quiet as quiet  # noqa: F401  (fixture)
 
@@ -26,6 +27,35 @@ def _add_pending(root: Path, monkeypatch: pytest.MonkeyPatch, *extra: str) -> No
         *(extra or ("--origin", f"spec:{SLUG_A}#R1")),
     )  # fmt: skip
     assert res.exit_code == 0, res.output
+
+
+# --- repo placement ------------------------------------------------------------------
+
+
+def test_repo_a_merged_rows_origin_is_refused(tmp_path: Path, monkeypatch) -> None:
+    root = merged_repo(tmp_path)
+    head = git(root, "rev-parse", "HEAD")
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "r", "--op", "reword",
+        "--origin", f"spec:{SLUG_A}#R2", "--why", "w",
+    )  # fmt: skip
+    assert res.exit_code == 2, res.output
+    assert "merged" in res.output
+    assert git(root, "rev-parse", "HEAD") == head
+
+
+def test_repo_a_pending_rows_origin_is_corrected_in_place(tmp_path: Path, monkeypatch) -> None:
+    root = merged_repo(tmp_path)
+    _add_pending(root, monkeypatch)
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "p", "--op", "reword",
+        "--origin", f"spec:{SLUG_A}#R2", "--why", "the requirement was mistyped",
+    )  # fmt: skip
+    assert res.exit_code == 0, res.output
+    rows = {r["id"]: r for r in fragment(root, SLUG_A)["rows"]}
+    assert rows["p"]["origin"] == [f"spec:{SLUG_A}#R2"]
+    assert not fragment(root, SLUG_A).get("amendments")
+    assert committed(root) == [f"{FRAGMENTS_REL}/{SLUG_A}.yaml"]
 
 
 # --- quiet: a merged row may be this branch's own ---------------------------------------
