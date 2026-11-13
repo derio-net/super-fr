@@ -1267,3 +1267,8 @@ Extends decision p7-r5-artifact-only after a security review: `placement_bound` 
 ### p7-r5-git-names-exact · decision · git_like refuses exactly .git, .gitmodules and .gitattributes, not every .git* name (phase 7)
 
 Narrows decision p7-r5-git-like-spellings: a `.git*` prefix also refused `.gitkeep`, a plain placeholder the acceptance tree carries, which the move then left on the default branch. The refused set is the names git acts on in a tree (`.git`, `.gitmodules`, `.gitattributes`) and their NTFS short names, each after NFC, HFS-ignorable removal, trailing dot/space stripping and casefolding.
+
+<!-- fr:journal kind=decision scope=plan id=p7-r5-ntfs-streams created=2026-11-13T13:09:58+00:00 phase=7 -->
+### p7-r5-ntfs-streams · decision · p7-r5 refuses any path component holding a colon, and .gitignore with its short name (phase 7)
+
+Extends decisions p7-r5-artifact-only, p7-r5-git-like-spellings and p7-r5-git-names-exact after a second security review: a component containing `:` is refused outright (NTFS alternate data streams such as `.git::$INDEX_ALLOCATION` and `.gitattributes:s` resolve to the real names, and no fr artifact name needs a colon). The refused git names are `.git`, `.gitmodules`, `.gitattributes` and `.gitignore`, plus `git~N`, `gitmod~N`, `gitatt~N`, `gitign~N` and the hashed `gi<hex4>~N` forms, compared after NFC, HFS-ignorable removal, trailing dot/space stripping and casefolding. `.gitkeep` stays allowed because fr's acceptance tree carries `docs/acceptance/features/.gitkeep`. The case-sensitive `placement_bound` allowlist remains the primary gate.
