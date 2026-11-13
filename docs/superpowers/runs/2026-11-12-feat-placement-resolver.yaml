@@ -297,3 +297,4 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
+pr: https://github.com/derio-net/super-fr/pull/1431
