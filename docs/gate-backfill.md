@@ -63,7 +63,7 @@ the retry does not accept the pass (exit 2).
 
 The retry hint that fr prints is a complete command (`--notes`, `--repo`, `--host`). The driver
 route prints the same adopt `gh issue close` and discharge lines after its `gate-pass` line, when
-it has a checkout of the repo. A PR that carries neither label still does not pass.
+it has a checkout of the repo. For a PR that carries neither label, the pass still stops with an error.
 
 **A partial pass: `--keep <key>`** (repeatable, gh#1323). A pass closes every tracker of its PR and
 gate, and at that time the key is usually still owed. So fr cannot tell a partial pass from a
@@ -148,10 +148,10 @@ comments of this account count.
 
 ## Trust
 
-The backfill reuses, rewrites and closes only trackers that `owned_owed_key` accepts. The account
+fr reuses, rewrites and closes only trackers that `owned_owed_key` accepts. The account
 that fr acts as wrote such a tracker. It is labelled `fr:owed`, and its last line is an owed marker.
 
-The backfill touches any other issue only through an explicit `adopt`. Even then it touches only
+fr touches any other issue only through an explicit `adopt`. Even then it touches only
 the comments and labels (`fr:owed`, plus `fr:awaiting-live` when only a walk remains). It never
 edits the body of that issue and never closes it. An adopt while fr-owned trackers hold the key
 closes every one of them as a duplicate.
