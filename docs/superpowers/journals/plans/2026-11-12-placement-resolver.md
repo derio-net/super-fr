@@ -1490,3 +1490,8 @@ fr placement move --to stealth removes fr's files from the target's default bran
 ### pr1431-r1-resolved · finding [fixed] · resolves pr1431-r1: Under stealth, fr push's drift refusal names migrate-branch, which commits a removal on the product branch and pushes without the stealth scan
 
 5e105abd9: every product-branch push goes through fr.git_policy.product.push_product_branch (stealth path and message scan, quiet R23 check and atomic push); a tripwire pins every other git push site; under stealth migrate-branch only copies into the tracking repo and names the unpushed commits plus a filter-branch command, or says the files already reached the target; the stealth drift refusal no longer offers migrate-branch. Reviewer's reproduction is tests/unit/test_placement_product_push.py.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r2-resolved created=2026-11-13T15:46:55+00:00 state=fixed resolves=pr1431-r2 -->
+### pr1431-r2-resolved · finding [fixed] · resolves pr1431-r2: A missing or unusable stealth marker falls back to repo while the isolation state still says stealth
+
+758af7ff0 (+7a4176356): a marker that exists but cannot be validated refuses; a missing one refuses when the worktree's isolation state records quiet or stealth, naming fr isolation up; fr isolation up restores it. git clean -fdx scenario in tests/unit/test_placement_marker_fallback.py.
