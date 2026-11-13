@@ -1495,3 +1495,8 @@ fr placement move --to stealth removes fr's files from the target's default bran
 ### pr1431-r2-resolved · finding [fixed] · resolves pr1431-r2: A missing or unusable stealth marker falls back to repo while the isolation state still says stealth
 
 758af7ff0 (+7a4176356): a marker that exists but cannot be validated refuses; a missing one refuses when the worktree's isolation state records quiet or stealth, naming fr isolation up; fr isolation up restores it. git clean -fdx scenario in tests/unit/test_placement_marker_fallback.py.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r3-resolved created=2026-11-13T15:46:57+00:00 state=fixed resolves=pr1431-r3 -->
+### pr1431-r3-resolved · finding [fixed] · resolves pr1431-r3: A reftable clone of a quiet repo reads as repo
+
+9c4a541b6: under reftable (reftable dir or extensions.refstorage) the switch sha, HEAD and branch names are read through git; files backends keep the filesystem path. tests/unit/test_placement_reftable.py, skipped only by a capability probe.
