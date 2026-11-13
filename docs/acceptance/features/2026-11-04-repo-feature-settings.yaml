@@ -206,12 +206,15 @@ rows:
       - super-fr:tests/unit/test_artifact_paths.py#test_quiet_and_stealth_keep_the_layout_below_a_feature_root
       - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_no_artifact_path_literal_outside_the_resolver
       - super-fr:tests/unit/test_settings_paths.py#test_shell_prints_the_placement_root_feature_and_every_kind
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_no_hook_spells_an_artifact_path_outside_the_fallback
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_no_plugin_source_spells_an_artifact_path_outside_the_fallback
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_pending_only_shrinks
       int:
       - super-fr:tests/integration/test_scenarios.py#test_placement_resolver
-    status: not-implemented
-    notes: phase 1 built the Python resolver and the tripwire; phase 2 empties its allowlist
-      and phase 6 moves hooks, the OpenCode plugin and the Hermes hook onto fr settings
-      paths; the row moves to ci when both land
+    status: ci
+    notes: 'every artifact path comes from fr.artifacts.paths: the Python tripwire''s
+      allowlist is empty (phase 2), hooks and the OpenCode plugin read fr settings paths
+      and are scanned by the tripwire with pinned fallback lines (phase 6)'
     scenario: tests/scenarios/placement-resolver.sh
   - id: placement-merged-status
     capability: repo-feature-settings
