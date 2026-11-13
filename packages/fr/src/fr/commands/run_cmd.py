@@ -6960,7 +6960,9 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
     write_text_atomic(body_path, render_pr_body(repo_root, state))
-    rel = body_path.relative_to(repo_root).as_posix()
+    # Under quiet and stealth the render is under the artifact root, outside the checkout:
+    # named by its full path there (lens-pr-body-quiet), committed by the same seam.
+    rel = _shown_path(body_path, repo_root)
     ref = pr or state.branch
     # Through the forge adapter, never `fr.gh`: on GitLab/Gitea `gh` cannot
     # read the PR, and a gate that cannot read it never passes (gh#742).

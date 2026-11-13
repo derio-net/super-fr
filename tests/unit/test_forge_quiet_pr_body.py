@@ -15,8 +15,10 @@ import pytest
 from fr.run.model import load_run_state
 
 from tests.unit.test_deliver_pr_body import RUN, _at_deliver, _body, _deliver, live
+from tests.unit.test_placement_merged import _home, quiet, stealthy
 
-__all__ = ["live"]  # the fixture, re-exported so pytest finds it here
+# the fixtures, re-exported so pytest finds them here
+__all__ = ["_home", "live", "quiet", "stealthy"]
 
 PLAIN = "## Summary\n\nShips the widget. Refs #3\n"
 
@@ -122,3 +124,45 @@ def test_full_is_unchanged_a_plain_body_is_refused_and_no_durable_render_is_kept
 
     assert out.exit_code == 0, out.output
     assert not rec.exists() and not _body(root).exists() and not _durable(root).exists()
+
+
+# --- lens-pr-body-quiet: the durable render lives outside the checkout ---------------
+
+
+@pytest.mark.parametrize("placement", ["quiet", "stealthy"])
+def test_minimal_under_an_outside_placement_keeps_the_render_beside_the_cursor(
+    placement: str,
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Under quiet and stealth `durable_pr_body_path` is under the artifact root, outside
+    the product checkout: `deliver` writes the render there and names it by its full
+    path, rather than raising on `relative_to(repo_root)`."""
+    from types import SimpleNamespace
+
+    import fr.hostclient
+    import fr.record.pr_body
+    import fr.settings
+    from fr.commands import run_cmd
+    from fr.record.pr_body import durable_pr_body_path
+
+    product = request.getfixturevalue(placement)
+    root = product.root
+    minimal_settings = SimpleNamespace(
+        settings=SimpleNamespace(forge=SimpleNamespace(pr_body="minimal"))
+    )
+    monkeypatch.setattr(fr.settings, "load_settings", lambda _root: minimal_settings)
+    monkeypatch.setattr(fr.record.pr_body, "render_pr_body", lambda *_a: "## Findings\n")
+    monkeypatch.setattr(run_cmd, "_deliver_pr_ask_gate", lambda *_a: None)
+    monkeypatch.setattr(run_cmd, "_refuse_premature_closes", lambda *_a: None)
+    forge = SimpleNamespace(pr_body=lambda ref, cwd=None: PLAIN)
+    monkeypatch.setattr(fr.hostclient, "client_for", lambda _root: forge)
+    state = SimpleNamespace(run=RUN, pr=None, branch="feat/view")
+
+    run_cmd._deliver_pr_gate(root, state, "https://example.com/acme/widget/pull/1")  # type: ignore[arg-type]
+
+    durable = durable_pr_body_path(root, RUN)
+    assert not durable.resolve().is_relative_to(root.resolve())  # the case under test
+    assert durable.read_text() == "## Findings\n"
+    assert str(durable) in " ".join(capsys.readouterr().err.split())
