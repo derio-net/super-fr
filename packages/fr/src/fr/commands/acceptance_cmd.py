@@ -1166,12 +1166,21 @@ def _init_quiet(root: Path, *, refresh_ci: bool) -> bool:
     from fr.artifacts.paths import outside_repo
     from fr.records_commit import commit_records
 
-    if outside_repo(root) is None:  # quiet, and stealth alike (R24: nothing in the target)
+    placement = outside_repo(root)  # quiet, and stealth alike (R24: nothing in the target)
+    if placement is None:
         return False
+    # review p4-r9: name the placement this workspace is in, and its requirement
+    req = "R24" if placement == "stealth" else "R23"
+    where = "the target" if placement == "stealth" else "the product branches"
+    what = (
+        "a stealth target receives no fr file"
+        if placement == "stealth"
+        else ("a quiet repo keeps no acceptance gate on its product branches")
+    )
     if refresh_ci:
         err_console.print(
-            "`fr acceptance init --refresh-ci` is not available under placement quiet: a "
-            "quiet repo keeps no acceptance gate on its product branches (R23)",
+            f"`fr acceptance init --refresh-ci` is not available under placement {placement}: "
+            f"{what} ({req})",
             soft_wrap=True,
         )
         raise typer.Exit(2)
@@ -1183,8 +1192,8 @@ def _init_quiet(root: Path, *, refresh_ci: bool) -> bool:
         keep.write_text("")
         typer.echo(f"created {keep}")
     typer.echo(
-        "quiet   no CI workflow, rule file, .gitignore lines or badge: under placement quiet "
-        "fr writes nothing on the product branches (R23)"
+        f"{placement:<7} no CI workflow, rule file, .gitignore lines or badge: under placement "
+        f"{placement} fr writes nothing on {where} ({req})"
     )
     commit_records(root, [keep], "chore(fr): acceptance init")
     return True

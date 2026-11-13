@@ -109,7 +109,7 @@ def test_up_again_on_a_stealth_workspace_with_a_plan_needs_no_validator_wrapper(
 @pytest.mark.parametrize(
     "rel",
     [
-        "docs/superpowers/plans/ünïcode \"quoted\".md",  # C-quoted by default
+        'docs/superpowers/plans/ünïcode "quoted".md',  # C-quoted by default
         "docs/superpowers/new\nline.md",  # a newline inside the name
         "Docs/Superpowers/plans/case.md",  # a case variant of fr's tree
         ".FR/settings.yaml",
@@ -224,3 +224,16 @@ def test_outside_stealth_the_client_is_not_wrapped(
     target, _ = stealth_pair(tmp_path)
     monkeypatch.chdir(target)
     assert client_for(target) is forge
+
+
+def test_acceptance_init_names_the_stealth_placement(ws: tuple[Path, Path, Path]) -> None:
+    """Review p4-r9: the refusal and the note name stealth and R24, not quiet and R23."""
+    root, _, _ = ws
+    refused = _fr(root, "acceptance", "init", "--refresh-ci")
+    text = " ".join(refused.output.split())
+    assert refused.exit_code == 2, refused.output
+    assert "placement stealth" in text and "R24" in text and "quiet" not in text
+    done = _fr(root, "acceptance", "init")
+    text = " ".join(done.output.split())
+    assert done.exit_code == 0, done.output
+    assert "under placement stealth" in text and "R24" in text and "quiet" not in text
