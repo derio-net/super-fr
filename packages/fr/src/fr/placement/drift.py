@@ -193,13 +193,18 @@ def _into_outside(root: Path, branch: str, current: str, emit: Callable[[str], N
     if not names or base is None:
         emit(f"nothing to migrate: {branch} carries no fr artifact (placement {current})")
         return
+    from fr.placement.move import _files, inside
+
+    # Read from git, never the working tree: a symlinked artifact refuses (its target could
+    # be any file on the host) instead of being copied into the other placement.
+    at_head = _files(root, "HEAD", keep=set(names).__contains__)
     froot = artifact_root(root)
     written: list[Path] = []
     for rel in names:
-        data = _show(root, "HEAD", rel)
-        if data is None:
+        if rel not in at_head:
             continue  # the branch deleted it: nothing to carry over
-        path = froot / rel
+        data = at_head[rel][1]
+        path = inside(froot, rel)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         written.append(path)
@@ -214,7 +219,7 @@ def _into_outside(root: Path, branch: str, current: str, emit: Callable[[str], N
             _run(root, "checkout", base, "--", rel)
         else:
             _run(root, "rm", "-q", "--cached", "--ignore-unmatch", "--", rel)
-            (root / rel).unlink(missing_ok=True)
+            inside(root, rel).unlink(missing_ok=True)
     _run(root, "commit", "-q", "--no-verify", "-m",
          f"chore(placement): move fr artifacts off {branch} (placement {current}, R28)",
          "--", *names)  # fmt: skip
@@ -235,7 +240,7 @@ def _into_repo(root: Path, branch: str, emit: Callable[[str], None]) -> None:
     one commit on each side, the placement recorded last (so a crash re-runs), pushed."""
     from fr.git_policy.push import PushRefusedError, atomic_push, push
     from fr.placement import quiet
-    from fr.placement.move import META, record_placement
+    from fr.placement.move import META, _files, inside, record_placement
 
     frwt = quiet.worktree_path(root)
     fid = paths.checked_feature_id(branch)
@@ -244,17 +249,20 @@ def _into_repo(root: Path, branch: str, emit: Callable[[str], None]) -> None:
     remote = _remote(root)
     if (frwt / ".git").exists() and froot.is_dir():
         quiet.fast_forward(root)
-        files = sorted(
-            p for p in froot.rglob("*") if p.is_file() and p.relative_to(froot).parts[0] not in META
-        )
+        # From git (the fr worktree's HEAD), never the working tree: a symlink refuses.
+        got = _files(frwt, "HEAD", f"{prefix}/")
+        files = {
+            p.removeprefix(f"{prefix}/"): data
+            for p, (_, data) in got.items()
+            if p.removeprefix(f"{prefix}/").split("/", 1)[0] not in META
+        }
         written: list[str] = []
-        for p in files:
-            rel = p.relative_to(froot).as_posix()
-            target = root / rel
-            if target.is_file() and target.read_bytes() == p.read_bytes():
+        for rel, data in sorted(files.items()):
+            target = inside(root, rel)
+            if target.is_file() and target.read_bytes() == data:
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(p.read_bytes())
+            target.write_bytes(data)
             written.append(rel)
         if written:
             _run(root, "add", "--", *written)

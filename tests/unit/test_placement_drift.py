@@ -270,3 +270,45 @@ def test_migrate_branch_moves_a_quiet_branch_back_into_repo(tmp_path: Path) -> N
     assert drift.detect(ws) is None
     origin = Path(git(root, "remote", "get-url", "origin").strip())
     assert FRAG in git(origin, "ls-tree", "-r", "--name-only", "feat/q")
+
+
+# --- security: migrate-branch never follows a link ---------------------------------------
+
+
+def test_migrate_branch_refuses_a_symlinked_artifact_and_copies_nothing(tmp_path: Path) -> None:
+    root, ws = drifted(tmp_path)
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOP-SECRET-KEY-MATERIAL\n")
+    link = ws / KIND_DIRS["acceptance-fragment"] / "2026-02-02-link.yaml"
+    link.symlink_to(secret)
+    git(ws, "add", "-A")
+    git(ws, "commit", "-qm", "chore(fr): a link")
+    with pytest.raises(SettingsError, match="symlink"):
+        drift.migrate_branch(ws, emit=lambda _: None)
+    frwt = quiet.worktree_path(ws)
+    found = [
+        p for p in frwt.rglob("*") if p.is_file() and "TOP-SECRET" in p.read_text(errors="ignore")
+    ]
+    assert found == []
+
+
+def test_migrate_branch_refuses_to_write_through_a_symlinked_directory(tmp_path: Path) -> None:
+    from fr.artifacts.commit import commit_paths
+    from fr.artifacts.paths import artifact_root
+    from fr.git_policy.push import atomic_push
+
+    root = make_repo(tmp_path)
+    _switch_to(root, QUIET)
+    ws = HostWorktreeTarget(root).up(profile=None, branch="feat/q").worktree
+    path = artifact_root(ws) / FRAG
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(FRAG_TEXT)
+    assert commit_paths(ws, [path], "chore(fr): row").committed
+    atomic_push(ws, quiet.worktree_path(ws), "origin", "feat/q", code=True)
+    _switch_to(root, QUIET.replace("placement: quiet", "placement: repo"))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (ws / "docs").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(SettingsError, match="symlink"):
+        drift.migrate_branch(ws, emit=lambda _: None)
+    assert list(outside.iterdir()) == []

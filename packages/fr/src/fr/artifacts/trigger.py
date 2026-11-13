@@ -471,7 +471,7 @@ def ensure_artifacts_current(
     emit = err if err is not None else _echo_err
     resolved: list[Path] = []
 
-    def where() -> Path:
+    def gate_root() -> Path:
         if not resolved:
             if repo_root is not None:
                 resolved.append(repo_root)
@@ -488,15 +488,15 @@ def ensure_artifacts_current(
     # nothing, so there is nothing to skip). `fr placement` is its remedy, so it passes.
     if not is_exempt(argv=argv, invoked_subcommand=invoked_subcommand, env={}):
         if invoked_subcommand == PLACEMENT_COMMAND:
-            if _drifted(where()):
+            if _drifted(gate_root()):
                 return  # a drifted tree's artifacts are judged after migrate-branch
         else:
-            _refuse_drift(where(), emit)
+            _refuse_drift(gate_root(), emit)
 
     if is_exempt(argv=argv, invoked_subcommand=invoked_subcommand, env=environ):
         return
 
-    root = where()
+    root = gate_root()
 
     try:
         stale = is_stale(root, registry=registry)

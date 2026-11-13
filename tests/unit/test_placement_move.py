@@ -520,5 +520,42 @@ def test_inside_refuses_a_path_leaving_its_feature_root(tmp_path: Path) -> None:
     base.mkdir(parents=True)
     for rel in ("../g/x", "/etc/passwd", ""):
         with pytest.raises(move.MoveError):
-            move._inside(base, rel)
-    assert move._inside(base, "docs/x.md") == base / "docs/x.md"
+            move.inside(base, rel)
+    assert move.inside(base, "docs/x.md") == base / "docs/x.md"
+
+
+# --- security: links are never followed --------------------------------------------------
+
+
+def test_a_symlinked_fragment_is_refused_and_its_target_reaches_no_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = repo_with_artifacts(tmp_path)
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOP-SECRET-KEY-MATERIAL\n")
+    tick()
+    link = root / FRAG / "2026-01-03-gamma.yaml"
+    link.symlink_to(secret)
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "feat(x): a link")
+    git(root, "push", "-q", "origin", "main")
+    git(root, "fetch", "-q", "origin")
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(app, ["placement", "move", "--to", "quiet"])
+    assert result.exit_code == 2, result.output
+    assert f"{FRAG}/2026-01-03-gamma.yaml" in result.output and "symlink" in result.output
+    origin = _origin(root)
+    assert not git(origin, "branch", "--list", "fr").strip()
+    assert "TOP-SECRET" not in git(origin, "log", "--all", "-p", "--format=")
+    assert not quiet.worktree_path(root).exists()
+
+
+def test_inside_refuses_a_symlinked_directory_on_the_way(tmp_path: Path) -> None:
+    base = tmp_path / "ws"
+    base.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (base / "docs").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(move.MoveError, match="symlink"):
+        move.inside(base, "docs/acceptance/x.yaml")
+    assert list(outside.iterdir()) == []

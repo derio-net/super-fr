@@ -123,9 +123,23 @@ def _tree(root: Path, commit: str, prefix: str = "") -> dict[str, tuple[str, str
             continue
         meta, _, name = entry.partition(b"\t")
         mode, kind, sha = meta.decode().split()
-        if kind == "blob":
+        if kind in ("blob", "commit"):
             out[name.decode()] = (mode, sha)
     return out
+
+
+LINK_MODES: Final = {"120000": "a symlink", "160000": "a submodule (gitlink)"}
+"""Tree entries a move never copies: a symlink's target could be anything on the host
+(`~/.ssh/...`), and a gitlink is another repository. Refused, naming the path."""
+
+
+def refuse_links(entries: Mapping[str, tuple[str, str]], where: str) -> None:
+    for path, (mode, _) in sorted(entries.items()):
+        if mode in LINK_MODES:
+            raise MoveError(
+                f"fr placement move: refused: {path} in {where} is {LINK_MODES[mode]}; fr "
+                "copies only regular files (a link could read or write outside the repo)"
+            )
 
 
 def _blobs(root: Path, shas: Sequence[str]) -> dict[str, bytes]:
@@ -145,8 +159,13 @@ def _blobs(root: Path, shas: Sequence[str]) -> dict[str, bytes]:
     return out
 
 
-def _files(root: Path, commit: str, prefix: str = "") -> dict[str, tuple[str, bytes]]:
-    tree = _tree(root, commit, prefix)
+def _files(
+    root: Path, commit: str, prefix: str = "", keep: Callable[[str], bool] | None = None
+) -> dict[str, tuple[str, bytes]]:
+    """Every file (*keep*-filtered) at *commit*, read from git, never the working tree; a
+    symlink or gitlink among them refuses (`refuse_links`)."""
+    tree = {p: v for p, v in _tree(root, commit, prefix).items() if keep is None or keep(p)}
+    refuse_links(tree, f"{root} at {commit[:12]}")
     data = _blobs(root, [b for _, b in tree.values()])
     return {p: (mode, data[b]) for p, (mode, b) in tree.items()}
 
@@ -295,12 +314,22 @@ def checked_owner(root: Path, owner: str) -> str:
     return fid
 
 
-def _inside(base: Path, rel: str) -> Path:
-    """`base / rel`, refused unless it stays inside *base* (defence in depth: every path
-    a move writes or deletes is below its one feature root)."""
+def inside(base: Path, rel: str) -> Path:
+    """`base / rel`, refused unless it stays inside *base*: a relative path with no `..`,
+    no component from *base* down to it a symlink (lstat), and resolving below *base*.
+    The ONE check every write and unlink of a move or `fr placement migrate-branch` takes
+    (defence in depth: each lands in its one feature root, or the workspace)."""
     path = base / rel
-    if Path(rel).is_absolute() or ".." in Path(rel).parts or not rel:
+    if not rel or Path(rel).is_absolute() or ".." in Path(rel).parts:
         raise MoveError(f"fr placement move: refused: {rel!r} is not a path inside {base}")
+    walk = Path(base)
+    for part in Path(rel).parts:
+        walk = walk / part
+        if walk.is_symlink():
+            raise MoveError(
+                f"fr placement move: refused: {walk} is a symlink; fr writes nothing through "
+                "a link (it could land outside the repo)"
+            )
     real, top = path.resolve(), base.resolve()
     if real != top and not real.is_relative_to(top):
         raise MoveError(f"fr placement move: refused: {rel!r} leaves {base}")
@@ -312,7 +341,7 @@ def _repo_groups(root: Path, ref: str) -> list[Group]:
     the bookkeeping a feature root carries synthesised from the default ref's history."""
     from fr.placement.merged import record_text
 
-    files = {p: v for p, v in _files(root, ref).items() if paths.placement_bound(p)}
+    files = _files(root, ref, keep=paths.placement_bound)
     plan_spec: dict[str, str] = {}
     run_branch: dict[str, str] = {}
     default = ref.rsplit("/", 1)[-1]
@@ -529,7 +558,7 @@ def _commit_feature(root: Path, parent: str | None, prefix: str, group: Group, m
     have = _tree(root, parent, f"{prefix}/") if parent else {}
     fake = Path("/") / prefix
     for rel in group.files:
-        _inside(fake, rel)
+        inside(fake, rel)
     want = {f"{prefix}/{rel}": (mode, data) for rel, (mode, data) in group.files.items()}
     hashed = {p: (mode, _hash(root, data)) for p, (mode, data) in want.items()}
     if have == hashed:
@@ -617,10 +646,10 @@ def _copy_stealth(ctx: Ctx) -> None:
         if have == want:
             continue
         froot = wt / prefix
-        _inside(wt / target / paths.FEATURES_DIR, g.fid)
+        inside(wt / target / paths.FEATURES_DIR, g.fid)
         written: list[Path] = []
         for rel, (mode, data) in g.files.items():
-            path = _inside(froot, rel)
+            path = inside(froot, rel)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
             if mode == "100755":
@@ -629,7 +658,7 @@ def _copy_stealth(ctx: Ctx) -> None:
         for stale in (p for p in have if p not in want):
             if not stale.startswith(f"{prefix}/"):
                 continue  # the stale pass is limited to exactly this feature's root
-            gone = _inside(froot, stale.removeprefix(f"{prefix}/"))
+            gone = inside(froot, stale.removeprefix(f"{prefix}/"))
             gone.unlink(missing_ok=True)
             written.append(gone)
         message = _fr_message(ctx.root, f"chore(fr): move {g.fid} from placement {ctx.source}")
@@ -673,7 +702,7 @@ def _copy_repo(ctx: Ctx) -> None:
         _git(root, "update-ref", f"refs/heads/{COPY_BRANCH}", new, _ZERO)
         existing = new
     else:
-        got = {p: d for p, (_, d) in _files(root, existing).items() if p in flat}
+        got = {p: d for p, (_, d) in _files(root, existing, keep=flat.__contains__).items()}
         if got != flat:
             raise MoveError(
                 f"fr placement move: the branch {COPY_BRANCH} already exists and does not hold "
@@ -720,7 +749,7 @@ def _copy_run(ctx: Ctx) -> None:
     content = group.content()
     written: list[str] = []
     for rel, data in content.items():
-        path = root / rel
+        path = inside(root, rel)
         if path.is_file() and path.read_bytes() == data:
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -790,8 +819,8 @@ def _dest_files(ctx: Ctx) -> dict[str, bytes]:
     head = ctx.state.get("copy_sha") or "HEAD"
     return {
         p: d
-        for p, (_, d) in _files(root, head).items()
-        if paths.placement_bound(p) and (ctx.run is None or p in ctx.groups()[0].content())
+        for p, (_, d) in _files(root, head, keep=paths.placement_bound).items()
+        if (ctx.run is None or p in ctx.groups()[0].content())
     }
 
 
@@ -887,7 +916,9 @@ def _switch(ctx: Ctx) -> None:
     if ctx.to == paths.REPO:
         _git(root, "fetch", "--quiet", "--no-tags", "origin")
         flat = ctx.flat()
-        landed = {p: d for p, (_, d) in _files(root, ctx.default_ref()).items() if p in flat}
+        landed = {
+            p: d for p, (_, d) in _files(root, ctx.default_ref(), keep=flat.__contains__).items()
+        }
         if landed != flat:
             raise _PausedError(
                 f"paused: {COPY_BRANCH} has not landed on the default branch yet; merge its PR, "
@@ -969,7 +1000,7 @@ def _remove_run(ctx: Ctx) -> None:
     present = list(_tree(wt, "HEAD", f"{prefix}/"))
     if not present:
         return
-    files = [wt / p for p in present]
+    files = [inside(wt, p) for p in present if p.startswith(f"{prefix}/")]
     for f in files:
         f.unlink(missing_ok=True)
     outcome = stealth.commit_and_push(
@@ -1044,8 +1075,14 @@ def _start(
             )
         found = stealth.marker_tracking(root)
         assert found is not None
-        state = {"to": to, "from": paths.STEALTH, "run": run, "tracking": found[0].text,
-                 "done": [], "started": datetime.now(UTC).isoformat()}  # fmt: skip
+        state: dict[str, Any] = {
+            "to": to,
+            "from": paths.STEALTH,
+            "run": run,
+            "tracking": found[0].text,
+            "done": [],
+            "started": datetime.now(UTC).isoformat(),
+        }
         return Ctx(root, to, paths.STEALTH, state, emit, found[0], run)
     if current == paths.STEALTH:
         raise MoveError(
@@ -1064,8 +1101,14 @@ def _start(
 
         if not _has_origin(root):
             raise MoveError("fr placement move --to quiet: this repository has no `origin`")
-    state = {"to": to, "from": current, "run": None, "tracking": tracking, "done": [],
-             "started": datetime.now(UTC).isoformat()}  # fmt: skip
+    state = {
+        "to": to,
+        "from": current,
+        "run": None,
+        "tracking": tracking,
+        "done": [],
+        "started": datetime.now(UTC).isoformat(),
+    }
     return Ctx(root, to, current, state, emit, ref, None)
 
 
