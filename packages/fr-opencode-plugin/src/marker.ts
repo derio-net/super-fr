@@ -230,12 +230,15 @@ export function switchEnabled(text: string): boolean {
  * Whether the repo is on the quiet or stealth placement, found WITHOUT `fr`: the
  * marker records `placement` quiet or stealth, or the last fetched
  * `refs/remotes/origin/fr:settings.yaml`, with an origin remote (R23), cannot be read
- * positively as `repo` (`switchEnabled`). The shell library's `_fr_placement_enabled`,
- * line for line.
+ * positively as `repo` (`switchEnabled`), read only when `switchRefMaybe` says the ref
+ * may exist, so a plain repo spawns no git for it. The shell library's
+ * `_fr_placement_enabled`, line for line.
  */
 export function placementEnabled(toplevel: string): boolean {
   const marker = readMarker(toplevel);
   if (marker && (marker.placement === "quiet" || marker.placement === "stealth")) return true;
+  // The filesystem answers first (review pr1431-n6): no `refs/remotes/origin/fr`, no git.
+  if (!switchRefMaybe(toplevel)) return false;
   if (git(toplevel, "config", "--get", "remote.origin.url") === undefined) return false;
   const text = git(toplevel, "cat-file", "-p", "refs/remotes/origin/fr:settings.yaml");
   return text !== undefined && switchEnabled(text);
@@ -245,7 +248,8 @@ export function placementEnabled(toplevel: string): boolean {
  * The one "is this repo fr-enabled" (bash `_fr_is_enabled`, R26): the DIRECT checks, a
  * devcontainer profile, a plans dir in the checkout (run whether or not `fr` resolves,
  * plan-journal decision p6-plans-test-always), or a quiet/stealth placement found
- * directly. Only then, and only when `refs/remotes/origin/fr` may exist (a plain repo
+ * directly (the switch read only past `switchRefMaybe`, review pr1431-n6). Only then, and
+ * only when `refs/remotes/origin/fr` may exist (a plain repo
  * spawns no `fr`, review p6-r1), `fr settings paths --json --no-create` naming a
  * quiet/stealth placement or an existing plans dir. A missing, failing, slow or garbled
  * `fr` can only fail to ADD a yes.

@@ -449,3 +449,36 @@ def test_every_spelling_of_a_placement_is_fr_enabled_without_fr(tmp_path: Path, 
 def test_a_switch_naming_no_placement_is_the_repo_default(tmp_path: Path) -> None:
     repo = quiet_repo(tmp_path, settings="schema: 1\n## placement: quiet is prose here\n")
     assert enabled(repo, NO_FR) == 1
+
+
+# --- review pr1431-n6: the placement question spawns no git in a plain repo ---------
+
+
+def recording_git(tmp_path: Path) -> tuple[Path, Path]:
+    """A git that logs its argv, then runs the real git: FR_GIT_CANDIDATES names it."""
+    real = shutil.which("git")
+    assert real is not None
+    log = tmp_path / "git-calls.log"
+    stub = tmp_path / "git-stub" / "git"
+    stub.parent.mkdir()
+    stub.write_text(f'#!/bin/bash\nprintf "%s\\n" "$*" >> "{log}"\nexec "{real}" "$@"\n')
+    stub.chmod(0o755)
+    return stub, log
+
+
+def test_a_plain_repos_placement_question_spawns_no_git(tmp_path: Path) -> None:
+    """The marker and the filesystem switch-ref precondition come first: a repo with no
+    `refs/remotes/origin/fr` never runs `git config` or `git cat-file` for placement."""
+    stub, log = recording_git(tmp_path)
+    plain = fr_repo(tmp_path, name="plain", fr_enabled=False)
+    _git(plain, "remote", "add", "origin", "https://example.com/org/repo.git")
+    env = {**NO_FR, "FR_GIT_CANDIDATES": str(stub)}
+    assert enabled(plain, env) == 1
+    assert decide(plain / "src.py", env=env) == 0
+    calls = log.read_text().splitlines() if log.exists() else []
+    assert not [c for c in calls if "config" in c or "cat-file" in c], calls
+    # and a quiet repo still asks, and is still fr-enabled
+    (tmp_path / "q").mkdir()
+    quiet = quiet_repo(tmp_path / "q")
+    assert enabled(quiet, env) == 0
+    assert any("cat-file" in c for c in log.read_text().splitlines())

@@ -320,8 +320,9 @@ fr_switch_ref_maybe() {
 #   - the QUIET switch: the last fetched `refs/remotes/origin/fr:settings.yaml`, with
 #     an origin remote (R23: no origin is `repo`), that cannot be read positively as
 #     `repo` (`_fr_switch_enabled`).
-# Only then, and only when `refs/remotes/origin/fr` may exist (`fr_switch_ref_maybe`:
-# a plain repo spawns no `fr`, review p6-r1), the resolver is asked, bounded, whether
+# The switch is read only when `refs/remotes/origin/fr` may exist (`fr_switch_ref_maybe`,
+# filesystem only), so a plain repo spawns neither git nor `fr` for placement (review
+# p6-r1, pr1431-n6). Only then the resolver is asked, bounded, whether
 # it names a quiet/stealth placement or an existing FR_PLANS_DIR. A missing, failing,
 # slow or garbled `fr` can only fail to ADD an enabled answer, never remove one.
 _fr_is_enabled() {
@@ -334,12 +335,15 @@ _fr_is_enabled() {
   return 1
 }
 
-# The marker's `placement` (quiet or stealth) or the quiet switch, read directly.
+# The marker's `placement` (quiet or stealth) or the quiet switch, read directly. The
+# filesystem answers first (review pr1431-n6): the marker, then `fr_switch_ref_maybe`,
+# so a repo with no `refs/remotes/origin/fr` spawns no git for the placement question.
 _fr_placement_enabled() {
   if [ -f "$1/.fr-isolation" ]; then
     _fr_pl=$(fr_json_file_field "$1/.fr-isolation" placement 2>/dev/null) || _fr_pl=""
     case "$_fr_pl" in quiet | stealth) return 0 ;; esac
   fi
+  fr_switch_ref_maybe "$1" || return 1
   fr_git_resolve || return 1
   "$FR_GIT_BIN" -C "$1" config --get remote.origin.url >/dev/null 2>&1 || return 1
   _fr_switch=$("$FR_GIT_BIN" -C "$1" cat-file -p refs/remotes/origin/fr:settings.yaml 2>/dev/null) ||

@@ -1,6 +1,6 @@
 // The acceptance nag (spec 2026-10-20-opencode-2-support R9).
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -260,10 +260,15 @@ describe("a plain repo's nag spawns nothing for the placement (review p6-r8)", (
     try {
       expect(hasAcceptance(repo)).toBe(true); // the checkout's own fragment
       expect(existsSync(log)).toBe(false);
-      // and a marker file makes it look (the placement checks may spawn)
+      // a marker naming no placement, with no origin/fr ref, still spawns nothing (pr1431-n6)
       writeFileSync(join(repo, ".fr-isolation"), "{}");
       hasAcceptance(repo);
-      expect(existsSync(log)).toBe(true);
+      expect(existsSync(log)).toBe(false);
+      // and a stealth marker makes it look: fr is asked for the acceptance dir
+      writeFileSync(join(repo, ".fr-isolation"), '{"placement": "stealth"}');
+      resetFrPaths();
+      hasAcceptance(repo);
+      expect(readFileSync(log, "utf-8")).toContain("fr settings paths");
     } finally {
       process.env.PATH = saved.PATH;
       if (saved.FR_GIT_CANDIDATES === undefined) delete process.env.FR_GIT_CANDIDATES;

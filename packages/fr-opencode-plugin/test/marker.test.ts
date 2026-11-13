@@ -448,3 +448,50 @@ describe("every spelling of a placement is fr-enabled without fr (p6-r3)", () =>
     expect(switchEnabled("placement: quiet\n")).toBe(true);
   });
 });
+
+// Review pr1431-n6: the placement question reads the filesystem first, so a plain repo
+// (no `refs/remotes/origin/fr`) spawns no `git config` / `git cat-file` for it.
+describe("the placement question spawns no git in a plain repo (pr1431-n6)", () => {
+  function withRecordingGit<T>(run: (log: string) => T): T {
+    const bin = mkdtempSync(join(tmpdir(), "fr-opencode-gitrec-"));
+    const log = join(bin, "calls.log");
+    const real = execFileSync("sh", ["-c", "command -v git"]).toString().trim();
+    writeFileSync(join(bin, "git"), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\nexec '${real}' "$@"\n`, {
+      mode: 0o755,
+    });
+    const saved = process.env.FR_GIT_CANDIDATES;
+    process.env.FR_GIT_CANDIDATES = join(bin, "git");
+    try {
+      return run(log);
+    } finally {
+      if (saved === undefined) delete process.env.FR_GIT_CANDIDATES;
+      else process.env.FR_GIT_CANDIDATES = saved;
+      rmSync(bin, { recursive: true, force: true });
+    }
+  }
+  const placementCalls = (log: string): string[] =>
+    existsSync(log)
+      ? readFileSync(log, "utf-8")
+          .split("\n")
+          .filter((c) => c.includes("config") || c.includes("cat-file"))
+      : [];
+
+  test("a plain repo with an origin remote", () => {
+    sh("git", ["remote", "add", "origin", "https://example.com/org/repo.git"], repo);
+    withRecordingGit((log) => {
+      withoutFr(() => {
+        expect(placementEnabled(repo)).toBe(false);
+        expect(resolveMarker(join(repo, "README.md")).frEnabled).toBe(false);
+      });
+      expect(placementCalls(log)).toEqual([]);
+    });
+  });
+
+  test("a quiet repo still reads its switch", () => {
+    quietSwitch(repo);
+    withRecordingGit((log) => {
+      withoutFr(() => expect(placementEnabled(repo)).toBe(true));
+      expect(placementCalls(log).some((c) => c.includes("cat-file"))).toBe(true);
+    });
+  });
+});
