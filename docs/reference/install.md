@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-13 placement-resolver phase 6, the plugin's fr-enabled detection changed; install delivery and channels are unchanged
+reviewed: 2026-11-13 placement-resolver phase 6 review, the plugin resolves fr from absolute PATH entries and asks it read-only; install delivery and channels are unchanged
 ---
 
 # Installing super-fr

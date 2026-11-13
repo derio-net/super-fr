@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-13 placement-resolver phase 6, quiet and stealth are fr-enabled in the hooks, the OpenCode plugin and Hermes (R26)
+reviewed: 2026-11-13 placement-resolver phase 6 review, no fr on a plain repo, a trusted bounded read-only fr, one switch spelling (R26)
 ---
 
 ## Overview: two boundaries and a bridge
@@ -129,11 +129,18 @@ Before step 1 the hook asks whether the repo is fr-enabled at all, and that answ
 only "has a devcontainer profile or a plans directory". A repo on the **quiet** placement
 keeps neither in its checkout, so the hook also reads the switch directly: the last fetched
 `origin/fr` carrying `placement: quiet` (and a repo with an origin remote), or a workspace
-whose marker records `placement: quiet` or `stealth`. These direct reads need no `fr`; when
-`fr` resolves, `fr settings paths` adds the placement's own plans directory. A missing,
-failing or garbled `fr` can therefore only fail to add a "yes", never turn one into a "no",
-so the gate is never weaker for lack of the binary. The OpenCode plugin and the Hermes hook
-make the same decision (one shared definition each).
+whose marker records `placement: quiet` or `stealth`. The switch has exactly one spelling,
+the line `placement: quiet`, which `fr settings init --quiet` writes and fr itself insists
+on; a switch the hook cannot read positively as `placement: repo` (quoted, commented,
+indented, anything else) counts as quiet, so an odd spelling closes the gate rather than
+opening it. These direct reads need no `fr`. A plain repo stops there and starts no `fr` at
+all, which keeps every edit fast; only when an `origin/fr` ref exists does the hook ask
+`fr settings paths --no-create`, bounded by a timeout, read-only (it never creates the `fr`
+branch or worktree) and only from an `fr` in an absolute PATH entry, never one a relative
+entry could find inside the repo. A missing, failing, slow or garbled `fr` can therefore only
+fail to add a "yes", never turn one into a "no", so the gate is never weaker for lack of the
+binary. The OpenCode plugin and the Hermes hook make the same decision (one shared
+definition each).
 
 Only a marker that clears every step allows the edit. There are three ways around the
 gate, all deliberate:
