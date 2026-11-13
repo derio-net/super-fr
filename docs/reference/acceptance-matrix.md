@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-12 placement-resolver phase 1, logical refs now resolve through the artifact path resolver; nothing this page describes changed
+reviewed: 2026-11-13 placement-resolver phase 5, the fold under quiet and stealth orders merged features by their code branch's merge
 ---
 
 # The acceptance matrix
@@ -26,6 +26,15 @@ read is never stored: fr **folds** every fragment, in the order the default bran
 history introduced them, and every reader (`check`, `status`, `fr debt`, plan
 self-review, the PR body, close-out) reads that fold. Two features editing their own
 fragments no longer touch the same file.
+
+Under the quiet and stealth placements the default branch holds no fragment: each
+feature's fragments sit in its own feature path, and a feature counts as merged when its
+code branch's head is on the default branch. Its amendments then apply in the order of
+the default branch's first-parent commit that merged it, and a feature not merged yet
+adds its own only to its own branch's view. `fr acceptance status` lists the merged
+features in that order. A row another merged feature created changes only by an
+amendment in your feature's fragment (`fr acceptance amend`, or `set-status`, which
+writes one).
 
 Rows cite fr's own artifacts **logically**: `spec:<slug>#R<n>` for a spec requirement,
 `plan:<slug>` for a plan. The slug is the spec's file name without `-design.md`, so it is

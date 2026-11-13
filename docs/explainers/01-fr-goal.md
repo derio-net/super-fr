@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 placement-resolver phase 4 review fixes, the stealth placement (chosen per run, the tracking worktree, the fatal fast-forward-only state push, what reaches the target, privacy, resume, init --stealth)
+reviewed: 2026-11-13 placement-resolver phase 5, merged status and archive under quiet and stealth (merged by the code branch's merge, merged.yaml a cache, archive moves nothing)
 ---
 
 ## Overview
@@ -1224,8 +1224,9 @@ feature's stale ones for its own workspace to migrate; `fr validate artifacts`
 reads every feature.
 
 Some commands cannot put their files on `fr` yet, and refuse before writing anything
-rather than leave them in your checkout: `fr archive` and `fr debt archive-pr`
-(merged status under quiet comes later), `fr ops gate`, and renaming a branch. When a
+rather than leave them in your checkout: `fr debt archive-pr`, `fr ops gate`, and
+renaming a branch. `fr archive` works only as `fr archive --branch` (see merged status
+below). When a
 repository-configuration command such as `fr init agents` or a profile scaffold writes
 files that do belong on the product branch, fr makes no commit for them and says so:
 you commit them yourself. If an fr record ever does reach your checkout, the commit
@@ -1345,6 +1346,27 @@ degrading; plans that name none are unaffected. And if you have written your own
 runner to execute work elsewhere, its interface now receives a single work item
 rather than a plan-and-phase pair, which is what allows one runner to serve
 shapes of different granularity.
+
+#### Merged status under quiet and stealth
+
+Under both placements the default branch carries none of fr's files, so "this feature
+merged" cannot mean "its plan is on `main`". It means its code branch merged: a feature
+is merged when every live ref of its branch (local and on `origin`) is reachable from the
+default branch, and its place in the order is the first-parent commit of the default
+branch that brought it in. The acceptance fold applies merged features' amendments in
+that order, so `fr acceptance status` shows a feature's amendment the moment its code
+merges, and lists the merged features; `fr status` and `fr debt` read the same answer for
+plans. A feature that has not merged counts only in its own branch's view.
+
+Archiving moves nothing. `fr archive --branch <branch>` checks that the branch is
+merged, then appends one record, `merged: <sha>` with the head it verified, to
+`features/<feature-id>/merged.yaml`, in one commit on `fr` that it pushes (under
+stealth, on the tracking branch, compare-and-swap); running it again writes nothing.
+`fr archive <plan>` and `fr archive --all` refuse, naming `--branch`. The record is a
+cache, never the truth: every read checks it again, a record that disagrees with the
+default branch is ignored and named in a note, and a record never makes an unmerged
+branch merged. It does keep the answer when the branch is deleted after its merge,
+because the head it carries is checked again on every read.
 
 ## Try it yourself
 
