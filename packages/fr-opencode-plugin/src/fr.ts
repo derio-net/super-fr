@@ -16,7 +16,9 @@ function executableFile(path: string): string | null {
 }
 
 export function resolveFr(
-  env: { PATH?: string; FR_HARNESS_FR?: string } = process.env
+  // A string record, not `{ PATH?; FR_HARNESS_FR? }`: an all-optional object type is a
+  // TypeScript "weak type", which `process.env` (index signature only) does not satisfy.
+  env: Readonly<Record<string, string | undefined>> = process.env
 ): string | null {
   // A pin that is an absolute path to an executable file wins. The identity string
   // fr-binary-pin.sh and ./pin.ts export (`<version> <package dir>`) is not a path and
