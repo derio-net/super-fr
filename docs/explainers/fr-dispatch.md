@@ -68,14 +68,17 @@ issue as a label, never in the plan files, and mixing runners per phase is legal
 back, `fr undispatch <plan-dir> --yes` closes the issues (reason: not planned) and nulls the
 tracking fields; it previews without `--yes`.
 
-The issue then moves through labels derived from what GitHub shows: `fr:ready` with no assignee
-and no open PR; `fr:in-progress` with an assignee or a draft PR; `fr:pr-ready` with an open,
-non-draft PR; closed once the plan records completion *and* a merged PR is observed. That is why
-`fr apply` is safe to run before a PR merges: it can only set `pr-ready` then.
+The issue then moves through labels derived from what GitHub shows: `fr:blocked` while a phase
+it depends on is not complete; `fr:ready` with no assignee and no open PR; `fr:in-progress` with
+an assignee or a draft PR; `fr:pr-ready` with an open, non-draft PR; closed once the plan records
+completion *and* a merged PR is observed. A `[manual]` phase closes once its completion records a
+time and a note, with no PR. That is why `fr apply` is safe to run before a PR merges: it can only
+set `pr-ready` then.
 
-A repo can opt out of these writes. Under `forge.labels: off` or `forge.issues: off` in its
-`.fr/settings.yaml`, `fr apply`, `fr undispatch` and the bridge skip that kind of write for the
-repo. See [the dispatch lifecycle reference](../reference/dispatch-lifecycle.md).
+A repo can opt out of these writes in its `.fr/settings.yaml`. Under `forge.issues: off` or
+`forge.labels: off`, `fr apply --yes` refuses with exit 2, and the dry run warns that it would.
+Under `forge.issues: off`, `fr undispatch --yes` refuses with exit 2 too. The bridge skips the
+label writes that are off for the repo. See [the dispatch lifecycle reference](../reference/dispatch-lifecycle.md).
 
 ## Before you dispatch
 
@@ -107,13 +110,17 @@ The runner is the autonomous consumer of queued phases. The framework half is th
 `fr_dispatch` package: it discovers plans and ticks them against a `Runner` protocol, and
 runners register through the `fr.runners` entry-point group, so adding one edits no existing
 package. The VibeKanban adapter, `fr_vk`, is the one the skill operates. Its daemon runs on its
-own pod and uses those packages as a library; neither is wired into the `fr` command line.
+own pod and uses those packages as a library; it is not an `fr` command. `fr apply --to` and
+`fr triage batch dispatch` do call into `fr_dispatch` (its runner registry, item graph and
+reachability gate).
 
 Work through these, in order:
 
 1. **Is the daemon ticking?** Its heartbeat gauge,
    `willikins_heartbeat_last_success_timestamp`, must be recent. Failure counters carry a
-   `reason`: `project_id_missing`, `unknown_repo`, `unit_mismatch`, `mcp_error`, `gh_error`.
+   `reason`; the common ones are `project_id_missing`, `unknown_repo`, `unit_mismatch`,
+   `mcp_error` and `gh_error`. `unknown_repo` means the runner refused the item, usually
+   because of its repo.
    `unit_mismatch` means an issue is labelled for a runner that never takes that unit, which
    `fr apply --to` now refuses up front, so look for labels set by hand or by an older `fr`.
 2. **Is the phase eligible?** `fr status <plan-dir>`. A phase dispatches only when its rendered
