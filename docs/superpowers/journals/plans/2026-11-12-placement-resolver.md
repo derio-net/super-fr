@@ -1252,3 +1252,8 @@ Each destination feature root (OWNER/BASE/HEADS/merged.yaml included) is laid ou
 ### p7-r7-ci-refs · decision · In CI, drift refuses a shallow checkout or one without the default ref; no network probe (phase 7)
 
 With a remote configured, a shallow clone or an unresolvable default ref refuses under a CI marker and warns elsewhere; a non-shallow checkout with the default ref and no origin/fr means no switch exists. This repo's validate-artifacts job now checks out with fetch-depth: 0.
+
+<!-- fr:journal kind=finding scope=plan id=p7-quiet-to-stealth-live-branches-resolved created=2026-11-13T12:24:12+00:00 phase=7 state=fixed resolves=p7-quiet-to-stealth-live-branches -->
+### p7-quiet-to-stealth-live-branches-resolved · finding [fixed] · resolves p7-quiet-to-stealth-live-branches: After a quiet -> stealth whole move, live quiet workspaces migrate to repo, not stealth (phase 7)
+
+fixed with review finding p7-r6 in b0f803ae2 and 65b6a59bd: a quiet-to-stealth move refuses while any quiet feature is unmerged (at start and at the switch), and migrate-branch refuses to write into a stealth-bound repo's branch
