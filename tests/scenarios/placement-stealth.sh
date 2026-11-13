@@ -6,7 +6,7 @@
 # records stealth; a plan, a journal entry and a run cursor land in the tracking repo
 # under local--origin/features/feat__s/, a code commit goes to the target with `fr push`.
 # Then: the target's remote holds only the code commit (no fr path, no chore(fr)
-# subject, no fr ref); a second HOME resumes the run from the tracking repo; the tracking
+# subject, no commit body naming fr even after a squash, no fr ref); a second HOME resumes the run from the tracking repo; the tracking
 # repo removed mid-run makes the next resolve exit 2. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
@@ -37,6 +37,12 @@ run_fr out settings init --stealth "$track@main"
 require_exit 0 "$out"
 git --git-dir="$track" show main:local--origin/settings.yaml | grep -qx 'placement: stealth' \
   || fail "the tracking branch lacks local--origin/settings.yaml saying placement: stealth"
+# squash-unpushed (review pr1431-r4): the squashed commit's BODY must name nothing of fr.
+policy="$base/track-policy"
+git clone -q "$track" "$policy" \
+  && printf 'git:\n  history: squash-unpushed\n' >> "$policy/local--origin/settings.yaml" \
+  && git -C "$policy" commit -qam "squash policy" && git -C "$policy" push -q origin main \
+  || fail "set git.history: squash-unpushed on the tracking branch"
 
 run_fr out isolation up --branch feat/s --stealth "$track@main"
 require_exit 0 "$out"
@@ -59,6 +65,8 @@ for cmd in "init agents" "init validator-wrapper" "settings init"; do
 done
 echo code > code.txt
 git add -A && git commit -qm "feat(s): a code change" || fail "code commit"
+echo more > more.txt
+git add -A && git commit -qm "fix(s): a follow-up" || fail "second code commit"
 refuse_grep '.' "$(git status --porcelain)" "the target checkout is clean"
 run_fr out push
 require_exit 0 "$out"
@@ -77,7 +85,11 @@ for ref in main feat/s; do
   fr_paths="$(git --git-dir="$origin" ls-tree -r --name-only "$ref" | grep -E '^(docs/(superpowers|acceptance)/|features/|\.fr/|\.fr-isolation|\.claude/agents/fr-|scripts/validate-plans\.sh|\.devcontainer/fr-profiles\.yaml)' || true)"
   [ -z "$fr_paths" ] || fail "origin $ref carries fr paths: $fr_paths"
   refuse_grep '^chore\(fr\)' "$(git --git-dir="$origin" log --format=%s "$ref")" "no chore(fr) commit on origin $ref"
+  refuse_grep 'fr push|squash-unpushed|Squashed by|Fr-Commit|placement|stealth|super-fr|\(fr\)' \
+    "$(git --git-dir="$origin" log --format=%B "$ref")" "no commit body on origin $ref names fr"
 done
+expect_grep 'fix\(s\): a follow-up' "$(git --git-dir="$origin" log --format=%B main..feat/s)" \
+  "the squashed commit folds the follow-up's subject"
 tracked="$(git --git-dir="$track" ls-tree -r --name-only main)"
 expect_grep '^local--origin/features/feat__s/docs/superpowers/plans/2026-11-12-s/_meta.yaml$' \
   "$tracked" "the tracking repo holds the plan"

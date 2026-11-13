@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
@@ -458,6 +459,24 @@ def _is_fr_owned(rel: str) -> bool:
     case-sensitive one gains nothing from telling them apart here."""
     folded = rel.casefold()
     return folded.startswith(tuple(p.casefold() for p in FR_OWNED_PATHS))
+
+
+FR_NAMING: Final = re.compile(
+    r"\((?:fr|placement)\)"  # fr's own commit scopes: chore(fr), chore(placement)
+    r"|^Fr-Commit:"  # the trailer every fr commit template keeps
+    r"|\bfr (?:push|placement|isolation|run|journal|plan|pr|acceptance)\b"
+    r"|\bplacement:? (?:stealth|quiet)\b"
+    r"|\bsuper-fr\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+"""What names fr in a commit message reaching a stealth target (R24 "only the code
+commits"; review pr1431-r1, r4): fr's own subjects and trailer, an fr command, the
+placement. Narrow on purpose: `(fr)` alone would refuse a French-locale scope."""
+
+
+def fr_naming(text: str) -> list[str]:
+    """The lines of a commit message that name fr, stripped, in order."""
+    return [line.strip() for line in text.splitlines() if FR_NAMING.search(line)]
 
 
 def fr_paths_in(root: Path, commits: Sequence[str]) -> list[str]:

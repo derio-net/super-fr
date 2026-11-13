@@ -218,9 +218,13 @@ def _is_fr_own(commit: Commit, values: Mapping[str, str]) -> bool:
     return (values.get("type"), values.get("scope")) == ("chore", "fr")
 
 
-def _composed(settings: Settings, segment: Sequence[Commit], issue: int | None) -> str:
+def _composed(
+    settings: Settings, segment: Sequence[Commit], issue: int | None, *, plain: bool = False
+) -> str:
     """The subject of a squashed segment: the values of its first commit that is not
-    fr's own bookkeeping (else its first commit), rendered through the templates."""
+    fr's own bookkeeping (else its first commit), rendered through the templates.
+    *plain* (stealth, review pr1431-r4): the subject and the folded subjects only, with
+    no line crediting fr, since only the code commits reach a stealth target (R24)."""
     commit_t = settings.git.commit
     parsed: list[tuple[Commit, dict[str, str]]] = []
     for c in segment:
@@ -245,15 +249,39 @@ def _composed(settings: Settings, segment: Sequence[Commit], issue: int | None) 
         issue,
     )
     folded = "\n".join(f"- {c.subject}" for c in segment)
+    if plain:
+        return f"{subject}\n\n{folded}\n"
     return f"{subject}\n\nSquashed by fr push (git.history: squash-unpushed) from:\n{folded}\n"
 
 
 def squash(
-    root: Path, settings: Settings, branch: str, commits: Sequence[Commit], issue: int | None
+    root: Path,
+    settings: Settings,
+    branch: str,
+    commits: Sequence[Commit],
+    issue: int | None,
+    *,
+    plain: bool = False,
 ) -> str | None:
-    """Rewrite the unpushed range (R13); the new head, or None when nothing changed."""
+    """Rewrite the unpushed range (R13); the new head, or None when nothing changed.
+
+    *plain* is stealth's (review pr1431-r4): the composed messages credit nothing to fr,
+    and a commit whose subject names fr refuses BEFORE anything is rewritten, since its
+    subject would be folded into the message that reaches the target."""
     if not commits:
         return None
+    if plain:
+        from fr.placement.stealth import fr_naming
+
+        named = [c for c in commits if fr_naming(c.subject)]
+        if named:
+            lines = "\n".join(f"  {c.sha[:12]} {c.subject}" for c in named)
+            raise PushRefusedError(
+                "under placement stealth only the code commits reach the target (R24), and "
+                f"{len(named)} unpushed commit subject(s) name fr:\n{lines}\nReword them, or "
+                "drop the commits that hold only fr's files, and push again; nothing was "
+                "rewritten"
+            )
     head = commits[-1].sha
     parent = commits[0].parents[0] if commits[0].parents else None
     if parent is None:
@@ -267,7 +295,7 @@ def squash(
             # One commit, parent unchanged: nothing to rewrite. It is still flushed:
             # a segment left behind would be folded again at the next flush (p4-r1).
             return segment.pop().sha
-        message = _composed(settings, segment, issue)
+        message = _composed(settings, segment, issue, plain=plain)
         new = _git(
             root,
             "commit-tree",

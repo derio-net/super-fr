@@ -240,6 +240,7 @@ def _refuse_fr_paths_under_stealth(repo_root: Path, remote: str, branch: str) ->
 def push_cmd() -> None:
     """Push this run's feature branch, under the repo's git policy (`git.*`)."""
     from fr.artifacts.commit import on_default_branch
+    from fr.artifacts.paths import STEALTH, outside_repo
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
     from fr.git_policy.push import PushRefusedError, check_subjects, squash, unpushed
     from fr.git_policy.templates import run_issue
@@ -271,7 +272,10 @@ def push_cmd() -> None:
         # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
         check_subjects(settings, rng.commits, issue)
         if settings.git.history == "squash-unpushed":
-            new = squash(repo_root, settings, branch, rng.commits, issue)
+            new = squash(
+                repo_root, settings, branch, rng.commits, issue,
+                plain=outside_repo(repo_root) == STEALTH,
+            )  # fmt: skip
             if new is not None:
                 console.print(
                     f"squashed {len(rng.commits)} unpushed commit(s) into {new[:12]} "
