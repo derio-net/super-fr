@@ -16,7 +16,16 @@ steps:
         evidence:
           unobserved: operator-gate
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-13T21:40:26+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-13T21:40:26+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
   plan:
     state: pending
   plan-review:
