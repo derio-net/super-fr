@@ -1309,7 +1309,9 @@ policy keys come from `<target-dir>/settings.yaml` on the tracking branch, which
 repository more visible than the target (a public one for a private target, or an
 internal one) is refused, and so is a visibility fr cannot read or does not
 recognise; a local path counts as private. The target's visibility is read through the
-forge client its checkout resolves, so a self-hosted target is asked on its own forge.
+forge type its checkout declares, on the host of its own remote, so a self-hosted target
+is asked on its own forge; a checkout whose forge names another host, and a Gitea forge
+(whose client fr cannot pin to a host), count as unreadable.
 
 A stealth run is resumed from the tracking repository, on any host:
 `fr isolation up --stealth <tracking-repo>@<branch> --resume <run-id>` from a clone of
