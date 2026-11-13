@@ -1565,3 +1565,8 @@ fb881cd6c: real. The devcontainer bind-mounts only the common dir and its worksp
 ### p1-r6-resolved-2 · finding [deferred → derio-net/super-fr#1419] · resolves p1-r6: branch_slug is not injective (feat/a__b and feat__a/b share a slug), now reused as the quiet/stealth feature id
 
 Out of scope: branch_slug predates this change; filed as #1419.
+
+<!-- fr:journal kind=finding scope=plan id=p6-relative-path-git-and-bare-fr-resolved-2 created=2026-11-13T19:18:53+00:00 state=open resolves=p6-relative-path-git-and-bare-fr tracked_by=derio-net/super-fr#1429 -->
+### p6-relative-path-git-and-bare-fr-resolved-2 · finding [deferred → derio-net/super-fr#1429] · resolves p6-relative-path-git-and-bare-fr: The git lookup and two bare fr spawns still trust relative PATH entries
+
+Out of scope: the git lookup and bare fr spawns predate this branch; filed as #1429.
