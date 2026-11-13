@@ -1,0 +1,266 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: implement-phase
+item: phase/4
+outcome: done
+ticks:
+- P4.T1.S1
+- P4.T1.S2
+- P4.T1.S3
+- P4.T2.S1
+- P4.T2.S2
+- P4.T2.S3
+refactor: {}
+journal:
+- kind: discovery
+  id: p4-acc-acceptance-verify-listing
+  title: 'accuracy: fr-acceptance.md said a --verify row keeps appearing in fr acceptance status whatever its status,
+    listed under post-merge owed (corrected)'
+  body: 'Claim: fr-acceptance.md:164-167 (merge base) a `--verify live` (or any strategy) row "keeps appearing in
+    `fr acceptance status` whatever its status, and the pull request body lists it under post-merge verification
+    owed". Code: packages/fr/src/fr/acceptance/check.py:109-122 (`open_rows`, the status nag set) keeps only `is_debt`
+    rows, acceptance/model.py:47,54-57 (a DEBT_STATUSES status or contested); commands/acceptance_cmd.py:393-415
+    reads no `verify`. record/pr_body.py:1135-1138 renders separate `## Pre-merge verification owed` and `## Post-merge
+    verification owed`; plugins/super-fr/verifications/{candidate,client-live,prerelease}.yaml are `when: pre-merge`,
+    only live.yaml is post-merge. Correction (cce064d24): the PR body lists a post-merge (`live`) row under Post-merge
+    and a pre-merge one under Pre-merge; `fr acceptance status` lists it only while its status is debt or the row
+    is contested.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-acceptance-weekly-issue
+  title: 'accuracy: fr-acceptance.md said CI keeps a weekly "Acceptance debt" issue from fr acceptance digest (corrected)'
+  body: 'Claim: fr-acceptance.md:218-219 "keeps a weekly ''Acceptance debt'' issue up to date from `fr acceptance
+    digest`". Code: .github/workflows/acceptance-report.yml:10-11,86-94 and acceptance/scaffold.py:438-524 (DEBT_STEP_*):
+    the weekly job runs `fr debt issue --yes` (one `<repo>: Technical debt` issue) and `fr debt archive-pr --yes`;
+    debt/render.py:178-180 `acceptance_section` is the `## Acceptance debt` section `fr acceptance digest` re-renders.
+    Correction (cce064d24): a weekly run upserts one `<repo>: Technical debt` issue (`fr debt issue`) whose Acceptance
+    debt section is what digest renders, and refreshes a draft PR that archives long-merged plans.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-acceptance-push-trigger
+  title: 'accuracy: fr-acceptance.md said CI runs the gate on push to the default branch only (corrected)'
+  body: 'Claim: fr-acceptance.md:218 "on every pull request and push to the default branch". Code: true of super-fr''s
+    own .github/workflows/acceptance-report.yml:19-23 (`push: branches: [main]`), but the template `fr acceptance
+    init` scaffolds triggers on `push: branches: ["**"]` (acceptance/scaffold.py:129,217). Correction (cce064d24):
+    every pull request and every branch push; super-fr''s own workflow narrows the push trigger to `main`.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-acceptance-init-creates
+  title: 'accuracy: fr-acceptance.md said fr acceptance init creates the matrix (corrected)'
+  body: 'Claim: fr-acceptance.md:129-130 "`fr acceptance init` creates the matrix, the rule and the gitignore entry".
+    Code: acceptance/scaffold.py:1 (module docstring) and :845-849 (init creates the fragments directory via `features/.gitkeep`
+    and no fragment), :887-888 (README badge only with CI). Correction (cce064d24): creates the fragments directory
+    `docs/acceptance/features/`, the rule and the gitignore entry; a CI workflow and a README badge only beside
+    existing CI or with `--with-ci`.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-acceptance-origin-form
+  title: 'accuracy: fr-acceptance.md used the path form --origin <repo>:<spec-path>#R<n> (corrected)'
+  body: 'Claim: fr-acceptance.md:138 (example) and :153 `--origin <repo>:<spec-path>#R<n>`. Code: acceptance/logical.py:68-89
+    (`to_logical`) rewrites a same-repo spec path to `spec:<slug>[#frag]`; `fr acceptance add --help` documents
+    `spec:<slug>`; the page''s own :32 uses `spec:<slug>#R<n>`. Correction (cce064d24): both use `--origin spec:<slug>#R<n>`
+    (example `spec:some-spec#R3`).'
+  phase: 4
+- kind: discovery
+  id: p4-acc-acceptance-add-inserts
+  title: 'accuracy: fr-acceptance.md said add appends the row (corrected)'
+  body: 'Claim: fr-acceptance.md:143 "`add` validates the shape and appends". Code: `fr acceptance add --help` /
+    commands/acceptance_cmd.py add docstring: inserts after its capability''s last row; a new capability goes at
+    the end of `rows:`. Correction (cce064d24): inserts the row after its capability''s last row.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-plan-rework-parent
+  title: 'accuracy: fr-brainstorming-and-plan.md said fr plan rework refuses a live or incomplete parent (corrected)'
+  body: 'Claim: fr-brainstorming-and-plan.md:166-168 "(the parent must be complete and archived; a live plan is
+    refused)". Code: packages/fr/src/fr/plan_ops.py:801-803 (`_PLAN_HOMES` includes `plan`, the live directory),
+    :860-874 (`rework_create` checks only that the parent dir exists under a plan home; no completeness check).
+    Correction (b54dd8b78): the parent may be live or archived; fr does not check that it is complete. The CLI help
+    still says "(Complete + archived)" (finding p4-plan-rework-help).'
+  phase: 4
+- kind: discovery
+  id: p4-acc-plan-v1-to-v2-scope
+  title: 'accuracy: fr-brainstorming-and-plan.md said fr migrate v1-to-v2 converts every v1 plan (corrected)'
+  body: 'Claim: fr-brainstorming-and-plan.md:208-209 "converts every one in the repo at once". Code: packages/fr/src/fr/migrate.py:209-216
+    skips a v1 plan whose status is not Complete unless `--include-in-progress` (commands/migrate_cmd.py:34). Correction
+    (b54dd8b78): converts every completed v1 plan; add `--include-in-progress` for the rest.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-dispatch-forge-off
+  title: 'accuracy: fr-dispatch.md said fr apply and fr undispatch skip writes under forge.issues/labels: off (corrected)'
+  body: 'Claim: fr-dispatch.md:76-78 under `forge.labels: off` or `forge.issues: off` "`fr apply`, `fr undispatch`
+    and the bridge skip that kind of write". Code: packages/fr/src/fr/commands/apply_cmd.py:277-285 (`require_forge`
+    issues and labels; exit 2 under `--yes`), :301-302 (dry run warns "--yes would be refused"); commands/undispatch_cmd.py:70-77
+    (`require_forge` issues; exit 2 under `--yes`, warning otherwise); only the bridge skips (packages/fr-dispatch/src/fr_dispatch/__init__.py:580-591).
+    Correction (858fa8213): `fr apply --yes` refuses with exit 2 and the dry run warns; under `forge.issues: off`
+    `fr undispatch --yes` refuses with exit 2; the bridge skips the label writes that are off.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-dispatch-cli-wiring
+  title: 'accuracy: fr-dispatch.md said neither fr_dispatch nor fr_vk is wired into the fr command line (corrected)'
+  body: 'Claim: fr-dispatch.md:110 "neither is wired into the `fr` command line". Code: commands/apply_cmd.py:130-131,163-164,549-555
+    import `fr_dispatch` (item_graph, reachability, registry) for `fr apply --to`; commands/triage_batch_cmd.py:20-22
+    is the second soft point (`fr triage batch dispatch`). Correction (858fa8213): the daemon is not an `fr` command,
+    but `fr apply --to` and `fr triage batch dispatch` call into `fr_dispatch` (runner registry, item graph, reachability
+    gate).'
+  phase: 4
+- kind: discovery
+  id: p4-acc-dispatch-failure-reasons
+  title: 'accuracy: fr-dispatch.md listed the runner failure reasons as complete (corrected)'
+  body: 'Claim: fr-dispatch.md:115-116 failure reasons `project_id_missing`, `unknown_repo`, `unit_mismatch`, `mcp_error`,
+    `gh_error`. Code: packages/fr-dispatch/src/fr_dispatch/__init__.py also pushes `repo_gate` (:526), `gh_rate_limited`,
+    `stale_artifact`, `pr_state_error`, `reap_error`, `done_reconcile_error`, `mcp_init_error`; :529-547 `unknown_repo`
+    is any `can_dispatch` refusal other than a unit mismatch, "kept for dashboards"; fr-vk/src/fr_vk/runner.py:62-63
+    maps backend_error/preflight to mcp_error/project_id_missing. Correction (858fa8213): "the common ones are"
+    the five, and `unknown_repo` means the runner refused the item, usually because of its repo.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-dispatch-label-lifecycle
+  title: 'accuracy: fr-dispatch.md''s label lifecycle omitted fr:blocked and manual-phase closing (corrected)'
+  body: 'Claim: fr-dispatch.md:71-73 lifecycle `fr:ready` / `fr:in-progress` / `fr:pr-ready` / closed on completion
+    plus merged PR. Code: packages/fr/src/fr/render.py:86-87 (`blocked` when dependencies are not satisfied), item_state.py:12
+    (`blocked -> fr:blocked`), render.py:217-218 (a `manual` phase is complete on `completion.at` and `completion.note`,
+    no PR). Correction (858fa8213): adds `fr:blocked` while a dependency is incomplete, and a `[manual]` phase closing
+    once its completion records a time and a note, with no PR.'
+  phase: 4
+- kind: discovery
+  id: p4-acc-unverified-left
+  title: 'accuracy: phase 4 unverified claims left as written; none refuted'
+  body: 'Not wrong per the reviews and not quickly verifiable, so the text stays: fr-acceptance.md per-forge Pages
+    visibility read (templates match); fr-audit.md "context carry dominates, turns are the cost unit" (a claim about
+    data, not code); fr-brainstorming-and-plan.md quiet placement "nothing lands on the feature branch" (commit
+    target not traced); fr-debugging.md the push/pr ask refuse-once flow (settings keys confirmed, settings/model.py;
+    the flow is the skill''s, SKILL.md). Refuted: none, all 12 wrong-or-stale items held against the code. fr-audit,
+    fr-debugging and fr-devops-gate had no wrong-or-stale finding, so their baseline is the merge base 63764b87921b4f741414cff4def0d5ee205547c9.'
+  phase: 4
+- kind: discovery
+  id: p4-ws-fr-acceptance
+  title: 'plain-language rewrite: docs/explainers/fr-acceptance.md'
+  body: 'Baseline: cce064d240b97cdca4d69ec4dcf4279eca914e51. Sentences/avg 106 / 16.3 -> 142 / 12.5. Checker (pin
+    3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 25 WARN -> 0 FAIL, 0 WARN,
+    no preserve hit. No warning kept. Headings became questions (rule 9): "Overview: claims, not tests" -> "What
+    does the matrix record?", "The honesty scale" -> "How honest is each status?", "Changing a row another feature
+    merged" -> "How do you change a row another feature merged?", "Backfilling a repo that has no matrix" -> "How
+    do you backfill a repo that has no matrix?", "Rows born from specs, and rows added mid-flight" -> "Where do
+    rows come from?", "Live verification, and walks" -> "What if only a live run can prove a claim?", "Reports and
+    the gate" -> "Where do the reports go?", "Limits" -> "What can the matrix not do?", "Where to go next" -> "Where
+    do you go next?". The backfill list keeps its baseline layout byte for byte (3-space fence); its pre-existing
+    render break is finding p4-acceptance-backfill-render. No inbound anchor links (git grep ''<page>.md#'' finds
+    none for any phase-4 page). Built site: no raw list marker introduced (HTML scan of <p> at the merge base and
+    at HEAD).'
+  phase: 4
+- kind: discovery
+  id: p4-ws-fr-audit
+  title: 'plain-language rewrite: docs/explainers/fr-audit.md'
+  body: 'Baseline: 63764b87921b4f741414cff4def0d5ee205547c9 (merge base; no corrections). Sentences/avg 65 / 13.5
+    -> 85 / 10.8. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL,
+    10 WARN -> 0 FAIL, 0 WARN, no preserve hit. No warning kept. ISO spelled out at first use. Headings: "Overview:
+    the numbers are not yours to compute" -> "Why not compute the numbers yourself?", "The commands" -> "Which commands
+    are there?", "Reading the split" -> "How do you read the split?", "The pages" -> "How do you build the pages?",
+    "Red flags" -> "What are the red flags?", "Limits" -> "What can it not do?", "Where to go next" -> "Where do
+    you go next?". The compare output became a list, every column kept. No inbound anchor links (git grep ''<page>.md#''
+    finds none for any phase-4 page). Built site: no raw list marker introduced (HTML scan of <p> at the merge base
+    and at HEAD).'
+  phase: 4
+- kind: discovery
+  id: p4-ws-fr-brainstorming-and-plan
+  title: 'plain-language rewrite: docs/explainers/fr-brainstorming-and-plan.md'
+  body: 'Baseline: b54dd8b786a3d58373b0477463220f2e4521ee4e. Sentences/avg 102 / 13.3 -> 126 / 10.9. Checker (pin
+    3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 10 WARN -> 0 FAIL, 0 WARN,
+    no preserve hit. No warning kept. Headings: "Overview: why the idea gets written down twice" -> "Why write the
+    idea down twice?", "fr-brainstorming: design where the work will happen" -> "What does fr-brainstorming add?",
+    "fr-plan: a folder of facts" -> "What is in an fr-plan folder?", "fr-execute: one phase, then stop" -> "How
+    does fr-execute run one phase?", "Limits" -> "What do the skills not do?", "Where to go next" -> "Where do you
+    go next?". No inbound anchor links (git grep ''<page>.md#'' finds none for any phase-4 page). Built site: no
+    raw list marker introduced (HTML scan of <p> at the merge base and at HEAD).'
+  phase: 4
+- kind: discovery
+  id: p4-ws-fr-debugging
+  title: 'plain-language rewrite: docs/explainers/fr-debugging.md'
+  body: 'Baseline: 63764b87921b4f741414cff4def0d5ee205547c9 (merge base; no corrections). Sentences/avg 73 / 13.4
+    -> 92 / 11.1. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL,
+    14 WARN -> 0 FAIL, 0 WARN, no preserve hit. No warning kept. `attempt` -> "before it tries a fourth". Headings:
+    "Overview: why \"just try something\" is the expensive path" -> "Why is \"just try something\" the expensive
+    path?", "The hard gate: isolation before anything" -> "Why must isolation come before anything?", "Autonomous,
+    with two hard stops" -> "When does it stop and ask you?", "The debug journal" -> "What goes in the debug journal?",
+    "Delivering the fix" -> "How does it deliver the fix?", "Limits" -> "What can it not do?", "Where to go next"
+    -> "Where do you go next?". The reuse-a-workspace and mode=stealth conditions stay conditions. No inbound anchor
+    links (git grep ''<page>.md#'' finds none for any phase-4 page). Built site: no raw list marker introduced (HTML
+    scan of <p> at the merge base and at HEAD).'
+  phase: 4
+- kind: discovery
+  id: p4-ws-fr-devops-gate
+  title: 'plain-language rewrite: docs/explainers/fr-devops-gate.md'
+  body: 'Baseline: 63764b87921b4f741414cff4def0d5ee205547c9 (merge base; no corrections). Sentences/avg 75 / 13.4
+    -> 88 / 11.8. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL,
+    16 WARN -> 0 FAIL, 1 WARN, no preserve hit. Kept: `OPEN` (:95, abbreviations) is the literal op state `fr ops
+    status` prints (packages/fr/src/fr/ops/engine.py:36 State = DONE|OPEN|N/A|UNVERIFIABLE|CANNOT-VERIFY|ESCALATE),
+    not an abbreviation; the page keeps all state names literal. "make an operation safe" -> "make an op safe" (the
+    page''s term). Headings: "Overview: why a delivered PR can still be unfinished" -> "Why can a delivered PR still
+    have work left?", "The eight stages" -> "What are the eight stages?", "Trust: probes are code from the repo"
+    -> "Why must you trust the probes?", "Reading what the stage tells you" -> "How do you read what the stage tells
+    you?", "Attest, or write a check?" -> "Should you attest, or write a check?", "The Test Plan steps and the tester
+    hand-off" -> "What happens to the Test Plan steps?", "What the stage never does" -> "What does the stage never
+    do?", "Limits" -> "What can it not do?", "Where to go next" -> "Where do you go next?". Stage 2''s three merge
+    conditions stay in one list. No inbound anchor links (git grep ''<page>.md#'' finds none for any phase-4 page).
+    Built site: no raw list marker introduced (HTML scan of <p> at the merge base and at HEAD).'
+  phase: 4
+- kind: discovery
+  id: p4-ws-fr-dispatch
+  title: 'plain-language rewrite: docs/explainers/fr-dispatch.md'
+  body: 'Baseline: 858fa8213c531c7e0593319fae9b963098e7230b. Sentences/avg 82 / 13.6 -> 102 / 11.2. Checker (pin
+    3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 9 WARN -> 0 FAIL, 0 WARN, no
+    preserve hit. No warning kept. The label lifecycle and the usual faults became bullet lists, every item kept.
+    Headings: "Overview: the plan stays the source of truth" -> "Why does the plan stay the source of truth?", "Tracking
+    versus queueing" -> "How does tracking differ from queueing?", "Before you dispatch" -> "What do you check before
+    you dispatch?" (the worked example''s cross-reference, (see "Before you dispatch" below), now quotes the new
+    heading), "When it refuses" -> "What do the exit codes mean?", "fr-runner: when a queued phase sits still" ->
+    "What if a queued phase sits still? (fr-runner)", "Other runners" -> "Which other runners are there?", "Limits"
+    -> "What does dispatch not do?", "Where to go next" -> "Where do you go next?". No inbound anchor links (git
+    grep ''<page>.md#'' finds none for any phase-4 page). Built site: no raw list marker introduced (HTML scan of
+    <p> at the merge base and at HEAD).'
+  phase: 4
+- kind: discovery
+  id: p4-ws-totals
+  title: 'phase 4 writing-standard totals: 0 FAIL -> 0, 84 WARN -> 1 over the 6 explainers'
+  body: 'Measured on the accuracy-corrected baselines (per-page sha in p4-ws-*): 0 FAIL, 84 WARN -> 0 FAIL, 1 WARN
+    (fr-devops-gate `OPEN`, kept with its reason). The plain-language standard had no FAIL on these pages before
+    the rewrite (every average was under 20), so the RED step showed warnings only: 24 long sentences (max 67 words),
+    the passives and 5 over-long paragraphs. Wording tripwires (test_tripwire_fr_goal_question_rounds, test_hermes_docs,
+    test_build_site, test_writing_standards_docs, test_tripwire_explainers_fresh): 483 passed; `fr docs check`:
+    32 pages current. Fact-keeper reviews are owed in review-phase against `git show <sha>:<page>`.'
+  phase: 4
+- kind: finding
+  id: p4-skill-acceptance-verify
+  title: fr-acceptance SKILL.md:116 says a --verify row keeps nagging in fr acceptance status whatever its status,
+    under Post-merge owed
+  body: 'plugins/super-fr/skills/fr-acceptance/SKILL.md:116 makes the claim corrected on the page (p4-acc-acceptance-verify-listing):
+    `open_rows` (acceptance/check.py:109-122) lists only debt or contested rows, and a pre-merge strategy row goes
+    under `## Pre-merge verification owed` (record/pr_body.py:1135-1138). A skill change, outside this docs feature.'
+  phase: 4
+  review_scope: out
+  state: open
+- kind: finding
+  id: p4-plan-rework-help
+  title: fr plan rework help says the parent is "(Complete + archived)"; rework_create accepts a live or incomplete
+    parent
+  body: packages/fr/src/fr/commands/plan_cmd.py:365 help "Path to parent plan folder (Complete + archived)." vs
+    plan_ops.py:801-803,860-874 (live plans dir allowed, no completeness check). Either the help or the check is
+    wrong; a code change, outside this docs feature.
+  phase: 4
+  review_scope: out
+  state: open
+- kind: finding
+  id: p4-acceptance-backfill-render
+  title: 'fr-acceptance.md backfill list already renders broken at the merge base: step 4 merges into step 3''s
+    paragraph'
+  body: 'docs/explainers/fr-acceptance.md "How do you backfill...": the paragraph after step 3''s fenced example
+    is followed directly by "4. Run ..." with no blank line, so Python-Markdown folds steps 4 and 5 into that paragraph
+    as raw "4. "/"5. " text (built-site <p> scan, same at the merge base 63764b879 and at HEAD). Adding the blank
+    line fixes the render but the checker then reports numerals 4 and 5 as disappeared (`preserve`), so it cannot
+    land in a language-only rewrite. Same class as p3-r8.'
+  phase: 4
+  review_scope: out
+  state: open
+resolves: []
+evidence:
+  tests: ci
