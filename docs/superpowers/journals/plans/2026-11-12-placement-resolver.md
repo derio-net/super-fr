@@ -1450,3 +1450,8 @@ Reproduced: a settings.yaml without a placement line fails the closed schema; th
 ### pr1431-r9 · finding [open] (reviewer: in scope) · git.push ask approval looks for the debug journal on the product branch
 
 Inferred: under quiet and stealth the debug journal is not there, so the push can never be approved.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n1 created=2026-11-13T15:06:55+00:00 state=open review_scope=in -->
+### pr1431-n1 · finding [open] (reviewer: in scope) · Devcontainer mode with quiet: in-container git worktree prune may deregister host worktrees
+
+Record item from the adversarial review; inferred, not run. Check before the tester walk.
