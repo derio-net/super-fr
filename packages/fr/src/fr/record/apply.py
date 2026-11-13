@@ -1172,8 +1172,15 @@ def _reword_pending(
         }
     )
     moved = f"{item.row}: origin {', '.join(existing.origin) or '—'} -> {', '.join(new_origins)}"
-    slugs = {parse_logical(o).slug for o in new_origins if o.startswith("spec:")}
-    target = owner.parent / f"{next(iter(slugs))}.yaml" if len(slugs) == 1 else owner
+
+    def spec_slugs(refs: tuple[str, ...]) -> set[str]:
+        return {parse_logical(o).slug for o in refs if o.startswith("spec:")}
+
+    # Review F6: only a changed set of origin specs re-files the row; a correction within
+    # the same spec keeps it where it is (`--feature` may have put it there).
+    slugs = spec_slugs(new_origins)
+    moves = len(slugs) == 1 and slugs != spec_slugs(existing.origin)
+    target = owner.parent / f"{next(iter(slugs))}.yaml" if moves else owner
     if target == owner:
         texts[owner] = replace_row(texts[owner], item.row, row)
         return moved

@@ -58,6 +58,23 @@ def test_repo_a_pending_rows_origin_is_corrected_in_place(tmp_path: Path, monkey
     assert committed(root) == [f"{FRAGMENTS_REL}/{SLUG_A}.yaml"]
 
 
+def test_repo_a_same_spec_correction_keeps_the_row_in_its_fragment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """F6: `--feature legacy` put the row in legacy.yaml; correcting R1 to R2 of the same
+    spec does not move it (only a changed set of spec slugs does)."""
+    root = merged_repo(tmp_path)
+    _add_pending(root, monkeypatch, "--origin", f"spec:{SLUG_A}#R1", "--feature", "legacy")
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "p", "--op", "reword",
+        "--origin", f"spec:{SLUG_A}#R2", "--why", "w",
+    )  # fmt: skip
+    assert res.exit_code == 0, res.output
+    assert (root / FRAGMENTS_REL / "legacy.yaml").is_file()
+    assert [r["id"] for r in fragment(root, "legacy")["rows"]] == ["p"]
+    assert "moved" not in res.output
+
+
 def test_repo_a_line_anchored_origin_is_refused(tmp_path: Path, monkeypatch) -> None:
     """F4: `add` refuses a `#L<n>` origin, so the correction does too."""
     root = merged_repo(tmp_path)
