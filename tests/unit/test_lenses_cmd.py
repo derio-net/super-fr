@@ -34,7 +34,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (root / "README.md").write_text("x\n")
     git(root, "add", "-A")
     git(root, "commit", "-qm", "base")
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     return root
 

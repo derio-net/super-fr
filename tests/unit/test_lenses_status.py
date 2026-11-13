@@ -76,7 +76,7 @@ def test_an_empty_set_says_no_lens_requested(tmp_path: Path) -> None:
     assert out.stdout.strip() == "no lens requested"
 
 
-def test_a_dropped_lens_is_a_warning(tmp_path: Path) -> None:
+def test_a_lens_the_branch_disabled_stays_and_is_a_warning(tmp_path: Path) -> None:
     root = _with_a_lens(tmp_path)
     (root / ".fr").mkdir(exist_ok=True)
     (root / ".fr" / "lenses.yaml").write_text("disable: [security]\n")
@@ -84,8 +84,8 @@ def test_a_dropped_lens_is_a_warning(tmp_path: Path) -> None:
     out = fr(root, ["lenses", "status"])
 
     assert out.exit_code == 0, out.output
-    assert "no lens requested" in out.stdout
-    assert "warning: lens security is not effective" in out.output
+    assert out.stdout.startswith("security: ")
+    assert "warning: lens security is changed or disabled on this branch" in out.output
 
 
 def test_an_unknown_run_is_exit_two(tmp_path: Path) -> None:

@@ -125,11 +125,9 @@ def lens_review_brief(root: Path, lens_set: LensSet) -> dict[str, Any]:
     """The brief's `lens_review` key (R8): per lens its title, instruction text,
     reasons or rule and file, and return rule, beside the diff's merge-base. An
     empty set is `{"set": [], "note": ...}`."""
-    from fr.lenses.resolve import effective_lenses
-
     if not lens_set.lenses:
         return {"set": [], "note": EMPTY_SET_NOTE}
-    effective = effective_lenses(root)
+    effective = lens_set.definitions
     out: dict[str, Any] = {
         "merge_base": lens_set.merge_base,
         "set": [

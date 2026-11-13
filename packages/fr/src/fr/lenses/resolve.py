@@ -41,7 +41,13 @@ def shipped_lenses() -> dict[str, Lens]:
     """
     found = shipped_lens_dir()
     if found is None:
-        return {}
+        # The wheel always carries them: none found is a broken install, and
+        # reading it as "this repo has no lenses" would empty every lens set.
+        raise LensError(
+            "no shipped lens manifests were found (looked in $"
+            f"{SHIPPED_ENV_VAR}, the fr package's {PACKAGED_LENSES_DIRNAME}/ and the "
+            "installed plugin): reinstall fr"
+        )
     out: dict[str, Lens] = {}
     for path in sorted(found.glob("*.yaml")):
         lens = parse_lens(read_text(path, str(path)), source=str(path))
@@ -74,3 +80,21 @@ def apply_config(shipped: dict[str, Lens], config: LensConfig) -> dict[str, Lens
 def effective_lenses(root: Path) -> dict[str, Lens]:
     """The repo's effective lenses, keyed by id."""
     return apply_config(shipped_lenses(), load_config(root))
+
+
+def review_lenses(root: Path, base_text: str | None, *, has_base: bool) -> dict[str, Lens]:
+    """The lenses a feature is REVIEWED under (§3.A): the working tree's effective
+    lenses, except that a lens effective on the default branch keeps the default
+    branch's definition and cannot be disabled by the branch under review. A branch
+    adds lenses for its own review; its change to an existing one takes effect once
+    merged, as its removal of a path rule does. With no default branch (`has_base`
+    false) the working tree is all there is."""
+    head = effective_lenses(root)
+    if not has_base:
+        return head
+    config = (
+        parse_config(base_text, source="the default branch's .fr/lenses.yaml")
+        if base_text
+        else LensConfig()
+    )
+    return {**head, **apply_config(shipped_lenses(), config)}

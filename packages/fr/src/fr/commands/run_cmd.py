@@ -2682,11 +2682,10 @@ def _owed_on(step: Step, lenses: LensSet | None) -> list[str]:
 def _lens_lines(repo_root: Path, lenses: LensSet, lens_id: str) -> list[str]:
     """What a refusal over `lens_id` prints (R10): its title, instruction text, why
     it is in the set, and the return rule: the brief for the reviewer still owed."""
-    from fr.lenses.resolve import effective_lenses
     from fr.lenses.review import lens_review_rule, why_line
 
     entry = next(e for e in lenses.lenses if e.lens == lens_id)
-    found = effective_lenses(repo_root).get(lens_id)
+    found = lenses.definitions.get(lens_id)
     lines = [f"lens {lens_id}" + (f": {found.title}" if found is not None else "")]
     lines.append(f"  in the set because: {why_line(entry)}")
     if found is not None:
@@ -2838,11 +2837,11 @@ def _check_lens_returns(
                     "did not change — name the changed files you read"
                 )
         elif block is not None:
-            missing = [f for f in block[1] if not (repo_root / f).is_file()]
+            missing = [f for f in block[1] if f not in _tracked_files(repo_root)]
             if missing:
                 mine_problems.append(
-                    f"reviewer {agent} examined {', '.join(missing)}, which is not a file "
-                    "in this checkout"
+                    f"reviewer {agent} examined {', '.join(missing)}, which is not a "
+                    "tracked file of this checkout"
                 )
         try:
             rows = parse_review_findings(
@@ -2893,6 +2892,17 @@ def _check_lens_returns(
             bulleted=True,
         )
     return seen
+
+
+@functools.cache
+def _tracked_files(repo_root: Path) -> frozenset[str]:
+    """The paths git tracks in this checkout: what a lens reviewer may name where
+    there is no remote and so no diff (review l-security-r2: `is_file()` accepted
+    `../` paths and untracked files)."""
+    from fr.git import git_answer
+
+    listed = git_answer(repo_root, "ls-files", "-z")
+    return frozenset(listed.stdout.split("\0")) - {""} if listed.returncode == 0 else frozenset()
 
 
 def _return_unobserved(key: str, who: str, why: str) -> None:

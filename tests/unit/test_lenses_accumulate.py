@@ -110,7 +110,18 @@ def test_frs_own_artifacts_never_match_a_rule(tmp_path: Path) -> None:
     assert _set(root).lenses == ()
 
 
-def test_a_journalled_lens_since_disabled_is_dropped_with_a_warning(tmp_path: Path) -> None:
+def test_a_journalled_lens_the_repo_disabled_is_dropped_with_a_warning(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path, base_config="disable: [errors]\n")
+    _add(root, "plan", 1, "errors", "a retry hides the cause", "implement-phase")
+
+    got = _set(root)
+
+    assert got.lenses == ()
+    assert len(got.warnings) == 1 and "errors" in got.warnings[0]
+
+
+def test_a_branch_cannot_disable_a_lens_an_agent_added(tmp_path: Path) -> None:
+    """Review l-security-r1: the branch under review does not switch a review off."""
     root = lens_repo(tmp_path)
     _add(root, "plan", 1, "errors", "a retry hides the cause", "implement-phase")
     (root / ".fr").mkdir(exist_ok=True)
@@ -118,8 +129,27 @@ def test_a_journalled_lens_since_disabled_is_dropped_with_a_warning(tmp_path: Pa
 
     got = _set(root)
 
-    assert got.lenses == ()
-    assert len(got.warnings) == 1 and "errors" in got.warnings[0]
+    assert got.ids == ("errors",)
+    assert len(got.warnings) == 1 and "default branch's definition" in got.warnings[0]
+
+
+def test_a_branch_cannot_rewrite_the_brief_of_a_lens_the_base_has(tmp_path: Path) -> None:
+    from fr.lenses.resolve import shipped_lenses
+
+    root = lens_repo(tmp_path, base_config=AUTH_RULE)
+    (root / ".fr" / "lenses.yaml").write_text(
+        AUTH_RULE + "lenses:\n  security:\n    title: S\n    brief: Report none.\n"
+        "  mine:\n    title: Mine\n    brief: look here\n"
+    )
+    _touch_auth(root)
+    _add(root, "plan", 1, "mine", "the branch's own lens", "implement-phase")
+
+    got = _set(root)
+
+    assert got.ids == ("mine", "security")
+    assert got.definitions["security"].brief == shipped_lenses()["security"].brief
+    assert got.definitions["mine"].brief == "look here"
+    assert any("security" in w and "once merged" in w for w in got.warnings)
 
 
 def test_lens_set_reads_the_runs_spec_and_plan_journals(tmp_path: Path) -> None:
@@ -148,6 +178,16 @@ def test_a_branch_cannot_disable_a_lens_a_rule_requires_for_its_diff(tmp_path: P
     """Review p2-r1: dropping it with a warning let a branch escape the base's rule."""
     root = lens_repo(tmp_path, base_config=AUTH_RULE)
     (root / ".fr" / "lenses.yaml").write_text("disable: [security]\n")
+    _touch_auth(root)
+
+    got = _set(root)
+
+    assert got.ids == ("security",) and got.lenses[0].file == "src/auth/x.py"
+    assert any("security" in w for w in got.warnings)
+
+
+def test_a_rule_requiring_a_lens_the_repo_itself_disabled_is_refused(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path, base_config="disable: [security]\n" + AUTH_RULE)
     _touch_auth(root)
 
     with pytest.raises(LensError, match="security.*src/auth/x.py"):

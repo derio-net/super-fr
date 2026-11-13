@@ -270,7 +270,7 @@ def test_a_plan_finding_that_is_not_a_lens_finding_does_not_gate(tmp_path: Path)
 
 # --- review p3-r1, p3-r4: what else must refuse ------------------------------------
 
-DISABLED_RULE_LENS = "disable: [security]\nrequire:\n  - paths: [src/**]\n    lenses: [security]\n"
+UNREADABLE_CONFIG = "require: nope\n"
 
 
 @pytest.mark.parametrize("evidence", ["findings", "review, reviewer, findings"])
@@ -296,14 +296,31 @@ def test_a_lens_set_fr_cannot_compute_refuses_the_resolve(tmp_path: Path, state:
     from tests.unit.lens_review_support import commit_paths
 
     repo, shipped, env = _ready(tmp_path)
-    commit_paths(repo, {".fr/lenses.yaml": DISABLED_RULE_LENS}, "a rule on a disabled lens")
+    commit_paths(repo, {".fr/lenses.yaml": UNREADABLE_CONFIG}, "a config fr cannot read")
 
     argv = [*RESOLVE, "--state", state, "--evidence", "review=lens-rev", "--evidence", MAP]
     result = _invoke_as_harness(repo, shipped, argv, env)
 
     assert result.exit_code == 2, result.output
-    assert "security" in _squash(result.output)
+    assert "lenses.yaml" in _squash(result.output)
     _not_done(repo)
+
+
+def test_with_no_remote_an_examined_file_must_be_tracked_here(tmp_path: Path) -> None:
+    """Review l-security-r2: `../` paths and untracked files passed `is_file()`."""
+    repo, shipped, opened = at_lens_review(tmp_path, lenses=("tests",), remote=False)
+    (repo / "scratch.txt").write_text("x\n")
+    plan_journal(repo, REVIEW)
+
+    for named in ("../outside.txt", "scratch.txt"):
+        (repo.parent / "outside.txt").write_text("x\n")
+        env = opencode_env(
+            _review_window(tmp_path, opened, {"ses_gen2": review_lens_return("tests", (named,))})
+        )
+        result = _resolve(repo, shipped, env, "review=lens-rev", "reviewer=tests=ses_gen2")
+        assert result.exit_code == 2, result.output
+        assert "not a tracked file" in _squash(result.output)
+        _not_done(repo)
 
 
 def test_a_review_entry_older_than_the_step_is_refused(tmp_path: Path) -> None:

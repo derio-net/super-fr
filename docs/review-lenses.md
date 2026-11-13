@@ -68,8 +68,8 @@ The title is the reason, one line. fr assigns the entry's id and stamps the step
 added it, so two agents adding the same lens never collide and the pull request can say
 who wanted it. The brainstorm, the spec review, the plan, an implementer and a phase
 reviewer can all do this; a read-only reviewer suggests one in its return and the
-orchestrator records it. Outside a run, `fr journal add --kind lens --lens <id> --title
-"<why>"` does the same with no step. A lens is never removed: nothing closes or
+orchestrator records it. Outside a run, `fr journal add --scope plan --slug <plan> --global
+--kind lens --lens <id> --title "<why>"` does the same with no step. A lens is never removed: nothing closes or
 withdraws it, because the point is that a concern once raised stays raised.
 
 **A path rule requires one.** A repo can say that a change touching certain files always
@@ -143,6 +143,12 @@ require:                     # path rules
 A lens id is lowercase letters, digits and hyphens, starting with a letter, because it
 travels inside journal headers and finding ids. A path rule cannot require a lens the
 repo has disabled; `fr lenses check` fails a config that does.
+
+A branch is reviewed under the lenses its default branch already has. It can add a
+lens and use it in the same pull request, but when it rewrites or disables a lens the
+default branch has, its own review still uses the default branch's text, and fr says so
+in a warning. The change takes effect once it is merged. The author of a change does
+not get to write the instructions its reviewer is given.
 
 ## The commands
 

@@ -55,3 +55,14 @@ def test_an_undecodable_config_is_a_lens_error(tmp_path: Path) -> None:
 
     with pytest.raises(LensError, match="lenses.yaml"):
         effective_lenses(tmp_path)
+
+
+def test_no_shipped_lens_set_is_a_broken_install_not_an_empty_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr.lenses import resolve
+
+    monkeypatch.setattr(resolve, "shipped_lens_dir", lambda: None)
+
+    with pytest.raises(LensError, match="no shipped lens manifests"):
+        shipped_lenses()

@@ -110,9 +110,9 @@ def test_an_empty_set_says_so_and_owes_no_reviewer(tmp_path: Path) -> None:
 
 
 def test_an_unreadable_lens_set_refuses_the_brief(tmp_path: Path) -> None:
-    """`lens_set` fails closed (a rule requires a lens that is not effective):
-    the brief refuses, exit 2, never an empty set."""
-    config = "disable: [security]\nrequire:\n  - paths: [src/**]\n    lenses: [security]\n"
+    """`lens_set` fails closed (a config fr cannot read): the brief refuses,
+    exit 2, never an empty set."""
+    config = "require: nope\n"
     repo, shipped, _ = at_lens_review(tmp_path, lenses=("tests",))
     (repo / ".fr" / "lenses.yaml").parent.mkdir(exist_ok=True)
     (repo / ".fr" / "lenses.yaml").write_text(config)
@@ -120,7 +120,7 @@ def test_an_unreadable_lens_set_refuses_the_brief(tmp_path: Path) -> None:
     out = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
 
     assert out.exit_code == 2, out.output
-    assert "requires lens security" in out.output
+    assert "lenses.yaml" in out.output
     assert "lens_review" not in out.output
 
 

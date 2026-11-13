@@ -172,9 +172,14 @@ at HEAD. Path rules follow `.fr/ci.yaml`'s precedent
 (`ci_evidence.declared_gates`): the rules in force are the union of the default
 branch's `require:` and HEAD's, so one PR can add a repo's first rule and use
 it, and no PR can remove a rule from under itself. `fr lenses check` refuses a
-HEAD config that disables a lens a rule in force requires. A branch may still
-replace a lens's instruction text; R12 states any change to the file on the
-pull request. With no remote, HEAD's rules are the rules in force, and
+HEAD config that disables a lens a rule in force requires. The lenses a
+feature is REVIEWED under follow the same precedent (`review_lenses`): a lens
+effective on the default branch keeps the default branch's definition and
+cannot be disabled by the branch under review, so the author of a change never
+writes the instructions its own reviewer is given. A branch may add a lens and
+use it at once; its change to an existing lens takes effect once merged, is
+named in a warning, and R12 states any change to the file on the pull request.
+With no remote, HEAD's rules are the rules in force, and
 because there is then no feature diff to match, every one of them applies. A
 remote whose default branch ref, its `.fr/lenses.yaml` or the merge-base cannot
 be read in this checkout is a refusal that says what to fetch, never "no rules".
@@ -219,9 +224,11 @@ it.
 of every `lens` entry in the run's spec and plan journals, plus the lenses of
 every rule in force matched by a file in the feature's diff (the
 proportionality diff, same exemptions), restricted to effective lenses. A
-journalled lens the repo has since disabled is dropped with a warning naming
-it; a lens a rule requires cannot be disabled (§3.A), so `lens_set` refuses,
-naming the rule, the lens and the file, when such a lens is not effective.
+journalled lens the repo (its default branch) has disabled is dropped with a
+warning naming it; one only the branch disabled stays (§3.A). A lens a rule
+requires cannot be disabled (§3.A), so `lens_set` refuses, naming the rule, the
+lens and the file, when such a lens is not effective. No shipped lens set at
+all is a broken install and a refusal, never an empty set.
 
 ### 3.C The lens review
 

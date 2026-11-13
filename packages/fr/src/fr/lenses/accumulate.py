@@ -4,9 +4,11 @@
 run's spec and plan journals, plus the lenses every path rule in force requires for
 a file in the feature's diff (`fr.proportionality.feature_diff`: merge-base..HEAD,
 fr's own artifacts exempt), restricted to effective lenses. A journalled lens the
-repo has since disabled is dropped with a warning naming it; a lens a rule requires
-that is not effective is a `LensError`, as is a default branch or a merge-base that
-cannot be read. With no remote there is no diff, and every rule applies. Computed from the
+repo has disabled is dropped with a warning naming it; a lens a rule requires
+that is not effective is a `LensError`. "Effective" here is `review_lenses`: a lens
+of the default branch keeps the default branch's text and cannot be disabled by the
+branch under review. A default branch or a merge-base that cannot be read is a
+`LensError` too. With no remote there is no diff, and every rule applies. Computed from the
 branch as it stands when it is read; nothing is stored.
 """
 
@@ -17,8 +19,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fr.git import GitUnavailableError
-from fr.lenses.model import LensError
-from fr.lenses.resolve import effective_lenses
+from fr.lenses.model import Lens, LensError
+from fr.lenses.resolve import effective_lenses, review_lenses
 from fr.lenses.rules import (
     base_config_text,
     default_ref,
@@ -62,6 +64,8 @@ class LensSet:
     """The diff's merge-base; None with no remote (there is no diff)."""
     changed: tuple[str, ...] | None = None
     """The feature's changed files (fr's own artifacts exempt); None with no remote."""
+    definitions: dict[str, Lens] = field(default_factory=dict)
+    """Each lens of the set as its reviewer is briefed (`review_lenses`)."""
 
     @property
     def ids(self) -> tuple[str, ...]:
@@ -130,10 +134,12 @@ def _changed(root: Path, ref: str | None) -> tuple[str | None, list[str] | None]
 
 def lens_set_for(root: Path, *, spec_slug: str | None, plan_slug: str | None) -> LensSet:
     """The lens set from the named journals and the branch's diff. Raises `LensError`."""
-    effective = effective_lenses(root)
     added = _added(root, spec_slug, plan_slug)
     ref = default_ref(root)
-    rules = rules_in_force(base_config_text(root, ref), head_config_text(root))
+    base_text = base_config_text(root, ref)
+    rules = rules_in_force(base_text, head_config_text(root))
+    head = effective_lenses(root)
+    effective = review_lenses(root, base_text, has_base=ref is not None)
     base, changed = _changed(root, ref)
     warnings: list[str] = []
     if changed is None:
@@ -165,6 +171,14 @@ def lens_set_for(root: Path, *, spec_slug: str | None, plan_slug: str | None) ->
                 f"lens {lens} is not effective in this repo and is dropped (an agent added it)"
             )
             continue
+        if head.get(lens) != effective[lens]:
+            # Review l-security-r1: the author of a change does not write the
+            # instructions its own reviewer is given, nor switch the review off.
+            warnings.append(
+                f"lens {lens} is changed or disabled on this branch; this feature is "
+                "reviewed under the default branch's definition, and the change takes "
+                "effect once merged"
+            )
         out.append(
             LensEntry(
                 lens=lens,
@@ -178,4 +192,5 @@ def lens_set_for(root: Path, *, spec_slug: str | None, plan_slug: str | None) ->
         warnings=tuple(warnings),
         merge_base=base,
         changed=tuple(changed) if changed is not None else None,
+        definitions={e.lens: effective[e.lens] for e in out},
     )
