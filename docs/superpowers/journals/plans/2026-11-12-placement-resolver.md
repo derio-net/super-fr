@@ -1440,3 +1440,8 @@ Bash reproduced, TypeScript by reading; quiet cannot run an fr-goal as shipped. 
 ### pr1431-r7 · finding [open] (reviewer: in scope) · validate-plans.sh depends on a healthy PATH fr and omits --no-create
 
 Inferred from the diff: a broken or identity-refusing fr turns the plan validator red for repo users, and under quiet a validator run creates the fr branch and worktree.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r8 created=2026-11-13T15:06:51+00:00 state=open review_scope=in -->
+### pr1431-r8 · finding [open] (reviewer: in scope) · An unrelated origin/fr with a root settings.yaml refuses every fr command, and placement move --to quiet adopts a foreign origin/fr
+
+Reproduced: a settings.yaml without a placement line fails the closed schema; the hooks read it as repo.
