@@ -75,3 +75,4 @@ steps:
     state: pending
 driver: standalone
 fr_version: 7.0.0rc3
+pr: https://github.com/derio-net/super-fr/pull/1436
