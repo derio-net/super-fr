@@ -3,7 +3,7 @@ run: 2026-11-12-feat-placement-resolver
 workflow: fr-goal@1
 branch: feat/placement-resolver
 started: '2026-11-12T11:47:04+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -259,7 +259,11 @@ steps:
           visual: none
           findings: p7-quiet-to-stealth-live-branches,p7-r1,p7-r2,p7-r3,p7-r4,p7-r5,p7-r6,p7-r7,p7-r8
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-13T13:43:35+00:00'
+    exit: 0
+    stdout: |
+      3 out-of-scope finding(s): p1-r6, p6-relative-path-git-and-bare-fr, p7-r8
   lens-review:
     state: pending
   deliver:
