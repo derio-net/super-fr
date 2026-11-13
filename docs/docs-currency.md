@@ -1,5 +1,5 @@
 ---
-title: "Docs currency: keeping pages true to the code"
+title: "Docs currency: keep pages true to the code"
 tldr: |
   A page names the paths it describes, and a check fails any pull request that changes
   one of those paths without touching the page. This guide covers the config, the
