@@ -58,6 +58,20 @@ def test_repo_a_pending_rows_origin_is_corrected_in_place(tmp_path: Path, monkey
     assert committed(root) == [f"{FRAGMENTS_REL}/{SLUG_A}.yaml"]
 
 
+def test_repo_a_line_anchored_origin_is_refused(tmp_path: Path, monkeypatch) -> None:
+    """F4: `add` refuses a `#L<n>` origin, so the correction does too."""
+    root = merged_repo(tmp_path)
+    _add_pending(root, monkeypatch)
+    head = git(root, "rev-parse", "HEAD")
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "p", "--op", "reword",
+        "--origin", "widget:tests/test_w.py#L1", "--why", "w",
+    )  # fmt: skip
+    assert res.exit_code == 2, res.output
+    assert "line anchor" in res.output
+    assert git(root, "rev-parse", "HEAD") == head
+
+
 # --- quiet: a merged row may be this branch's own ---------------------------------------
 
 

@@ -1159,6 +1159,11 @@ def _reword_pending(
             parse_logical(ref) if is_logical(ref) else split_ref(ref)
     except AcceptanceError as e:
         raise RecordRefusedError(f"{where}: {e}") from e
+    from fr.acceptance.anchors import line_anchor_error
+
+    for ref in new_origins:  # review F4: what `add` refuses in an origin, so does this
+        if (why := line_anchor_error(ref)) is not None:
+            raise RecordRefusedError(f"{where}: {why}")
     row = existing.model_copy(
         update={
             "origin": new_origins,
