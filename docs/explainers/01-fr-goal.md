@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 placement-resolver phase 7, fr placement move (copy, verify, switch, remove; restartable) and migrate-branch with drift refused everywhere
+reviewed: 2026-11-13 placement-resolver phase 7 review, a move re-copies a source that moved, verifies the destination as laid out, copies fr artifacts only, refuses quiet-to-stealth with live branches; drift ignores deletions and refuses a shallow CI checkout
 ---
 
 ## Overview
@@ -1419,21 +1419,34 @@ fr's files, archived features included, in four steps: **copy**, **verify**, **s
 **remove**. Out of `repo`, the copy reads the default branch and gives each feature its
 own path, with an `OWNER`, a `BASE` and a `merged:` record worked out from the default
 branch's history, so a feature merged long ago still reads as merged, in the same order.
-Verify then re-reads the destination and refuses unless its files, its acceptance fold
-and its `fr validate artifacts` report are the same as the source's. Only then does the
-switch happen: the quiet switch commit on `fr`, or, moving back, `placement: repo` written
+Verify then re-reads the destination and refuses unless its files and its acceptance fold
+are the same as the source's, and unless `fr validate artifacts` passes on the
+destination as it is laid out, every feature path with the `OWNER`, `BASE`, `HEADS` and
+`merged:` record fr wrote for it. If the source moved since the copy (a feature merged
+in the meantime), verify and the switch both notice and the move copies again first, so
+it never switches on a copy that is missing a feature. Only then does the switch happen: the quiet switch commit on `fr`, or, moving back, `placement: repo` written
 there by a new commit, never a force push. Remove opens a branch that deletes the files
 from the default branch, pushes it, and prints the `fr pr create` command for its pull
 request; nothing is pushed to the default branch itself, and fr reminds you that git
 history still holds the files. Moving back into `repo` lands through a pull request too,
 so that move pauses after its copy and finishes when you run it again after the merge.
+That pull request is recognised by what it holds: CI accepts it under quiet because its
+files are exactly the merged features `fr` holds, byte for byte, and nothing more.
+
+A move copies only fr's own files, the ones below `docs/superpowers/` and
+`docs/acceptance/`. Anything else it finds where it copies from, a
+`.github/workflows/` file or a `.gitattributes` planted on `fr`, refuses the move, naming
+the path, before anything is written; `fr placement migrate-branch` refuses the same way.
 
 Every step can be run again: a state file under the git directory records the steps
-done, so a move interrupted anywhere (a refused push, a closed terminal) completes when
-you re-run the same command, and a different move refuses until it does. A move refuses
+done, so a move interrupted anywhere (a refused push, a closed terminal, even between a
+step's commit and its push) completes when you re-run the same command, and a different
+move refuses until it does. A move refuses
 while any workspace of the repository has uncommitted work. Moving to stealth checks the
 tracking repository is reachable and no more visible than the target before it writes,
-and puts nothing of fr's on the target. `fr placement move --run <id>`, run in a stealth
+and puts nothing of fr's on the target; moving from quiet to stealth refuses while any
+quiet feature is not merged yet, listing them, because a live branch cannot follow the
+repository into stealth. `fr placement move --run <id>`, run in a stealth
 workspace, moves that one run out of its tracking repository.
 
 A branch that was live during the move is left as it was: its workspace recorded the old
@@ -1441,7 +1454,10 @@ placement. From then on every fr command there, `fr push`, `deliver` and `fr val
 artifacts` (which is how CI notices) refuse, naming `fr placement migrate-branch`. None of
 them moves anything. `fr placement migrate-branch`, run in that workspace, moves the
 branch's own files to where the placement keeps them, as one commit on each side, and
-pushes both.
+pushes both; run again after an interrupted push, it pushes what it already committed.
+A branch that only deletes fr's files is not drift. In CI, a checkout too shallow to see
+`origin/fr` and the default branch refuses, asking for `fetch-depth: 0`, rather than
+pass a branch it could not check; elsewhere it warns and goes on.
 
 ## Try it yourself
 
