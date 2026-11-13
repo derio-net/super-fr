@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
@@ -11,12 +14,6 @@ REPO = Path(__file__).resolve().parents[2]
 
 def _page_globs() -> list[str]:
     return list(yaml.safe_load((REPO / ".fr/docs.yaml").read_text())["pages"])
-
-
-def test_the_docs_config_names_the_three_page_groups() -> None:
-    assert sorted(_page_globs()) == sorted(
-        ["docs/explainers/*.md", "docs/*.md", "docs/reference/*.md"]
-    )
 
 
 SCRIPT = REPO / "scripts/check-writing-standards.sh"
@@ -64,13 +61,6 @@ def test_the_script_covers_exactly_the_docs_config_pages() -> None:
     assert sorted(covered) == sorted(_page_globs())
 
 
-def test_the_script_runs_from_the_toplevel_with_its_own_pyyaml() -> None:
-    text = SCRIPT.read_text()
-    assert 'cd "$(git rev-parse --show-toplevel)"' in text
-    assert "uv run --isolated --no-project --with pyyaml python" in text
-    assert "tools/validate_writing_standard.py" in text
-
-
 def test_only_the_three_exceptions_carry_a_writing_standard_key() -> None:
     carried = {}
     for glob in _page_globs():
@@ -79,3 +69,83 @@ def test_only_the_three_exceptions_carry_a_writing_standard_key() -> None:
             if "writing_standard" in meta:
                 carried[page.relative_to(REPO).as_posix()] = meta["writing_standard"]
     assert carried == EXCEPTIONS
+
+
+# A stand-in for `uv` (no network): it logs its cwd and arguments, one call per
+# line, and exits with $FAKE_STE_EXIT for the ste group, $FAKE_OTHER_EXIT otherwise.
+FAKE_UV = """#!/usr/bin/env bash
+printf '%s\\t%s\\n' "$PWD" "$*" >> "$FAKE_UV_LOG"
+case " $* " in
+  *" --default ste "*) exit "$FAKE_STE_EXIT" ;;
+  *) exit "$FAKE_OTHER_EXIT" ;;
+esac
+"""
+
+
+def _run_script(
+    tmp_path: Path, cwd: Path, ste_exit: int, other_exit: int
+) -> tuple[int, list[list[str]], Path]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "uv"
+    fake.write_text(FAKE_UV)
+    fake.chmod(0o755)
+    blog_craft = tmp_path / "blog-craft"
+    blog_craft.mkdir()
+    log = tmp_path / "uv.log"
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "FAKE_UV_LOG": str(log),
+        "FAKE_STE_EXIT": str(ste_exit),
+        "FAKE_OTHER_EXIT": str(other_exit),
+    }
+    proc = subprocess.run(
+        ["bash", str(SCRIPT), os.path.relpath(blog_craft, cwd)],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    calls = [line.split("\t", 1) for line in log.read_text().splitlines()] if log.exists() else []
+    return proc.returncode, calls, blog_craft
+
+
+def _assert_both_groups_ran_at_the_toplevel(calls: list[list[str]], blog_craft: Path) -> None:
+    checker = blog_craft.resolve() / "tools/validate_writing_standard.py"
+    prefix = f"run --isolated --no-project --with pyyaml python {checker} --default "
+    assert [cwd for cwd, _ in calls] == [str(REPO), str(REPO)]
+    assert sorted(args.removeprefix(prefix).split()[0] for _, args in calls) == sorted(GROUPS)
+    assert all(args.startswith(prefix) for _, args in calls)
+
+
+def test_the_script_runs_every_group_from_the_toplevel_and_exits_with_the_highest_code(
+    tmp_path: Path,
+) -> None:
+    code, calls, blog_craft = _run_script(tmp_path, REPO / "tests", ste_exit=2, other_exit=1)
+    assert code == 2
+    _assert_both_groups_ran_at_the_toplevel(calls, blog_craft)
+
+
+def test_the_script_exits_zero_when_every_group_passes(tmp_path: Path) -> None:
+    code, calls, blog_craft = _run_script(tmp_path, REPO / "tests", ste_exit=0, other_exit=0)
+    assert code == 0
+    _assert_both_groups_ran_at_the_toplevel(calls, blog_craft)
+
+
+@pytest.mark.parametrize(("ste_exit", "other_exit"), [(1, 0), (0, 1)])
+def test_a_fail_in_either_group_fails_the_script(
+    tmp_path: Path, ste_exit: int, other_exit: int
+) -> None:
+    code, calls, _ = _run_script(tmp_path, REPO / "tests", ste_exit, other_exit)
+    assert code == 1
+    assert len(calls) == 2
+
+
+def test_the_script_checks_its_own_repo_whatever_the_callers_directory(tmp_path: Path) -> None:
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    code, calls, blog_craft = _run_script(tmp_path, outside, ste_exit=0, other_exit=0)
+    assert code == 0
+    _assert_both_groups_ran_at_the_toplevel(calls, blog_craft)

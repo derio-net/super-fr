@@ -16,7 +16,9 @@ if [ $# -ne 1 ] || [ ! -d "$1" ]; then
   exit 2
 fi
 checker="$(realpath "$1")/tools/validate_writing_standard.py"
-cd "$(git rev-parse --show-toplevel)" || exit 2
+# The repo this script belongs to, whatever the caller's directory.
+top="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 2
+cd "$top" || exit 2
 
 worst=0
 run() {
