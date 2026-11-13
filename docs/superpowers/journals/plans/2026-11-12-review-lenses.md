@@ -336,3 +336,71 @@ Two small fixes (adoption's _owed_before, one reshape message); no second copy o
 ### no-refactor-p3-t5 · discovery · no-refactor-because P3.T5 (phase 3)
 
 The three scenarios share _lens_fixture.sh, whose lens_base / lens_review_repo split was made while writing them; the AGENTS.md lines and the row moves have nothing to clean.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-11-13T00:39:53+00:00 phase=3 -->
+### review-p3 · review · Phase 3 review: no bypass in the shipped shapes; a custom shape's flat step was weakened, fixed (phase 3)
+
+A separate reviewer attacked the lens-review gate (R8-R11, R13). Sound on the
+shipped shapes: fewer reviewers than lenses, one id for two lenses, a wrong-lens
+block, a file outside the diff, an early dispatch, a caller-passed `lenses`, an
+unreadable set, adopt/reshape skipping the step. It reproduced the needs cycle
+the executor reported. Seven findings, all in scope, all fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-13T00:39:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · any flat journal:plan step with review evidence got the feature target (phase 3)
+
+A repo shape's flat step `{emits: [journal:plan], evidence: [findings]}` used to be
+refused (no target) and now resolved with non-lens plan findings open.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-13T00:39:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · fr-goal skill says the last review-phase resolve opens deliver; light list omits lens-review (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-13T00:39:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · spec 3.C still shows needs: [spec, plan, journal:plan], a cycle (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-13T00:39:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · five refusals or branches of the lens-review gate had no test (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-13T00:39:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · the record template shows reviewer: <id>, not the <lens>=<id> map (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-13T00:39:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · _verify_reviewer inlines the dispatch walk _dispatches_since claims to own (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-13T00:39:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · a file repeated in examined: inflates the lens's examined count (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-13T00:39:53+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: any flat journal:plan step with review evidence got the feature target (phase 3)
+
+`_evidence_target` gives the feature target only to a step that declares `lenses`; any other flat journal:plan step keeps the no-target refusal. Test: test_a_flat_plan_journal_step_without_lenses_is_not_a_feature_review.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-13T00:39:53+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: fr-goal skill says the last review-phase resolve opens deliver; light list omits lens-review (phase 3)
+
+SKILL.md section 8 names lens-review's resolve as what opens deliver; the light shape's step list includes lens-review; both mirrors re-synced.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-13T00:39:53+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: spec 3.C still shows needs: [spec, plan, journal:plan], a cycle (phase 3)
+
+Spec 3.C amended to needs: [spec, plan], with the cycle and the lenses-declares-the-target rule stated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-13T00:39:53+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: five refusals or branches of the lens-review gate had no test (phase 3)
+
+Tests added: an uncomputable set at resolve (done and failed), a review entry older than the step, a named reviewer with no readable return, and `_owed_before` when the superseded run did the lens review.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-13T00:39:53+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: the record template shows reviewer: <id>, not the <lens>=<id> map (phase 3)
+
+The template's owed line shows reviewer as "<lens>=<dispatch-id>,<lens>=<dispatch-id>" on a step declaring lenses.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-13T00:39:53+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: _verify_reviewer inlines the dispatch walk _dispatches_since claims to own (phase 3)
+
+`_verify_reviewer` calls `_dispatches_since`.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-13T00:39:53+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: a file repeated in examined: inflates the lens's examined count (phase 3)
+
+`parse_review_lens` de-duplicates examined files, keeping order. Test: test_a_file_named_twice_is_examined_once.
