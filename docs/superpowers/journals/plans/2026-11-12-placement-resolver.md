@@ -1465,3 +1465,8 @@ Record item: dirty_workspaces checks isolation states only, not the fr worktree 
 ### pr1431-n3 · finding [open] (reviewer: in scope) · HEADS records a head before it is pushed
 
 Record item: a refused push leaves the record on local fr; no false merged found.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n4 created=2026-11-13T15:07:00+00:00 state=open review_scope=in -->
+### pr1431-n4 · finding [open] (reviewer: in scope) · A whole-repo move to stealth pushes a branch and prints a PR naming fr and stealth on the target
+
+Record item: should be a stated decision.
