@@ -1510,3 +1510,8 @@ fr placement move --to stealth removes fr's files from the target's default bran
 ### pr1431-r5-resolved · finding [fixed] · resolves pr1431-r5: fr pr create's default base comes from the settings source ref
 
 d8ad52635: fr pr create's default base comes from fr.git.remote_default_ref, never the settings source ref; tests under repo, quiet and stealth compute the base only.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r8-resolved created=2026-11-13T15:47:01+00:00 state=fixed resolves=pr1431-r8 -->
+### pr1431-r8-resolved · finding [fixed] · resolves pr1431-r8: An unrelated origin/fr with a root settings.yaml refuses every fr command, and placement move --to quiet adopts a foreign origin/fr
+
+61665c914: an origin/fr settings.yaml with no live placement line is not a switch and reads as repo (canonical-spelling rule kept for files naming placement); fr placement move --to quiet refuses an origin/fr that is not a switch branch, naming it.
