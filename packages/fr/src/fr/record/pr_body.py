@@ -1015,6 +1015,24 @@ def _lens_counts(state: RunState) -> dict[str, str]:
     return counts
 
 
+def _cell(text: str) -> str:
+    """`text` as one Markdown table cell: a pipe escaped, a line break a space.
+    A lens reason is a journal title someone typed (review p4-r1)."""
+    return " ".join(text.split()).replace("|", "\\|")
+
+
+def _lens_examined(lens: str, counts: dict[str, str], reviewed: bool) -> str:
+    """The `Files examined` cell. "not observable" is only an `unobserved` return
+    (§3.D); a review that has not run, or a lens that joined the set after it, is
+    not a review fr could not read (review p4-r2)."""
+    if not reviewed:
+        return "not reviewed yet"
+    count = counts.get(lens)
+    if count is None:
+        return "not reviewed"
+    return "not observable" if count == "unobserved" else count
+
+
 def _lens_why(entry: LensEntry, by_id: dict[str, JournalEntry]) -> str:
     """Why a lens is in the set: each addition as `<step>[ phase N]: "<reason>"`
     (`command line` when no step was recorded), then the path rule and a matching file."""
@@ -1068,24 +1086,29 @@ def _review_lenses(repo_root: Path, state: RunState) -> str:
         if ".fr/lenses.yaml" in (lenses.changed or ())
         else ""
     )
+    # What `lens_set` warned about (a journalled lens the repo since disabled, a
+    # repo with no remote) is part of why the section reads as it does (review p4-r4).
+    note += "".join(f"\n\nNote: {' '.join(w.split())}" for w in lenses.warnings)
     if not lenses.lenses:
         return "No lens was requested for this change." + note
     counts = _lens_counts(state)
+    reviewed = state.steps["lens-review"].state == "done"
     by_id = {e.id: e for e in entries}
     rows = [
         _md_row(
-            (
+            _cell(cell)
+            for cell in (
                 e.lens,
                 _lens_why(e, by_id),
-                "not observable"
-                if counts.get(e.lens, "unobserved") == "unobserved"
-                else counts[e.lens],
+                _lens_examined(e.lens, counts, reviewed),
                 _lens_finding_cells(e.lens, entries),
             )
         )
         for e in lenses.lenses
     ]
     head = [_md_row(("Lens", "Why", "Files examined", "Findings")), _md_row(("---",) * 4)]
+    if not reviewed:
+        note = "\n\nThe lens review has not run yet." + note
     return "\n".join([*head, *rows]) + note
 
 

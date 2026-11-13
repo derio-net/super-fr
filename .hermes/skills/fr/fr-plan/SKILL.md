@@ -92,6 +92,7 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 - **Cross-repo completeness:** If the spec lists multiple plans across repos, write ALL of them
   before offering the execution handoff. For each target repo: scaffold the plan in that repo's
   `docs/superpowers/plans/` directory. `fr plan create` updates the spec table automatically.
+- **Lenses:** When the work gives you a reason to want the whole feature examined under a concern (shipped: `security`, `tests`, `errors`, `simplicity`; `fr lenses list` shows the repo's set), add one in your step record: `journal: [{kind: lens, lens: <id>, title: "<why, one line>"}]`. A lens is never removed, and the lens review before `deliver` examines the whole diff under each one.
 
 ## Dependency declarations
 
@@ -116,5 +117,4 @@ rework plan — do not reopen the parent.
 
 ## Integration
 
-Upstream: brainstorming hands off via fr-plan-override. Downstream:
-`fr apply` for GitHub-side work; `executing-plans` for the agent loop. **Lenses.** When the work gives you a reason to want the whole feature examined under a concern (shipped: `security`, `tests`, `errors`, `simplicity`; `fr lenses list` shows the repo's set), add one in your step record: `journal: [{kind: lens, lens: <id>, title: "<why, one line>"}]`. A lens is never removed, and the lens review before `deliver` examines the whole diff under each one.
+Upstream: brainstorming hands off via fr-plan-override. Downstream: `fr apply` for GitHub-side work; `executing-plans` for the agent loop.

@@ -30,13 +30,15 @@ def _entry(root: Path, **kw: object) -> JournalEntry:
     return entry
 
 
-def _state(evidence: str | None, *, with_step: bool = True) -> SimpleNamespace:
+def _state(
+    evidence: str | None, *, with_step: bool = True, step_state: str = "done"
+) -> SimpleNamespace:
     steps = {
         "plan": SimpleNamespace(emitted={"plan": f"docs/superpowers/plans/{PLAN}"}, units=None),
     }
     if with_step:
         units = {"step/lens-review": UnitRecord(evidence={"lenses": evidence} if evidence else {})}
-        steps["lens-review"] = StepRecord(state="done", units=units)  # type: ignore[assignment]
+        steps["lens-review"] = StepRecord(state=step_state, units=units)  # type: ignore[assignment]
     return SimpleNamespace(run="r1", steps=steps, workflow="fr-goal@1")
 
 
@@ -137,3 +139,50 @@ def test_the_section_is_not_required_so_an_old_live_body_is_unchanged() -> None:
     assert HEADING not in REQUIRED_SECTIONS
     old = "\n\n".join(f"{h}\n\nx" for h in REQUIRED_SECTIONS)
     assert missing_sections(old) == []
+
+
+def test_a_pipe_in_a_reason_stays_inside_its_cell(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path)
+    _entry(root, kind="lens", id="lens-errors-1", lens="errors", title="a | b", step="plan")
+
+    section = _section(root, _state("errors=3:none"))
+
+    assert '| errors | plan: "a \\| b" | 3 | none |' in section
+
+
+def test_a_cell_is_one_line() -> None:
+    from fr.record.pr_body import _cell
+
+    assert _cell("a | b\nc") == "a \\| b c"
+
+
+def test_a_lens_review_that_has_not_run_is_not_called_unobservable(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path)
+    _entry(root, kind="lens", id="lens-errors-1", lens="errors", title="why", step="plan")
+
+    section = _section(root, _state(None, step_state="pending"))
+
+    assert "| not reviewed yet |" in section
+    assert "The lens review has not run yet." in section
+    assert "not observable" not in section
+
+
+def test_a_lens_that_joined_after_the_review_is_not_reviewed(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path)
+    _entry(root, kind="lens", id="lens-errors-1", lens="errors", title="why", step="plan")
+    _entry(root, kind="lens", id="lens-tests-1", lens="tests", title="late", step="deliver")
+
+    section = _section(root, _state("errors=3:none"))
+
+    assert "| 3 | none |" in section
+    assert '| tests | deliver: "late" | not reviewed | none |' in section
+
+
+def test_a_lens_the_repo_disabled_is_named_under_the_section(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path, base_config="disable: [errors]\n")
+    _entry(root, kind="lens", id="lens-errors-1", lens="errors", title="why", step="plan")
+
+    section = _section(root, _state(None))
+
+    assert section.startswith("No lens was requested for this change.")
+    assert "Note: " in section and "errors" in section
