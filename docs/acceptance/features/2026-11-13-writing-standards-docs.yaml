@@ -67,3 +67,15 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+  - id: writing-standards-docs-accuracy
+    capability: published-docs
+    acceptance: 'Every published page says what the code does: each claim was checked
+      against the code it covers, and each wrong or stale one was corrected or shown
+      true, with evidence.'
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R13
+    - spec:2026-11-13-writing-standards-docs#R14
+    levels: {}
+    status: not-implemented
+    notes: per-page accuracy reviews owed (phases 2-6)
+    verify: none
