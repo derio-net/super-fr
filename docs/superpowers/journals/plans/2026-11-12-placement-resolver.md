@@ -974,3 +974,143 @@ tripwire helpers are shared by the shell and TypeScript scans; the scenario and 
 ### p6-plans-test-always · decision · The plans-dir test runs whether or not fr resolves (phase 6)
 
 Spec §3.E says the OpenCode plugin falls back to the plans test only when `fr` is absent. Both engines (bash `_fr_is_enabled`, TS `frEnabled`) run it unconditionally, before asking `fr`. Kept deliberately (review p6-r7): the plans test can only ADD an fr-enabled answer, so running it always is the fail-closed reading. Running it only when `fr` is absent would let a failing, slow, garbled or lying `fr` turn a repo that has a plans dir in its checkout into 'not fr-enabled' and open the edit gate. The spec is not edited.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-6 created=2026-11-13T10:39:18+00:00 phase=6 -->
+### review-phase-6 · review · Phase 6 (hooks, OpenCode plugin, Hermes) review, range 6a400f6..ae7bf18de (phase 6)
+
+Reviewer ae531c0ff80f9ed22 (opus) returned not ready with nine in-scope findings, four reproduced (a repo-planted fr run by the bash edit hook, a non-canonical quiet switch failing open without fr, a 9x slower plain-repo decision, a hook creating the fr branch and worktree). All nine were fixed at 53d0569a6..77435bb1c; the full suite (15817 passed) and bun test (285 pass) ran after the last code commit. Running the new scenario from the workspace mutated it (HEAD switched to main, a seed commit on local main, a push to origin started); the reviewer killed the push before anything reached the remote and restored every ref, verified by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · The bash library spawned fr settings paths, untimed, on every decision in every plain repo (phase 6)
+
+Measured about 70 ms to 610 ms per edit or terminal decision.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · The bash fr lookup honoured relative PATH entries; a repo-planted bin/fr ran in the edit hook (phase 6)
+
+Reproduced; a new code-execution path the TypeScript side already refused.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r3 · finding [open] (reviewer: in scope) · A non-canonical spelling of the quiet switch was not fr-enabled when fr was absent or refused (phase 6)
+
+Quoted, commented, flow or indented placement: quiet let a base-clone edit through (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r4 · finding [open] (reviewer: in scope) · Hooks called fr settings paths, which under quiet creates the fr branch and worktree (phase 6)
+
+The session-start nag did it for every quiet repo (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r5 · finding [open] (reviewer: in scope) · placement-fr-enabled.sh mutated whatever repo it ran in (phase 6)
+
+Run from the workspace it committed onto local main and started a push to origin.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r6 · finding [open] (reviewer: in scope) · The tripwire's fr-paths-fallback exemption was self-asserting and unpinned (phase 6)
+
+Any new hard-coded path passed by carrying the marker; _ts_code stripped // inside strings.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r7 · finding [open] (reviewer: in scope) · The plans test runs always, not only when fr is absent (spec 3.E) (phase 6)
+
+Safer than the wording; record the deviation.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r8 · finding [open] (reviewer: in scope) · The nag's no-process-spawn contract became false (phase 6)
+
+placementEnabled spawned git twice before the early exit, in both engines.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9 created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=in -->
+### p6-r9 · finding [open] (reviewer: in scope) · The plugin's frPaths inherited FR_REPO_ROOT (phase 6)
+
+fr could answer for another repo than the toplevel judged.
+
+<!-- fr:journal kind=finding scope=plan id=p6-relative-path-git-and-bare-fr created=2026-11-13T10:39:18+00:00 phase=6 state=open review_scope=out -->
+### p6-relative-path-git-and-bare-fr · finding [open] (reviewer: out of scope) · The git lookup and two bare fr spawns still trust relative PATH entries (phase 6)
+
+fr_git_resolve, git.ts onPath, fr-worktree-create.sh and pin.ts predate this branch; tracked by derio-net/super-fr#1429.
+
+<!-- fr:journal kind=decision scope=plan id=p6-r3-canonical-word created=2026-11-13T10:39:18+00:00 phase=6 -->
+### p6-r3-canonical-word · decision · A valid fr-branch switch is one column-0 line placement: <word>; fr refuses any other spelling (phase 6)
+
+The hooks read placement: repo, or no placement line, as repo and everything else, stealth included, as fr-enabled, so fr and the hooks agree on what a switch is and the hooks fail closed on the rest.
+
+<!-- fr:journal kind=decision scope=plan id=p6-r3-text-scan created=2026-11-13T10:39:18+00:00 phase=6 -->
+### p6-r3-text-scan · decision · Neither hook engine parses YAML; a live line naming placement counts as naming the key (phase 6)
+
+Such a line inside another value gives a harmless false enabled, never a false not-enabled.
+
+<!-- fr:journal kind=decision scope=plan id=p6-r1-git-kept created=2026-11-13T10:39:18+00:00 phase=6 -->
+### p6-r1-git-kept · decision · The filesystem ref check only gates the fr spawn and the nag; the edit gate's switch read still uses git (phase 6)
+
+A wrong filesystem answer (a GIT_DIR override, say) can therefore never make a repo not enabled.
+
+<!-- fr:journal kind=decision scope=plan id=p6-r2-pin-identity created=2026-11-13T10:39:18+00:00 phase=6 -->
+### p6-r2-pin-identity · decision · FR_HARNESS_FR is used as the fr to run only when it is an absolute path to an executable file (phase 6)
+
+It normally holds an identity string; otherwise absolute PATH entries decide.
+
+<!-- fr:journal kind=decision scope=plan id=p6-r4-no-create created=2026-11-13T10:39:18+00:00 phase=6 -->
+### p6-r4-no-create · decision · fr settings paths --no-create computes paths without creating anything, and every hook uses it (phase 6)
+
+Under stealth it also skips the reachability check and sync and does not refuse a missing tracking worktree. validate-plans.sh, a plan validator rather than a hook, keeps the creating form.
+
+<!-- fr:journal kind=decision scope=plan id=p6-r5-fresh-fixture created=2026-11-13T10:39:18+00:00 phase=6 -->
+### p6-r5-fresh-fixture · decision · Placement scenarios refuse unless run at the toplevel of a repo with no commits and no remote (phase 6)
+
+That is how test_scenarios.py and fr verification walk hand a scenario its directory.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: The bash library spawned fr settings paths, untimed, on every decision in every plain repo (phase 6)
+
+9c76f07d3, 141a2545d: enabled from direct checks only; fr asked only when an origin/fr ref is on the filesystem, bounded by FR_PATHS_TIMEOUT; a plain repo spawns no fr (tested).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: The bash fr lookup honoured relative PATH entries; a repo-planted bin/fr ran in the edit hook (phase 6)
+
+9c76f07d3, 141a2545d: fr resolved from an absolute FR_HARNESS_FR path or absolute PATH entries only, exact path spawned, in the decision library and both nags; planted relative-entry fr ignored (tested in both engines).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r3 -->
+### p6-r3-resolved · finding [fixed] · resolves p6-r3: A non-canonical spelling of the quiet switch was not fr-enabled when fr was absent or refused (phase 6)
+
+53d0569a6 (fr refuses non-canonical switch spellings), 9c76f07d3, 141a2545d (hooks treat anything but placement: repo as enabled); every spelling tested with fr absent.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r4 -->
+### p6-r4-resolved · finding [fixed] · resolves p6-r4: Hooks called fr settings paths, which under quiet creates the fr branch and worktree (phase 6)
+
+53d0569a6, 9c76f07d3, 141a2545d: fr settings paths --no-create, used by every hook; no branch or worktree created (tested).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r5 -->
+### p6-r5-resolved · finding [fixed] · resolves p6-r5: placement-fr-enabled.sh mutated whatever repo it ran in (phase 6)
+
+2b4f7e481: scenario_require_fresh_repo guards all five placement scenarios (tested).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r6 -->
+### p6-r6-resolved · finding [fixed] · resolves p6-r6: The tripwire's fr-paths-fallback exemption was self-asserting and unpinned (phase 6)
+
+71285b8f6: exempt lines pinned in FALLBACK_LINES; string-aware _ts_code.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r7 -->
+### p6-r7-resolved · finding [fixed] · resolves p6-r7: The plans test runs always, not only when fr is absent (spec 3.E) (phase 6)
+
+2b05e1e92: decision p6-plans-test-always records the safer deviation; code unchanged, spec not edited.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r8 -->
+### p6-r8-resolved · finding [fixed] · resolves p6-r8: The nag's no-process-spawn contract became false (phase 6)
+
+9c76f07d3, 141a2545d: both nags look only when a marker or an origin/fr ref is on the filesystem; comments corrected; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-r9 -->
+### p6-r9-resolved · finding [fixed] · resolves p6-r9: The plugin's frPaths inherited FR_REPO_ROOT (phase 6)
+
+141a2545d: frPaths spawns with FR_REPO_ROOT set to the toplevel; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p6-relative-path-git-and-bare-fr-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=open resolves=p6-relative-path-git-and-bare-fr out_of_scope=true -->
+### p6-relative-path-git-and-bare-fr-resolved · finding [out-of-scope] · resolves p6-relative-path-git-and-bare-fr: The git lookup and two bare fr spawns still trust relative PATH entries (phase 6)
+
+Predates this branch; tracked by derio-net/super-fr#1429.
+
+<!-- fr:journal kind=finding scope=plan id=p6-stray-stash-entry-resolved created=2026-11-13T10:39:18+00:00 phase=6 state=fixed resolves=p6-stray-stash-entry -->
+### p6-stray-stash-entry-resolved · finding [fixed] · resolves p6-stray-stash-entry: stash@{0} on this repo belongs to another branch (fix/opencode-edit-gate-closed) and is untouched (phase 6) (phase 6)
+
+Verified by the orchestrator: the worktree is clean, the unrelated stash entry is intact, and the one stray untracked file was removed.
