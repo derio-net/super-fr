@@ -495,3 +495,6 @@ The sentence is its own bullet in fr-brainstorming, fr-execute and fr-plan (all 
 ### p4-r4-resolved · finding [fixed] · resolves p4-r4: lens_set's warnings (a disabled journalled lens, no remote) are not shown in the PR section (phase 4)
 
 Cheap and in the same function, so fixed here: each `lens_set` warning is printed as a `Note:` line under the section, including under the empty-set sentence. Test: test_a_lens_the_repo_disabled_is_named_under_the_section.
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-13T03:29:27+00:00 lens=security -->
+### lens-security-1 · lens · the feature adds an evidence gate and reads repo-controlled YAML and reviewer returns: look for a way a resolve passes unreviewed
