@@ -1257,3 +1257,8 @@ With a remote configured, a shallow clone or an unresolvable default ref refuses
 ### p7-quiet-to-stealth-live-branches-resolved · finding [fixed] · resolves p7-quiet-to-stealth-live-branches: After a quiet -> stealth whole move, live quiet workspaces migrate to repo, not stealth (phase 7)
 
 fixed with review finding p7-r6 in b0f803ae2 and 65b6a59bd: a quiet-to-stealth move refuses while any quiet feature is unmerged (at start and at the switch), and migrate-branch refuses to write into a stealth-bound repo's branch
+
+<!-- fr:journal kind=decision scope=plan id=p7-r5-git-like-spellings created=2026-11-13T12:29:22+00:00 phase=7 -->
+### p7-r5-git-like-spellings · decision · p7-r5 refuses .git-like components as git's verify_path reads them, on top of the case-sensitive allowlist (phase 7)
+
+Extends decision p7-r5-artifact-only after a security review: `placement_bound` stays the allowlist, matched exactly and case-sensitively, and `move.git_like` adds a refusal for any component that is `.git*` once NFC-normalised, stripped of HFS-ignorable codepoints and trailing dots/spaces, and casefolded, or that is an NTFS short name (`git~1`, `gitmod~1`, `gi<hex4>~n`). Ordinary artifacts that merely name git (`...-gitops-design.md`) stay allowed.
