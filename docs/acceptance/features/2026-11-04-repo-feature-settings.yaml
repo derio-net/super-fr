@@ -824,3 +824,13 @@ amendments:
     ref: super-fr:tests/unit/test_placement_move_hardening.py#test_a_git_like_component_is_refused_in_every_spelling
     why: 'phase 7 review security follow-up: a .git-like path component is refused in
       every filesystem spelling'
+  - row: repo-settings-quiet-repo-live
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'plan 3 ships quiet and stealth; the live end-to-end walk on a real forge
+      is post-merge, tracked by #1432'
+    issues:
+    - derio-net/super-fr#1432
+    why: 'plan 3 ships quiet and stealth; the live end-to-end walk on a real forge is
+      post-merge, tracked by #1432'
