@@ -72,6 +72,25 @@ def test_repo_a_line_anchored_origin_is_refused(tmp_path: Path, monkeypatch) -> 
     assert git(root, "rev-parse", "HEAD") == head
 
 
+def test_repo_pending_is_judged_after_fetching_the_default_ref(tmp_path: Path, monkeypatch) -> None:
+    """F5: the row merged on origin while this clone had not fetched; the correction
+    fetches first and refuses, instead of moving a merged row (which left a fold that
+    no longer loads after the next fetch)."""
+    root = merged_repo(tmp_path)
+    _add_pending(root, monkeypatch)
+    old = git(root, "rev-parse", "refs/remotes/origin/main").strip()
+    git(root, "push", "-q", "origin", "feat/b:main")  # the PR merges
+    git(root, "update-ref", "refs/remotes/origin/main", old)  # not fetched here
+    head = git(root, "rev-parse", "HEAD")
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "p", "--op", "reword",
+        "--origin", "spec:2026-09-09-x#R1", "--why", "w",
+    )  # fmt: skip
+    assert res.exit_code == 2, res.output
+    assert "merged" in res.output
+    assert git(root, "rev-parse", "HEAD") == head
+
+
 # --- quiet: a merged row may be this branch's own ---------------------------------------
 
 

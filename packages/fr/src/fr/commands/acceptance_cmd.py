@@ -1004,6 +1004,20 @@ def amend_cmd(
     if level is not None:
         (lv, refs), *more = _parse_levels([level]).items()
         ref = refs[0]
+    if origin:
+        # Review F5: "pending" is judged against the default ref, so read it as the
+        # remote has it, as `check` and `deliver` do: a row merged since the last fetch
+        # is merged, and moving it would leave a fold that no longer loads.
+        from fr.acceptance.amend import default_ref_name, fetch_default
+
+        default = default_ref_name(root)
+        why_not = fetch_default(root, default) if default is not None else None
+        if why_not is not None:
+            err_console.print(
+                f"[yellow]warning:[/yellow] could not fetch {default} ({escape(why_not)}); "
+                "judging which rows are merged against the local ref",
+                soft_wrap=True,
+            )
     _load(root)
     if origin and op == "reword" and acceptance is None and capability is None:
         # An origin-only correction keeps the row's statement (the item needs one).
