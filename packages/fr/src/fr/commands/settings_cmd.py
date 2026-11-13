@@ -80,6 +80,16 @@ def init_cmd(
         except SettingsError as e:
             raise _refuse(e) from e
         return
+    from fr.placement.stealth import refuse_repo_config
+
+    try:  # review p4-r3: from a stealth workspace, neither writes into the target
+        refuse_repo_config(
+            resolve_repo_root(),
+            "fr settings init --quiet" if quiet else "fr settings init",
+            "an `fr` branch on its origin" if quiet else SETTINGS_PATH,
+        )
+    except SettingsError as e:
+        raise _refuse(e) from e
     if quiet:
         if force:
             typer.echo(

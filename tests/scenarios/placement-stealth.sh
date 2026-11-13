@@ -51,8 +51,13 @@ run_fr out journal add --scope plan --slug 2026-11-12-s --kind discovery --title
 require_exit 0 "$out"
 run_fr out run start fr-goal --branch feat/s
 require_exit 0 "$out"
+# Repository configuration fr would scaffold is refused before it is written (R24, p4-r3).
+for cmd in "init agents" "init validator-wrapper" "settings init"; do
+  run_fr out $cmd
+  require_exit 2 "$out"
+done
 echo code > code.txt
-git add code.txt && git commit -qm "feat(s): a code change" || fail "code commit"
+git add -A && git commit -qm "feat(s): a code change" || fail "code commit"
 refuse_grep '.' "$(git status --porcelain)" "the target checkout is clean"
 run_fr out push
 require_exit 0 "$out"
@@ -61,13 +66,14 @@ run_id="$(git --git-dir="$track" ls-tree -r --name-only main \
 [ -n "$run_id" ] || fail "no run cursor in the tracking repo"
 run_fr out run advance "$run_id"   # a state write after the code push: it records that head
 
-# The target's remote: only the code commit, no fr path, no chore(fr) subject, no fr ref.
+# The target's remote, after `git add -A` and `fr push`: only the code commit, no fr path,
+# no chore(fr) subject, no fr ref.
 refs="$(git --git-dir="$origin" for-each-ref --format='%(refname)' | sort | tr '\n' ' ')"
 [ "$refs" = "refs/heads/feat/s refs/heads/main " ] || fail "origin holds other refs: $refs"
 [ "$(git --git-dir="$origin" log --format=%s main..feat/s)" = "feat(s): a code change" ] \
   || fail "origin feat/s holds more than the code commit"
 for ref in main feat/s; do
-  fr_paths="$(git --git-dir="$origin" ls-tree -r --name-only "$ref" | grep -E '^(docs/(superpowers|acceptance)/|features/)' || true)"
+  fr_paths="$(git --git-dir="$origin" ls-tree -r --name-only "$ref" | grep -E '^(docs/(superpowers|acceptance)/|features/|\.fr/|\.fr-isolation|\.claude/agents/fr-|scripts/validate-plans\.sh|\.devcontainer/fr-profiles\.yaml)' || true)"
   [ -z "$fr_paths" ] || fail "origin $ref carries fr paths: $fr_paths"
   refuse_grep '^chore\(fr\)' "$(git --git-dir="$origin" log --format=%s "$ref")" "no chore(fr) commit on origin $ref"
 done

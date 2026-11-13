@@ -403,6 +403,61 @@ def tracking_root(space: paths.ArtifactSpace) -> Path:
     return space.root.parent
 
 
+# --- what reaches the target -----------------------------------------------------------
+
+FR_OWNED_PATHS: Final = (
+    *(f"{paths.KIND_DIRS[k]}/" for k in ("superpowers", "acceptance")),
+    ".fr/",
+    ".fr-isolation",
+    ".claude/agents/fr-",
+    ".claude/rules/acceptance-matrix.md",
+    ".devcontainer/fr-profiles.yaml",
+    "scripts/validate-plans.sh",
+)
+"""Path prefixes only fr writes in a repo: its artifact trees and the repository
+configuration it scaffolds (decision quiet-placement-bound-vs-repo-config). A stealth
+push refuses a commit that touches one (R24 "no fr file reaches the target")."""
+
+
+def refuse_repo_config(repo_root: Path, command: str, what: str) -> None:
+    """R24 "what reaches the target": under stealth no fr file reaches the target, so a
+    command that writes repository configuration INTO the target (*what*) refuses, exit
+    2, before it writes anything (review p4-r3). Under quiet the same files are written
+    for the operator to commit (decision quiet-placement-bound-vs-repo-config)."""
+    if paths.outside_repo(Path(repo_root)) != STEALTH:
+        return
+    raise SettingsError(
+        f"{command} is not available under placement stealth: it writes {what} into the "
+        "target, and no fr file reaches a stealth target (R24). Nothing was written"
+    )
+
+
+def refuse_forge_writes(repo_root: Path, command: str) -> None:
+    """R24 "what reaches the target": only the code and one minimal draft PR. A command
+    that writes issues, labels or comments to the target's forge refuses under stealth,
+    exit 2, before any forge call (review p4-r5)."""
+    if paths.outside_repo(Path(repo_root)) != STEALTH:
+        return
+    raise SettingsError(
+        f"{command} is not available under placement stealth: it writes to the target's "
+        "forge, which receives only the code and one minimal draft PR (R24). Nothing was "
+        "written"
+    )
+
+
+def fr_paths_in(root: Path, commits: Sequence[str]) -> list[str]:
+    """The paths among *commits*' changes that only fr writes (`FR_OWNED_PATHS`)."""
+    found: list[str] = []
+    for sha in commits:
+        done = _git(
+            Path(root), "diff-tree", "--no-commit-id", "--name-only", "-r", "-m", "--root", sha
+        )
+        for rel in done.stdout.splitlines():
+            if rel.startswith(FR_OWNED_PATHS) and rel not in found:
+                found.append(rel)
+    return found
+
+
 # --- privacy ------------------------------------------------------------------------
 
 
