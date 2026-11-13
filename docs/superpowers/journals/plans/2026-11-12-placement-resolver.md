@@ -924,3 +924,48 @@ b8f366e6e: close-out records each plan's resolved directory; debt dates quiet an
 ### p5-debt-stale-quiet-fr-history-resolved · finding [fixed] · resolves p5-debt-stale-quiet-fr-history: fr debt's staleness under quiet reads plan activity from the product history, which holds no fr file (phase 5)
 
 Superseded by p5-r8, fixed at b8f366e6e.
+
+<!-- fr:journal kind=decision scope=plan id=p6-direct-checks-first created=2026-11-13T09:31:58+00:00 phase=6 -->
+### p6-direct-checks-first · decision · _fr_is_enabled and frEnabled run the direct checks before asking fr, so fr can only add a yes (phase 6) (phase 6)
+
+Order is profile, plans dir, then the quiet switch (origin remote plus refs/remotes/origin/fr:settings.yaml says placement: quiet) and the marker's placement (quiet or stealth), and only then `fr settings paths --shell|--json` (placement quiet/stealth, or an existing FR_PLANS_DIR). A missing, failing or garbled fr therefore never turns a direct yes into a no. The output is never eval'd: two keys are read by name.
+
+<!-- fr:journal kind=decision scope=plan id=p6-fr-resolution-trusts-absolute-path-entries created=2026-11-13T09:31:58+00:00 phase=6 -->
+### p6-fr-resolution-trusts-absolute-path-entries · decision · The plugin resolves fr from absolute PATH entries only and spawns the file it checked (security relay, phase 6) (phase 6)
+
+src/fr.ts skips empty or relative PATH entries (checked against the plugin's cwd but run from the repo toplevel, so a planted fr in the edited repo could run in the gate's decision path), returns the realpath of the checked file, and marker.ts spawns exactly that. No trusted fr means the direct fallback checks, never a weaker gate. The plugin does not consume FR_HARNESS_FR (pin.ts only exports it), so there was no pinned path to require absolute. Bun test: a relative-entry fr is never chosen or spawned.
+
+<!-- fr:journal kind=decision scope=plan id=p6-nag-asks-fr-only-for-placement-repos created=2026-11-13T09:31:58+00:00 phase=6 -->
+### p6-nag-asks-fr-only-for-placement-repos · decision · The acceptance nag asks fr for FR_ACCEPTANCE_DIR only when the placement is quiet or stealth (phase 6) (phase 6)
+
+The cheap early exit must spawn no fr for a plain repo (test_p2_r6). So the nag detects quiet/stealth directly (the library's _fr_placement_enabled, nag.ts placementEnabled) and only then asks fr settings paths for the acceptance dir; otherwise the checkout's docs/acceptance, marked fr-paths-fallback.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-bun-bare-spawn-uses-startup-path created=2026-11-13T09:31:58+00:00 phase=6 -->
+### p6-bun-bare-spawn-uses-startup-path · discovery · A bare-name spawn from bun answered from the startup PATH, so tests could not substitute fr (phase 6) (phase 6)
+
+Stub fr on a modified process.env.PATH was ignored; the real fr ran. resolveFr resolves from the PATH at call time to an absolute file, which is also what the security fix needs.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-red-by-stash-and-order created=2026-11-13T09:31:58+00:00 phase=6 -->
+### p6-red-by-stash-and-order · discovery · RED for T1 taken by stashing the library change (7 failed); T2/T3 REDs were taken against missing exports and an unmarked scan (phase 6) (phase 6)
+
+T1: 7 of the new tests failed without the library change. T2: tests import exports (frPaths, placementEnabled, resetFrPaths, warnIfFrUnresolved) that did not exist, so they failed by construction before the code existed. The scenario's RED was not separately captured: a `git stash push -- <committed path>` stashed nothing and its pop applied an unrelated older stash, which I removed (only an untracked debug journal file landed; the stash entry is untouched).
+
+<!-- fr:journal kind=finding scope=plan id=p6-stray-stash-entry created=2026-11-13T09:31:58+00:00 phase=6 state=open review_scope=out -->
+### p6-stray-stash-entry · finding [open] (reviewer: out of scope) · stash@{0} on this repo belongs to another branch (fix/opencode-edit-gate-closed) and is untouched (phase 6) (phase 6)
+
+Left as found; it holds version bumps and an unrelated OpenCode gate WIP. Not part of this feature.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-11-13T09:31:58+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+the private fr_enabled copy in fr-worktree-create.sh was replaced by the library's one _fr_is_enabled; nothing else duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-11-13T09:31:58+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+guard.ts's frEnabled became a re-export of marker.ts's, so there is one definition; nothing left to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t3 created=2026-11-13T09:31:58+00:00 phase=6 -->
+### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
+
+tripwire helpers are shared by the shell and TypeScript scans; the scenario and parity text need no cleanup
