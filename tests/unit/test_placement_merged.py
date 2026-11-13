@@ -360,3 +360,36 @@ def test_acceptance_status_names_the_merged_features_and_the_ignored_records(
     assert "acceptance: ci: 1" in out
     assert "merged: feat__a" in out and f"feat__b at {sha[:12]}" in out
     assert "feat__c" in out and "never the truth" in out
+
+
+def _fr_ok(root: Path, *argv: str) -> str:
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    clear_fold_cache()
+    result = CliRunner().invoke(app, list(argv), env={**os.environ, "FR_REPO_ROOT": str(root)})
+    assert result.exit_code == 0, result.output
+    return result.output
+
+
+@pytest.mark.parametrize("verb", ["amend", "set-status"])
+def test_a_feature_amends_a_row_another_merged_feature_owns(quiet: Product, verb: str) -> None:
+    """Under quiet a merged feature's row lives in ITS feature path; another feature's
+    branch changes it only by an amendment in its own fragment (R16), validated against
+    the fold this branch sees (merged features included)."""
+    quiet.feature("a", rows=[_row(ROW)])
+    quiet.merge("a")
+    argv = (
+        ["acceptance", "amend", "--id", ROW, "--op", "set-status", "--why", "w"]
+        if verb == "amend"
+        else ["acceptance", "set-status", "--id", ROW]
+    )
+    _fr_ok(quiet.root, *argv, "--status", "unwired", "--notes", "n", "--feature", "2026-01-02-v")
+    own = quiet.space.root / "features" / "feat__view" / KIND_DIRS["acceptance-fragment"]
+    data = yaml.safe_load((own / "2026-01-02-v.yaml").read_text())
+    assert not data.get("rows") and data["amendments"][0]["row"] == ROW
+    assert data["amendments"][0]["base"] == 0
+    # feature a's fragment is untouched, and this branch's view applies the amendment
+    a = quiet.feature_root("a") / KIND_DIRS["acceptance-fragment"] / "a.yaml"
+    assert "amendments: []" in a.read_text()
+    assert _status(quiet.root) == "unwired"

@@ -850,6 +850,16 @@ class _Amending:
             self._merged = frozenset(merged.owners) if merged is not None else frozenset()
         return row_id in self._merged
 
+    def identity(self) -> str | None:
+        """`<org>/<repo>` as the fold's fragments name it, or None when none does."""
+        matrix = self._fold().matrix
+        return f"{matrix.org}/{matrix.repo}" if matrix.org and matrix.repo else None
+
+    def merged_outside(self, own_rows: frozenset[str]) -> None:
+        """Quiet and stealth: the rows the fold knows that this branch's own fragments do
+        not define are merged (the fold includes no unmerged feature but this one)."""
+        self._merged = frozenset(self._fold().owners) - own_rows
+
     def feature(self) -> str:
         if self._feature is None:
             from fr.acceptance.amend import NO_FEATURE
@@ -1041,7 +1051,7 @@ def _acceptance_writes(
         render_fragment,
         replace_row,
     )
-    from fr.acceptance.fold import fold_texts
+    from fr.acceptance.fold import fold_outside_with, fold_texts, has_fragments
     from fr.acceptance.fragment import FRAGMENTS_DIR, Fragment, parse_fragment
     from fr.acceptance.logical import is_logical, parse_logical, to_logical
     from fr.acceptance.model import (
@@ -1052,14 +1062,17 @@ def _acceptance_writes(
         split_ref,
         walked_error,
     )
-    from fr.artifacts.paths import artifact_root
+    from fr.artifacts.paths import artifact_root, outside_repo
 
     folder = artifact_root(repo_root) / FRAGMENTS_DIR
-    if not folder.is_dir():
+    outside = outside_repo(repo_root) is not None
+    if not folder.is_dir() and not (outside and has_fragments(repo_root)):
+        # Under quiet and stealth a feature's own fragment folder is made by its first
+        # write: the repo keeps acceptance when any feature root does.
         raise RecordRefusedError(
             f"no {FRAGMENTS_DIR}/ (run `fr acceptance init` to scaffold acceptance)"
         )
-    paths = {p for p in folder.glob("*.yaml") if p.is_file()}
+    paths = {p for p in folder.glob("*.yaml") if p.is_file()} if folder.is_dir() else set()
     paths |= {p for p in overlay.writes if p.parent == folder and p.suffix == ".yaml"}
     texts: dict[Path, str] = {}
     for p in sorted(paths):
@@ -1083,6 +1096,10 @@ def _acceptance_writes(
         known = {f.repo for f in parsed().values()}
         if known:
             return sorted(known)[0]
+        if outside:  # another feature's fragments already name the repo
+            seen = amending.identity()
+            if seen:
+                return seen
         if repo:
             return repo
         from fr.acceptance.check import resolve_identity
@@ -1106,6 +1123,10 @@ def _acceptance_writes(
         else None
     )
     amending = _Amending(repo_root, default_feature)
+    if outside:
+        # Under quiet and stealth "merged on the default ref" is a row another feature's
+        # merged fragments define (R17's clause): it changes only by amendment (R16).
+        amending.merged_outside(frozenset(r.id for f in parsed().values() for r in f.rows))
 
     def write_amendment(amendment: Any) -> None:
         feature = amending.feature()
@@ -1273,7 +1294,8 @@ def _acceptance_writes(
             lines.append(f"{row.id}: {describe_move(existing, row)}")
             counts["row moved"] = counts.get("row moved", 0) + 1
     try:
-        fold_texts({rel(p): t for p, t in texts.items()})
+        written = {rel(p): t for p, t in texts.items()}
+        fold_outside_with(repo_root, written) if outside else fold_texts(written)
     except AcceptanceError as e:
         raise RecordRefusedError(f"the rows would leave invalid fragments: {e}") from e
     for p, t in texts.items():

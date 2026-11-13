@@ -447,7 +447,15 @@ def _empty() -> Effective:
     )
 
 
-def _outside_fold(root: Path) -> Effective:
+def fold_outside_with(root: Path, own: dict[str, str]) -> Effective:
+    """The quiet/stealth fold of *root* with this branch's own fragments replaced by
+    *own* (fragment path -> text, relative to its feature root): what a writer validates
+    the fragments it is about to write against, since another merged feature's row is
+    only known to the fold across features (R16, R17)."""
+    return _outside_fold(root, own)
+
+
+def _outside_fold(root: Path, own_texts: dict[str, str] | None = None) -> Effective:
     """The fold under quiet and stealth (R17's clause): every MERGED feature's fragments,
     their amendments in the order `fr.placement.merged` gives the features (the
     first-parent commit of the product's default ref that introduced each), then this
@@ -459,10 +467,16 @@ def _outside_fold(root: Path) -> Effective:
 
     space = space_for(root)
     view = merged_features(space, root)
+
+    def texts_of(froot: Path, fid: str) -> dict[str, str]:
+        if own_texts is not None and fid == space.feature:
+            return dict(sorted(own_texts.items()))
+        return _working_fragments(froot)
+
     merged: dict[str, Fragment] = {}
     intro: dict[tuple[str, int], int] = {}
     for feature in view.features:
-        for path, text in _working_fragments(feature.root).items():
+        for path, text in texts_of(feature.root, feature.feature).items():
             key = f"{FEATURES_DIR}/{feature.feature}/{path}"
             frag = parse_fragment(text, source=key)
             merged[key] = frag
@@ -470,10 +484,9 @@ def _outside_fold(root: Path) -> Effective:
                 intro[(key, k)] = feature.position
     working: dict[str, str] = {}
     if space.feature is not None and view.get(space.feature) is None:
-        own = feature_root(space)
         working = {
             f"{FEATURES_DIR}/{space.feature}/{path}": text
-            for path, text in _working_fragments(own).items()
+            for path, text in texts_of(feature_root(space), space.feature).items()
         }
     if not merged and not working:
         return replace(_empty(), notices=view.notices)
