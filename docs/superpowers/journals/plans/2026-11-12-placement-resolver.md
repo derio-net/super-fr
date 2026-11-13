@@ -1242,3 +1242,8 @@ At verify and at switch the move compares a digest of the source (the default re
 ### p7-r4-dest-validation · decision · Verify validates the destination feature roots one by one, plus a bookkeeping lint (phase 7)
 
 Each destination feature root (OWNER/BASE/HEADS/merged.yaml included) is laid out and validated with `validate_repo` per root, which is how `iter_paths_of` reaches kinds under quiet and stealth; the destination may report no issue the source lacks and check no fewer artifacts. `bookkeeping_problems` checks the four files as their readers need them, and the bytes must equal what the move synthesised.
+
+<!-- fr:journal kind=decision scope=plan id=p7-r5-artifact-only created=2026-11-13T12:23:55+00:00 phase=7 -->
+### p7-r5-artifact-only · decision · Copies keep placement-bound paths with no .git* component, and refuse anything else (phase 7)
+
+`move.foreign` is `not placement_bound(rel)` or any `.git*` path component; every direction into repo refuses such a path (exit 2, nothing written), and copies into fr or a tracking repo filter the repo side and refuse on the fr side.
