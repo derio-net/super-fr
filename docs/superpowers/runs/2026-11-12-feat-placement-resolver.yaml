@@ -265,6 +265,14 @@ steps:
     stdout: |
       3 out-of-scope finding(s): p1-r6, p6-relative-path-git-and-bare-fr, p7-r8
   lens-review:
-    state: pending
+    state: running
+    at: '2026-11-13T13:43:36+00:00'
+    units:
+      step/lens-review:
+        attempts:
+        - dispatched: '2026-11-13T13:43:36+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: f5689a0b-c781-4953-bf5a-b20b350b4acf
   deliver:
     state: pending
