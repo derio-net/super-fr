@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 placement-resolver phase 4, the stealth placement (chosen per run, the tracking worktree, the fatal state push, privacy, resume, init --stealth)
+reviewed: 2026-11-13 placement-resolver phase 4 review fixes, the stealth placement (chosen per run, the tracking worktree, the fatal fast-forward-only state push, what reaches the target, privacy, resume, init --stealth)
 ---
 
 ## Overview
@@ -1278,25 +1278,38 @@ directory there, named `<host>--<owner>--<repo>` from the target's remote
 refusal of a branch whose id another branch holds.
 
 Every state write is committed in that clone and pushed to the tracking branch with a
-compare-and-swap push. When another target or host pushed in between, fr fetches,
-replays its own commit on the new tip and tries again, at most three times. A push the
-tracking repository refuses is fatal: the command exits 2, the commit is dropped and
-the clone is put back as it was, so the cursor never moves on your machine while the
-tracking branch did not. An unreachable tracking repository, or a branch it does not
+compare-and-swap push, and only as a fast-forward: fr never forces a commit over one
+another host pushed. When another target or host pushed in between, fr fetches,
+replays its own commit on the new tip and tries again, at most three times. Each
+command's first look at the clone fetches it under the clone's lock and brings it to
+the tip: a clone that cannot fast-forward, or holds unpushed commits that will not
+replay, is refused rather than read as the state. A push the tracking repository
+refuses is fatal, and so is a commit the clone refuses (a change fr did not write,
+outside any feature's path, is in the way): the command exits 2, this command's commit
+is dropped and the files it wrote are put back, so the cursor never moves on your
+machine while the tracking branch did not. Nothing else in the clone is touched, not
+even another workspace's file waiting for its own commit. An unreachable tracking repository, or a branch it does not
 have, is refused at `fr isolation up`, at `fr run start` and before any other fr write,
 with nothing written.
 
 The target receives only your code and one draft pull request with a plain summary:
-`fr push` pushes the feature branch alone, and `fr pr create` refuses a body that
-carries fr's markers. Stealth sets `forge.labels`, `forge.comments` and `forge.issues`
+`fr push` pushes the feature branch alone, refusing a commit that carries a path only fr
+writes (its artifact trees, `.fr/`, `.claude/agents/fr-*.md`, the plan validator), and
+`fr pr create` refuses a body that carries fr's markers. The commands that would write
+repository configuration into the target (`fr init scaffold`, `fr init agents`,
+`fr init validator-wrapper`, `fr init migrate --yes`, `fr settings init`) refuse before
+writing, and so does every forge write but that one draft: `fr apply --yes`,
+`fr gate pass --yes`, `fr debt issue --yes` and the rest exit 2, and the forge clients
+themselves refuse an issue, a label or a comment there. Stealth sets `forge.labels`, `forge.comments` and `forge.issues`
 to `off` and `forge.pr_body` to `minimal` itself, and `fr settings check` and
 `fr run start` refuse a tracking file that sets one of them to anything else. The
 policy keys come from `<target-dir>/settings.yaml` on the tracking branch, which
 `fr settings init --stealth <tracking-repo>@<branch>` writes and pushes; a
 `.fr/settings.yaml` in the target is ignored, and fr prints that it was. A tracking
 repository more visible than the target (a public one for a private target, or an
-internal one) is refused, and so is a visibility fr cannot read; a local path counts
-as private.
+internal one) is refused, and so is a visibility fr cannot read or does not
+recognise; a local path counts as private. The target's visibility is read through the
+forge client its checkout resolves, so a self-hosted target is asked on its own forge.
 
 A stealth run is resumed from the tracking repository, on any host:
 `fr isolation up --stealth <tracking-repo>@<branch> --resume <run-id>` from a clone of
