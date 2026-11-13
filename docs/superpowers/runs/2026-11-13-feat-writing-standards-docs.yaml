@@ -3,7 +3,7 @@ run: 2026-11-13-feat-writing-standards-docs
 workflow: fr-goal@1
 branch: feat/writing-standards-docs
 started: '2026-11-13T21:36:25+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -16,8 +16,8 @@ steps:
         evidence:
           unobserved: operator-gate
   spec-review:
-    state: running
-    at: '2026-11-13T21:40:26+00:00'
+    state: done
+    at: '2026-11-13T21:47:31+00:00'
     units:
       step/spec-review:
         attempts:
@@ -26,6 +26,13 @@ steps:
           harness: claude-code
           tier: hard
           session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
+          returned: '2026-11-13T21:47:30+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a43b3148211e09d63
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s1-help-lines
+          unobserved: reviewer
   plan:
     state: pending
   plan-review:

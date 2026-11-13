@@ -28,3 +28,106 @@ _`decided_by=operator` recorded unverified: the gate could not read who answered
 Checker in site-build fails the PR on FAIL; each page passes --preserve-from origin/main and a fact-keeper review recorded in the plan journal.
 
 _`decided_by=operator` recorded unverified: the gate could not read who answered it._
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-11-13T21:47:30+00:00 -->
+### spec-review · review · independent spec review: 8 findings, all in scope
+
+fr-spec-reviewer, read-only, separate context: checked the spec against decisions d-standards, d-scope, d-verification and the code it names (ci.yml site-build, build-site.py landing parser, fr.docs parse_page, blog-craft checker, tripwire tests, change-fragment rules). Suggested a tests lens.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · cli.md's generated cli-tree block cannot pass ste without changing fr help text
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · site-build gives PyYAML only to the build step's isolated env
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · explainers-currency.md edit needs its .opencode mirror regenerated
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s4 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s4 · finding [open] (reviewer: in scope) · --preserve-from origin/main baseline moves during the feature
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · R8 ignored fact-keeper's added facts
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s6 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s6 · finding [open] (reviewer: in scope) · rewrite must keep wording-pinning tripwires
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s7 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s7 · finding [open] (reviewer: in scope) · R7 'no hit' vs kept warnings; front matter keys vs R3
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s8 created=2026-11-13T21:47:30+00:00 state=open review_scope=in -->
+### s8 · finding [open] (reviewer: in scope) · Test Plan gaps for R10 and R9's record; approval stop replacement unstated
+
+Raised by the spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s1-help-lines created=2026-11-13T21:47:30+00:00 state=open review_scope=out -->
+### s1-help-lines · finding [open] (reviewer: out of scope) · fr's CLI help lines are too long for STE, so docs/reference/cli.md's generated tree cannot meet the guides' standard
+
+Fixing it means rewriting fr's own help strings (a code change with a change fragment, a sync-readme regeneration and README table changes), outside this docs feature. cli.md opts out until then.
+
+<!-- fr:journal kind=decision scope=spec id=d-cli-md-exception created=2026-11-13T21:47:30+00:00 -->
+### d-cli-md-exception · decision · docs/reference/cli.md follows no standard (third exception), because its generated block mirrors fr's help text
+
+Agent decision from spec finding s1, narrowing d-standards for one page; the alternative (rewriting fr's help strings) is a code change outside this feature's non-goals. Raised to the operator in the hand-off.
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-13T21:47:30+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · 31 pages rewritten under wording-pinning tripwires plus a new CI step; the test plan relies on narrow checks
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: cli.md's generated cli-tree block cannot pass ste without changing fr help text
+
+cli.md opts out (writing_standard: none) as a third recorded exception (R1, R3, §1); its hand-written prose is still rewritten; rewriting fr's help lines is filed as out-of-scope follow-up s1-help-lines.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: site-build gives PyYAML only to the build step's isolated env
+
+Script runs the checker through `uv run --isolated --no-project --with pyyaml` from the repo root (R2, §1).
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: explainers-currency.md edit needs its .opencode mirror regenerated
+
+R10 and §4 require scripts/sync-opencode.py and the regenerated mirror; Enforcement list names the new check; Test Plan 8.
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s4 -->
+### s4-resolved · finding [fixed] · resolves s4: --preserve-from origin/main baseline moves during the feature
+
+Baseline is the merge base, recorded once in the plan journal; pages main changed after a merge are re-checked (R7, §3 step 0).
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s5 -->
+### s5-resolved · finding [fixed] · resolves s5: R8 ignored fact-keeper's added facts
+
+R8, §3 step 3 and Test Plan 5 cover lost, changed and added.
+
+<!-- fr:journal kind=finding scope=spec id=s6-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s6 -->
+### s6-resolved · finding [fixed] · resolves s6: rewrite must keep wording-pinning tripwires
+
+New R12; §3 lists the tripwires; R7 keeps HTML comment markers; Test Plan 7.
+
+<!-- fr:journal kind=finding scope=spec id=s7-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s7 -->
+### s7-resolved · finding [fixed] · resolves s7: R7 'no hit' vs kept warnings; front matter keys vs R3
+
+R7 now 'no FAIL and no preserve hit', exempts R3's key and title/tldr prose; R9 covers every standard.
+
+<!-- fr:journal kind=finding scope=spec id=s8-resolved created=2026-11-13T21:47:30+00:00 state=fixed resolves=s8 -->
+### s8-resolved · finding [fixed] · resolves s8: Test Plan gaps for R10 and R9's record; approval stop replacement unstated
+
+Test Plan 6 and 8 added; §3 states the operator's decisions replace the per-batch approval stop.
+
+<!-- fr:journal kind=finding scope=spec id=s1-help-lines-resolved created=2026-11-13T21:47:30+00:00 state=open resolves=s1-help-lines out_of_scope=true -->
+### s1-help-lines-resolved · finding [out-of-scope] · resolves s1-help-lines: fr's CLI help lines are too long for STE, so docs/reference/cli.md's generated tree cannot meet the guides' standard
+
+Not caused by this change: fr's help text predates it and is code this docs feature does not touch.
