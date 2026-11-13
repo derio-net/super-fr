@@ -20,3 +20,8 @@ proportionality._phases_at_head/_meta_at_head/_spec_at_head and the journal read
 ### rc-closeout · root-cause · close-out from the base clone cannot find a quiet feature's run, reads its spec from the product checkout, and prints repo-placement steps
 
 deliver prints 'fr pickup --run <id>' for the base clone; under quiet the base clone's own feature is its default branch (features/main), so the run is 'never started here'. closeout_brief read spec_file = repo_root / spec_path (silently dropping the Test Plan steps). The brief told the operator to bring up a chore workspace, git add/commit/push and open a housekeeping PR, while under quiet/stealth fr archive --branch records the merge on the placement branch and pushes it, moving nothing (R25). fr archive --issues is silently ignored under quiet (archive returns after the merged record): not fixed here, the brief no longer offers it.
+
+<!-- fr:journal kind=decision scope=debug id=d-origin-fix created=2026-11-13T22:32:42+00:00 -->
+### d-origin-fix · decision · a pending row's origin is correctable: amend --op reword --origin, in place, never as an amendment
+
+Defect, not by design: add creates only, set-status moves status/evidence, no amendment op carries origin, and hand-editing a fragment is forbidden. A merged row's origins are history, so --origin is refused for a merged row and for any op but reword. Carried by RecordTarget.acceptance_origins (verb-only, like acceptance_drops), so the record kind's shape does not change. A corrected origin naming another spec moves the row to that spec's fragment (R16 ownership); an emptied fragment is removed.
