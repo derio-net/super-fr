@@ -206,3 +206,67 @@ def test_a_lost_race_is_replayed_on_the_new_tip(
     files = tracked_files(track)
     assert "local--elsewhere/x.txt" in files
     assert f"{FEATURE}/docs/superpowers/runs/r1.yaml" in files
+
+
+# --- review p4-r2: a commit the tracking clone refuses is fatal, and touches nothing else
+
+
+def _commit_other_feature(state: IsolationState, track: Path) -> Path:
+    """A file another workspace's feature committed, pushed to the tracking repo."""
+    wt = _tracking_wt(state)
+    other = wt / "local--origin/features/feat__other/notes.md"
+    other.parent.mkdir(parents=True)
+    other.write_text("committed\n")
+    git(wt, "add", "-A")
+    git(wt, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "other")
+    git(wt, "push", "-q", "origin", "HEAD:main")
+    git(wt, "fetch", "-q", "origin", "+refs/heads/main:refs/remotes/origin/main")
+    return other
+
+
+def test_a_stray_edit_in_the_tracking_clone_fails_the_write_with_exit_2(
+    ws: tuple[IsolationState, Path, Path],
+) -> None:
+    state, track, _ = ws
+    wt = _tracking_wt(state)
+    (wt / "README.md").write_text("someone's hand edit\n")
+    remote_before = git(track, "rev-parse", "main")
+
+    result = _fr(ws, "plan", "create", "--slug", "2026-11-12-s", "--target-repo", "derio-net/s")
+
+    assert result.exit_code == 2, result.output
+    assert "README.md" in " ".join(result.output.split())
+    assert git(track, "rev-parse", "main") == remote_before
+    assert not (wt / FEATURE / "docs/superpowers/plans/2026-11-12-s").exists()  # restored
+    assert (wt / "README.md").read_text() == "someone's hand edit\n"  # never touched
+
+
+def test_a_concurrent_workspaces_pending_file_does_not_block_and_survives_a_rollback(
+    ws: tuple[IsolationState, Path, Path],
+) -> None:
+    state, track, _ = ws
+    other = _commit_other_feature(state, track)
+    other.write_text("another workspace, written, not yet committed\n")
+
+    ok = _fr(ws, "run", "start", "tiny", "--branch", "feat/s", "--run-id", "r1")
+    assert ok.exit_code == 0, ok.output  # another feature's pending write is not a stray
+    assert f"{FEATURE}/docs/superpowers/runs/r1.yaml" in tracked_files(track)
+
+    _decline_pushes(track)
+    failed = _fr(ws, "plan", "create", "--slug", "2026-11-12-s", "--target-repo", "derio-net/s")
+    assert failed.exit_code == 2, failed.output
+    assert other.read_text() == "another workspace, written, not yet committed\n"
+
+
+def test_a_privacy_refusal_at_the_seam_is_exit_2(
+    ws: tuple[IsolationState, Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state, track, _ = ws
+    stealth.reset_caches()
+    monkeypatch.setattr(
+        stealth, "visibility", lambda repo: "public" if repo == str(track) else "private"
+    )
+    result = _fr(ws, "plan", "create", "--slug", "2026-11-12-s", "--target-repo", "derio-net/s")
+    assert result.exit_code == 2, result.output
+    wt = _tracking_wt(state)
+    assert git(wt, "status", "--porcelain").strip() == ""

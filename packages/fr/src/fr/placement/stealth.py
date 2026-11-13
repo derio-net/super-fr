@@ -255,7 +255,7 @@ def _replay(path: Path, onto: str) -> bool:
     """Rebase this clone's unpushed commits onto *onto* (features' paths are disjoint, so
     a conflict means something is wrong); a rebase that fails is aborted. Whether it
     landed."""
-    if _git(path, "rebase", "--quiet", onto).returncode == 0:
+    if _git(path, "rebase", "--quiet", "--autostash", onto).returncode == 0:
         return True
     _git(path, "rebase", "--abort")
     return False
@@ -496,13 +496,39 @@ def from_tracking_repo(cwd: Path) -> StealthRef:
 # --- the fatal state push ---------------------------------------------------------
 
 
-def _rollback(wt: Path, old: str) -> None:
-    """Put the tracking worktree back at *old*: the commit made here is dropped, and the
-    files it held return to their bytes there (`commit_and_push` refused a worktree with
-    any other uncommitted change first, so nothing else is lost)."""
+def restore_files(wt: Path, files: Sequence[Path]) -> None:
+    """Put each of *files* (written by THIS operation, in the tracking worktree *wt*) back
+    to its bytes at HEAD, deleting one HEAD does not hold, with its index entry; empty
+    directories it leaves are removed. Nothing else in *wt* is touched (review p4-r2: a
+    concurrent workspace's pending file is not fr's to reset)."""
+    top = wt.resolve()
+    for f in files:
+        path = Path(f).resolve()
+        try:
+            rel = path.relative_to(top).as_posix()
+        except ValueError:
+            continue
+        if _git(wt, "cat-file", "-e", f"HEAD:{rel}").returncode == 0:
+            _git(wt, "checkout", "HEAD", "--", rel)
+            continue
+        _git(wt, "rm", "--cached", "--quiet", "--ignore-unmatch", "--", rel)
+        path.unlink(missing_ok=True)
+        parent = path.parent
+        while parent != top and parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
+
+
+def _rollback(wt: Path, old: str, files: Sequence[Path]) -> None:
+    """Drop the one commit this operation made (when it made one) and put *files* back as
+    they were: a soft reset moves only the branch, so no other path's bytes or index entry
+    move (review p4-r2: never `reset --hard`, which wiped a concurrent workspace's pending
+    file). A commit already replayed on a newer tip keeps that tip under it."""
     if _git(wt, "rebase", "--abort").returncode != 0:
         pass  # no rebase in progress: the common case
-    _git(wt, "reset", "--quiet", "--hard", old)
+    if _git(wt, "rev-parse", "HEAD").stdout.strip() != old:
+        _git(wt, "reset", "--quiet", "--soft", "HEAD~1")
+    restore_files(wt, files)
 
 
 def _push(wt: Path, ref: StealthRef) -> None:
@@ -550,11 +576,18 @@ def _push(wt: Path, ref: StealthRef) -> None:
 
 
 def _dirty_elsewhere(wt: Path, mine: Sequence[Path]) -> list[str]:
+    """Uncommitted changes in *wt* fr did not write: anything outside a feature's path.
+    A change below `<target>/features/<id>/` is another workspace's pending write (it
+    commits under this lock next), never in the way of a pathspec commit, and left alone
+    (review p4-r2)."""
     status = _git(wt, "status", "--porcelain", "--untracked-files=no")
     owned = {p.resolve() for p in mine}
     out = []
     for line in status.stdout.splitlines():
         rel = line[3:].split(" -> ")[-1]
+        parts = Path(rel).parts
+        if len(parts) >= 3 and parts[1] == paths.FEATURES_DIR:
+            continue
         if (wt / rel).resolve() not in owned:
             out.append(rel)
     return out
@@ -598,7 +631,7 @@ def commit_and_push(
         try:
             _push(wt, ref)
         except BaseException:
-            _rollback(wt, old)
+            _rollback(wt, old, files)
             raise
     return outcome
 

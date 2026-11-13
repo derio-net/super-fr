@@ -711,6 +711,65 @@ def commit_paths(
     lock_wait: float = 0.0,
     tracking_branch: bool = False,
 ) -> CommitOutcome:
+    """Commit exactly `paths` under `message`, or explain why it did not (`_commit_paths`).
+
+    Under stealth any outcome that leaves a state file uncommitted in the tracking
+    worktree is fatal (R24 "fail-fast": never only a warning, review p4-r2): the files
+    this call was given are put back to their bytes at the tracking HEAD, and
+    `StealthPushError` (exit 2) is raised. "Nothing to commit" is not a refusal.
+    """
+    outcome = _commit_paths(
+        repo_root,
+        paths,
+        message,
+        no_verify=no_verify,
+        restore_index=restore_index,
+        lock_wait=lock_wait,
+        tracking_branch=tracking_branch,
+    )
+    if outcome.committed or outcome.unchanged or tracking_branch:
+        return outcome
+    wt = _stealth_worktree(repo_root)
+    if wt is None:
+        return outcome
+    written = [
+        p
+        for p in (q if q.is_absolute() else repo_root / q for q in paths)
+        if p.resolve().is_relative_to(wt.resolve())
+    ]
+    if not written:
+        return outcome
+    from fr.placement.stealth import restore_files
+
+    restore_files(wt, written)
+    raise StealthPushError(
+        f"placement stealth: {outcome.reason.removesuffix(f'; {_UNCOMMITTED}')}. The step is "
+        "NOT recorded, and the files fr wrote in the tracking worktree are put back (R24)"
+    )
+
+
+def _stealth_worktree(repo_root: Path) -> Path | None:
+    """The tracking worktree of the stealth workspace at *repo_root*, or None."""
+    from fr.placement.stealth import worktree_path
+    from fr.settings import SettingsError
+
+    try:
+        ref = _stealth_ref(repo_root)
+    except SettingsError:
+        return None
+    return worktree_path(repo_root, ref) if ref is not None else None
+
+
+def _commit_paths(
+    repo_root: Path,
+    paths: Sequence[Path],
+    message: str,
+    *,
+    no_verify: bool,
+    restore_index: bool,
+    lock_wait: float,
+    tracking_branch: bool,
+) -> CommitOutcome:
     """Commit exactly `paths` under `message`, or explain why it did not.
 
     The generic body `commit_migration` delegates to, and the one committer fr's
@@ -804,10 +863,10 @@ def commit_paths(
                     tracking_branch=True,
                 )
 
-            try:
-                from fr.placement.stealth import origin_url
+            from fr.placement.stealth import origin_url, restore_files
 
-                return commit_and_push(
+            try:
+                done = commit_and_push(
                     stealthy,
                     fr_root,
                     files,
@@ -818,9 +877,12 @@ def commit_paths(
             except StealthPushError:
                 raise  # R24: fatal, the caller exits 2 (the worktree is already restored)
             except SettingsError as e:
-                return CommitOutcome(
+                done = CommitOutcome(
                     committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}"
                 )
+            if not done.committed and owner is not None:
+                restore_files(fr_root, [owner])  # commit_paths restores the rest, p4-r2
+            return done
 
         # p3-r8: every workspace of the repo shares this worktree and its index.
         try:
