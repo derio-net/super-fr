@@ -270,3 +270,17 @@ def test_a_privacy_refusal_at_the_seam_is_exit_2(
     assert result.exit_code == 2, result.output
     wt = _tracking_wt(state)
     assert git(wt, "status", "--porcelain").strip() == ""
+
+
+def test_the_migration_veto_sees_the_tracking_clone(
+    ws: tuple[IsolationState, Path, Path],
+) -> None:
+    """Review p4-r6: an artifact with uncommitted changes in the tracking clone is held
+    back from the migration gate, as the quiet fr worktree's are."""
+    from fr.artifacts.commit import uncommitted_veto
+
+    state, _, _ = ws
+    assert _fr(ws, "run", "start", "tiny", "--branch", "feat/s", "--run-id", "r1").exit_code == 0
+    cursor = _tracking_wt(state) / FEATURE / "docs/superpowers/runs/r1.yaml"
+    cursor.write_text(cursor.read_text() + "# an edit in progress\n")
+    assert uncommitted_veto(state.worktree)(cursor) is not None

@@ -369,14 +369,20 @@ def uncommitted_paths(root: Path) -> frozenset[Path]:
 
 
 def _quiet_fr_root(root: Path) -> Path | None:
-    """The fr worktree under quiet, else None (also when the placement cannot be read)."""
-    from fr.artifacts.paths import QUIET, space_for
+    """The checkout holding this workspace's artifacts off the product branch: the fr
+    worktree under quiet, the tracking clone under stealth (review p4-r6); else None
+    (also when the placement cannot be read)."""
+    from fr.artifacts.paths import QUIET, STEALTH, space_for
     from fr.settings import SettingsError
 
     try:
         space = space_for(root)
     except SettingsError:
         return None
+    if space.placement == STEALTH:
+        from fr.placement.stealth import tracking_root
+
+        return tracking_root(space)
     return space.root if space.placement == QUIET else None
 
 
