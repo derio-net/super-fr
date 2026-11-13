@@ -254,10 +254,17 @@ rows:
       its parity row
     origin:
     - spec:2026-11-04-repo-feature-settings#R26
-    levels: {}
-    status: not-implemented
-    notes: added at planning (plan 3); scenario tests/scenarios/placement-fr-enabled.sh
-      is built by plan 2026-11-12-placement-resolver
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_quiet_repo_is_fr_enabled
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py#test_a_quiet_repo_blocks_a_base_clone_edit
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_placement_fr_enabled
+    status: ci
+    notes: 'R26: quiet switch and stealth marker are fr-enabled in the bash library,
+      Hermes hook, OpenCode plugin and acceptance nag; scenario placement-fr-enabled.sh
+      walks base-clone deny and workspace allow'
     scenario: tests/scenarios/placement-fr-enabled.sh
 amendments:
   - row: acceptance-report-formats
