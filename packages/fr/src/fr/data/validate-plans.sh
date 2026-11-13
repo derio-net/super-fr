@@ -7,25 +7,66 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ERRORS=()
 PROFILE=""
 
-# Artifact directories come from the path resolver (`fr settings paths --shell`, spec
-# 2026-11-04 R1) when `fr` is on PATH, so they follow the repo's placement. The literals
-# below are the `repo` layout's own and the fallback for a PATH without `fr`, or with one
-# too old to answer; phase 6 of the placement plan owns the rest of the shell surfaces.
-# A refusal from `fr` (exit 2: an unservable placement, an invalid switch) is NOT a reason to
-# fall back: that would validate the wrong directory. Only an absent `fr`, or one without the
-# subcommand ("No such command"), falls back. `fr`'s toplevel prefers $FR_REPO_ROOT, so it is
-# unset for the call and `fr` runs from $REPO_ROOT, the toplevel this script already uses.
-if command -v fr >/dev/null 2>&1; then
+# Artifact directories come from the path resolver (`fr settings paths --shell --no-create`,
+# spec 2026-11-04 R1), so they follow the repo's placement; the literals below are the
+# `repo` layout's own and the fallback. `--no-create` keeps the read side-effect free: under
+# quiet it never creates the `fr` branch or worktree (review pr1431-r7).
+#
+# `fr` is resolved as the hooks resolve it (fr-isolation-decision.sh `fr_fr_resolve`): an
+# absolute FR_HARNESS_FR naming an executable file, else the first ABSOLUTE PATH entry
+# holding one. A relative PATH entry would run whatever `fr` sits in the checkout.
+#
+# Only an explicit placement refusal is fatal: exit 2 with stderr starting
+# `fr settings paths: refused: ` (fr.commands.settings_cmd.PATHS_REFUSAL_PREFIX); falling
+# back then would validate the wrong directory. Every other failure (no `fr`, a broken or
+# too-old one, a binary-identity refusal, a usage error) validates the literals as before.
+# The answer is read by name and never eval'd. `fr`'s toplevel prefers $FR_REPO_ROOT, so it
+# is unset for the call and `fr` runs from $REPO_ROOT, the toplevel this script uses.
+FR_BIN=""
+case "${FR_HARNESS_FR:-}" in
+  /*) if [ -f "$FR_HARNESS_FR" ] && [ -x "$FR_HARNESS_FR" ]; then FR_BIN="$FR_HARNESS_FR"; fi ;;
+esac
+if [ -z "$FR_BIN" ]; then
+  _fr_rest="${PATH:-}:"
+  while [ -n "$_fr_rest" ]; do
+    _fr_dir="${_fr_rest%%:*}"
+    _fr_rest="${_fr_rest#*:}"
+    case "$_fr_dir" in /*) ;; *) continue ;; esac
+    if [ -f "$_fr_dir/fr" ] && [ -x "$_fr_dir/fr" ]; then
+      FR_BIN="$_fr_dir/fr"
+      break
+    fi
+  done
+fi
+# _fr_answer <KEY>: one key of the `--shell` answer, unquoted; empty unless it is a plain
+# absolute path (shlex leaves one bare or wraps it in single quotes, nothing else).
+_fr_answer() {
+  local v
+  v="$(printf '%s\n' "$FR_PATHS" | sed -n "s/^$1=//p" | head -n 1)"
+  case "$v" in \'*\') v="${v#\'}"; v="${v%\'}" ;; esac
+  case "$v" in /*) ;; *) return 0 ;; esac
+  case "$v" in *\'*) return 0 ;; esac
+  printf '%s' "$v"
+}
+FR_PATHS=""
+if [ -n "$FR_BIN" ]; then
   FR_ERR="$(mktemp)"
-  if FR_PATHS="$(cd "$REPO_ROOT" && env -u FR_REPO_ROOT fr settings paths --shell 2>"$FR_ERR")"; then
-    eval "$FR_PATHS"
-  elif ! grep -q "No such command" "$FR_ERR"; then
-    cat "$FR_ERR" >&2
-    rm -f "$FR_ERR"
-    exit 2
+  _fr_rc=0
+  FR_PATHS="$(cd "$REPO_ROOT" && env -u FR_REPO_ROOT "$FR_BIN" settings paths --shell --no-create 2>"$FR_ERR")" || _fr_rc=$?
+  if [ "$_fr_rc" -ne 0 ]; then
+    FR_PATHS=""
+    if [ "$_fr_rc" -eq 2 ] && head -n 1 "$FR_ERR" | grep -q '^fr settings paths: refused: '; then
+      cat "$FR_ERR" >&2
+      rm -f "$FR_ERR"
+      exit 2
+    fi
   fi
   rm -f "$FR_ERR"
 fi
+for _fr_key in FR_PLAN_CONFIG_FILE FR_PLANS_DIR FR_ARCHIVED_PLANS_DIR FR_LEGACY_ARCHIVED_PLANS_DIR; do
+  _fr_val="$(_fr_answer "$_fr_key")"
+  if [ -n "$_fr_val" ]; then printf -v "$_fr_key" '%s' "$_fr_val"; fi
+done
 : "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/docs/superpowers/plan-config.yaml}"
 : "${FR_PLANS_DIR:=$REPO_ROOT/docs/superpowers/plans}"
 : "${FR_ARCHIVED_PLANS_DIR:=$REPO_ROOT/docs/superpowers/implemented/plans}"

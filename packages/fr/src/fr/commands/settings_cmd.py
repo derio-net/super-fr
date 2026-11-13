@@ -278,6 +278,12 @@ def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, st
     return out
 
 
+PATHS_REFUSAL_PREFIX = "fr settings paths: refused: "
+"""The first bytes of `paths`' stderr when fr refuses the placement (exit 2). A caller that
+falls back to the `repo` literals on any other failure (`validate-plans.sh`, review
+pr1431-r7) keys on it: exit 2 alone is also a usage error or a binary-identity refusal."""
+
+
 @settings_app.command("paths")
 def paths_cmd(
     shell: bool = typer.Option(False, "--shell", help="Print shell-quoted FR_*=… lines."),
@@ -296,7 +302,8 @@ def paths_cmd(
     try:
         answers = paths_answers(_toplevel(), create=not no_create)
     except SettingsError as e:
-        raise _refuse(e) from e
+        typer.echo(f"{PATHS_REFUSAL_PREFIX}{e}", err=True)
+        raise typer.Exit(2) from e
     if as_json:
         typer.echo(json.dumps(answers))
         return
