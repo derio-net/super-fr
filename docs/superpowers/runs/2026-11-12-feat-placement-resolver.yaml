@@ -129,7 +129,7 @@ steps:
           visual: none
           findings: quiet-unconverted-writers,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9,p3-r10,p3-r11
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-12T20:49:54+00:00'
           agent: fr-phase-executor
@@ -149,6 +149,11 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
+          returned: '2026-11-13T00:16:51+00:00'
+          outcome: done
+        evidence:
+          tests: p4-suite-2.log@cd6224c37762;tree=edd946aa3be2c669c690d91f30b2957d690a16664749b1b80910a749b25c66ae
+          visual: none
   journal-check:
     state: pending
   deliver:

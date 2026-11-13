@@ -506,3 +506,113 @@ cd57c673d: fr-worktree.lock held around rerouted commits and fr push, bounded wa
 ### p3-r11-resolved · finding [fixed] · resolves p3-r11: The scenario's deletion check is weak (phase 3)
 
 79e6272ab: the scenario deletes origin's fr and asserts run start and run status refuse naming both placements.
+
+<!-- fr:journal kind=decision scope=plan id=stealth-run-start-new-workspace-only created=2026-11-13T00:16:49+00:00 phase=4 -->
+### stealth-run-start-new-workspace-only · decision · run start --stealth records stealth only for a workspace it enters; an existing one must already be stealth on that ref (phase 4)
+
+R24 says run start may choose stealth, R23 says a workspace never changes placement. `fr run
+start --stealth <ref>` therefore records stealth when it enters isolation itself (case 3 of
+ensure_run_workspace) and, in an existing workspace, requires the state/marker to record
+stealth on the same tracking ref, refusing otherwise with the up command to use.
+
+<!-- fr:journal kind=decision scope=plan id=stealth-product-head-is-the-pushed-head created=2026-11-13T00:16:49+00:00 phase=4 -->
+### stealth-product-head-is-the-pushed-head · decision · The state records the PUSHED product head (refs/remotes/origin/<branch>), in <run-id>.stealth.json (phase 4)
+
+"Code is pushed before state, and the state records the product head it describes" is held
+by recording only pushed code: every run write (start, advance, resolve) rewrites
+`<runs dir>/<run-id>.stealth.json` with the target remote, branch and origin/<branch>'s sha,
+committed with the step. It is not a cursor field (no kind changes) and not *.yaml, so no
+locator reads it as a cursor. "Redo the last step's bookkeeping" on resume is re-recording
+that head for the branch as fetched, committed and pushed like any state write; idempotent.
+
+<!-- fr:journal kind=decision scope=plan id=stealth-privacy-at-the-push-seam created=2026-11-13T00:16:49+00:00 phase=4 -->
+### stealth-privacy-at-the-push-seam · decision · The privacy verdict is required by commit_and_push itself, not only by its callers (phase 4)
+
+Raised by the coordinator's security relay: `fr settings init --stealth` skipped the guard.
+Beside the fix in init, `stealth.commit_and_push` calls `check_privacy(ref, target_remote)`
+before committing (cached per process), so no future caller can push state to a tracking
+repo more visible than its target. A local path counts as private; an unreadable visibility
+refuses.
+
+<!-- fr:journal kind=decision scope=plan id=stealth-reachability-once-per-process created=2026-11-13T00:16:49+00:00 phase=4 -->
+### stealth-reachability-once-per-process · decision · space_for checks the tracking repo reachable once per process; up, run start and every push check it again (phase 4)
+
+R24 fail-fast: `stealth_space` runs `git ls-remote` for the tracking ref the first time a
+process resolves a stealth space, so any fr write refuses before writing when the tracking
+repo is gone; `up`, `run start` and settings init check it uncached, and the CAS push is
+itself the per-write check (a failure there is fatal, StealthPushError, exit 2, with the
+tracking worktree reset to its pre-commit HEAD).
+
+<!-- fr:journal kind=discovery scope=plan id=stealth-red-order created=2026-11-13T00:16:49+00:00 phase=4 -->
+### stealth-red-order · discovery · Most of stealth.py was written before its tests; RED taken by disabling each task's code (phase 4)
+
+fr/placement/stealth.py was drafted in one sitting ahead of tasks 3-5. RED was taken honestly
+per task: T1 (5 of 9 failed before servable/more_visible/_repo_file), T3 (with the commit
+seam's stealth branch disabled 4 of 8 failed; the 4 passing were fail-fast checks already
+in up), T4 (the two privacy-relay tests failed with the guard removed), T5 (all 5 failed
+with run_cmd/isolation_cmd/apply_cmd stashed). The implementation was restored byte for byte.
+
+<!-- fr:journal kind=discovery scope=plan id=relative-root-worktree-path created=2026-11-13T00:16:49+00:00 phase=4 -->
+### relative-root-worktree-path · discovery · quiet.worktree_path("." ) named ~/.cache/fr/worktrees/fr; fixed by resolving the root (phase 4)
+
+`fr isolation up` from the cwd passes Path("."), whose common dir is the relative `.git`, so
+the repo name was empty. Found by the resume test on a second host; quiet had the same latent
+bug. Both quiet.worktree_path and stealth.worktree_path/target_dir now resolve first.
+
+<!-- fr:journal kind=discovery scope=plan id=record-home-message-outside-checkout created=2026-11-13T00:16:49+00:00 phase=4 -->
+### record-home-message-outside-checkout · discovery · resolve --record's "not in this run's records dir" refusal crashed (ValueError) when the run lives outside the checkout (phase 4)
+
+`home.relative_to(repo_root)` raised under quiet and stealth; it now prints the path relative
+when inside the checkout, absolute otherwise (`_shown_path`).
+
+<!-- fr:journal kind=discovery scope=plan id=stealth-full-suite-caught-workspace-read created=2026-11-13T00:16:49+00:00 phase=4 -->
+### stealth-full-suite-caught-workspace-read · discovery · The first full suite caught ensure_run_workspace reading state.placement on a stub without it (phase 4)
+
+test_run_workspace's reuse test stubs the state with only `worktree`; the stealth check read
+`placement` unconditionally. It now reads the recorded placement only for a stealth request
+(91b550eee); the full suite was re-run after the fix.
+
+<!-- fr:journal kind=finding scope=plan id=stealth-init-skipped-privacy created=2026-11-13T00:16:49+00:00 phase=4 state=open review_scope=in -->
+### stealth-init-skipped-privacy · finding [open] (reviewer: in scope) · fr settings init --stealth pushed into the tracking repo without the privacy guard (phase 4)
+
+Security relay from the coordinator: init_stealth ran parse_ref -> check_reachable ->
+target_dir -> ensure_worktree -> commit_and_push and never check_privacy, so it could push a
+target's settings and identity into a tracking repo more visible than the target (R24).
+
+<!-- fr:journal kind=finding scope=plan id=stealth-init-skipped-privacy-resolved created=2026-11-13T00:16:49+00:00 phase=4 state=fixed resolves=stealth-init-skipped-privacy -->
+### stealth-init-skipped-privacy-resolved · finding [fixed] · resolves stealth-init-skipped-privacy: fr settings init --stealth pushed into the tracking repo without the privacy guard (phase 4)
+
+init_stealth calls check_privacy before cloning or pushing, and commit_and_push itself refuses
+without a privacy verdict. Tests: test_init_stealth_refuses_a_public_tracking_repo_for_a_private_target
+(exit 2, no worktree, tracking ref unmoved) and test_the_push_seam_itself_refuses_without_a_privacy_verdict;
+both failed with the guard removed.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-13T00:16:49+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+new module fr/placement/stealth.py; the targets share one fetch_placement and one _tracking_entry, the CLI one _stealth_request; nothing duplicated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-13T00:16:49+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+one _stealth source in the loader beside _quiet, one data rule in RULES, render_init gained a placement instead of a second renderer
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-13T00:16:49+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+the stealth commit is one branch of the existing commit seam (commit_and_push), reusing gitseam.push_ref_cas and the fr-worktree lock; no parallel path left to merge
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t4 created=2026-11-13T00:16:49+00:00 phase=4 -->
+### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
+
+more_visible sits beside leak_risk; check_privacy is the one guard, called by enter, init --stealth and the push seam
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t5 created=2026-11-13T00:16:49+00:00 phase=4 -->
+### no-refactor-p4-t5 · discovery · no-refactor-because P4.T5 (phase 4)
+
+the product-head write is one _RunWrites hook; resume is prepare/finish around the existing up; the quiet-only refusals now share outside_repo
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t6 created=2026-11-13T00:16:49+00:00 phase=4 -->
+### no-refactor-p4-t6 · discovery · no-refactor-because P4.T6 (phase 4)
+
+skills, mirrors, a scenario, docs and the row move; no code to clean
