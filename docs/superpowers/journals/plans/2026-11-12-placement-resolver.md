@@ -1247,3 +1247,8 @@ Each destination feature root (OWNER/BASE/HEADS/merged.yaml included) is laid ou
 ### p7-r5-artifact-only · decision · Copies keep placement-bound paths with no .git* component, and refuse anything else (phase 7)
 
 `move.foreign` is `not placement_bound(rel)` or any `.git*` path component; every direction into repo refuses such a path (exit 2, nothing written), and copies into fr or a tracking repo filter the repo side and refuse on the fr side.
+
+<!-- fr:journal kind=decision scope=plan id=p7-r7-ci-refs created=2026-11-13T12:23:57+00:00 phase=7 -->
+### p7-r7-ci-refs · decision · In CI, drift refuses a shallow checkout or one without the default ref; no network probe (phase 7)
+
+With a remote configured, a shallow clone or an unresolvable default ref refuses under a CI marker and warns elsewhere; a non-shallow checkout with the default ref and no origin/fr means no switch exists. This repo's validate-artifacts job now checks out with fetch-depth: 0.
