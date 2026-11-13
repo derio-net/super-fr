@@ -404,3 +404,54 @@ The template's owed line shows reviewer as "<lens>=<dispatch-id>,<lens>=<dispatc
 ### p3-r7-resolved · finding [fixed] · resolves p3-r7: a file repeated in examined: inflates the lens's examined count (phase 3)
 
 `parse_review_lens` de-duplicates examined files, keeping order. Test: test_a_file_named_twice_is_examined_once.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-skill-sentence-placement created=2026-11-13T03:20:46+00:00 phase=4 -->
+### p4-skill-sentence-placement · discovery · the three capped skills carry the lens sentence inside an existing line, never a new one (phase 4)
+
+fr-brainstorming (119), fr-plan (120) and fr-execute (119) cannot take a paragraph
+without passing 120 lines. The sentence is appended to an existing line's end (a bullet
+in brainstorming and execute, the Integration line in fr-plan), and fr-goal's section 6
+gained one sentence inside its existing paragraph telling the orchestrator to pass the
+suggestion sentence to phase reviewers and never lens text. Section 7a already held the
+lens-review dispatch, so no new section or renumbering was needed.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-agents-kind-bumped-to-5 created=2026-11-13T03:20:46+00:00 phase=4 -->
+### p4-agents-kind-bumped-to-5 · discovery · both agent edits moved the agents kind to 5; a scenario and a test pinned 4 (phase 4)
+
+Followed AGENTS.md's agents procedure (sync-agents-data, current_version 5,
+CANONICAL_SHA256 and PINNED_AT_VERSION, rerender_migration(4, 5), `fr migrate artifacts`
+for .claude/agents). tests/unit/test_agents_artifact.py and
+tests/scenarios/cloud-triage-repo-agents.sh named version 4 literally; both moved to 5
+(the scenario only failed in the full suite).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-visual-evidence-tests-flake-in-full-suite created=2026-11-13T03:20:46+00:00 phase=4 -->
+### p4-visual-evidence-tests-flake-in-full-suite · discovery · tests/unit/test_run_evidence_visual.py failed one test in two of three full-suite runs, none alone (phase 4)
+
+Runs 2 and 3 each failed a different test in that file (a read stamp the unit's window
+did not cover); the file passed alone, repeated, in parallel, and the third full run
+was green (15414 passed). Not touched by this phase; looks wall-clock-tight (a transcript
+stamp is the cursor stamp plus 2.5 s, so a resolve faster than that falls outside the
+window). Worth its own issue.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-pr-section-uses-live-set created=2026-11-13T03:20:46+00:00 phase=4 -->
+### p4-pr-section-uses-live-set · discovery · the PR table's rows come from the live lens set, the counts from the lenses evidence (phase 4)
+
+`_review_lenses` recomputes `lens_set` (so why and the config-change line read the
+branch as it stands) and takes only the per-lens file count from the lens-review unit's
+`lenses` evidence; an unresolved or unreadable count reads "not observable". A run with
+no `lens-review` step on its cursor renders "This run predates review lenses.".
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-13T03:20:46+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+prose and generated mirrors only; each sentence is one appended clause, nothing to restructure
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-13T03:20:46+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+a new page plus two stamp and link edits; nothing to restructure
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t4 created=2026-11-13T03:20:46+00:00 phase=4 -->
+### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
+
+a scenario script, a registration and a status move; nothing to restructure
