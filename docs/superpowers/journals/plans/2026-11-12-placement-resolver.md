@@ -1227,3 +1227,8 @@ new module fr/placement/drift.py; the gate, fr push, deliver and validate each c
 ### no-refactor-p7-t3 · discovery · no-refactor-because P7.T3 (phase 7)
 
 scenario, row amendment and docs only; nothing to fold
+
+<!-- fr:journal kind=decision scope=plan id=p7-r3-return-copy-structural created=2026-11-13T12:23:51+00:00 phase=7 -->
+### p7-r3-return-copy-structural · decision · The copy back into repo is recognised structurally, option (b) (phase 7)
+
+Under quiet, `branch_drift` accepts a branch whose added fr files are a subset of, and whose tree holds exactly, the merged features' files `fr` holds (the same `Ctx.flat()` reading the move copies from), byte for byte. Rejected (a): the switch lives on `fr`, not the product branch, so the copy branch cannot carry the flip, and any repo-side evidence would be self-asserted. Rejected (c): a trailer anyone can write. The structural test lets nothing through that `fr` does not already hold as merged history. It reads `fr` through the fr worktree, created in CI when absent, only on a branch that already carries fr files.
