@@ -1475,3 +1475,8 @@ Record item: should be a stated decision.
 ### pr1431-n5 · finding [open] (reviewer: in scope) · PR title and prose under stealth are marker-checked only
 
 Record item: pr_cmd refuses fr markers in the body; the title and free prose are the agent's.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n6 created=2026-11-13T15:07:04+00:00 state=open review_scope=in -->
+### pr1431-n6 · finding [open] (reviewer: in scope) · The hooks spawn git in plain repos before the switch-ref precondition
+
+Record item: _fr_placement_enabled and placementEnabled run git config and git cat-file on every edit decision; the comments say a plain repo asks no git.
