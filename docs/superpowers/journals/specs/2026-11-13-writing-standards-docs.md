@@ -134,3 +134,6 @@ Not caused by this change: fr's help text predates it and is code this docs feat
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-13-writing-standards-docs-p2 created=2026-11-13T21:48:45+00:00 -->
 ### phase-split-2026-11-13-writing-standards-docs-p2 · decision · review-size: reference pages to STE are one reviewable rewrite batch
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-13-writing-standards-docs-p3 created=2026-11-13T21:48:47+00:00 -->
+### phase-split-2026-11-13-writing-standards-docs-p3 · decision · review-size: the nine guides to STE
