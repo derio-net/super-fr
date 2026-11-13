@@ -1420,3 +1420,8 @@ Reproduced: git clean -fdx removes .fr-isolation, fr journal add commits a debug
 ### pr1431-r3 · finding [open] (reviewer: in scope) · A reftable clone of a quiet repo reads as repo
 
 Reproduced with git 2.53: quiet._ref_sha reads loose refs and packed-refs only; the bash library answers enabled for the same clone.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r4 created=2026-11-13T15:06:44+00:00 state=open review_scope=in -->
+### pr1431-r4 · finding [open] (reviewer: in scope) · git.history squash-unpushed writes fr attribution into the stealth target's history
+
+Reproduced: the squashed commit body says Squashed by fr push (git.history: squash-unpushed); the stealth scenario greps subjects only.
