@@ -1535,3 +1535,8 @@ Recording the head after the push needs a design choice (roll back local fr on a
 ### pr1431-n4-resolved · finding [fixed] · resolves pr1431-n4: A whole-repo move to stealth pushes a branch and prints a PR naming fr and stealth on the target
 
 a03e602: recorded as decision pr1431-n4-decision (the whole-repo move to stealth names fr on the target once, by the operator's explicit command; runs started under stealth afterwards leave no trace).
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-n5-resolved created=2026-11-13T15:47:09+00:00 state=fixed resolves=pr1431-n5 -->
+### pr1431-n5-resolved · finding [fixed] · resolves pr1431-n5: PR title and prose under stealth are marker-checked only
+
+f60886a05: under stealth fr pr create refuses a title or body naming fr (commit scopes, fr commands, the placement) before any forge call, beside the marker check.
