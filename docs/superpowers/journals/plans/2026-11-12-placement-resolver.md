@@ -1505,3 +1505,8 @@ fr placement move --to stealth removes fr's files from the target's default bran
 ### pr1431-r4-resolved · finding [fixed] · resolves pr1431-r4: git.history squash-unpushed writes fr attribution into the stealth target's history
 
 51a09c2f0: under stealth the squash message is the subject plus folded subjects with no fr attribution, and a folded subject naming fr refuses before rewriting; placement-stealth.sh squashes two commits and greps every commit body on the target.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r5-resolved created=2026-11-13T15:47:00+00:00 state=fixed resolves=pr1431-r5 -->
+### pr1431-r5-resolved · finding [fixed] · resolves pr1431-r5: fr pr create's default base comes from the settings source ref
+
+d8ad52635: fr pr create's default base comes from fr.git.remote_default_ref, never the settings source ref; tests under repo, quiet and stealth compute the base only.
