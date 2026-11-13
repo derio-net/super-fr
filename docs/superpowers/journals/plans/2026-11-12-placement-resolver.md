@@ -1405,3 +1405,8 @@ Unsafe owners are dropped with a notice that never echoes them, shas must be ful
 ### lens-pr-body-quiet-resolved · finding [fixed] · resolves lens-pr-body-quiet: deliver raised ValueError under quiet and stealth with forge.pr_body minimal
 
 4bb686fdb: _deliver_pr_gate names the render with _shown_path and commits it through the run-writes seam; tested under quiet and stealth.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r1 created=2026-11-13T15:06:38+00:00 state=open review_scope=in -->
+### pr1431-r1 · finding [open] (reviewer: in scope) · Under stealth, fr push's drift refusal names migrate-branch, which commits a removal on the product branch and pushes without the stealth scan
+
+BLOCKER, reproduced by the independent adversarial review of PR #1431 at e4ca3869: the spec and a chore(placement) commit naming fr and stealth reach the target (R24). drift.py _into_outside calls _push_placement directly.
