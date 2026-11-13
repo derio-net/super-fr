@@ -498,3 +498,6 @@ Cheap and in the same function, so fixed here: each `lens_set` warning is printe
 
 <!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-13T03:29:27+00:00 lens=security -->
 ### lens-security-1 · lens · the feature adds an evidence gate and reads repo-controlled YAML and reviewer returns: look for a way a resolve passes unreviewed
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-1 created=2026-11-13T03:29:31+00:00 lens=errors -->
+### lens-errors-1 · lens · every unreadable input (lens config, default ref, session transcript) must refuse or be noted, never read as an empty set
