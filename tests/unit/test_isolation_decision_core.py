@@ -395,10 +395,14 @@ def test_a_relative_path_entry_holding_an_fr_is_never_run(tmp_path: Path) -> Non
     planted.write_text(f'#!/bin/bash\ntouch "{ran}"\necho FR_PLACEMENT=quiet\n')
     planted.chmod(0o755)
     for relative in ("bin", "./bin", "", "."):
-        entry = f"{relative}:/usr/bin:/bin" if relative != "." else ".:/usr/bin:/bin"
-        script = f'cd "{repo}/{"bin" if relative == "." else ""}"; . "{LIB}"; _fr_is_enabled "{repo.resolve()}"'
+        entry = f"{relative}:/usr/bin:/bin"
+        cwd = repo / "bin" if relative == "." else repo
+        script = f'cd "{cwd}"; . "{LIB}"; _fr_is_enabled "{repo.resolve()}"'
         result = subprocess.run(
-            ["bash", "-c", script], capture_output=True, text=True, env={**os.environ, "PATH": entry}
+            ["bash", "-c", script],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PATH": entry},
         )
         assert result.returncode == 1, (relative, result.stderr)
     assert not ran.exists()

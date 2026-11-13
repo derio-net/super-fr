@@ -138,7 +138,9 @@ def test_no_create_resolves_a_quiet_repo_without_creating_anything(
     assert got["FR_ARTIFACT_ROOT"] == str(wt)
     assert got["FR_FEATURE"] == "main"
     assert not wt.exists() and not local_fr()
-    assert json.loads(runner.invoke(app, ["settings", "paths", "--json", "--no-create"]).output) == got
+    assert (
+        json.loads(runner.invoke(app, ["settings", "paths", "--json", "--no-create"]).output) == got
+    )
     assert not wt.exists() and not local_fr()
     # the creating form, for contrast
     assert runner.invoke(app, ["settings", "paths", "--shell"]).exit_code == 0
