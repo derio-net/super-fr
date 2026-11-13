@@ -1232,3 +1232,8 @@ scenario, row amendment and docs only; nothing to fold
 ### p7-r3-return-copy-structural · decision · The copy back into repo is recognised structurally, option (b) (phase 7)
 
 Under quiet, `branch_drift` accepts a branch whose added fr files are a subset of, and whose tree holds exactly, the merged features' files `fr` holds (the same `Ctx.flat()` reading the move copies from), byte for byte. Rejected (a): the switch lives on `fr`, not the product branch, so the copy branch cannot carry the flip, and any repo-side evidence would be self-asserted. Rejected (c): a trailer anyone can write. The structural test lets nothing through that `fr` does not already hold as merged history. It reads `fr` through the fr worktree, created in CI when absent, only on a branch that already carries fr files.
+
+<!-- fr:journal kind=decision scope=plan id=p7-r1-recopy created=2026-11-13T12:23:52+00:00 phase=7 -->
+### p7-r1-recopy · decision · A source that moved after the copy is copied again, never refused (phase 7)
+
+At verify and at switch the move compares a digest of the source (the default ref's placement-bound tree, or the merged features' flat content from `fr`) with the one recorded at copy; a difference resets the move to copy (idempotent by content), at most 3 times per invocation, then refuses naming the re-run. Into repo, the re-copy is one more commit on the move's own copy branch (only when the state's copy_sha is its ancestor).
