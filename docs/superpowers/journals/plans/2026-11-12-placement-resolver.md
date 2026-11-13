@@ -1425,3 +1425,8 @@ Reproduced with git 2.53: quiet._ref_sha reads loose refs and packed-refs only; 
 ### pr1431-r4 · finding [open] (reviewer: in scope) · git.history squash-unpushed writes fr attribution into the stealth target's history
 
 Reproduced: the squashed commit body says Squashed by fr push (git.history: squash-unpushed); the stealth scenario greps subjects only.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r5 created=2026-11-13T15:06:46+00:00 state=open review_scope=in -->
+### pr1431-r5 · finding [open] (reviewer: in scope) · fr pr create's default base comes from the settings source ref
+
+Under quiet it is fr, under stealth the tracking branch's name; it must be the target's default branch.
