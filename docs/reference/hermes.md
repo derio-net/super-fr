@@ -47,8 +47,10 @@ super-fr's own files are touched. `--home` defaults to `$HERMES_HOME`, then `~/.
 
 ## Enforcement
 
-Hermes runs shell hooks over the same block protocol as Claude Code, so the isolation guards
-are the same scripts. They gate edits (`write_file`, `patch`) and shell commands
+Hermes accepts a Claude-Code-style block decision, so super-fr ships Hermes versions of the
+isolation guards (`plugins/super-fr/hooks/hermes/`) that share the Claude Code hooks' decision
+library. Unlike the Claude Code shell guard, the Hermes one judges by the workspace marker on
+every git or gh change, not only while a pipeline is live. They gate edits (`write_file`, `patch`) and shell commands
 (`terminal`, `execute_code`: git and gh changes outside isolation, and pushes to a merged
 PR's branch). A first-turn hook shows open acceptance debt. The escapes are unchanged:
 `fr isolation up`, `.fr-isolation-allow`, and `FR_BASE_OK=1`. The rule is explained in
