@@ -18,7 +18,9 @@ before it can merge. Two shapes of drift:
 
 Detection never migrates, in any context, CI included: every caller refuses, naming
 `fr placement migrate-branch`, which runs only in a valid workspace and moves the
-artifacts as its own commit on each side.
+artifacts as its own commit on each side. Under stealth there is no "each side": fr never
+commits on, or pushes, the target's branch (review pr1431-r1), so the refusal names the
+rewrite, and migrate-branch only copies the files into the tracking repo.
 """
 
 from __future__ import annotations
@@ -188,7 +190,34 @@ def detect(root: Path, *, deep: bool = True) -> Drift | None:
     return marker_drift(Path(root)) or (branch_drift(Path(root)) if deep else None)
 
 
+def rewrite_command(names: list[str], since: str) -> str:
+    """A non-interactive git command that drops *names* from every commit in
+    `since..HEAD` (review pr1431-r1): what the operator runs under stealth, where fr never
+    commits on, or pushes, the product branch itself. Every path is shell-quoted twice
+    (once for `--index-filter`'s own shell, once for the operator's)."""
+    import shlex
+
+    inner = "git rm -q --cached --ignore-unmatch -- " + " ".join(shlex.quote(n) for n in names)
+    return (
+        "FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --prune-empty --index-filter "
+        f"{shlex.quote(inner)} -- {since}..HEAD"
+    )
+
+
 def refusal(found: Drift) -> str:
+    if found.files and found.current == paths.STEALTH:
+        listed = ", ".join(found.files[:3]) + (" ..." if len(found.files) > 3 else "")
+        # Review pr1431-r1: under stealth no fr command commits on, or pushes, the product
+        # branch to cure this, so the refusal names the rewrite, never a command that
+        # would push a commit to the target.
+        return (
+            f"placement drift: the repo is placement: stealth, and this branch's own tree "
+            f"carries fr files ({listed}), which never reach a stealth target (R24). fr "
+            "never commits on, or pushes, this branch to take them out: remove them from "
+            "the commits that add them before anything is pushed (rewrite those unpushed "
+            "commits, e.g. with `git rebase` or `git filter-branch --index-filter`); fr "
+            "keeps its own copy in the tracking repo"
+        )
     if found.files:
         listed = ", ".join(found.files[:3]) + (" ..." if len(found.files) > 3 else "")
         what = (
@@ -265,13 +294,17 @@ def _migration_pending(root: Path, branch: str, remote: str) -> bool:
 
 
 def _into_outside(root: Path, branch: str, current: str, emit: Callable[[str], None]) -> None:
-    """The branch's own fr artifacts into its feature root (quiet or stealth), and off the
-    branch: one commit on each side, then both pushed. Idempotent mid-step: a re-run with
-    nothing left to move still pushes what an earlier run committed."""
+    """The branch's own fr artifacts into its quiet feature root, and off the branch: one
+    commit on each side, then both pushed (stealth is `_into_stealth`'s). Idempotent
+    mid-step: a re-run with nothing left to move still pushes what an earlier run
+    committed."""
     from fr.artifacts.commit import commit_paths
     from fr.artifacts.paths import artifact_root
-    from fr.commands.push_cmd import _push_placement
+    from fr.git_policy.product import push_product_branch
     from fr.git_policy.push import PushRefusedError, fr_pending
+
+    if current != paths.QUIET:  # stealth never commits on the product branch (pr1431-r1)
+        raise SettingsError(f"{COMMAND}: internal: into placement {current} is not quiet")
 
     base, names = branch_files(root)
     remote = _remote(root)
@@ -312,7 +345,7 @@ def _into_outside(root: Path, branch: str, current: str, emit: Callable[[str], N
         emit(f"nothing to migrate: {branch} carries no fr artifact (placement {current})")
         return
     try:
-        pushed = _push_placement(root, remote, branch, code=code)
+        pushed = push_product_branch(root, remote, branch, code=code)
     except PushRefusedError as e:
         raise SettingsError(
             f"{COMMAND}: the commits are made; push them with `fr push`: {e}"
@@ -321,6 +354,81 @@ def _into_outside(root: Path, branch: str, current: str, emit: Callable[[str], N
         f"pushed the migration of {branch} an earlier run committed"
     )  # fmt: skip
     emit(f"{what} to placement {current}; pushed {' and '.join(pushed) or 'nothing new'}")
+
+
+def _into_stealth(root: Path, branch: str, emit: Callable[[str], None]) -> None:
+    """Stealth (review pr1431-r1): copy the branch's own fr artifacts to its feature root in
+    the tracking repo (a commit there, pushed there), and NEVER commit on, or push, the
+    product branch: R24 lets only the code commits reach the target, and a removal commit
+    is itself a commit naming fr. So when the branch carries fr files this refuses after
+    the copy, naming the unpushed commits that carry them and a command that rewrites
+    them, or saying plainly that pushed ones have already reached the target."""
+    from fr.artifacts.commit import commit_paths
+    from fr.artifacts.paths import artifact_root
+    from fr.git_policy.push import PushRefusedError, commits_the_push_adds
+    from fr.placement.move import _files, inside, refuse_foreign
+    from fr.placement.stealth import fr_paths_in
+
+    base, names = branch_files(root)
+    if base is None or not names:
+        emit(f"nothing to migrate: {branch} carries no fr artifact (placement stealth)")
+        return
+    refuse_foreign(names, f"branch {branch}")
+    # From git, never the working tree: a symlinked artifact refuses (p7 hardening).
+    at_head = _files(root, "HEAD", keep=set(names).__contains__)
+    froot = artifact_root(root)
+    written: list[Path] = []
+    for rel in names:
+        if rel not in at_head:
+            continue
+        path = inside(froot, rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(at_head[rel][1])
+        written.append(path)
+    if written:
+        outcome = commit_paths(
+            root, written, f"chore(fr): copy {branch}'s artifacts into the tracking repo"
+        )
+        if not (outcome.committed or outcome.unchanged):
+            raise SettingsError(f"{COMMAND}: {outcome.reason}")
+        emit(f"copied {len(written)} artifact(s) of {branch} into the tracking repo")
+    remote = _remote(root)
+    try:
+        unpushed = commits_the_push_adds(root, remote, branch)
+    except PushRefusedError as e:
+        raise SettingsError(f"{COMMAND}: {e}") from e
+    carrying = [sha for sha in unpushed if fr_paths_in(root, [sha])]
+    listed_remote = _git(root, "ls-remote", "--heads", remote, f"refs/heads/{branch}") or ""
+    remote_sha = listed_remote.split()[0] if listed_remote.split() else None
+    pushed_files: list[str] = []
+    if remote_sha is not None:
+        reached = (_git(root, "rev-list", "--reverse", remote_sha, "--not", base) or "").split()
+        pushed_files = fr_paths_in(root, reached)
+    problems: list[str] = []
+    if carrying:
+        files = fr_paths_in(root, carrying)
+        subjects = [
+            f"  {sha[:12]} {(_git(root, 'show', '-s', '--format=%s', sha) or '').strip()}"
+            for sha in carrying
+        ]
+        problems.append(
+            f"under placement stealth fr never commits on, or pushes, {branch} (R24), and "
+            f"{len(carrying)} unpushed commit(s) carry fr files "
+            f"({', '.join(files[:5])}{' ...' if len(files) > 5 else ''}):\n"
+            + "\n".join(subjects)
+            + "\nRewrite them before anything is pushed, for example:\n  "
+            + rewrite_command(files, remote_sha or base)
+            + "\nthen run `fr push`"
+        )
+    if pushed_files:
+        problems.append(
+            f"{', '.join(pushed_files[:5])}{' ...' if len(pushed_files) > 5 else ''} "
+            f"have already reached the target: {remote}/{branch} holds them in its history. "
+            "fr cannot take them back (that needs a force push, which fr never makes)"
+        )
+    if problems:
+        raise SettingsError(f"{COMMAND}: " + "\n".join(problems))
+    emit(f"nothing left to rewrite: {branch} pushes only code (placement stealth)")
 
 
 def _refuse_stealth_bound(root: Path) -> None:
@@ -352,7 +460,8 @@ def _into_repo(root: Path, branch: str, emit: Callable[[str], None]) -> None:
     """The branch's quiet feature root back into its tree (repo layout), and off `fr`:
     one commit on each side, the placement recorded last (so a crash re-runs), pushed.
     The placement is recorded only once nothing is left unpushed (review p7-r2)."""
-    from fr.git_policy.push import PushRefusedError, atomic_push, fr_pending, push
+    from fr.git_policy.product import push_product_branch
+    from fr.git_policy.push import PushRefusedError, atomic_push, fr_pending
     from fr.placement import quiet
     from fr.placement.move import META, _files, inside, record_placement, refuse_foreign
 
@@ -397,7 +506,7 @@ def _into_repo(root: Path, branch: str, emit: Callable[[str], None]) -> None:
     if code or fr_side:
         try:
             if code:
-                push(root, remote, branch)
+                push_product_branch(root, remote, branch)
             if fr_side:
                 atomic_push(root, frwt, remote, branch, code=False)
         except PushRefusedError as e:
@@ -437,7 +546,9 @@ def migrate_branch(root: Path, *, emit: Callable[[str], None] = print) -> None:
         if found is None:
             raise SettingsError(f"{COMMAND}: the quiet switch (origin/fr) cannot be read")
         current = found
-    if current in (paths.QUIET, paths.STEALTH):
+    if current == paths.STEALTH:
+        _into_stealth(root, branch, emit)
+    elif current == paths.QUIET:
         if recorded != current:
             record_placement(root, current)
         _into_outside(root, branch, current, emit)

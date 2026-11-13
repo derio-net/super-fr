@@ -68,19 +68,19 @@ def quiet_branch(tmp_path: Path, branch: str = "feat/q") -> tuple[Path, Path]:
 def test_migrate_into_quiet_killed_before_its_push_pushes_on_rerun(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.commands import push_cmd
+    from fr.git_policy import product
 
     root, ws = drifted(tmp_path)
     head = git(ws, "rev-parse", "HEAD").strip()
-    real = push_cmd._push_placement
+    real = product.push_product_branch
 
     def killed(*a: object, **k: object) -> list[str]:
         raise KeyboardInterrupt("killed before the push")
 
-    monkeypatch.setattr(push_cmd, "_push_placement", killed)
+    monkeypatch.setattr(product, "push_product_branch", killed)
     with pytest.raises(KeyboardInterrupt):
         drift.migrate_branch(ws, emit=lambda _: None)
-    monkeypatch.setattr(push_cmd, "_push_placement", real)
+    monkeypatch.setattr(product, "push_product_branch", real)
 
     lines: list[str] = []
     drift.migrate_branch(ws, emit=lines.append)
@@ -92,21 +92,24 @@ def test_migrate_into_quiet_killed_before_its_push_pushes_on_rerun(
     assert "earlier run" in "\n".join(lines)
 
 
-@pytest.mark.parametrize("killed_at", ["push", "atomic_push"])
+@pytest.mark.parametrize("killed_at", ["push_product_branch", "atomic_push"])
 def test_migrate_into_repo_killed_before_its_push_pushes_on_rerun_and_records_last(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, killed_at: str
 ) -> None:
+    from fr.git_policy import product
+
+    module = product if killed_at == "push_product_branch" else git_push
     root, ws = quiet_branch(tmp_path)
-    real = getattr(git_push, killed_at)
+    real = getattr(module, killed_at)
 
     def killed(*a: object, **k: object) -> object:
         raise KeyboardInterrupt(f"killed in {killed_at}")
 
-    monkeypatch.setattr(git_push, killed_at, killed)
+    monkeypatch.setattr(module, killed_at, killed)
     with pytest.raises(KeyboardInterrupt):
         drift.migrate_branch(ws, emit=lambda _: None)
     assert (marker_at(ws) or {}).get("placement") == "quiet"  # not recorded while unpushed
-    monkeypatch.setattr(git_push, killed_at, real)
+    monkeypatch.setattr(module, killed_at, real)
 
     drift.migrate_branch(ws, emit=lambda _: None)
 

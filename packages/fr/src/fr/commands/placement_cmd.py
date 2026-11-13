@@ -50,7 +50,9 @@ def migrate_branch_cmd() -> None:
 
     Run in a valid workspace: one commit on each side, then pushes both where they
     belong. The CLI-entry gate, `fr push`, `deliver` and `fr validate artifacts` refuse a
-    mismatched branch, naming this command; none of them migrates.
+    mismatched branch, naming this command; none of them migrates. Under stealth it only
+    copies the files into the tracking repo: it never commits on, or pushes, the product
+    branch, and names the commits to rewrite instead.
     """
     from fr.placement.drift import migrate_branch
 

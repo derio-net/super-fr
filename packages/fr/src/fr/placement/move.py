@@ -268,11 +268,33 @@ def _commit_tree(
     return _git(root, *argv, data=message.encode(), env=dated).decode().strip()
 
 
+def _push_fr_branch(root: Path) -> None:
+    """A plain push of quiet's `fr` branch to origin (never forced), then its tracking
+    ref. The one branch this module pushes itself: a product branch goes through
+    `fr.git_policy.product.push_product_branch` (`_push_product`, review pr1431-r1)."""
+    _git(root, "push", "--quiet", "origin", "refs/heads/fr:refs/heads/fr")
+    _git(root, "fetch", "--quiet", "--no-tags", "origin", "+refs/heads/fr:refs/remotes/origin/fr")
+
+
 def _push_branch(root: Path, branch: str) -> None:
-    """A plain push of *branch* to origin (never forced), then its tracking ref."""
-    _git(root, "push", "--quiet", "origin", f"refs/heads/{branch}:refs/heads/{branch}")
-    _git(root, "fetch", "--quiet", "--no-tags", "origin",
-         f"+refs/heads/{branch}:refs/remotes/origin/{branch}")  # fmt: skip
+    """Every push this module makes: quiet's `fr` itself, any other branch through the
+    one product pusher."""
+    if branch == "fr":
+        _push_fr_branch(root)
+    else:
+        _push_product(root, branch)
+
+
+def _push_product(root: Path, branch: str) -> None:
+    """A side branch this move opened on the product repo (the copy back, the removal),
+    pushed through the one product pusher, so stealth's guard holds on it too."""
+    from fr.git_policy.product import push_product_branch
+    from fr.git_policy.push import PushRefusedError
+
+    try:
+        push_product_branch(root, "origin", branch, rev=f"refs/heads/{branch}")
+    except PushRefusedError as e:
+        raise MoveError(f"fr placement move: {e}") from e
 
 
 def _fr_message(root: Path, text: str) -> str:

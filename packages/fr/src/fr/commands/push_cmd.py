@@ -12,7 +12,7 @@ renders itself.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
@@ -169,79 +169,12 @@ def _code_pending(rng: object) -> bool:
     return bool(getattr(rng, "commits", ())) or getattr(rng, "remote_sha", None) is None
 
 
-def _push_placement(repo_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:
-    """The push itself: `repo` pushes the branch; quiet pushes the branch and `fr`
-    together, atomically, or `fr` alone (R23). The refs pushed."""
-    from fr.artifacts.paths import QUIET, space_for
-    from fr.git_policy.push import atomic_push, push
-
-    space = space_for(repo_root)
-    if space.placement != QUIET:
-        push(repo_root, remote, branch)
-        return [branch]
-    if code:
-        _record_pushed_head(repo_root, space)
-    return atomic_push(repo_root, space.root, remote, branch, code=code)
-
-
-def _record_pushed_head(repo_root: Path, space: Any) -> None:
-    """Quiet (review p5-r3): append the head about to be pushed to the feature's `HEADS`
-    and commit it on `fr`, so the ONE atomic push carries the code and the record of it.
-    A feature's merged status then outlives its branch's refs. Only a claimed feature
-    root (one with `OWNER`) records; nothing is created for a branch with no fr work."""
-    from fr.artifacts.commit import commit_paths
-    from fr.artifacts.paths import FEATURE_HEADS, FEATURE_OWNER, feature_root
-    from fr.git_policy.push import PushRefusedError, run_git
-    from fr.placement.merged import record_head
-
-    if space.feature is None:
-        return
-    froot = feature_root(space)
-    if not (froot / FEATURE_OWNER).is_file():
-        return
-    done = run_git(repo_root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
-    head = done.stdout.strip() if done.returncode == 0 else ""
-    if not head:
-        return
-    heads = froot / FEATURE_HEADS
-    before = heads.read_bytes() if heads.is_file() else None
-    path = record_head(froot, head)
-    if path is None:
-        return
-    outcome = commit_paths(repo_root, [path], f"chore(fr): record pushed head {head[:12]}")
-    if not (outcome.committed or outcome.unchanged):
-        if before is None:
-            path.unlink(missing_ok=True)
-        else:
-            path.write_bytes(before)
-        raise PushRefusedError(f"cannot record the pushed head in {path}: {outcome.reason}")
-
-
-def _refuse_fr_paths_under_stealth(repo_root: Path, remote: str, branch: str) -> None:
-    """R24 "what reaches the target": under stealth only the code is pushed, so a commit
-    carrying a path only fr writes (an artifact, `.claude/agents/fr-*.md`, `.fr/`, the
-    plan validator...) refuses the push, naming it (review p4-r3). Every commit the push
-    adds is scanned, side branches of a merge included (lens l-security-r1)."""
-    from fr.artifacts.paths import STEALTH, outside_repo
-    from fr.git_policy.push import PushRefusedError, commits_the_push_adds
-    from fr.placement.stealth import fr_paths_in
-
-    if outside_repo(repo_root) != STEALTH:
-        return
-    found = fr_paths_in(repo_root, commits_the_push_adds(repo_root, remote, branch))
-    if found:
-        raise PushRefusedError(
-            f"under placement stealth no fr file reaches the target (R24), and the commits to "
-            f"push carry {', '.join(found[:5])}{' ...' if len(found) > 5 else ''}. Remove "
-            "them from those commits (fr keeps its state in the tracking repo) and push again"
-        )
-
-
 def push_cmd() -> None:
     """Push this run's feature branch, under the repo's git policy (`git.*`)."""
     from fr.artifacts.commit import on_default_branch
     from fr.artifacts.paths import STEALTH, outside_repo
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
+    from fr.git_policy.product import push_product_branch, refuse_stealth_content
     from fr.git_policy.push import PushRefusedError, check_subjects, squash, unpushed
     from fr.git_policy.templates import run_issue
     from fr.placement.drift import refuse
@@ -268,7 +201,8 @@ def push_cmd() -> None:
                 still_current=push_still_current(repo_root, git_dir, branch, head),
             )
         rng = unpushed(repo_root, remote, branch)
-        _refuse_fr_paths_under_stealth(repo_root, remote, branch)
+        # Before the squash rewrites anything; the one pusher scans again (pr1431-r1).
+        refuse_stealth_content(repo_root, remote, branch)
         # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
         check_subjects(settings, rng.commits, issue)
         if settings.git.history == "squash-unpushed":
@@ -282,7 +216,7 @@ def push_cmd() -> None:
                     "(git.history: squash-unpushed)",
                     soft_wrap=True,
                 )
-        pushed = _push_placement(repo_root, remote, branch, code=_code_pending(rng))
+        pushed = push_product_branch(repo_root, remote, branch, code=_code_pending(rng))
         if settings.git.push == "ask":
             consume(git_dir, "push", branch)
     except (SettingsError, PushRefusedError, AskRefusedError) as e:

@@ -135,9 +135,10 @@ def unpushed(root: Path, remote: str, branch: str) -> Range:
     return Range(tuple(_commit(root, s) for s in shas), remote_sha)
 
 
-def commits_the_push_adds(root: Path, remote: str, branch: str) -> list[str]:
-    """EVERY commit `git push <remote> <branch>` would add to the remote, oldest first:
-    `rev-list HEAD --not <remote tips>`, WITHOUT `--first-parent` (lens l-security-r1).
+def commits_the_push_adds(root: Path, remote: str, branch: str, rev: str = "HEAD") -> list[str]:
+    """EVERY commit `git push <remote> <rev>:<branch>` would add to the remote, oldest
+    first: `rev-list <rev> --not <remote tips>`, WITHOUT `--first-parent` (lens
+    l-security-r1).
 
     This is the range a content scan (stealth's "no fr file reaches the target", R24)
     must read: a merged side branch that adds a file and later removes it puts that file
@@ -167,7 +168,7 @@ def commits_the_push_adds(root: Path, remote: str, branch: str) -> list[str]:
                 f"`git fetch {remote}` and try again"
             )
     exclude = ["--not", *tips] if tips else []
-    return _git(root, "rev-list", "--reverse", "HEAD", *exclude).split()
+    return _git(root, "rev-list", "--reverse", rev, *exclude).split()
 
 
 def is_migration(settings: Settings, commit: Commit) -> bool:
@@ -346,11 +347,6 @@ def squash(
         head,
     )
     return parent
-
-
-def push(root: Path, remote: str, branch: str) -> None:
-    """`git push -u <remote> <branch>`: a fast-forward, never forced."""
-    _git(root, "push", "-u", remote, branch)
 
 
 MAX_PUSH_ATTEMPTS = 3
