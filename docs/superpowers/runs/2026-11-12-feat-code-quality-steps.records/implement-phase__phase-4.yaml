@@ -40,7 +40,6 @@ journal:
       stamp is the cursor stamp plus 2.5 s, so a resolve faster than that falls outside the
       window). Worth its own issue.
     phase: 4
-    review_scope: out
   - kind: discovery
     id: p4-pr-section-uses-live-set
     title: "the PR table's rows come from the live lens set, the counts from the lenses evidence"
