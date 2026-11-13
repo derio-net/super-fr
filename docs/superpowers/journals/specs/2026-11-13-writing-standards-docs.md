@@ -140,3 +140,6 @@ Not caused by this change: fr's help text predates it and is code this docs feat
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-13-writing-standards-docs-p4 created=2026-11-13T21:48:48+00:00 -->
 ### phase-split-2026-11-13-writing-standards-docs-p4 · decision · review-size: first six explainers to plain language
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-13-writing-standards-docs-p5 created=2026-11-13T21:48:49+00:00 -->
+### phase-split-2026-11-13-writing-standards-docs-p5 · decision · review-size: second six explainers to plain language
