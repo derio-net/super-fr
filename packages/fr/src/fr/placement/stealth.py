@@ -365,10 +365,14 @@ def marker_entry(ref: StealthRef, target: str) -> dict[str, str]:
     return {"ref": ref.text, "target": target}
 
 
-def stealth_space(root: Path) -> paths.ArtifactSpace:
+def stealth_space(root: Path, *, create: bool = True) -> paths.ArtifactSpace:
     """The stealth `ArtifactSpace` of the workspace at *root*: `<tracking worktree>/
     <target-dir>`, and the feature its branch names. The tracking repo is checked
-    reachable once per process (R24 fail-fast), before any caller writes."""
+    reachable once per process (R24 fail-fast), before any caller writes.
+
+    `create=False` (`fr settings paths --no-create`, the hooks' read, review p6-r4)
+    only computes the space: no reachability check, no sync, and no refusal for a
+    tracking worktree that is gone (its path is still the answer)."""
     from fr.placement.quiet import branch_of, check_feature_id, check_owner
 
     root = Path(root)
@@ -376,12 +380,12 @@ def stealth_space(root: Path) -> paths.ArtifactSpace:
     assert found is not None
     ref, target = found
     wt = worktree_path(root, ref)
-    if not (wt / ".git").exists():
+    if create and not (wt / ".git").exists():
         raise SettingsError(
             f"placement stealth: the tracking worktree {wt} is gone; re-create it with "
             f"`fr isolation up --stealth {ref.text}` (R24 fail-fast)"
         )
-    if ref.text not in _REACHED:
+    if create and ref.text not in _REACHED:
         from fr.placement.quiet import fr_worktree_lock
 
         check_reachable(ref, wt)

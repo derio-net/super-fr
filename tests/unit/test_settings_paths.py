@@ -103,3 +103,43 @@ def test_settings_help_lists_paths() -> None:
     result = runner.invoke(app, ["settings", "--help"])
     assert result.exit_code == 0
     assert "paths" in result.output
+
+
+def test_no_create_resolves_a_quiet_repo_without_creating_anything(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p6-r4: the hooks and the plugin ask `--no-create`, which computes the quiet
+    paths without creating the local `fr` branch or the fr worktree (plain `paths`, which
+    an fr command's own resolution matches, still creates them on demand)."""
+    from fr.placement.quiet import worktree_path
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    git(repo, "checkout", "-q", "--orphan", "fr")
+    git(repo, "rm", "-rfq", ".")
+    (repo / "settings.yaml").write_text("placement: quiet\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "fr")
+    git(repo, "push", "-q", "origin", "fr")
+    git(repo, "checkout", "-q", "main")
+    git(repo, "branch", "-qD", "fr")
+    wt = worktree_path(repo)
+
+    def local_fr() -> bool:
+        done = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--verify", "--quiet", "refs/heads/fr"],
+            capture_output=True,
+        )
+        return done.returncode == 0
+
+    result = runner.invoke(app, ["settings", "paths", "--shell", "--no-create"])
+    assert result.exit_code == 0, result.output
+    got = _lines(result.output)
+    assert got["FR_PLACEMENT"] == "quiet"
+    assert got["FR_ARTIFACT_ROOT"] == str(wt)
+    assert got["FR_FEATURE"] == "main"
+    assert not wt.exists() and not local_fr()
+    assert json.loads(runner.invoke(app, ["settings", "paths", "--json", "--no-create"]).output) == got
+    assert not wt.exists() and not local_fr()
+    # the creating form, for contrast
+    assert runner.invoke(app, ["settings", "paths", "--shell"]).exit_code == 0
+    assert (wt / ".git").exists() and local_fr()

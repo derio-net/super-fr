@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import re
 import subprocess
 import sys
 import time
@@ -129,6 +130,9 @@ def _read(root: Path) -> Switch | None:
     result: Switch | None = None
     if text is not None:
         settings = parse_settings_text(text, source=_SOURCE, servable=False)
+        problem = switch_spelling_problem(text, yaml_of(text, _SOURCE))
+        if problem is not None:
+            raise SettingsError(problem)
         if settings.placement == paths.QUIET:
             result = Switch(settings, yaml_of(text, _SOURCE), sha)
         elif settings.placement != paths.REPO:
@@ -139,6 +143,37 @@ def _read(root: Path) -> Switch | None:
             )
     _CACHE[key] = result
     return result
+
+
+_CANONICAL_PLACEMENT: Final = re.compile(r"placement: [a-z]+")
+
+
+def switch_spelling_problem(text: str, data: object) -> str | None:
+    """Why the switch's `placement` is not spelled canonically, or None (review p6-r3).
+
+    The hooks and the OpenCode plugin read the switch WITHOUT `fr` (R26), so they and fr
+    must agree on what a valid switch is: one line `placement: <value>`, at column 0,
+    unquoted, with no comment and no trailing space, and no other live line naming
+    `placement`. Every other spelling YAML accepts (quoted, commented, flow, indented,
+    a quoted or escaped key) is refused here, and the hooks treat it as fr-enabled, so
+    neither side reads it as `repo`. `fr settings init --quiet` writes the canonical
+    line. A file naming no placement at all is fine (the default, `repo`)."""
+    live = [
+        line
+        for line in text.splitlines()
+        if "placement" in line and not line.lstrip().startswith("#")
+    ]
+    if len(live) == 1 and _CANONICAL_PLACEMENT.fullmatch(live[0]):
+        return None
+    if not live and not (isinstance(data, dict) and "placement" in data):
+        return None
+    found = "; ".join(repr(line) for line in live) or "a key that does not read `placement`"
+    return (
+        f"{_SOURCE}: the placement must be spelled exactly `placement: quiet` (or "
+        "`placement: repo`): one line, at column 0, unquoted, with no comment, and no other "
+        "line naming placement, because the hooks read the switch without fr (R26); found "
+        f"{found}. Rewrite it and push `{QUIET_BRANCH}`"
+    )
 
 
 def read_switch(root: Path) -> Any:
@@ -383,9 +418,11 @@ def branch_of(root: Path) -> str | None:
     return branch
 
 
-def quiet_space(root: Path) -> paths.ArtifactSpace:
+def quiet_space(root: Path, *, create: bool = True) -> paths.ArtifactSpace:
     """The quiet `ArtifactSpace` of the checkout at *root*: the fr worktree, and the
-    feature its branch names (none in the fr worktree itself)."""
+    feature its branch names (none in the fr worktree itself). `create=False` (`fr
+    settings paths --no-create`, the hooks' read, review p6-r4) computes the space
+    without creating the local `fr` branch or the fr worktree."""
     root = Path(root)
     path = worktree_path(root)
     branch = branch_of(root)
@@ -397,7 +434,8 @@ def quiet_space(root: Path) -> paths.ArtifactSpace:
             "its branch; a quiet feature is named by its branch"
         )
     fid = check_feature_id(root, branch)
-    ensure_worktree(root)
+    if create:
+        ensure_worktree(root)
     check_owner(path, fid, branch)
     return paths.ArtifactSpace(paths.QUIET, path, fid)
 

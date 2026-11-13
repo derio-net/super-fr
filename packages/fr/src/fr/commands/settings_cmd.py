@@ -260,7 +260,7 @@ def _toplevel() -> Path | None:
     return Path(top).resolve() if done.returncode == 0 and top else None
 
 
-def paths_answers(toplevel: Path | None) -> dict[str, str]:
+def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, str]:
     """The resolver's answers as `FR_*` variables: the placement, its root, the feature,
     then one per `fr.artifacts.paths.KIND_DIRS` entry. `FR_PLACEMENT=none` alone
     outside a git repo. Raises `SettingsError` for a placement this fr cannot serve."""
@@ -268,7 +268,7 @@ def paths_answers(toplevel: Path | None) -> dict[str, str]:
 
     if toplevel is None:
         return {"FR_PLACEMENT": "none"}
-    space = space_for(toplevel)
+    space = space_for(toplevel, create=create)
     out = {
         "FR_PLACEMENT": space.placement,
         "FR_ARTIFACT_ROOT": str(space.root),
@@ -282,13 +282,19 @@ def paths_answers(toplevel: Path | None) -> dict[str, str]:
 def paths_cmd(
     shell: bool = typer.Option(False, "--shell", help="Print shell-quoted FR_*=… lines."),
     as_json: bool = typer.Option(False, "--json", help="Print the same keys as one object."),
+    no_create: bool = typer.Option(
+        False,
+        "--no-create",
+        help="Compute the paths only: never create the quiet fr branch or worktree, "
+        "nor ask a stealth tracking repo (what hooks and plugins call).",
+    ),
 ) -> None:
     """Print the artifact path resolver's answers, for hooks and plugins (R1, R3)."""
     if shell == as_json:
         typer.echo("pass exactly one of --shell or --json", err=True)
         raise typer.Exit(2)
     try:
-        answers = paths_answers(_toplevel())
+        answers = paths_answers(_toplevel(), create=not no_create)
     except SettingsError as e:
         raise _refuse(e) from e
     if as_json:

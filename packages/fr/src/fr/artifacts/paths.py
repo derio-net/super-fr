@@ -231,13 +231,17 @@ def sticky_refusal(recorded: str, current: str, source: str) -> SettingsError:
     )
 
 
-def space_for(repo_root: Path) -> ArtifactSpace:
+def space_for(repo_root: Path, *, create: bool = True) -> ArtifactSpace:
     """The artifact space of the checkout at *repo_root*.
 
     Precedence: a stealth marker (R24: stealth is chosen per run and recorded in the
     workspace, so no command run there falls back to `repo`), then a valid `origin/fr`
     switch (quiet), then `repo`. A workspace whose marker recorded one placement while
-    the switch now names another refuses, naming both (R23 "sticky")."""
+    the switch now names another refuses, naming both (R23 "sticky").
+
+    `create=False` only computes the space: the quiet fr worktree and branch are not
+    created and the stealth tracking repo is not asked (`fr settings paths --no-create`,
+    which the hooks and the OpenCode plugin call, review p6-r4)."""
     from fr.isolation.marker import MARKER
     from fr.placement.quiet import quiet_space, read_switch
     from fr.settings.load import unservable_placement
@@ -247,14 +251,14 @@ def space_for(repo_root: Path) -> ArtifactSpace:
     if marked == STEALTH:
         from fr.placement.stealth import stealth_space
 
-        return stealth_space(root)
+        return stealth_space(root, create=create)
     if marked is not None and marked not in (REPO, QUIET):
         raise unservable_placement(marked, str(root / MARKER))
     current = QUIET if read_switch(root) is not None else REPO
     if marked is not None and marked != current:
         raise sticky_refusal(marked, current, str(root / MARKER))
     if current == QUIET:
-        return quiet_space(root)
+        return quiet_space(root, create=create)
     return ArtifactSpace(REPO, root, None)
 
 

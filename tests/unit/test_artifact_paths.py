@@ -253,3 +253,42 @@ def test_a_worktree_sees_its_common_dirs_origin_fr(tmp_path: Path) -> None:
 def test_the_module_is_the_only_home_of_its_literals() -> None:
     assert paths.__doc__ is not None
     assert "R1" in paths.__doc__ and "only place" in paths.__doc__
+
+
+# --- review p6-r3(a): the switch's placement is spelled one way ---------------------
+#
+# The hooks read the switch without `fr` (spec R26), so fr and they must agree on what a
+# valid switch is: `placement: <value>` at column 0, nothing else on the line. Any other
+# spelling YAML accepts is refused here, and the hooks treat it as fr-enabled.
+
+NON_CANONICAL_SWITCHES = {
+    "double-quoted": 'schema: 1\nplacement: "quiet"\n',
+    "single-quoted": "schema: 1\nplacement: 'quiet'\n",
+    "trailing-comment": "schema: 1\nplacement: quiet # the switch\n",
+    "flow-mapping": "{schema: 1, placement: quiet}\n",
+    "indented": "  schema: 1\n  placement: quiet\n",
+    "double-space": "schema: 1\nplacement:  quiet\n",
+    "trailing-space": "schema: 1\nplacement: quiet \n",
+    "quoted-key": 'schema: 1\n"placement": quiet\n',
+    "quoted-repo": 'schema: 1\nplacement: "repo"\n',
+}
+
+
+@pytest.mark.parametrize("text", NON_CANONICAL_SWITCHES.values(), ids=NON_CANONICAL_SWITCHES)
+def test_a_non_canonical_placement_spelling_on_the_switch_is_refused(
+    tmp_path: Path, text: str
+) -> None:
+    root = make_repo(tmp_path)
+    _push_fr_branch(root, text)
+    with pytest.raises(SettingsError) as caught:
+        space_for(root)
+    message = " ".join(str(caught.value).split())
+    assert _SWITCH in message and "spelled exactly `placement: quiet`" in message
+
+
+def test_init_quiet_writes_the_one_canonical_placement_line() -> None:
+    from fr.settings.render import render_init
+
+    lines = render_init("quiet").splitlines()
+    live = [ln for ln in lines if not ln.lstrip().startswith("#") and "placement" in ln]
+    assert live == ["placement: quiet"]
