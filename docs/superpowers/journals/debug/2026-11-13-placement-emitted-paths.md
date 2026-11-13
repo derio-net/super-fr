@@ -15,3 +15,8 @@ _repo_relative_artifact resolved --emitted against the product checkout; under q
 ### rc-operator · root-cause · decision operator window opened at an entry of the same record
 
 record/apply.py _verify: since = [*existing, *new][-1].created. Every entry a record adds is stamped with the apply time, so the operator brief ahead of a brainstorm record's decisions moved the window past the question round and every answered_by: operator decision was refused. (verify_operator_claim is the finding-resolution path; the decision path is verify_operator_answer called from apply.py.) The existing test passed only because its answer was dated 2099.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-record-null created=2026-11-13T20:59:03+00:00 -->
+### rc-record-null · root-cause · brief record: null is placement-related
+
+record.template.record_brief computed path.relative_to(repo_root); under quiet/stealth the records dir is in the fr worktree or tracking clone, so it raised ValueError, which run_cmd._record_brief swallows into record: null. Fixed: an absolute path when the records dir is outside the checkout (--record accepts either).
