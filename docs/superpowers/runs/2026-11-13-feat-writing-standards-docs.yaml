@@ -103,11 +103,20 @@ steps:
           tests: ci:c7e76c68c1a0aab280332c2749493cdf9849f52d+63764b87921b4f741414cff4def0d5ee205547c9;tree=cb5f931912c7f2a664a29d6f759c61f7847c99f00ee173a8d11836a9233bf25c
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-13T22:41:40+00:00'
           harness: claude-code
+          model: claude-opus-5-5
           session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
+          returned: '2026-11-13T22:55:40+00:00'
+          outcome: done
+        evidence:
+          review: review-p2
+          reviewer: a4beab4eb53ae2617
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6,p2-r7
+          unobserved: reviewer,reviewer-return
   journal-check:
     state: pending
   lens-review:

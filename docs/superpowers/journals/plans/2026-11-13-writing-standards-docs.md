@@ -231,3 +231,90 @@ Measured on the accuracy-corrected baselines: 26 FAIL over the 7 gated pages plu
 ### p2-baseline-paths · discovery · phase 2 baselines: the recorded scratchpad paths are session-local; the sha is authoritative (phase 2)
 
 The baseline file paths in the p2-ws-* entries (/tmp/claude-0/.../scratchpad/baselines/...) are session-local and not authoritative; they may not exist later. Each page's baseline is `git show <sha>:<page>`, with the sha named in the same p2-ws-* entry: acceptance-matrix 63764b87921b4f741414cff4def0d5ee205547c9 (merge base), components 4d47e37f3efedbb299d4ef54130382ec115127fc, dispatch-lifecycle e610913551192927a389cc320ea1445726f834d6, hermes a057184df8ee0829a6268b9d91c5b5a1ba065e04, install cb73793da178bddff5a92f9ebf398bbac63032c9, plan-model 5c634cd8402351b4f770b357c414696dbf7cb6ad, workflow-shapes cf7a68a21bbef7cc959aaeefbe275514badea268, cli 30f0f6a4a2322c28f247c56c27004a96d33692c2. Later phases record the sha only. (Review finding p2-r6.)
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-13T22:55:39+00:00 phase=2 -->
+### review-p2 · review · phase 2 review: 7 findings (6 in, 1 reclassified in), all fixed; fact-keepers: no lost, changed or added facts (phase 2)
+
+Code reviewer (separate context, read-only) checked every accuracy commit against the cited code, the STE rewrite against each page's baseline (per-page --preserve-from), the checker, fr docs check, sync-readme --check and the wording tripwires. Eight blind fact-keepers (blog-craft agents/fact-keeper.md), one per page, given only baseline and rewrite. Fixes in 0a7eb2a1b, b8dbd1bc8, 30074254d, cd812440e, fcc855c4b, a7753a907; ci-ok green on a7753a9. Reviewer suggested a docs-accuracy lens: the phase-6 path rule requires it for every published page.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fact-keeper created=2026-11-13T22:55:39+00:00 phase=2 -->
+### p2-fact-keeper · discovery · Fact-keeper results per page (R8): page | agent | counts | resolution (phase 2)
+
+docs/reference/hermes.md | a7f4a7f9be839cd80 | kept 28, changed 1, lost 0, added 0 | changed: title/H1 'Running super-fr under Hermes Agent' -> 'Run super-fr under Hermes Agent' (heading wording, no claim) — accepted: STE imperative heading
+docs/reference/components.md | a849b5f7b517581c1 | kept 36, changed 0, lost 0, added 0
+docs/reference/workflow-shapes.md | a13b9f40a73dbac76 | kept 25, changed 0, lost 0, added 0
+docs/reference/plan-model.md | a1ab31e2d855cb915 | kept 18, changed 0, lost 0, added 0
+docs/reference/cli.md | a837996281bb338d4 | kept 25, changed 0, lost 0, added 0
+docs/reference/install.md | a773534515aa33c8e | kept 32, changed 0, lost 0, added 0
+docs/reference/acceptance-matrix.md | a3eaf48db3169f5f8 | kept 41, changed 0, lost 0, added 0
+docs/reference/dispatch-lifecycle.md | a47222d599708fcdc | kept 31, changed 0, lost 0, added 0
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-13T22:55:39+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · workflow-shapes: plain fr run adopt also previews unless --yes (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-13T22:55:39+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · install: --uninstall leaves-list omitted marketplace registration/clone and managed clone (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-13T22:55:39+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · cli: drift-gate wording wrong for exempt fr migrate and fr placement (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-13T22:55:39+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · cli: isolation exec 'in the worktree itself' wrong for external mode (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-13T22:55:39+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · plan-model: fr_version 'allowed to read' became 'can read' (policy vs capability) (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-13T22:55:39+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · journal p2-ws-* recorded session-local scratchpad paths (phase 2)
+
+Raised by the phase 2 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-13T22:55:39+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · workflow-shapes: cursor path shown is repo-placement only (phase 2)
+
+Reviewer tagged it out of scope as pre-existing; reclassified in scope because R13 makes each rewritten page's accuracy this feature's responsibility.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-13T22:55:39+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: workflow-shapes: plain fr run adopt also previews unless --yes (phase 2)
+
+0a7eb2a1b
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-13T22:55:39+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: install: --uninstall leaves-list omitted marketplace registration/clone and managed clone (phase 2)
+
+b8dbd1bc8
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-13T22:55:39+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: cli: drift-gate wording wrong for exempt fr migrate and fr placement (phase 2)
+
+30074254d, cd812440e
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-13T22:55:39+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: cli: isolation exec 'in the worktree itself' wrong for external mode (phase 2)
+
+30074254d
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-13T22:55:39+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: plan-model: fr_version 'allowed to read' became 'can read' (policy vs capability) (phase 2)
+
+fcc855c4b
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-13T22:55:39+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: journal p2-ws-* recorded session-local scratchpad paths (phase 2)
+
+a7753a907 (discovery p2-baseline-paths; journal is append-only)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-13T22:55:39+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: workflow-shapes: cursor path shown is repo-placement only (phase 2)
+
+0a7eb2a1b
