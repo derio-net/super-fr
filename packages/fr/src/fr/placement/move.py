@@ -157,14 +157,17 @@ _HFS_IGNORABLE: Final = frozenset(
     [*range(0x200C, 0x2010), *range(0x202A, 0x202F), *range(0x206A, 0x2070), 0xFEFF]
 )
 """Codepoints HFS+ ignores in a name (git's `is_hfs_dotgit` list): `.g\u200cit` IS `.git`."""
-_NTFS_SHORT: Final = re.compile(r"(?:git|gitmod|gitatt|gitign)~\d+|gi[0-9a-f]{4}~\d+")
-"""NTFS 8.3 short names git refuses for `.git`, `.gitmodules`, `.gitattributes` and
-`.gitignore` (`git~1`, `gitmod~1`, and the hashed `gi7eba~1` forms)."""
+_GIT_NAMES: Final = frozenset({".git", ".gitmodules", ".gitattributes"})
+"""The names git itself acts on in a tree: the repository, its submodules, its
+attributes (filters and diff drivers). `.gitkeep` and the like are plain files."""
+_NTFS_SHORT: Final = re.compile(r"(?:git|gitmod|gitatt)~\d+|gi[0-9a-f]{4}~\d+")
+"""NTFS 8.3 short names git refuses for those (`git~1`, `gitmod~1`, and the hashed
+`gi7eba~1` forms)."""
 
 
 def git_like(component: str) -> bool:
-    """Is one path component `.git` (or `.gitmodules`, `.gitattributes`, any `.git*`) on
-    SOME filesystem? Read as git's `verify_path` reads it (review p7-r5, security
+    """Is one path component `.git`, `.gitmodules` or `.gitattributes` on SOME
+    filesystem? Read as git's `verify_path` reads it (review p7-r5, security
     follow-up): NFC-normalised, HFS-ignorable codepoints removed, trailing dots and
     spaces stripped (NTFS), casefolded (APFS, HFS+, NTFS); and the NTFS short names."""
     import unicodedata
@@ -172,7 +175,7 @@ def git_like(component: str) -> bool:
     name = unicodedata.normalize("NFC", component)
     name = "".join(ch for ch in name if ord(ch) not in _HFS_IGNORABLE)
     name = name.rstrip(". ").casefold()
-    return name.startswith(".git") or bool(_NTFS_SHORT.fullmatch(name))
+    return name in _GIT_NAMES or bool(_NTFS_SHORT.fullmatch(name))
 
 
 def foreign(rel: str) -> bool:
@@ -195,8 +198,8 @@ def refuse_foreign(rels: Iterable[str], where: str) -> None:
         raise MoveError(
             f"fr placement move: refused: {where} holds {listed}, which "
             f"{'is not an fr artifact' if len(bad) == 1 else 'are not fr artifacts'} (fr "
-            "copies only the placement-bound paths below docs/superpowers/ and "
-            "docs/acceptance/); nothing was written"
+            "copies only its own placement-bound artifacts, never a file git acts on); "
+            "nothing was written"
         )
 
 

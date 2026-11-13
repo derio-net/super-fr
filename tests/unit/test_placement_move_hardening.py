@@ -327,7 +327,13 @@ def test_a_git_like_component_is_refused_in_every_spelling(rel: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "rel", [f"{SP}/2026-01-01-gitops-design.md", f"{SP}/git-notes.md", f"{FRAG}/x.yaml"]
+    "rel",
+    [
+        f"{SP}/2026-01-01-gitops-design.md",
+        f"{SP}/git-notes.md",
+        f"{FRAG}/x.yaml",
+        f"{FRAG}/.gitkeep",
+    ],
 )
 def test_an_ordinary_fr_artifact_naming_git_is_kept(rel: str) -> None:
     assert not move.foreign(rel)
