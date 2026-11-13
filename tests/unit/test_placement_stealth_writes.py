@@ -158,7 +158,7 @@ def test_a_refused_push_fails_the_resolve_and_moves_nothing(
 
     record = artifact_root(state.worktree) / "docs/superpowers/runs/r1.records/work.yaml"
     record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text("schema_version: 11\nrun: r1\nstep: work\noutcome: done\n")
+    record.write_text("schema_version: 12\nrun: r1\nstep: work\noutcome: done\n")
     bytes_before = _snapshot(wt)
     _decline_pushes(track)
 
