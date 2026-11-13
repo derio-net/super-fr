@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 placement-resolver phase 7 review, a move re-copies a source that moved, verifies the destination as laid out, copies fr artifacts only, refuses quiet-to-stealth with live branches; drift ignores deletions and refuses a shallow CI checkout
+reviewed: 2026-11-13 placement-resolver PR review, stealth never commits on or pushes the target's branch (migrate-branch copies and names the rewrite), a lost marker refuses, squash and PR text name no fr
 ---
 
 ## Overview
@@ -1224,8 +1224,11 @@ creates an orphan branch named `fr`, holding only a `settings.yaml` that says
 `placement: quiet` (every other key commented out at its default), and pushes it to
 `origin` with an ordinary push. It refuses when `origin` already has an `fr` branch,
 because that branch is never overwritten, and when there is no `origin` to push to.
-The existence of that file on `origin/fr` is the switch: a repository without it is
-`repo`, and so is any clone with no `origin`.
+The existence of that file on `origin/fr`, with a line naming `placement`, is the
+switch: a repository without it is `repo`, and so is any clone with no `origin`. Some
+other branch that happens to be called `fr`, with a `settings.yaml` that names no
+placement, is not a switch either, and `fr placement move --to quiet` refuses to build on
+it. A clone that keeps its refs in a reftable reads the switch through git.
 
 From then on fr writes every record into a second worktree of `fr`, at
 `~/.cache/fr/worktrees/<repo>/fr`, below `features/<feature-id>/`, where the feature
@@ -1294,7 +1297,11 @@ per run.
 
 The workspace's isolation state and its `.fr-isolation` marker record
 `placement: stealth` and the tracking ref, so every later fr command run there knows
-it. fr clones the tracking repository to
+it. The marker is excluded from git, so `git clean -fdx` removes it; fr then finds the
+placement in the isolation state and refuses every command, naming the
+`fr isolation up --branch <branch> --stealth <ref>` that writes the marker again. A marker
+fr cannot read (truncated, recorded for another directory) refuses the same way: fr never
+reads a lost placement as `repo`. fr clones the tracking repository to
 `~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>`, and each target has its own
 directory there, named `<host>--<owner>--<repo>` from the target's remote
 (`local--<name>` for a local path). Below it the layout is quiet's:
@@ -1318,8 +1325,12 @@ with nothing written.
 
 The target receives only your code and one draft pull request with a plain summary:
 `fr push` pushes the feature branch alone, refusing a commit that carries a path only fr
-writes (its artifact trees, `.fr/`, `.claude/agents/fr-*.md`, the plan validator), and
-`fr pr create` refuses a body that carries fr's markers. The commands that would write
+writes (its artifact trees, `.fr/`, `.claude/agents/fr-*.md`, the plan validator) or a
+message naming fr (`chore(fr)`, an fr command, the placement), and `fr pr create` refuses
+a title or body that names fr or carries its markers. Under `git.history:
+squash-unpushed` the squashed commit's message is the subject and the folded subjects,
+with no line crediting fr. Every push of a product branch fr makes, from any command,
+goes through the same check. The commands that would write
 repository configuration into the target (`fr init scaffold`, `fr init agents`,
 `fr init validator-wrapper`, `fr settings init`) refuse before
 writing, and so does every forge write but that one draft: `fr apply --yes`,
@@ -1455,6 +1466,14 @@ artifacts` (which is how CI notices) refuse, naming `fr placement migrate-branch
 them moves anything. `fr placement migrate-branch`, run in that workspace, moves the
 branch's own files to where the placement keeps them, as one commit on each side, and
 pushes both; run again after an interrupted push, it pushes what it already committed.
+Under stealth there is no second side to commit on, because fr never commits on, or
+pushes, the target's branch. When a stealth branch's own commits carry fr's files (a spec
+committed with `git add -A`, say), `fr push` refuses, naming them, and
+`fr placement migrate-branch` copies them into the tracking repository, then refuses
+too: it lists the unpushed commits that carry them and prints a `git filter-branch`
+command that takes the files out of exactly those commits. Files that were already pushed
+have reached the target, and it says so plainly: taking them back would need a force
+push, which fr never makes.
 A branch that only deletes fr's files is not drift. In CI, a checkout too shallow to see
 `origin/fr` and the default branch refuses, asking for `fetch-depth: 0`, rather than
 pass a branch it could not check; elsewhere it warns and goes on.
