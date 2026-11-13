@@ -8,6 +8,7 @@ covers:
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
 reviewed: 2026-11-13 placement-resolver phase 7, fr placement move and migrate-branch documented
+writing_standard: none
 ---
 
 # The fr command line

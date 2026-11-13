@@ -13,6 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
 reviewed: 2026-11-12 placement-resolver phase 4, fr-goal learned mode=stealth (records in a separate tracking repo); the essay's claims are unchanged
+writing_standard: elements-of-style
 ---
 
 ## The premise
