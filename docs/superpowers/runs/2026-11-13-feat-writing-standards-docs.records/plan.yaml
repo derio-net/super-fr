@@ -1,0 +1,11 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: plan
+outcome: done
+journal:
+  - {kind: decision, id: plan-gate-last, global: true, title: "The CI gate turns on in the last phase", body: "ci-ok depends on site-build (.fr/ci.yaml gate_checks: [ci-ok]); turning the writing-standard step on before every page passes would make every phase's tests: ci evidence red."}
+  - {kind: decision, id: plan-fact-keeper-in-review, global: true, title: "Fact-keeper reviews run in each phase's review step", body: "A phase executor cannot dispatch agents; the executor writes each page's baseline outside the repo and the orchestrator dispatches one fact-keeper per page during review-phase, recording the results in that record (R8)."}
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-11-13-writing-standards-docs
+evidence: {}
