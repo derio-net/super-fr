@@ -61,31 +61,35 @@ runs only trusted code from `main`.
 ## Operator steps, in order
 
 1. **Install the app.** In the org, install `derio-fr-automation` on the repo
-   with contents write and issues write access. Generate a private key in the app's settings
-   (the one step that needs the web UI).
+    with contents write and issues write access. Generate a private key in the app's settings
+    (the one step that needs the web UI).
+
 2. **Store the key.** `gh secret set FR_AUTOMATION_APP_KEY < key.pem`, then
-   delete the file. Nothing in the script below reads it.
+    delete the file. Nothing in the script below reads it.
+
 3. **Stage `bypass`.**
 
-       scripts/configure-main-protection.sh --repo OWNER/REPO --stage bypass --dry-run
-       scripts/configure-main-protection.sh --repo OWNER/REPO --stage bypass
+        scripts/configure-main-protection.sh --repo OWNER/REPO --stage bypass --dry-run
+        scripts/configure-main-protection.sh --repo OWNER/REPO --stage bypass
 
-   This sets the variable `FR_AUTOMATION_APP_ID` and adds the app to the
-   `protect main` ruleset as an always-bypass actor. The script merges the
-   rules that are already there, and never overwrites them.
+    This sets the variable `FR_AUTOMATION_APP_ID` and adds the app to the
+    `protect main` ruleset as an always-bypass actor. The script merges the
+    rules that are already there, and never overwrites them.
+
 4. **Cut a release as the app.** Merge a change with a fragment, or run the
-   `Release` workflow by hand. Confirm the new `v*` tag's commit has a CI run.
+    `Release` workflow by hand. Confirm the new `v*` tag's commit has a CI run.
+
 5. **Stage `require`.**
 
-       scripts/configure-main-protection.sh --repo OWNER/REPO --stage require
+        scripts/configure-main-protection.sh --repo OWNER/REPO --stage require
 
-   This adds the `ci-ok` required check with "require branches to be up to
-   date". It stops with an error until the bypass is in place.
-   It also stops until the newest `v*` tag's commit has a push-event run that the app triggered.
-   `--force` skips only that release check, never the bypass check.
+    This adds the `ci-ok` required check with "require branches to be up to
+    date". It stops with an error until the bypass is in place.
+    It also stops until the newest `v*` tag's commit has a push-event run that the app triggered.
+    `--force` skips only that release check, never the bypass check.
 
 Both stages are idempotent: a second run reports that nothing changed. Run them
-in this order. If `ci-ok` is a required check before the release can bypass it, the next
+in this order, with the release of step 4 before step 5. If `ci-ok` is a required check before the release can bypass it, the next
 release fails with a protection refusal (`release.py` reports it by name).
 
 ## Adopt this in another repo
