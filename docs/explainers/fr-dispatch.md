@@ -50,7 +50,7 @@ run**. It lists what it would do: ensure labels, create an issue, edit labels, e
 body, set a state. Read the preview, then act.
 
 The plan and its spec must already be on the default branch, because the runner works
-from its own checkout of it. Otherwise this exits 2 (see "Before you dispatch" below):
+from its own checkout of it. Otherwise this exits 2 (see "What do you check before you dispatch?" below):
 
 ```bash
 fr apply docs/superpowers/plans/2026-11-11-webhook-limiter --to vk --yes
