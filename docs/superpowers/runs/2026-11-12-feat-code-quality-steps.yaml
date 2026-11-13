@@ -207,8 +207,10 @@ steps:
           findings: l-security-r1,l-security-r2,l-security-r3,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4
           lenses: errors=18:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4;security=18:l-security-r1,l-security-r2,l-security-r3
   deliver:
-    state: running
-    at: '2026-11-13T03:41:58+00:00'
+    state: done
+    at: '2026-11-13T04:24:16+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1426
     units:
       step/deliver:
         attempts:
@@ -216,6 +218,14 @@ steps:
           harness: claude-code
           model: claude-fable-5-2
           session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
+          returned: '2026-11-13T04:23:52+00:00'
+          outcome: done
+        evidence:
+          tests: review-lenses-deliver-suite.log@faa397ed5d10
+          walk: 20261113T042239Z.log@41a08e94cf8b
+          proportionality: 258d10aa25774822e668bd1f19e474e3040b8460:033e6bcd33150e3834448bbf396af6055cdb71446f134001def322443a059d5d
+          docs: 258d10aa25774822e668bd1f19e474e3040b8460:6d97ef941428c08edcf664b15a2e31d2163fad929e5563d646e4a778d6f60760
+          visual: none
 driver: standalone
 fr_version: 6.4.0rc3
 pr: https://github.com/derio-net/super-fr/pull/1426
