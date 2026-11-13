@@ -20,3 +20,8 @@ record/apply.py _verify: since = [*existing, *new][-1].created. Every entry a re
 ### rc-record-null · root-cause · brief record: null is placement-related
 
 record.template.record_brief computed path.relative_to(repo_root); under quiet/stealth the records dir is in the fr worktree or tracking clone, so it raised ValueError, which run_cmd._record_brief swallows into record: null. Fixed: an absolute path when the records dir is outside the checkout (--record accepts either).
+
+<!-- fr:journal kind=finding scope=debug id=fix-emitted-paths created=2026-11-13T21:25:36+00:00 state=fixed -->
+### fix-emitted-paths · finding [fixed] · emitted paths, plan root, brief record and decision window fixed
+
+Source: run_cmd._repo_relative_artifact records below feature_root (logical, absolute, fr-root spellings; outside refused); fr.artifacts.paths.emitted_path is the reader for every product-root join; _template_context renders absolute off repo; plan_layout_root/Plan.artifact_root + refs.resolve_spec_ref_below for a quiet/stealth plan's spec; pickup matches by the plan's artifact root; record_brief names the records path absolutely outside the checkout; apply._verify opens a decision window at the last entry on disk. Tests first: tests/unit/test_placement_emitted_paths.py (6), test_journal_decision_tokens.py::TestDecisionWindowInOneRecord, and placement-quiet.sh / placement-stealth.sh now drive brainstorm (both failed on the unfixed code at record: null).
