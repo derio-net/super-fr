@@ -1555,3 +1555,8 @@ fac91e3e4: the bash library and the OpenCode plugin read the marker, then the fi
 ### pr1431-n1-resolved · finding [fixed] · resolves pr1431-n1: Devcontainer mode with quiet: in-container git worktree prune may deregister host worktrees
 
 fb881cd6c: real. The devcontainer bind-mounts only the common dir and its workspace; a scratch repo whose other worktree paths were hidden lost their registrations to git worktree prune (git 2.53: 'gitdir file points to non-existent location', then 'not a git repository'). ensure_worktree now removes only the fr worktree's own stale admin entry (unlocked), never a global prune; tests for an unmounted worktree surviving, a deleted fr worktree recreated, a locked entry kept
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r6-resolved created=2026-11-13T17:48:04+00:00 state=fixed resolves=pr1431-r6 -->
+### pr1431-r6-resolved · finding [fixed] · resolves pr1431-r6: Under quiet and stealth the edit gate blocks the fr worktree and tracking clone, and no skill says to ask fr settings paths
+
+4fe38e9b8: bash _fr_placement_write_target (Claude Code + Hermes) and marker.ts placementWriteTarget allow the repo's own quiet fr worktree (linked, at quiet.worktree_path from its common dir, HEAD refs/heads/fr, switch canonically quiet) and a stealth--* tracking clone named by a valid sibling stealth marker; refuse a foreign fr worktree, one elsewhere or off fr, and a primary checkout; skills take FR_SPECS_DIR/FR_PLANS_DIR from fr settings paths; tests in bash, bun and the Hermes hook
