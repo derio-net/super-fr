@@ -209,5 +209,7 @@ steps:
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
   journal-check:
     state: pending
+  lens-review:
+    state: pending
   deliver:
     state: pending
