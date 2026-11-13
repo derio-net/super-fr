@@ -26,7 +26,7 @@ read, not the one that was installed globally.
 | Command | What it does |
 |---|---|
 | `fr isolation up --branch <b>` | Create the isolated workspace for a branch. See [fr-isolation](../explainers/fr-isolation.md). |
-| `fr isolation exec -- <cmd>` | Run a build, test or lint command inside that workspace: in its container in devcontainer mode, in the worktree itself in the docker-less modes. |
+| `fr isolation exec -- <cmd>` | Run a build, test or lint command inside that workspace: in its container in devcontainer mode, in the workspace's checkout in the docker-less modes. |
 | `fr status` | Read-only report on every plan: phases, steps, tracking issues. Never writes. |
 | `fr apply <plan>` | Mirror a plan to tracking issues. Dry run unless you add `--yes`; `--to <runner>` also queues its phases. See [dispatch](../explainers/fr-dispatch.md). |
 | `fr acceptance status` | The open acceptance debt in one screen. See [the acceptance matrix](acceptance-matrix.md). |
@@ -53,8 +53,8 @@ The move does not start while any workspace has uncommitted work, and it never
 force-pushes. Out of `repo`, it removes the files through a pushed branch and a printed
 `fr pr create` command. `--run <id>`, in a stealth workspace, moves that one run.
 
-A branch left under the old placement is stopped by fr's CLI-entry gate (every command that
-is not read-only), `fr push`, `deliver` and `fr validate artifacts`. This continues until
+A branch left under the old placement is stopped by fr's CLI-entry gate (every command
+except the read-only ones, `fr migrate` and `fr placement`), `fr push`, `deliver` and `fr validate artifacts`. This continues until
 `fr placement migrate-branch`, run in its workspace, moves its files (one commit on each
 side, both pushed). Nothing else migrates it, CI included.
 
