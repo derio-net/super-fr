@@ -288,8 +288,10 @@ steps:
           findings: l-security-r1,l-security-r2
           lenses: security=28:l-security-r1,l-security-r2
   deliver:
-    state: running
-    at: '2026-11-13T14:36:15+00:00'
+    state: done
+    at: '2026-11-13T19:20:34+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1431
     units:
       step/deliver:
         attempts:
@@ -297,4 +299,12 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
+          returned: '2026-11-13T19:20:19+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite-2.log@711a404ff35d
+          walk: 20261113T184009Z.log@34cba9c75305
+          proportionality: f90986ffba12b4e70e207e0abd95d1c623e8386c:f166d33c39c5deefd6fc72aee93bc10343b813154a968898822a2cb757055af0
+          docs: f90986ffba12b4e70e207e0abd95d1c623e8386c:5656420493672c8eef4efe613d35fd0deff0286f9e8b85e5afcc8d6bf6629766
+          visual: none
 pr: https://github.com/derio-net/super-fr/pull/1431
