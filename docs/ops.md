@@ -56,7 +56,7 @@ ops:
 | `check` | A probe: exit 0 is DONE; any other exit is OPEN, its last stdout line the reason. The reserved value `proof` means "done only once a recorded proof says so". |
 | `na_if` | A probe: exit 0 means the op does not apply here (N/A). |
 | `apply` | Idempotent automation. Absent for an op only a human can do in a UI. |
-| `undo` | A command, or `none: <reason>`. Shown when a mutating op is confirmed or fails. |
+| `undo` | A command, or the mapping `{none: <reason>}`. Shown when a mutating op is confirmed or fails. |
 | `mutating` | Default `false`. A mutating op's confirmation names its side effects and undo, and needs `--yes-mutating` as well as `--yes` without a terminal. |
 | `interactive` | Default `false`. `true` runs the apply with your terminal attached (an authorisation prompt). |
 | `side_effects` | Prose list, shown at confirmation. |
@@ -176,7 +176,7 @@ fr ops scratch --cleanup 'forge-cli repo delete acme/scratch --yes' -- ./scripts
 
 `seal` substitutes `{in}` (a 0600 plaintext temp file outside the repo, filled from
 stdin), `{out}` (an empty 0600 temp file beside the target) and `{target}` (the target's
-name). It replaces the target only when the command exits 0 and `{out}` is non-empty;
+full path). Each substitution is shell-quoted. It replaces the target only when the command exits 0 and `{out}` is non-empty;
 otherwise the target is byte-identical to before. Both temp files are removed on every
 exit path, signals included.
 
@@ -186,8 +186,8 @@ Ops need credentials the delivering agent does not have, so they run in an **ops
 profile**: a devcontainer profile declared `ops: true`.
 
 ```bash
-fr init scaffold --ops               # a new ops profile (FR_PROFILE set, trust store mounted read-only)
-fr init scaffold --ops --force       # an existing profile gains the key; then fr isolation rebuild
+fr init scaffold --profile <name> --purpose "<line>" --ops           # a new ops profile (FR_PROFILE set, trust store mounted read-only)
+fr init scaffold --profile <name> --purpose "<line>" --ops --force   # an existing profile gains the key; then fr isolation rebuild
 ```
 
 `apply`, `attest` and `seal` refuse outside one and print the route:
@@ -257,8 +257,8 @@ refusing one that already exists; every later one is leased on the sha fr last p
 (`--force-with-lease`), recorded in the host state. A rerun resumes at the first stage the host state does not record, and a PR the
 forge reports MERGED counts as stage 2 done. Stage 2 merges only the recorded head, and
 stage 3 checks the merged PR's head is that one. The first failure stops the run, naming
-the stage (exit 1; a refusal such as a moved head, a changed ops profile or an untrusted
-op set exits 2). Pre-merge evidence never lands on the PR head, so the reviewed head and
+the stage (exit 1, also when the op set is not trusted when asked; a refusal such as a moved head
+or a changed ops profile exits 2). Pre-merge evidence never lands on the PR head, so the reviewed head and
 its checks stay valid.
 
 ### When a devops step is owed
