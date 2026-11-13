@@ -804,3 +804,123 @@ new module fr/placement/merged.py; the fold change split _fold into _fold (git t
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 the archive record reuses the commit seams as they are (commit_paths in the fr worktree under its lock, atomic_push for quiet, stealth.commit_and_push); the sweep's quiet branch is one function beside plan_sweep, and debt reads its new maps with the repo path as default
+
+<!-- fr:journal kind=review scope=plan id=review-phase-5 created=2026-11-13T05:47:39+00:00 phase=5 -->
+### review-phase-5 · review · Phase 5 (merged status) review, range 6bb2acb..f5efed268 (phase 5)
+
+Reviewer ad1ee57ed98179b38 (opus) raised eight in-scope findings, four reproduced in scratch repos (a branch fresh from main reading merged, a squash merge never detected, a deleted branch un-merging, a forged record trusted). All eight were fixed at 11a227edb..47b96ff63; the full suite passed (15552 passed) after the last code commit.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · A feature branch fresh from the default ref read as merged (phase 5)
+
+Its head was an ancestor of main before any work, so its rows entered every matrix and fr archive would record it merged (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · Squash and rebase merges were never detected (phase 5)
+
+Only ancestry was tested, so the merge styles this repo and many stealth targets use never read as merged (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · Merged status depended on host-local refs and was not monotone (phase 5)
+
+A branch deleted after merge read unmerged on another host, and a commit pushed after the merge un-merged it (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r4 · finding [open] (reviewer: in scope) · With the branch gone, a merged record's head was trusted (phase 5)
+
+A stale or forged merged: record decided status alone, against R17's cache-is-never-the-truth (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r5 · finding [open] (reviewer: in scope) · Merged features' fragments were read live from the fr worktree (phase 5)
+
+Later amendments applied at once and in-place edits of merged rows were accepted, so R16 went unenforced under quiet.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r6 · finding [open] (reviewer: in scope) · Remote branch heads hard-coded origin (phase 5)
+
+A repo whose default ref lives on another remote read no heads.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r7 · finding [open] (reviewer: in scope) · A quiet archive whose push was refused later reported already recorded with exit 0 (phase 5)
+
+The record stayed local and unpushed while the rerun claimed success.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8 created=2026-11-13T05:47:39+00:00 phase=5 state=open review_scope=in -->
+### p5-r8 · finding [open] (reviewer: in scope) · Debt staleness and close-out read plan history from the product branch (phase 5)
+
+Under quiet and stealth the plan lives in fr or tracking history, so every plan read stale. Supersedes p5-debt-stale-quiet-fr-history.
+
+<!-- fr:journal kind=decision scope=plan id=merged-base-file created=2026-11-13T05:47:39+00:00 phase=5 -->
+### merged-base-file · decision · BASE is written beside OWNER by a feature root's first fr commit (phase 5)
+
+Its value is the merge base of HEAD with the default ref, else HEAD, which can only undercount a feature's own commits. A root without BASE is merged only through the forge, with a notice.
+
+<!-- fr:journal kind=decision scope=plan id=merged-heads-file created=2026-11-13T05:47:39+00:00 phase=5 -->
+### merged-heads-file · decision · Under quiet, fr push appends the pushed head to the feature root's HEADS file in the same atomic push (phase 5)
+
+HEADS is append-only and written only for claimed roots. Stealth keeps product_head in stealth.json as its recorded head and gets no HEADS file. Archive adds the heads it verified, including a forge PR's head.
+
+<!-- fr:journal kind=decision scope=plan id=merged-status-rule created=2026-11-13T05:47:39+00:00 phase=5 -->
+### merged-status-rule · decision · Merged by git when any recorded or live head is on the default ref and past BASE; else the forge's merged PR; else unmerged (phase 5)
+
+The position is the earliest introducing first-parent commit, and status is monotone. A forge PR counts only when its merge commit is on the default ref's first-parent line and not inside BASE.
+
+<!-- fr:journal kind=decision scope=plan id=merged-forge-read created=2026-11-13T05:47:39+00:00 phase=5 -->
+### merged-forge-read · decision · The merged-PR read is a forge read, reached only from fr archive --branch and fr acceptance status (phase 5)
+
+It is allowed under stealth (a read). The fold, close-out and debt never read the forge; a squash merge reaches the fold through archive's pr: record, corroborated by owned HEADS. Fork PRs and PRs with another head name are ignored; a local-path origin has no forge.
+
+<!-- fr:journal kind=decision scope=plan id=merged-no-git-fallback created=2026-11-13T05:47:39+00:00 phase=5 -->
+### merged-no-git-fallback · decision · No patch-id or tree-equivalence fallback for squash detection (phase 5)
+
+Matching content could mark an unmerged feature merged, so without the forge a squash merge reads unmerged and fr says the forge is needed and why it was not read.
+
+<!-- fr:journal kind=decision scope=plan id=merged-freeze-by-time created=2026-11-13T05:47:39+00:00 phase=5 -->
+### merged-freeze-by-time · decision · A merged feature's fragments are frozen at its last pushed fr commit at or before the merge commit's committer time (phase 5)
+
+Computed on every read from origin/fr or the tracking upstream, not stored in the record. Clock skew between hosts is a known limit.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: A feature branch fresh from the default ref read as merged (phase 5)
+
+b8f366e6e: BASE recorded beside OWNER; merged only with a head past BASE on the default ref.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: Squash and rebase merges were never detected (phase 5)
+
+b8f366e6e: forge merged-PR read (MergedPrs protocol, ClientMergedPrs over GhClient), merge commit checked on the first-parent line; plain message when unmerged.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: Merged status depended on host-local refs and was not monotone (phase 5)
+
+b8f366e6e: HEADS recorded by fr push; status reads live refs, HEADS and stealth product_head, monotone; archive works for a deleted branch.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r4 -->
+### p5-r4-resolved · finding [fixed] · resolves p5-r4: With the branch gone, a merged record's head was trusted (phase 5)
+
+b8f366e6e: a merged: record supplies no head; a forge-merge record counts offline only when an owned head and the first-parent line corroborate it.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r5 -->
+### p5-r5-resolved · finding [fixed] · resolves p5-r5: Merged features' fragments were read live from the fr worktree (phase 5)
+
+b8f366e6e: merged fragments read from the pushed fr commit frozen at the merge; outside_merged_row_edits refuses in-place edits under quiet and stealth.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r6 -->
+### p5-r6-resolved · finding [fixed] · resolves p5-r6: Remote branch heads hard-coded origin (phase 5)
+
+b8f366e6e: heads read from remote_of(default ref).
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r7 -->
+### p5-r7-resolved · finding [fixed] · resolves p5-r7: A quiet archive whose push was refused later reported already recorded with exit 0 (phase 5)
+
+b8f366e6e: a cache hit with an unpushed record pushes it under the lock, or exits 2 naming it.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-r8 -->
+### p5-r8-resolved · finding [fixed] · resolves p5-r8: Debt staleness and close-out read plan history from the product branch (phase 5)
+
+b8f366e6e: close-out records each plan's resolved directory; debt dates quiet and stealth plans from fr history.
+
+<!-- fr:journal kind=finding scope=plan id=p5-debt-stale-quiet-fr-history-resolved created=2026-11-13T05:47:39+00:00 phase=5 state=fixed resolves=p5-debt-stale-quiet-fr-history -->
+### p5-debt-stale-quiet-fr-history-resolved · finding [fixed] · resolves p5-debt-stale-quiet-fr-history: fr debt's staleness under quiet reads plan activity from the product history, which holds no fr file (phase 5)
+
+Superseded by p5-r8, fixed at b8f366e6e.
