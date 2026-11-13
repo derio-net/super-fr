@@ -12,14 +12,14 @@ journal:
   - kind: decision
     id: baseline
     global: true
-    title: "Rewrite baseline: abd098d1b0b858d9e7c89fa563ac06be715f2548"
-    body: "git merge-base HEAD origin/main at the start of the rewrite; every --preserve-from and fact review in phases 2–6 uses it"
+    title: "Rewrite baseline: 63764b87921b4f741414cff4def0d5ee205547c9"
+    body: "git merge-base HEAD origin/main at the start of the rewrite (after merging origin/main at 63764b879, #1435, in phase 1); every --preserve-from and fact review in phases 2–6 uses it"
   - kind: discovery
     id: ws-starting-totals
     phase: 1
     title: "Starting writing-standard totals (pin 3b0c7d0, before the terms file)"
     body: |
-      `bash scripts/check-writing-standards.sh /home/user/blog-craft`, exit 1, before `.writing-standard-terms`:
+      `bash scripts/check-writing-standards.sh /home/user/blog-craft`, exit 1, without `.writing-standard-terms`, re-measured after the merge of origin/main at 63764b879 (identical to the pre-merge run):
       - guides (`docs/*.md`, ste): 137 FAIL, 243 WARN
       - reference (`docs/reference/*.md`, ste; cli.md opted out): 22 FAIL, 49 WARN
       - explainers (`docs/explainers/*.md`, plain-language; why-fr.md elements-of-style, index.md none): 1 FAIL, 585 WARN
