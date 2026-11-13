@@ -1515,3 +1515,8 @@ d8ad52635: fr pr create's default base comes from fr.git.remote_default_ref, nev
 ### pr1431-r8-resolved · finding [fixed] · resolves pr1431-r8: An unrelated origin/fr with a root settings.yaml refuses every fr command, and placement move --to quiet adopts a foreign origin/fr
 
 61665c914: an origin/fr settings.yaml with no live placement line is not a switch and reads as repo (canonical-spelling rule kept for files naming placement); fr placement move --to quiet refuses an origin/fr that is not a switch branch, naming it.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r9-resolved created=2026-11-13T15:47:03+00:00 state=fixed resolves=pr1431-r9 -->
+### pr1431-r9-resolved · finding [fixed] · resolves pr1431-r9: git.push ask approval looks for the debug journal on the product branch
+
+f7753b0ba: under quiet and stealth git.push: ask finds the debug journal at the feature root through artifact_root; tests under both placements.
