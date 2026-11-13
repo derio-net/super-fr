@@ -126,8 +126,9 @@ in order of their base, so a branch's own sequence on one row applies as written
 
 ## Backfilling a repo that has no matrix
 
-1. `fr acceptance init` creates the matrix, the rule and the gitignore entry. A CI
-   workflow is added only beside existing CI, or with `--with-ci`. It is idempotent.
+1. `fr acceptance init` creates the fragments directory, `docs/acceptance/features/`, the
+   rule and the gitignore entry. A CI workflow and a README badge are added only beside
+   existing CI, or with `--with-ci`. It is idempotent.
 2. `fr acceptance backfill` prints an inventory (specs with a Test Plan not yet cited,
    plans with no linked rows, hints from the test tree) and the protocol to follow.
 3. Draft **one row per business acceptance, not per test**:
@@ -135,12 +136,13 @@ in order of their base, so a branch's own sequence on one row applies as written
    ```bash
    fr acceptance add --id resume-stopped-workspace --capability isolation \
        --acceptance "An operator can resume a stopped workspace" \
-       --origin example-repo:docs/superpowers/specs/some-spec.md#R3 \
+       --origin spec:some-spec#R3 \
        --level unit=example-repo:tests/test_up.py#test_resume \
        --status unwired --notes "test exists, not yet in CI"
    ```
 
-   `add` validates the shape and appends; never hand-edit the YAML.
+   `add` validates the shape and inserts the row after its capability's last row; never
+   hand-edit the YAML.
 4. Run `fr acceptance check` until only honest warnings remain.
 5. Open a review PR. The operator audits every status.
 
@@ -150,7 +152,7 @@ line number slides onto whatever test lands there next, and nothing notices.
 ## Rows born from specs, and rows added mid-flight
 
 A row that comes from a spec's `## Requirements` list cites the requirement
-(`--origin <repo>:<spec-path>#R<n>`), so you can trace a claim to the sentence that
+(`--origin spec:<slug>#R<n>`), so you can trace a claim to the sentence that
 demanded it. `fr-brainstorming` creates these and presents them to you at the end of the
 design. See [fr-brainstorming-and-plan](fr-brainstorming-and-plan.md).
 
@@ -162,9 +164,11 @@ addition is listed in the PR body under "rows added since brainstorm"
 ## Live verification, and walks
 
 Some claims can only be proven by a real run: a real binary, a real model, a real forge.
-Mark such a row `--verify live`, or any strategy `fr verification list` shows. It then keeps
-appearing in `fr acceptance status` whatever its status, and the pull request body lists it
-under post-merge verification owed. See [verification strategies](../verification-strategies.md).
+Mark such a row `--verify live`, or any strategy `fr verification list` shows. The pull
+request body lists a row whose strategy runs after the merge (`live`) under "Post-merge
+verification owed", and one whose strategy runs before it under "Pre-merge verification owed".
+`fr acceptance status` lists the row only while its status is debt or the row is contested.
+See [verification strategies](../verification-strategies.md).
 
 To record the proof, use a walk:
 
@@ -215,8 +219,10 @@ needs `glab` authenticated in the image. With
 `forge.report_comment: on` (and comments on) CI also keeps one PR comment with the Markdown
 report, found by its marker and edited in place only when this identity wrote it.
 
-CI runs the gate on every pull request and push to the default branch and keeps a weekly
-"Acceptance debt" issue up to date from `fr acceptance digest`.
+CI runs the gate on every pull request and every branch push (super-fr's own workflow narrows the push
+trigger to `main`). A weekly run upserts one `<repo>: Technical debt` issue
+(`fr debt issue`), whose Acceptance debt section is what `fr acceptance digest` renders, and
+refreshes a draft PR that archives long-merged plans.
 
 ## Limits
 
