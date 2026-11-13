@@ -1,0 +1,99 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: review
+  id: review-p3
+  phase: 3
+  title: 'phase 3 review: 8 findings (7 in, 1 out), all in-scope fixed; fact-keepers: 0 lost, 3 meaning shifts fixed'
+  body: 'Code reviewer (separate context, read-only) checked the six accuracy commits against the cited code (all true), the STE rewrite against each page''s baseline with --preserve-from, the tripwires, fr docs check, and built the site at e84325d and HEAD to compare rendering: the checker does not see Markdown list breakage, which the build showed on ops.md and review-lenses.md. Nine blind fact-keepers (blog-craft agents/fact-keeper.md), one per guide, given only baseline and rewrite. Fixes in 036276ef9, 9d869f9b3, 3c1e17628, d6750f94c, 2605a2abc, 22103e06b, f52f33659, e8c934efb; ci-ok green on e8c934e. A built-site raw-list-marker scan over docs/*.md and docs/reference/*.md is clean apart from the two pre-existing docs-currency.md defects (p3-r8).'
+- kind: discovery
+  id: p3-fact-keeper
+  phase: 3
+  title: 'Fact-keeper results per page (R8): page | counts | resolution'
+  body: "docs/cloud-setup.md | kept 67, changed 0, lost 0, added 0\ndocs/docs-currency.md | kept 48, changed 1, lost 0, added 0 | 'whatever aggregate check your repo requires' lost its any-scope: fixed in 22103e06b ('any aggregate check that your repo needs')\ndocs/exit-gates-release-walk.md | kept 46, changed 0, lost 0, added 0\ndocs/gate-backfill.md | kept 81, changed 0, lost 0, added 0\ndocs/herdr-control-sessions.md | kept 87, changed 0, lost 0, added 0\ndocs/merge-protection.md | kept 36, changed 0, lost 0, added 0\ndocs/ops.md | kept 43, changed 0, lost 0, added 0\ndocs/review-lenses.md | kept 71, changed 3, lost 0, added 1 | two wording-only; the conditional 'when it rewrites or disables a lens' had become a permission ('But it can ...'): fixed in 9d869f9b3; the added sentence only counts the three checks listed\ndocs/verification-strategies.md | kept 57, changed 1, lost 0, added 0 | 'walk refuses a source: prerelease strategy' had become 'does not run it': fixed in e8c934efb ('stops with an error', walk.py WalkError)"
+- kind: finding
+  id: p3-r1
+  phase: 3
+  review_scope: in
+  title: 'ops.md: 2-space continuations/nested lists break the Test Plan list in the site renderer'
+  body: Raised by the phase 3 reviewer.
+- kind: finding
+  id: p3-r2
+  phase: 3
+  review_scope: in
+  title: 'review-lenses.md: nested lens sub-lists collapse into one paragraph with raw markers'
+  body: Raised by the phase 3 reviewer.
+- kind: finding
+  id: p3-r3
+  phase: 3
+  review_scope: in
+  title: 'ops.md stage 2: two merge preconditions moved out of the all-of-these list'
+  body: Raised by the phase 3 reviewer.
+- kind: finding
+  id: p3-r4
+  phase: 3
+  review_scope: in
+  title: 'exit-gates-release-walk.md: "workflows that trigger themselves" misstates auto-triggering'
+  body: Raised by the phase 3 reviewer.
+- kind: finding
+  id: p3-r5
+  phase: 3
+  review_scope: in
+  title: 'cloud-setup.md: status-bucket literal "working" became "active"'
+  body: Raised by the phase 3 reviewer.
+- kind: finding
+  id: p3-r6
+  phase: 3
+  review_scope: in
+  title: 'gate-backfill.md: "still does not pass" made the refusal ambiguous'
+  body: Raised by the phase 3 reviewer.
+- kind: finding
+  id: p3-r7
+  phase: 3
+  review_scope: in
+  title: 'gate-backfill.md Trust: subject narrowed from fr to the backfill'
+  body: Raised by the phase 3 reviewer.
+- kind: finding
+  id: p3-r8
+  phase: 3
+  review_scope: out
+  title: 'docs-currency.md and merge-protection.md lists already rendered broken at the merge base'
+  body: Raised by the phase 3 reviewer; present at e84325d and at the merge base, not caused by the rewrite.
+- kind: finding
+  id: p3-build-site-marker
+  phase: 3
+  review_scope: out
+  title: 'scripts/build-site.py fill_pages replaces <!-- site:pages --> even inside inline code'
+  body: 'fill_pages (scripts/build-site.py:267-280) does a plain text.replace(MARKER, ...), so docs/docs-currency.md item 5, which names the marker as inline code, gets the page list inserted mid-list and its numbered list breaks at item 6. Pre-existing at the merge base; a build-script bug, not a page defect. Found while fixing p3-r8.'
+resolves:
+- id: p3-r1
+  state: fixed
+  body: 036276ef9
+- id: p3-r2
+  state: fixed
+  body: 9d869f9b3
+- id: p3-r3
+  state: fixed
+  body: 036276ef9
+- id: p3-r4
+  state: fixed
+  body: 3c1e17628
+- id: p3-r5
+  state: fixed
+  body: d6750f94c
+- id: p3-r6
+  state: fixed
+  body: 2605a2abc
+- id: p3-r7
+  state: fixed
+  body: 2605a2abc
+- id: p3-r8
+  state: out-of-scope
+  body: 'Pre-existing at the merge base. merge-protection.md fixed anyway in f52f33659. docs-currency.md left: its CI YAML fence sits under a 2-space bullet and re-indenting changes the fenced bytes the preserve check compares; item 6 breaks because of the build-script bug p3-build-site-marker, which is filed separately.'
+evidence:
+  review: review-p3
+  reviewer: a526b8b16834e967b
+  model: claude-opus-5-5
