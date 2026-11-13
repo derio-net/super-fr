@@ -15,7 +15,7 @@ covers:
   - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-12 front-page-second-pass phase 2, the front page is rendered with its own look and no embedded font, and takes acts, a grid, terminal lines and figures
+reviewed: 2026-11-13 writing-standards-docs phase 1, explainers-currency now names each page group's writing standard; this page still defers authoring detail to that rule
 ---
 
 # Docs currency: keeping pages true to the code
