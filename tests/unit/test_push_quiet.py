@@ -255,3 +255,25 @@ def test_a_commit_is_not_blocked_by_an_unrelated_edit_in_the_fr_worktree(ws) -> 
     note.write_text("x\n")
     assert commit_paths(wt, [note], "chore(fr): note").committed
     assert "settings.yaml" in git(fr_root, "status", "--porcelain")
+
+
+def test_a_code_push_records_its_head_in_the_feature_root(ws, recorder: Recorder) -> None:
+    """Review p5-r3: `fr push` appends the head it pushes to the claimed feature root's
+    HEADS, committed on `fr` and carried by the same atomic push."""
+    wt, fr_root, origin = ws
+    froot = fr_root / "features" / "feat__q"
+    froot.mkdir(parents=True, exist_ok=True)
+    (froot / "OWNER").write_text("feat/q\n")
+    git(fr_root, "add", "-A")
+    git(fr_root, "commit", "-qm", "chore(fr): claim")
+    _code_commit(wt)
+    result = _push(wt)
+    assert result.exit_code == 0, result.output
+    head = git(wt, "rev-parse", "HEAD").strip()
+    assert git(origin, "show", "fr:features/feat__q/HEADS") == f"{head}\n"
+    assert _remote(origin, "refs/heads/feat/q") == head
+    assert len(recorder.pushes()) == 1 and recorder.pushes()[0][:2] == ["push", "--atomic"]
+    _code_commit(wt, "feat(q): another")
+    assert _push(wt).exit_code == 0
+    second = git(wt, "rev-parse", "HEAD").strip()
+    assert git(origin, "show", "fr:features/feat__q/HEADS") == f"{head}\n{second}\n"

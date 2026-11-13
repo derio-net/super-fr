@@ -165,6 +165,9 @@ class PlanSweep:
     merged_commits: dict[str, str] = field(default_factory=dict)
     """Plan name -> the default ref's commit that merged it, when the sweep knows it
     (under quiet and stealth, from `fr.placement.merged`)."""
+    plan_dirs: dict[str, Path] = field(default_factory=dict)
+    """Plan name -> its directory, where the resolver put it, under quiet and stealth
+    (in a feature root of the fr or tracking worktree, never the product checkout)."""
 
 
 def _plan_merged(name: str, plan: Plan, evidence: MergeEvidence) -> bool:
@@ -240,6 +243,7 @@ def _feature_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
         branch = owner_of(space.root, froot.name)
         for plan_dir in sorted(p for p in plans_dir.iterdir() if (p / "_meta.yaml").exists()):
             name = plan_dir.name
+            sweep.plan_dirs[name] = plan_dir
             if branch:
                 sweep.branches[name] = branch
             try:
@@ -345,7 +349,7 @@ def _owed_plans(repo_root: Path, evidence: MergeEvidence) -> list[Owed]:
     return [
         Owed(
             kind="plan",
-            path=PLANS_REL / name,
+            path=sweep.plan_dirs.get(name, PLANS_REL / name),
             clear=sweep.commands.get(name, f"fr archive {PLANS_REL / name}"),
         )
         for name in sweep.archivable

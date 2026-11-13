@@ -36,9 +36,14 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fr.acceptance.fragment import FRAGMENTS_DIR, Amendment, Fragment, parse_fragment
 from fr.acceptance.model import LEVELS, AcceptanceError, Matrix, Row
+
+if TYPE_CHECKING:
+    from fr.artifacts.paths import ArtifactSpace
+    from fr.placement.merged import MergedView
 
 GitRunner = Callable[[Sequence[str], bytes | None], "subprocess.CompletedProcess[bytes]"]
 """`(git args, stdin) -> completed process`, run in the repo being folded."""
@@ -459,39 +464,80 @@ def _outside_fold(root: Path, own_texts: dict[str, str] | None = None) -> Effect
     """The fold under quiet and stealth (R17's clause): every MERGED feature's fragments,
     their amendments in the order `fr.placement.merged` gives the features (the
     first-parent commit of the product's default ref that introduced each), then this
-    branch's own entries when its feature is not merged. A feature never merged
-    contributes to its own branch's view only. Keys are `features/<id>/<fragment path>`,
-    so two features' fragments never share one."""
+    branch's own entries. A feature never merged contributes to its own branch's view
+    only. Keys are `features/<id>/<fragment path>`, so two features' fragments never
+    share one.
+
+    A merged feature's fragments are FROZEN at its merge (review p5-r5): read from the
+    last pushed fr commit of its path at or before the merge commit
+    (`merged.frozen_commit`), never from a worktree, so neither a later amendment nor an
+    unpushed local change counts as merged. This branch's own feature, merged or not,
+    adds its working tree as pending on top: an amendment made after the merge is
+    pending (and stale-checked), an in-place edit of a merged row is kept out with the
+    "differs from the merged one" notice."""
     from fr.artifacts.paths import FEATURES_DIR, feature_root, space_for
-    from fr.placement.merged import merged_features
 
     space = space_for(root)
-    view = merged_features(space, root)
+    view, frozen, notices = _merged_outside(root, space)
 
-    def texts_of(froot: Path, fid: str) -> dict[str, str]:
-        if own_texts is not None and fid == space.feature:
+    def own() -> dict[str, str]:
+        if own_texts is not None:
             return dict(sorted(own_texts.items()))
-        return _working_fragments(froot)
+        return _working_fragments(feature_root(space))
 
     merged: dict[str, Fragment] = {}
     intro: dict[tuple[str, int], int] = {}
     for feature in view.features:
-        for path, text in texts_of(feature.root, feature.feature).items():
+        for path, text in frozen.get(feature.feature, {}).items():
             key = f"{FEATURES_DIR}/{feature.feature}/{path}"
             frag = parse_fragment(text, source=key)
             merged[key] = frag
             for k in range(len(frag.amendments)):
                 intro[(key, k)] = feature.position
     working: dict[str, str] = {}
-    if space.feature is not None and view.get(space.feature) is None:
-        working = {
-            f"{FEATURES_DIR}/{space.feature}/{path}": text
-            for path, text in texts_of(feature_root(space), space.feature).items()
-        }
+    if space.feature is not None:
+        working = {f"{FEATURES_DIR}/{space.feature}/{path}": text for path, text in own().items()}
     if not merged and not working:
-        return replace(_empty(), notices=view.notices)
+        return replace(_empty(), notices=notices)
     result = _fold_from(merged, intro, working)
-    return replace(result, notices=(*view.notices, *result.notices))
+    return replace(result, notices=(*notices, *result.notices))
+
+
+def _merged_outside(
+    root: Path, space: ArtifactSpace
+) -> tuple[MergedView, dict[str, dict[str, str]], tuple[str, ...]]:
+    """(the merged view, feature id -> its frozen fragment texts, the notices)."""
+    from fr.placement.merged import files_at, frozen_commit, merged_features
+
+    placement = space.placement
+    view = merged_features(space, root)
+    notices = list(view.notices)
+    frozen: dict[str, dict[str, str]] = {}
+    for feature in view.features:
+        commit, why = frozen_commit(feature, placement, root)
+        if why:
+            notices.append(why)
+        texts = files_at(feature.root, placement, commit, FRAGMENTS_REL) if commit else {}
+        frozen[feature.feature] = {p: t for p, t in sorted(texts.items()) if _is_fragment_path(p)}
+    return view, frozen, tuple(notices)
+
+
+def own_merged_fragments(root: Path) -> tuple[dict[str, str], dict[str, str], str] | None:
+    """Under quiet and stealth, when this branch's own feature is merged: (its fragments
+    frozen at the merge, its working ones, the default ref), keyed relative to the
+    feature root. None otherwise. What `check`'s in-place-edit refusal reads (R16)."""
+    from fr.artifacts.paths import feature_root, space_for
+
+    if _quiet_root(root) is None:
+        return None
+    space = space_for(root)
+    if space.feature is None:
+        return None
+    view, frozen, _ = _merged_outside(root, space)
+    if view.get(space.feature) is None or view.ref is None:
+        return None
+    ref = view.ref.removeprefix("refs/remotes/")
+    return frozen.get(space.feature, {}), _working_fragments(feature_root(space)), ref
 
 
 def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:

@@ -667,7 +667,7 @@ def _quiet_product_artifacts(
 
 def _quiet_commit(
     repo_root: Path, toplevel: Path, paths: Sequence[Path], elsewhere: list[Path]
-) -> tuple[Path, Path | None] | CommitOutcome:
+) -> tuple[Path, tuple[Path, ...]] | CommitOutcome:
     """Where a commit of paths outside *toplevel* is made: the fr worktree under quiet,
     when EVERY path is below this feature's own path there (R23: each commit touches
     one feature's path). Anything else is the existing outside-the-repo refusal."""
@@ -709,22 +709,48 @@ def _stealth_ref(repo_root: Path) -> Any:
     return found[0] if found is not None else None
 
 
-def _owner_file(repo_root: Path, space: ArtifactSpace) -> Path | None:
-    """The feature root's OWNER file, written with this branch when it is not there yet,
-    so the feature's first commit records who owns its path (p3-r6); None when it was
+def _owner_file(repo_root: Path, space: ArtifactSpace) -> tuple[Path, ...]:
+    """The feature root's OWNER and BASE files, written with this branch and its base
+    when OWNER is not there yet, so the feature's first commit records who owns its path
+    (p3-r6) and which product commits were already there when it claimed it (review
+    p5-r1: a branch fresh from the default ref is not merged). Empty when OWNER was
     already recorded (`space_for` has refused a different owner)."""
-    from fr.artifacts.paths import FEATURE_OWNER, feature_root
+    from fr.artifacts.paths import FEATURE_BASE, FEATURE_OWNER, feature_root
     from fr.placement.quiet import branch_of
 
     owner = feature_root(space) / FEATURE_OWNER
     if owner.exists():
-        return None
+        return ()
     branch = branch_of(repo_root)
     if branch is None:
-        return None
+        return ()
     owner.parent.mkdir(parents=True, exist_ok=True)
     owner.write_text(f"{branch}\n")
-    return owner
+    base = _claim_base(repo_root)
+    if base is None:
+        return (owner,)
+    base_file = owner.parent / FEATURE_BASE
+    base_file.write_text(f"{base}\n")
+    return (owner, base_file)
+
+
+def _claim_base(repo_root: Path) -> str | None:
+    """The product commit a feature claims its root from: HEAD's merge base with the
+    default ref, else HEAD itself (no default ref: every commit HEAD holds counts as the
+    base, which can only under-count the feature's own commits, never over-count)."""
+    from fr.git import GitUnavailableError, git_answer
+    from fr.placement.merged import default_ref
+
+    try:
+        ref, _ = default_ref(repo_root)
+        if ref is not None:
+            done = git_answer(repo_root, "merge-base", "HEAD", ref)
+            if done.returncode == 0 and done.stdout.strip():
+                return done.stdout.strip()
+        head = git_answer(repo_root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+    except GitUnavailableError:
+        return None
+    return head.stdout.strip() or None if head.returncode == 0 else None
 
 
 def commit_paths(
@@ -869,11 +895,11 @@ def _commit_paths(
         rerouted = _quiet_commit(repo_root, toplevel, paths, elsewhere)
         if isinstance(rerouted, CommitOutcome):
             return rerouted
-        fr_root, owner = rerouted
+        fr_root, owned = rerouted
         from fr.placement.quiet import fr_worktree_lock, fr_worktree_problem
         from fr.settings import SettingsError
 
-        files = (*paths, owner) if owner is not None else paths
+        files = (*paths, *owned)
         stealthy = _stealth_ref(repo_root)
         if stealthy is not None:
             from fr.placement.stealth import commit_and_push
@@ -907,8 +933,8 @@ def _commit_paths(
                 pushed = CommitOutcome(
                     committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}"
                 )
-            if not pushed.committed and owner is not None:
-                restore_files(fr_root, [owner])  # commit_paths restores the rest, p4-r2
+            if not pushed.committed and owned:
+                restore_files(fr_root, list(owned))  # commit_paths restores the rest, p4-r2
             return pushed
 
         # p3-r8: every workspace of the repo shares this worktree and its index.
@@ -921,7 +947,7 @@ def _commit_paths(
                     )
                 return commit_paths(
                     fr_root,
-                    (*paths, owner) if owner is not None else paths,
+                    files,
                     message,
                     no_verify=no_verify,
                     restore_index=restore_index,

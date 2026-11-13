@@ -423,13 +423,21 @@ def _echo_merged_features(root: Path) -> None:
     """Under quiet and stealth, which features the fold took as merged, in merge order
     (R17's clause), and every `merged:` record it ignored. Nothing under `repo`."""
     from fr.artifacts.paths import outside_repo, space_for
-    from fr.placement.merged import merged_features
+    from fr.placement.merged import forge_for, merged_features
 
     if outside_repo(root) is None:
         return
-    view = merged_features(space_for(root), root)
+    forge, why_not = forge_for(root)
+    view = merged_features(space_for(root), root, forge=forge)
     listed = ", ".join(f"{f.feature} at {f.sha[:12]}" for f in view.features) or "none"
     typer.echo(f"merged: {listed}")
+    if view.unmerged:
+        state = why_not if forge is None else view.forge
+        typer.echo(
+            f"unmerged: {', '.join(view.unmerged)} (no merge found on "
+            f"{view.ref or 'the default ref'}; a squash or rebase merge is found only "
+            f"through the forge's merged PR, and the forge was {state})"
+        )
     for notice in view.notices:
         typer.echo(f"note: {notice}")
 

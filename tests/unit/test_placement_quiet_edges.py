@@ -149,6 +149,23 @@ def test_the_first_fr_commit_records_the_owning_branch(tmp_path: Path) -> None:
     assert git(fr_root, "show", "HEAD:features/feat__q/OWNER") == "feat/q\n"
 
 
+def test_the_first_fr_commit_records_the_base_the_branch_claimed_from(tmp_path: Path) -> None:
+    """Review p5-r1: BASE, beside OWNER in the same commit, is the branch's merge base
+    with the default ref, so commits already there never count as the feature's."""
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
+    main = git(repo, "rev-parse", "origin/main").strip()
+    state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
+    code, out = _invoke(
+        state.worktree, "plan", "create", "--slug", "2026-11-12-q", "--target-repo", "derio-net/q"
+    )
+    assert code == 0, out
+    fr_root = Path(os.environ["HOME"]) / ".cache" / "fr" / "worktrees" / "work" / "fr"
+    assert git(fr_root, "show", "HEAD:features/feat__q/BASE") == f"{main}\n"
+    names = git(fr_root, "show", "--name-only", "--format=", "HEAD").split()
+    assert "features/feat__q/OWNER" in names and "features/feat__q/BASE" in names
+
+
 def test_a_feature_root_owned_by_another_branch_is_refused(tmp_path: Path) -> None:
     """gh#1419 across clones: the other branch need not exist here, its OWNER file does."""
     repo = make_repo(tmp_path)

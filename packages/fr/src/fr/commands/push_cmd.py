@@ -12,7 +12,7 @@ renders itself.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -165,7 +165,42 @@ def _push_placement(repo_root: Path, remote: str, branch: str, *, code: bool) ->
     if space.placement != QUIET:
         push(repo_root, remote, branch)
         return [branch]
+    if code:
+        _record_pushed_head(repo_root, space)
     return atomic_push(repo_root, space.root, remote, branch, code=code)
+
+
+def _record_pushed_head(repo_root: Path, space: Any) -> None:
+    """Quiet (review p5-r3): append the head about to be pushed to the feature's `HEADS`
+    and commit it on `fr`, so the ONE atomic push carries the code and the record of it.
+    A feature's merged status then outlives its branch's refs. Only a claimed feature
+    root (one with `OWNER`) records; nothing is created for a branch with no fr work."""
+    from fr.artifacts.commit import commit_paths
+    from fr.artifacts.paths import FEATURE_HEADS, FEATURE_OWNER, feature_root
+    from fr.git_policy.push import PushRefusedError, run_git
+    from fr.placement.merged import record_head
+
+    if space.feature is None:
+        return
+    froot = feature_root(space)
+    if not (froot / FEATURE_OWNER).is_file():
+        return
+    done = run_git(repo_root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
+    head = done.stdout.strip() if done.returncode == 0 else ""
+    if not head:
+        return
+    heads = froot / FEATURE_HEADS
+    before = heads.read_bytes() if heads.is_file() else None
+    path = record_head(froot, head)
+    if path is None:
+        return
+    outcome = commit_paths(repo_root, [path], f"chore(fr): record pushed head {head[:12]}")
+    if not (outcome.committed or outcome.unchanged):
+        if before is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_bytes(before)
+        raise PushRefusedError(f"cannot record the pushed head in {path}: {outcome.reason}")
 
 
 def _refuse_fr_paths_under_stealth(repo_root: Path, commits: list[str]) -> None:

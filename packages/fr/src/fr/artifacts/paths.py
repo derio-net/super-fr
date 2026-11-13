@@ -42,6 +42,13 @@ FEATURES_DIR: Final = "features"
 FEATURE_OWNER: Final = "OWNER"
 """`<root>/features/<feature-id>/OWNER` names the branch that owns that feature root (one
 line), so a second branch with the same id is refused even from another clone (gh#1419)."""
+FEATURE_BASE: Final = "BASE"
+"""`<root>/features/<feature-id>/BASE`: the product commit the branch stood on (its merge
+base with the default ref) when it claimed the root, written with `OWNER` by the same
+first fr commit. Merged status counts only commits the base does not contain (R17)."""
+FEATURE_HEADS: Final = "HEADS"
+"""`<root>/features/<feature-id>/HEADS`: the product heads `fr push` pushed for the feature,
+one sha a line, append-only: owned evidence that outlives the branch's refs (R17)."""
 RECORDS_SUFFIX: Final = ".records"
 """A run's step records sit at `<runs dir>/<run-id>.records/`, beside its cursor."""
 SWITCH_REF: Final = "refs/remotes/origin/fr"

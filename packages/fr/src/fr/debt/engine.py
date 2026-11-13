@@ -291,6 +291,21 @@ def _last_commit(
     return _parse(done.stdout.strip()) if done.returncode == 0 else None
 
 
+def _fr_plan_times(repo_root: Path, plan_dir: Path) -> list[datetime | None]:
+    """Under quiet and stealth (review p5-r8): a plan's activity is the history of ITS
+    path in the fr (or tracking) worktree, local and pushed; the product's history holds
+    no fr file."""
+    from fr.artifacts.paths import outside_repo
+    from fr.placement.merged import pushed_ref
+
+    found = pushed_ref(plan_dir, outside_repo(repo_root) or "")
+    if found is None:
+        return []
+    top, pushed = found
+    rel = plan_dir.resolve().relative_to(top.resolve()).as_posix()
+    return [_last_commit(top, "HEAD", rel), _last_commit(top, pushed, rel)]
+
+
 def _parse(text: str | None) -> datetime | None:
     if not text:
         return None
@@ -460,7 +475,10 @@ def compute(
     for name in [*sweep.in_progress, *sweep.complete_unmerged]:
         rel = f"{PLANS_REL}/{name}"
         times: list[datetime | None] = []
-        if ref:
+        plan_dir = sweep.plan_dirs.get(name)
+        if plan_dir is not None:
+            times += _fr_plan_times(repo_root, plan_dir)  # quiet/stealth: where it lives
+        elif ref:
             times.append(_last_commit(repo_root, ref, rel))
         else:
             times.append(_last_commit(repo_root, "HEAD", rel))

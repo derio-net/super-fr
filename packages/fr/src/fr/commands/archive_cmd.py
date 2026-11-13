@@ -237,10 +237,12 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
     """`fr archive --branch <b>` under quiet and stealth (R25): append one `merged: <sha>`
     record to the feature's `merged.yaml`, in ONE commit on the placement's branch, pushed
     (quiet: a plain push of `fr`; stealth: compare-and-swap to the tracking ref), and move
-    nothing. The sha is the default ref's commit that merged the branch (R17's clause):
-    a branch that is not merged is refused, and a record that already agrees is not
-    written twice."""
-    from fr.artifacts.paths import FEATURES_DIR, feature_id
+    nothing. The sha is the default ref's commit that merged the branch (R17's clause,
+    `fr.placement.merged`, which also reads the forge for a squash or rebase merge): a
+    branch that is not merged is refused, saying why, and a record that already agrees is
+    not written twice (an unpushed one is pushed). A deleted branch is fine: its merge is
+    judged by the heads fr recorded for it (review p5-r3)."""
+    from fr.artifacts.paths import FEATURES_DIR, STEALTH, feature_id
     from fr.placement import merged as merged_status
     from fr.placement.quiet import owner_of
 
@@ -250,7 +252,8 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
             f"refusing to archive — no default ref: {evidence.ref_error}", soft_wrap=True
         )
         raise typer.Exit(2)
-    _branch_refs_or_exit(repo_root, branch, evidence.ref.ref.split("/", 1)[0])
+    # Fetches the branch's remote ref; a branch gone everywhere is no refusal here.
+    resolve_branch_refs(subprocess_runner, repo_root, branch, evidence.ref.ref.split("/", 1)[0])
     _note_fetch_error(evidence)
     space = space_for(repo_root)
     fid = feature_id(branch)
@@ -266,33 +269,76 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    view = merged_status.merged_features(space, repo_root)
+    forge, why_not = merged_status.forge_for(repo_root)
+    view = merged_status.merged_features(space, repo_root, forge=forge)
     for notice in view.notices:
         err_console.print(f"note: {escape(notice)}", soft_wrap=True)
     feature = view.get(fid)
     if feature is None:
+        reason = view.no_merge(branch)
+        if forge is None:
+            reason = reason.replace("the forge was not read", f"the forge was {why_not}")
         err_console.print(
-            f"refusing to archive — {branch} is not merged into {view.ref or 'the default ref'}:"
-            " its head is not reachable from it (R17). Nothing was written",
-            soft_wrap=True,
+            f"refusing to archive — {escape(reason)}. Nothing was written", soft_wrap=True
         )
         raise typer.Exit(2)
     short = feature.sha[:12]
+    record = merged_status.merged_file(froot)
     if feature.cached:
+        if placement != STEALTH and _unpushed(space.root, record):
+            _push_fr(repo_root, space.root, record)
+            typer.echo(f"already recorded: {branch} merged at {short}; pushed the record")
+            return
         typer.echo(f"already recorded: {branch} merged at {short}; nothing to write")
         return
-    path = merged_status.append_record(froot, feature.sha, feature.heads)
+    written = [merged_status.append_record(froot, feature.sha, feature.heads, pr=feature.pr)]
+    # The verified heads are owned evidence from here on: the merge survives the branch.
+    for head in feature.heads:
+        added = merged_status.record_head(froot, head)
+        if added is not None and added not in written:
+            written.append(added)
+    via = f" (PR #{feature.pr}, by the forge)" if feature.how == "forge" else ""
     _commit_merged_record(
-        repo_root, space, placement, path, f"chore(fr): record {branch} merged at {short}"
+        repo_root, space, placement, written, f"chore(fr): record {branch} merged at {short}"
     )
     typer.echo(
-        f"recorded: {branch} merged at {short} "
+        f"recorded: {branch} merged at {short}{via} "
         f"({FEATURES_DIR}/{fid}/{merged_status.MERGED_FILE}); nothing moved (R25)"
     )
 
 
+def _unpushed(fr_root: Path, path: Path) -> bool:
+    """The local `fr` holds a commit of *path* that `origin/fr` does not (review p5-r7)."""
+    from fr.artifacts.paths import SWITCH_REF
+    from fr.git import GitUnavailableError, git_answer
+
+    rel = path.resolve().relative_to(fr_root.resolve()).as_posix()
+    try:
+        done = git_answer(fr_root, "log", "--format=%H", f"{SWITCH_REF}..HEAD", "--", rel)
+    except GitUnavailableError:
+        return True
+    return done.returncode != 0 or bool(done.stdout.strip())
+
+
+def _push_fr(repo_root: Path, fr_root: Path, record: Path) -> None:
+    """Push the local `fr` (under its lock), or exit 2 naming the unpushed record."""
+    from fr.git_policy.push import PushRefusedError, atomic_push
+    from fr.placement.quiet import QUIET_BRANCH
+
+    try:
+        atomic_push(repo_root, fr_root, "origin", QUIET_BRANCH, code=False)
+    except PushRefusedError as e:
+        err_console.print(
+            f"refusing to archive — the record {record} is committed on the local "
+            f"`{QUIET_BRANCH}` branch but not pushed, and its push was refused: "
+            f"{escape(str(e))}; run `fr push` to retry",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+
+
 def _commit_merged_record(
-    repo_root: Path, space: Any, placement: str, path: Path, message: str
+    repo_root: Path, space: Any, placement: str, written: list[Path], message: str
 ) -> None:
     """Commit the one record and push it; on any failure put the file back and exit 2
     (a push quiet's `fr` branch refused leaves the commit for `fr push` to retry)."""
@@ -304,7 +350,7 @@ def _commit_merged_record(
     from fr.settings import SettingsError
 
     def refuse(why: str, wt: Path) -> None:
-        stealth.restore_files(wt, [path])
+        stealth.restore_files(wt, written)
         err_console.print(f"refusing to archive — {escape(why)}", soft_wrap=True)
         raise typer.Exit(2)
 
@@ -320,7 +366,7 @@ def _commit_merged_record(
             outcome = stealth.commit_and_push(
                 found[0],
                 wt,
-                [path],
+                written,
                 message,
                 tracking,
                 target_remote=stealth.origin_url(repo_root),
@@ -341,7 +387,7 @@ def _commit_merged_record(
             problem = fr_worktree_problem(fr_root, dirty=False)
             if problem is not None:
                 refuse(problem, fr_root)
-            outcome = commit_paths(fr_root, [path], message)
+            outcome = commit_paths(fr_root, written, message)
     except SettingsError as e:
         refuse(str(e), fr_root)
     if not outcome.committed:
