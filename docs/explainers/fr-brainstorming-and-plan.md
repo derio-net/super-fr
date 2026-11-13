@@ -164,8 +164,8 @@ The rules the skill applies when it writes a plan:
   plan at delivery.
 
 After a plan ships, surfaced-but-unbuilt items go into a sibling rework plan rather than
-reopening the parent: `fr plan rework <parent-plan-dir>` (the parent must be complete and
-archived; a live plan is refused), then `fr plan rework-add` to
+reopening the parent: `fr plan rework <parent-plan-dir>` (the parent may be live or archived;
+fr does not check that it is complete), then `fr plan rework-add` to
 record each item and `fr plan rework-list` to see what is open.
 
 ## fr-execute: one phase, then stop
@@ -206,7 +206,8 @@ Constraints worth knowing:
 - Outside fr-goal, the executor pushes with `fr push` and opens its draft with
   `fr pr create`, never `git push` or the forge's CLI, so the repo's git policy applies.
 - A plan that is a single `.md` file is the old v1 format. `fr migrate v1-to-v2 --yes`
-  converts every one in the repo at once; commit that as its own change.
+  converts every completed v1 plan in the repo at once (add `--include-in-progress` for the
+  rest); commit that as its own change.
 
 ## Where to go next
 
