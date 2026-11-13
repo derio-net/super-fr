@@ -266,7 +266,7 @@ def check_feature_id(root: Path, branch: str, placement: str = "quiet") -> str:
             f"placement quiet: a feature branch cannot be named `{QUIET_BRANCH}`, the branch "
             "that holds the artifacts"
         )
-    fid = paths.feature_id(branch)
+    fid = paths.checked_feature_id(branch)
     common = paths._common_dir(Path(root))
     others = (
         sorted(n for n in _branch_names(common) if n != branch and paths.feature_id(n) == fid)

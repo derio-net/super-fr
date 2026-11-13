@@ -242,9 +242,10 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
     branch that is not merged is refused, saying why, and a record that already agrees is
     not written twice (an unpushed one is pushed). A deleted branch is fine: its merge is
     judged by the heads fr recorded for it (review p5-r3)."""
-    from fr.artifacts.paths import FEATURES_DIR, STEALTH, feature_id
+    from fr.artifacts.paths import FEATURES_DIR, STEALTH, checked_feature_id
     from fr.placement import merged as merged_status
     from fr.placement.quiet import owner_of
+    from fr.settings import SettingsError
 
     evidence = merge_evidence(repo_root, fetch=True)
     if evidence.ref is None:
@@ -256,7 +257,11 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
     resolve_branch_refs(subprocess_runner, repo_root, branch, evidence.ref.ref.split("/", 1)[0])
     _note_fetch_error(evidence)
     space = space_for(repo_root)
-    fid = feature_id(branch)
+    try:
+        fid = checked_feature_id(branch)
+    except SettingsError as e:
+        err_console.print(f"refusing to archive: {e}", soft_wrap=True, markup=False)
+        raise typer.Exit(2) from e
     froot = space.root / FEATURES_DIR / fid
     if not froot.is_dir():
         typer.echo(f"nothing to archive for {branch}: it has no feature path under {placement}")

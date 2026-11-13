@@ -279,6 +279,34 @@ class Group:
         return {rel: data for rel, (_, data) in self.files.items() if rel not in META}
 
 
+def checked_owner(root: Path, owner: str) -> str:
+    """*owner*'s feature id, refused unless the branch is a valid ref name (`git
+    check-ref-format --branch`) and its id one safe path segment
+    (`paths.checked_feature_id`): a run cursor's `branch:` is repo content, untrusted."""
+    try:
+        fid = paths.checked_feature_id(owner)
+    except SettingsError as e:
+        raise MoveError(f"fr placement move: refused: {e}") from e
+    if not _ok(root, "check-ref-format", "--branch", owner):
+        raise MoveError(
+            f"fr placement move: refused: branch {owner!r} is not a valid branch name "
+            "(`git check-ref-format --branch`), so it cannot name a feature root"
+        )
+    return fid
+
+
+def _inside(base: Path, rel: str) -> Path:
+    """`base / rel`, refused unless it stays inside *base* (defence in depth: every path
+    a move writes or deletes is below its one feature root)."""
+    path = base / rel
+    if Path(rel).is_absolute() or ".." in Path(rel).parts or not rel:
+        raise MoveError(f"fr placement move: refused: {rel!r} is not a path inside {base}")
+    real, top = path.resolve(), base.resolve()
+    if real != top and not real.is_relative_to(top):
+        raise MoveError(f"fr placement move: refused: {rel!r} leaves {base}")
+    return path
+
+
 def _repo_groups(root: Path, ref: str) -> list[Group]:
     """Every placement-bound artifact at *ref* (the default ref), grouped by feature, with
     the bookkeeping a feature root carries synthesised from the default ref's history."""
@@ -307,7 +335,7 @@ def _repo_groups(root: Path, ref: str) -> list[Group]:
     groups: list[Group] = []
     seen: dict[str, str] = {}
     for owner, rels in sorted(owned.items()):
-        fid = paths.feature_id(owner)
+        fid = checked_owner(root, owner)
         if fid in seen:
             raise MoveError(
                 f"fr placement move: {owner!r} and {seen[fid]!r} share the feature id {fid!r}; "
@@ -499,6 +527,9 @@ def _commit_feature(root: Path, parent: str | None, prefix: str, group: Group, m
     """*parent* with `<prefix>/` holding exactly *group*'s files, as one commit (or
     *parent* itself when it already does: the copy is idempotent by content)."""
     have = _tree(root, parent, f"{prefix}/") if parent else {}
+    fake = Path("/") / prefix
+    for rel in group.files:
+        _inside(fake, rel)
     want = {f"{prefix}/{rel}": (mode, data) for rel, (mode, data) in group.files.items()}
     hashed = {p: (mode, _hash(root, data)) for p, (mode, data) in want.items()}
     if have == hashed:
@@ -585,17 +616,22 @@ def _copy_stealth(ctx: Ctx) -> None:
         want = {f"{prefix}/{rel}": (mode, _hash(wt, data)) for rel, (mode, data) in g.files.items()}
         if have == want:
             continue
+        froot = wt / prefix
+        _inside(wt / target / paths.FEATURES_DIR, g.fid)
         written: list[Path] = []
         for rel, (mode, data) in g.files.items():
-            path = wt / prefix / rel
+            path = _inside(froot, rel)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
             if mode == "100755":
                 path.chmod(0o755)
             written.append(path)
         for stale in (p for p in have if p not in want):
-            (wt / stale).unlink(missing_ok=True)
-            written.append(wt / stale)
+            if not stale.startswith(f"{prefix}/"):
+                continue  # the stale pass is limited to exactly this feature's root
+            gone = _inside(froot, stale.removeprefix(f"{prefix}/"))
+            gone.unlink(missing_ok=True)
+            written.append(gone)
         message = _fr_message(ctx.root, f"chore(fr): move {g.fid} from placement {ctx.source}")
         with _dated(g.date):
             outcome = stealth.commit_and_push(
@@ -1083,6 +1119,10 @@ def move(
             emit(str(e))
             return "paused"
         except BaseException:
+            if not ctx.state["done"]:
+                # Nothing verified yet: a re-run reads the default ref afresh, so a fixed
+                # source (a crafted cursor removed) is what it copies.
+                ctx.state.pop("source_sha", None)
             ctx.save()
             raise
         ctx.state["done"].append(step)

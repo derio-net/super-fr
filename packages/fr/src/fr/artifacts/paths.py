@@ -25,6 +25,7 @@ switch (quiet, `fr.placement.quiet`), then `repo`.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -178,6 +179,44 @@ def feature_id(branch: str) -> str:
     return types.branch_slug(branch)
 
 
+_SAFE_FEATURE_ID: Final = re.compile(r"[A-Za-z0-9._-]+")
+_REF_FORBIDDEN: Final = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
+
+
+def unsafe_branch(branch: str) -> str | None:
+    """Why *branch* cannot name a feature root, or None. The rules of `git
+    check-ref-format --branch` that a pure check can hold (no process: this runs on every
+    quiet or stealth lookup): not empty, not `-`-led, no `..`, no `@{`, no control or
+    special character, no empty, `.`-led or `.lock` component, no leading or trailing
+    `/`, no trailing `.`, and not `@` alone."""
+    if not branch or branch == "@" or branch.startswith(("-", "/")) or branch.endswith(("/", ".")):
+        return "empty, `@`, or a leading `-`/`/`, or a trailing `/`/`.`"
+    if ".." in branch or "@{" in branch or _REF_FORBIDDEN.search(branch):
+        return "it holds `..`, `@{`, a space, a control character or one of ~^:?*[\\"
+    for part in branch.split("/"):
+        if not part or part.startswith(".") or part.endswith(".lock"):
+            return "a path component is empty, starts with `.` or ends with `.lock`"
+    return None
+
+
+def checked_feature_id(branch: str) -> str:
+    """*branch*'s feature id, refused (`SettingsError`) unless it is a safe single path
+    segment: the branch passes `unsafe_branch`, and its id matches `[A-Za-z0-9._-]+` and
+    is not all dots. The ONE check every quiet, stealth, merged and move path takes
+    before a feature id names a directory: a branch is repo content (a run cursor names
+    it), so a crafted one must never reach a path outside `features/<id>/`. (The id is
+    not injective, gh#1419; that is refused elsewhere, not here.)"""
+    from fr.settings import SettingsError
+
+    why = unsafe_branch(branch) if isinstance(branch, str) else "not a string"
+    fid = feature_id(branch) if why is None else ""
+    if why is None and (not _SAFE_FEATURE_ID.fullmatch(fid) or not fid.strip(".")):
+        why = f"its feature id {fid!r} is not one safe path segment"
+    if why is not None:
+        raise SettingsError(f"branch {branch!r} cannot name a feature root: {why}")
+    return fid
+
+
 def _common_dir(repo_root: Path) -> Path | None:
     """The repository's common git dir, read from the filesystem (no subprocess: this
     runs on every artifact lookup), or None outside a git checkout."""
@@ -226,7 +265,8 @@ def sticky_refusal(recorded: str, current: str, source: str) -> SettingsError:
         f"{source}: this workspace was set up under placement: {recorded}, but the "
         f"`fr` switch (origin/fr) now says placement: {current} (the `fr` branch was "
         "deleted or renamed, or its settings changed). fr will not move a live workspace "
-        f"between placements: restore origin/fr to placement: {recorded}, or finish this "
+        f"between placements by itself: run `fr placement migrate-branch` in it to move its "
+        f"artifacts (R28), restore origin/fr to placement: {recorded}, or finish this "
         "workspace and start the next one with `fr isolation up`"
     )
 

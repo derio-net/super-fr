@@ -453,3 +453,72 @@ def test_run_refuses_outside_a_stealth_workspace(tmp_path: Path) -> None:
     root = repo_with_artifacts(tmp_path)
     with pytest.raises(move.MoveError, match="stealth workspace"):
         _run(root, "repo", run="r-x")
+
+
+# --- security: a crafted branch never names a path outside its feature root ------------
+
+
+@pytest.mark.parametrize("branch", ["..", "../../escape", "a/../../b", "a\\\\b", "-x", ".hidden"])
+def test_checked_feature_id_refuses_an_unsafe_branch(branch: str) -> None:
+    from fr.artifacts.paths import checked_feature_id
+
+    with pytest.raises(SettingsError, match="cannot name a feature root"):
+        checked_feature_id(branch)
+
+
+def test_checked_feature_id_takes_an_ordinary_branch() -> None:
+    from fr.artifacts.paths import checked_feature_id
+
+    assert checked_feature_id("feat/a-b_c.1") == "feat__a-b_c.1"
+
+
+def _crafted(tmp_path: Path, branch: str) -> Path:
+    root = repo_with_artifacts(tmp_path)
+    _merge(root, "feat/evil", {f"{KIND_DIRS['run-archived']}/r-evil.yaml":
+                               f"run: r-evil\nbranch: '{branch}'\n"})  # fmt: skip
+    git(root, "fetch", "-q", "origin")
+    return root
+
+
+def _snapshot(*tops: Path) -> dict[str, bytes]:
+    out: dict[str, bytes] = {}
+    for top in tops:
+        for p in sorted(top.rglob("*")) if top.exists() else []:
+            if p.is_file() and ".git" not in p.relative_to(top).parts:
+                out[str(p)] = p.read_bytes()
+    return out
+
+
+@pytest.mark.parametrize("branch", ["../../escape", ".."])
+def test_a_cursor_with_a_crafted_branch_is_refused_and_nothing_is_written(
+    tmp_path: Path, branch: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _crafted(tmp_path, branch)
+    before = _snapshot(tmp_path)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(app, ["placement", "move", "--to", "quiet"])
+    assert result.exit_code == 2, result.output
+    assert branch in result.output and "cannot name a feature root" in result.output
+    assert not git(_origin(root), "branch", "--list", "fr").strip()
+    assert git(root, "branch", "--list", "fr").strip() == ""
+    after = {k: v for k, v in _snapshot(tmp_path).items() if move.STATE_NAME not in k}
+    assert after == before
+
+
+def test_a_crafted_branch_never_reaches_the_tracking_repo(tmp_path: Path) -> None:
+    root = _crafted(tmp_path, "../../escape")
+    bare = make_tracking(tmp_path)
+    tip = git(bare, "rev-parse", "main").strip()
+    with pytest.raises(move.MoveError, match="cannot name a feature root"):
+        _run(root, "stealth", tracking=f"{bare}@main")
+    assert git(bare, "rev-parse", "main").strip() == tip
+    assert not (tmp_path / "escape").exists()
+
+
+def test_inside_refuses_a_path_leaving_its_feature_root(tmp_path: Path) -> None:
+    base = tmp_path / "features" / "f"
+    base.mkdir(parents=True)
+    for rel in ("../g/x", "/etc/passwd", ""):
+        with pytest.raises(move.MoveError):
+            move._inside(base, rel)
+    assert move._inside(base, "docs/x.md") == base / "docs/x.md"
