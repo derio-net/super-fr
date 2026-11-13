@@ -229,7 +229,7 @@ The skill `fr-devops-gate` holds the judgement it needs from you.
 | Stage | |
 |---|---|
 | 1 | Before anything comes up, stop on a PR that changes the ops profile itself. That is a PR whose own diff, from the merge base, touches `.devcontainer/<ops>/**` or `.devcontainer/fr-profiles.yaml`. That change must merge in its own PR first. Bring up or reuse the ops workspace `chore/ops-<slug>` on the ops profile. Cut it from exactly the PR head, or from the default branch's tip once the PR has merged (a merged head can never be rebased). Stop on a cut whose profile is not the same as the default branch's, because the workspace runs the cut's copy with the ops credentials. Rebase an open PR onto the default branch; a merged PR's stale workspace is cut again. Grant trust on the host if the op set changed. Then show the pre-merge status, then each open op. Each op is confirmed on the host terminal and run as `fr isolation exec --branch chore/ops-<slug> -- fr ops apply <id> --yes [--yes-mutating]`. Records the head it cut from. |
-| 2 | Merge through the forge, only when all of these are true: no pre-merge op is open, and the PR's required checks are green on that head. The head is unchanged since stage 1. A terminal confirmation names the PR, its head and the pre-merge state (asked even under `--yes`). If fr cannot merge through the forge, the stage stops and names the manual merge. |
+| 2 | Merge through the forge, only when all of these are true: no pre-merge op is open; the PR's required checks are green on that head; the head is unchanged since stage 1; the operator confirms a terminal prompt that names the PR, its head and the pre-merge state (asked even under `--yes`). If fr cannot merge through the forge, the stage stops and names the manual merge. |
 | 3 | `fr isolation verify-merge`. Then rebase the ops branch onto the default branch (it then carries only its own evidence commits). Then every `ready:`. |
 | 4 | Post-merge status and apply. |
 | 5 | Each Test Plan step whose effective gate is `devops`. A pointed step's probe runs (see Test Plan probes), and the stage asks about the others. Each answer is recorded with `fr closeout outcome`: `ran`, `na`, or `owed` (stage 6 then stops on it; see below). |
@@ -301,55 +301,61 @@ A devops-gated run's Test Plan steps that run commands should be ops. Then stage
 run their checks, and does not have to ask.
 
 - **The pointer.** A step may lead its text with `(op: <id>)`, after the optional gate
-  tag: `- [devops] (op: guest-verify) Run the verify playbook`. `fr plan self-review`
-  errors when the id names no op of the plan.
+    tag: `- [devops] (op: guest-verify) Run the verify playbook`. `fr plan self-review`
+    errors when the id names no op of the plan.
+
 - **The gap.** A run has an ops gap when all of these are true: its gates include `devops`,
-  and its plan declares no op and no `none:`. Also, its devops steps carry commands. These are
-  fenced lines, or inline spans that look like an operations command. This test is a
-  heuristic, so a prose span can be a false positive. `fr plan self-review` and the spec
-  review warn about the gap.
+    and its plan declares no op and no `none:`. Also, its devops steps carry commands. These are
+    fenced lines, or inline spans that look like an operations command. This test is a
+    heuristic, so a prose span can be a false positive. `fr plan self-review` and the spec
+    review warn about the gap.
 
-  `fr ops gate` stage 1 stops on it (exit 2, nothing brought up
-  or recorded). The stage reads the PR head, or the default branch's tip once merged. Fix the
-  gap on the PR branch while the PR is open. After it has merged, land the fix on the
-  default branch through a follow-up PR (stage 1 then reads the default branch's tip).
+    `fr ops gate` stage 1 stops on it (exit 2, nothing brought up
+    or recorded). The stage reads the PR head, or the default branch's tip once merged. Fix the
+    gap on the PR branch while the PR is open. After it has merged, land the fix on the
+    default branch through a follow-up PR (stage 1 then reads the default branch's tip).
+
 - **`fr ops stub [--plan <dir>] [--yes]`.** For each devops command step without a
-  pointer, it proposes the op `step-<n>` and the `(op: step-<n>)` pointer. The op has
-  `phase: post-merge`, `apply:` the step's commands joined with ` && `, and `mutating: true`.
-  Without `--yes` it prints both and writes nothing. With `--yes` it writes `ops.yaml`
-  (stamped `schema_version: 2`) and the spec.
+    pointer, it proposes the op `step-<n>` and the `(op: step-<n>)` pointer. The op has
+    `phase: post-merge`, `apply:` the step's commands joined with ` && `, and `mutating: true`.
+    Without `--yes` it prints both and writes nothing. With `--yes` it writes `ops.yaml`
+    (stamped `schema_version: 2`) and the spec.
 
-  It stops, and writes nothing, on a declared id, a
-  `none:` file or a plan with no spec. Each stub's `check:` is the sentinel `TODO`.
-  `fr ops status` reports it UNVERIFIABLE ("write a real probe"), and self-review shows an
-  error on it until you replace it.
+    It stops, and writes nothing, on a declared id, a
+    `none:` file or a plan with no spec. Each stub's `check:` is the sentinel `TODO`.
+    `fr ops status` reports it UNVERIFIABLE ("write a real probe"), and self-review shows an
+    error on it until you replace it.
+
 - **`none: <reason>`.** When the steps have no ops on purpose, say so in `ops.yaml`
-  (`schema_version: 2`, `none: <reason>`, no `ops:`). It is not accepted beside `ops:` or a
-  `# manual-operation` step block. A `none:` plan does not promote the run to the
-  `devops` gate.
+    (`schema_version: 2`, `none: <reason>`, no `ops:`). It is not accepted beside `ops:` or a
+    `# manual-operation` step block. A `none:` plan does not promote the run to the
+    `devops` gate.
+
 - **Stage 5.** For a pointed step it runs `fr ops status <id> --json` in the ops workspace
-  (after the trust check). A check that passes records `ran` with `<op id>: check passed` and
-  the evidence lines, with no question. An OPEN, UNVERIFIABLE, CANNOT-VERIFY or ESCALATE
-  op shows its reason and asks `retry`, `na <reason>` or `owed <why>`. An N/A op, or a
-  DONE that ran no check, asks the usual `ran | na | owed`.
+    (after the trust check). A check that passes records `ran` with `<op id>: check passed` and
+    the evidence lines, with no question. An OPEN, UNVERIFIABLE, CANNOT-VERIFY or ESCALATE
+    op shows its reason and asks `retry`, `na <reason>` or `owed <why>`. An N/A op, or a
+    DONE that ran no check, asks the usual `ran | na | owed`.
 
-  Answers take an optional `:`
-  or `-` separator (`ran: x`). If an answer does not match, the stage asks again. Three
-  such answers in a row fail the stage.
+    Answers take an optional `:`
+    or `-` separator (`ran: x`). If an answer does not match, the stage asks again. Three
+    such answers in a row fail the stage.
+
 - **Evidence bound.** The screen shows the last 40 lines of a probe that passes (each at most
-  200 characters). Only the last three **status lines**, 300 characters in all, are
-  recorded. The rule fails closed:
-  - a status line holds only letters, digits, spaces and `, . ; ( ) / % + # _ * -`
-    (no colon, quote, `=` or angle bracket);
-  - a line that starts with `- ` or `* ` (a list item) is dropped;
-  - a line with a word of 20 or more characters is dropped;
-  - a line with a word of 12 or more that mixes letters and digits (token-shaped) is dropped;
-  - output with a `{`, `}`, `[` or `]` anywhere records none of its lines.
+    200 characters). Only the last three **status lines**, 300 characters in all, are
+    recorded. The rule fails closed:
 
-  So a JSON or YAML body, an env assignment, a URL, a JWT or a key is never committed. The
-  evidence reads `no output` instead. The mask hides known secret values only. It does not
-  filter hostnames, IPs or other text that identifies a system. So end a probe
-  with a plain one-line summary (`converged 3 of 3`) and keep it free of them.
+    - a status line holds only letters, digits, spaces and `, . ; ( ) / % + # _ * -`
+      (no colon, quote, `=` or angle bracket);
+    - a line that starts with `- ` or `* ` (a list item) is dropped;
+    - a line with a word of 20 or more characters is dropped;
+    - a line with a word of 12 or more that mixes letters and digits (token-shaped) is dropped;
+    - output with a `{`, `}`, `[` or `]` anywhere records none of its lines.
+
+    So a JSON or YAML body, an env assignment, a URL, a JWT or a key is never committed. The
+    evidence reads `no output` instead. The mask hides known secret values only. It does not
+    filter hostnames, IPs or other text that identifies a system. So end a probe
+    with a plain one-line summary (`converged 3 of 3`) and keep it free of them.
 
 ### Test Plan tags
 
