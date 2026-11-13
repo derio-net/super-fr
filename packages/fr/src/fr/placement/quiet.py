@@ -78,8 +78,40 @@ def _git_dir(root: Path) -> Path | None:
     return None
 
 
+_REFSTORAGE: Final = re.compile(r"(?im)^\s*refstorage\s*=\s*(\S+)")
+
+
+def _reftable(common: Path) -> bool:
+    """Does this repository keep its refs in a reftable (review pr1431-r3)? Then there
+    are no loose refs or `packed-refs` to read, and every ref read goes through git."""
+    if (common / "reftable").exists():
+        return True
+    try:
+        config = (common / "config").read_text()
+    except OSError:
+        return False
+    found = _REFSTORAGE.search(config)
+    return found is not None and found.group(1).strip().strip('"').lower() != "files"
+
+
+def _git_ref_read(cwd: Path, *args: str) -> str | None:
+    """One read of a ref through git (reftable only); None when git says there is no
+    such ref. A git that cannot answer refuses: an unread ref is never read as absent."""
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        done = git_answer(cwd, *args)
+    except GitUnavailableError as e:
+        raise SettingsError(f"placement: cannot read the refs of a reftable repository: {e}") from e
+    return done.stdout if done.returncode == 0 else None
+
+
 def _ref_sha(common: Path, ref: str) -> str | None:
-    """The sha a ref holds, read from the filesystem (loose, then packed-refs)."""
+    """The sha a ref holds, read from the filesystem (loose, then packed-refs), or through
+    git under reftable."""
+    if _reftable(common):
+        out = _git_ref_read(common, "rev-parse", "--verify", "--quiet", f"{ref}^{{object}}")
+        return (out.strip() or None) if out is not None else None
     loose = common / ref
     try:
         if loose.is_file():
@@ -248,6 +280,10 @@ def head_branch(root: Path) -> str | None:
     git_dir = _git_dir(Path(root))
     if git_dir is None:
         return None
+    common = paths._common_dir(Path(root))
+    if common is not None and _reftable(common):
+        out = (_git_ref_read(Path(root), "symbolic-ref", "--quiet", "HEAD") or "").strip()
+        return out.removeprefix("refs/heads/") if out.startswith("refs/heads/") else None
     try:
         head = (git_dir / "HEAD").read_text().strip()
     except OSError:
@@ -259,6 +295,15 @@ def _branch_names(common: Path) -> set[str]:
     """Every local and `origin` branch name, from the filesystem."""
     prefixes = ("refs/heads/", "refs/remotes/origin/")
     names: set[str] = set()
+    if _reftable(common):
+        out = _git_ref_read(common, "for-each-ref", "--format=%(refname)", *prefixes) or ""
+        for name in out.splitlines():
+            for prefix in prefixes:
+                if name.startswith(prefix):
+                    names.add(name.removeprefix(prefix))
+        names.discard("HEAD")
+        names.discard(QUIET_BRANCH)
+        return names
     for prefix in prefixes:
         base = common / prefix
         if base.is_dir():
