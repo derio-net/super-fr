@@ -27,7 +27,7 @@ docs/superpowers/plans/<slug>/   # by convention the slug starts with a date, YY
 ```
 
 `_meta.yaml` names the plan, the spec it implements (`spec:`) and the repo it changes
-(`target_repo:`). It also names the range of `fr` versions that can read it (`fr_version:`).
+(`target_repo:`). It also names the range of `fr` versions that it accepts (`fr_version:`).
 
 Each phase file has a `phase:` header. The header holds the phase's `number`, `title`, `tag`
 and `depends_on` phases. It also holds the `acceptance` rows the phase moves, a model `tier`
