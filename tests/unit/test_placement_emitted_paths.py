@@ -88,7 +88,6 @@ def test_the_brainstorm_brief_carries_a_record_template_under_quiet(
     monkeypatch.chdir(state.worktree)
     code, out = _fr(state.worktree, "run", "start", "fr-goal", "--branch", "feat/q")
     assert code == 0, out
-    run_id = next(line for line in out.splitlines() if "run" in line)  # noqa: F841
     fr_root = Path(os.environ["HOME"]) / ".cache" / "fr" / "worktrees" / "work" / "fr"
     (cursor,) = (fr_root / "features" / FEATURE / KIND_DIRS["run"]).glob("*.yaml")
     code, out = _fr(state.worktree, "run", "advance", cursor.stem)
@@ -115,6 +114,30 @@ def test_a_spec_in_the_product_checkout_is_refused_under_quiet(
     )  # fmt: skip
     assert code == 2, out
     assert "quiet artifact root" in out and "fr settings paths" in out
+
+
+@pytest.mark.parametrize("escape", ["dotdot", "other-feature", "symlink"])
+def test_an_emitted_path_cannot_leave_the_feature_root(
+    started: tuple[Path, Path, str], escape: str
+) -> None:
+    worktree, feature, run_id = started
+    other = feature.parent / "feat__other" / KIND_DIRS["spec"] / "x.md"
+    other.parent.mkdir(parents=True)
+    other.write_text("# other\n")
+    if escape == "dotdot":
+        value = f"../feat__other/{KIND_DIRS['spec']}/x.md"
+    elif escape == "other-feature":
+        value = f"features/feat__other/{KIND_DIRS['spec']}/x.md"
+    else:
+        link = feature / KIND_DIRS["spec"] / "link.md"
+        link.symlink_to(other)
+        value = f"{KIND_DIRS['spec']}/link.md"
+    code, out = _fr(
+        worktree, "run", "resolve", run_id, "--step", "brainstorm", "--state", "done",
+        "--answered-by", "agent", "--emitted", f"spec={value}",
+    )  # fmt: skip
+    assert code == 2, out
+    assert "outside this feature's quiet artifact root" in out
 
 
 def test_readers_of_the_emitted_paths_follow_the_artifact_root(

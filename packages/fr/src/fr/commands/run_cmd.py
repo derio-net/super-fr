@@ -1620,6 +1620,9 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
             inside.append(target.resolve().relative_to(resolved_root))
         except ValueError:
             continue
+    real_inside = [r for r in inside if (resolved_root / r).exists()]
+    if not real_inside and any(t.exists() for t in candidates):
+        inside = []  # it exists, but only outside the root: say that, not "missing"
     if not inside:
         if space.placement == REPO:
             where, hint = "the repo", "a run records repo-relative artifact paths"
@@ -1629,7 +1632,7 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
         raise RunStateError(
             f"--emitted {name}={value!r} is outside {where} ({resolved_root}) — {hint}"
         )
-    rel = next((r for r in inside if (resolved_root / r).exists()), inside[0])
+    rel = real_inside[0] if real_inside else inside[0]
     if not (resolved_root / rel).exists():
         raise RunStateError(
             f"--emitted {name}={value!r} does not exist ({resolved_root / rel}). "

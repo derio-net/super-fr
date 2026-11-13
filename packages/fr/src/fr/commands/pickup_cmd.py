@@ -277,7 +277,10 @@ def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
         return None
     # Under quiet or stealth the plan sits in the `fr` worktree or tracking clone, below
     # its feature root; the run that emitted it records it relative to that root, and is
-    # read (and its brief built) from the product checkout whose artifact root it is.
+    # read (and its brief built) from the product checkout whose artifact root it is. The
+    # comparison asks with `create=False`, so an unrelated cwd is never touched; once it
+    # matches, this checkout is the feature's own workspace, and reading its space as any
+    # fr command there does (a stealth sync included) is what follows.
     try:
         here = resolve_repo_root()
         if feature_root(space_for(here, create=False)).resolve() == Path(plan_root).resolve():

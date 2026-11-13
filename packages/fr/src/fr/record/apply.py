@@ -432,6 +432,11 @@ def _journal_writes(
                 # at an entry this record adds: every one carries the apply time, after
                 # any answer the operator gave (the operator brief ahead of a brainstorm
                 # record's decisions refused every one of them, 7.0.0rc3 live walk).
+                # Deliberately, so one window serves every decision of the record: a
+                # question round answers several decisions in one exchange, as the gate's
+                # own attribution of a round's decisions does. What is checked is that
+                # the operator answered in the window, never which decision an answer
+                # was about; with no answer there, every claimed decision is refused.
                 since = existing[-1].created if existing else None
                 since_utc = journal_stamp_as_utc(since) if since else _SESSION_START
                 advisory = verify_operator_answer(
