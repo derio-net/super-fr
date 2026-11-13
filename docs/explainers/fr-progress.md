@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-12 docstring and comment wording only (fr where the old vk command was named); nothing this page describes changed
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 ## Overview: nothing to sync

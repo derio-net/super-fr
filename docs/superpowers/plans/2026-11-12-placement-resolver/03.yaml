@@ -1,0 +1,151 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'Quiet: the fr-branch switch, sticky placement, fr worktree, atomic push,
+    init --quiet (R2, R3, R23)'
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - placement-quiet
+  tier: hard
+  files:
+  - packages/fr/src/fr/artifacts/paths.py
+  - packages/fr/src/fr/placement/*.py
+  - packages/fr/src/fr/settings/*.py
+  - packages/fr/src/fr/isolation/*.py
+  - packages/fr/src/fr/commands/isolation_cmd.py
+  - packages/fr/src/fr/commands/settings_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/push_cmd.py
+  - packages/fr/src/fr/commands/apply_cmd.py
+  - packages/fr/src/fr/git_policy/*.py
+  - packages/fr/src/fr/git.py
+  - packages/fr/src/fr/run/*.py
+  - tests/unit/test_placement_quiet*.py
+  - tests/unit/test_settings_*.py
+  - tests/unit/test_push*.py
+  - tests/unit/test_isolation*.py
+  - tests/scenarios/placement-quiet.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/features/*.yaml
+  - docs/*.md
+  - docs/explainers/*.md
+  estimate_lines: 2200
+tasks:
+- number: 1
+  title: The switch and the quiet settings source (R2, R23 "the switch")
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_placement_quiet.py with a local bare origin fixture —
+      - a repo whose origin has an orphan `fr` branch with root `settings.yaml` carrying `placement: quiet` reads as quiet: `load_settings` takes the policy keys from `refs/remotes/origin/fr:settings.yaml` (sources say `quiet`), and `space_for` returns placement quiet, root = the fr worktree path (`~/.cache/fr/worktrees/<repo>/fr`, under a monkeypatched HOME), feature = the branch's feature id.
+      - an `fr` branch whose settings.yaml says `placement: repo`, or has none, is not a switch (repo).
+      - a repo with no origin is repo even with a local `fr` branch.
+      - `SERVABLE_PLACEMENTS` now includes quiet; stealth is still refused "not yet available".
+      - a `.fr/settings.yaml` on the default branch of a quiet repo is ignored with a note (the placement's own file is the source).
+  - id: P3.T1.S2
+    text: |-
+      GREEN: a new fr/placement/ package (quiet.py: `QUIET_BRANCH = "fr"`, `read_switch(root) -> Settings | None` reading the commit `refs/remotes/origin/fr` names, by SHA, never the working tree, refusing an unreadable file as R2 requires) wired into fr.settings.load and fr.artifacts.paths.space_for. Tests pass.
+- number: 2
+  title: Fetch at up and run start; sticky placement (R23 "the switch", "sticky")
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: `fr isolation up` fetches `+refs/heads/fr:refs/remotes/origin/fr` (absent is fine) and refuses (exit 2, naming origin and `git remote -v`) when origin is unreachable; `--no-fetch` reads the last fetched ref and prints that it did; `fr run start` does the same fetch and refusal. `IsolationState` gains optional `placement` (default None, read as repo) recorded at up; a later `space_for` in that workspace whose switch disagrees (fr branch deleted, or settings changed placement) refuses naming both values. The marker JSON carries `placement` too. Old state files without the key still load (test with a pre-change JSON).
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement in fr/isolation (types.py, local.py's `_remote_view`/`_fetch_origin`, hostworktree.py, external.py adoption) and run_cmd's start. Tests pass; the existing isolation suite stays green (fixtures with unreachable fake origins pass `--no-fetch` or a reachable bare origin: fix each fixture, never the rule).
+- number: 3
+  title: Artifacts and fr commits land in the fr worktree (R23 "append-only", "nothing
+    on the product branches")
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: under quiet, `fr plan create`, `fr journal add`, `fr run start/resolve` write below `<fr worktree>/features/<feature-id>/` and commit there; each commit touches only that feature's path (assert `git show --name-only` per commit); the product feature branch gains no file under any KIND_DIRS dir and no `chore(fr):` commit. Also: `run/code_tree.py` under quiet treats the whole product tree as code (no fr paths to exclude).
+  - id: P3.T3.S2
+    text: |-
+      GREEN: route fr's commit seam (`commit_paths` and every writer going through `fr.artifacts.paths`) to the space's git worktree: the fr worktree is created on demand (`git worktree add <path> origin/fr`, then a local `fr` branch tracking it), never with a force flag; commits on `fr` are only ever fast-forward appends. Tests pass.
+- number: 4
+  title: fr push under quiet — atomic, replay, bookkeeping-only (R23 "pushing", R12)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: tests/unit/test_push_quiet.py asserting the git argv and outcomes: with code commits pending, `fr push` runs ONE `git push --atomic origin <branch> fr` (no force flag ever: assert no `-f`, `--force`, `--force-with-lease` in any argv); when origin's `fr` moved (another feature pushed), the push is rejected, fr fetches, rebases only its own fr commits onto the new tip (disjoint paths), retries, and both refs land; a conflict on the same feature path refuses naming it; with no code change pending and fr commits pending, it pushes `fr` alone; the subject check (R14) and the squash (R13) apply to the product branch only, never to `fr`.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: implement in fr/git_policy/push.py (an `atomic_push` beside `push`) and push_cmd.py; the retry loop is bounded (3 attempts, then refuse naming the rejected ref). Tests pass.
+- number: 5
+  title: init --quiet, dispatch refusal, settings check (R3, R23 "known limitation",
+    "not available here")
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      RED: `fr settings init --quiet` creates the orphan `fr` branch with root settings.yaml (`placement: quiet`, every other key commented at its default, the same render as `init` plus the known-limitation text: a host whose fr predates plan 3 never looks for the switch) and pushes it to origin with a plain (non-force) push, refusing when `fr` already exists on origin (`--force` is not offered for it) or when there is no origin; `fr apply --to <runner>` on a quiet repo refuses exit 2 naming the placement; `fr settings check` on quiet accepts the quiet file and still applies R5 and R22's rules.
+  - id: P3.T5.S2
+    text: |-
+      GREEN: implement (settings_cmd.py, settings/render.py, apply_cmd.py right after the tracking-only branch). Tests pass.
+- number: 6
+  title: Scenario, row, docs
+  steps:
+  - id: P3.T6.S1
+    text: |-
+      RED: tests/scenarios/placement-quiet.sh — a fresh repo with a local bare origin: `fr settings init --quiet`; `fr isolation up --branch feat/q` (host worktree mode, `FR_ISOLATION_TARGET=worktree`); create a plan and a journal entry; a code commit; `fr push`; then assert: origin's `feat/q` has the code commit and no path under docs/superpowers or docs/acceptance and no `chore(fr):` subject; origin's `fr` has `features/feat__q/docs/superpowers/plans/…`; every `fr` commit touches one feature path; deleting origin's `fr` and running `fr run status` in the workspace refuses naming quiet and repo. Wire as `test_placement_quiet`. Confirm red, then green.
+  - id: P3.T6.S2
+    text: |-
+      GREEN: amend the merged `placement-quiet` row (`uv run fr acceptance set-status --id placement-quiet --status ci --notes "quiet placement built: switch, sticky state, fr worktree, atomic push, init --quiet; scenario in CI" --level unit=… --level int=super-fr:tests/integration/test_scenarios.py#test_placement_quiet --scenario tests/scenarios/placement-quiet.sh --feature 2026-11-04-repo-feature-settings`). Document quiet, `init --quiet` and its known limitation on the settings guide page and in docs/explainers/01-fr-goal.md where it names where artifacts live; bump `reviewed` stamps; `uv run fr docs check --base origin/main` passes.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T6.S1:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+    P3.T6.S2:
+      state: x
+      ticked_at: '2026-11-12T17:57:33+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T17:57:33+00:00'
+    note: null
+    observed_prs: []

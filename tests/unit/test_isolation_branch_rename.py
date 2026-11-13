@@ -301,12 +301,14 @@ def test_a_write_that_dies_midway_never_leaves_a_truncated_marker_or_record(
 
 
 def test_a_marker_for_another_toplevel_is_not_rewritten(ws: tuple[Path, Path]) -> None:
-    """p1-r5: a marker whose toplevel is not this worktree is not a valid marker."""
+    """p1-r5: a marker whose toplevel is not this worktree is not a valid marker, and
+    pr1431-r2: fr cannot tell the workspace's placement from it, so the rename refuses
+    before it writes anything, the stray marker untouched."""
     repo, wt = ws
     stray = json.dumps({"toplevel": "/elsewhere", "branch": OLD, "mode": "worktree"})
     (wt / ".fr-isolation").write_text(stray)
-    steps = rename_branch(repo, wt, OLD, NEW)
-    assert not any("marker" in s for s in steps)
+    with pytest.raises(IsolationError, match="marker"):
+        rename_branch(repo, wt, OLD, NEW)
     assert (wt / ".fr-isolation").read_text() == stray
 
 

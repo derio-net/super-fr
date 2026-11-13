@@ -33,6 +33,7 @@ from pathlib import Path
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
+from fr.artifacts.paths import kind_dir, space_for
 from fr.plan_config import strip_dead_keys
 from fr.refs import RefResolution
 
@@ -109,7 +110,7 @@ def plans_referencing_specs(repo_root: Path, spec_paths: list[Path]) -> frozense
     slugs: set[str] = set()
     for p in spec_paths:
         slugs.update(s for ref in parse_spec(p).plans if (s := refs.plan_slug(ref.file)))
-    sp = repo_root / "docs" / "superpowers"
+    sp = kind_dir("superpowers", space_for(repo_root))
     for d in (sp / "plans", sp / "implemented" / "plans"):
         for meta_path in sorted(d.glob("*/_meta.yaml")) if d.is_dir() else ():
             try:
@@ -293,7 +294,7 @@ def repair_repo(
     and `plan-config.yaml` repair are repo-level and skipped. `None` is the
     repo-wide behaviour (#686).
     """
-    sp = repo_root / "docs" / "superpowers"
+    sp = kind_dir("superpowers", space_for(repo_root))
     out = RepairResult()
     spec_dirs = (sp / "specs", sp / "implemented" / "specs")
     plan_dirs = (sp / "plans", sp / "implemented" / "plans")

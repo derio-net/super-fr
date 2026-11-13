@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 still true after review-lenses phase 3 added the lens-review step to the fr-goal skill and shape
+reviewed: 2026-11-12 placement-resolver phase 4, fr-goal learned mode=stealth (records in a separate tracking repo); the essay's claims are unchanged
 ---
 
 ## The premise

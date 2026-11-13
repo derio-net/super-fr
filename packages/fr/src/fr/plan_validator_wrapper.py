@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PLANS_REL = Path("docs") / "superpowers" / "plans"
+from fr.artifacts.paths import KIND_DIRS, artifact_root
+
+PLANS_REL = Path(KIND_DIRS["plan"])
 # Harness-neutral: `fr init validator-wrapper` (below) runs identically on
 # Claude Code, OpenCode, Hermes, or a bare CLI shell — unlike the retired
 # `bash ~/.claude/plugins/marketplaces/.../install-validator-wrapper.sh`
@@ -38,7 +40,7 @@ class ValidatorWrapperError(RuntimeError):
 
 
 def plans_dir_exists(repo_root: Path) -> bool:
-    return (repo_root / PLANS_REL).is_dir()
+    return (artifact_root(repo_root) / PLANS_REL).is_dir()
 
 
 def validator_wrapper_path(repo_root: Path) -> Path:

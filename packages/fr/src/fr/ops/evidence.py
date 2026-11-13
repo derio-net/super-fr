@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.journal.model import (
     IMPLEMENTED_JOURNALS_REL,
     JOURNALS_REL,
@@ -36,7 +37,7 @@ from fr.ops.mask import passthrough_values, sanitise_reason
 if TYPE_CHECKING:
     from fr.ops.load import LoadedOp
 
-PLANS_REL = Path("docs/superpowers/plans")
+PLANS_REL = Path(KIND_DIRS["plan"])
 WITHHELD = "reason withheld: it looked like a response body"
 
 
@@ -122,7 +123,8 @@ def _entries(path: Path) -> list[JournalEntry]:
 
 def _all_plan_journals(repo_root: Path) -> list[Path]:
     sub = SCOPE_DIRS["plan"]
-    dirs = (repo_root / JOURNALS_REL / sub, repo_root / IMPLEMENTED_JOURNALS_REL / sub)
+    base = artifact_root(repo_root)
+    dirs = (base / JOURNALS_REL / sub, base / IMPLEMENTED_JOURNALS_REL / sub)
     return [p for d in dirs if d.is_dir() for p in sorted(d.glob("*.md"))]
 
 
@@ -174,7 +176,7 @@ def record_op(
     that does not exist (R7: a runbook op's evidence needs a named plan). The
     reason goes through `sanitise_reason` once more, with the repo's
     `env_passthrough` values, so no write path can record one unsanitised."""
-    if not (repo_root / PLANS_REL / plan_slug).is_dir():
+    if not (artifact_root(repo_root) / PLANS_REL / plan_slug).is_dir():
         raise ValueError(f"no plan {plan_slug!r} to record op {op!r} against")
     path = journal_path(repo_root, "plan", plan_slug)
     if reason:

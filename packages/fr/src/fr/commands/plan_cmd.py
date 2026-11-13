@@ -85,18 +85,26 @@ def _staged_among(repo_root: Path, candidates: list[Path]) -> list[Path] | None:
     Passing the candidates on instead would hand `commit_paths` exactly the
     foreign file this filter exists to keep out, and it would `git add` it."""
     from fr.git import GitUnavailableError, git_answer
+    from fr.plan_ops import worktree_of
 
-    existing = [c for c in candidates if c.exists()]
-    rel = [str(c.resolve()) for c in existing]
-    try:
-        top = git_answer(repo_root, "rev-parse", "--show-toplevel")
-        done = git_answer(repo_root, "diff", "--cached", "--name-only", "-z", "HEAD", "--", *rel)
-    except GitUnavailableError:
-        return None
-    if top.returncode != 0 or done.returncode != 0:
-        return None
-    toplevel = Path(top.stdout.strip())
-    return [toplevel / name for name in done.stdout.split("\0") if name]
+    # Grouped by the checkout holding each path: under quiet the plan files sit in the
+    # `fr` worktree, whose index is not the product checkout's.
+    groups: dict[Path, list[str]] = {}
+    for c in candidates:
+        if c.exists():
+            groups.setdefault(worktree_of(c, repo_root), []).append(str(c.resolve()))
+    staged: list[Path] = []
+    for root, rel in groups.items():
+        try:
+            top = git_answer(root, "rev-parse", "--show-toplevel")
+            done = git_answer(root, "diff", "--cached", "--name-only", "-z", "HEAD", "--", *rel)
+        except GitUnavailableError:
+            return None
+        if top.returncode != 0 or done.returncode != 0:
+            return None
+        toplevel = Path(top.stdout.strip())
+        staged += [toplevel / name for name in done.stdout.split("\0") if name]
+    return staged
 
 
 def _commit_plan_writes(

@@ -33,6 +33,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.run.telemetry import Round, answered_rounds_since
 
 RequestKind = Literal["push", "pr"]
@@ -47,7 +48,7 @@ class ApprovalJournal:
     slug: str
 
 
-JOURNALS_PREFIX = "docs/superpowers/journals/"
+JOURNALS_PREFIX = f"{KIND_DIRS['journal']}/"
 """Commits after a push request that touch only this tree (the approval itself) keep it."""
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")

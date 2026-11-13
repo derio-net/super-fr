@@ -67,7 +67,7 @@ import { createClaimHandler, sharedClaimed } from "./claim";
 import { resolveGit } from "./git";
 import { decideShell } from "./guard";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
-import { matchesAllowlist, resolveMarker } from "./marker";
+import { matchesAllowlist, resolveMarker, warnIfFrUnresolved } from "./marker";
 import { createNagHandler, sharedServed } from "./nag";
 import { createPinHandler, type ShellCreateEvent } from "./pin";
 import { decidePush } from "./push";
@@ -210,6 +210,7 @@ async function gate(directory: string, event: GateEvent): Promise<void> {
     const resolution = resolveMarker(file);
     if (!resolution.toplevel || !resolution.frEnabled) continue; // not fr-enabled — allow
     if (resolution.hasValidMarker) continue; // valid isolation workspace — allow
+    if (resolution.placementTarget) continue; // the quiet fr worktree / stealth clone (pr1431-r6)
     if (matchesAllowlist(resolution.toplevel, file)) continue;
 
     if (resolution.drift) {
@@ -255,6 +256,7 @@ const plugin: Plugin.Plugin = {
   id: "super-fr",
   async setup(ctx) {
     warnIfGitUnresolved();
+    warnIfFrUnresolved();
     const directory = ctx.location.directory;
     const claimChild = createClaimHandler({
       session: ctx.session,

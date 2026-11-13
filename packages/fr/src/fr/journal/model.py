@@ -23,6 +23,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.gates import GATES
 from fr.run.model import AnsweredBy
 
@@ -91,8 +92,8 @@ OP_RESULTS = ("done", "na", "open", "failed", "attested", "proof")
 # that appends one stamps the journal in the same write (`_at_current_stamp`).
 _STAMPING_KINDS = frozenset({"owed", "op", "lens"})
 
-JOURNALS_REL = Path("docs/superpowers/journals")
-IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
+JOURNALS_REL = Path(KIND_DIRS["journal"])
+IMPLEMENTED_JOURNALS_REL = Path(KIND_DIRS["journal-archived"])
 
 # Each scope gets its own subdirectory so a bare `ls journals/` tells you which
 # journal is which at a glance (a debug-slug and a plan-slug can otherwise look
@@ -346,12 +347,12 @@ def journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     The scope names a subdirectory (``specs`` / ``plans`` / ``debug``) so the
     tree is glanceable and a debug-slug can never be mistaken for a plan-slug.
     """
-    return repo_root / JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
+    return artifact_root(repo_root) / JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
 
 
 def archived_journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     """Archived journal path (mirrors ``implemented/plans`` / ``implemented/specs``)."""
-    return repo_root / IMPLEMENTED_JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
+    return artifact_root(repo_root) / IMPLEMENTED_JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
 
 
 def journal_read_candidates(repo_root: Path, scope: JournalScope, slug: str) -> tuple[Path, Path]:

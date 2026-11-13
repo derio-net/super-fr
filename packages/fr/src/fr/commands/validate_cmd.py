@@ -31,8 +31,16 @@ def artifacts_cmd(
     unknown `--kind`. Read-only: nothing here writes.
     """
     from fr.artifacts.validate import UnknownArtifactKindError, validate_repo
+    from fr.placement.drift import DriftError, refuse
 
     repo_root = resolve_repo_root()
+    try:
+        # R28: a branch whose artifacts do not match the placement refuses here too, which
+        # is how CI's `validate-artifacts` job sees it (detection only, never a migration).
+        refuse(repo_root, "fr validate artifacts")
+    except DriftError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
     require_migrated_layout(repo_root)
     try:
         report = validate_repo(repo_root, kind_name=kind)

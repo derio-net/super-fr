@@ -285,6 +285,12 @@ def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) 
     honour (gh-486; spec §4.D). The GitLab adapter threads it to `glab`,
     the GitHub one as `GH_HOST` (spec 2026-10-06-forge-remainder §4.E);
     `tea` still resolves its own host."""
+    from fr.placement.forge_guard import guard
+
+    return guard(_client_for_backend(backend, host=host))
+
+
+def _client_for_backend(backend: _hosts.HostBackend, *, host: str | None) -> GhClient:
     if backend == "gitlab":
         # gitlab.com likewise: never a GITLAB_HOST, so a SaaS repo needs no
         # glab config login past the trust gate (gh#1014).
@@ -352,6 +358,8 @@ def client_for(repo_root: Path) -> GhClient:
             "applies instead. See gh-486.",
             file=sys.stderr,
         )
+    from fr.placement.forge_guard import guard
+
     if backend == "github":
-        return client_for_backend(backend, host=declared)
-    return client_for_backend(backend, host=_hosts.host_for(repo_root))
+        return guard(client_for_backend(backend, host=declared), repo_root)
+    return guard(client_for_backend(backend, host=_hosts.host_for(repo_root)), repo_root)

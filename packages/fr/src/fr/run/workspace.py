@@ -50,7 +50,9 @@ def _select_target(repo_root: Path) -> Any:
     return _target(repo_root)
 
 
-def ensure_run_workspace(repo_root: Path, branch: str) -> Path:
+def ensure_run_workspace(
+    repo_root: Path, branch: str, *, no_fetch: bool = False, stealth: Any = None
+) -> Path:
     """The workspace root this run must be born in. Idempotent.
 
     Three cases, in order:
@@ -67,6 +69,10 @@ def ensure_run_workspace(repo_root: Path, branch: str) -> Path:
     3. **Otherwise** — enter isolation for `branch` (`fr isolation up
        --branch <b>`, whichever backend `FR_ISOLATION_TARGET` selects) and use
        the worktree it returns.
+
+    With *stealth* (a `fr.placement.stealth.StealthRef`, R24 "chosen per run"), an
+    existing workspace must already record that tracking ref (a workspace never changes
+    placement, R23 "sticky"); a new one is entered with it.
     """
     marker = marker_at(repo_root)
     if marker is not None:
@@ -80,14 +86,41 @@ def ensure_run_workspace(repo_root: Path, branch: str) -> Path:
         problem = marker_mode_holds(repo_root, marker)
         if problem is not None:
             raise RunWorkspaceError(problem)
+        if stealth is not None:
+            _same_stealth(marker.get("placement"), _marker_ref(marker), stealth, repo_root)
         return repo_root
 
     state = load_state(repo_root, branch)
     if state is not None and Path(state.worktree).is_dir():
+        if stealth is not None:
+            _same_stealth(state.placement, state.tracking, stealth, Path(state.worktree))
         return Path(state.worktree)
 
     try:
-        new_state = _select_target(repo_root).up(profile=None, branch=branch)
+        extra = {"stealth": stealth} if stealth is not None else {}
+        new_state = _select_target(repo_root).up(
+            profile=None, branch=branch, no_fetch=no_fetch, **extra
+        )
     except IsolationError as e:
         raise RunWorkspaceError(f"could not enter isolation for branch {branch!r}: {e}") from e
     return Path(new_state.worktree)
+
+
+def _marker_ref(marker: dict[str, Any]) -> str | None:
+    tracking = marker.get("tracking")
+    ref = tracking.get("ref") if isinstance(tracking, dict) else None
+    return ref if isinstance(ref, str) else None
+
+
+def _same_stealth(placement: object, recorded: str | None, stealth: Any, where: Path) -> None:
+    """A `--stealth` run in an existing workspace needs that workspace to be stealth on
+    the same tracking ref: the placement was recorded at `up` (R23 "sticky", R24)."""
+    if stealth is None:
+        return
+    if placement != "stealth" or recorded != stealth.text:
+        now = f"placement {placement or 'repo'}" + (f" on {recorded}" if recorded else "")
+        raise RunWorkspaceError(
+            f"the workspace {where} was set up under {now}, not stealth on {stealth.text}; "
+            "a workspace never changes placement (R23 sticky). Start the run on a new "
+            f"branch, or `fr isolation up --stealth {stealth.text}` one"
+        )

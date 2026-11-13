@@ -194,6 +194,81 @@ rows:
     scenario: tests/scenarios/acceptance-effective-matrix-fold.sh
     issues:
     - derio-net/super-fr#1379
+  - id: placement-resolver
+    capability: repo-feature-settings
+    acceptance: Every artifact path comes from one resolver keyed by kind and placement,
+      across the Python modules, hooks, OpenCode plugin, Hermes hook and CI templates;
+      a hardcoded artifact path anywhere else fails CI
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_artifact_paths.py#test_quiet_and_stealth_keep_the_layout_below_a_feature_root
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_no_artifact_path_literal_outside_the_resolver
+      - super-fr:tests/unit/test_settings_paths.py#test_shell_prints_the_placement_root_feature_and_every_kind
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_no_hook_spells_an_artifact_path_outside_the_fallback
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_no_plugin_source_spells_an_artifact_path_outside_the_fallback
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_pending_only_shrinks
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_placement_resolver
+    status: ci
+    notes: 'every artifact path comes from fr.artifacts.paths: the Python tripwire''s
+      allowlist is empty (phase 2), hooks and the OpenCode plugin read fr settings paths
+      and are scanned by the tripwire with pinned fallback lines (phase 6)'
+    scenario: tests/scenarios/placement-resolver.sh
+  - id: placement-merged-status
+    capability: repo-feature-settings
+    acceptance: Under quiet and stealth a feature's merged status and order come from
+      its code branch's merge into the default ref; merged records are a cache and archive
+      moves nothing
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R25
+    levels:
+      unit:
+      - super-fr:tests/unit/test_placement_merged.py#test_merged_amendments_apply_in_merge_order
+      - super-fr:tests/unit/test_placement_merged.py#test_a_record_for_an_unmerged_feature_never_makes_it_merged
+      - super-fr:tests/unit/test_placement_merged.py#test_stealth_merged_status_comes_from_the_targets_default_ref
+      - super-fr:tests/unit/test_placement_merged_archive.py#test_archive_branch_records_merged_and_moves_nothing
+      - super-fr:tests/unit/test_placement_merged_archive.py#test_stealth_archive_records_in_the_tracking_repo_only
+      - super-fr:tests/unit/test_placement_merged.py#test_a_branch_fresh_from_the_default_ref_is_not_merged
+      - super-fr:tests/unit/test_placement_merged.py#test_a_squash_merge_is_found_only_through_the_forge
+      - super-fr:tests/unit/test_placement_merged.py#test_a_merged_feature_stays_merged_when_its_branch_moves_on
+      - super-fr:tests/unit/test_placement_merged.py#test_a_forged_record_for_a_deleted_branch_is_ignored
+      - super-fr:tests/unit/test_placement_merged.py#test_a_merged_features_later_amendment_is_pending_on_its_branch
+      - super-fr:tests/unit/test_placement_merged_archive.py#test_archive_records_a_deleted_branch_by_its_recorded_heads
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_placement_merged_status
+    status: ci
+    notes: 'built in plan 2026-11-12-placement-resolver phase 5, fixed after its review:
+      under quiet and stealth a feature is merged when a head of its own (past the BASE
+      its root was claimed from; live refs, or the HEADS fr push records, or stealth''s
+      product head) is on the default ref, monotone once merged, or for a squash or
+      rebase merge when the forge''s merged PR (read by fr archive --branch and fr acceptance
+      status) has its merge commit on the first-parent line; merged.yaml is a cache
+      corroborated only by owned heads; merged features'' fragments are frozen at the
+      last pushed fr commit at or before the merge, in-place edits refused; the quiet
+      scenario (fresh branch unmerged, squash refusal without a forge, deleted branch
+      archived) and the unit tests (fake forge, stealth included) run in CI'
+    scenario: tests/scenarios/placement-merged-status.sh
+  - id: placement-fr-enabled
+    capability: repo-feature-settings
+    acceptance: A quiet fr-branch switch and a stealth workspace count as fr-enabled
+      in the bash decision library, the OpenCode plugin and the Hermes hook, each with
+      its parity row
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R26
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_quiet_repo_is_fr_enabled
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py#test_a_quiet_repo_blocks_a_base_clone_edit
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_placement_fr_enabled
+    status: ci
+    notes: 'R26: quiet switch and stealth marker are fr-enabled in the bash library,
+      Hermes hook, OpenCode plugin and acceptance nag; scenario placement-fr-enabled.sh
+      walks base-clone deny and workspace allow'
+    scenario: tests/scenarios/placement-fr-enabled.sh
 amendments:
   - row: acceptance-report-formats
     op: reword
@@ -331,3 +406,434 @@ amendments:
       parse with per-caller deep copy, uncached errors and real-fragment equality (test_acceptance_parse_cache;
       re-pointed after the fragments split renamed the test). Phase 1 of plan 2026-11-01-ci-speed.
     why: re-pointed after the fragments split renamed the test
+  - row: placement-quiet
+    op: set-status
+    base: 0
+    status: not-implemented
+    notes: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+    scenario: tests/scenarios/placement-quiet.sh
+    why: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+  - row: placement-stealth
+    op: set-status
+    base: 0
+    status: not-implemented
+    notes: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+    scenario: tests/scenarios/placement-stealth.sh
+    why: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+  - row: placement-move-and-drift
+    op: set-status
+    base: 0
+    status: not-implemented
+    notes: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+    scenario: tests/scenarios/placement-move-and-drift.sh
+    why: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+  - row: placement-quiet
+    op: set-status
+    base: 1
+    status: ci
+    notes: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet.py#test_an_origin_fr_switch_reads_as_quiet
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_up.py#test_a_deleted_fr_branch_makes_the_workspace_refuse_naming_both
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_writes.py#test_plan_and_journal_land_in_the_feature_path
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_writes.py#test_fr_never_commits_an_artifact_path_on_the_product_branch
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_push_quiet.py#test_code_and_fr_go_in_one_atomic_push
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_push_quiet.py#test_a_moved_fr_is_fetched_replayed_and_both_land
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_settings_quiet.py#test_init_quiet_creates_and_pushes_the_orphan_fr_branch
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 9
+    level: int
+    ref: super-fr:tests/integration/test_scenarios.py#test_placement_quiet
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: set-status
+    base: 10
+    status: ci
+    notes: 'quiet placement built and reviewed: switch, sticky state (old workspaces
+      count as repo), fr worktree with OWNER and lock, every placement-bound writer
+      on the resolver root or refused before writing, atomic push; scenario in CI'
+    why: 'quiet placement built and reviewed: switch, sticky state (old workspaces count
+      as repo), fr worktree with OWNER and lock, every placement-bound writer on the
+      resolver root or refused before writing, atomic push; scenario in CI'
+  - row: placement-quiet
+    op: add-level
+    base: 11
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_edges.py
+    why: 'quiet placement built and reviewed: switch, sticky state (old workspaces count
+      as repo), fr worktree with OWNER and lock, every placement-bound writer on the
+      resolver root or refused before writing, atomic push; scenario in CI'
+  - row: placement-quiet
+    op: add-level
+    base: 12
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_migrate.py
+    why: 'quiet placement built and reviewed: switch, sticky state (old workspaces count
+      as repo), fr worktree with OWNER and lock, every placement-bound writer on the
+      resolver root or refused before writing, atomic push; scenario in CI'
+  - row: placement-stealth
+    op: set-status
+    base: 1
+    status: ci
+    notes: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 2
+    level: int
+    ref: super-fr:tests/integration/test_scenarios.py#test_placement_stealth
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth.py#test_up_with_stealth_records_it_in_the_state_and_the_marker
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_writes.py#test_a_refused_push_fails_the_resolve_and_moves_nothing
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_privacy.py#test_up_refuses_a_tracking_repo_more_visible_than_the_target
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_privacy.py#test_pr_create_opens_one_minimal_draft_and_nothing_else
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_resume.py#test_resume_refuses_when_the_state_is_ahead_naming_the_sha
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_settings_stealth.py#test_check_and_run_start_refuse_an_explicit_contrary_forge_value
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: set-status
+    base: 9
+    status: ci
+    notes: 'stealth placement built and reviewed: chosen per run and recorded in the
+      workspace, tracking worktree per target, fail-fast before writes, every state
+      write pushed compare-and-swap as a fast-forward only (a diverged clone is replayed
+      or refused, never forced), any state commit the tracking clone refuses or a push
+      it refuses is fatal (exit 2) with only this command''s commit and files rolled
+      back, privacy guard at every entry and the push seam (unknown visibility fails
+      closed, the target read through its own forge client), repo-configuration writers
+      and every forge write but the one minimal draft PR refused, fr push refuses commits
+      carrying fr paths, resume reconciled with the pushed product head; scenario in
+      CI. Not shown here: a real forge (row repo-settings-quiet-repo-live)'
+    why: 'stealth placement built and reviewed: chosen per run and recorded in the workspace,
+      tracking worktree per target, fail-fast before writes, every state write pushed
+      compare-and-swap as a fast-forward only (a diverged clone is replayed or refused,
+      never forced), any state commit the tracking clone refuses or a push it refuses
+      is fatal (exit 2) with only this command''s commit and files rolled back, privacy
+      guard at every entry and the push seam (unknown visibility fails closed, the target
+      read through its own forge client), repo-configuration writers and every forge
+      write but the one minimal draft PR refused, fr push refuses commits carrying fr
+      paths, resume reconciled with the pushed product head; scenario in CI. Not shown
+      here: a real forge (row repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 10
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_sync.py#test_a_diverged_clone_never_force_overwrites_another_hosts_push
+    why: 'stealth placement built and reviewed: chosen per run and recorded in the workspace,
+      tracking worktree per target, fail-fast before writes, every state write pushed
+      compare-and-swap as a fast-forward only (a diverged clone is replayed or refused,
+      never forced), any state commit the tracking clone refuses or a push it refuses
+      is fatal (exit 2) with only this command''s commit and files rolled back, privacy
+      guard at every entry and the push seam (unknown visibility fails closed, the target
+      read through its own forge client), repo-configuration writers and every forge
+      write but the one minimal draft PR refused, fr push refuses commits carrying fr
+      paths, resume reconciled with the pushed product head; scenario in CI. Not shown
+      here: a real forge (row repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 11
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_target.py#test_forge_writers_refuse_and_write_nothing
+    why: 'stealth placement built and reviewed: chosen per run and recorded in the workspace,
+      tracking worktree per target, fail-fast before writes, every state write pushed
+      compare-and-swap as a fast-forward only (a diverged clone is replayed or refused,
+      never forced), any state commit the tracking clone refuses or a push it refuses
+      is fatal (exit 2) with only this command''s commit and files rolled back, privacy
+      guard at every entry and the push seam (unknown visibility fails closed, the target
+      read through its own forge client), repo-configuration writers and every forge
+      write but the one minimal draft PR refused, fr push refuses commits carrying fr
+      paths, resume reconciled with the pushed product head; scenario in CI. Not shown
+      here: a real forge (row repo-settings-quiet-repo-live)'
+  - row: placement-move-and-drift
+    op: set-status
+    base: 1
+    status: ci
+    notes: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move.py#test_move_to_quiet_copies_verifies_switches_and_removes
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move.py#test_move_back_to_repo_copies_through_a_branch_and_switches_by_a_new_commit
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move.py#test_a_move_killed_after_any_step_completes_on_rerun_without_duplication
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift.py#test_the_gate_refuses_a_drifted_workspace_naming_migrate_branch
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift.py#test_migrate_branch_moves_a_repo_branch_into_quiet_and_pushes_both_sides
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 7
+    level: int
+    ref: super-fr:tests/integration/test_scenarios.py#test_placement_move_and_drift
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move_hardening.py#test_a_feature_merged_after_the_copy_is_copied_before_verify
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 9
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move_hardening.py#test_a_move_killed_between_a_commit_and_its_push_completes_on_rerun
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 10
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move_hardening.py#test_verify_refuses_a_destination_whose_synthesised_bookkeeping_is_corrupt
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 11
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move_hardening.py#test_quiet_to_stealth_refuses_while_a_quiet_feature_is_unmerged
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 12
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift_hardening.py#test_the_moves_own_branches_pass_validate_in_ci
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 13
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift_hardening.py#test_migrate_into_repo_killed_before_its_push_pushes_on_rerun_and_records_last
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 14
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift_hardening.py#test_migrate_branch_refuses_a_planted_workflow_and_writes_nothing
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 15
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift_hardening.py#test_in_ci_a_shallow_checkout_refuses_naming_fetch_depth
+    why: 'phase 7 review hardening (p7-r1..r7): re-copy on a moved source, resume mid-step,
+      destination validation, artifact-only copies, quiet-to-stealth refusal, deletions
+      and the move''s copy are not drift, CI refuses a shallow checkout'
+  - row: placement-move-and-drift
+    op: add-level
+    base: 16
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move_hardening.py#test_a_git_like_component_is_refused_in_every_spelling
+    why: 'phase 7 review security follow-up: a .git-like path component is refused in
+      every filesystem spelling'
+  - row: repo-settings-quiet-repo-live
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'plan 3 ships quiet and stealth; the live end-to-end walk on a real forge
+      is post-merge, tracked by #1432'
+    issues:
+    - derio-net/super-fr#1432
+    why: 'plan 3 ships quiet and stealth; the live end-to-end walk on a real forge is
+      post-merge, tracked by #1432'

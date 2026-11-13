@@ -96,7 +96,9 @@ def _resolve(
         return RefResolution(slug="", path=None, tried=(), matches=())
     if suffix and not slug.endswith(suffix):
         slug += suffix
-    sp = repo_root / "docs" / "superpowers"
+    from fr.artifacts.paths import kind_dir, space_for  # lazy: fr.artifacts imports this module
+
+    sp = kind_dir("superpowers", space_for(repo_root))
     tried = tuple(sp.joinpath(*root.split("/")) / slug for root in roots)
     exists = Path.is_dir if is_dir else Path.is_file
     matches = tuple(p for p in tried if exists(p))
@@ -159,7 +161,9 @@ def keeps_spec_ref_verbatim(value: str, repo_root: Path, res: RefResolution | No
         return True
     candidate = (repo_root / token).resolve()
     if candidate.is_file() and candidate != res.path.resolve():
-        sp = (repo_root / "docs" / "superpowers").resolve()
+        from fr.artifacts.paths import kind_dir, space_for  # lazy: see _resolve
+
+        sp = kind_dir("superpowers", space_for(repo_root)).resolve()
         roots = [(sp / r) for r in SPEC_ROOTS]
         if not any(candidate.is_relative_to(r) for r in roots):
             return True

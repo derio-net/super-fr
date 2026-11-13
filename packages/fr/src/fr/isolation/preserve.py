@@ -54,6 +54,7 @@ from typing import Any, TypeGuard
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import KIND_DIRS, below
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -64,8 +65,8 @@ from fr.isolation.types import (
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
-RECORDS_PREFIX = "docs/superpowers/"
-RUNS_DIR = Path("docs") / "superpowers" / "runs"
+RECORDS_PREFIX = f"{KIND_DIRS['superpowers']}/"
+RUNS_DIR = Path(KIND_DIRS["run"])
 TOMBSTONE = "teardown.json"
 STAGE_JSON = "stage.json"
 VERSION = 1
@@ -209,7 +210,7 @@ def branch_runs(worktree: Path, branch: str) -> list[BranchRun]:
     a mapping), is kept as active and `unreadable`: unknown is not "finished".
     """
     try:
-        paths = sorted((Path(worktree) / RUNS_DIR).glob("*.yaml"))
+        paths = sorted(below(Path(worktree), "run").glob("*.yaml"))
     except OSError:
         return []
     runs: list[BranchRun] = []
@@ -333,7 +334,7 @@ def _porcelain(run: Runner, worktree: Path) -> list[tuple[str, str, str | None]]
         )
     except UnicodeDecodeError as e:
         raise IsolationError(
-            f"could not read {worktree}'s changes under docs/superpowers/ (a path git "
+            f"could not read {worktree}'s changes under {KIND_DIRS['superpowers']}/ (a path git "
             f"reports is not UTF-8: {e}) — nothing was torn down. Rename it and retry, or "
             "discard fr's records with `fr isolation down --force --no-preserve`."
         ) from e
@@ -428,7 +429,7 @@ def _collect(run: Runner, worktree: Path, runs: list[BranchRun]) -> _Collector:
         # git cannot read the tree (p4-f10): copy docs/superpowers/ wholesale,
         # base_blob null, so a restore only fills absent paths or reports a
         # conflict — never overwrites on a guess.
-        if (worktree / RECORDS_PREFIX).is_dir():
+        if below(worktree, "superpowers").is_dir():
             c.walk(RECORDS_PREFIX, lambda _p: None, ignored=True)
         return c
     for xy, path, source in entries:
@@ -515,7 +516,8 @@ def stage(
         _write_stage(record, removal_attempted=retry)
     except OSError as e:
         raise IsolationError(
-            f"could not preserve {state.branch}'s records under docs/superpowers/ ({e}) — "
+            f"could not preserve {state.branch}'s records under "
+            f"{KIND_DIRS['superpowers']}/ ({e}) — "
             "nothing was torn down. Free the space or fix the tree and retry, or discard "
             f"them with `fr isolation down --branch {state.branch} --force --no-preserve`."
         ) from e
@@ -873,7 +875,7 @@ def restore(
         path = entry.get("path") if isinstance(entry, dict) else None
         if not _safe(path):
             print(
-                f"isolation: ignoring preserved path outside docs/superpowers/: {path!r}",
+                f"isolation: ignoring preserved path outside {KIND_DIRS['superpowers']}/: {path!r}",
                 file=sys.stderr,
             )
             continue
@@ -904,7 +906,7 @@ def restore(
     for path in tomb.get("deleted", []):
         if not _safe(path):
             print(
-                f"isolation: ignoring preserved path outside docs/superpowers/: {path!r}",
+                f"isolation: ignoring preserved path outside {KIND_DIRS['superpowers']}/: {path!r}",
                 file=sys.stderr,
             )
             continue
@@ -1033,7 +1035,7 @@ def _live_holder(repo_root: Path, run_id: str) -> tuple[Path, str] | None:
             wt = Path(st.worktree)
             if wt.resolve() == here:
                 continue
-            f = wt / RUNS_DIR / f"{run_id}.yaml"
+            f = below(wt, "run") / f"{run_id}.yaml"
             if not f.is_file():
                 continue
             try:
@@ -1210,7 +1212,7 @@ def _on_default_ref(repo_root: Path, run_id: str) -> str | None:
 
 def _never_existed(repo_root: Path, run_id: str, path: Path) -> str:
     try:
-        ids = sorted(p.stem for p in (Path(repo_root) / RUNS_DIR).glob("*.yaml"))
+        ids = sorted(p.stem for p in below(Path(repo_root), "run").glob("*.yaml"))
     except OSError:
         ids = []
     return (

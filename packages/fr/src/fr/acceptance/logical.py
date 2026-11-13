@@ -12,15 +12,28 @@ does; `is_logical` decides on the prefix alone.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from fr.acceptance.model import AcceptanceError, Matrix, same_repo, split_ref
+from fr.artifacts import paths
 
 LOGICAL_KINDS: tuple[str, ...] = ("spec", "plan")
 
-SPEC_DIRS: tuple[str, ...] = ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/")
-PLAN_DIRS: tuple[str, ...] = ("docs/superpowers/plans/", "docs/superpowers/implemented/plans/")
+
+def spec_dirs() -> tuple[str, ...]:
+    """The spec directories, live then archived, from R1's resolver (`/`-terminated)."""
+    return (f"{paths.KIND_DIRS['spec']}/", f"{paths.KIND_DIRS['spec-archived']}/")
+
+
+def plan_dirs() -> tuple[str, ...]:
+    """The plan directories, live then archived, from R1's resolver (`/`-terminated)."""
+    return (f"{paths.KIND_DIRS['plan']}/", f"{paths.KIND_DIRS['plan-archived']}/")
+
+
+SPEC_DIRS: tuple[str, ...] = spec_dirs()
+PLAN_DIRS: tuple[str, ...] = plan_dirs()
 
 _SLUG_RE = re.compile(r"^[^/:#\s]+$")
 
@@ -70,11 +83,11 @@ def to_logical(ref: str, *, own_repo: str | None = None) -> str:
         return ref
     from fr.acceptance.fragment import fragment_slug_for_spec
 
-    for base in SPEC_DIRS:
+    for base in spec_dirs():
         rest = path.removeprefix(base)
         if rest != path and "/" not in rest and rest.endswith(".md"):
             return str(LogicalRef("spec", fragment_slug_for_spec(rest), frag))
-    for base in PLAN_DIRS:
+    for base in plan_dirs():
         rest = path.removeprefix(base).rstrip("/")
         if rest != path.rstrip("/") and rest and "/" not in rest and not frag:
             return str(LogicalRef("plan", rest))
@@ -84,41 +97,83 @@ def to_logical(ref: str, *, own_repo: str | None = None) -> str:
 def candidates(ref: LogicalRef) -> tuple[str, ...]:
     if ref.kind == "spec":
         return tuple(
-            f"{base}{ref.slug}{suffix}" for base in SPEC_DIRS for suffix in ("-design.md", ".md")
+            f"{base}{ref.slug}{suffix}" for base in spec_dirs() for suffix in ("-design.md", ".md")
         )
-    return tuple(f"{base}{ref.slug}" for base in PLAN_DIRS)
+    return tuple(f"{base}{ref.slug}" for base in plan_dirs())
 
 
-def _resolve(ref: str, repo_root: Path) -> tuple[Path | None, str | None]:
+@dataclass(frozen=True)
+class Resolved:
+    """Where a logical ref resolved: the feature root it was found in, and its path
+    relative to that root (the one layout, R1). `rel` is what a path ref spells;
+    `path` is what a reader opens."""
+
+    feature_root: Path
+    rel: PurePosixPath
+
+    @property
+    def path(self) -> Path:
+        return self.feature_root / self.rel
+
+
+def feature_roots_of(repo_root: Path) -> tuple[Path, ...]:
+    """Every feature root of *repo_root*'s space. `space_for` reads the filesystem (marker,
+    commondir, packed-refs), so a caller resolving many refs computes this ONCE and passes
+    it as `roots=` to the functions below."""
+    return tuple(paths.feature_roots(paths.space_for(Path(repo_root))))
+
+
+def _resolve(
+    ref: str, repo_root: Path, roots: Sequence[Path] | None = None
+) -> tuple[Resolved | None, str | None]:
     try:
         logical = parse_logical(ref)
     except AcceptanceError as e:
         return None, str(e)
-    root = Path(repo_root)
-    for rel in candidates(logical):
-        target = root / rel
-        if target.is_dir() if logical.kind == "plan" else target.is_file():
-            return Path(PurePosixPath(rel)), None
+    for feature_root in feature_roots_of(repo_root) if roots is None else roots:
+        for rel in candidates(logical):
+            target = feature_root / rel
+            if target.is_dir() if logical.kind == "plan" else target.is_file():
+                return Resolved(feature_root, PurePosixPath(rel)), None
     tried = ", ".join(candidates(logical))
     return None, f"{ref}: no {logical.kind} {logical.slug!r} in this repo (looked for {tried})"
+
+
+def resolve_logical_at(
+    ref: str, repo_root: Path, roots: Sequence[Path] | None = None
+) -> Resolved | None:
+    """Where *ref* resolves (`Resolved`: feature root and relative layout path), or None
+    (`resolution_problem` says why). The search is `resolve_logical`'s."""
+    return _resolve(ref, repo_root, roots)[0]
 
 
 def resolve_logical(ref: str, repo_root: Path) -> Path | None:
     """The repo-relative path a logical ref names, or None (`resolution_problem` says why).
 
-    Until plan 3 this reads `repo` paths only (R18): a live spec
+    Looks in every feature root of R1's resolver (`fr.artifacts.paths.feature_roots`;
+    the repo toplevel alone under `repo`), in order: a live spec
     (`specs/<slug>-design.md`, else `specs/<slug>.md`), else its archived twin under
-    `implemented/`; a plan folder, live or archived. Plan 3 swaps in R1's resolver
-    behind this one function, so no caller changes."""
-    return _resolve(ref, repo_root)[0]
+    `implemented/`; a plan folder, live or archived. Plan 3 swapped the resolver in
+    behind this one function (R18), so no caller changed. The path is repo-relative
+    when found under the repo, absolute when found in a feature root elsewhere (which
+    `repo_root / found` still reads correctly); a path-shaped output wants
+    `resolve_logical_at`'s `rel`, never this."""
+    found = resolve_logical_at(ref, repo_root)
+    if found is None:
+        return None
+    return Path(found.rel) if found.feature_root == Path(repo_root) else found.path
 
 
-def resolution_problem(ref: str, repo_root: Path) -> str | None:
+def resolution_problem(
+    ref: str, repo_root: Path, roots: Sequence[Path] | None = None
+) -> str | None:
     """Why *ref* does not resolve, or None when it does."""
-    return _resolve(ref, repo_root)[1]
+    return _resolve(ref, repo_root, roots)[1]
 
 
-def as_path_ref(ref: str, repo_root: Path, own_repo: str) -> str:
+def as_path_ref(
+    ref: str, repo_root: Path, own_repo: str, roots: Sequence[Path] | None = None
+) -> str:
     """*ref* as a `<own_repo>:<path>[#anchor]` path ref when it is logical, else *ref*.
 
     For readers that link or open the file a ref names (reports, the link checks):
@@ -130,8 +185,10 @@ def as_path_ref(ref: str, repo_root: Path, own_repo: str) -> str:
         logical = parse_logical(ref)
     except AcceptanceError:
         return ref
-    found = resolve_logical(ref, repo_root)
-    rel = found.as_posix() if found is not None else candidates(logical)[0]
+    # The layout path relative to its feature root, never an absolute one: a feature
+    # root outside the repo would otherwise spell `<repo>:/abs/path` (and a local path).
+    found = resolve_logical_at(ref, repo_root, roots)
+    rel = found.rel.as_posix() if found is not None else candidates(logical)[0]
     return f"{own_repo}:{rel}" + (f"#{logical.anchor}" if logical.anchor else "")
 
 
@@ -141,8 +198,10 @@ def path_view(matrix: Matrix, repo_root: Path, own_repo: str) -> Matrix:
     move never rewrites a row)."""
     from fr.acceptance.model import LEVELS
 
+    roots = feature_roots_of(repo_root)  # once per matrix, not once per ref
+
     def conv(refs: tuple[str, ...]) -> tuple[str, ...]:
-        return tuple(as_path_ref(r, repo_root, own_repo) for r in refs)
+        return tuple(as_path_ref(r, repo_root, own_repo, roots) for r in refs)
 
     rows = tuple(
         row.model_copy(
@@ -158,7 +217,8 @@ def path_view(matrix: Matrix, repo_root: Path, own_repo: str) -> Matrix:
 
 def origin_spec_path(origin: str, repo_root: Path) -> str | None:
     """The repo-relative spec file *origin* names when it names one, or None: a
-    logical `spec:<slug>` resolved in this repo (live, else archived), or a path
+    logical `spec:<slug>` resolved in this repo (live, else archived; the layout path,
+    relative to its feature root), or a path
     origin's own `.md` path (not checked for existence)."""
     if is_logical(origin):
         try:
@@ -166,8 +226,8 @@ def origin_spec_path(origin: str, repo_root: Path) -> str | None:
                 return None
         except AcceptanceError:
             return None
-        found = resolve_logical(origin, repo_root)
-        return found.as_posix() if found is not None else None
+        found = resolve_logical_at(origin, repo_root)
+        return found.rel.as_posix() if found is not None else None
     try:
         _, path, _ = split_ref(origin)
     except AcceptanceError:

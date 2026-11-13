@@ -212,7 +212,9 @@ class Settings(_Closed):
         "repo",
         PLACEMENTS,
         description="Default: artifacts live on the feature branch.\n"
-        "Quiet or stealth keep them elsewhere; this fr cannot yet serve either.",
+        "Quiet keeps them on the orphan `fr` branch, switched on by that branch's own\n"
+        "settings.yaml (`fr settings init --quiet`), never by this key in .fr/settings.yaml;\n"
+        "stealth is not yet served.",
     )
     artifacts: Artifacts = Field(
         default_factory=Artifacts,

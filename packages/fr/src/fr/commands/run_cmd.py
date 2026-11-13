@@ -121,6 +121,7 @@ if TYPE_CHECKING:
     from fr.run.observed import ChildDispatch
     from fr.run.telemetry import Round
     from fr.verification.walk import WalkOwed
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.run.provenance import cleared_gates, gates
 from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.units import UnitAttempt
@@ -248,6 +249,10 @@ class _RunWrites:
                 for path in guard.before_commit():
                     self.note(root, path)
         pending, self.paths = self.paths, {}
+        for root in pending:
+            extra = self._stealth_head(root)
+            if extra is not None:
+                pending[root].append(extra)
         outcome: CommitOutcome | None = None
         for root, paths in pending.items():
             outcome = commit_records(root, paths, self.message(), quiet=self.quiet)
@@ -256,6 +261,21 @@ class _RunWrites:
         if outcome is not None:
             self.last_outcome = outcome
         return outcome
+
+    def _stealth_head(self, root: Path) -> Path | None:
+        """Under stealth, every run write records the product head it describes beside
+        the cursor (`<run-id>.stealth.json`, R24 "resume"): the pushed head of the
+        product branch, so the state never describes code that is not pushed yet."""
+        from fr.artifacts.paths import STEALTH, outside_repo
+        from fr.placement import stealth
+        from fr.run.model import run_path
+
+        if self.last is None or outside_repo(root) != STEALTH:
+            return None
+        runs = run_path(root, self.last.run).parent
+        path = stealth.placement_file(runs, self.last.run)
+        self.remember(path)
+        return stealth.write_placement_file(root, runs, self.last.run, self.last.branch)
 
 
 _RUN_WRITES: ContextVar[_RunWrites | None] = ContextVar("fr_run_writes", default=None)
@@ -3193,7 +3213,7 @@ def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
         rel_parts = path.relative_to(repo_root.resolve()).parts
     except ValueError:
         rel_parts = ()
-    if rel_parts[:3] == ("docs", "superpowers", "runs") and (
+    if rel_parts[:3] == Path(KIND_DIRS["run"]).parts and (
         len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
     ):
         # gh#638: `<run>.records/` holds step records and fr's pr-body render,
@@ -5113,7 +5133,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
     what CI structurally could not, since every unit fixture creates its runs in
     the workspace and so satisfies the false assumption by construction.
     """
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if not runs_dir.is_dir():
         return None
     for candidate in sorted(runs_dir.glob("*.yaml")):
@@ -5208,6 +5228,44 @@ def _refuse_incoherent_settings(repo_root: Path) -> None:
         raise typer.Exit(2)
 
 
+def _stealth_ref_or_exit(cwd: Path, stealth: str | None, target: Path | None) -> Any:
+    """`--stealth`/`--target` as a `StealthRef` (R24, chosen per run), or None."""
+    from fr.placement.stealth import from_tracking_repo, parse_ref
+    from fr.settings import SettingsError
+
+    try:
+        if target is not None:
+            return parse_ref(stealth) if stealth else from_tracking_repo(cwd)
+        return parse_ref(stealth) if stealth is not None else None
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
+def _fetch_switch_or_refuse(
+    repo_root: Path, *, no_fetch: bool = False, stealth: Any = None
+) -> None:
+    """R23 "the switch": `run start` fetches `origin/fr` like `fr isolation up`, and
+    refuses (exit 2) when origin is unreachable, even when the workspace already exists.
+    `--no-fetch` reads the last fetched `origin/fr` and says so, as `up --no-fetch` does.
+    Under stealth (requested, or recorded by the workspace) the tracking repo must answer
+    instead, before anything is written (R24 fail-fast)."""
+    from fr.placement.quiet import fetch_switch
+    from fr.placement.stealth import check_reachable, marker_tracking
+    from fr.settings import SettingsError
+
+    try:
+        recorded = marker_tracking(repo_root)
+        ref = stealth if stealth is not None else (recorded[0] if recorded else None)
+        if ref is not None:
+            check_reachable(ref, repo_root)
+            return
+        fetch_switch(repo_root, no_fetch=no_fetch, command="fr run start")
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
 @run_app.command("start")
 @_commits_run_writes("start")
 def start_cmd(
@@ -5234,6 +5292,23 @@ def start_cmd(
         help="The forge issue this run works on: fr's commit subjects then use the "
         "`git.commit.with_issue` template (repo settings R14).",
     ),
+    no_fetch: bool = typer.Option(
+        False,
+        "--no-fetch",
+        help="Read the last fetched origin/fr for the placement instead of fetching it "
+        "(as `fr isolation up --no-fetch`; not a reachability check).",
+    ),
+    stealth: str | None = typer.Option(
+        None,
+        "--stealth",
+        help="Run under the stealth placement, keeping fr's state on <repo>@<branch> "
+        "(as `fr isolation up --stealth`; chosen per run).",
+    ),
+    target: Path | None = typer.Option(
+        None,
+        "--target",
+        help="Started from the tracking repo: the local target checkout (stealth).",
+    ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
 
@@ -5256,6 +5331,9 @@ def start_cmd(
         err_console.print(f"[red]--issue {issue}: an issue number is positive[/red]")
         raise typer.Exit(2)
     repo_root = resolve_repo_root()
+    stealth_ref = _stealth_ref_or_exit(repo_root, stealth, target)
+    if target is not None:
+        repo_root = target.resolve()
     try:
         manifest = resolve_workflow(workflow, repo_root)
     except WorkflowError as e:
@@ -5277,10 +5355,19 @@ def start_cmd(
             err_console.print(f"  {err}", soft_wrap=True)
         raise typer.Exit(2)
 
-    _refuse_incoherent_settings(repo_root)
+    _fetch_switch_or_refuse(repo_root, no_fetch=no_fetch, stealth=stealth_ref)
+    if stealth_ref is None:
+        # Under a requested stealth the policy is the tracking repo's, read once the
+        # workspace records it: checked below, inside the workspace.
+        _refuse_incoherent_settings(repo_root)
 
     try:
-        workspace = ensure_run_workspace(repo_root, branch)
+        workspace = ensure_run_workspace(
+            repo_root,
+            branch,
+            no_fetch=no_fetch,
+            **({"stealth": stealth_ref} if stealth_ref else {}),
+        )
     except RunWorkspaceError as e:
         # soft_wrap=True, like every other operator-facing refusal in this
         # module (p1-f1, r1-f2). This message embeds the repository path, so
@@ -5310,6 +5397,8 @@ def start_cmd(
             for err in shape_errors:
                 err_console.print(f"  {err}", soft_wrap=True)
             raise typer.Exit(2)
+    if stealth_ref is not None:
+        _refuse_incoherent_settings(workspace)
 
     try:
         # `--run-id` is operator input and becomes a path segment
@@ -6512,7 +6601,7 @@ def resolve_cmd(
     record_file: Path | None = typer.Option(
         None,
         "--record",
-        help="The step's record (docs/superpowers/runs/<run>.records/<step>[__<item>].yaml): "
+        help=f"The step's record ({KIND_DIRS['run']}/<run>.records/<step>[__<item>].yaml): "
         "its outcome, ticks, journal entries, resolutions, acceptance rows and evidence, "
         "applied in one commit (spec 2026-09-25 §5.C.2). Replaces --state/--evidence/--emitted.",
     ),
@@ -6871,7 +6960,9 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
     write_text_atomic(body_path, render_pr_body(repo_root, state))
-    rel = body_path.relative_to(repo_root).as_posix()
+    # Under quiet and stealth the render is under the artifact root, outside the checkout:
+    # named by its full path there (lens-pr-body-quiet), committed by the same seam.
+    rel = _shown_path(body_path, repo_root)
     ref = pr or state.branch
     # Through the forge adapter, never `fr.gh`: on GitLab/Gitea `gh` cannot
     # read the PR, and a gate that cannot read it never passes (gh#742).
@@ -7061,6 +7152,18 @@ def _gate_journals(read: Callable[[], _T_JOURNALS]) -> _T_JOURNALS:
             markup=False,
             soft_wrap=True,
         )
+        raise typer.Exit(2) from e
+
+
+def _deliver_placement_gate(repo_root: Path) -> None:
+    """Spec 2026-11-04 R28: `deliver` refuses a branch whose artifacts do not match the
+    repo's placement, naming `fr placement migrate-branch`; it never migrates."""
+    from fr.placement.drift import DriftError, refuse
+
+    try:
+        refuse(repo_root, "deliver")
+    except DriftError as e:
+        err_console.print(f"refused: {e}", markup=False, soft_wrap=True)
         raise typer.Exit(2) from e
 
 
@@ -7404,6 +7507,7 @@ def _resolve_body(
         # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
+        _deliver_placement_gate(repo_root)
         _deliver_acceptance_gate(repo_root)
         _deliver_leftovers_gate(repo_root, state)
         _deliver_pr_gate(repo_root, state, pr)
@@ -7584,6 +7688,15 @@ def resolve_in_process(
     )
 
 
+def _shown_path(path: Path, repo_root: Path) -> str:
+    """*path* relative to the checkout when it is inside it, else absolute: under quiet
+    and stealth a run's files live outside the product checkout."""
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def _resolve_with_record(
     run_id: str, step_id: str, item: str | None, record_file: Path, *, advance: bool = True
 ) -> None:
@@ -7602,7 +7715,7 @@ def _resolve_with_record(
     if not path.resolve().is_relative_to(home.resolve()):
         err_console.print(
             f"refused: {record_file} is not in this run's records dir "
-            f"({home.relative_to(repo_root).as_posix()}/) — nothing applied",
+            f"({_shown_path(home, repo_root)}/) — nothing applied",
             markup=False,
             soft_wrap=True,
         )
@@ -8122,7 +8235,7 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     from fr.run.adopt import current_branch
 
     branch = current_branch(repo_root)
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if branch is None or not runs_dir.is_dir():
         return []
     found: list[RunState] = []

@@ -38,7 +38,7 @@ covers:
   - packages/fr/src/fr/commands/gate_cmd.py
   - packages/fr/src/fr/triage/batch_drive.py
   - scripts/release.py
-reviewed: 2026-11-13 still true after review-lenses phase 3 added the lens-review step; this page names no step between the phase reviews and delivery
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 ## How a run goes

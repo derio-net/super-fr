@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import IO, Any, ClassVar, cast
 
 from fr._hosts import detect_backend
+from fr.artifacts.paths import KIND_DIRS, below
 from fr.ghclient import CommandRunner
 from fr.hostclient import FORGE_ERRORS, client_for
 from fr.isolation import preserve as _preserve
@@ -288,7 +289,7 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
         f"Or reap it anyway with `fr isolation down --branch {branch} --force`, "
         "which removes the worktree and fr's record of it (the branch and any "
         "commits on it remain in the repo; uncommitted changes do not survive, except "
-        "fr's own records under `docs/superpowers/`, which are preserved and restored "
+        f"fr's own records under `{KIND_DIRS['superpowers']}/`, which are preserved and restored "
         "by the next `up`)."
     )
     return "\n".join(lines)
@@ -303,8 +304,16 @@ _UP_REMEDY = "`fr isolation up --branch <branch>`"
 # usage/<id>.yaml — every destination is the source path with `implemented/`
 # spliced in after `docs/superpowers/`). Kept as a local constant, not imported
 # from fr.archive: this module must not depend on the archive command.
-_ARCHIVED_KINDS = ("plans", "specs", "journals", "runs", "usage")
-_SUPERPOWERS = "docs/superpowers/"
+_ARCHIVED_KINDS = tuple(
+    sorted(
+        name
+        for rel in KIND_DIRS.values()
+        if rel.startswith(f"{KIND_DIRS['superpowers']}/")
+        and "/" not in (name := rel.removeprefix(f"{KIND_DIRS['superpowers']}/"))
+        and f"{KIND_DIRS['archive']}/{name}" in KIND_DIRS.values()
+    )
+)  # the live kind dirs that have an `implemented/` twin: plans, specs, journals, runs, usage
+_SUPERPOWERS = f"{KIND_DIRS['superpowers']}/"
 
 # Files only fr's own tooling writes into a workspace, appended to the shared
 # `info/exclude` on `up` so they never make a worktree dirty — which would make
@@ -322,7 +331,7 @@ def _archived_path(path: str) -> str | None:
     """
     for kind in _ARCHIVED_KINDS:
         if path.startswith(f"{_SUPERPOWERS}{kind}/"):
-            return f"{_SUPERPOWERS}implemented/{path[len(_SUPERPOWERS) :]}"
+            return f"{KIND_DIRS['archive']}/{path[len(_SUPERPOWERS) :]}"
     return None
 
 
@@ -908,6 +917,39 @@ def network_env(run: Runner, repo_root: Path) -> dict[str, str]:
     return env
 
 
+def fetch_placement(
+    repo_root: Path,
+    branch: str,
+    no_fetch: bool,
+    network: Callable[[list[str]], subprocess.CompletedProcess[str]],
+    stealth: Any = None,
+) -> str:
+    """The placement `up` records for *branch* (every target's one call): with *stealth*
+    (a `fr.placement.stealth.StealthRef`, chosen per run, R24) the tracking repo's
+    reachability, privacy and worktree, before anything is written; otherwise fetch the
+    quiet switch through *network* and, under quiet, check the branch's feature id. A
+    refusal is an `IsolationError` (exit 2)."""
+    from fr.placement.quiet import check_feature_id, ensure_worktree, fetch_switch
+    from fr.settings import SettingsError
+
+    if stealth is not None:
+        from fr.placement.stealth import enter
+
+        try:
+            enter(repo_root, branch, stealth)
+        except SettingsError as e:
+            raise IsolationError(str(e)) from e
+        return "stealth"
+    try:
+        placement = fetch_switch(repo_root, no_fetch=no_fetch, network=network)
+        if placement == "quiet":
+            check_feature_id(repo_root, branch)
+            ensure_worktree(repo_root)
+    except SettingsError as e:
+        raise IsolationError(str(e)) from e
+    return placement
+
+
 def run_network(
     run: Runner,
     repo_root: Path,
@@ -1171,7 +1213,9 @@ class LocalWorktreeDevcontainerTarget:
         path: Path | None = None,
         base: str | None = None,
         no_fetch: bool = False,
+        stealth: Any = None,
     ) -> IsolationState:
+        placement = self._fetch_placement(branch, no_fetch, stealth)
         worktree = self._worktree_up_core(branch, path)
         name = resolve_profile(self.repo_root, profile)
         base_sha = self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
@@ -1201,10 +1245,23 @@ class LocalWorktreeDevcontainerTarget:
         # `status` nor `down` could address. With the record saved first, a
         # failed `up` is a listed workspace — retry `up`, or `down` it.
         state = carried_state(
-            self.repo_root, branch, worktree, name, "devcontainer", base_sha=base_sha
+            self.repo_root,
+            branch,
+            worktree,
+            name,
+            "devcontainer",
+            base_sha=base_sha,
+            placement=placement,
+            tracking=stealth.text if stealth is not None else None,
         )
         save_state(state)
-        self._write_isolation_marker(worktree, branch, created_at=state.created_at)
+        self._write_isolation_marker(
+            worktree,
+            branch,
+            created_at=state.created_at,
+            placement=state.placement,
+            tracking=self._tracking_entry(state),
+        )
         try:
             self._devcontainer_up(worktree, name)
         except IsolationError as err:
@@ -1963,7 +2020,7 @@ class LocalWorktreeDevcontainerTarget:
         if not preserve and not force:
             raise IsolationError(
                 "--no-preserve is only valid with --force — it discards fr's records "
-                "under docs/superpowers/, an explicit per-call decision."
+                f"under {KIND_DIRS['superpowers']}/, an explicit per-call decision."
             )
         runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
@@ -2573,7 +2630,7 @@ class LocalWorktreeDevcontainerTarget:
         still lack the validator entry point.
         """
         plans = self.run(
-            ["git", "ls-tree", ref, "--", "docs/superpowers/plans"],
+            ["git", "ls-tree", ref, "--", KIND_DIRS["plan"]],
             cwd=self.repo_root,
         )
         if plans.returncode != 0 or not plans.stdout.strip():
@@ -2585,7 +2642,7 @@ class LocalWorktreeDevcontainerTarget:
         line = result.stdout.strip()
         if result.returncode != 0 or not line:
             raise IsolationError(
-                f"plan repo has docs/superpowers/plans in {ref} but no "
+                f"plan repo has {KIND_DIRS['plan']} in {ref} but no "
                 f"scripts/validate-plans.sh there; run `{REPAIR_COMMAND}` from the repo "
                 f"root, commit it to the isolation start ref, then retry {_UP_REMEDY}."
             )
@@ -2598,7 +2655,10 @@ class LocalWorktreeDevcontainerTarget:
             )
 
     def _ensure_validator_wrapper_in_worktree(self, worktree: Path) -> None:
-        plans = worktree / "docs" / "superpowers" / "plans"
+        # The wrapper is owed by a product branch that holds plans. Under quiet or stealth
+        # the plans live on `fr` or in the tracking repo (review p4-r4), so only plans in
+        # the product tree itself count, as in `_ensure_validator_wrapper_in_ref`.
+        plans = below(worktree, "plan")  # the product checkout's own tree
         if not plans.is_dir():
             return
         wrapper = worktree / "scripts" / "validate-plans.sh"
@@ -2718,6 +2778,23 @@ class LocalWorktreeDevcontainerTarget:
         back as a non-zero, non-2 exit — `unknown`, never `absent`."""
         return run_network(self.run, self.repo_root, argv, cwd=cwd)
 
+    def _fetch_placement(self, branch: str, no_fetch: bool, stealth: Any = None) -> str:
+        """R23 "the switch": fetch `origin/fr` (absent is fine) and return the placement
+        it names, refusing an unreachable origin before anything is provisioned; under
+        quiet, also refuse a branch whose feature id another branch holds (gh#1419).
+        With *stealth*, R24's checks instead (`fetch_placement`)."""
+        return fetch_placement(
+            self.repo_root, branch, no_fetch, lambda argv: self._run_network(argv), stealth
+        )
+
+    def _tracking_entry(self, state: IsolationState) -> dict[str, str] | None:
+        """The marker's `tracking` record under stealth (R24 "the local record")."""
+        if state.placement != "stealth" or state.tracking is None:
+            return None
+        from fr.placement.stealth import marker_entry, parse_ref, target_dir
+
+        return marker_entry(parse_ref(state.tracking), target_dir(self.repo_root))
+
     def _remote_view(self, branch: str, no_fetch: bool) -> RemoteView:
         """Probe `origin/<B>`: `ls-remote --exit-code` (0 exists, 2 absent,
         anything else unknown — never absence, #354), then an explicit-refspec
@@ -2766,6 +2843,8 @@ class LocalWorktreeDevcontainerTarget:
         mode: str = "worktree",
         created_at: str | None = None,
         target: str = "devcontainer",
+        placement: str | None = None,
+        tracking: dict[str, str] | None = None,
     ) -> None:
         """Write the `.fr-isolation` identity marker and git-exclude it.
 
@@ -2795,6 +2874,12 @@ class LocalWorktreeDevcontainerTarget:
                     # the state record's own created_at, so an `up` that
                     # carries the record forward does not restamp the marker
                     "created_at": created_at or datetime.now(UTC).isoformat(),
+                    # R23 "sticky": the placement `up` found; `space_for` refuses a
+                    # later switch that disagrees. Omitted only by a caller with none.
+                    **({"placement": placement} if placement is not None else {}),
+                    # R24 "the local record": under stealth, the tracking ref and the
+                    # target's directory in the tracking worktree.
+                    **({"tracking": tracking} if tracking is not None else {}),
                 },
                 indent=2,
             )

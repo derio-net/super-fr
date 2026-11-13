@@ -12,7 +12,7 @@ covers:
   - plugins/super-fr/skills/fr-init/SKILL.md
   - packages/fr/src/fr/commands/init_cmd.py
   - packages/fr/src/fr/commands/services_cmd.py
-reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
+reviewed: 2026-11-13 init's writers refuse in a stealth workspace (placement-resolver p4-r3)
 ---
 
 ## Overview: the profile is the contract
@@ -97,7 +97,10 @@ call for a non-GitHub forge.
 **4. Hand back.** The skill tells you which placeholder files to fill. Scaffold already
 committed the profile, because `fr isolation up` builds from the committed tree. Add
 `--no-commit` to write the files only, for example when you must open a pull request to
-get them onto a protected branch.
+get them onto a protected branch. In a stealth workspace (a run whose records live in a
+separate tracking repository) `fr init scaffold`, `fr init agents` and `fr init
+validator-wrapper` refuse before writing anything: no fr file
+may reach a stealth target.
 
 ## Services: forge, CI, tracking
 

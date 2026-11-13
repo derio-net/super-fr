@@ -11,7 +11,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-12 vk compat removal, only label wording in two comments changed, the page already says fr:ready
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 # Dispatch labels and the per-repo plan profile

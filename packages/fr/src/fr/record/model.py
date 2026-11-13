@@ -38,6 +38,7 @@ from pydantic import (
 )
 
 from fr.acceptance.model import Visual, Walk, check_issue_refs, check_status, check_verify
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.journal.model import FindingState, JournalKind, ReviewScope
 from fr.run.model import AnsweredBy
 from fr.workflow.artifacts import ALWAYS_RECORD_SECTIONS, record_sections
@@ -102,7 +103,7 @@ spec `2026-11-04-repo-feature-settings-design.md` R16, R19). Migration:
 journal item and `JournalItem.lens` (spec `2026-11-12-review-lenses-design.md`
 §3.B, R4). Migration: `fr.artifacts.record_lens`, stamp only."""
 RECORDS_SUFFIX = ".records"
-RUNS_REL = Path("docs") / "superpowers" / "runs"
+RUNS_REL = Path(KIND_DIRS["run"])
 
 Outcome = Literal["done", "failed", "blocked"]
 ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope"]
@@ -460,7 +461,7 @@ def allowed_sections(step: Any, group: Any = None) -> frozenset[str]:
 
 
 def records_dir(repo_root: Path, run_id: str) -> Path:
-    return repo_root / RUNS_REL / f"{run_id}{RECORDS_SUFFIX}"
+    return artifact_root(repo_root) / RUNS_REL / f"{run_id}{RECORDS_SUFFIX}"
 
 
 def record_path(repo_root: Path, run_id: str, step: str, item: str | None = None) -> Path:

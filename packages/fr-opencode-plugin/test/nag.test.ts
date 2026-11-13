@@ -1,6 +1,6 @@
 // The acceptance nag (spec 2026-10-20-opencode-2-support R9).
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -195,5 +195,104 @@ describe("acceptance nag", () => {
       },
     });
     await expect(throwing(ctxEvent())).resolves.toBeUndefined();
+  });
+});
+
+describe("the nag's acceptance directory (R1, R26)", () => {
+  test("under the quiet placement the fragments live where fr settings paths says", async () => {
+    // A repo with no fragment in its checkout, but the quiet switch on origin/fr and an
+    // `fr` that names the acceptance directory elsewhere.
+    const { hasAcceptance } = await import("../src/nag");
+    const { resetFrPaths } = await import("../src/marker");
+    const { execFileSync } = await import("node:child_process");
+    const quiet = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-quiet-")));
+    const space = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-space-")));
+    const bin = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-bin-")));
+    const savedPath = process.env.PATH;
+    try {
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: quiet, stdio: "pipe" });
+      git("init", "--quiet");
+      git("remote", "add", "origin", "https://example.com/org/repo.git");
+      const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: quiet, input: "placement: quiet\n" })
+        .toString()
+        .trim();
+      const tree = execFileSync("git", ["mktree"], { cwd: quiet, input: `100644 blob ${blob}\tsettings.yaml\n` })
+        .toString()
+        .trim();
+      const commit = execFileSync("git", ["commit-tree", tree, "-m", "s"], {
+        cwd: quiet,
+        env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" },
+      })
+        .toString()
+        .trim();
+      git("update-ref", "refs/remotes/origin/fr", commit);
+      mkdirSync(join(space, "features"), { recursive: true });
+      writeFileSync(join(space, "features", "f.yaml"), "rows:\n");
+      writeFileSync(join(bin, "fr"), `#!/bin/sh\necho '{"FR_ACCEPTANCE_DIR": "${space}"}'\n`, { mode: 0o755 });
+      process.env.PATH = `${bin}:${savedPath}`;
+      resetFrPaths();
+      expect(hasAcceptance(quiet)).toBe(true);
+      // and the same repo with no fr falls back to the checkout's layout: nothing there
+      writeFileSync(join(bin, "fr"), "#!/bin/sh\nexit 3\n", { mode: 0o755 });
+      resetFrPaths();
+      expect(hasAcceptance(quiet)).toBe(false);
+    } finally {
+      process.env.PATH = savedPath;
+      resetFrPaths();
+      for (const d of [quiet, space, bin]) rmSync(d, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a plain repo's nag spawns nothing for the placement (review p6-r8)", () => {
+  test("no marker and no origin/fr ref on the filesystem: no git, no fr", async () => {
+    const { hasAcceptance } = await import("../src/nag");
+    const { resetFrPaths } = await import("../src/marker");
+    const bin = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-rec-")));
+    const log = join(bin, "calls.log");
+    for (const name of ["git", "fr"]) {
+      writeFileSync(join(bin, name), `#!/bin/sh\necho "${name} $*" >> ${log}\nexit 1\n`, { mode: 0o755 });
+    }
+    const saved = { PATH: process.env.PATH, FR_GIT_CANDIDATES: process.env.FR_GIT_CANDIDATES };
+    process.env.PATH = bin;
+    process.env.FR_GIT_CANDIDATES = join(bin, "git");
+    resetFrPaths();
+    try {
+      expect(hasAcceptance(repo)).toBe(true); // the checkout's own fragment
+      expect(existsSync(log)).toBe(false);
+      // a marker naming no placement, with no origin/fr ref, still spawns nothing (pr1431-n6)
+      writeFileSync(join(repo, ".fr-isolation"), "{}");
+      hasAcceptance(repo);
+      expect(existsSync(log)).toBe(false);
+      // and a stealth marker makes it look: fr is asked for the acceptance dir
+      writeFileSync(join(repo, ".fr-isolation"), '{"placement": "stealth"}');
+      resetFrPaths();
+      hasAcceptance(repo);
+      expect(readFileSync(log, "utf-8")).toContain("fr settings paths");
+    } finally {
+      process.env.PATH = saved.PATH;
+      if (saved.FR_GIT_CANDIDATES === undefined) delete process.env.FR_GIT_CANDIDATES;
+      else process.env.FR_GIT_CANDIDATES = saved.FR_GIT_CANDIDATES;
+      resetFrPaths();
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  test("the default runner spawns only a trusted fr, never a relative PATH entry's (review p6-r2)", async () => {
+    const planted = join(repo, "planted-ran");
+    writeFileSync(join(repo, "fr"), `#!/bin/sh\ntouch ${planted}\necho 1 row unwired: planted\n`, { mode: 0o755 });
+    const saved = process.env.PATH;
+    const savedCwd = process.cwd();
+    process.env.PATH = ".";
+    process.chdir(repo);
+    try {
+      const event = ctxEvent("ses_rel");
+      await createNagHandler({ session: topLevel, directory: repo })(event);
+      expect(existsSync(planted)).toBe(false);
+      expect(event.system).toHaveLength(0);
+    } finally {
+      process.chdir(savedCwd);
+      process.env.PATH = saved;
+    }
   });
 });

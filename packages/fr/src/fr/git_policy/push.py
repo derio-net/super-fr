@@ -113,7 +113,8 @@ class Range:
 
 
 def unpushed(root: Path, remote: str, branch: str) -> Range:
-    """The commits `fr push` may check and squash (see the module doc)."""
+    """The FIRST-PARENT commits `fr push` may check and squash (R13/R14; see the module
+    doc). Not the range a content scan reads: that is `commits_the_push_adds`."""
     listed = _git(root, "ls-remote", "--heads", remote, f"refs/heads/{branch}").split()
     remote_sha = listed[0] if listed else None
     exclude = [f"--remotes={remote}"]
@@ -132,6 +133,42 @@ def unpushed(root: Path, remote: str, branch: str) -> Range:
         exclude.append(remote_sha)
     shas = _git(root, "rev-list", "--first-parent", "--reverse", "HEAD", "--not", *exclude).split()
     return Range(tuple(_commit(root, s) for s in shas), remote_sha)
+
+
+def commits_the_push_adds(root: Path, remote: str, branch: str, rev: str = "HEAD") -> list[str]:
+    """EVERY commit `git push <remote> <rev>:<branch>` would add to the remote, oldest
+    first: `rev-list <rev> --not <remote tips>`, WITHOUT `--first-parent` (lens
+    l-security-r1).
+
+    This is the range a content scan (stealth's "no fr file reaches the target", R24)
+    must read: a merged side branch that adds a file and later removes it puts that file
+    in the remote's history although no first-parent commit names it. `unpushed` is a
+    different question (which commits R13/R14 may check and squash) and stays
+    first-parent.
+
+    The exclusion is read LIVE from the remote with `ls-remote` (the target branch and
+    the remote's default `HEAD`), never from remote-tracking refs, which a stale fetch
+    or a hand-made ref could point past a commit the remote does not hold. Fails closed:
+    a remote it cannot read, or a remote tip this clone does not hold, refuses."""
+    done = run_git(root, ["ls-remote", remote, "HEAD", f"refs/heads/{branch}"])
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip()
+        raise PushRefusedError(
+            f"cannot read {remote}'s tips to decide which commits the push adds: {detail}"
+        )
+    tips: list[str] = []
+    for line in done.stdout.splitlines():
+        words = line.split()
+        if len(words) == 2 and words[0] not in tips:
+            tips.append(words[0])
+    for sha in tips:
+        if run_git(root, ["cat-file", "-e", f"{sha}^{{commit}}"]).returncode != 0:
+            raise PushRefusedError(
+                f"{remote} is at {sha[:12]}, which this clone does not have: run "
+                f"`git fetch {remote}` and try again"
+            )
+    exclude = ["--not", *tips] if tips else []
+    return _git(root, "rev-list", "--reverse", rev, *exclude).split()
 
 
 def is_migration(settings: Settings, commit: Commit) -> bool:
@@ -182,9 +219,13 @@ def _is_fr_own(commit: Commit, values: Mapping[str, str]) -> bool:
     return (values.get("type"), values.get("scope")) == ("chore", "fr")
 
 
-def _composed(settings: Settings, segment: Sequence[Commit], issue: int | None) -> str:
+def _composed(
+    settings: Settings, segment: Sequence[Commit], issue: int | None, *, plain: bool = False
+) -> str:
     """The subject of a squashed segment: the values of its first commit that is not
-    fr's own bookkeeping (else its first commit), rendered through the templates."""
+    fr's own bookkeeping (else its first commit), rendered through the templates.
+    *plain* (stealth, review pr1431-r4): the subject and the folded subjects only, with
+    no line crediting fr, since only the code commits reach a stealth target (R24)."""
     commit_t = settings.git.commit
     parsed: list[tuple[Commit, dict[str, str]]] = []
     for c in segment:
@@ -209,15 +250,39 @@ def _composed(settings: Settings, segment: Sequence[Commit], issue: int | None) 
         issue,
     )
     folded = "\n".join(f"- {c.subject}" for c in segment)
+    if plain:
+        return f"{subject}\n\n{folded}\n"
     return f"{subject}\n\nSquashed by fr push (git.history: squash-unpushed) from:\n{folded}\n"
 
 
 def squash(
-    root: Path, settings: Settings, branch: str, commits: Sequence[Commit], issue: int | None
+    root: Path,
+    settings: Settings,
+    branch: str,
+    commits: Sequence[Commit],
+    issue: int | None,
+    *,
+    plain: bool = False,
 ) -> str | None:
-    """Rewrite the unpushed range (R13); the new head, or None when nothing changed."""
+    """Rewrite the unpushed range (R13); the new head, or None when nothing changed.
+
+    *plain* is stealth's (review pr1431-r4): the composed messages credit nothing to fr,
+    and a commit whose subject names fr refuses BEFORE anything is rewritten, since its
+    subject would be folded into the message that reaches the target."""
     if not commits:
         return None
+    if plain:
+        from fr.placement.stealth import fr_naming
+
+        named = [c for c in commits if fr_naming(c.subject)]
+        if named:
+            lines = "\n".join(f"  {c.sha[:12]} {c.subject}" for c in named)
+            raise PushRefusedError(
+                "under placement stealth only the code commits reach the target (R24), and "
+                f"{len(named)} unpushed commit subject(s) name fr:\n{lines}\nReword them, or "
+                "drop the commits that hold only fr's files, and push again; nothing was "
+                "rewritten"
+            )
     head = commits[-1].sha
     parent = commits[0].parents[0] if commits[0].parents else None
     if parent is None:
@@ -231,7 +296,7 @@ def squash(
             # One commit, parent unchanged: nothing to rewrite. It is still flushed:
             # a segment left behind would be folded again at the next flush (p4-r1).
             return segment.pop().sha
-        message = _composed(settings, segment, issue)
+        message = _composed(settings, segment, issue, plain=plain)
         new = _git(
             root,
             "commit-tree",
@@ -284,6 +349,95 @@ def squash(
     return parent
 
 
-def push(root: Path, remote: str, branch: str) -> None:
-    """`git push -u <remote> <branch>`: a fast-forward, never forced."""
-    _git(root, "push", "-u", remote, branch)
+MAX_PUSH_ATTEMPTS = 3
+"""Quiet's replay bound (R23): this many rejected pushes of `fr`, then a refusal."""
+
+QUIET_BRANCH = "fr"
+
+
+def _sha(root: Path, ref: str) -> str | None:
+    done = run_git(root, ["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"])
+    if done.returncode != 0:
+        return None
+    return done.stdout.strip() or None
+
+
+def fr_pending(root: Path, remote: str) -> bool:
+    """Local `fr` holds commits `<remote>/fr` (as last fetched) does not."""
+    local = _sha(root, f"refs/heads/{QUIET_BRANCH}")
+    if local is None:
+        return False
+    tracking = _sha(root, f"refs/remotes/{remote}/{QUIET_BRANCH}")
+    if tracking is None:
+        return True
+    return _git(root, "rev-list", "--count", f"{tracking}..{local}").strip() != "0"
+
+
+def _replay(fr_root: Path, remote: str) -> None:
+    """Fetch `<remote>/fr` and replay this checkout's own unpushed fr commits onto it.
+    Features write disjoint paths, so the replay is clean; a conflict means the same
+    path, which is refused naming it, with the worktree put back as it was."""
+    from fr.placement.quiet import fr_worktree_problem
+
+    problem = fr_worktree_problem(fr_root)
+    if problem is not None:  # p3-r8: say what is wrong, never "the same path"
+        raise PushRefusedError(f"cannot replay this feature's `{QUIET_BRANCH}` commits: {problem}")
+    tracking = f"refs/remotes/{remote}/{QUIET_BRANCH}"
+    _git(fr_root, "fetch", "--no-tags", remote, f"+refs/heads/{QUIET_BRANCH}:{tracking}")
+    done = run_git(fr_root, ["rebase", "--no-autostash", tracking])
+    if done.returncode == 0:
+        return
+    conflicted = run_git(fr_root, ["diff", "--name-only", "--diff-filter=U"]).stdout.split()
+    run_git(fr_root, ["rebase", "--abort"])
+    where = ", ".join(conflicted) or (done.stderr or done.stdout).strip()
+    raise PushRefusedError(
+        f"cannot replay this feature's `{QUIET_BRANCH}` commits onto {remote}/{QUIET_BRANCH}: "
+        f"another push changed the same path ({where}). Each feature writes only its own "
+        "path; resolve it on the fr worktree and push again"
+    )
+
+
+def atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:
+    """Quiet's push (R23): the feature branch and `fr` in ONE `git push --atomic` when
+    code moved, `fr` alone when only bookkeeping did. When `fr` is rejected because
+    another feature moved it, fetch, replay, retry, at most `MAX_PUSH_ATTEMPTS` times.
+    Never forced. The refs pushed, in order (empty: nothing was pending).
+
+    Held under the fr worktree's lock (p3-r8): every workspace of the repo shares it."""
+    from fr.placement.quiet import fr_worktree_lock
+    from fr.settings import SettingsError
+
+    try:
+        with fr_worktree_lock(fr_root):
+            return _atomic_push(root, fr_root, remote, branch, code=code)
+    except SettingsError as e:
+        raise PushRefusedError(str(e)) from e
+
+
+def _atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:
+    for _ in range(MAX_PUSH_ATTEMPTS):
+        refs = ([branch] if code else []) + ([QUIET_BRANCH] if fr_pending(root, remote) else [])
+        if not refs:
+            return []
+        argv = (
+            ["push", "--atomic", "-u", remote, *refs]
+            if len(refs) > 1
+            else ["push", "-u", remote, *refs]
+        )
+        if any(a in FORCE_FLAGS for a in argv):  # unreachable; a last line of defence
+            raise PushRefusedError(f"refusing a forced git call: git {' '.join(argv)}")
+        done = run_git(root, argv)
+        if done.returncode == 0:
+            return refs
+        detail = (done.stderr or done.stdout).strip()
+        listed = run_git(root, ["ls-remote", "--heads", remote, f"refs/heads/{QUIET_BRANCH}"])
+        words = listed.stdout.split()
+        remote_fr = words[0] if words else None
+        tracking = _sha(root, f"refs/remotes/{remote}/{QUIET_BRANCH}")
+        if QUIET_BRANCH not in refs or listed.returncode != 0 or remote_fr == tracking:
+            raise PushRefusedError(f"`git {' '.join(argv)}` failed: {detail}")
+        _replay(fr_root, remote)
+    raise PushRefusedError(
+        f"{remote} rejected refs/heads/{QUIET_BRANCH} {MAX_PUSH_ATTEMPTS} times: it kept "
+        "moving under other features' pushes. Nothing was forced; run `fr push` again"
+    )

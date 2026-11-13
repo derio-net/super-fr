@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 review-lenses phase 4, the lens-review step and the PR table it feeds, linked to the new guide
+reviewed: 2026-11-13 placement-resolver PR review, stealth never commits on or pushes the target's branch (migrate-branch copies and names the rewrite), a lost marker refuses, squash and PR text name no fr
 ---
 
 ## Overview
@@ -1169,7 +1169,7 @@ than looking for a flag that bends this one.
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
-| Repo settings | `.fr/settings.yaml`, read from the default branch | Turns policy features off, quiets the forge, and sets the git policy. |
+| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`; stealth: `<target-dir>/settings.yaml` on the tracking branch) | Turns policy features off, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
 
 ### Repo settings
 
@@ -1215,9 +1215,156 @@ than quietly falling back to the defaults.
   use them, the agents are told them, and `fr push` refuses a commit whose subject
   does not match. The issue comes from the run (`fr run start --issue <n>`).
 
-Today the settings file lives in the repository itself. Keeping fr's records off
-the feature branch altogether, on a separate branch or in a separate tracking
-repository, comes later.
+#### Quiet: fr's records on a branch of their own
+
+Some repositories do not want fr's records on their feature branches at all: no
+plans, journals or run cursors in the pull request, and no `chore(fr):` commits in
+its history. For them there is the **quiet** placement. `fr settings init --quiet`
+creates an orphan branch named `fr`, holding only a `settings.yaml` that says
+`placement: quiet` (every other key commented out at its default), and pushes it to
+`origin` with an ordinary push. It refuses when `origin` already has an `fr` branch,
+because that branch is never overwritten, and when there is no `origin` to push to.
+The existence of that file on `origin/fr`, with a line naming `placement`, is the
+switch: a repository without it is `repo`, and so is any clone with no `origin`. Some
+other branch that happens to be called `fr`, with a `settings.yaml` that names no
+placement, is not a switch either, and `fr placement move --to quiet` refuses to build on
+it. A clone that keeps its refs in a reftable reads the switch through git.
+
+From then on fr writes every record into a second worktree of `fr`, at
+`~/.cache/fr/worktrees/<repo>/fr`, below `features/<feature-id>/`, where the feature
+id is the branch name with `/` written as `__` (`feat/q` becomes `feat__q`). Below
+that the layout is the usual one, so a plan sits at
+`features/feat__q/docs/superpowers/plans/<slug>/`. Acceptance rows are the same:
+`fr acceptance add` and `set-status` write this feature's fragment there, and
+`fr acceptance init` creates only that directory, with no CI workflow, rule file or
+`.gitignore` lines on the product branch. Each fr commit on `fr` touches only its own
+feature's path, and the feature's first commit writes `features/<feature-id>/OWNER`
+naming its branch. A branch whose id another branch already holds, here or in that
+`OWNER` file from another clone, is refused, naming both, rather than left to share a
+path (`feat/a__b` and `feat__a/b` collapse to the same id). Every workspace of the
+repository shares the one `fr` worktree, so fr's commits and pushes there take a lock
+in its git directory; a rebase left in progress there, or hand edits to its tracked
+files, is reported as exactly that. `fr migrate artifacts` and the migration check
+before every command rewrite only your own feature's records, and report another
+feature's stale ones for its own workspace to migrate; `fr validate artifacts`
+reads every feature.
+
+Some commands cannot put their files on `fr` yet, and refuse before writing anything
+rather than leave them in your checkout: `fr debt archive-pr`, `fr ops gate`, and
+renaming a branch. `fr archive` works only as `fr archive --branch` (see merged status
+below). When a
+repository-configuration command such as `fr init agents` or a profile scaffold writes
+files that do belong on the product branch, fr makes no commit for them and says so:
+you commit them yourself. If an fr record ever does reach your checkout, the commit
+fails with an error instead of a warning. `fr push` pushes your feature branch and `fr` together in one
+`git push --atomic`, or `fr` alone when only bookkeeping moved. When another
+feature pushed `fr` in between, it fetches, replays its own fr commits on top (the
+paths never overlap) and tries again, at most three times. It never force-pushes
+`fr` and never rewrites what is already there. The commit-subject check and the
+squash apply to your feature branch only. Runner dispatch (`fr apply --to`) is
+refused under quiet, because a runner works from the default branch, where a quiet
+repository keeps no plan.
+
+Under quiet the policy keys come from `fr`'s own `settings.yaml`, read from
+`origin/fr`, and a `.fr/settings.yaml` on the default branch is ignored (`fr settings
+show` says so). Whoever can push to `fr` can therefore change the policy, so **give
+the `fr` branch the same branch protection as your default branch.**
+
+fr fetches `origin/fr` at `fr isolation up` and at `fr run start`, and both refuse
+when `origin` cannot be reached, naming `git remote -v`, rather than guess the
+placement. `fr isolation up --no-fetch` and `fr run start --no-fetch` read the last
+fetched `origin/fr` instead and say so. The workspace records the placement it was set
+up under, and a later disagreement refuses, naming both: deleting or renaming `fr`, or
+changing its `placement`, stops the workspace rather than quietly sending records back
+onto the feature branch. A workspace set up before the switch appeared counts as
+`repo` and refuses the same way. A local `fr` branch that is neither behind nor ahead
+of `origin/fr` is never adopted, and `fr settings init --quiet` refuses while one
+exists. One known limitation: a host whose fr predates quiet support never
+looks for the switch, and writes its records on the feature branch as before.
+
+#### Stealth: fr's records in a separate tracking repository
+
+Quiet still puts fr's records in the product's own remote. Sometimes even that is too
+much: the repository is someone else's, and nothing of fr may reach it, not a branch,
+not a label, not a comment. For that there is the **stealth** placement, and unlike
+quiet it is never a setting of the repository: you choose it for one run. Tell fr-goal
+or fr-debugging `mode=stealth <tracking-repo>@<branch>`, and they pass
+`--stealth <tracking-repo>@<branch>` to `fr isolation up` and `fr run start`; or start
+from a clone of the tracking repository with `mode=stealth target=<path>`, which passes
+`--target <path>` and takes the tracking repository and branch from that clone. A
+`.fr/settings.yaml` saying `placement: stealth` is refused, because stealth is chosen
+per run.
+
+The workspace's isolation state and its `.fr-isolation` marker record
+`placement: stealth` and the tracking ref, so every later fr command run there knows
+it. The marker is excluded from git, so `git clean -fdx` removes it; fr then finds the
+placement in the isolation state and refuses every command, naming the
+`fr isolation up --branch <branch> --stealth <ref>` that writes the marker again. A marker
+fr cannot read (truncated, recorded for another directory) refuses the same way: fr never
+reads a lost placement as `repo`. fr clones the tracking repository to
+`~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>`, and each target has its own
+directory there, named `<host>--<owner>--<repo>` from the target's remote
+(`local--<name>` for a local path). Below it the layout is quiet's:
+`features/<feature-id>/docs/superpowers/...`, with the same `OWNER` file and the same
+refusal of a branch whose id another branch holds.
+
+Every state write is committed in that clone and pushed to the tracking branch with a
+compare-and-swap push, and only as a fast-forward: fr never forces a commit over one
+another host pushed. When another target or host pushed in between, fr fetches,
+replays its own commit on the new tip and tries again, at most three times. Each
+command's first look at the clone fetches it under the clone's lock and brings it to
+the tip: a clone that cannot fast-forward, or holds unpushed commits that will not
+replay, is refused rather than read as the state. A push the tracking repository
+refuses is fatal, and so is a commit the clone refuses (a change fr did not write,
+outside any feature's path, is in the way): the command exits 2, this command's commit
+is dropped and the files it wrote are put back, so the cursor never moves on your
+machine while the tracking branch did not. Nothing else in the clone is touched, not
+even another workspace's file waiting for its own commit. An unreachable tracking repository, or a branch it does not
+have, is refused at `fr isolation up`, at `fr run start` and before any other fr write,
+with nothing written.
+
+The target receives only your code and one draft pull request with a plain summary:
+`fr push` pushes the feature branch alone, refusing a commit that carries a path only fr
+writes (its artifact trees, `.fr/`, `.claude/agents/fr-*.md`, the plan validator) or a
+message naming fr (`chore(fr)`, an fr command, the placement), and `fr pr create` refuses
+a title or body that names fr or carries its markers. Under `git.history:
+squash-unpushed` the squashed commit's message is the subject and the folded subjects,
+with no line crediting fr. Every push of a product branch fr makes, from any command,
+goes through the same check. The commands that would write
+repository configuration into the target (`fr init scaffold`, `fr init agents`,
+`fr init validator-wrapper`, `fr settings init`) refuse before
+writing, and so does every forge write but that one draft: `fr apply --yes`,
+`fr gate pass --yes`, `fr debt issue --yes` and the rest exit 2, and the forge clients
+themselves refuse an issue, a label or a comment there. Stealth sets `forge.labels`, `forge.comments` and `forge.issues`
+to `off` and `forge.pr_body` to `minimal` itself, and `fr settings check` and
+`fr run start` refuse a tracking file that sets one of them to anything else. The
+policy keys come from `<target-dir>/settings.yaml` on the tracking branch, which
+`fr settings init --stealth <tracking-repo>@<branch>` writes and pushes; a
+`.fr/settings.yaml` in the target is ignored, and fr prints that it was. A tracking
+repository more visible than the target (a public one for a private target, or an
+internal one) is refused, and so is a visibility fr cannot read or does not
+recognise; a local path counts as private. The target's visibility is read through the
+forge type its checkout declares, on the host of its own remote, so a self-hosted target
+is asked on its own forge; a checkout whose forge names another host, and a Gitea forge
+(whose client fr cannot pin to a host), count as unreadable.
+
+A stealth run is resumed from the tracking repository, on any host:
+`fr isolation up --stealth <tracking-repo>@<branch> --resume <run-id>` from a clone of
+the target. Code is pushed before state, and beside the run cursor fr keeps
+`<run-id>.stealth.json` with the target's remote, its branch and the pushed product
+head the state describes. On resume fr compares that head with the branch: equal, it
+resumes; the branch ahead, it records the new head again (the last step's
+bookkeeping); the state ahead, it refuses, naming the commit the branch lacks. Runner
+dispatch (`fr apply --to`) is refused under stealth, as under quiet.
+
+Where fr's records live is answered by one resolver, and `fr settings paths` prints
+its answers: `--shell` gives `FR_PLACEMENT`, `FR_ARTIFACT_ROOT`, `FR_FEATURE` and one
+shell-quoted `FR_<KIND>_DIR` (or `_FILE`) line per kind, such as `FR_PLANS_DIR`, ready
+for `eval` in a hook; `--json` gives the same keys as one object. Outside a git
+repository it prints `FR_PLACEMENT=none` and still succeeds, so a hook can call it
+anywhere. Under `repo` the paths are the ones in the table above; under quiet
+`FR_PLACEMENT=quiet`, `FR_ARTIFACT_ROOT` is the `fr` worktree and `FR_FEATURE` the
+feature id.
 
 The workflow is not one large program. The shape supplies the sequence, the
 skill supplies the judgment each step needs, and smaller commands and safety
@@ -1233,6 +1380,103 @@ degrading; plans that name none are unaffected. And if you have written your own
 runner to execute work elsewhere, its interface now receives a single work item
 rather than a plan-and-phase pair, which is what allows one runner to serve
 shapes of different granularity.
+
+#### Merged status under quiet and stealth
+
+Under both placements the default branch carries none of fr's files, so "this feature
+merged" cannot mean "its plan is on `main`". It means its code branch merged. When a
+feature's first fr commit claims its path, fr writes `OWNER` (the branch) and `BASE`
+(the commit the branch started from), and only commits past `BASE` are the feature's:
+a branch fresh from the default branch, or behind it, is never merged, however reachable
+its head is. Each `fr push` also appends the head it pushes to `HEADS` in the feature
+path, in the same atomic push. A feature is merged when one of its heads, a live ref of
+its branch or one recorded in `HEADS` (under stealth, the product head each run
+recorded), holds a commit of its own and is reachable from the default branch; its place
+in the order is the first-parent commit of the default branch that brought it in. That
+answer only grows: a commit after the merge, or a branch deleted after it, never
+un-merges a feature. A squash or rebase merge leaves no head on the default branch, so
+`fr archive --branch` and `fr acceptance status` also ask the forge for the branch's
+merged pull request (a read, which stealth allows) and take its merge commit, when that
+commit is on the default branch's first-parent line; with the forge unreadable, they say
+that no merge was found and that a squash or rebase merge needs the forge.
+
+The acceptance fold applies merged features' amendments in merge order, reading each
+merged feature's fragments as they were at its merge: from the last pushed fr commit of
+its path at or before the merge commit. An amendment written after the merge, or a
+change never pushed, does not count as merged; on the feature's own branch it is pending,
+and an in-place edit of a merged row there is refused by `fr acceptance check`, as on the
+default branch under `repo`. `fr acceptance status` shows a feature's amendment the
+moment its code merges, and lists the merged features; `fr status` and `fr debt` read the
+same answer for plans, dating a plan by the history of its path in the fr worktree. A
+feature that has not merged counts only in its own branch's view.
+
+Archiving moves nothing. `fr archive --branch <branch>` checks that the branch is
+merged, then appends one record, `merged: <sha>` with the head it verified (and the pull
+request, for a forge merge), to `features/<feature-id>/merged.yaml`, in one commit on
+`fr` that it pushes (under stealth, on the tracking branch, compare-and-swap); running it
+again writes nothing, except that a record whose push was refused is pushed then. It
+works for a branch deleted after its merge. `fr archive <plan>` and `fr archive --all`
+refuse, naming `--branch`. The record is a cache, never the truth: every read checks it
+again, a record that disagrees with the default branch is ignored and named in a note,
+and a record never makes an unmerged branch merged. A forge merge's record counts without
+the forge only when its head is one fr recorded for the feature and neither it nor its
+merge commit is in `BASE`.
+
+#### Moving between placements
+
+A repository is not stuck with the placement it started under. `fr placement move --to
+quiet` (or `--to repo`, or `--to stealth --tracking <repo>@<branch>`) moves every one of
+fr's files, archived features included, in four steps: **copy**, **verify**, **switch**,
+**remove**. Out of `repo`, the copy reads the default branch and gives each feature its
+own path, with an `OWNER`, a `BASE` and a `merged:` record worked out from the default
+branch's history, so a feature merged long ago still reads as merged, in the same order.
+Verify then re-reads the destination and refuses unless its files and its acceptance fold
+are the same as the source's, and unless `fr validate artifacts` passes on the
+destination as it is laid out, every feature path with the `OWNER`, `BASE`, `HEADS` and
+`merged:` record fr wrote for it. If the source moved since the copy (a feature merged
+in the meantime), verify and the switch both notice and the move copies again first, so
+it never switches on a copy that is missing a feature. Only then does the switch happen: the quiet switch commit on `fr`, or, moving back, `placement: repo` written
+there by a new commit, never a force push. Remove opens a branch that deletes the files
+from the default branch, pushes it, and prints the `fr pr create` command for its pull
+request; nothing is pushed to the default branch itself, and fr reminds you that git
+history still holds the files. Moving back into `repo` lands through a pull request too,
+so that move pauses after its copy and finishes when you run it again after the merge.
+That pull request is recognised by what it holds: CI accepts it under quiet because its
+files are exactly the merged features `fr` holds, byte for byte, and nothing more.
+
+A move copies only fr's own files, the ones below `docs/superpowers/` and
+`docs/acceptance/`. Anything else it finds where it copies from, a
+`.github/workflows/` file or a `.gitattributes` planted on `fr`, refuses the move, naming
+the path, before anything is written; `fr placement migrate-branch` refuses the same way.
+
+Every step can be run again: a state file under the git directory records the steps
+done, so a move interrupted anywhere (a refused push, a closed terminal, even between a
+step's commit and its push) completes when you re-run the same command, and a different
+move refuses until it does. A move refuses
+while any workspace of the repository has uncommitted work. Moving to stealth checks the
+tracking repository is reachable and no more visible than the target before it writes,
+and puts nothing of fr's on the target; moving from quiet to stealth refuses while any
+quiet feature is not merged yet, listing them, because a live branch cannot follow the
+repository into stealth. `fr placement move --run <id>`, run in a stealth
+workspace, moves that one run out of its tracking repository.
+
+A branch that was live during the move is left as it was: its workspace recorded the old
+placement. From then on every fr command there, `fr push`, `deliver` and `fr validate
+artifacts` (which is how CI notices) refuse, naming `fr placement migrate-branch`. None of
+them moves anything. `fr placement migrate-branch`, run in that workspace, moves the
+branch's own files to where the placement keeps them, as one commit on each side, and
+pushes both; run again after an interrupted push, it pushes what it already committed.
+Under stealth there is no second side to commit on, because fr never commits on, or
+pushes, the target's branch. When a stealth branch's own commits carry fr's files (a spec
+committed with `git add -A`, say), `fr push` refuses, naming them, and
+`fr placement migrate-branch` copies them into the tracking repository, then refuses
+too: it lists the unpushed commits that carry them and prints a `git filter-branch`
+command that takes the files out of exactly those commits. Files that were already pushed
+have reached the target, and it says so plainly: taking them back would need a force
+push, which fr never makes.
+A branch that only deletes fr's files is not drift. In CI, a checkout too shallow to see
+`origin/fr` and the default branch refuses, asking for `fetch-depth: 0`, rather than
+pass a branch it could not check; elsewhere it warns and goes on.
 
 ## Try it yourself
 

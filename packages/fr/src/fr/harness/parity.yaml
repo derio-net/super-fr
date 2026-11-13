@@ -19,7 +19,12 @@ surfaces:
   - id: fr-acceptance-nag
     kind: hook
     script: fr-acceptance-nag.sh
-    summary: Nags the operator toward `fr acceptance status` at session start.
+    summary: >-
+      Nags the operator toward `fr acceptance status` at session start; the
+      acceptance directory is the placement's (`fr settings paths --no-create`,
+      read-only), so a quiet or stealth repo is nagged too (R26). A plain repo
+      (no marker, no origin/fr ref on the filesystem) asks no git and no fr for
+      it, and only an fr from an absolute PATH entry is ever run.
     harnesses:
       claude-code: {state: enforced}
       opencode:
@@ -30,7 +35,10 @@ surfaces:
           `ctx.session.hook("context")`, at most once per session, bounded and
           silent on failure (bun-tested over a fake context, test/nag.test.ts).
           That the part reaches a live model request is owed to the post-merge
-          walk (spec 2026-10-20-opencode-2-support Test Plan item 6).
+          walk (spec 2026-10-20-opencode-2-support Test Plan item 6). A quiet
+          or stealth repo's fragments are found through `fr settings paths
+          --json --no-create` (nag.ts `hasAcceptance`), the checkout's layout
+          when `fr` is absent.
       hermes: {state: enforced}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
@@ -71,7 +79,9 @@ surfaces:
   - id: fr-isolation-guard
     kind: hook
     script: fr-isolation-guard.sh
-    summary: Gates Bash commands to keep a live pipeline inside its own repo/worktree.
+    summary: >-
+      Gates Bash commands to keep a live pipeline inside its own repo/worktree;
+      a quiet or stealth repo counts as fr-enabled for its cross-repo rule.
     harnesses:
       claude-code: {state: enforced}
       opencode:
@@ -81,7 +91,9 @@ surfaces:
           the WHOLE command line and the call's workdir, with the bash guard's
           decision: the captured verdict table
           tests/fixtures/hooks/guard-verdicts.yaml passes against both engines
-          (test/guard-verdicts.test.ts, tests/unit/test_hooks_guard.py). Armed
+          (test/guard-verdicts.test.ts, tests/unit/test_hooks_guard.py); its
+          fr-enabled test is marker.ts's `frEnabled`, the same quiet/stealth
+          detection as the edit gate. Armed
           by the pipeline sentinel (`fr-pipeline-sentinel`). A model-driven
           OpenCode 2 session's refused command is the post-merge walk.
       hermes:
@@ -97,7 +109,17 @@ surfaces:
   - id: fr-isolation-required
     kind: hook
     script: fr-isolation-required.sh
-    summary: Edits to tracked source must happen inside an fr-isolation workspace.
+    summary: >-
+      Edits to tracked source must happen inside an fr-isolation workspace; a
+      repo is fr-enabled by a profile, a plans dir, the quiet switch on
+      origin/fr or a stealth marker, all found without `fr` (R26). A switch the
+      hook cannot read positively as `placement: repo` counts as quiet. A plain
+      repo spawns no `fr`; past an origin/fr ref, a bounded read-only `fr
+      settings paths --no-create`, from an absolute PATH entry only, may add one.
+      The placement's own write targets are allowed by structure: the repo's
+      quiet `fr` worktree (a linked worktree at the path fr computes, on branch
+      `fr`, the switch canonically quiet) and a stealth tracking clone a valid
+      stealth workspace's marker names (review pr1431-r6).
     harnesses:
       claude-code: {state: enforced}
       opencode:
@@ -111,15 +133,24 @@ surfaces:
           (scripts/deliver-opencode-plugin.sh); the real opencode 2.x binary
           loads it once and the delivered copy refuses a base-clone edit
           (tests/integration/test_opencode_plugin_live.py, CI on 2.0.32 and
-          2.1.0). A model-driven 2.x session's refused edit is the post-merge
-          walk. OpenCode 1.x is not supported.
+          2.1.0). Quiet and stealth are fr-enabled (marker.ts `frEnabled`: the
+          switch on origin/fr and the marker's placement are read directly, and
+          only past an origin/fr ref is `fr settings paths --json --no-create`
+          asked, with FR_REPO_ROOT set to the toplevel; a missing `fr` is
+          logged once at load, never a weaker gate; test/marker.test.ts). The
+          quiet `fr` worktree and the stealth tracking clone are allowed by
+          marker.ts `placementWriteTarget`, the shell library's rule case for
+          case. A model-driven 2.x session's refused edit is the post-merge walk.
+          OpenCode 1.x is not supported.
       hermes:
         state: partial
         scope_note: >-
           the `pre_tool_call` hook (.hermes/config.snippet.yaml) gates
           `write_file` and `patch` only; `terminal`/`execute_code` writes
           reach only `fr-isolation-guard.sh`, which sees git/gh mutations
-          alone — a shell redirect into the base clone is not gated (#561)
+          alone — a shell redirect into the base clone is not gated (#561).
+          The hook shares the decision library, so a quiet repo or a stealth
+          workspace is fr-enabled there too (R26)
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
@@ -247,7 +278,10 @@ surfaces:
   - id: fr-worktree-create
     kind: hook
     script: fr-worktree-create.sh
-    summary: Routes a harness's own worktree-creation flow through fr-isolation.
+    summary: >-
+      Routes a harness's own worktree-creation flow through fr-isolation, for
+      every fr-enabled repo, quiet and stealth ones included (the decision
+      library's one `_fr_is_enabled`, R26).
     harnesses:
       claude-code: {state: enforced}
       opencode: {state: absent}

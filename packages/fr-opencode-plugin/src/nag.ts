@@ -14,26 +14,47 @@
 //     assumed to be top-level;
 //   - a repo with no acceptance fragment (docs/acceptance/features/*.yaml) and
 //     no retired docs/acceptance/matrix.yaml returns BEFORE any process spawn
-//     (the repo root is found on the filesystem, not via git);
+//     (the repo root is found on the filesystem, not via git). That holds for a plain
+//     repo: the placement is looked for (git for the switch, `fr settings paths`) only
+//     when the filesystem shows a `.fr-isolation` marker or a `refs/remotes/origin/fr`
+//     ref, loose, packed or in a reftable (review p6-r8);
+//   - `fr` is the absolute file `resolveFr` names, never a bare name a relative PATH
+//     entry could answer from the repo (review p6-r2);
 //   - bounded (a short timeout), silent on every failure — except the stale
 //     artifact refusal, which says why the nag is missing;
 //   - NEVER THROWS.
 import { existsSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { resolveFr } from "./fr";
+import { frPaths, placementEnabled, switchRefMaybe } from "./marker";
 import { run, type RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-/** Whether the repo keeps acceptance rows: a fragment under docs/acceptance/features/
+/** The acceptance directory: the placement's answer (`fr settings paths --json
+ * --no-create`) on a quiet or stealth repo (R1, R26: it is not in the checkout there), else
+ * the checkout's own layout, which is also the fallback when `fr` gives no usable answer.
+ * A plain repo (no marker file, no `origin/fr` ref on the filesystem) spawns nothing. */
+function acceptanceDirOf(root: string): string {
+  const candidate = existsSync(join(root, ".fr-isolation")) || switchRefMaybe(root);
+  if (candidate && placementEnabled(root)) {
+    const named = frPaths(root)?.acceptanceDir;
+    if (named !== undefined && isAbsolute(named)) return named;
+  }
+  return join(root, "docs", "acceptance"); // fr-paths-fallback
+}
+
+/** Whether the repo keeps acceptance rows: a fragment under <acceptance dir>/features/
  * (spec 2026-11-04-repo-feature-settings R16), or the retired matrix still waiting
  * for its migration (R19), so `fr` can say it is stale. Never throws. */
 export function hasAcceptance(root: string): boolean {
   try {
-    const features = join(root, "docs", "acceptance", "features");
+    const dir = acceptanceDirOf(root);
+    const features = join(dir, "features");
     if (existsSync(features) && readdirSync(features).some((name) => name.endsWith(".yaml"))) {
       return true;
     }
-    return existsSync(join(root, "docs", "acceptance", "matrix.yaml"));
+    return existsSync(join(dir, "matrix.yaml"));
   } catch {
     return false;
   }
@@ -94,7 +115,12 @@ async function isTopLevel(session: unknown, id: string): Promise<boolean> {
 
 export function createNagHandler(options: NagHandlerOptions) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const runFr = options.runFr ?? ((cwd: string, args: string[]) => run("fr", args, { cwd, timeoutMs }));
+  const runFr =
+    options.runFr ??
+    ((cwd: string, args: string[]): Promise<RunAnswer> => {
+      const fr = resolveFr();
+      return fr === null ? Promise.resolve({ code: null, stdout: "" }) : run(fr, args, { cwd, timeoutMs });
+    });
   const served = options.served ?? new Set<string>();
 
   return async (event: ContextEvent | null | undefined): Promise<void> => {

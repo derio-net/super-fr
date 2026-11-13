@@ -48,6 +48,7 @@ from fr.archive import (
     spec_archive_sweep,
     unticked_manual_phases,
 )
+from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
 from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from fr.isolation.local import (
@@ -70,7 +71,7 @@ if TYPE_CHECKING:
 console = Console()
 err_console = Console(stderr=True)
 
-IMPLEMENTED_REL = Path("docs/superpowers/implemented")
+IMPLEMENTED_REL = Path(KIND_DIRS["archive"])
 
 
 def _make_gh_client() -> GhClient:
@@ -232,6 +233,181 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
         typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
 
 
+def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
+    """`fr archive --branch <b>` under quiet and stealth (R25): append one `merged: <sha>`
+    record to the feature's `merged.yaml`, in ONE commit on the placement's branch, pushed
+    (quiet: a plain push of `fr`; stealth: compare-and-swap to the tracking ref), and move
+    nothing. The sha is the default ref's commit that merged the branch (R17's clause,
+    `fr.placement.merged`, which also reads the forge for a squash or rebase merge): a
+    branch that is not merged is refused, saying why, and a record that already agrees is
+    not written twice (an unpushed one is pushed). A deleted branch is fine: its merge is
+    judged by the heads fr recorded for it (review p5-r3)."""
+    from fr.artifacts.paths import FEATURES_DIR, STEALTH, checked_feature_id
+    from fr.placement import merged as merged_status
+    from fr.placement.quiet import owner_of
+    from fr.settings import SettingsError
+
+    evidence = merge_evidence(repo_root, fetch=True)
+    if evidence.ref is None:
+        err_console.print(
+            f"refusing to archive — no default ref: {evidence.ref_error}", soft_wrap=True
+        )
+        raise typer.Exit(2)
+    # Fetches the branch's remote ref; a branch gone everywhere is no refusal here.
+    resolve_branch_refs(subprocess_runner, repo_root, branch, evidence.ref.ref.split("/", 1)[0])
+    _note_fetch_error(evidence)
+    space = space_for(repo_root)
+    try:
+        fid = checked_feature_id(branch)
+    except SettingsError as e:
+        err_console.print(f"refusing to archive: {e}", soft_wrap=True, markup=False)
+        raise typer.Exit(2) from e
+    froot = space.root / FEATURES_DIR / fid
+    if not froot.is_dir():
+        typer.echo(f"nothing to archive for {branch}: it has no feature path under {placement}")
+        return
+    owner = owner_of(space.root, fid)
+    if owner is not None and owner != branch:
+        err_console.print(
+            f"refusing to archive — the feature path {FEATURES_DIR}/{fid} belongs to "
+            f"{owner!r}, not {branch!r}",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    forge, why_not = merged_status.forge_for(repo_root)
+    view = merged_status.merged_features(space, repo_root, forge=forge)
+    for notice in view.notices:
+        err_console.print(f"note: {escape(notice)}", soft_wrap=True)
+    feature = view.get(fid)
+    if feature is None:
+        reason = view.no_merge(branch)
+        if forge is None:
+            reason = reason.replace("the forge was not read", f"the forge was {why_not}")
+        err_console.print(
+            f"refusing to archive — {escape(reason)}. Nothing was written", soft_wrap=True
+        )
+        raise typer.Exit(2)
+    short = feature.sha[:12]
+    record = merged_status.merged_file(froot)
+    if feature.cached:
+        if placement != STEALTH and _unpushed(space.root, record):
+            _push_fr(repo_root, space.root, record)
+            typer.echo(f"already recorded: {branch} merged at {short}; pushed the record")
+            return
+        typer.echo(f"already recorded: {branch} merged at {short}; nothing to write")
+        return
+    written = [merged_status.append_record(froot, feature.sha, feature.heads, pr=feature.pr)]
+    # The verified heads are owned evidence from here on: the merge survives the branch.
+    for head in feature.heads:
+        added = merged_status.record_head(froot, head)
+        if added is not None and added not in written:
+            written.append(added)
+    via = f" (PR #{feature.pr}, by the forge)" if feature.how == "forge" else ""
+    _commit_merged_record(
+        repo_root, space, placement, written, f"chore(fr): record {branch} merged at {short}"
+    )
+    typer.echo(
+        f"recorded: {branch} merged at {short}{via} "
+        f"({FEATURES_DIR}/{fid}/{merged_status.MERGED_FILE}); nothing moved (R25)"
+    )
+
+
+def _unpushed(fr_root: Path, path: Path) -> bool:
+    """The local `fr` holds a commit of *path* that `origin/fr` does not (review p5-r7)."""
+    from fr.artifacts.paths import SWITCH_REF
+    from fr.git import GitUnavailableError, git_answer
+
+    rel = path.resolve().relative_to(fr_root.resolve()).as_posix()
+    try:
+        done = git_answer(fr_root, "log", "--format=%H", f"{SWITCH_REF}..HEAD", "--", rel)
+    except GitUnavailableError:
+        return True
+    return done.returncode != 0 or bool(done.stdout.strip())
+
+
+def _push_fr(repo_root: Path, fr_root: Path, record: Path) -> None:
+    """Push the local `fr` (under its lock), or exit 2 naming the unpushed record."""
+    from fr.git_policy.push import PushRefusedError, atomic_push
+    from fr.placement.quiet import QUIET_BRANCH
+
+    try:
+        atomic_push(repo_root, fr_root, "origin", QUIET_BRANCH, code=False)
+    except PushRefusedError as e:
+        err_console.print(
+            f"refusing to archive — the record {record} is committed on the local "
+            f"`{QUIET_BRANCH}` branch but not pushed, and its push was refused: "
+            f"{escape(str(e))}; run `fr push` to retry",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+
+
+def _commit_merged_record(
+    repo_root: Path, space: Any, placement: str, written: list[Path], message: str
+) -> None:
+    """Commit the one record and push it; on any failure put the file back and exit 2
+    (a push quiet's `fr` branch refused leaves the commit for `fr push` to retry)."""
+    from fr.artifacts.commit import CommitOutcome, StealthPushError, commit_paths
+    from fr.artifacts.paths import STEALTH
+    from fr.git_policy.push import PushRefusedError, atomic_push
+    from fr.placement import stealth
+    from fr.placement.quiet import QUIET_BRANCH, fr_worktree_lock, fr_worktree_problem
+    from fr.settings import SettingsError
+
+    def refuse(why: str, wt: Path) -> None:
+        stealth.restore_files(wt, written)
+        err_console.print(f"refusing to archive — {escape(why)}", soft_wrap=True)
+        raise typer.Exit(2)
+
+    if placement == STEALTH:
+        found = stealth.marker_tracking(repo_root)
+        assert found is not None  # space_for resolved a stealth space
+        wt = stealth.tracking_root(space)
+
+        def tracking(w: Path, todo: Any, msg: str) -> CommitOutcome:
+            return commit_paths(w, todo, msg, tracking_branch=True)
+
+        try:
+            outcome = stealth.commit_and_push(
+                found[0],
+                wt,
+                written,
+                message,
+                tracking,
+                target_remote=stealth.origin_url(repo_root),
+                target_root=repo_root,
+            )
+        except StealthPushError as e:  # the worktree is already restored
+            err_console.print(f"refusing to archive — {escape(str(e))}", soft_wrap=True)
+            raise typer.Exit(2) from e
+        except SettingsError as e:
+            refuse(str(e), wt)
+        else:
+            if not outcome.committed:
+                refuse(outcome.reason, wt)
+        return
+    fr_root = space.root
+    try:
+        with fr_worktree_lock(fr_root):
+            problem = fr_worktree_problem(fr_root, dirty=False)
+            if problem is not None:
+                refuse(problem, fr_root)
+            outcome = commit_paths(fr_root, written, message)
+    except SettingsError as e:
+        refuse(str(e), fr_root)
+    if not outcome.committed:
+        refuse(outcome.reason, fr_root)
+    try:
+        atomic_push(repo_root, fr_root, "origin", QUIET_BRANCH, code=False)
+    except PushRefusedError as e:
+        err_console.print(
+            f"recorded on the local `{QUIET_BRANCH}` branch, but its push was refused: "
+            f"{escape(str(e))}; run `fr push` to retry",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+
+
 def _note_fetch_error(evidence: MergeEvidence) -> None:
     if evidence.fetch_error:
         err_console.print(
@@ -338,7 +514,7 @@ def _archive_follower(repo_root: Path, a: BranchArtifact) -> Path | str:
         return "follows no recorded plan"
     if (repo_root / plan).exists():
         return f"follows plan {plan}, still live"
-    if not (repo_root / IMPLEMENTED_REL / "plans" / Path(plan).name).is_dir():
+    if not (artifact_root(repo_root) / IMPLEMENTED_REL / "plans" / Path(plan).name).is_dir():
         return f"follows plan {plan}, which is neither live nor archived"
     # The orphan rule (§C): its plan is already archived, so it follows.
     try:
@@ -360,11 +536,11 @@ def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
     if not (repo_root / a.path).exists():  # its owner's move carried it
         return dst.relative_to(repo_root)
     if scope == "plan":
-        owner_archived = (repo_root / IMPLEMENTED_REL / "plans" / slug).is_dir()
+        owner_archived = (artifact_root(repo_root) / IMPLEMENTED_REL / "plans" / slug).is_dir()
         owner = f"plan {slug}"
     elif scope == "spec":
         owner_archived = any(
-            (repo_root / IMPLEMENTED_REL / "specs" / name).is_file()
+            (artifact_root(repo_root) / IMPLEMENTED_REL / "specs" / name).is_file()
             for name in (f"{slug}-design.md", f"{slug}.md")
         )
         owner = f"spec {slug}"
@@ -664,7 +840,7 @@ def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
 def archive_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(
-        False, "--all", help="Archive every finished plan under docs/superpowers/plans/."
+        False, "--all", help=f"Archive every finished plan under {KIND_DIRS['plan']}/."
     ),
     force: bool = typer.Option(
         False,
@@ -716,6 +892,17 @@ def archive_command(
     entirely. `--sweep-only` is the inverse: just the sweep, for finishing a
     close-out whose plan moves already landed.
     """
+    from fr.artifacts.paths import outside_repo
+    from fr.settings import SettingsError
+
+    placement = outside_repo(resolve_repo_root())
+    if placement is not None and branch is None:
+        raise SettingsError(
+            f"`fr archive` without --branch is not available under placement {placement}: "
+            "a merged feature is recorded, never moved (R25). Run `fr archive --branch "
+            "<branch>`, which appends `merged: <sha>` to its feature path and moves nothing. "
+            "Nothing was written"
+        )
     require_migrated_layout()
     if branch is not None:
         for conflicting, name in (
@@ -727,6 +914,9 @@ def archive_command(
             if conflicting:
                 err_console.print(f"--branch takes no {name} — it archives what the branch touched")
                 raise typer.Exit(2)
+        if placement is not None:
+            _record_merged(resolve_repo_root(), branch, placement)
+            return
         _archive_branch(resolve_repo_root(), branch, no_spec_sweep=no_spec_sweep)
         return
     if sweep_only:
@@ -766,7 +956,7 @@ def archive_command(
     _note_fetch_error(evidence)
 
     if all_plans:
-        plans_root = repo_root / "docs" / "superpowers" / "plans"
+        plans_root = kind_dir("plan", space_for(repo_root))
         targets = (
             sorted(p for p in plans_root.iterdir() if p.is_dir() and (p / "_meta.yaml").exists())
             if plans_root.is_dir()

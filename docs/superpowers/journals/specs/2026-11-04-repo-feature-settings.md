@@ -916,3 +916,97 @@ Filed at deliver as derio-net/super-fr#1409; still owed until discharged.
 ### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1410] · resolves test-plan-step-2: Test Plan step 2 owed
 
 Filed at deliver as derio-net/super-fr#1410; still owed until discharged.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p2 created=2026-11-12T11:57:09+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p2 · decision · review-size: ~115 mechanical call-site rewrites onto the resolver
+
+Phase 1 builds the resolver and its tripwire; converting every caller in the same phase would bury the resolver's design in a ~2400-line mechanical diff. The tripwire's shrinking allowlist joins them.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p3 created=2026-11-12T11:57:10+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p3 · decision · ask: the quiet placement (R23, row placement-quiet)
+
+Quiet is its own requirement and row with its own scenario.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p4 created=2026-11-12T11:57:12+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p4 · decision · ask: the stealth placement (R24, row placement-stealth)
+
+Stealth is its own requirement and row with its own scenario.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p5 created=2026-11-12T11:57:14+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p5 · decision · ask: merged status and archive outside repo (R25, R17's quiet/stealth clause)
+
+Shared by quiet and stealth, with its own row placement-merged-status.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p6 created=2026-11-12T11:57:15+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p6 · decision · ask: hooks, OpenCode and Hermes are fr-enabled for quiet and stealth (R26)
+
+A different surface (bash, TypeScript, Hermes) with its own row placement-fr-enabled and parity rows.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p7 created=2026-11-12T11:57:16+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p7 · decision · ask: placement moves and branch drift (R27, R28)
+
+Its own requirements and row placement-move-and-drift.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p1 created=2026-11-12T11:57:18+00:00 -->
+### tier-2026-11-12-placement-resolver-p1 · decision · hard: the resolver is the path seam every artifact reader and writer relies on
+
+A wrong layout or precedence decision here propagates to every caller and to both later placements.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p3 created=2026-11-12T11:57:19+00:00 -->
+### tier-2026-11-12-placement-resolver-p3 · decision · hard: quiet moves fr's own commit seam and the push
+
+A wrong root writes artifacts onto product branches, which R23 forbids; the atomic push and replay loop are concurrency paths.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p4 created=2026-11-12T11:57:21+00:00 -->
+### tier-2026-11-12-placement-resolver-p4 · decision · hard: stealth makes a failed state push fatal inside resolve and adds the resume reconciliation
+
+Changes the record-apply failure path every step relies on and a privacy guard.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p5 created=2026-11-12T11:57:22+00:00 -->
+### tier-2026-11-12-placement-resolver-p5 · decision · hard: changes the acceptance fold's merge-order source
+
+The fold is read by check, status, debt, self-review, the PR body and close-out.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p7 created=2026-11-12T11:57:24+00:00 -->
+### tier-2026-11-12-placement-resolver-p7 · decision · hard: a restartable move and a new CLI-entry refusal in the migration trigger
+
+The trigger gates every fr command; the move rewrites where every artifact lives.
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-34 created=2026-11-12T11:57:38+00:00 -->
+### exit-change-34 · decision · exit change: row placement-quiet -> strategy candidate
+
+plan 3 (2026-11-12-placement-resolver) builds this row; its candidate walk runs tests/scenarios/placement-quiet.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-35 created=2026-11-12T11:57:41+00:00 -->
+### exit-change-35 · decision · exit change: row placement-stealth -> strategy candidate
+
+plan 3 (2026-11-12-placement-resolver) builds this row; its candidate walk runs tests/scenarios/placement-stealth.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-36 created=2026-11-12T11:57:45+00:00 -->
+### exit-change-36 · decision · exit change: row placement-move-and-drift -> strategy candidate
+
+plan 3 (2026-11-12-placement-resolver) builds this row; its candidate walk runs tests/scenarios/placement-move-and-drift.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.commands.common import resolve_repo_root
 from fr.debt.render import BOT_LOGINS  # the one definition, shared with `fr triage`
 
@@ -148,6 +149,15 @@ def issue_cmd(
     from fr.settings import forge_block
 
     root = resolve_repo_root()
+    if yes:
+        from fr.placement.stealth import refuse_forge_writes
+        from fr.settings import SettingsError
+
+        try:
+            refuse_forge_writes(root, "`fr debt issue --yes`")  # R24, review p4-r5
+        except SettingsError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(2) from e
     try:
         off = forge_block(root, "issues")
         comments_off = forge_block(root, "comments")
@@ -310,7 +320,7 @@ def _held(root: Path, name: str) -> list[str]:
     from fr.archive import outcome_hold
     from fr.parser import PlanSchemaError, parse
 
-    rel = Path("docs/superpowers/plans") / name
+    rel = Path(KIND_DIRS["plan"]) / name
     try:
         return outcome_hold(root, parse(root / rel), rel)
     except (PlanSchemaError, OSError, ValueError, KeyError, TypeError):
@@ -326,7 +336,7 @@ def _archive_one(root: Path, name: str, env: dict[str, str]) -> tuple[bool, str]
     from fr.safe_spawn import fr_argv, safe_fr_env
 
     done = subprocess.run(
-        fr_argv("archive", f"docs/superpowers/plans/{name}"),
+        fr_argv("archive", f"{KIND_DIRS['plan']}/{name}"),
         cwd=root,
         env=safe_fr_env(env),
         capture_output=True,
@@ -354,6 +364,14 @@ def archive_pr_cmd(
     from fr.hostclient import FORGE_ERRORS
 
     root = resolve_repo_root()
+    from fr.placement.quiet import refuse_under_quiet
+
+    refuse_under_quiet(
+        root,
+        "fr debt archive-pr",
+        "it commits archived plans on a product branch; under quiet merged status is "
+        "recorded on the `fr` branch (R25)",
+    )
     slug = _identity(root)
     token = os.environ.get("FR_DEBT_TOKEN", "").strip()
     if token:

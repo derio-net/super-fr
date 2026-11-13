@@ -16,6 +16,7 @@ from typing import Any, Protocol, cast
 import typer
 
 from fr import cloud
+from fr.artifacts.paths import KIND_DIRS
 from fr.isolation import sessions as _sessions
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
@@ -246,13 +247,84 @@ def _refuse_no_docker_status_extras(target: Target) -> None:
         )
 
 
+def _stealth_request(
+    repo: Path, stealth: str | None, target: Path | None
+) -> tuple[Path, dict[str, Any]]:
+    """The repo to isolate and the stealth keyword `up` takes (R24, chosen per run):
+    `--stealth <repo>@<branch>` from the target, or `--target <path>` from the tracking
+    repo, whose own origin and branch are then the tracking ref unless `--stealth` names
+    one. Neither: no keyword, today's `up`."""
+    from fr.placement.stealth import from_tracking_repo, parse_ref
+    from fr.settings import SettingsError
+
+    try:
+        if target is not None:
+            ref = parse_ref(stealth) if stealth else from_tracking_repo(repo)
+            return target, {"stealth": ref}
+        if stealth is not None:
+            return repo, {"stealth": parse_ref(stealth)}
+    except SettingsError as e:
+        raise IsolationError(str(e)) from e
+    return repo, {}
+
+
+def _prepare_resume(
+    repo: Path, extra: dict[str, Any], run_id: str, branch: str | None
+) -> tuple[Any, str]:
+    """R24 "resume": the run's branch from the tracking repo, reconciled with the target's
+    pushed code BEFORE any worktree is made (a state ahead of the code refuses here)."""
+    from fr.placement.stealth import prepare_resume
+    from fr.settings import SettingsError
+
+    if "stealth" not in extra:
+        raise IsolationError("--resume resumes a stealth run: name it with --stealth or --target")
+    try:
+        found = prepare_resume(repo, extra["stealth"], run_id)
+    except SettingsError as e:
+        raise IsolationError(str(e)) from e
+    if branch is not None and branch != found.branch:
+        raise IsolationError(
+            f"run {run_id} works on {found.branch!r}, not {branch!r}; omit --branch to resume it"
+        )
+    return found, found.branch
+
+
+def _finish_resume(state: IsolationState, found: Any, run_id: str) -> None:
+    """Equal: resume as is. The branch ahead: redo the last step's bookkeeping, i.e.
+    record the product head the state now describes (idempotent), committed and pushed
+    to the tracking repo like every state write."""
+    from fr.placement import stealth
+    from fr.records_commit import commit_records
+
+    verdict = found.reconciled
+    if verdict.verdict == "equal":
+        typer.echo(f"resume {run_id}: the state and origin/{found.branch} agree", err=True)
+        return
+    written = stealth.write_placement_file(
+        state.worktree, found.placement_file.parent, run_id, found.branch
+    )
+    commit_records(
+        state.worktree,
+        [written],
+        f"chore(fr): run {run_id} — resume, product head {(verdict.branch_head or '')[:12]}",
+    )
+    typer.echo(
+        f"resume {run_id}: origin/{found.branch} is ahead of the state "
+        f"({(verdict.recorded or 'none')[:12]} -> {(verdict.branch_head or '')[:12]}); the "
+        "last step's bookkeeping was redone",
+        err=True,
+    )
+
+
 @isolation_app.command()
 def up(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
     profile: str | None = typer.Option(
         None, help="Devcontainer profile (default: repo's configured default)."
     ),
-    branch: str = typer.Option(..., help="Branch for the worktree."),
+    branch: str | None = typer.Option(
+        None, help="Branch for the worktree (required, except with --resume)."
+    ),
     path: Path | None = typer.Option(
         None,
         help="Worktree path (default: ~/.cache/fr/worktrees/<main-checkout>/<branch>).",
@@ -282,6 +354,24 @@ def up(
         help="Print ONLY the worktree path on stdout (last line); everything else "
         "to stderr. For WorktreeCreate hooks.",
     ),
+    stealth: str | None = typer.Option(
+        None,
+        "--stealth",
+        help="Run under the stealth placement: keep fr's state on <repo>@<branch>, a "
+        "separate tracking repo (chosen per run, never by repo settings).",
+    ),
+    target_repo: Path | None = typer.Option(
+        None,
+        "--target",
+        help="Run from the tracking repo: the local target checkout to isolate (stealth; "
+        "the tracking ref defaults to this checkout's origin and branch).",
+    ),
+    resume: str | None = typer.Option(
+        None,
+        "--resume",
+        help="Resume stealth run <run-id> from its tracking repo (any host): its branch "
+        "comes from the tracking repo, reconciled with the target's pushed code.",
+    ),
 ) -> None:
     """Create worktree + start the profile's devcontainer against it.
 
@@ -292,10 +382,21 @@ def up(
     is the worktree path — the contract a WorktreeCreate hook relies on — and
     the human-facing lines move to stderr.
     """
+    if branch is None and resume is None:
+        # Required (no implicit default branch), except that --resume takes the run's
+        # branch from the tracking repo (R24).
+        raise typer.BadParameter("missing option '--branch'", param_hint="'--branch'")
     try:
+        repo, extra = _stealth_request(repo, stealth, target_repo)
+        resumed = None
+        if resume is not None:
+            resumed, branch = _prepare_resume(repo, extra, resume, branch)
+        assert branch is not None
         state = _target(repo).up(
-            profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch
+            profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch, **extra
         )
+        if resumed is not None and resume is not None:
+            _finish_resume(state, resumed, resume)
         if session:
             state = _sessions.attach(state.repo_root, state.branch, session, harness=harness)
     except IsolationError as err:
@@ -547,13 +648,13 @@ def down(
         "hazard — uncommitted changes, or content not on origin). Removes "
         "the worktree and fr's record of it; the branch and any landed "
         "commits stay in the repo, but uncommitted changes do not survive — "
-        "except fr's own records under docs/superpowers/, which are preserved "
+        f"except fr's own records under {KIND_DIRS['superpowers']}/, which are preserved "
         "and restored by the next `up`.",
     ),
     no_preserve: bool = typer.Option(
         False,
         "--no-preserve",
-        help="With --force: discard fr's records under docs/superpowers/ instead "
+        help=f"With --force: discard fr's records under {KIND_DIRS['superpowers']}/ instead "
         "of preserving them (a full disk, an unreadable tree). Refused without --force.",
     ),
     all_: bool = typer.Option(
@@ -615,7 +716,7 @@ def down(
         _fail(
             IsolationError(
                 "--no-preserve is only valid with --force — it discards fr's records "
-                "under docs/superpowers/ that a teardown otherwise preserves."
+                f"under {KIND_DIRS['superpowers']}/ that a teardown otherwise preserves."
             )
         )
     # The caller is the ambient session when --session is not given — the same

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr.acceptance.fold import Effective, default_ref_fold, effective
-from fr.acceptance.fragment import fragment_slug_for_spec, parse_fragment
+from fr.acceptance.fragment import Fragment, fragment_slug_for_spec, parse_fragment
 from fr.acceptance.model import AcceptanceError
 
 IMMUTABLE = "rows merged on {ref} change only by amendment"
@@ -30,10 +30,11 @@ IMMUTABLE = "rows merged on {ref} change only by amendment"
 
 def _branch_run_specs(repo_root: Path, branch: str) -> set[str]:
     """The spec (repo-relative) of every run cursor recorded for *branch*."""
+    from fr.artifacts.paths import artifact_root
     from fr.requirements import run_spec
     from fr.run.model import RUNS_REL, RunStateError, parse_run_state
 
-    runs = repo_root / RUNS_REL
+    runs = artifact_root(repo_root) / RUNS_REL
     if not runs.is_dir():
         return set()
     specs: set[str] = set()
@@ -149,33 +150,67 @@ def merged_row_edits(repo_root: Path, merged: Effective | None, ref: str | None)
         except AcceptanceError as e:
             errors.append(str(e))
             continue
-        rows = {r.id: r for r in now.rows} if now is not None else {}
-        then = forked.get(rel)
-        at_fork = {r.id: r for r in then.rows} if then is not None else {}
-        for row in frag.rows:
-            current = rows.get(row.id)
-            if current == row or current == at_fork.get(row.id):
-                continue  # unchanged, or untouched by this branch
-            what = "removed" if current is None else "edited in place"
-            errors.append(
-                f"{rel}: row {row.id} {what}; {rule} (`fr acceptance amend --id {row.id}`, "
-                f"or `fr acceptance set-status`, which writes one)"
-            )
-        # The fold orders a fragment's amendments by position, so the merged ones (as
-        # this branch forked from them: an amendment merged since is the branch being
-        # behind) must lead the working list unchanged, in order. A multiset compare
-        # let a swap, or an insert above them, pass and change the post-merge fold.
-        merged_list = then.amendments if then is not None else ()
-        working = now.amendments if now is not None else ()
-        for k, a in enumerate(merged_list):
-            if k < len(working) and working[k] == a:
-                continue
-            errors.append(
-                f"{rel}: merged amendment {k} ({a.op} of row {a.row}, base {a.base}) removed, "
-                "changed, reordered or preceded by a new one; a merged amendment is never "
-                "edited, and a new one is appended after every merged one"
-            )
-            break
+        errors += _fragment_edits(rel, frag, now, forked.get(rel), rule)
+    return errors
+
+
+def _fragment_edits(
+    rel: str, frag: Fragment, now: Fragment | None, then: Fragment | None, rule: str
+) -> list[str]:
+    """The R16 edits of one merged fragment *frag*: its rows as the branch has them
+    (*now*) against the merged ones, and its merged amendments (*then*: as the branch
+    forked from them) leading the working list unchanged, in order."""
+    errors: list[str] = []
+    rows = {r.id: r for r in now.rows} if now is not None else {}
+    at_fork = {r.id: r for r in then.rows} if then is not None else {}
+    for row in frag.rows:
+        current = rows.get(row.id)
+        if current == row or current == at_fork.get(row.id):
+            continue  # unchanged, or untouched by this branch
+        what = "removed" if current is None else "edited in place"
+        errors.append(
+            f"{rel}: row {row.id} {what}; {rule} (`fr acceptance amend --id {row.id}`, "
+            f"or `fr acceptance set-status`, which writes one)"
+        )
+    # The fold orders a fragment's amendments by position, so the merged ones (as
+    # this branch forked from them: an amendment merged since is the branch being
+    # behind) must lead the working list unchanged, in order. A multiset compare
+    # let a swap, or an insert above them, pass and change the post-merge fold.
+    merged_list = then.amendments if then is not None else ()
+    working = now.amendments if now is not None else ()
+    for k, a in enumerate(merged_list):
+        if k < len(working) and working[k] == a:
+            continue
+        errors.append(
+            f"{rel}: merged amendment {k} ({a.op} of row {a.row}, base {a.base}) removed, "
+            "changed, reordered or preceded by a new one; a merged amendment is never "
+            "edited, and a new one is appended after every merged one"
+        )
+        break
+    return errors
+
+
+def outside_merged_row_edits(repo_root: Path) -> list[str]:
+    """`merged_row_edits` under quiet and stealth (review p5-r5): this branch's own
+    feature, once merged, keeps its fragments as they were frozen at the merge
+    (`fr.acceptance.fold.own_merged_fragments`); a row or amendment it changed since is
+    refused like an in-place edit on the default ref."""
+    from fr.acceptance.fold import own_merged_fragments
+
+    found = own_merged_fragments(Path(repo_root))
+    if found is None:
+        return []
+    frozen, live, ref = found
+    rule = IMMUTABLE.format(ref=ref)
+    errors: list[str] = []
+    for rel, text in sorted(frozen.items()):
+        try:
+            frag = parse_fragment(text, source=rel)
+            now = parse_fragment(live[rel], source=rel) if rel in live else None
+        except AcceptanceError as e:
+            errors.append(str(e))
+            continue
+        errors += _fragment_edits(rel, frag, now, frag, rule)
     return errors
 
 
@@ -314,6 +349,7 @@ def branch_refusals(repo_root: Path, *, fetch: bool = True) -> BranchCheck:
     try:
         merged = default_ref_fold(root)
         out.errors += merged_row_edits(root, merged, ref)
+        out.errors += outside_merged_row_edits(root)
         out.stale += stale_lines(effective(root))
     except AcceptanceError as e:
         out.errors.append(str(e))

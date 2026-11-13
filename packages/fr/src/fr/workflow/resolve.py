@@ -55,12 +55,13 @@ from typing import TYPE_CHECKING
 
 from fr import _shipped
 from fr._shipped import MARKETPLACE_ROOT
+from fr.artifacts.paths import KIND_DIRS
 from fr.workflow.model import WorkflowError, WorkflowManifest, parse_manifest
 
 if TYPE_CHECKING:
     from fr.parser import Plan
 
-REPO_WORKFLOWS_REL = Path("docs") / "superpowers" / "workflows"
+REPO_WORKFLOWS_REL = Path(KIND_DIRS["workflow"])
 SHIPPED_WORKFLOWS_REL = Path("plugins") / "super-fr" / "workflows"
 
 

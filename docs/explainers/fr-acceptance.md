@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
+reviewed: 2026-11-12 placement-resolver phase 1, logical refs now resolve through the artifact path resolver; nothing this page describes changed
 ---
 
 ## Overview: claims, not tests

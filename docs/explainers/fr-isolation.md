@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
+reviewed: 2026-11-13 placement-resolver phase 6 review, no fr on a plain repo, a trusted bounded read-only fr, one switch spelling (R26)
 ---
 
 ## Overview: two boundaries and a bridge
@@ -67,6 +67,16 @@ The marker closes the loop. On `up`, fr writes `.fr-isolation` into the worktree
 adds it to the repo's exclude list: gitignored, never committed, backed by a CI tripwire.
 Every edit the agent attempts is checked against it.
 
+The marker also records where fr keeps its own records for this workspace. Under the
+**stealth** placement (`fr isolation up --stealth <tracking-repo>@<branch>`, or
+`--target <path>` from a clone of the tracking repository) it carries
+`placement: stealth` and the tracking ref, and fr keeps the run's records in a clone of
+that separate repository at `~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>`
+instead of on your branch. `up` refuses before creating anything when the tracking
+repository cannot be reached, lacks the branch, or is more visible than the target, and
+`--resume <run-id>` brings a stealth run up on another host. The
+[fr-goal explainer](01-fr-goal.md) tells the whole story.
+
 ## Who creates worktrees
 
 Four things can create a worktree. fr owns or routes all of them, and knows which agent
@@ -115,8 +125,34 @@ hook points; the shell is judged by a sibling guard while a pipeline is live.)
    edit another. A detached HEAD, as in the middle of a rebase, still passes, and the way
    back (`git switch <registered branch>`) is never blocked.
 
-Only a marker that clears every step allows the edit. There are three ways around the
-gate, all deliberate:
+Before step 1 the hook asks whether the repo is fr-enabled at all, and that answer is not
+only "has a devcontainer profile or a plans directory". A repo on the **quiet** placement
+keeps neither in its checkout, so the hook also reads the switch directly: the last fetched
+`origin/fr` carrying `placement: quiet` (and a repo with an origin remote), or a workspace
+whose marker records `placement: quiet` or `stealth`. The switch has exactly one spelling,
+the line `placement: quiet`, which `fr settings init --quiet` writes and fr itself insists
+on; a switch the hook cannot read positively as `placement: repo` (quoted, commented,
+indented, anything else) counts as quiet, so an odd spelling closes the gate rather than
+opening it. These direct reads need no `fr`. A plain repo stops there and starts no `fr` at
+all, which keeps every edit fast; only when an `origin/fr` ref exists does the hook ask
+`fr settings paths --no-create`, bounded by a timeout, read-only (it never creates the `fr`
+branch or worktree) and only from an `fr` in an absolute PATH entry, never one a relative
+entry could find inside the repo. A missing, failing, slow or garbled `fr` can therefore only
+fail to add a "yes", never turn one into a "no", so the gate is never weaker for lack of the
+binary. The OpenCode plugin and the Hermes hook make the same decision (one shared
+definition each).
+
+Only a marker that clears every step allows the edit, with one structural exception. Under
+quiet and stealth, fr keeps a feature's spec, plan and journals outside the workspace: in the
+repo's own `fr` worktree, or in the clone of the tracking repo. Neither carries a marker, so
+the gate recognises them by their shape instead. The `fr` worktree must be a linked worktree
+of the same repository, at exactly the path fr gives it (`~/.cache/fr/worktrees/<repo>/fr`),
+on branch `fr`, while the switch says `placement: quiet`; a worktree of another repo parked at
+that path, or a branch named `fr` anywhere else, does not qualify. The tracking clone must be
+named `stealth--…`, sit beside a workspace whose marker is valid and says `placement: stealth`,
+and have the origin and branch that marker names. The skills ask `fr settings paths --shell`
+for the directories (`FR_SPECS_DIR`, `FR_PLANS_DIR` and the rest) rather than writing to
+`docs/superpowers/` in the workspace. There are three ways around the gate, all deliberate:
 
 - **`FR_BASE_OK=1`**: a one-shot environment override for a deliberate, knowing edit to the
   base clone.

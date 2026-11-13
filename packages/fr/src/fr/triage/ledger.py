@@ -23,15 +23,16 @@ from pathlib import Path
 
 import yaml
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.triage.batch_drive import RUNS_DIR, GatedRow, find_run
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 
 EXIT_INPUTS = (
-    "docs/acceptance/features",
+    KIND_DIRS["acceptance-fragment"],
     ".fr",
-    "docs/superpowers/verifications",
-    "docs/superpowers/workflows",
+    KIND_DIRS["verification"],
+    KIND_DIRS["workflow"],
 )
 """What `run_exit` reads besides the spec and the run's plan: the acceptance fragments
 (folded in memory in the snapshot, spec 2026-11-04 R17), the remap and the
@@ -183,7 +184,7 @@ def closeout_read(checkout: Checkout, ref: str, branch: str, repo: str) -> Close
         )
         with tempfile.TemporaryDirectory(prefix="fr-closeout-") as tmp:
             root = Path(tmp) / "tree"
-            paths = ("docs/superpowers/journals", *(p for p in (spec,) if p))
+            paths = (KIND_DIRS["journal"], *(p for p in (spec,) if p))
             checkout.snapshot_paths(ref, paths, root)
             missing: tuple[int, ...] = ()
             journals: list[Path] = []

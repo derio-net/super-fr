@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import KIND_DIRS, below
 
 from .sessions import _write_index, read_session_index
 from .types import IsolationError, delete_state, load_state, save_state
@@ -35,7 +36,7 @@ from .types import IsolationError, delete_state, load_state, save_state
 __all__ = ["IsolationError", "RenamePlan", "plan_rename", "rename_branch"]
 
 MARKER = ".fr-isolation"
-RUNS_REL = Path("docs") / "superpowers" / "runs"
+RUNS_REL = Path(KIND_DIRS["run"])
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,20 @@ def _cursor_branch_line(name: str) -> re.Pattern[str]:
 
 def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePlan:
     """Read every key and refuse before anything is written (spec §B, R9, R10)."""
+    from fr.artifacts.paths import outside_repo
+    from fr.settings import SettingsError
+
+    try:
+        placement = outside_repo(Path(worktree)) or outside_repo(Path(repo_root))
+    except SettingsError as e:  # pr1431-r2: an unreadable placement is no `repo`
+        raise IsolationError(f"cannot rename {old}: {e}. Nothing was written") from e
+    if placement is not None:
+        # p3-r1: under quiet (and stealth) a branch rename moves the feature id, i.e. its
+        # path below the placement's root, which needs its own design; refused first.
+        raise IsolationError(
+            f"renaming {old} is not available under placement {placement} yet: the branch "
+            "name is the feature's path below the placement's root. Nothing was written"
+        )
     wt = Path(worktree)
     if _git_path(wt, "rebase-merge").exists() or _git_path(wt, "rebase-apply").exists():
         raise IsolationError(f"{wt} is mid-rebase: finish or abort it before renaming {old}")
@@ -132,7 +147,7 @@ def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePl
     if head not in (old, new):
         raise IsolationError(f"{wt} is not on {old} (HEAD is {head}): refusing to rename")
 
-    runs = wt / RUNS_REL
+    runs = below(wt, "run")  # refused under quiet before this (cli), so the repo layout
     cursors: list[Path] = []
     uncommitted: list[Path] = []
     for f in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():

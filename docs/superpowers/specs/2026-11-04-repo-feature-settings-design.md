@@ -689,9 +689,9 @@ gate: repo-settings-quiet-repo-live=tester
 - acceptance-fragments-amendments: candidate — built by plan 2 of this spec (R29); verified by the candidate walk of plan 2's run, through `tests/scenarios/acceptance-fragments-amendments.sh`
 - acceptance-matrix-migration: candidate — built by plan 2 of this spec (R29); verified by the candidate walk of plan 2's run, through `tests/scenarios/acceptance-matrix-migration.sh`
 - acceptance-reports-derived-published: candidate — built by plan 2 of this spec (R29); verified by the candidate walk of plan 2's run, through `tests/scenarios/acceptance-reports-derived-published.sh`
-- placement-quiet: none — built by plan 3 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 3, which sets this row back to candidate with its scenario
-- placement-stealth: none — built by plan 3 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 3, which sets this row back to candidate with its scenario
-- placement-move-and-drift: none — built by plan 3 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 3, which sets this row back to candidate with its scenario
+- placement-quiet: candidate — built by plan 3 of this spec (R29); verified by the candidate walk of plan 3's run, through `tests/scenarios/placement-quiet.sh`
+- placement-stealth: candidate — built by plan 3 of this spec (R29); verified by the candidate walk of plan 3's run, through `tests/scenarios/placement-stealth.sh`
+- placement-move-and-drift: candidate — built by plan 3 of this spec (R29); verified by the candidate walk of plan 3's run, through `tests/scenarios/placement-move-and-drift.sh`
 
 ## Test Plan
 
@@ -719,4 +719,4 @@ _(post-merge, operator-driven)_
 |---|---|---|---|
 | 2026-11-07-repo-settings-core | `derio-net/super-fr` | `2026-11-07-repo-settings-core` | — |
 | 2026-11-12-acceptance-fragments | `derio-net/super-fr` | `2026-11-12-acceptance-fragments` | 2026-11-07-repo-settings-core |
-| Plan 3: resolver, quiet, stealth, moves (R1, R23–R28) | `derio-net/super-fr` | `pending` | 2026-11-07-repo-settings-core, plan 2 (R18's resolver) |
+| 2026-11-12-placement-resolver | `derio-net/super-fr` | `2026-11-12-placement-resolver` | 2026-11-07-repo-settings-core, 2026-11-12-acceptance-fragments |

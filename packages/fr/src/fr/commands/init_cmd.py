@@ -94,6 +94,7 @@ def scaffold(
             f"error: --backend must be one of github, gitlab, gitea; got {backend!r}", err=True
         )
         raise typer.Exit(2)
+    _refuse_under_stealth(repo, "fr init scaffold", "a devcontainer profile (and a forge label)")
     try:
         path = scaffold_profile(
             repo.resolve(),
@@ -116,6 +117,19 @@ def scaffold(
         raise typer.Exit(2) from err
     typer.echo(f"scaffolded: {path}")
     _ensure_approval_label(repo.resolve())
+
+
+def _refuse_under_stealth(repo: Path, command: str, what: str) -> None:
+    """R24: under stealth no fr file reaches the target (review p4-r3), so these writers
+    of repository configuration refuse, exit 2, before writing anything."""
+    from fr.placement.stealth import refuse_repo_config
+    from fr.settings import SettingsError
+
+    try:
+        refuse_repo_config(repo.resolve(), command, what)
+    except SettingsError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(2) from err
 
 
 def approval_label_target(repo_root: Path) -> tuple[Any, str] | None:
@@ -161,6 +175,7 @@ def agents_cmd(
     from fr.agents import AGENT_NAMES, agent_path, write_agents
     from fr.isolation.scaffold import commit_paths
 
+    _refuse_under_stealth(repo, "fr init agents", "fr's agents (.claude/agents/fr-*.md)")
     repo_root = repo.resolve()
     written = write_agents(repo_root)
     for path in written:
@@ -184,6 +199,7 @@ def validator_wrapper_cmd(
     """Write scripts/validate-plans.sh (0755) and stage it — the harness-neutral
     remedy every isolation guard names when a plan repo is missing the wrapper.
     Idempotent; refuses (exit 2) rather than overwrite a foreign file there."""
+    _refuse_under_stealth(repo, "fr init validator-wrapper", "scripts/validate-plans.sh")
     repo_root = repo.resolve()
     target = validator_wrapper_path(repo_root)
     try:

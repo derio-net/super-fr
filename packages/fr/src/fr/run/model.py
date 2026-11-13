@@ -28,6 +28,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
+from fr.artifacts.paths import KIND_DIRS, artifact_root
+
 StepState = Literal["pending", "running", "done", "failed", "blocked"]
 """A step's lifecycle in run state — distinct from `fr.item_state.ItemState`
 (the dispatch-queue vocabulary for a `WorkItem`); this is per-STEP progress
@@ -41,8 +43,8 @@ where it cannot, this records a *claim* and the caller must make one:
 `fr run resolve` has no default (spec 2026-10-02-opencode-observe-2 §F, R10),
 so nothing is silently recorded as "a human answered" — or as "nobody did"."""
 
-RUNS_REL = Path("docs") / "superpowers" / "runs"
-IMPLEMENTED_RUNS_REL = Path("docs") / "superpowers" / "implemented" / "runs"
+RUNS_REL = Path(KIND_DIRS["run"])
+IMPLEMENTED_RUNS_REL = Path(KIND_DIRS["run-archived"])
 
 
 class RunStateError(Exception):
@@ -448,7 +450,7 @@ def validate_run_id(run_id: str) -> str:
     if not RUN_ID_RE.match(run_id):
         raise RunStateError(
             f"run id {run_id!r} must match {RUN_ID_RE.pattern} — it names a file in "
-            "docs/superpowers/runs/ and a segment of the work-item id, so it may "
+            f"{KIND_DIRS['run']}/ and a segment of the work-item id, so it may "
             "contain only letters, digits, '.', '-' and '_' and must start with a "
             "letter or digit"
         )
@@ -468,7 +470,7 @@ def existing_run_id_colliding_with(repo_root: Path, run_id: str) -> str | None:
     everywhere, and the same as the operator's intuition: two runs whose ids
     differ only by case are one run with a typo.
     """
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if not runs_dir.is_dir():
         return None
     wanted = run_id.casefold()
@@ -480,12 +482,12 @@ def existing_run_id_colliding_with(repo_root: Path, run_id: str) -> str | None:
 
 def run_path(repo_root: Path, run_id: str) -> Path:
     """Active run-state path: ``docs/superpowers/runs/<run-id>.yaml``."""
-    return repo_root / RUNS_REL / f"{run_id}.yaml"
+    return artifact_root(repo_root) / RUNS_REL / f"{run_id}.yaml"
 
 
 def archived_run_path(repo_root: Path, run_id: str) -> Path:
     """Archived run-state path (mirrors ``implemented/plans`` / ``implemented/journals``)."""
-    return repo_root / IMPLEMENTED_RUNS_REL / f"{run_id}.yaml"
+    return artifact_root(repo_root) / IMPLEMENTED_RUNS_REL / f"{run_id}.yaml"
 
 
 class _CursorDumper(yaml.SafeDumper):

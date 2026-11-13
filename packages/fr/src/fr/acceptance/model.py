@@ -24,6 +24,7 @@ from pydantic import (
     model_validator,
 )
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL, SCOPE_DIRS
 
 LEVELS: tuple[str, ...] = ("unit", "api", "int", "ui")
@@ -102,7 +103,7 @@ def same_repo(a: str, b: str) -> bool:
 # the pipeline must run, not what the product does (gh#775 — take 10's
 # `basket-single-phase` cited the plan's `01.yaml` as its unit test). A spec is
 # a row's ORIGIN, never its evidence.
-PIPELINE_ARTIFACTS_REL = "docs/superpowers/"
+PIPELINE_ARTIFACTS_REL = f"{KIND_DIRS['superpowers']}/"
 
 
 def pipeline_ref_error(ref: str) -> str | None:
@@ -129,7 +130,7 @@ def pipeline_ref_error(ref: str) -> str | None:
 # `IMPLEMENTED_JOURNALS_REL`) rather than re-declared here, so a new journal
 # scope needs no edit on this side.
 ARCHIVE_TWIN_DIRS: tuple[tuple[str, str], ...] = (
-    ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/"),
+    (f"{KIND_DIRS['spec']}/", f"{KIND_DIRS['spec-archived']}/"),
     *(
         (f"{JOURNALS_REL}/{scope_dir}/", f"{IMPLEMENTED_JOURNALS_REL}/{scope_dir}/")
         for scope_dir in SCOPE_DIRS.values()

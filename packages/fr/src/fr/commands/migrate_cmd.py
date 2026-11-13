@@ -190,6 +190,11 @@ def artifacts_cmd(
         typer.echo(f"  {verb}: {_rel(action.path, repo_root)} · {action.summary}")
     for skip in report.skipped:
         typer.echo(f"  skipped (already done by another writer): {_rel(skip.path, repo_root)}")
+    for other in report.elsewhere:
+        typer.echo(
+            f"  stale, another feature's, not migrated here (its own workspace migrates it "
+            f"when it next runs fr): {other}"
+        )
     for failure in report.failed:
         typer.echo(f"  FAILED: {_rel(failure.path, repo_root)} · {failure.error}", err=True)
         for companion in failure.also_wrote:

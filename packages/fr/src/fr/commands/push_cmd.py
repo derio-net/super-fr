@@ -63,6 +63,7 @@ def approval_journal(repo_root: Path) -> ApprovalJournal | str:
     fr-debugging session (no run, no spec), the one debug journal the branch added
     since it left the default branch. A string says why there is none."""
     from fr.archive import spec_slug_of
+    from fr.artifacts.paths import artifact_root, outside_repo
     from fr.git import GitRefusal, remote_default_ref
     from fr.git_policy.ask import ApprovalJournal
     from fr.git_policy.push import run_git
@@ -73,6 +74,13 @@ def approval_journal(repo_root: Path) -> ApprovalJournal | str:
         spec = run_spec(state)
         if spec:
             return ApprovalJournal("spec", spec_slug_of(Path(spec)))
+    slugs: list[str]
+    if outside_repo(repo_root) is not None:
+        # Review pr1431-r9: under quiet or stealth the journal lives at this feature's
+        # root, never on the product branch, and every journal there is this branch's.
+        debug = artifact_root(repo_root) / JOURNALS_REL / SCOPE_DIRS["debug"]
+        slugs = sorted(p.stem for p in debug.glob("*.md")) if debug.is_dir() else []
+        return _one_debug_journal(slugs)
     default = remote_default_ref(repo_root)
     if default is None or isinstance(default, GitRefusal):
         why = default.reason if isinstance(default, GitRefusal) else "no default ref"
@@ -87,6 +95,12 @@ def approval_journal(repo_root: Path) -> ApprovalJournal | str:
     if base.returncode != 0 or added.returncode != 0:
         return "this branch has no spec-driven run, and fr cannot read its debug journals"
     slugs = sorted(Path(p).stem for p in added.stdout.splitlines() if p.endswith(".md"))
+    return _one_debug_journal(slugs)
+
+
+def _one_debug_journal(slugs: list[str]) -> ApprovalJournal | str:
+    from fr.git_policy.ask import ApprovalJournal
+
     if len(slugs) == 1:
         return ApprovalJournal("debug", slugs[0])
     if not slugs:
@@ -150,16 +164,25 @@ def refuse_closed_pr(repo_root: Path) -> None:
             )
 
 
+def _code_pending(rng: object) -> bool:
+    """The feature branch has something to push: unpushed commits, or no remote branch."""
+    return bool(getattr(rng, "commits", ())) or getattr(rng, "remote_sha", None) is None
+
+
 def push_cmd() -> None:
     """Push this run's feature branch, under the repo's git policy (`git.*`)."""
     from fr.artifacts.commit import on_default_branch
+    from fr.artifacts.paths import STEALTH, outside_repo
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
-    from fr.git_policy.push import PushRefusedError, check_subjects, push, squash, unpushed
+    from fr.git_policy.product import push_product_branch, refuse_stealth_content
+    from fr.git_policy.push import PushRefusedError, check_subjects, squash, unpushed
     from fr.git_policy.templates import run_issue
+    from fr.placement.drift import refuse
     from fr.settings import SettingsError, load_settings
 
     repo_root = resolve_repo_root()
     try:
+        refuse(repo_root, "fr push")  # R28: detection only; migrate-branch migrates
         settings = load_settings(repo_root).settings
         branch, head, git_dir = branch_context(repo_root)
         if on_default_branch(repo_root) is not None:
@@ -178,18 +201,24 @@ def push_cmd() -> None:
                 still_current=push_still_current(repo_root, git_dir, branch, head),
             )
         rng = unpushed(repo_root, remote, branch)
+        # Before the squash rewrites anything; the one pusher scans again (pr1431-r1).
+        refuse_stealth_content(repo_root, remote, branch)
+        # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
         check_subjects(settings, rng.commits, issue)
         if settings.git.history == "squash-unpushed":
-            new = squash(repo_root, settings, branch, rng.commits, issue)
+            new = squash(
+                repo_root, settings, branch, rng.commits, issue,
+                plain=outside_repo(repo_root) == STEALTH,
+            )  # fmt: skip
             if new is not None:
                 console.print(
                     f"squashed {len(rng.commits)} unpushed commit(s) into {new[:12]} "
                     "(git.history: squash-unpushed)",
                     soft_wrap=True,
                 )
-        push(repo_root, remote, branch)
+        pushed = push_product_branch(repo_root, remote, branch, code=_code_pending(rng))
         if settings.git.push == "ask":
             consume(git_dir, "push", branch)
     except (SettingsError, PushRefusedError, AskRefusedError) as e:
         raise _fail(f"fr push: {e}") from e
-    console.print(f"pushed {branch} to {remote}", soft_wrap=True)
+    console.print(f"pushed {' and '.join(pushed) or 'nothing'} to {remote}", soft_wrap=True)

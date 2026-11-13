@@ -25,14 +25,40 @@ console = Console()
 
 
 def _default_branch(repo_root: Path) -> str:
+    """The product repo's default branch, read from its remote (review pr1431-r5). Never
+    the settings source ref: under quiet that is `origin/fr`, under stealth the tracking
+    repo's branch, and neither is a branch a PR merges into."""
+    from fr.git import GitRefusal, remote_default_ref, remote_name
     from fr.git_policy.push import PushRefusedError
-    from fr.settings import load_settings
 
-    ref = load_settings(repo_root).ref
-    if ref is None or not ref.startswith(("refs/remotes/", "refs/heads/")):
-        raise PushRefusedError("cannot tell the default branch to open the PR against; pass --base")
-    parts = ref.split("/")
-    return "/".join(parts[3:] if ref.startswith("refs/remotes/") else parts[2:])
+    ref = remote_default_ref(repo_root)
+    remote = remote_name(repo_root)
+    if ref is None or isinstance(ref, GitRefusal) or not isinstance(remote, str):
+        why = f" ({ref.reason})" if isinstance(ref, GitRefusal) else ""
+        raise PushRefusedError(
+            f"cannot tell the default branch to open the PR against{why}; pass --base"
+        )
+    return ref.removeprefix(f"{remote}/")
+
+
+def _refuse_fr_naming_under_stealth(repo_root: Path, title: str, body: str) -> None:
+    """R24 "what reaches the target" (review pr1431-n5): under stealth the PR's title
+    and body name nothing of fr. fr's markers are refused under `pr_body: minimal`; this
+    adds the title and the prose (fr's commit scopes, its commands, the placement)."""
+    from fr.artifacts.paths import STEALTH, outside_repo
+    from fr.git_policy.push import PushRefusedError
+    from fr.placement.stealth import fr_naming
+
+    if outside_repo(repo_root) != STEALTH:
+        return
+    for what, text in (("title", title), ("body", body)):
+        found = fr_naming(text)
+        if found:
+            raise PushRefusedError(
+                f"under placement stealth the PR reaching the target names nothing of fr "
+                f"(R24), and its {what} does: {'; '.join(found[:3])}. Write it as a plain "
+                "summary of the code change"
+            )
 
 
 def _refuse_recorded_pr(repo_root: Path, url: str | None) -> None:
@@ -95,6 +121,19 @@ def create_cmd(
             body = body_file.read_text()
         except (OSError, UnicodeDecodeError) as e:
             raise PushRefusedError(f"cannot read --body-file {body_file}: {e}") from e
+        if settings.forge.pr_body == "minimal":
+            from fr.record.pr_body import fr_markers
+
+            # R10, and R24 "what reaches the target": under a minimal body (which
+            # stealth always sets) the PR carries a plain summary, no fr marker.
+            markers = fr_markers(body)
+            if markers:
+                raise PushRefusedError(
+                    "under forge.pr_body: minimal (stealth sets it) the PR body is a plain "
+                    f"summary, and {body_file} carries fr markers ({'; '.join(markers)}); "
+                    "pass a plain summary instead"
+                )
+        _refuse_fr_naming_under_stealth(repo_root, title, body)
         if settings.git.pr == "ask":
             require_approval(
                 repo_root,

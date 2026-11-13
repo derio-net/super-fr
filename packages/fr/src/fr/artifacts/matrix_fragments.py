@@ -43,6 +43,7 @@ from pathlib import Path
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.matrix_strategies import UnconvertibleMatrixError
 from fr.artifacts.matrix_verify import UnreadableMatrixError
+from fr.artifacts.paths import KIND_DIRS, below, kind_dir, space_for
 from fr.artifacts.runner import MIGRATIONS, SchemaMigration
 
 MIGRATION_NAME = "acceptance-fragments"
@@ -50,10 +51,10 @@ MIGRATION_NAME = "acceptance-fragments"
 __all__ = ["MATRIX_FRAGMENTS_MIGRATION", "MIGRATION_NAME", "split_matrix", "split_texts"]
 
 _DELETED_REPORTS: tuple[str, ...] = (
-    "docs/acceptance/report_local.html",
-    "docs/acceptance/report_linked.html",
-    "docs/acceptance/report_linked.md",
-    "docs/acceptance/report.github.html",
+    f"{KIND_DIRS['acceptance']}/report_local.html",
+    f"{KIND_DIRS['acceptance']}/report_linked.html",
+    f"{KIND_DIRS['acceptance']}/report_linked.md",
+    f"{KIND_DIRS['acceptance']}/report.github.html",
 )
 """The committed reports R19 deletes — named here, not read from `fr.acceptance.report`,
 because they are what a v5 repo carried, whatever the report module writes later."""
@@ -104,7 +105,7 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
         ) from e
     repo = _identity(old.org, old.repo, root)
     own = repo.partition("/")[2]
-    anchors = conversions(root / "docs" / "acceptance" / "matrix.yaml")
+    anchors = conversions(kind_dir("acceptance", space_for(root)) / "matrix.yaml")
 
     def convert(ref: str) -> str:
         return to_logical(anchors.get(ref, ref), own_repo=own)
@@ -131,7 +132,7 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
         by_feature.setdefault(feature, []).append(row)
         expected[row.id] = row.model_dump()
 
-    folder = root / FRAGMENTS_DIR
+    folder = below(root, "acceptance-fragment")  # root: the one this matrix's path names
     on_disk = (
         {f"{FRAGMENTS_DIR.as_posix()}/{p.name}": p.read_text() for p in folder.glob("*.yaml")}
         if folder.is_dir()
@@ -251,13 +252,12 @@ def _companions(path: Path) -> list[Path]:
     own (a pre-v5 body the frozen reader refuses until the earlier hops run, or one
     it will refuse anyway), every fragment already here is named instead (review
     pr1408-r9): a fragment that does not exist yet holds no uncommitted change."""
-    from fr.acceptance.fragment import FRAGMENTS_DIR
 
     root = _root(path)
     try:
         written = [root / rel for rel in split_texts(path.read_text(), root)]
     except Exception:
-        written = sorted((root / FRAGMENTS_DIR).glob("*.yaml"))
+        written = sorted(below(root, "acceptance-fragment").glob("*.yaml"))
     return [*written, *_deleted(path)]
 
 
@@ -294,7 +294,8 @@ MATRIX_FRAGMENTS_MIGRATION = SchemaMigration(
     from_version=5,
     to_version=6,
     fn=split_matrix,
-    description="matrix: split into per-feature fragments under docs/acceptance/features/ "
+    description=f"matrix: split into per-feature fragments under "
+    f"{KIND_DIRS['acceptance-fragment']}/ "
     "with logical refs; the matrix and its committed reports are deleted (kind retired)",
     companions=_companions,
     retires=True,

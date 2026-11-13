@@ -28,6 +28,7 @@ from rich.console import Console
 
 from fr import plan_ops
 from fr.apply import apply
+from fr.artifacts.paths import KIND_DIRS, feature_roots, kind_dir, space_for
 from fr.commands.common import (
     PlanReport,
     build_plan_report,
@@ -42,7 +43,7 @@ from fr.diff import (
     IssueStateChange,
     RepoLabelEnsure,
 )
-from fr.parser import Plan, PlanSchemaError
+from fr.parser import Plan, PlanSchemaError, _find_repo_root
 from fr.plan_ops import PlanEditError
 from fr.services import ServicesError
 from fr.settings import require_forge
@@ -267,6 +268,12 @@ def _apply_one(
         # (gh#804): fr has no checkout of `target_repo` to read one from, and
         # the plan repo is the one that declared where its work is tracked.
         plan_root = resolve_repo_root(plan_dir.resolve())
+        from fr.artifacts.paths import outside_repo
+
+        if outside_repo(resolve_repo_root()) is not None:
+            # quiet/stealth: the plan dir is on `fr` or in the tracking clone; the forge
+            # policy is the workspace's (review p4-r5)
+            plan_root = resolve_repo_root()
         require_forge(plan_root, "issues")
         require_forge(plan_root, "labels")  # the runner reads its queue from the labels
     except ServicesError as e:
@@ -370,7 +377,7 @@ def _apply_one(
             "",
             f"refuse to dispatch: {e}",
             "",
-            "Author the shape under docs/superpowers/workflows/, or fix the "
+            f"Author the shape under {KIND_DIRS['workflow']}/, or fix the "
             "`workflow:` key in the plan's _meta.yaml.",
         ]
         json_out["workflow_error"] = str(e)
@@ -455,6 +462,29 @@ def _do_mutations(
     return 0, "\n".join(parts), json_out
 
 
+def _refuse_dispatch_outside_repo() -> None:
+    """R23 "not available here": a runner works from its own checkout of the default
+    branch, where a quiet repo keeps no plan, so `--to` is refused naming the placement."""
+    from fr.artifacts.paths import REPO, outside_repo
+    from fr.settings import SettingsError
+
+    # The switch or the stealth marker alone (review p3-r10): no fr worktree is created
+    # and no feature id is checked just to refuse (R23, R24 "runner dispatch is refused").
+    try:
+        placement = outside_repo(resolve_repo_root()) or REPO
+    except SettingsError as e:
+        err_console.print(str(e), soft_wrap=True)
+        raise typer.Exit(2) from e
+    if placement != REPO:
+        err_console.print(
+            f"`fr apply --to` is not available under placement {placement} (R23, R24): a runner "
+            "dispatches from the default branch, where this repo keeps no plan. Run the plan "
+            "in a session (fr-goal) instead",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
 def apply_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(False, "--all", help="Walk all plans in current repo."),
@@ -491,6 +521,14 @@ def apply_command(
 
     Defaults to a preview. Pass --yes to actually mutate GitHub state.
     """
+    if to is not None:
+        _refuse_dispatch_outside_repo()  # first: it must not create the fr worktree (p3-r10)
+    if yes:
+        # R24, review p4-r5: before any forge call, and read from the WORKSPACE (the plan
+        # dir of a stealth run sits in the tracking clone, which has no marker).
+        from fr.placement.stealth import refuse_forge_writes
+
+        refuse_forge_writes(resolve_repo_root(), "`fr apply --yes`")
     require_migrated_layout()
     if all_plans and plan_dir is not None:
         err_console.print("--all and plan_dir are mutually exclusive")
@@ -546,7 +584,7 @@ def apply_command(
             raise typer.Exit(2)
 
     if all_plans:
-        plans_dir = Path.cwd() / "docs" / "superpowers" / "plans"
+        plans_dir = kind_dir("plan", space_for(Path.cwd()))
         if not plans_dir.is_dir():
             err_console.print(f"plans dir not found: {plans_dir}")
             raise typer.Exit(2)
@@ -563,14 +601,12 @@ def apply_command(
         # `fr apply docs/superpowers/archived-plans/<plan>`. Anchored to the
         # canonical `superpowers/archived-plans` location so an unrelated dir
         # that merely happens to be named "archived-plans" isn't refused.
-        resolved_parts = plan_dir.resolve().parts
+        resolved_dir = plan_dir.resolve()
+        plan_repo = _find_repo_root(resolved_dir) or Path.cwd()
         under_archived = any(
-            resolved_parts[i] == "superpowers"
-            and (
-                resolved_parts[i + 1] == "archived-plans"
-                or resolved_parts[i + 1 : i + 3] == ("implemented", "plans")
-            )
-            for i in range(len(resolved_parts) - 1)
+            (froot / KIND_DIRS[kind]).resolve() in resolved_dir.parents
+            for froot in feature_roots(space_for(plan_repo))
+            for kind in ("plan-archived", "plan-legacy-archived")
         )
         if under_archived:
             err_console.print(

@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
+reviewed: 2026-11-13 placement-resolver phase 6 review, the plugin resolves fr from absolute PATH entries and asks it read-only; install delivery and channels are unchanged
 ---
 
 # Installing super-fr

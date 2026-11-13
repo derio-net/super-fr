@@ -74,6 +74,7 @@ from fr.artifacts.commit import (
     lock_path,
     uncommitted_veto,
 )
+from fr.artifacts.paths import KIND_DIRS
 from fr.artifacts.runner import (
     FailedAction,
     MigrationRegistry,
@@ -403,6 +404,39 @@ def _refuse(emit: Callable[[str], None], lines: Sequence[str]) -> typer.Exit:
     return typer.Exit(2)
 
 
+PLACEMENT_COMMAND: Final = "placement"
+"""`fr placement`: not exempt (it writes artifacts), but the drift check's remedy, so the
+drift refusal alone lets it through."""
+
+
+def _drifted(root: Path) -> bool:
+    from fr.placement.drift import marker_drift
+
+    try:
+        return marker_drift(root) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _refuse_drift(root: Path, emit: Callable[[str], None]) -> None:
+    """Refuse a workspace whose recorded placement the switch no longer names (the
+    filesystem-only check: no network, and no process without a marker and a switch)."""
+    from fr.placement.drift import marker_drift, refusal
+
+    try:
+        found = marker_drift(root)
+    except Exception:  # noqa: BLE001 — a check that cannot answer leaves it to the command
+        return
+    if found is not None:
+        raise _refuse(
+            emit,
+            [
+                f"fr: {refusal(found)}.",
+                "  run:  fr placement migrate-branch   (in this workspace)",
+            ],
+        )
+
+
 def ensure_artifacts_current(
     *,
     argv: Sequence[str] | None = None,
@@ -434,19 +468,35 @@ def ensure_artifacts_current(
     them.
     """
     environ = os.environ if env is None else env
+    emit = err if err is not None else _echo_err
+    resolved: list[Path] = []
+
+    def gate_root() -> Path:
+        if not resolved:
+            if repo_root is not None:
+                resolved.append(repo_root)
+            else:
+                # Imported here, not at module scope: `fr.artifacts` is a lower layer
+                # than `fr.commands`, and the gate is the one place the two meet.
+                from fr.commands.common import resolve_repo_root
+
+                resolved.append(resolve_repo_root())
+        return resolved[0]
+
+    # Placement drift (spec 2026-11-04 R28): detection ONLY, before every non-exempt
+    # command and in every context (CI and FR_SKIP_MIGRATION included: it migrates
+    # nothing, so there is nothing to skip). `fr placement` is its remedy, so it passes.
+    if not is_exempt(argv=argv, invoked_subcommand=invoked_subcommand, env={}):
+        if invoked_subcommand == PLACEMENT_COMMAND:
+            if _drifted(gate_root()):
+                return  # a drifted tree's artifacts are judged after migrate-branch
+        else:
+            _refuse_drift(gate_root(), emit)
+
     if is_exempt(argv=argv, invoked_subcommand=invoked_subcommand, env=environ):
         return
 
-    emit = err if err is not None else _echo_err
-
-    if repo_root is not None:
-        root = repo_root
-    else:
-        # Imported here, not at module scope: `fr.artifacts` is a lower layer
-        # than `fr.commands`, and the gate is the one place the two meet.
-        from fr.commands.common import resolve_repo_root
-
-        root = resolve_repo_root()
+    root = gate_root()
 
     try:
         stale = is_stale(root, registry=registry)
@@ -699,6 +749,11 @@ def _migrate_and_commit(
         emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
     for skipped in report.skipped:
         emit(f"  skipped (another writer got there first): {_rel(skipped.path, root)}")
+    for other in report.elsewhere:
+        emit(
+            f"  stale, another feature's, not migrated here (its own workspace migrates it "
+            f"when it next runs fr): {other}"
+        )
     _emit_unrepairable(report, root, emit)
 
     if report.applied:
@@ -856,7 +911,7 @@ def _cannot_read(root: Path, failures: Sequence[FailedAction]) -> tuple[str, ...
     ]
     if any(f.path.parent.name.endswith(RECORDS_DIR_SUFFIX) for f in failures):
         lines.append(
-            f"  Every file under docs/superpowers/runs/<run>{RECORDS_DIR_SUFFIX}/ is read "
+            f"  Every file under {KIND_DIRS['run']}/<run>{RECORDS_DIR_SUFFIX}/ is read "
             "as one step's record. Scratch inputs (for `fr plan create`, say) belong "
             "outside the repository — in $TMPDIR."
         )

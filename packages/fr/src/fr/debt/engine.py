@@ -27,6 +27,7 @@ from fr.acceptance.model import (
     latest_passing_walk_at,
 )
 from fr.archive import MergeEvidence, merge_evidence
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.closeout import plan_sweep
 from fr.debt.model import (
     AcceptanceDebt,
@@ -42,9 +43,9 @@ from fr.debt.model import (
 
 DEFAULT_STALE_DAYS = 14
 CONFIG_REL = Path(".fr/debt.yaml")
-PLANS_REL = "docs/superpowers/plans"
-SPECS_REL = "docs/superpowers/specs"
-RUNS_REL = Path("docs/superpowers/runs")
+PLANS_REL = KIND_DIRS["plan"]
+SPECS_REL = KIND_DIRS["spec"]
+RUNS_REL = Path(KIND_DIRS["run"])
 OWED_MARKER = re.compile(r"<!--\s*fr-owed:(\S+?)\s*-->")
 _CONFIG_KEYS = frozenset({"stale_days"})
 
@@ -161,7 +162,7 @@ def spec_heading_problems(repo_root: Path) -> list[str]:
     zero. Archived specs are frozen and not read."""
     from fr.spec import find_test_plan_heading, near_miss_message
 
-    specs = repo_root / SPECS_REL
+    specs = artifact_root(repo_root) / SPECS_REL
     out: list[str] = []
     for spec in sorted(specs.glob("*.md")) if specs.is_dir() else []:
         try:
@@ -290,6 +291,21 @@ def _last_commit(
     return _parse(done.stdout.strip()) if done.returncode == 0 else None
 
 
+def _fr_plan_times(repo_root: Path, plan_dir: Path) -> list[datetime | None]:
+    """Under quiet and stealth (review p5-r8): a plan's activity is the history of ITS
+    path in the fr (or tracking) worktree, local and pushed; the product's history holds
+    no fr file."""
+    from fr.artifacts.paths import outside_repo
+    from fr.placement.merged import pushed_ref
+
+    found = pushed_ref(plan_dir, outside_repo(repo_root) or "")
+    if found is None:
+        return []
+    top, pushed = found
+    rel = plan_dir.resolve().relative_to(top.resolve()).as_posix()
+    return [_last_commit(top, "HEAD", rel), _last_commit(top, pushed, rel)]
+
+
 def _parse(text: str | None) -> datetime | None:
     if not text:
         return None
@@ -320,7 +336,7 @@ def _safe_branch(repo_root: Path, branch: str) -> bool:
 def _run_branches(repo_root: Path) -> dict[str, str]:
     """plan name -> run branch, from every run cursor that emitted the plan."""
     out: dict[str, str] = {}
-    runs = repo_root / RUNS_REL
+    runs = artifact_root(repo_root) / RUNS_REL
     for path in sorted(runs.glob("*.yaml")) if runs.is_dir() else []:
         try:
             data = yaml.safe_load(path.read_text())
@@ -390,7 +406,7 @@ def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, Sou
     from fr.acceptance.fragment import FRAGMENTS_DIR
 
     try:
-        if not has_fragments(repo_root) and not (repo_root / FRAGMENTS_DIR).is_dir():
+        if not has_fragments(repo_root) and not (artifact_root(repo_root) / FRAGMENTS_DIR).is_dir():
             raise AcceptanceError(f"no acceptance fragments under {FRAGMENTS_DIR}/")
         folded = effective(repo_root)
     except (AcceptanceError, OSError) as e:
@@ -436,11 +452,15 @@ def compute(
 
     archivable = []
     for name in sweep.archivable:
-        merged = _last_commit(repo_root, ref, f"{PLANS_REL}/{name}") if ref else None
+        merged_sha = sweep.merged_commits.get(name)
+        if merged_sha is not None:  # quiet and stealth: the commit that merged its feature
+            merged = _last_commit(repo_root, merged_sha, None)
+        else:
+            merged = _last_commit(repo_root, ref, f"{PLANS_REL}/{name}") if ref else None
         archivable.append(
             ArchivablePlan(
                 name=name,
-                command=f"fr archive {PLANS_REL}/{name}",
+                command=sweep.commands.get(name, f"fr archive {PLANS_REL}/{name}"),
                 merged_at=merged.isoformat() if merged else None,
                 age_days=(now - merged).days if merged else None,
             )
@@ -449,12 +469,16 @@ def compute(
     forge_ok = forge is not None
     forge_why = f"{forge_why or 'offline'}: staleness comes from git alone" if forge is None else ""
     forge_note = ""
-    branches = _run_branches(repo_root)
+    owned = {n: b for n, b in sweep.branches.items() if _safe_branch(repo_root, b)}
+    branches = {**owned, **_run_branches(repo_root)}  # quiet/stealth: OWNER names it
     stale = []
     for name in [*sweep.in_progress, *sweep.complete_unmerged]:
         rel = f"{PLANS_REL}/{name}"
         times: list[datetime | None] = []
-        if ref:
+        plan_dir = sweep.plan_dirs.get(name)
+        if plan_dir is not None:
+            times += _fr_plan_times(repo_root, plan_dir)  # quiet/stealth: where it lives
+        elif ref:
             times.append(_last_commit(repo_root, ref, rel))
         else:
             times.append(_last_commit(repo_root, "HEAD", rel))

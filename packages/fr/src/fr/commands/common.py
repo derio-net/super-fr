@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+
 if TYPE_CHECKING:
     from fr.diff import Diff
     from fr.ghclient import GhClient
@@ -90,7 +92,7 @@ def require_migrated_layout(repo_root: Path | None = None) -> None:
     in an unrelated directory) — the guard targets repos that have plans.
     """
     root = repo_root if repo_root is not None else resolve_repo_root()
-    sp = root / "docs" / "superpowers"
+    sp = kind_dir("superpowers", space_for(root))
     legacy_dirs = [d for d in (sp / "archived-plans", sp / "archived-specs") if d.is_dir()]
     if legacy_dirs:
         import typer
@@ -100,7 +102,7 @@ def require_migrated_layout(repo_root: Path | None = None) -> None:
         for d in legacy_dirs:
             typer.echo(f"legacy layout detected: {d}", err=True)
         typer.echo(
-            "The archive location moved to docs/superpowers/implemented/. "
+            f"The archive location moved to {KIND_DIRS['archive']}/. "
             "Run `fr migrate dirs --yes`, then commit the rename.",
             err=True,
         )

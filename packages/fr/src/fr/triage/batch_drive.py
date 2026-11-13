@@ -23,6 +23,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import QueueState
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
 from fr.triage.approval import ApprovalVerdict, is_approved
@@ -75,11 +76,16 @@ ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
 EXPORT_PREFIX = "chore/triage-state-"  # + `<scope id>-wave-<N>` (gh#1101)
 """The head of a wave's state-export PR (pages-goal R13). Not in `ARCHIVE_PREFIXES`, so
 archive attribution can never claim an export PR."""
-RUNS_DIR = "docs/superpowers/runs"
-JOURNAL_DIRS = ("docs/superpowers/journals/", "docs/superpowers/implemented/journals/")
-RUN_ARTIFACT_DIRS = tuple(
-    f"docs/superpowers/{d}/" for d in ("plans", "specs", "journals", "runs", "usage")
+RUNS_DIR = KIND_DIRS["run"]
+JOURNAL_DIRS = (f"{KIND_DIRS['journal']}/", f"{KIND_DIRS['journal-archived']}/")
+ARCHIVE_DIRS = (
+    KIND_DIRS["plan"],
+    KIND_DIRS["spec"],
+    KIND_DIRS["journal"],
+    KIND_DIRS["run"],
+    KIND_DIRS["usage"],
 )
+RUN_ARTIFACT_DIRS = tuple(f"{d}/" for d in ARCHIVE_DIRS)
 """Where a run's live artifacts sit until its close-out archives them under
 `docs/superpowers/implemented/` (`fr archive --branch`)."""
 
@@ -1028,9 +1034,6 @@ def closeout_handback_decision(
     return "stuck" if len(heads) >= CLOSEOUT_HANDBACKS else "handback"
 
 
-ARCHIVE_DIRS = ("plans", "specs", "journals", "runs", "usage")
-
-
 def archive_allowed(entry: str) -> bool:
     """Whether one `<status>\t<path>` change is what an archive makes (R15's auto-merge
     allowlist): anything under `docs/superpowers/implemented/`, a deletion out of a live
@@ -1040,9 +1043,9 @@ def archive_allowed(entry: str) -> bool:
     status, _, path = entry.partition("\t")
     if not path or ".." in PurePosixPath(path).parts:
         return False
-    if path.startswith("docs/superpowers/implemented/"):
+    if path.startswith(f"{KIND_DIRS['archive']}/"):
         return True
-    return status == "D" and path.startswith(tuple(f"docs/superpowers/{d}/" for d in ARCHIVE_DIRS))
+    return status == "D" and path.startswith(RUN_ARTIFACT_DIRS)
 
 
 def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> list[str]:

@@ -27,11 +27,13 @@ from fr.settings import SettingsError
 from fr.settings.model import PLACEMENTS, Settings, parse_settings
 
 SETTINGS_PATH: Final = ".fr/settings.yaml"
-SERVABLE_PLACEMENTS: Final = frozenset({"repo"})
-"""The placements this fr can serve. Quiet and stealth arrive with a later plan (R29)."""
+SERVABLE_PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
+"""The placements this fr can serve."""
 
-Source = Literal["remote", "local", "head", "defaults"]
-"""Where the policy came from: R2 step 1, step 2, the CI exception, or nowhere."""
+Source = Literal["remote", "local", "head", "defaults", "quiet", "stealth"]
+"""Where the policy came from: R2 step 1, step 2, the CI exception, nowhere, (quiet) the
+`fr` branch's root `settings.yaml` (`fr.placement.quiet`), or (stealth) the target's file
+on the tracking ref (`fr.placement.stealth`)."""
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,9 @@ class EffectiveSettings:
     pending_edit: str | None
     source: Source = "defaults"
     """Which R2 step supplied `ref` (`fr settings show` reports it)."""
+    contrary: tuple[str, ...] = ()
+    """Under stealth, the forge keys the tracking file sets explicitly to something other
+    than stealth's own value (R5 refuses them, `stealth-forge-explicit`)."""
 
 
 _CACHE: dict[tuple[str, str], tuple[Settings, dict[str, str]]] = {}
@@ -91,6 +96,10 @@ def _show(root: Path, sha: str, path: str = SETTINGS_PATH) -> str | None:
             f"cannot read {path} at {sha[:12]}: git show failed: {done.stderr.strip()}"
         )
     return done.stdout
+
+
+show_at_commit = _show
+"""*path* at a commit: the reader the quiet switch (`fr.placement.quiet`) shares."""
 
 
 def _commit_of(root: Path, qualified_ref: str) -> str | None:
@@ -220,20 +229,144 @@ def _yaml_of(text: str | None, source: str) -> object:
         raise SettingsError(f"{source}: not valid YAML: {e}") from e
 
 
+yaml_of = _yaml_of
+
+
+def unservable_placement(placement: str, source: str) -> SettingsError:
+    """R4's refusal of a placement this fr cannot yet serve: the one wording, shared by
+    the loader and the path resolver (`fr.artifacts.paths.space_for`)."""
+    return SettingsError(
+        f"{source}: placement: {placement} is not yet available in this fr (only "
+        f"{', '.join(f'`{p}`' for p in sorted(SERVABLE_PLACEMENTS))} are served)"
+    )
+
+
 def _servable(settings: Settings, source: str) -> Settings:
     if settings.placement not in SERVABLE_PLACEMENTS:
         assert settings.placement in PLACEMENTS
+        raise unservable_placement(settings.placement, source)
+    return settings
+
+
+def _repo_file(settings: Settings) -> Settings:
+    """`.fr/settings.yaml` is the `repo` placement's file, so it says `repo` (§3.A: the
+    placement must match where the file lives). Quiet is switched on by the `fr` branch."""
+    if settings.placement == "stealth":
         raise SettingsError(
-            f"{source}: placement: {settings.placement} is not yet available "
-            "in this fr (only `repo` is served)"
+            f"{SETTINGS_PATH}: placement: stealth cannot be set in repo settings: stealth is "
+            "chosen per run, never by repo settings (R24). Start the run with "
+            "`fr isolation up --stealth <tracking-repo>@<branch>` (or fr-goal mode=stealth)"
+        )
+    if settings.placement != "repo":
+        raise SettingsError(
+            f"{SETTINGS_PATH}: placement: {settings.placement} is not set here: this file is "
+            "the `repo` placement's. Quiet is switched on by the `fr` branch's root "
+            "settings.yaml (`fr settings init --quiet`)"
         )
     return settings
 
 
-def parse_settings_text(text: str | None, *, source: str) -> Settings:
+def _quiet(root: Path) -> EffectiveSettings | None:
+    """R2 under quiet: the policy is the `fr` branch's root settings.yaml, read from
+    `origin/fr` by commit. A `.fr/settings.yaml` on the default branch is ignored, and
+    the note says so."""
+    from fr.artifacts.paths import SWITCH_REF, SWITCH_SETTINGS
+    from fr.placement.quiet import switch
+
+    found = switch(root)
+    if found is None:
+        return None
+    settings = found.settings
+    sources = {k: ("quiet" if _present(found.data, k) else "default") for k in _leaf_keys(settings)}
+    note = f"quiet: read from origin/fr:{SWITCH_SETTINGS} ({found.sha[:12]})"
+    try:
+        _, sha, _, _ = _resolve_source(root)
+        ignored = sha is not None and _show(root, sha) is not None
+    except (SettingsError, GitUnavailableError):
+        ignored = False
+    if ignored:
+        note += f"; {SETTINGS_PATH} on the default branch is ignored under quiet"
+    return EffectiveSettings(settings, sources, SWITCH_REF, note, None, "quiet")
+
+
+_STEALTH_NOTICED: set[str] = set()
+
+
+def _stealth(root: Path) -> EffectiveSettings | None:
+    """R2 under stealth: the policy is `<target-dir>/settings.yaml` on the tracking ref,
+    read by commit in the tracking worktree; a target's `.fr/settings.yaml` is ignored
+    and fr prints that it was. Stealth sets the forge keys itself (R5, R24): the
+    effective values are always the quiet ones, and an explicit contrary value is
+    reported in `contrary` for `fr settings check` and `fr run start` to refuse."""
+    from fr.placement.stealth import (
+        QUIET_FORGE,
+        TARGET_SETTINGS,
+        marker_tracking,
+        worktree_path,
+    )
+
+    found = marker_tracking(root)
+    if found is None:
+        return None
+    ref, target = found
+    wt = worktree_path(root, ref)
+    qualified = f"refs/remotes/origin/{ref.branch}"
+    rel = f"{target}/{TARGET_SETTINGS}"
+    source = f"{ref.text}:{rel}"
+    sha = _commit_of(wt, qualified) if (wt / ".git").exists() else None
+    if sha is None:
+        raise SettingsError(
+            f"placement stealth: cannot read the tracking ref {ref.text} in {wt}; re-run "
+            f"`fr isolation up --stealth {ref.text}` (R24 fail-fast)"
+        )
+    text = _show(wt, sha, rel)
+    data = _yaml_of(text, source)
+    settings = parse_settings(data, source=source)
+    if _present(data, "placement") and settings.placement != "stealth":
+        raise SettingsError(
+            f"{source}: placement: {settings.placement} cannot be set in a target's stealth "
+            "settings file; it says `placement: stealth` (or nothing)"
+        )
+    contrary = tuple(
+        f"forge.{key}"
+        for key, value in QUIET_FORGE.items()
+        if _present(data, f"forge.{key}") and getattr(settings.forge, key) != value
+    )
+    settings = settings.model_copy(
+        update={
+            "placement": "stealth",
+            "forge": settings.forge.model_copy(update=dict(QUIET_FORGE)),
+        }
+    )
+    sources = {k: ("stealth" if _present(data, k) else "default") for k in _leaf_keys(settings)}
+    for key in QUIET_FORGE:
+        sources[f"forge.{key}"] = "stealth"
+    note = f"stealth: read from {source} ({sha[:12]}); the forge keys are stealth's own"
+    try:
+        _, own, _, _ = _resolve_source(root)
+        ignored = own is not None and _show(root, own) is not None
+    except (SettingsError, GitUnavailableError):
+        ignored = False
+    if ignored:
+        note += f"; the target's {SETTINGS_PATH} is ignored under stealth"
+        if str(root) not in _STEALTH_NOTICED:
+            _STEALTH_NOTICED.add(str(root))
+            print(
+                f"fr: settings: placement stealth: the target's {SETTINGS_PATH} is ignored; "
+                f"the tracking repo's {rel} wins (R24)",
+                file=sys.stderr,
+            )
+    return EffectiveSettings(settings, sources, qualified, note, None, "stealth", contrary=contrary)
+
+
+def parse_settings_text(text: str | None, *, source: str, servable: bool = True) -> Settings:
     """A settings file's text (None: absent, the defaults) as `Settings`, by the same
-    closed, strict model and placement check the checkout reader applies."""
-    return _servable(parse_settings(_yaml_of(text, source), source=source), source)
+    closed, strict model and placement check the checkout reader applies.
+
+    `servable=False` skips only the placement check, for a caller that decides what a
+    valid placement means itself (the `origin/fr` switch, `fr.artifacts.paths`)."""
+    settings = parse_settings(_yaml_of(text, source), source=source)
+    return _servable(settings, source) if servable else settings
 
 
 def load_settings(repo_root: Path) -> EffectiveSettings:
@@ -245,6 +378,12 @@ def load_settings(repo_root: Path) -> EffectiveSettings:
     root = Path(repo_root)
     try:
         in_repo = git_answer(root, "rev-parse", "--git-dir").returncode == 0
+        hidden = _stealth(root) if in_repo else None
+        if hidden is not None:
+            return hidden
+        quiet = _quiet(root) if in_repo else None
+        if quiet is not None:
+            return quiet
         ref, sha, note, source = (
             _resolve_source(root) if in_repo else (None, None, "not a git repo", "defaults")
         )
@@ -265,7 +404,7 @@ def load_settings(repo_root: Path) -> EffectiveSettings:
     cached = _CACHE.get(key)
     if cached is None:
         data = _yaml_of(text, SETTINGS_PATH)
-        settings = _servable(parse_settings(data, source=SETTINGS_PATH), SETTINGS_PATH)
+        settings = _repo_file(_servable(parse_settings(data, source=SETTINGS_PATH), SETTINGS_PATH))
         sources = {k: ("repo" if _present(data, k) else "default") for k in _leaf_keys(settings)}
         cached = (settings, sources)
         _CACHE[key] = cached

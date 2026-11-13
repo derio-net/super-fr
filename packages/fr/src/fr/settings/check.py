@@ -14,6 +14,7 @@ from typing import Final
 
 import yaml
 
+from fr.artifacts.paths import KIND_DIRS, feature_roots, space_for
 from fr.settings import SettingsError, load_settings
 from fr.settings.load import read_at_default
 from fr.settings.model import Settings
@@ -34,10 +35,13 @@ def _live_plans_with_ops(root: Path, settings: Settings) -> tuple[str, ...]:
         return ()
     from fr.ops.load import plan_has_ops
 
-    plans = root / "docs" / "superpowers" / "plans"
-    if not plans.is_dir():
-        return ()
-    return tuple(sorted(d.name for d in plans.iterdir() if d.is_dir() and plan_has_ops(root, d)))
+    # Every feature's live plans: under quiet each feature has its own plans directory.
+    found: set[str] = set()
+    for froot in feature_roots(space_for(root)):
+        plans = froot / KIND_DIRS["plan"]
+        if plans.is_dir():
+            found |= {d.name for d in plans.iterdir() if d.is_dir() and plan_has_ops(root, d)}
+    return tuple(sorted(found))
 
 
 DRIVEN_TRIAGE_KEYS: Final = ("post_merge", "export", "version", "post_merge_restart")
@@ -84,6 +88,15 @@ def _report_comment_outside_repo(_root: Path, settings: Settings) -> tuple[str, 
     return ()
 
 
+def _stealth_forge_explicit(root: Path, settings: Settings) -> tuple[str, ...]:
+    """R5: under stealth, a forge key the tracking file sets explicitly to anything but
+    stealth's own value. Stealth sets those keys itself; the contrary value is refused
+    rather than ignored."""
+    if settings.placement != "stealth":
+        return ()
+    return load_settings(root).contrary
+
+
 RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
     (
         "gates-off-with-ops",
@@ -107,6 +120,13 @@ RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
         "report-comment-needs-repo-placement",
         _report_comment_outside_repo,
         "{detail}: on is refused under placement quiet and stealth (reports are local only)",
+    ),
+    (
+        "stealth-forge-explicit",
+        _stealth_forge_explicit,
+        "{detail} is set explicitly in the tracking repo's settings file, to a value other "
+        "than stealth's own (labels, comments and issues off, pr_body minimal): stealth sets "
+        "those keys itself and refuses a contrary value rather than ignoring it",
     ),
 )
 

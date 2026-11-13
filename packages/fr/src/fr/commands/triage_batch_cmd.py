@@ -164,7 +164,6 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
     EXPORT_KINDS,
-    RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
     ChecksVerdict,
@@ -6930,9 +6929,12 @@ def _say(line: str) -> None:
 
 def _cursors(root: Path) -> list[object]:
     """The parsed run cursors of the fast-forwarded checkout; an unreadable one is
-    skipped (it cannot name the batch branch for certain)."""
+    skipped (it cannot name the batch branch for certain). The checkout's own tree, as
+    fast-forwarded: `below`, no placement read."""
+    from fr.artifacts.paths import below
+
     out: list[object] = []
-    for path in sorted((root / RUNS_DIR).glob("*.yaml")):
+    for path in sorted(below(root, "run").glob("*.yaml")):
         try:
             out.append(yaml.safe_load(path.read_text(encoding="utf-8")))
         except (OSError, yaml.YAMLError):

@@ -227,11 +227,12 @@ def run_issue(repo_root: Path) -> int | None:
     Every readable cursor whose `branch` is this one; None when none records an
     issue, or when they disagree (fr does not guess which one a commit is for).
     """
+    from fr.artifacts.paths import artifact_root
     from fr.run.adopt import current_branch
     from fr.run.model import RUNS_REL, RunStateError, parse_run_state
 
     branch = current_branch(repo_root)
-    runs = repo_root / RUNS_REL
+    runs = artifact_root(repo_root) / RUNS_REL
     if branch is None or not runs.is_dir():
         return None
     issues: set[int] = set()

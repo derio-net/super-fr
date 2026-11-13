@@ -265,6 +265,7 @@ def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
     # The read-only resolver (spec 2026-10-05-run-upgrade-midflight §B): pickup
     # only reads the cursor, so a step drift is one warning naming `fr run
     # reshape`, not a refusal `_record_section` would swallow (gh#988).
+    from fr.artifacts.paths import artifact_root
     from fr.commands.run_cmd import _resolve_manifest_for_read
     from fr.record.template import record_brief
     from fr.run.model import RUNS_REL, parse_run_state
@@ -273,7 +274,7 @@ def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
     rel = getattr(plan, "repo_relative_dir", None)
     if repo_root is None or rel is None:
         return None
-    for path in sorted((repo_root / RUNS_REL).glob("*.yaml")):
+    for path in sorted((artifact_root(repo_root) / RUNS_REL).glob("*.yaml")):
         try:
             state = parse_run_state(path.read_text())
         except Exception:  # noqa: BLE001, S112 — an unreadable cursor is not this plan's

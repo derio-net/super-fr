@@ -43,6 +43,20 @@ def _rest() -> RealGhRestClient | None:
     return RealGhRestClient(host=_HOST.get())
 
 
+def _stealth_refuses(fn: Callable[..., T]) -> Callable[..., T]:
+    """A forge write helper refused under stealth, before any call (review p4-r5)."""
+    import functools
+
+    @functools.wraps(fn)
+    def inner(*a: Any, **kw: Any) -> T:
+        from fr.placement.forge_guard import refuse_in_stealth
+
+        refuse_in_stealth(f"`fr.gh.{fn.__name__}`")
+        return fn(*a, **kw)
+
+    return inner
+
+
 def _records(value: Any) -> list[dict[str, object]]:
     return list(value)
 
@@ -246,6 +260,7 @@ def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:
     return done.stdout
 
 
+@_stealth_refuses
 def create_issue(
     *,
     repo: str,
@@ -290,6 +305,7 @@ def read_file_at_ref(*, repo: str, path: str, ref: str) -> str:
     return _run_gh(["api", "-H", "Accept: application/vnd.github.raw+json", endpoint])
 
 
+@_stealth_refuses
 def edit_issue(
     *,
     repo: str,
@@ -305,11 +321,13 @@ def edit_issue(
     _run_gh(args)
 
 
+@_stealth_refuses
 def edit_issue_body(*, repo: str, number: int, body: str) -> None:
     """Update the body of an existing Issue via `gh issue edit`."""
     _run_gh(["issue", "edit", str(number), "--repo", repo, "--body", body])
 
 
+@_stealth_refuses
 def ensure_label(
     *,
     repo: str,
@@ -339,6 +357,7 @@ def ensure_label(
     _run_gh(args)
 
 
+@_stealth_refuses
 def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
     """Ensure every label exists on the repo with the right color and
     description. First failure propagates.
@@ -350,6 +369,7 @@ def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
         ensure_label(repo=repo, name=ld.name, color=ld.color, description=ld.description)
 
 
+@_stealth_refuses
 def close_issue(*, repo: str, number: int) -> None:
     """Close a GitHub Issue by number."""
     if (rest := _rest()) is not None:
@@ -366,6 +386,7 @@ def close_issue(*, repo: str, number: int) -> None:
     )
 
 
+@_stealth_refuses
 def edit_issue_labels(
     *,
     repo: str,
@@ -382,6 +403,7 @@ def edit_issue_labels(
     _run_gh(args)
 
 
+@_stealth_refuses
 def swap_issue_labels(
     *,
     repo: str,
@@ -648,6 +670,7 @@ def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[s
     return json.loads(out) if out else []
 
 
+@_stealth_refuses
 def delete_label(*, repo: str, name: str) -> None:
     """Delete a label from the repo. `--yes` skips gh's confirmation prompt."""
     _run_gh(["label", "delete", name, "--repo", repo, "--yes"])

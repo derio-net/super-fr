@@ -23,6 +23,7 @@ import yaml
 from pydantic import ValidationError
 
 from fr import real_ghclient
+from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, held_gates
@@ -360,14 +361,14 @@ def _anchor_file(paths: Iterable[str]) -> tuple[str, str] | None:
     """First spec-like or debug path in anchor priority order, independent of diff order."""
     paths = list(paths)
     for path in paths:
-        if path.startswith("docs/superpowers/specs/") and path.endswith(".md"):
+        if path.startswith(f"{KIND_DIRS['spec']}/") and path.endswith(".md"):
             return "spec", path
-        if path.startswith("docs/superpowers/journals/specs/") and path.endswith(".md"):
+        if path.startswith(f"{KIND_DIRS['journal-specs']}/") and path.endswith(".md"):
             return "spec", path
-        if path.startswith("docs/superpowers/plans/") and path.endswith("/_meta.yaml"):
+        if path.startswith(f"{KIND_DIRS['plan']}/") and path.endswith("/_meta.yaml"):
             return "spec-meta", path
     for path in paths:
-        if path.startswith("docs/superpowers/journals/debug/") and path.endswith(".md"):
+        if path.startswith(f"{KIND_DIRS['journal-debug']}/") and path.endswith(".md"):
             return "debug", path
     return None
 

@@ -36,9 +36,14 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fr.acceptance.fragment import FRAGMENTS_DIR, Amendment, Fragment, parse_fragment
 from fr.acceptance.model import LEVELS, AcceptanceError, Matrix, Row
+
+if TYPE_CHECKING:
+    from fr.artifacts.paths import ArtifactSpace
+    from fr.placement.merged import MergedView
 
 GitRunner = Callable[[Sequence[str], bytes | None], "subprocess.CompletedProcess[bytes]"]
 """`(git args, stdin) -> completed process`, run in the repo being folded."""
@@ -262,7 +267,10 @@ def _introductions(
 
 
 def _working_fragments(root: Path) -> dict[str, str]:
-    folder = root / FRAGMENTS_DIR
+    """The fragments below *root*, an artifact root (the checkout, or a quiet feature's)."""
+    from fr.artifacts.paths import below
+
+    folder = below(root, "acceptance-fragment")
     if not folder.is_dir():
         return {}
     return {
@@ -358,8 +366,14 @@ def fold_texts(working: dict[str, str]) -> Effective:
 def has_fragments(repo_root: Path) -> bool:
     """Whether *repo_root*'s working tree holds at least one fragment: the one
     "this repo keeps acceptance rows" test every reader and hook shares (R19)."""
-    folder = Path(repo_root) / FRAGMENTS_DIR
-    return folder.is_dir() and any(p.is_file() for p in folder.glob("*.yaml"))
+    from fr.artifacts.paths import search_roots
+
+    # Under quiet and stealth every feature root: the repo keeps rows when any feature does.
+    return any(
+        (top / FRAGMENTS_DIR).is_dir()
+        and any(p.is_file() for p in (top / FRAGMENTS_DIR).glob("*.yaml"))
+        for top in search_roots(Path(repo_root), FRAGMENTS_REL)
+    )
 
 
 def load_effective(repo_root: Path, *, ref: str | None = None) -> Matrix:
@@ -373,6 +387,8 @@ def default_ref_fold(repo_root: Path) -> Effective | None:
     ref, so nothing is held to "a merged row changes only by amendment" (R16)."""
     from fr.git import GitRefusal, GitUnavailableError, remote_default_ref
 
+    if _quiet_root(Path(repo_root)) is not None:
+        return None  # R23: a quiet product default ref holds no row (merged status: R25)
     try:
         named = remote_default_ref(Path(repo_root))
     except GitUnavailableError:
@@ -391,6 +407,13 @@ def effective(repo_root: Path, *, ref: str | None = None) -> Effective:
     fragments folded in memory when *repo_root* is not the top of a git work tree
     (a bare fixture, an exported tree); else the full fold."""
     root = Path(repo_root)
+    froot = _quiet_root(root)
+    if froot is not None:
+        # Under quiet and stealth the product's default ref holds no fragment (R23, R24):
+        # a feature's merged status and order come from its code branch's merge (R17).
+        if ref is not None:
+            return _empty()
+        return _outside_fold(root)
     if ref is not None:
         return fold(root, ref=ref, include_pending=False)
     working = _working_fragments(root)
@@ -409,6 +432,14 @@ def effective(repo_root: Path, *, ref: str | None = None) -> Effective:
     return fold(root)
 
 
+def _quiet_root(root: Path) -> Path | None:
+    """This checkout's feature root when it is not the checkout itself (quiet), else None."""
+    from fr.artifacts.paths import artifact_root
+
+    froot = artifact_root(root)
+    return None if froot.resolve() == root.resolve() else froot
+
+
 def _empty() -> Effective:
     return Effective(
         matrix=Matrix(),
@@ -421,12 +452,118 @@ def _empty() -> Effective:
     )
 
 
+def fold_outside_with(root: Path, own: dict[str, str]) -> Effective:
+    """The quiet/stealth fold of *root* with this branch's own fragments replaced by
+    *own* (fragment path -> text, relative to its feature root): what a writer validates
+    the fragments it is about to write against, since another merged feature's row is
+    only known to the fold across features (R16, R17)."""
+    return _outside_fold(root, own)
+
+
+def fold_of_space(root: Path, space: ArtifactSpace) -> Effective:
+    """The quiet/stealth fold of the MERGED features below *space* (a placement root with
+    no feature of its own), judged against *root*'s default ref: what `fr placement move`
+    verifies a destination with before its switch makes it the placement (R27)."""
+    return _outside_fold(root, space=space)
+
+
+def _outside_fold(
+    root: Path, own_texts: dict[str, str] | None = None, *, space: ArtifactSpace | None = None
+) -> Effective:
+    """The fold under quiet and stealth (R17's clause): every MERGED feature's fragments,
+    their amendments in the order `fr.placement.merged` gives the features (the
+    first-parent commit of the product's default ref that introduced each), then this
+    branch's own entries. A feature never merged contributes to its own branch's view
+    only. Keys are `features/<id>/<fragment path>`, so two features' fragments never
+    share one.
+
+    A merged feature's fragments are FROZEN at its merge (review p5-r5): read from the
+    last pushed fr commit of its path at or before the merge commit
+    (`merged.frozen_commit`), never from a worktree, so neither a later amendment nor an
+    unpushed local change counts as merged. This branch's own feature, merged or not,
+    adds its working tree as pending on top: an amendment made after the merge is
+    pending (and stale-checked), an in-place edit of a merged row is kept out with the
+    "differs from the merged one" notice."""
+    from fr.artifacts.paths import FEATURES_DIR, feature_root, space_for
+
+    space = space if space is not None else space_for(root)
+    view, frozen, notices = _merged_outside(root, space)
+
+    def own() -> dict[str, str]:
+        if own_texts is not None:
+            return dict(sorted(own_texts.items()))
+        return _working_fragments(feature_root(space))
+
+    merged: dict[str, Fragment] = {}
+    intro: dict[tuple[str, int], int] = {}
+    for feature in view.features:
+        for path, text in frozen.get(feature.feature, {}).items():
+            key = f"{FEATURES_DIR}/{feature.feature}/{path}"
+            frag = parse_fragment(text, source=key)
+            merged[key] = frag
+            for k in range(len(frag.amendments)):
+                intro[(key, k)] = feature.position
+    working: dict[str, str] = {}
+    if space.feature is not None:
+        working = {f"{FEATURES_DIR}/{space.feature}/{path}": text for path, text in own().items()}
+    if not merged and not working:
+        return replace(_empty(), notices=notices)
+    result = _fold_from(merged, intro, working)
+    return replace(result, notices=(*notices, *result.notices))
+
+
+def _merged_outside(
+    root: Path, space: ArtifactSpace
+) -> tuple[MergedView, dict[str, dict[str, str]], tuple[str, ...]]:
+    """(the merged view, feature id -> its frozen fragment texts, the notices)."""
+    from fr.placement.merged import files_at, frozen_commit, merged_features
+
+    placement = space.placement
+    view = merged_features(space, root)
+    notices = list(view.notices)
+    frozen: dict[str, dict[str, str]] = {}
+    for feature in view.features:
+        commit, why = frozen_commit(feature, placement, root)
+        if why:
+            notices.append(why)
+        texts = files_at(feature.root, placement, commit, FRAGMENTS_REL) if commit else {}
+        frozen[feature.feature] = {p: t for p, t in sorted(texts.items()) if _is_fragment_path(p)}
+    return view, frozen, tuple(notices)
+
+
+def own_merged_fragments(root: Path) -> tuple[dict[str, str], dict[str, str], str] | None:
+    """Under quiet and stealth, when this branch's own feature is merged: (its fragments
+    frozen at the merge, its working ones, the default ref), keyed relative to the
+    feature root. None otherwise. What `check`'s in-place-edit refusal reads (R16)."""
+    from fr.artifacts.paths import feature_root, space_for
+
+    if _quiet_root(root) is None:
+        return None
+    space = space_for(root)
+    if space.feature is None:
+        return None
+    view, frozen, _ = _merged_outside(root, space)
+    if view.get(space.feature) is None or view.ref is None:
+        return None
+    ref = view.ref.removeprefix("refs/remotes/")
+    return frozen.get(space.feature, {}), _working_fragments(feature_root(space)), ref
+
+
 def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
-    notices: list[str] = []
     merged = _tip_fragments(run, sha) if sha else {}
     amended = any(f.amendments for f in merged.values())
     intro = _introductions(run, sha, merged) if amended else {}
+    return _fold_from(merged, intro, working)
 
+
+def _fold_from(
+    merged: dict[str, Fragment],
+    intro: dict[tuple[str, int], int],
+    working: dict[str, str],
+) -> Effective:
+    """The fold of *merged* fragments (their amendments ordered by *intro*, the
+    introducing position of each `(path, index)`) and the branch's *working* ones."""
+    notices: list[str] = []
     rows: dict[str, tuple[Row, str, int]] = {}  # id -> (row, defining path, index)
     owners: dict[str, str] = {}
 

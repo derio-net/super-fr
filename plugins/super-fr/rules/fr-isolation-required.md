@@ -61,8 +61,19 @@ pipeline skill ran this session.
      validates; a marker copied to the Mac base clone fails the toplevel match
      (the container checkout path can't equal the base-clone path).
    - any other `mode` → fail closed.
-4. Path matches a glob in `.fr-isolation-allow` (below) → allow.
-5. Otherwise → **deny** with a message naming the three ways forward.
+4. **The placement's own write target → allow** (quiet and stealth keep fr's
+   artifacts outside the workspace). Recognised by structure, never by name:
+   - the repo's quiet `fr` worktree — a linked worktree at exactly
+     `~/.cache/fr/worktrees/<main checkout>/fr`, HEAD on `refs/heads/fr`, the
+     `origin/fr` switch reading `placement: quiet`;
+   - a stealth tracking clone — a clone named `stealth--*` beside a workspace
+     whose marker is valid, records `placement: stealth`, and names this clone's
+     origin and branch as its tracking ref.
+   An `fr` worktree of another repo, one anywhere else, and a primary checkout
+   are not targets. Ask `fr settings paths --shell` for the directories
+   (`FR_SPECS_DIR`, `FR_PLANS_DIR`, …).
+5. Path matches a glob in `.fr-isolation-allow` (below) → allow.
+6. Otherwise → **deny** with a message naming the three ways forward.
 
 One dependency failure is fail-**open**, and it is the only one: when `git`
 itself cannot be resolved (nothing on `PATH`, nothing in

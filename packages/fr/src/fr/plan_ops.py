@@ -29,9 +29,10 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
+from fr.artifacts.paths import KIND_DIRS, feature_roots, kind_dir, space_for
 from fr.journal.model import JournalEntry, journal_header, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
-from fr.parser import Plan, PlanSchemaError, parse
+from fr.parser import Plan, PlanSchemaError, _find_repo_root, parse
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
     ensure_validator_wrapper,
@@ -65,16 +66,29 @@ class PlanEditError(Exception):
 # helpers
 
 
+def worktree_of(path: Path, fallback: Path) -> Path:
+    """The git checkout holding *path*: the nearest ancestor with a `.git`. Under quiet a
+    plan lives in the `fr` worktree, not the product checkout (`fallback`)."""
+    for parent in path.resolve().parents:
+        if (parent / ".git").exists():
+            return parent
+    return fallback
+
+
 def _stage(repo_root: Path | None, paths: list[Path]) -> None:
-    """git add the paths if we're in a git repo."""
+    """git add the paths if we're in a git repo, each in the checkout that holds it."""
     if repo_root is None:
         return
-    rels = [str(p.resolve().relative_to(repo_root)) for p in paths]
-    subprocess.run(
-        ["git", "-C", str(repo_root), "add", *rels],
-        check=False,
-        capture_output=True,
-    )
+    groups: dict[Path, list[str]] = {}
+    for p in paths:
+        top = worktree_of(p, Path(repo_root).resolve())
+        groups.setdefault(top, []).append(str(p.resolve().relative_to(top)))
+    for top, rels in groups.items():
+        subprocess.run(
+            ["git", "-C", str(top), "add", *rels],
+            check=False,
+            capture_output=True,
+        )
 
 
 def _now_iso() -> str:
@@ -263,7 +277,7 @@ def create(
     Returns the parsed Plan. Raises PlanEditError on collisions.
     """
     if plans_dir is None:
-        plans_dir = repo_root / "docs" / "superpowers" / "plans"
+        plans_dir = kind_dir("plan", space_for(repo_root))
     folder = plans_dir / slug
 
     spec_str = str(spec) if spec is not None else None
@@ -388,7 +402,8 @@ def create(
     # is left untouched — the same refusal `ensure_validator_wrapper`
     # already makes elsewhere — reported as a warning, not a failure: a
     # plan is still worth creating even when the wrapper can't be.
-    if (repo_root / ".git").exists():
+    # Under quiet the product branch carries no fr file at all (R23): no wrapper.
+    if (repo_root / ".git").exists() and space_for(repo_root).placement == "repo":
         try:
             if ensure_validator_wrapper(repo_root):
                 written.append(validator_wrapper_path(repo_root))
@@ -785,25 +800,32 @@ def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
 _REWORK_SUFFIX_RE = re.compile(r"-rework-(\d+)$")
 
 
-def _superpowers_dir(parent_dir: Path) -> Path:
-    """Resolve the docs/superpowers/ root from a plan dir in any layout:
-    plans/<x>, implemented/plans/<x> (canonical archive, 2026-06-05 spec),
-    or archived-plans/<x> (legacy)."""
-    if parent_dir.parent.name == "plans" and parent_dir.parent.parent.name == "implemented":
-        return parent_dir.parent.parent.parent
-    return parent_dir.parent.parent
+_PLAN_HOMES = ("plan", "plan-archived", "plan-legacy-archived")
+"""The plan directories a parent plan may live in: active, canonical archive
+(2026-06-05 spec), legacy archive."""
 
 
-def _next_rework_number(parent_dir: Path) -> int:
+def _feature_root_of(parent_dir: Path, repo_root: Path | None) -> Path | None:
+    """The feature root whose plan directory holds *parent_dir*, found through the path
+    resolver (`KIND_DIRS` below each `feature_roots` entry), or None when it sits in none
+    of `_PLAN_HOMES`. *repo_root* is the real checkout root, never walked up to."""
+    if repo_root is None:
+        return None
+    for froot in feature_roots(space_for(repo_root)):
+        if any(froot / KIND_DIRS[kind] == parent_dir.parent for kind in _PLAN_HOMES):
+            return froot
+    return None
+
+
+def _next_rework_number(parent_dir: Path, froot: Path) -> int:
     """Cross-directory N collision check, like v1 next_rework_number.
 
     Scans active plans/, implemented/plans/ (canonical archive), and
     archived-plans/ (legacy) so an archived rework still claims its number.
     """
-    repo_root = _superpowers_dir(parent_dir)
-    plans_dir = repo_root / "plans"
-    implemented_dir = repo_root / "implemented" / "plans"
-    archived_dir = repo_root / "archived-plans"
+    plans_dir = froot / KIND_DIRS["plan"]
+    implemented_dir = froot / KIND_DIRS["plan-archived"]
+    archived_dir = froot / KIND_DIRS["plan-legacy-archived"]
 
     parent_slug = parent_dir.name
 
@@ -844,21 +866,17 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     parent_dir = parent_plan_dir.resolve()
     if not parent_dir.is_dir():
         raise PlanEditError(f"parent plan dir not found: {parent_dir}")
-    superpowers_dir = _superpowers_dir(parent_dir)
-    in_implemented = (
-        parent_dir.parent.name == "plans" and parent_dir.parent.parent.name == "implemented"
-    )
-    in_active_or_legacy = parent_dir.parent.name in ("plans", "archived-plans")
-    if superpowers_dir.name != "superpowers" or not (in_implemented or in_active_or_legacy):
+    froot = _feature_root_of(parent_dir, _find_repo_root(parent_dir))
+    if froot is None:
         raise PlanEditError(
-            f"parent must live under docs/superpowers/"
+            f"parent must live under {KIND_DIRS['superpowers']}/"
             f"{{plans,implemented/plans,archived-plans}}/, got: {parent_dir}"
         )
 
     parent_plan = parse(parent_dir)
-    n = _next_rework_number(parent_dir)
+    n = _next_rework_number(parent_dir, froot)
     rework_slug = f"{parent_dir.name}-rework-{n}"
-    plans_dir = superpowers_dir / "plans"
+    plans_dir = froot / KIND_DIRS["plan"]
     rework_folder = plans_dir / rework_slug
     if rework_folder.exists():
         raise PlanEditError(f"rework folder already exists: {rework_folder}")
@@ -871,16 +889,14 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     parent_rel = parent_dir.name
     prior_rework_rel: str | None = None
     if n > 1:
-        prior_dir = _find_prior_rework(parent_dir, below=n)
+        prior_dir = _find_prior_rework(parent_dir, froot, below=n)
         if prior_dir is not None:
             prior_rework_rel = prior_dir.name
 
     parent_spec = parent_plan.meta.spec
     if parent_spec:
         # The one canonical `spec:` form, shared with create and repair (#686).
-        parent_spec = refs.canonical_spec_ref(
-            parent_spec, repo_root or superpowers_dir.parent.parent
-        )
+        parent_spec = refs.canonical_spec_ref(parent_spec, repo_root or froot)
 
     meta = {
         "schema_version": 2,
@@ -934,10 +950,9 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     return parse(rework_folder)
 
 
-def _find_prior_rework(parent_dir: Path, *, below: int) -> Path | None:
+def _find_prior_rework(parent_dir: Path, froot: Path, *, below: int) -> Path | None:
     """Highest archived rework N below `below` (in archived-plans/)."""
-    superpowers_dir = parent_dir.parent.parent
-    archived_dir = superpowers_dir / "archived-plans"
+    archived_dir = froot / KIND_DIRS["plan-legacy-archived"]
     if not archived_dir.is_dir():
         return None
     parent_slug = parent_dir.name
@@ -994,9 +1009,9 @@ class ReworkRecord:
 
 def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[ReworkRecord]:
     """Glob plan folders; filter by parent_plan; aggregate status."""
-    dirs = [repo_root / "docs" / "superpowers" / "plans"]
+    dirs = [kind_dir("plan", space_for(repo_root))]
     if include_archived:
-        dirs.append(repo_root / "docs" / "superpowers" / "archived-plans")
+        dirs.append(kind_dir("plan-legacy-archived", space_for(repo_root)))
 
     records: list[ReworkRecord] = []
     for d in dirs:
@@ -1801,7 +1816,7 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
                     severity="error",
                     message=(
                         f"phase {phase_n} links unknown acceptance row id {rid!r} "
-                        f"(no fragment under docs/acceptance/features/ defines it)"
+                        f"(no fragment under {KIND_DIRS['acceptance-fragment']}/ defines it)"
                     ),
                 )
             )

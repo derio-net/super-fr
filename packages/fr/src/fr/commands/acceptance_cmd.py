@@ -14,12 +14,13 @@ from rich.markup import escape
 
 from fr.acceptance.fragment import FRAGMENTS_DIR
 from fr.acceptance.model import AcceptanceError, Matrix, Row, Walk
+from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
 
-RETIRED_MATRIX_REL = Path("docs/acceptance/matrix.yaml")
+RETIRED_MATRIX_REL = Path(KIND_DIRS["acceptance"]) / "matrix.yaml"
 """The retired matrix (spec 2026-11-04-repo-feature-settings R19): read only from a
 base ref older than the split, never written."""
 
@@ -58,7 +59,7 @@ def _load(root: Path) -> Matrix:
     fragment and no `docs/acceptance/features/` directory has no acceptance: exit 1."""
     from fr.acceptance.fold import has_fragments, load_effective
 
-    if not has_fragments(root) and not (root / FRAGMENTS_DIR).is_dir():
+    if not has_fragments(root) and not (artifact_root(root) / FRAGMENTS_DIR).is_dir():
         err_console.print(
             f"no acceptance fragments under {FRAGMENTS_DIR}/ "
             "(run `fr acceptance init` to scaffold, then `fr acceptance add`)"
@@ -215,7 +216,7 @@ def report_cmd(
     out: Path | None = typer.Option(
         None,
         "--out",
-        help="Output file (repo-relative). Default: docs/acceptance/report.html "
+        help=f"Output file (repo-relative). Default: {KIND_DIRS['acceptance']}/report.html "
         "(report.md with --format md), both gitignored.",
     ),
     fmt: str = typer.Option("html", "--format", help="html | md."),
@@ -239,7 +240,11 @@ def report_cmd(
     root = resolve_repo_root()
     _refuse_if_off(root, "`fr acceptance report` writes no report")
     matrix = _load(root)
-    out_path = (root / (out if out is not None else REPORT_OUTPUTS[fmt])).resolve()
+    # The default lands at the artifact root: under quiet the fr worktree, never the
+    # product checkout, where no `.gitignore` line keeps it out of `git add -A` (p3-r1).
+    out_path = (
+        (root / out) if out is not None else (artifact_root(root) / REPORT_OUTPUTS[fmt])
+    ).resolve()
     try:
         text = render_report(matrix, root, out_path.parent, sibling_root, link_mode, ref, fmt)
     except AcceptanceError as e:
@@ -317,7 +322,7 @@ def comment_cmd(
         err_console.print("[red]error:[/red] no origin remote to name the repository")
         raise typer.Exit(2)
     matrix = _load(root)
-    out_dir = root / "docs" / "acceptance"
+    out_dir = kind_dir("acceptance", space_for(root))
     try:
         report = render_report(matrix, root, out_dir, "..", "github", ref, "md")
     except AcceptanceError as e:
@@ -400,6 +405,8 @@ def status_cmd(
     if contested:
         summary += f"; contested: {len(contested)}"
     typer.echo(f"acceptance: {summary}")
+    if not brief:
+        _echo_merged_features(root)
     opens = open_rows(matrix, contested, retired)
     if not opens:
         typer.echo("no acceptance debt.")
@@ -410,6 +417,29 @@ def status_cmd(
         typer.echo(f"  {r.id} [{tag}] {r.acceptance} — {r.notes}")
     if brief and len(opens) > len(shown):
         typer.echo(f"  … +{len(opens) - len(shown)} more (fr acceptance status)")
+
+
+def _echo_merged_features(root: Path) -> None:
+    """Under quiet and stealth, which features the fold took as merged, in merge order
+    (R17's clause), and every `merged:` record it ignored. Nothing under `repo`."""
+    from fr.artifacts.paths import outside_repo, space_for
+    from fr.placement.merged import forge_for, merged_features
+
+    if outside_repo(root) is None:
+        return
+    forge, why_not = forge_for(root)
+    view = merged_features(space_for(root), root, forge=forge)
+    listed = ", ".join(f"{f.feature} at {f.sha[:12]}" for f in view.features) or "none"
+    typer.echo(f"merged: {listed}")
+    if view.unmerged:
+        state = why_not if forge is None else view.forge
+        typer.echo(
+            f"unmerged: {', '.join(view.unmerged)} (no merge found on "
+            f"{view.ref or 'the default ref'}; a squash or rebase merge is found only "
+            f"through the forge's merged PR, and the forge was {state})"
+        )
+    for notice in view.notices:
+        typer.echo(f"note: {notice}")
 
 
 @acceptance_app.command("summary")
@@ -1003,7 +1033,7 @@ def _rebase(root: Path) -> None:
         return
     written: dict[Path, str] = {}
     for s in stale:
-        path = root / s.path
+        path = artifact_root(root) / s.path  # the fold's paths hang from the artifact root
         text = written.get(path, path.read_text())
         written[path] = rebase_amendment(text, s.index, s.revision)
         typer.echo(f"{s.row}: {s.op} amendment re-based {s.base} → {s.revision}")
@@ -1070,7 +1100,7 @@ def add_cmd(
     feature: str | None = typer.Option(
         None,
         "--feature",
-        help="The fragment (docs/acceptance/features/<feature>.yaml) to write the row "
+        help=f"The fragment ({KIND_DIRS['acceptance-fragment']}/<feature>.yaml) to write the row "
         "to, when its origins name no single spec (`legacy` for none).",
     ),
     repo: str | None = typer.Option(
@@ -1153,6 +1183,47 @@ def add_cmd(
     typer.echo(f"added row {new_row.id} ({new_row.status})")
 
 
+def _init_quiet(root: Path, *, refresh_ci: bool) -> bool:
+    """Under quiet, `init` scaffolds only the fragment directory, in this feature's root
+    on the `fr` branch (p3-r1). The CI gate, the rule file, the `.gitignore` lines and
+    the badge are product-branch files, and a quiet product branch holds no row for them
+    to read (R23). False (nothing done) when the repo is not quiet."""
+    from fr.artifacts.paths import outside_repo
+    from fr.records_commit import commit_records
+
+    placement = outside_repo(root)  # quiet, and stealth alike (R24: nothing in the target)
+    if placement is None:
+        return False
+    # review p4-r9: name the placement this workspace is in, and its requirement
+    req = "R24" if placement == "stealth" else "R23"
+    where = "the target" if placement == "stealth" else "the product branches"
+    what = (
+        "a stealth target receives no fr file"
+        if placement == "stealth"
+        else ("a quiet repo keeps no acceptance gate on its product branches")
+    )
+    if refresh_ci:
+        err_console.print(
+            f"`fr acceptance init --refresh-ci` is not available under placement {placement}: "
+            f"{what} ({req})",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    keep = artifact_root(root) / FRAGMENTS_DIR / ".gitkeep"
+    if keep.exists():
+        typer.echo(f"exists  {keep} (left untouched)")
+    else:
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        keep.write_text("")
+        typer.echo(f"created {keep}")
+    typer.echo(
+        f"{placement:<7} no CI workflow, rule file, .gitignore lines or badge: under placement "
+        f"{placement} fr writes nothing on {where} ({req})"
+    )
+    commit_records(root, [keep], "chore(fr): acceptance init")
+    return True
+
+
 @acceptance_app.command("init")
 def init_cmd(
     with_ci: bool = typer.Option(
@@ -1179,6 +1250,8 @@ def init_cmd(
 
     root = resolve_repo_root()
     _refuse_if_off(root, "`fr acceptance init` scaffolds no matrix, report or CI")
+    if _init_quiet(root, refresh_ci=refresh_ci):
+        return
     try:
         org, repo = resolve_identity(Matrix(), root)
     except AcceptanceError as e:
@@ -1368,7 +1441,7 @@ def backfill_cmd() -> None:
     ]
 
     unlinked_plans: list[str] = []
-    plans_dir = root / "docs" / "superpowers" / "plans"
+    plans_dir = kind_dir("plan", space_for(root))
     if plans_dir.is_dir():
         for plan_dir in sorted(p for p in plans_dir.iterdir() if p.is_dir()):
             linked = False

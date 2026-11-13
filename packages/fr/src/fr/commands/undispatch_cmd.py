@@ -63,6 +63,10 @@ def undispatch_command(
     # (gh#804). Strict: a malformed declaration refuses as well.
     try:
         root = resolve_repo_root(plan_dir.resolve())
+        from fr.artifacts.paths import outside_repo
+
+        if outside_repo(resolve_repo_root()) is not None:
+            root = resolve_repo_root()  # the plan dir is on `fr` / the tracking clone (p4-r5)
         require_forge(root, "issues")
         comment = forge_allows(root, "comments")
     except ServicesError as e:

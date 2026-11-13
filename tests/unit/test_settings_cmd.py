@@ -113,11 +113,11 @@ def test_check_exits_0_when_coherent_and_2_listing_problems(repo: Path) -> None:
     assert "report_comment" in result.output
 
 
-def test_check_refuses_an_unservable_placement(repo: Path) -> None:
-    land_on_main(repo, "placement: quiet\n")
+def test_check_refuses_stealth_in_repo_settings(repo: Path) -> None:
+    land_on_main(repo, "placement: stealth\n")
     result = runner.invoke(app, ["settings", "check"])
     assert result.exit_code == 2
-    assert "not yet available" in result.output.replace("\n", " ")
+    assert "chosen per run" in " ".join(result.output.split())
 
 
 def test_settings_is_read_only_for_the_migration_gate() -> None:

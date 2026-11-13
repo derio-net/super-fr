@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict
 
 from fr.archive_followups import owned_owed_key
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.gatebackfill.forge import OPEN_ISSUE_LIMIT, BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
 from fr.gatebackfill.trackers import fr_gate_marker, fr_passed_marker, is_ours
@@ -24,10 +25,10 @@ from fr.triage.debt import has_marker
 if TYPE_CHECKING:
     from fr.archive import MergeEvidence
 
-PLANS_REL = Path("docs/superpowers/plans")
-IMPLEMENTED_PLANS_REL = Path("docs/superpowers/implemented/plans")
-SPECS_REL = Path("docs/superpowers/specs")
-IMPLEMENTED_SPECS_REL = Path("docs/superpowers/implemented/specs")
+PLANS_REL = Path(KIND_DIRS["plan"])
+IMPLEMENTED_PLANS_REL = Path(KIND_DIRS["plan-archived"])
+SPECS_REL = Path(KIND_DIRS["spec"])
+IMPLEMENTED_SPECS_REL = Path(KIND_DIRS["spec-archived"])
 MANIFEST_HINT = "in a manifest entry for this key (--from), not in the plan file"
 """Where an operator's delivering PR goes: `--yes` re-resolves a plan file's `pr:` (R15)."""
 
@@ -160,32 +161,47 @@ def spec_plans(root: Path, spec_rel: str) -> tuple[str, ...]:
         for cell in line.split("|"):
             name = cell.strip().strip("`")
             if re.fullmatch(r"[\w.-]+", name) and name not in found:
-                if (root / PLANS_REL / name).is_dir() or (
-                    root / IMPLEMENTED_PLANS_REL / name
+                if (artifact_root(root) / PLANS_REL / name).is_dir() or (
+                    artifact_root(root) / IMPLEMENTED_PLANS_REL / name
                 ).is_dir():
                     found.append(name)
     return tuple(found)
 
 
 def row_spec(root: Path, origins: tuple[str, ...]) -> str | None:
-    """The spec file a row's `origin` refs name, when this repo holds it (live or archived)."""
-    from fr.acceptance.logical import origin_spec_path
+    """The spec file a row's `origin` refs name, when this repo holds it (live or archived).
+
+    Looked up in every feature root of the resolver (R1/R18): repo-relative when found
+    under the repo, absolute when found in a feature root elsewhere (which `root / found`
+    still reads)."""
+    from fr.acceptance.logical import is_logical, origin_spec_path, resolve_logical_at
+    from fr.artifacts.paths import feature_roots, space_for
+
+    def shown(feature_root: Path, cand: Path) -> str:
+        return cand.as_posix() if feature_root == root else (feature_root / cand).as_posix()
 
     for origin in origins:
+        if is_logical(origin):
+            found = resolve_logical_at(origin, root)
+            if found is not None and found.path.is_file():
+                return shown(found.feature_root, Path(found.rel))
+            continue
         path = origin_spec_path(origin, root)
         if path is None:
             continue
-        for cand in (Path(path), IMPLEMENTED_SPECS_REL / Path(path).name):
-            if (root / cand).is_file():
-                return cand.as_posix()
+        for feature_root in feature_roots(space_for(root)):
+            for cand in (Path(path), IMPLEMENTED_SPECS_REL / Path(path).name):
+                if (feature_root / cand).is_file():
+                    return shown(feature_root, cand)
     return None
 
 
 def _plan_dir(root: Path, name: str) -> tuple[Path | None, bool]:
-    live = root / PLANS_REL / name
+    base = artifact_root(root)
+    live = base / PLANS_REL / name
     if live.is_dir():
         return live, False
-    archived = root / IMPLEMENTED_PLANS_REL / name
+    archived = base / IMPLEMENTED_PLANS_REL / name
     return (archived, True) if archived.is_dir() else (None, False)
 
 

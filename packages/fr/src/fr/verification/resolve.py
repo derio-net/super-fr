@@ -18,9 +18,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr import _shipped
+from fr.artifacts.paths import KIND_DIRS
 from fr.verification.model import RESERVED, StrategyError, StrategyManifest, parse_strategy
 
-REPO_VERIFICATIONS_REL = Path("docs") / "superpowers" / "verifications"
+REPO_VERIFICATIONS_REL = Path(KIND_DIRS["verification"])
 PLUGIN_VERIFICATIONS_REL = Path("plugins") / "super-fr" / "verifications"
 PACKAGED_VERIFICATIONS_DIRNAME = "verifications"
 SHIPPED_ENV_VAR = "FR_SHIPPED_VERIFICATIONS_DIR"

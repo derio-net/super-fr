@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.journal.model import (
     IMPLEMENTED_JOURNALS_REL,
     SCOPE_DIRS,
@@ -220,14 +221,16 @@ def _existing_markers(gh: GhClient, repo: str) -> dict[str, str]:
 def context_for(repo_root: Path, end: OpenEnd) -> list[str]:
     """The spec/plan the end belongs to, repo-relative, whichever location it
     is at now (archived or live) — independent of what this run moved."""
-    root = Path("docs/superpowers")
     if end.scope == "plan":
-        cands = [root / "implemented/plans" / end.slug, root / "plans" / end.slug]
+        cands = [
+            Path(KIND_DIRS["plan-archived"]) / end.slug,
+            Path(KIND_DIRS["plan"]) / end.slug,
+        ]
         return [c.as_posix() for c in cands if (repo_root / c).is_dir()][:1]
     if end.scope == "spec":
         cands = [
-            root / d / f"{end.slug}{suffix}"
-            for d in ("implemented/specs", "specs")
+            Path(d) / f"{end.slug}{suffix}"
+            for d in (KIND_DIRS["spec-archived"], KIND_DIRS["spec"])
             for suffix in ("-design.md", ".md")
         ]
         return [c.as_posix() for c in cands if (repo_root / c).is_file()][:1]
@@ -417,7 +420,7 @@ def _matrix_identity(repo_root: Path) -> str | None:
 
     from fr.acceptance.fragment import FRAGMENTS_DIR
 
-    folder = repo_root / FRAGMENTS_DIR
+    folder = artifact_root(repo_root) / FRAGMENTS_DIR
     for path in sorted(folder.glob("*.yaml")) if folder.is_dir() else ():
         try:
             data = yaml.safe_load(path.read_text())
@@ -590,7 +593,7 @@ def write_manual_owed(repo_root: Path, plan_name: str, phases: list[int]) -> Pat
                 what=f"do manual phase {n} of {plan_name} and tick its steps",
                 why="fr archive holds the plan until its manual phases are ticked",
                 how=f"tick phase {n} (fr plan edit --tick), then fr archive "
-                f"docs/superpowers/plans/{plan_name}",
+                f"{KIND_DIRS['plan']}/{plan_name}",
                 key=key,
             ),
         )

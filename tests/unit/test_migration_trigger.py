@@ -1290,3 +1290,29 @@ def test_a_failing_migration_in_ci_refuses(tmp_path: Path) -> None:
     assert code == 2, lines
     assert "migration exploded" in _flat(lines)
     assert _g(fx.primary, "rev-parse", "HEAD") == head
+
+
+def test_a_drifted_workspace_is_refused_naming_migrate_branch_and_nothing_migrates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Spec 2026-11-04 R28: the gate only detects a workspace whose recorded placement the
+    switch no longer names, and refuses naming `fr placement migrate-branch`, in every
+    context (CI included); the exemption list is unchanged and `fr placement` passes."""
+    from fr.placement import drift as drift_mod
+
+    found = drift_mod.Drift("repo", "quiet")
+    monkeypatch.setattr(drift_mod, "marker_drift", lambda root: found)
+    lines: list[str] = []
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=[], invoked_subcommand="run", env={"CI": "true"}, repo_root=tmp_path,
+            err=lines.append,
+        )  # fmt: skip
+    assert e.value.exit_code == 2
+    assert "fr placement migrate-branch" in "\n".join(lines)
+    assert not list(tmp_path.iterdir())  # nothing written
+    for sub in ("placement", "status"):
+        trigger.ensure_artifacts_current(
+            argv=[], invoked_subcommand=sub, env={"CI": "true"}, repo_root=tmp_path,
+            err=lines.append,
+        )  # fmt: skip

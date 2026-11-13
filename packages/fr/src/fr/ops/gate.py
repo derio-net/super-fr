@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import UnsupportedForgeOperation
 from fr.journal.model import (
     JournalEntry,
@@ -48,7 +49,7 @@ if TYPE_CHECKING:
 
 STAGE_PREFIX = "gate-stage-"
 PROFILES_FILE = ".devcontainer/fr-profiles.yaml"
-ARCHIVED_JOURNALS = "docs/superpowers/implemented/journals"
+ARCHIVED_JOURNALS = KIND_DIRS["journal-archived"]
 FIRST_PUSHED_STAGE = 3  # the ops branch holds only default-branch code from the rebase on
 GATE_DIR_ENV = "FR_OPS_GATE_DIR"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
@@ -576,8 +577,8 @@ def apply_phase(gate: Gate, phase: str) -> None:
 def _head_paths(t: GateTarget, spec_rel: str) -> list[str]:
     """What the ops-gap check reads at the PR head (spec 2026-11-01-ops-gate-probes §A),
     plus the run's own spec when it lives elsewhere."""
-    paths = ["docs/superpowers/specs", t.plan_rel, "docs/acceptance/features", ".fr"]
-    return paths if spec_rel.startswith("docs/superpowers/specs/") else [*paths, spec_rel]
+    paths = [KIND_DIRS["spec"], t.plan_rel, KIND_DIRS["acceptance-fragment"], ".fr"]
+    return paths if spec_rel.startswith(f"{KIND_DIRS['spec']}/") else [*paths, spec_rel]
 
 
 def _refuse_an_ops_gap(gate: Gate, ref: str, *, merged: bool) -> None:

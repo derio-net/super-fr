@@ -18,6 +18,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.artifacts.paths import kind_dir, space_for
 from fr.repos import (
     DEFAULT_MANIFEST,
     ManifestError,
@@ -102,7 +103,7 @@ def sync(
         if not root.exists() or not (root / ".git").exists():
             console.print(f"WARN (missing)  {entry.repo}  — not checked out at {root}")
             continue
-        cfg = root / "docs" / "superpowers" / "plan-config.yaml"
+        cfg = kind_dir("plan-config", space_for(root))
         if cfg.exists() and not force:
             console.print(f"SKIP (exists)   {entry.repo}  — {cfg}")
             continue

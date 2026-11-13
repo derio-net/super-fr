@@ -30,6 +30,7 @@ from typing import Any
 from fr import plan_ops, refs
 from fr._urls import is_cross_repo_spec
 from fr._yaml import LiteralStr, dump_plan_yaml
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.parser import PlanSchemaError
 from fr.parser import parse as _parse_v2
 from fr.plan.parser import _RE_STEP, _strip_fenced_regions
@@ -99,7 +100,7 @@ def migrate_repo(
     formats).
     """
     outcomes: list[MigrationOutcome] = []
-    sp = repo_root / "docs" / "superpowers"
+    sp = kind_dir("superpowers", space_for(repo_root))
     # Canonical layout: active plans/ + implemented/plans/ (the archive,
     # 2026-06-05 spec). Legacy archived-plans/ kept in the walk for direct
     # library callers; the CLI's layout guard prevents reaching it there.
@@ -364,7 +365,7 @@ def _migrate_one(
             warnings.append(row_warning)
     elif v1plan.spec:
         warnings.append(
-            f"spec {v1plan.spec!r} not found under docs/superpowers/ — couldn't "
+            f"spec {v1plan.spec!r} not found under {KIND_DIRS['superpowers']}/ — couldn't "
             f"ensure its Implementation Plans row for {slug!r}."
         )
 
@@ -869,7 +870,7 @@ def _archive_path_variants(
     slug = refs.plan_slug(file_cell)
     if not slug:
         return None, None, None
-    return tuple(f"docs/superpowers/{root}/{slug}" for root in refs.PLAN_ROOTS)  # type: ignore[return-value]
+    return tuple(f"{KIND_DIRS['superpowers']}/{root}/{slug}" for root in refs.PLAN_ROOTS)  # type: ignore[return-value]
 
 
 # The pending-slice recognizer is the canonical classifier in `fr.refs` (beside
@@ -907,7 +908,7 @@ def _spec_fully_implemented(
     meta = parse_spec(spec_path)
     if not meta.plans:
         return False, "no Implementation Plans rows — leaving in place"
-    sp = repo_root / "docs" / "superpowers"
+    sp = kind_dir("superpowers", space_for(repo_root))
     for ref in meta.plans:
         if not ref.file or ref.file in ("—", "-"):
             continue  # manual/informational row — non-blocking
@@ -936,7 +937,10 @@ def _spec_fully_implemented(
         try:
             rel_parts = resolved.relative_to(sp).parts
         except ValueError:
-            return False, f"row {ref.name!r} resolves outside docs/superpowers — leaving in place"
+            return (
+                False,
+                f"row {ref.name!r} resolves outside {KIND_DIRS['superpowers']} — leaving in place",
+            )
         in_archive = rel_parts[:2] == ("implemented", "plans") or rel_parts[0] == "archived-plans"
         if not in_archive:
             return False, f"row {ref.name!r} still active under plans/"
@@ -950,14 +954,14 @@ def plan_dirs_migration(repo_root: Path) -> tuple[list[DirsMove], list[str]]:
     """
     moves: list[DirsMove] = []
     notes: list[str] = []
-    sp = repo_root / "docs" / "superpowers"
+    sp = kind_dir("superpowers", space_for(repo_root))
 
     legacy = sp / "archived-plans"
     if legacy.is_dir():
         moves.append(
             DirsMove(
                 src=legacy.relative_to(repo_root),
-                dst=Path("docs/superpowers/implemented/plans"),
+                dst=Path(KIND_DIRS["plan-archived"]),
                 kind="plans-dir",
             )
         )
@@ -970,7 +974,7 @@ def plan_dirs_migration(repo_root: Path) -> tuple[list[DirsMove], list[str]]:
             moves.append(
                 DirsMove(
                     src=entry.relative_to(repo_root),
-                    dst=Path("docs/superpowers/implemented/specs") / entry.name,
+                    dst=Path(KIND_DIRS["spec-archived"]) / entry.name,
                     kind="spec",
                 )
             )
@@ -983,7 +987,7 @@ def plan_dirs_migration(repo_root: Path) -> tuple[list[DirsMove], list[str]]:
                 moves.append(
                     DirsMove(
                         src=spec_path.relative_to(repo_root),
-                        dst=Path("docs/superpowers/implemented/specs") / spec_path.name,
+                        dst=Path(KIND_DIRS["spec-archived"]) / spec_path.name,
                         kind="spec",
                     )
                 )
@@ -1013,7 +1017,7 @@ def migrate_dirs(repo_root: Path, *, dry_run: bool = True) -> tuple[list[DirsMov
             ) from e
     # Per-entry moves out of archived-specs/ leave the (untracked, empty)
     # directory husk behind — git mv removes files, not dirs.
-    legacy_specs = repo_root / "docs" / "superpowers" / "archived-specs"
+    legacy_specs = kind_dir("spec-legacy-archived", space_for(repo_root))
     if legacy_specs.is_dir() and not any(legacy_specs.iterdir()):
         legacy_specs.rmdir()
     return moves, notes

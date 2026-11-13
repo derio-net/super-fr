@@ -23,8 +23,9 @@ from fr.acceptance.model import (
     same_repo,
     split_ref,
 )
+from fr.artifacts.paths import KIND_DIRS
 
-SPEC_DIRS = ("docs/superpowers/specs", "docs/superpowers/implemented/specs")
+SPEC_DIRS = (KIND_DIRS["spec"], KIND_DIRS["spec-archived"])
 LIVE_SPEC_DIR = SPEC_DIRS[0]
 
 
@@ -84,7 +85,7 @@ def resolve_identity(matrix: Matrix, root: Path) -> tuple[str, str]:
     if m:
         return matrix.org or m.group(1), matrix.repo or m.group(2)
     raise AcceptanceError(
-        "cannot resolve repo identity: write a fragment under docs/acceptance/features/ "
+        f"cannot resolve repo identity: write a fragment under {KIND_DIRS['acceptance-fragment']}/ "
         "(each carries `repo: <org>/<repo>`; `fr acceptance add --repo` writes the first) "
         "or add a github origin remote"
     )
@@ -256,13 +257,14 @@ def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[st
     globs = pr.get("paths") or []
     if not globs:
         return []
-    from fr.acceptance.logical import as_path_ref
+    from fr.acceptance.logical import as_path_ref, feature_roots_of
 
+    roots = feature_roots_of(root)
     uncovered: list[str] = []
     for r in matrix.rows:
         for ref in r.refs():
             try:
-                repo, path, _ = split_ref(as_path_ref(ref, root, own))
+                repo, path, _ = split_ref(as_path_ref(ref, root, own, roots))
             except AcceptanceError:
                 continue
             if not same_repo(repo, own):
@@ -282,13 +284,20 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     missing_repos: set[str] = set()
     case_only: set[str] = set()
 
-    from fr.acceptance.logical import candidates, is_logical, parse_logical, resolution_problem
+    from fr.acceptance.logical import (
+        candidates,
+        feature_roots_of,
+        is_logical,
+        parse_logical,
+        resolution_problem,
+    )
 
+    roots = feature_roots_of(root)
     for r in matrix.rows:
         for ref in r.refs():
             if is_logical(ref):
                 # R18: `spec:<slug>` / `plan:<slug>` name this repo's artifacts.
-                problem = resolution_problem(ref, root)
+                problem = resolution_problem(ref, root, roots)
                 if problem is not None:
                     result.errors.append(f"row {r.id}: ref does not resolve: {problem}")
                 continue

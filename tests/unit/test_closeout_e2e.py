@@ -103,6 +103,11 @@ def fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     workspace = tmp_path / "workspace"
     _git(base, "worktree", "add", "-q", "-b", "b", str(workspace))
+    # As `fr isolation up` does: the marker is excluded, never committed, so it never
+    # reaches the base clone (where it would be a copied marker, which refuses).
+    (base / ".git" / "info").mkdir(exist_ok=True)
+    with (base / ".git" / "info" / "exclude").open("a") as f:
+        f.write(".fr-isolation\n")
     (workspace / "docs" / "superpowers" / "workflows").mkdir(parents=True, exist_ok=True)
     (workspace / ".fr-isolation").write_text(
         json.dumps(

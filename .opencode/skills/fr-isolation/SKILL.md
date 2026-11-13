@@ -41,7 +41,7 @@ fr isolation gc [--repo <path>] [--dry-run] [--format json]                     
 
 - `up` (devcontainer mode) resolves the profile (flag → repo default from `.devcontainer/fr-profiles.yaml` → sole profile), creates the
   worktree under the MAIN checkout's name (even from inside another worktree), ensures the host secrets env-file, starts the container
-  with the base repo's `.git` mounted at the same absolute path. Re-running `up` on a live workspace keeps its record and sessions.
+  with the base repo's `.git` mounted at the same absolute path. Re-running `up` on a live workspace keeps its record and sessions. **Stealth (`mode=stealth`, spec `2026-11-04-repo-feature-settings` R24):** `up --stealth <tracking-repo>@<branch>` (from the target) or `up --target <path>` (from a clone of the tracking repo) records `placement: stealth` and the tracking ref in the state and the marker; fr's artifacts then live in a clone of the tracking repo at `~/.cache/fr/worktrees/<repo>/stealth--<slug>`, below `<host>--<owner>--<repo>/features/<id>/`. An unreachable tracking repo, a missing branch, or a tracking repo more visible than the target is refused before anything is written. `--resume <run-id>` resumes a stealth run on another host, reconciled with the target's pushed code. A stealth run pushes with `fr push` and opens its one draft PR with `fr pr create` only; it never writes the target's forge.
 
 | Situation (the container is disposable, the worktree is the work) | Verb | Worktree, uncommitted files, run record | In-container installs |
 |---|---|---|---|

@@ -1,0 +1,86 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Every caller on the resolver; the tripwire's allowlist empties (R1)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - placement-resolver
+  tier: standard
+  files:
+  - packages/fr/src/fr/**/*.py
+  - packages/fr-dispatch/src/**/*.py
+  - packages/fr-vk/src/**/*.py
+  - packages/fr-herdr/src/**/*.py
+  - packages/fr/src/fr/data/validate-plans.sh
+  - tests/unit/test_tripwire_artifact_paths.py
+  - tests/**/*.py
+  estimate_lines: 2400
+tasks:
+- number: 1
+  title: Convert the acceptance, archive, journal and plan callers
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: shrink the tripwire's PENDING by removing every module under fr/acceptance/, fr/archive.py, fr/closeout.py, fr/migrate.py, fr/plan_ops.py, fr/refs.py, fr/repair.py, fr/commands/{journal,acceptance,archive,apply,repair,run,spec,repos}_cmd.py and fr/commands/common.py; run `uv run pytest tests/unit/test_tripwire_artifact_paths.py -q --no-cov` and confirm it names them.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: rewrite each literal (both the string and the path-segment form) as a `fr.artifacts.paths` call against the module's repo root (`kind_dir(kind, space_for(root))`, or a relative `KIND_DIRS[...]` where the value is a git pathspec or a report string). Keep `repo` output byte-identical: the full suite stays green with no fixture edits (`uv run pytest -q --no-cov -n auto`). Tripwire green.
+- number: 2
+  title: Convert isolation, run, record, usage, ops, triage, gatebackfill, verification
+    and workflow callers
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: remove fr/isolation/*, fr/run/*, fr/record/*, fr/usage/*, fr/ops/*, fr/triage/*, fr/gatebackfill/*, fr/verification/*, fr/workflow/*, fr/git_policy/*, fr/proportionality.py, fr/plan_validator_wrapper.py, fr/artifacts/{validate,matrix_fragments,record_status_split,trigger}.py, fr/settings/check.py from PENDING; confirm the tripwire names them.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: convert them as in P2.T1.S2; the per-module constants (RUNS_DIR, RUNS_REL, JOURNAL_DIRS, ARCHIVE_PREFIX, RECORDS_PREFIX, JOURNALS_PREFIX, EXEMPT_PREFIXES, FR_ARTIFACT_PREFIXES, USAGE_REL, IMPLEMENTED_USAGE_REL, ARCHIVED_RUNS_REL, _RUN_DIRS, REPO_WORKFLOWS_REL, WORKFLOWS_REL, PLANS_REL) become imports or derivations of `fr.artifacts.paths`, never new literals. Full suite green, tripwire green.
+- number: 3
+  title: Convert the sister packages and the CI templates
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: remove fr-dispatch, fr-vk, fr-herdr modules and fr/acceptance/scaffold.py from PENDING (PENDING is now empty, and the stale-entry test still passes on an empty tuple); confirm the tripwire names them.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: fr-dispatch/fr-vk/fr-herdr import `fr.artifacts.paths` (they already depend on `fr`; check tests/unit/test_import_direction.py stays green). scaffold.py renders its template paths from KIND_DIRS (the rendered workflow files are byte-identical: assert with the existing scaffold tests). fr/data/validate-plans.sh is shell: give it the paths from `fr settings paths --shell` when `fr` is on PATH and its current literals as the fallback, and say so in a comment (the tripwire scans .py only; phase 6 owns the shell surfaces). Full suite green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: delete PENDING's machinery only if empty and the test reads clearer without it; otherwise keep it as the mechanism the next exemption would need. Re-run `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T14:36:21+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T14:36:21+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T14:36:21+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T14:36:21+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T14:36:21+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T14:36:21+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-12T14:36:21+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T14:36:21+00:00'
+    note: null
+    observed_prs: []

@@ -34,6 +34,26 @@ require_exit() { [ "$RC" -eq "$1" ] || fail "expected exit $1, got $RC: $2"; }
 
 command -v fr >/dev/null || fail "no fr on PATH"
 
+# scenario_require_fresh_repo: refuse unless the working directory is the toplevel of a
+# freshly `git init`ed repo, with no commit and no remote: the fixture
+# tests/integration/test_scenarios.py and `fr verification walk` hand a scenario (review
+# p6-r5). A scenario that adds an origin, commits or pushes calls it FIRST, so one run
+# from a real checkout refuses before it touches anything: one committed onto `main` and
+# tried to push to the real remote. Run a scenario through
+# `uv run pytest tests/integration/test_scenarios.py -k <name>`.
+scenario_require_fresh_repo() {
+  local top
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+    fail "not a fresh fixture: $(pwd) is not a git repo (run scenarios through tests/integration/test_scenarios.py)"
+  [ "$(cd "$top" && pwd -P)" = "$(pwd -P)" ] ||
+    fail "not a fresh fixture: $(pwd) is not the toplevel of its repo ($top)"
+  if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    fail "not a fresh fixture: $(pwd) has commits; this scenario commits and pushes, so it runs only in a freshly \`git init\`ed repo (tests/integration/test_scenarios.py)"
+  fi
+  [ -z "$(git remote 2>/dev/null)" ] ||
+    fail "not a fresh fixture: $(pwd) has a remote ($(git remote | tr '\n' ' ')); this scenario adds its own origin and pushes to it"
+}
+
 # Long-prefix uv entrypoints may have a /bin/sh trampoline, not a Python shebang.
 # Resolve the installed tool's symlink, then use its own sibling interpreter.
 candidate_python() {
