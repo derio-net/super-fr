@@ -146,3 +146,8 @@ Not caused by this change: fr's help text predates it and is code this docs feat
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-13-writing-standards-docs-p6 created=2026-11-13T21:48:51+00:00 -->
 ### phase-split-2026-11-13-writing-standards-docs-p6 · decision · ask: the CI gate (R6) lands last, after every page passes, with the two remaining pages
+
+<!-- fr:journal kind=decision scope=spec id=d-accuracy created=2026-11-13T22:17:52+00:00 decided_by=operator -->
+### d-accuracy · decision · Pages must be (and stay) accurate: accuracy pass before each rewrite, docs-accuracy lens after
+
+Operator, asked whether the rewrite is based on the code or the prose: "yes, I want the documents to be (and stay) accurate". Adds R13-R16.
