@@ -11,7 +11,7 @@ reviewed: 2026-11-11 docs-currency phase 3
 
 # Merge protection for `main`
 
-This repo's `main` can need the `ci-ok` check and an up-to-date branch. The
+A ruleset can make the `ci-ok` check and an up-to-date branch mandatory for this repo's `main`. The
 release workflow still has to push the release commit. So it does that as a
 GitHub App, `derio-fr-automation`, which the ruleset lets bypass. Spec:
 `docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md` §F.
