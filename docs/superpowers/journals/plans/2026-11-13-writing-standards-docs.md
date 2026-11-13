@@ -463,3 +463,116 @@ Baseline: 16d3ddafef4f6c450925e1c9ee1d1abc633c1e18. Sentences/avg 56 / 14.9 -> 7
 ### p3-ws-totals · discovery · phase 3 writing-standard totals: 141 FAIL -> 0 over the 9 guides (phase 3)
 
 Measured on the accuracy-corrected baselines (per-page sha in p3-ws-*): 141 FAIL, 223 WARN -> 0 FAIL, 15 WARN, all kept with reasons. Wording tripwires (test_tripwire_fr_goal_question_rounds, test_hermes_docs, test_build_site, test_writing_standards_docs, test_tripwire_explainers_fresh, plus test_triage_skill_docs, test_docs_globs): 508 passed; `fr docs check`: 32 pages current. fr-exit-gates.md and fr-wave-driver.md cover guides that changed, so their `reviewed` stamps moved (nothing they describe changed). Sentence splitting note for later phases: the checker starts a new sentence only before a capital, a backtick or a bracket, so a sentence that starts with lowercase `fr` is merged into the one before it. Fact-keeper reviews are owed in review-phase against `git show <sha>:<page>`.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-11-13T23:38:18+00:00 phase=3 -->
+### review-p3 · review · phase 3 review: 8 findings (7 in, 1 out), all in-scope fixed; fact-keepers: 0 lost, 3 meaning shifts fixed (phase 3)
+
+Code reviewer (separate context, read-only) checked the six accuracy commits against the cited code (all true), the STE rewrite against each page's baseline with --preserve-from, the tripwires, fr docs check, and built the site at e84325d and HEAD to compare rendering: the checker does not see Markdown list breakage, which the build showed on ops.md and review-lenses.md. Nine blind fact-keepers (blog-craft agents/fact-keeper.md), one per guide, given only baseline and rewrite. Fixes in 036276ef9, 9d869f9b3, 3c1e17628, d6750f94c, 2605a2abc, 22103e06b, f52f33659, e8c934efb; ci-ok green on e8c934e. A built-site raw-list-marker scan over docs/*.md and docs/reference/*.md is clean apart from the two pre-existing docs-currency.md defects (p3-r8).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-fact-keeper created=2026-11-13T23:38:18+00:00 phase=3 -->
+### p3-fact-keeper · discovery · Fact-keeper results per page (R8): page | counts | resolution (phase 3)
+
+docs/cloud-setup.md | kept 67, changed 0, lost 0, added 0
+docs/docs-currency.md | kept 48, changed 1, lost 0, added 0 | 'whatever aggregate check your repo requires' lost its any-scope: fixed in 22103e06b ('any aggregate check that your repo needs')
+docs/exit-gates-release-walk.md | kept 46, changed 0, lost 0, added 0
+docs/gate-backfill.md | kept 81, changed 0, lost 0, added 0
+docs/herdr-control-sessions.md | kept 87, changed 0, lost 0, added 0
+docs/merge-protection.md | kept 36, changed 0, lost 0, added 0
+docs/ops.md | kept 43, changed 0, lost 0, added 0
+docs/review-lenses.md | kept 71, changed 3, lost 0, added 1 | two wording-only; the conditional 'when it rewrites or disables a lens' had become a permission ('But it can ...'): fixed in 9d869f9b3; the added sentence only counts the three checks listed
+docs/verification-strategies.md | kept 57, changed 1, lost 0, added 0 | 'walk refuses a source: prerelease strategy' had become 'does not run it': fixed in e8c934efb ('stops with an error', walk.py WalkError)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · ops.md: 2-space continuations/nested lists break the Test Plan list in the site renderer (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · review-lenses.md: nested lens sub-lists collapse into one paragraph with raw markers (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · ops.md stage 2: two merge preconditions moved out of the all-of-these list (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · exit-gates-release-walk.md: "workflows that trigger themselves" misstates auto-triggering (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · cloud-setup.md: status-bucket literal "working" became "active" (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · gate-backfill.md: "still does not pass" made the refusal ambiguous (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · gate-backfill.md Trust: subject narrowed from fr to the backfill (phase 3)
+
+Raised by the phase 3 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=out -->
+### p3-r8 · finding [open] (reviewer: out of scope) · docs-currency.md and merge-protection.md lists already rendered broken at the merge base (phase 3)
+
+Raised by the phase 3 reviewer; present at e84325d and at the merge base, not caused by the rewrite.
+
+<!-- fr:journal kind=finding scope=plan id=p3-build-site-marker created=2026-11-13T23:38:18+00:00 phase=3 state=open review_scope=out -->
+### p3-build-site-marker · finding [open] (reviewer: out of scope) · scripts/build-site.py fill_pages replaces <!-- site:pages --> even inside inline code (phase 3)
+
+fill_pages (scripts/build-site.py:267-280) does a plain text.replace(MARKER, ...), so docs/docs-currency.md item 5, which names the marker as inline code, gets the page list inserted mid-list and its numbered list breaks at item 6. Pre-existing at the merge base; a build-script bug, not a page defect. Found while fixing p3-r8.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: ops.md: 2-space continuations/nested lists break the Test Plan list in the site renderer (phase 3)
+
+036276ef9
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: review-lenses.md: nested lens sub-lists collapse into one paragraph with raw markers (phase 3)
+
+9d869f9b3
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: ops.md stage 2: two merge preconditions moved out of the all-of-these list (phase 3)
+
+036276ef9
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: exit-gates-release-walk.md: "workflows that trigger themselves" misstates auto-triggering (phase 3)
+
+3c1e17628
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: cloud-setup.md: status-bucket literal "working" became "active" (phase 3)
+
+d6750f94c
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: gate-backfill.md: "still does not pass" made the refusal ambiguous (phase 3)
+
+2605a2abc
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: gate-backfill.md Trust: subject narrowed from fr to the backfill (phase 3)
+
+2605a2abc
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=open resolves=p3-r8 out_of_scope=true -->
+### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: docs-currency.md and merge-protection.md lists already rendered broken at the merge base (phase 3)
+
+Pre-existing at the merge base. merge-protection.md fixed anyway in f52f33659. docs-currency.md left: its CI YAML fence sits under a 2-space bullet and re-indenting changes the fenced bytes the preserve check compares; item 6 breaks because of the build-script bug p3-build-site-marker, which is filed separately.
+
+<!-- fr:journal kind=finding scope=plan id=p3-ops-seal-encrypt-help-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=open resolves=p3-ops-seal-encrypt-help out_of_scope=true -->
+### p3-ops-seal-encrypt-help-resolved · finding [out-of-scope] · resolves p3-ops-seal-encrypt-help: ops_cmd.py `fr ops seal --encrypt` help says {target} is the target's name; it is the shell-quoted full path (phase 3)
+
+A fr CLI help defect (ops_cmd.py:535-536), not caused by a docs rewrite; the page now states the code behaviour. To be filed as an issue at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p3-build-site-marker-resolved created=2026-11-13T23:38:18+00:00 phase=3 state=open resolves=p3-build-site-marker out_of_scope=true -->
+### p3-build-site-marker-resolved · finding [out-of-scope] · resolves p3-build-site-marker: scripts/build-site.py fill_pages replaces <!-- site:pages --> even inside inline code (phase 3)
+
+Pre-existing build-script bug, not caused by this change; to be filed as an issue at deliver.
