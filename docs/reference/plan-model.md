@@ -12,9 +12,9 @@ reviewed: 2026-11-12 placement-resolver phase 3, plan create writes and commits 
 
 # The plan model
 
-A plan is the written-down answer to "what will we build, in what order, and how will we
-know each part is done". It lives in the same repo as the code it changes, under
-`docs/superpowers/plans/`, so it is reviewed, branched and merged like code.
+A plan is the written answer to "what will we build, in what order, and how will we know
+each part is done". It lives in the same repo as the code it changes, under
+`docs/superpowers/plans/`. So it is reviewed, branched and merged like code.
 
 ## One folder per plan
 
@@ -26,18 +26,19 @@ docs/superpowers/plans/<slug>/   # by convention the slug starts with a date, YY
 └── 02.yaml       # phase 2 ...
 ```
 
-`_meta.yaml` names the plan, the spec it implements (`spec:`), the repo it changes
-(`target_repo:`) and the range of `fr` versions allowed to read it (`fr_version:`).
-Each phase file has a `phase:` header with its `number`, `title`, `tag`, `depends_on`
-phases, the `acceptance` rows it moves, a model `tier` hint and the `files` it expects to
-touch, followed by `tasks:` and a `state:` block that records each step's tick and the
-phase's completion. A task holds `steps:`, and every step has an id of the form
+`_meta.yaml` names the plan, the spec it implements (`spec:`) and the repo it changes
+(`target_repo:`). It also names the range of `fr` versions that can read it (`fr_version:`).
+
+Each phase file has a `phase:` header. The header holds the phase's `number`, `title`, `tag`
+and `depends_on` phases. It also holds the `acceptance` rows the phase moves, a model `tier`
+hint and the `files` it expects to touch. After the header come `tasks:` and a `state:` block. The block
+records each step's tick and the phase's completion. A task holds `steps:`, and every step has an id of the form
 `P<phase>.T<task>.S<step>` (for example `P2.T1.S3`) plus its text.
 
 The `tag` is `agentic` (an agent does it) or `manual` (a human does it, such as secrets, UI
 work or a deploy). Manual phases are never routed to a runner.
 
-## Making and changing one
+## Make and change one
 
 ```bash
 fr plan create --slug <slug> --target-repo <owner/repo> \
@@ -49,14 +50,14 @@ fr plan rework --help                                            # a sibling pla
 fr pickup <plan-dir> --phase 2                                   # print one phase's scope for an agent
 ```
 
-Run any of them with `--help` for the full flags; the skills drive these for you. Plans
-are edited through the commands rather than by hand so the ticks, the spec's plan table
-and the run cursor stay in agreement.
+Run any of them with `--help` for the full flags. The skills drive these for you. Edit plans
+through the commands, not by hand, so that the ticks, the spec's plan table and the run
+cursor stay in agreement.
 
-In a repository using the quiet placement, `create` writes the plan folder below this
-feature's path in the `fr` worktree (`features/<feature-id>/docs/superpowers/plans/<slug>/`)
-and commits it on the `fr` branch, not the feature branch (see the quiet section of
-[the fr-goal explainer](../explainers/01-fr-goal.md)).
+A repository can use the quiet placement. There, `create` writes the plan folder below this
+feature's path in the `fr` worktree (`features/<feature-id>/docs/superpowers/plans/<slug>/`).
+It commits the folder on the `fr` branch, not the feature branch. See the quiet section of
+[the fr-goal explainer](../explainers/01-fr-goal.md).
 
 ## One plan, one repo, and when PRs split
 
