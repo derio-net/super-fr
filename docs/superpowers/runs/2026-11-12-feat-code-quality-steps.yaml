@@ -185,11 +185,17 @@ steps:
     stdout: ''
   lens-review:
     state: running
-    at: '2026-11-13T03:25:11+00:00'
+    at: '2026-11-13T03:29:38+00:00'
     units:
       step/lens-review:
         attempts:
         - dispatched: '2026-11-13T03:25:11+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
+          returned: '2026-11-13T03:29:38+00:00'
+          outcome: abandoned
+        - dispatched: '2026-11-13T03:29:38+00:00'
           harness: claude-code
           model: claude-fable-5-2
           session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
