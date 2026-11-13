@@ -3,11 +3,18 @@ run: 2026-11-13-feat-writing-standards-docs
 workflow: fr-goal@1
 branch: feat/writing-standards-docs
 started: '2026-11-13T21:36:25+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-13T21:36:31+00:00'
+    state: done
+    at: '2026-11-13T21:40:25+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-13-writing-standards-docs-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          unobserved: operator-gate
   spec-review:
     state: pending
   plan:
