@@ -26,7 +26,7 @@ reading rather than whatever was installed globally.
 | Command | What it does |
 |---|---|
 | `fr isolation up --branch <b>` | Create the isolated workspace for a branch. See [fr-isolation](../explainers/fr-isolation.md). |
-| `fr isolation exec -- <cmd>` | Run a build, test or lint command inside that workspace's container. |
+| `fr isolation exec -- <cmd>` | Run a build, test or lint command inside that workspace: in its container in devcontainer mode, in the worktree itself in the docker-less modes. |
 | `fr status` | Read-only report on every plan: phases, steps, tracking issues. Never writes. |
 | `fr apply <plan>` | Mirror a plan to tracking issues. Dry run unless you add `--yes`; `--to <runner>` also queues its phases. See [dispatch](../explainers/fr-dispatch.md). |
 | `fr acceptance status` | The open acceptance debt in one screen. See [the acceptance matrix](acceptance-matrix.md). |
@@ -50,7 +50,7 @@ state lives under the git directory, so re-running the same command after an
 interruption finishes the move. It refuses while any workspace has uncommitted work, it
 never force-pushes, and out of `repo` it removes the files through a pushed branch and a
 printed `fr pr create` command. `--run <id>`, in a stealth workspace, moves that one run.
-A branch left under the old placement is refused by every fr command, `fr push`,
+A branch left under the old placement is refused by fr's CLI-entry gate (every command that is not read-only), `fr push`,
 `deliver` and `fr validate artifacts` until `fr placement migrate-branch`, run in its
 workspace, moves its files (one commit on each side, both pushed). Nothing else migrates
 it, CI included.
