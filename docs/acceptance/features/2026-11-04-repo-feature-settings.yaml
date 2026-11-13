@@ -687,3 +687,69 @@ amendments:
       write but the one minimal draft PR refused, fr push refuses commits carrying fr
       paths, resume reconciled with the pushed product head; scenario in CI. Not shown
       here: a real forge (row repo-settings-quiet-repo-live)'
+  - row: placement-move-and-drift
+    op: set-status
+    base: 1
+    status: ci
+    notes: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move.py#test_move_to_quiet_copies_verifies_switches_and_removes
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move.py#test_move_back_to_repo_copies_through_a_branch_and_switches_by_a_new_commit
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_placement_move.py#test_a_move_killed_after_any_step_completes_on_rerun_without_duplication
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift.py#test_the_gate_refuses_a_drifted_workspace_naming_migrate_branch
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_placement_drift.py#test_migrate_branch_moves_a_repo_branch_into_quiet_and_pushes_both_sides
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
+  - row: placement-move-and-drift
+    op: add-level
+    base: 7
+    level: int
+    ref: super-fr:tests/integration/test_scenarios.py#test_placement_move_and_drift
+    why: fr placement move (copy, verify, switch, remove; restartable; repo<->quiet,
+      to stealth, --run) and drift refused by the gate, fr push, deliver and validate
+      with fr placement migrate-branch built; unit tests and scenario in CI (plan 2026-11-12-placement-resolver
+      phase 7)
