@@ -30,12 +30,13 @@ from typing import Any
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import repo_glob
 from fr.artifacts.registry import read_verbatim, split_lines
 from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, Repair
 
 KEY = "vk_version"
 REPAIR_NAME = "drop-vk-version"
-ARCHIVE_LOCATOR = "docs/superpowers/implemented/plans/*/_meta.yaml"
+ARCHIVE_LOCATOR = repo_glob("plan-archived", "*/_meta.yaml")
 
 _LINE_RE = re.compile(rf"^{KEY}[ \t]*:")
 
