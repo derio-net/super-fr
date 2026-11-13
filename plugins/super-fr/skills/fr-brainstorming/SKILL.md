@@ -116,4 +116,4 @@ added AND presented, each citing its requirement id.
   own craft (questions, alternatives, YAGNI) is unchanged.
 - Multi-repo features: brainstorm in the repo that owns the spec; other
   repos get their own isolation workspaces when their plans dispatch
-  (one workspace, one branch, one PR per repo).
+  (one workspace, one branch, one PR per repo). **Lenses.** When the work gives you a reason to want the whole feature examined under a concern (shipped: `security`, `tests`, `errors`, `simplicity`; `fr lenses list` shows the repo's set), add one in your step record: `journal: [{kind: lens, lens: <id>, title: "<why, one line>"}]`. A lens is never removed, and the lens review before `deliver` examines the whole diff under each one.

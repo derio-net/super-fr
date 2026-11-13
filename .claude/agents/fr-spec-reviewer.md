@@ -11,7 +11,7 @@ description: >
   NOT a general-purpose reviewer and NOT for code review — `review-phase` owns
   that.
 tools: Read, Grep, Glob
-fr_artifact_version: 4
+fr_artifact_version: 5
 ---
 
 # fr-spec-reviewer
@@ -138,3 +138,10 @@ journal:
 The `verified` list in the review entry is the names you checked and found
 correct; it is what makes "no findings" distinguishable from "did not look". A
 clean review returns the `review` entry alone, with a non-empty `verified`.
+
+**Suggested lenses.** You write nothing, so you cannot add a lens. When the spec
+gives you a reason to want the whole feature examined under a concern (`fr lenses
+list` shows the set; shipped: `security`, `tests`, `errors`, `simplicity`), end your
+return with `suggested lenses:` and one line per lens, `<id> — <why, one line>`; the
+orchestrator records each as a `lens` journal entry. Never put a lens's instruction
+text in a finding.

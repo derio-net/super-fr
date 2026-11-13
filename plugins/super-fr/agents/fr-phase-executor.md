@@ -88,6 +88,12 @@ the same capability boundary as #420, read from the other side).
    `no-refactor-because: P<n>.T<m>` discovery for a task with nothing to clean
    (`--complete-phase` refuses a phase with a task that has neither).
 
+**Lenses.** When the work gives you a reason to want the whole feature examined
+under a concern (shipped: `security`, `tests`, `errors`, `simplicity`; `fr lenses
+list` shows the repo's set), add one in your step record:
+`journal: [{kind: lens, lens: <id>, title: "<why, one line>"}]`. A lens is never
+removed, and the lens review before `deliver` examines the whole diff under each one.
+
 ## Contract — the worktree has exactly one writer
 
 How you work. The two refusals above are a different kind of rule — what you

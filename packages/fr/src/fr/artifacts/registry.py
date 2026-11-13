@@ -626,7 +626,8 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 2: fr-spec-reviewer checks the `## Test Plan` heading (#1315).
             # 3: fr-spec-reviewer reviews against the repo's settings (repo-feature-settings R15).
             # 4: fr-phase-executor pushes with `fr push` (repo-feature-settings R12).
-            current_version=4,
+            # 5: both agents say a lens can be added or suggested (review-lenses R14).
+            current_version=5,
             locator=".claude/agents/fr-*.md",
             stamp=f"`{AGENTS_STAMP_KEY}` in the agent's front matter",
             read_stamp=_read_agents_stamp,

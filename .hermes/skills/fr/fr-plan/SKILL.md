@@ -117,4 +117,4 @@ rework plan — do not reopen the parent.
 ## Integration
 
 Upstream: brainstorming hands off via fr-plan-override. Downstream:
-`fr apply` for GitHub-side work; `executing-plans` for the agent loop.
+`fr apply` for GitHub-side work; `executing-plans` for the agent loop. **Lenses.** When the work gives you a reason to want the whole feature examined under a concern (shipped: `security`, `tests`, `errors`, `simplicity`; `fr lenses list` shows the repo's set), add one in your step record: `journal: [{kind: lens, lens: <id>, title: "<why, one line>"}]`. A lens is never removed, and the lens review before `deliver` examines the whole diff under each one.

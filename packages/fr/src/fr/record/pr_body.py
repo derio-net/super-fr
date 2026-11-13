@@ -30,6 +30,7 @@ from fr.journal.model import (
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Matrix, Row
+    from fr.lenses.accumulate import LensEntry
     from fr.ops.model import Op
     from fr.run.cost import PhaseRow, Summary
     from fr.run.model import RunState
@@ -83,6 +84,10 @@ run after merge can move; `Pre-merge verification owed` (spec
 before it, each with its exact walk command; `Manual operations` (spec
 2026-10-22-fr-ops R13) the plan's ops with their recorded state, `None.` when
 it has none."""
+
+HEADING_REVIEW_LENSES = "## Review lenses"
+"""Rendered after the findings sections, never required: a live body older than the
+section must still pass `missing_sections` (spec 2026-11-12-review-lenses R12)."""
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
 
@@ -996,6 +1001,94 @@ def _historical(state: RunState) -> str | None:
     return "\n".join(lines) if lines else None
 
 
+def _lens_counts(state: RunState) -> dict[str, str]:
+    """Per lens the files its reviewer examined, from the `lenses` evidence of the lens
+    review's unit (`security=2:l-security-r1;tests=5:none`): a count or `unobserved`."""
+    record = state.steps.get("lens-review")
+    unit = (record.units or {}).get("step/lens-review") if record is not None else None
+    witness = (unit.evidence or {}).get("lenses", "") if unit is not None else ""
+    counts: dict[str, str] = {}
+    for part in witness.split(";"):
+        lens, _, rest = part.partition("=")
+        if rest:
+            counts[lens] = rest.partition(":")[0]
+    return counts
+
+
+def _lens_why(entry: LensEntry, by_id: dict[str, JournalEntry]) -> str:
+    """Why a lens is in the set: each addition as `<step>[ phase N]: "<reason>"`
+    (`command line` when no step was recorded), then the path rule and a matching file."""
+    parts: list[str] = []
+    for reason in entry.reasons:
+        found = by_id.get(reason.entry)
+        phase = f" phase {found.phase}" if found is not None and found.phase is not None else ""
+        who = f"{reason.step}{phase}" if reason.step else "command line"
+        parts.append(f'{who}: "{reason.text}"')
+    if entry.rule is not None:
+        where = f" ({entry.file})" if entry.file else ""
+        parts.append(f"rule `{', '.join(entry.rule)}`{where}")
+    return "; ".join(parts)
+
+
+def _lens_finding_cells(lens: str, entries: list[JournalEntry]) -> str:
+    """The lens's findings, each with its folded state, or `none`."""
+    from fr.lenses.review import lens_finding_ids
+
+    mine = lens_finding_ids(lens)
+    states = effective_finding_states(entries)
+    tracked = {e.resolves: e.tracked_by for e in entries if e.resolves and e.tracked_by}
+    out: list[str] = []
+    for e in entries:
+        if e.kind != "finding" or e.resolves is not None or not mine.match(e.id):
+            continue
+        verdict = states.get(e.id, e.state or "open")
+        if verdict in _CLOSED_OUT:
+            where = tracked.get(e.id)
+            out.append(f"{e.id} out of scope" + (f" ({where})" if where else ""))
+        else:
+            out.append(f"{e.id} {verdict}")
+    return ", ".join(out) or "none"
+
+
+def _review_lenses(repo_root: Path, state: RunState) -> str:
+    """The `## Review lenses` body (spec 2026-11-12-review-lenses R12, §3.D). Not a
+    required section: an older live body that lacks it still passes `missing_sections`."""
+    from fr.lenses.accumulate import lens_set
+    from fr.lenses.model import LensError
+
+    if "lens-review" not in state.steps:
+        return "This run predates review lenses."
+    try:
+        lenses = lens_set(repo_root, state)
+    except LensError as e:
+        return f"The lens set could not be read: {e}"
+    entries = [e for _scope, _slug, es in _journals(repo_root, state) for e in es]
+    note = (
+        "\n\nThis branch changed the repo's lens config (`.fr/lenses.yaml`)."
+        if ".fr/lenses.yaml" in (lenses.changed or ())
+        else ""
+    )
+    if not lenses.lenses:
+        return "No lens was requested for this change." + note
+    counts = _lens_counts(state)
+    by_id = {e.id: e for e in entries}
+    rows = [
+        _md_row(
+            (
+                e.lens,
+                _lens_why(e, by_id),
+                "not observable"
+                if counts.get(e.lens, "unobserved") == "unobserved"
+                else counts[e.lens],
+                _lens_finding_cells(e.lens, entries),
+            )
+        )
+        for e in lenses.lenses
+    ]
+    head = [_md_row(("Lens", "Why", "Files examined", "Findings")), _md_row(("---",) * 4)]
+    return "\n".join([*head, *rows]) + note
+
+
 def render_pr_body(repo_root: Path, state: RunState) -> str:
     """The PR body fr owns: every `REQUIRED_SECTIONS` heading, in order, plus
     `## Historical reviews` when the run has any. The agent may add a summary
@@ -1008,6 +1101,7 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         "## Out-of-scope findings",
         render_out_of_scope(outside),
     ]
+    parts += [HEADING_REVIEW_LENSES, _review_lenses(repo_root, state)]
     historical = _historical(state)
     if historical is not None:
         from fr.run.historical import HISTORICAL_HEADING
