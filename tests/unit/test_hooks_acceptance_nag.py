@@ -313,7 +313,7 @@ def test_nag_reads_the_acceptance_dir_the_placement_names(tmp_path: Path) -> Non
     stub.write_text(
         "#!/bin/bash\n"
         'case "$*" in\n'
-        f'  "settings paths --shell") echo "FR_ACCEPTANCE_DIR={elsewhere}" ;;\n'
+        f'  "settings paths --shell --no-create") echo "FR_ACCEPTANCE_DIR={elsewhere}" ;;\n'
         '  "settings show --json") echo "{}" ;;\n'
         '  "acceptance status --brief") echo "1 row unwired: stub-row" ;;\n'
         "esac\n"
@@ -329,3 +329,57 @@ def test_nag_reads_the_acceptance_dir_the_placement_names(tmp_path: Path) -> Non
     )
     assert result.returncode == 0, result.stderr
     assert "stub-row" in result.stdout
+
+
+def test_a_relative_path_entry_holding_an_fr_is_never_run(tmp_path: Path) -> None:
+    """Review p6-r2: the nag spawns only an `fr` found in an ABSOLUTE PATH entry; a
+    repo-planted `bin/fr` reached through `bin` or `.` is never executed."""
+    rows = row(id="debt-0", status="unwired")
+    root = make_repo(tmp_path, rows, git=False)
+    _git(root)
+    ran = tmp_path / "planted-ran"
+    for where in (root / "bin", root):
+        where.mkdir(exist_ok=True)
+        planted = where / "fr"
+        planted.write_text(f'#!/bin/bash\ntouch "{ran}"\necho planted-debt\n')
+        planted.chmod(0o755)
+    tools = sorted({str(Path(shutil.which(t) or "/usr/bin/x").parent) for t in ("jq", "git")})
+    path = ":".join(["bin", ".", "", *tools, "/usr/bin", "/bin"])
+    result = subprocess.run(
+        ["bash", str(SCRIPT)],
+        input=json.dumps({"session_id": "s", "cwd": str(root), "hook_event_name": "SessionStart"}),
+        capture_output=True,
+        text=True,
+        cwd=root,
+        env={**os.environ, "PATH": path},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "planted-debt" not in result.stdout
+    assert not ran.exists()
+
+
+def test_a_plain_repo_with_fragments_never_asks_for_paths(tmp_path: Path) -> None:
+    """Review p6-r8: with no `origin/fr` ref and no marker on the filesystem, the nag
+    asks `fr` only for the nag itself, never `fr settings paths`."""
+    rows = row(id="debt-0", status="unwired")
+    root = make_repo(tmp_path, rows, git=False)
+    _git(root)
+    subprocess.run(
+        ["git", "-C", str(root), "remote", "add", "origin", "https://example.com/o/r.git"],
+        check=True,
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "calls"
+    fake = bin_dir / "fr"
+    fake.write_text(f'#!/bin/bash\necho "$@" >> {calls}\n')
+    fake.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(SCRIPT)],
+        input=json.dumps({"session_id": "s", "cwd": str(root), "hook_event_name": "SessionStart"}),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "settings paths" not in (calls.read_text() if calls.exists() else "")

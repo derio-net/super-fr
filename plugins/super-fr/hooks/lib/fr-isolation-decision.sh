@@ -183,18 +183,147 @@ _fr_toplevel_of() {
   (cd "$_fr_t" 2>/dev/null && pwd -P) || return 1
 }
 
+# --- fr resolution ----------------------------------------------------------
+#
+# `fr` is asked only for an artifact path, never for the fr-enabled answer alone, and
+# it is resolved the way the OpenCode plugin's src/fr.ts resolves it (review p6-r2):
+# `command -v` honours a RELATIVE PATH entry (`.`, `bin`, an empty one), which names a
+# file in whatever directory the hook runs from, possibly one planted in the repo being
+# edited. So: an absolute FR_HARNESS_FR naming an executable file (a pin that is a
+# path; the identity string fr-binary-pin.sh exports is not one, and falls through),
+# else the first ABSOLUTE PATH entry holding an executable regular `fr`. That exact
+# path is what runs. No subprocess is spent finding it.
+
+FR_FR_BIN=""
+
+# Resolve fr once into FR_FR_BIN.  returns 0 -> resolved; 1 -> no trusted fr
+fr_fr_resolve() {
+  [ -n "$FR_FR_BIN" ] && return 0
+  case "${FR_HARNESS_FR:-}" in
+    /*)
+      if [ -f "$FR_HARNESS_FR" ] && [ -x "$FR_HARNESS_FR" ]; then
+        FR_FR_BIN=$FR_HARNESS_FR
+        return 0
+      fi
+      ;;
+  esac
+  _fr_rest="${PATH:-}:"
+  while [ -n "$_fr_rest" ]; do
+    _fr_dir=${_fr_rest%%:*}
+    _fr_rest=${_fr_rest#*:}
+    case "$_fr_dir" in /*) ;; *) continue ;; esac
+    if [ -f "$_fr_dir/fr" ] && [ -x "$_fr_dir/fr" ]; then
+      FR_FR_BIN="$_fr_dir/fr"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# fr_bounded <seconds> <outfile> <cmd...>
+#   Run cmd with its stdout written to <outfile>, SIGKILLed after <seconds>; returns its
+#   status (a killed run returns non-zero). No `timeout(1)`: macOS has none. Output goes
+#   to a FILE, not a pipe: a grandchild that outlives the kill would hold a pipe open and
+#   make a `$(…)` wait for it, which is the unbounded wait this exists to prevent.
+fr_bounded() {
+  _fr_secs=$1
+  _fr_bout=$2
+  shift 2
+  "$@" > "$_fr_bout" &
+  _fr_bpid=$!
+  (
+    trap 'kill "$_fr_sleep" 2>/dev/null; exit 0' TERM
+    sleep "$_fr_secs" &
+    _fr_sleep=$!
+    wait "$_fr_sleep"
+    kill -9 "$_fr_bpid" 2>/dev/null
+  ) >/dev/null 2>&1 &
+  _fr_wd=$!
+  _fr_brc=0
+  { wait "$_fr_bpid"; } 2>/dev/null || _fr_brc=$?
+  kill "$_fr_wd" 2>/dev/null || true
+  { wait "$_fr_wd"; } 2>/dev/null || true
+  return "$_fr_brc"
+}
+
+# The bound on one `fr settings paths` from a hook, in seconds.
+: "${FR_PATHS_TIMEOUT:=5}"
+
+# fr_settings_paths <toplevel>
+#   Print `fr settings paths --shell --no-create` for <toplevel>: bounded, run from it
+#   with FR_REPO_ROOT set to it, and read-only (it never creates the `fr` branch or the
+#   fr worktree, review p6-r4). Non-zero when no trusted fr resolves, or it fails or
+#   times out.
+fr_settings_paths() {
+  fr_fr_resolve || return 1
+  _fr_tmp=$(mktemp 2>/dev/null) || return 1
+  _fr_prc=0
+  (cd "$1" 2>/dev/null && FR_REPO_ROOT="$1" fr_bounded "$FR_PATHS_TIMEOUT" "$_fr_tmp" \
+    "$FR_FR_BIN" settings paths --shell --no-create 2>/dev/null) || _fr_prc=$?
+  [ "$_fr_prc" -eq 0 ] && cat "$_fr_tmp"
+  rm -f "$_fr_tmp"
+  return "$_fr_prc"
+}
+
+# fr_paths_value <answer> <KEY> — one key of a `--shell` answer, unquoted, never eval'd.
+fr_paths_value() {
+  printf '%s\n' "$1" | sed -n "s/^$2=//p" | head -n 1 | sed -e "s/^'//" -e "s/'\$//"
+}
+
+# _fr_common_dir_of <toplevel> — the repository's common git dir, read from the
+# filesystem (no subprocess): `.git` as a dir, or a `gitdir:` file (a linked worktree),
+# then its `commondir`. Non-zero when it cannot be read.
+_fr_common_dir_of() {
+  if [ -d "$1/.git" ]; then
+    _fr_gd="$1/.git"
+  elif [ -f "$1/.git" ]; then
+    _fr_line=""
+    IFS= read -r _fr_line < "$1/.git" || [ -n "$_fr_line" ] || return 1
+    case "$_fr_line" in "gitdir: "*) _fr_gd=${_fr_line#gitdir: } ;; *) return 1 ;; esac
+    case "$_fr_gd" in /*) ;; *) _fr_gd="$1/$_fr_gd" ;; esac
+  else
+    return 1
+  fi
+  if [ -f "$_fr_gd/commondir" ]; then
+    _fr_cd=""
+    IFS= read -r _fr_cd < "$_fr_gd/commondir" || [ -n "$_fr_cd" ] || return 1
+    case "$_fr_cd" in /*) _fr_gd=$_fr_cd ;; *) _fr_gd="$_fr_gd/$_fr_cd" ;; esac
+  fi
+  printf '%s\n' "$_fr_gd"
+}
+
+# fr_switch_ref_maybe <toplevel>
+#   0 when `refs/remotes/origin/fr` may exist: a loose ref, a packed-refs line, a
+#   reftable store (not readable without git, so "maybe"), or a git dir that cannot be
+#   read at all. 1 only when the filesystem says positively that it does not. NO
+#   subprocess (review p6-r8): it is the precondition that keeps a plain repo's nag and
+#   gate from spawning `fr` (review p6-r1). It never decides fr-enabled by itself.
+fr_switch_ref_maybe() {
+  _fr_common=$(_fr_common_dir_of "$1") || return 0
+  [ -d "$_fr_common" ] || return 0
+  [ -e "$_fr_common/refs/remotes/origin/fr" ] && return 0
+  [ -d "$_fr_common/reftable" ] && return 0
+  if [ -f "$_fr_common/packed-refs" ]; then
+    while IFS= read -r _fr_line || [ -n "$_fr_line" ]; do
+      case "$_fr_line" in *" refs/remotes/origin/fr") return 0 ;; esac
+    done < "$_fr_common/packed-refs"
+  fi
+  return 1
+}
+
 # Return 0 if the given resolved toplevel is fr-enabled, else 1 (spec 2026-11-04
-# repo-feature-settings R26). fr-enabled is any of:
-#   - a devcontainer profile, or an fr plans dir in the checkout (the legacy test);
-#   - the QUIET switch: the last fetched `refs/remotes/origin/fr:settings.yaml` says
-#     `placement: quiet` and the repo has an origin remote (R23: no origin is `repo`);
+# repo-feature-settings R26). fr-enabled is any of the DIRECT checks, none of which
+# needs `fr`:
+#   - a devcontainer profile, or an fr plans dir in the checkout (the legacy test; it
+#     runs whether or not `fr` resolves, plan-journal decision p6-plans-test-always);
 #   - a workspace whose `.fr-isolation` marker records `placement` quiet or stealth;
-#   - `fr settings paths --shell` (when `fr` resolves) names an existing FR_PLANS_DIR
-#     or a FR_PLACEMENT of quiet/stealth.
-# The direct checks run FIRST and need no `fr`, so a missing, failing or garbled `fr`
-# can only fail to ADD an enabled answer, never remove one: it falls back to them.
-# Quiet and stealth keep no plans dir in the checkout, so without the direct checks a
-# missing `fr` would call such a repo "not fr-enabled" and open the edit gate.
+#   - the QUIET switch: the last fetched `refs/remotes/origin/fr:settings.yaml`, with
+#     an origin remote (R23: no origin is `repo`), that cannot be read positively as
+#     `repo` (`_fr_switch_enabled`).
+# Only then, and only when `refs/remotes/origin/fr` may exist (`fr_switch_ref_maybe`:
+# a plain repo spawns no `fr`, review p6-r1), the resolver is asked, bounded, whether
+# it names a quiet/stealth placement or an existing FR_PLANS_DIR. A missing, failing,
+# slow or garbled `fr` can only fail to ADD an enabled answer, never remove one.
 _fr_is_enabled() {
   for _fr_cfg in "$1"/.devcontainer/*/devcontainer.json; do
     [ -f "$_fr_cfg" ] && return 0
@@ -213,18 +342,43 @@ _fr_placement_enabled() {
   fi
   fr_git_resolve || return 1
   "$FR_GIT_BIN" -C "$1" config --get remote.origin.url >/dev/null 2>&1 || return 1
-  "$FR_GIT_BIN" -C "$1" cat-file -p refs/remotes/origin/fr:settings.yaml 2>/dev/null |
-    grep -Eq '^placement:[[:space:]]*quiet[[:space:]]*$'
+  _fr_switch=$("$FR_GIT_BIN" -C "$1" cat-file -p refs/remotes/origin/fr:settings.yaml 2>/dev/null) ||
+    return 1
+  _fr_switch_enabled "$_fr_switch"
 }
 
-# Ask the resolver. Never evals its output: two keys are read by name and a value
-# that does not look like a plain path is ignored.
+# _fr_switch_enabled <settings.yaml text> (review p6-r3)
+#   0 when the switch is quiet OR cannot be read positively as `repo`. fr refuses every
+#   spelling of `placement` but one (`fr.placement.quiet.switch_spelling_problem`): the
+#   line `placement: <value>` at column 0, unquoted, no comment, the only live line
+#   naming placement. So: that line saying `quiet` is quiet; it saying `repo`, or no
+#   live line naming placement at all (the default), is repo; ANYTHING else (a quoted,
+#   commented, flow, indented or doubled spelling) fails closed, as fr-enabled.
+_fr_switch_enabled() {
+  _fr_live=0
+  _fr_canon=""
+  while IFS= read -r _fr_line || [ -n "$_fr_line" ]; do
+    _fr_line=${_fr_line%$'\r'}
+    case "$_fr_line" in *placement*) ;; *) continue ;; esac
+    _fr_trim=${_fr_line#"${_fr_line%%[![:space:]]*}"}
+    case "$_fr_trim" in '#'*) continue ;; esac
+    _fr_live=$((_fr_live + 1))
+    case "$_fr_line" in 'placement: quiet' | 'placement: repo') _fr_canon=$_fr_line ;; esac
+  done <<FR_SWITCH_EOF
+$1
+FR_SWITCH_EOF
+  [ "$_fr_live" -eq 0 ] && return 1
+  [ "$_fr_live" -eq 1 ] && [ "$_fr_canon" = "placement: repo" ] && return 1
+  return 0
+}
+
+# Ask the resolver, only past the cheap precondition. Never evals its output: two keys
+# are read by name and a value that does not look like a plain path is ignored.
 _fr_paths_enabled() {
-  command -v fr >/dev/null 2>&1 || return 1
-  _fr_out=$(FR_REPO_ROOT="$1" fr settings paths --shell 2>/dev/null) || return 1
-  _fr_val() { printf '%s\n' "$_fr_out" | sed -n "s/^$1=//p" | head -n 1 | sed -e "s/^'//" -e "s/'\$//"; }
-  case "$(_fr_val FR_PLACEMENT)" in quiet | stealth) return 0 ;; esac
-  _fr_plans=$(_fr_val FR_PLANS_DIR)
+  fr_switch_ref_maybe "$1" || return 1
+  _fr_out=$(fr_settings_paths "$1") || return 1
+  case "$(fr_paths_value "$_fr_out" FR_PLACEMENT)" in quiet | stealth) return 0 ;; esac
+  _fr_plans=$(fr_paths_value "$_fr_out" FR_PLANS_DIR)
   case "$_fr_plans" in /*) [ -d "$_fr_plans" ] && return 0 ;; esac
   return 1
 }

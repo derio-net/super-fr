@@ -328,13 +328,120 @@ def test_a_garbled_fr_answer_never_turns_a_direct_yes_into_no(tmp_path: Path) ->
 
 
 def test_fr_paths_name_a_plans_dir_the_direct_test_cannot_see(tmp_path: Path) -> None:
-    """When `fr` resolves, FR_PLANS_DIR is the plans directory the placement names."""
-    repo = fr_repo(tmp_path, fr_enabled=False)
+    """When `fr` resolves and an `origin/fr` ref exists (the cheap precondition, review
+    p6-r1), FR_PLANS_DIR is the plans directory the placement names. It is asked with
+    `--no-create` (review p6-r4): a hook never creates the `fr` branch or worktree."""
+    repo = quiet_repo(tmp_path, settings="placement: repo\n")
     plans = tmp_path / "elsewhere" / "plans"
     plans.mkdir(parents=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     stub = bin_dir / "fr"
-    stub.write_text(f"#!/bin/bash\necho 'FR_PLACEMENT=repo'\necho 'FR_PLANS_DIR={plans}'\n")
+    stub.write_text(
+        '#!/bin/bash\n[ "$*" = "settings paths --shell --no-create" ] || exit 9\n'
+        f"echo 'FR_PLACEMENT=repo'\necho 'FR_PLANS_DIR={plans}'\n"
+    )
     stub.chmod(0o755)
     assert enabled(repo, {"PATH": f"{bin_dir}:/usr/bin:/bin"}) == 0
+
+
+# --- review p6-r1: no `fr` spawn on a plain repo; a bounded one otherwise -----------
+
+
+def recording_fr(bin_dir: Path, body: str = "") -> Path:
+    """A PATH stub `fr` that appends its argv to a log, then runs *body*."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    log = bin_dir.parent / f"{bin_dir.name}-calls.log"
+    stub = bin_dir / "fr"
+    stub.write_text(f'#!/bin/bash\nprintf "%s\\n" "$*" >> "{log}"\n{body}\n')
+    stub.chmod(0o755)
+    return log
+
+
+def test_a_plain_repos_decision_spawns_no_fr(tmp_path: Path) -> None:
+    log = recording_fr(tmp_path / "bin")
+    env = {"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin"}
+    plain = fr_repo(tmp_path, name="plain", fr_enabled=False)
+    with_origin = fr_repo(tmp_path, name="with-origin", fr_enabled=False)
+    _git(with_origin, "remote", "add", "origin", "https://example.com/org/repo.git")
+    for repo in (plain, with_origin):
+        assert enabled(repo, env) == 1
+        assert decide(repo / "src.py", env=env) == 0
+    assert not log.exists(), log.read_text()
+
+
+def test_a_slow_fr_is_bounded_and_falls_back_to_the_direct_checks(tmp_path: Path) -> None:
+    import time
+
+    repo = quiet_repo(tmp_path, settings="placement: repo\n")
+    log = recording_fr(tmp_path / "bin", "sleep 30")
+    env = {"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "FR_PATHS_TIMEOUT": "1"}
+    started = time.monotonic()
+    assert enabled(repo, env) == 1
+    assert time.monotonic() - started < 10
+    assert log.read_text().splitlines() == ["settings paths --shell --no-create"]
+
+
+# --- review p6-r2: only an absolute PATH entry's `fr` is ever run --------------------
+
+
+def test_a_relative_path_entry_holding_an_fr_is_never_run(tmp_path: Path) -> None:
+    """A repo-planted `bin/fr` reached through a relative PATH entry is never executed
+    (the TS `resolveFr` relative-PATH test, mirrored)."""
+    repo = quiet_repo(tmp_path, settings="placement: repo\n")
+    planted = repo / "bin" / "fr"
+    planted.parent.mkdir()
+    ran = tmp_path / "planted-ran"
+    planted.write_text(f'#!/bin/bash\ntouch "{ran}"\necho FR_PLACEMENT=quiet\n')
+    planted.chmod(0o755)
+    for relative in ("bin", "./bin", "", "."):
+        entry = f"{relative}:/usr/bin:/bin" if relative != "." else ".:/usr/bin:/bin"
+        script = f'cd "{repo}/{"bin" if relative == "." else ""}"; . "{LIB}"; _fr_is_enabled "{repo.resolve()}"'
+        result = subprocess.run(
+            ["bash", "-c", script], capture_output=True, text=True, env={**os.environ, "PATH": entry}
+        )
+        assert result.returncode == 1, (relative, result.stderr)
+    assert not ran.exists()
+
+
+def test_an_absolute_fr_harness_pin_is_preferred_over_path(tmp_path: Path) -> None:
+    repo = quiet_repo(tmp_path, settings="placement: repo\n")
+    on_path = recording_fr(tmp_path / "path-bin", "echo FR_PLACEMENT=repo")
+    pinned = recording_fr(tmp_path / "pin-bin", "echo FR_PLACEMENT=quiet")
+    env = {
+        "PATH": f"{tmp_path / 'path-bin'}:/usr/bin:/bin",
+        "FR_HARNESS_FR": str(tmp_path / "pin-bin" / "fr"),
+    }
+    assert enabled(repo, env) == 0
+    assert pinned.exists() and not on_path.exists()
+    # an identity string (what the pin normally holds) is not a path: PATH decides
+    env["FR_HARNESS_FR"] = f"7.0.0 {tmp_path}"
+    assert enabled(repo, env) == 1
+    assert on_path.exists()
+
+
+# --- review p6-r3(b): a switch the hooks cannot positively read as repo is fr-enabled ---
+
+NON_CANONICAL_QUIET = {
+    "double-quoted": 'placement: "quiet"\n',
+    "single-quoted": "placement: 'quiet'\n",
+    "trailing-comment": "placement: quiet # c\n",
+    "flow-mapping": "{placement: quiet}\n",
+    "indented": "  placement: quiet\n",
+    "quoted-key": '"placement": quiet\n',
+    "crlf-canonical": "placement: quiet\r\n",
+    "two-lines": "placement: repo\nplacement: quiet\n",
+    "quoted-repo": 'placement: "repo"\n',
+}
+
+
+@pytest.mark.parametrize("text", NON_CANONICAL_QUIET.values(), ids=NON_CANONICAL_QUIET)
+def test_every_spelling_of_a_placement_is_fr_enabled_without_fr(tmp_path: Path, text: str) -> None:
+    repo = quiet_repo(tmp_path, settings=text)
+    assert enabled(repo, NO_FR) == 0
+    assert decide(repo / "src.py", env=NO_FR) == 1
+
+
+def test_a_switch_naming_no_placement_is_the_repo_default(tmp_path: Path) -> None:
+    repo = quiet_repo(tmp_path, settings="schema: 1\n## placement: quiet is prose here\n")
+    assert enabled(repo, NO_FR) == 1
