@@ -19,8 +19,8 @@ know each part is done". It lives in the same repo as the code it changes, under
 ## One folder per plan
 
 ```
-docs/superpowers/plans/<YYYY-MM-DD-slug>/
-├── _meta.yaml    # slug, spec, target repo, fr_version range, schema_version
+docs/superpowers/plans/<slug>/   # by convention the slug starts with a date, YYYY-MM-DD-...
+├── _meta.yaml    # plan (its slug), spec, target_repo, fr_version, created, schema_version
 ├── _prose.md     # the human-readable narrative
 ├── 01.yaml       # phase 1: header, tasks, steps
 └── 02.yaml       # phase 2 ...
@@ -30,7 +30,8 @@ docs/superpowers/plans/<YYYY-MM-DD-slug>/
 (`target_repo:`) and the range of `fr` versions allowed to read it (`fr_version:`).
 Each phase file has a `phase:` header with its `number`, `title`, `tag`, `depends_on`
 phases, the `acceptance` rows it moves, a model `tier` hint and the `files` it expects to
-touch, followed by `tasks:`. A task holds `steps:`, and every step has an id of the form
+touch, followed by `tasks:` and a `state:` block that records each step's tick and the
+phase's completion. A task holds `steps:`, and every step has an id of the form
 `P<phase>.T<task>.S<step>` (for example `P2.T1.S3`) plus its text.
 
 The `tag` is `agentic` (an agent does it) or `manual` (a human does it, such as secrets, UI
