@@ -131,3 +131,6 @@ Test Plan 6 and 8 added; §3 states the operator's decisions replace the per-bat
 ### s1-help-lines-resolved · finding [out-of-scope] · resolves s1-help-lines: fr's CLI help lines are too long for STE, so docs/reference/cli.md's generated tree cannot meet the guides' standard
 
 Not caused by this change: fr's help text predates it and is code this docs feature does not touch.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-13-writing-standards-docs-p2 created=2026-11-13T21:48:45+00:00 -->
+### phase-split-2026-11-13-writing-standards-docs-p2 · decision · review-size: reference pages to STE are one reviewable rewrite batch
