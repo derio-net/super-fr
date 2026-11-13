@@ -49,12 +49,14 @@ Then start a new session: it runs the script, the one you are in does not.
 
 ## Checking an environment
 
-`fr cloud doctor` lists every prerequisite above with its state and fix, and exits 1
-when any fails. In a cloud session (`CLAUDE_CODE_REMOTE=true`, which the harness sets in
-every shell) an fr command that fails for one of these reasons — a GraphQL 403 under
-`forge.api: graphql`, a worker blocked on the `agents` artifact, a run cursor written by a
-newer fr — ends with one block naming what is missing and this fix. On a host none of
-this ever prints.
+`fr cloud doctor` lists every prerequisite above with its state, prints the fix for each
+one that fails, and exits 1 when any fails; in a cloud session it then prints the remedy
+block for the failed ones other than the merge method. In a cloud session
+(`CLAUDE_CODE_REMOTE=true`, which the harness sets in every shell) an fr command that
+fails for one of these reasons — a GraphQL 403 under `forge.api: graphql`, a run cursor
+written by a newer fr — ends with one block naming what is missing and this fix, and a
+worker blocked on the `agents` artifact quotes the same block in its `needs_action`. On a
+host none of this ever prints.
 
 ## The `agents` artifact
 
