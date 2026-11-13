@@ -1,0 +1,44 @@
+schema_version: 11
+run: 2026-11-12-feat-placement-resolver
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+- kind: review
+  id: review-phase-4
+  phase: 4
+  title: Phase 4 (stealth) review, range c730b11b7..b224b27cf
+  body: Reviewer a69ecb483d71aace6 (opus) returned "not ready" with nine in-scope findings, most reproduced in scratch repos (a CAS overwrite of another host's state, a refused commit that exited 0, fr agents delivered to the target origin). All nine were fixed at 9b012fd4d..66f4529f2, together with three automated security-review follow-ups (NUL-safe, case-folded fr-path check on fr push; forge writes refused at the client layer; visibility asked only of the remote URL's own host and backend).
+- {kind: finding, id: p4-r1, phase: 4, review_scope: in, title: "Stealth push force-with-lease without ancestry check; ensure_worktree ignores a failed fast-forward", body: "A diverged tracking clone force-overwrote another writer's state (reproduced)."}
+- {kind: finding, id: p4-r2, phase: 4, review_scope: in, title: "A commit refused in the tracking clone was a warning with exit 0", body: "The cursor moved locally while the tracking ref did not, against R24 (reproduced with fr run advance)."}
+- {kind: finding, id: p4-r3, phase: 4, review_scope: in, title: "fr init agents and scaffolds wrote fr files into the target under stealth", body: "git add -A plus fr push delivered .claude/agents to the target origin (reproduced)."}
+- {kind: finding, id: p4-r4, phase: 4, review_scope: in, title: "Re-running fr isolation up on a stealth workspace demanded scripts/validate-plans.sh on the product branch", body: "space_for saw the tracking repo's plans."}
+- {kind: finding, id: p4-r5, phase: 4, review_scope: in, title: "fr apply --yes gated the forge against the tracking clone", body: "forge.issues and labels read as on, so issues would reach the target forge."}
+- {kind: finding, id: p4-r6, phase: 4, review_scope: in, title: "The uncommitted-edit veto ignored the tracking clone", body: "The migration gate could commit a half-edited artifact there."}
+- {kind: finding, id: p4-r7, phase: 4, review_scope: in, title: "Visibility could never be read for self-hosted or scp-style targets", body: "_forge_visibility built https://host:path and picked GitHub."}
+- {kind: finding, id: p4-r8, phase: 4, review_scope: in, title: "more_visible treated an unknown target visibility as public", body: "Fail-open for a public tracking repo."}
+- {kind: finding, id: p4-r9, phase: 4, review_scope: in, title: "Stealth refusals in fr acceptance init named placement quiet and R23", body: "Wrong placement in the message."}
+- kind: decision
+  id: stealth-gitea-unreadable
+  phase: 4
+  title: "A Gitea target or tracking repo is unreadable for the privacy guard, so stealth refuses it"
+  body: The tea client cannot be pinned to the remote URL's host, so fr cannot be sure which forge answered the visibility question. R24's guard fails closed on unreadable visibility; an explicit Gitea path is follow-up work, not this plan's.
+- kind: decision
+  id: stealth-forge-guard-at-client
+  phase: 4
+  title: "Under stealth, forge writes are refused at the client layer, except the one minimal draft PR"
+  body: fr/placement/forge_guard.py wraps every client from client_for and client_for_backend, so a new command cannot skip the R24 guard; commands keep their own earlier refusals for a better message. Stealth is decided from the checkout and the process cwd, so a triage or release forge write started inside a stealth workspace is refused too.
+resolves:
+- {id: p4-r1, state: fixed, body: "9b012fd4d: push requires ancestry (replays onto the seen tip); stealth.sync() under fr_worktree_lock fetches, fast-forwards, rebases unpushed commits or refuses."}
+- {id: p4-r2, state: fixed, body: "90e6b5ed8, 151f9ad56: any non-committed stealth outcome raises StealthPushError (exit 2) after restoring only this call's files; rollback is a soft reset, never reset --hard; other features' pending files are ignored; row note and explainers corrected."}
+- {id: p4-r3, state: fixed, body: "99f6c64e5, 2870a7b98: repo-config writers refuse under stealth before writing; fr push refuses commits carrying fr-owned paths, read with diff-tree -z and core.quotePath=false, case-folded; the scenario asserts the target origin holds no fr path."}
+- {id: p4-r4, state: fixed, body: "1d3926be1: the existing-worktree check counts only product-tree plans, for quiet and stealth."}
+- {id: p4-r5, state: fixed, body: "2870a7b98: fr apply --yes refuses under stealth; forge policy read from the cwd workspace; forge_guard refuses every write but create_pr; tests show zero write calls."}
+- {id: p4-r6, state: fixed, body: "06276a412: the veto covers the tracking clone."}
+- {id: p4-r7, state: fixed, body: "600e05500, ab698827d, 7fe6442f7: scp/ssh remotes parsed; the checkout's raw host must equal the URL's host; a SaaS host must be asked by its own backend; Gitea unreadable."}
+- {id: p4-r8, state: fixed, body: "99e7d92c2: unknown target visibility is private, unknown tracking visibility public."}
+- {id: p4-r9, state: fixed, body: "6ffbbf8c2: the messages name placement stealth and R24."}
+evidence:
+  review: review-phase-4
+  reviewer: a69ecb483d71aace6
+  model: claude-opus-5-5
