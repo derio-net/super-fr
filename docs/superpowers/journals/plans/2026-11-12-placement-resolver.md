@@ -1560,3 +1560,8 @@ fb881cd6c: real. The devcontainer bind-mounts only the common dir and its worksp
 ### pr1431-r6-resolved · finding [fixed] · resolves pr1431-r6: Under quiet and stealth the edit gate blocks the fr worktree and tracking clone, and no skill says to ask fr settings paths
 
 4fe38e9b8: bash _fr_placement_write_target (Claude Code + Hermes) and marker.ts placementWriteTarget allow the repo's own quiet fr worktree (linked, at quiet.worktree_path from its common dir, HEAD refs/heads/fr, switch canonically quiet) and a stealth--* tracking clone named by a valid sibling stealth marker; refuse a foreign fr worktree, one elsewhere or off fr, and a primary checkout; skills take FR_SPECS_DIR/FR_PLANS_DIR from fr settings paths; tests in bash, bun and the Hermes hook
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-11-13T19:18:51+00:00 state=open resolves=p1-r6 tracked_by=derio-net/super-fr#1419 -->
+### p1-r6-resolved-2 · finding [deferred → derio-net/super-fr#1419] · resolves p1-r6: branch_slug is not injective (feat/a__b and feat__a/b share a slug), now reused as the quiet/stealth feature id
+
+Out of scope: branch_slug predates this change; filed as #1419.
