@@ -45,17 +45,18 @@ build (`.github/blog-craft.ref`), and its `site-build` CI job already checks it 
 
 ## Requirements
 
-R1. Guides (`docs/*.md`) and reference pages (`docs/reference/*.md`) follow `ste`, explainers (`docs/explainers/*.md`) follow `plain-language`, `docs/explainers/why-fr.md` follows `elements-of-style`, and the landing page `docs/explainers/index.md` follows no standard.
-R2. One script, `scripts/check-writing-standards.sh <blog-craft-dir>`, holds the page-group mapping and runs blog-craft's `tools/validate_writing_standard.py` over every page `.fr/docs.yaml` names; it exits with the checker's code, so a FAIL fails it and warnings do not.
-R3. A page that departs from its group's standard says so in its own front matter (`writing_standard: <name>` or `none`), and only `why-fr.md` and `index.md` do.
+R1. Guides (`docs/*.md`) and reference pages (`docs/reference/*.md`) follow `ste`, explainers (`docs/explainers/*.md`) follow `plain-language`, `docs/explainers/why-fr.md` follows `elements-of-style`, and two pages follow no standard: the landing page `docs/explainers/index.md`, and `docs/reference/cli.md`, whose command tree is generated from `fr`'s help text.
+R2. One script, `scripts/check-writing-standards.sh <blog-craft-dir>`, holds the page-group mapping and runs blog-craft's `tools/validate_writing_standard.py`, with PyYAML provided by `uv run --isolated --no-project --with pyyaml`, over every page `.fr/docs.yaml` names, from the repository root whatever the caller's directory; it exits with the highest code any group returned, so a FAIL fails it and warnings do not.
+R3. A page that departs from its group's standard says so in its own front matter (`writing_standard: <name>` or `none`), and only `why-fr.md`, `index.md` and `cli.md` do.
 R4. Product terms the docs legitimately use (for example `worktree`, `devcontainer`, `fr`, `PR`, `CI`) are listed once in `.writing-standard-terms` at the repo root, which the checker reads; a term is listed only when the standard would otherwise flag a word the page cannot avoid.
 R5. `.github/blog-craft.ref` points at a blog-craft commit that ships the checker and the three standards, and every page still renders: CI's `site-build` job passes.
 R6. CI's `site-build` job runs `scripts/check-writing-standards.sh` against the pinned blog-craft checkout and fails on any FAIL.
-R7. Every page with a standard is rewritten to it, language only: front matter keys, section order, fenced code, inline code, link targets and numerals stay, and the page passes `validate_writing_standard.py --preserve-from origin/main` with no hit.
-R8. Every rewritten page gets a fact-keeper review, a read-only agent given only the page as it is on `origin/main` and the rewrite, and no fact it reports `lost` or `changed` stays unresolved; the result is recorded in the plan journal per page.
-R9. After the rewrite, no page FAILs its standard, and an explainer keeps a plain-language warning only when the plan journal names the warning and the reason it stays.
-R10. `.claude/rules/explainers-currency.md` says which standard each page group follows, how to run the check locally, and replaces its "second person, concrete, unhurried" voice line with the standards; the explainers keep explaining why a mechanism exists.
-R11. A unit test pins the `site-build` step, the script's page-group mapping, and the two front-matter exceptions.
+R7. Every page with a standard is rewritten to it, language only: front matter keys (apart from R3's added key) and their values (apart from `title` and `tldr` prose), section order, fenced code, inline code, link targets, numerals and HTML comment markers stay, and the page passes `validate_writing_standard.py --preserve-from <baseline>` with no FAIL and no `preserve` hit, where `<baseline>` is the merge base of the branch and `origin/main`, recorded once in the plan journal.
+R8. Every rewritten page gets a fact-keeper review, a read-only agent given only the page at the baseline and the rewrite, and no fact it reports `lost`, `changed` or `added` stays unresolved: each is fixed, or the journal records why the rewrite is right; the result is recorded in the plan journal per page.
+R9. After the rewrite, no page FAILs its standard, and a page keeps a warning only when the plan journal names the warning and the reason it stays; this holds for every standard, the `ste` and `elements-of-style` pages included.
+R10. `.claude/rules/explainers-currency.md` says which standard each page group follows, how to run the check locally, and replaces its "second person, concrete, unhurried" voice line with the standards (the explainers keep explaining why a mechanism exists); its Enforcement list names the new check, and its generated mirror `.opencode/instructions/explainers-currency.md` is regenerated.
+R11. A unit test pins the `site-build` step, the script's page-group mapping, and the three front-matter exceptions.
+R12. The rewrite keeps every test that pins page wording or markers green, among them `tests/unit/test_tripwire_fr_goal_question_rounds.py`, `tests/unit/test_hermes_docs.py` and `tests/unit/test_build_site.py`; the full unit suite passes in CI after every batch.
 
 ## Design
 
@@ -69,19 +70,29 @@ It runs the checker once per group, with the group's standard as `--default`, so
 page's own front matter still wins (R3):
 
 ```bash
-checker="$1/tools/validate_writing_standard.py"
-python3 "$checker" --default ste docs/*.md docs/reference/*.md
-python3 "$checker" --default plain-language docs/explainers/*.md
+cd "$(git rev-parse --show-toplevel)"
+checker="$(realpath "$1")/tools/validate_writing_standard.py"
+run() { uv run --isolated --no-project --with pyyaml python "$checker" "$@"; }
+run --default ste docs/*.md docs/reference/*.md
+run --default plain-language docs/explainers/*.md
 ```
 
 The globs are the three `pages:` globs of `.fr/docs.yaml`. A page added to one of
 those directories is checked with no edit to the script. The script runs every group
 before it exits, then exits with the highest code any group returned, so one run shows
-every failure. It needs only Python 3 and PyYAML, which the `site-build` job already
-installs.
+every failure. `site-build` only gives PyYAML to its build step's isolated environment
+(`.github/workflows/ci.yml`), so the script brings its own through `uv run --isolated
+--no-project --with pyyaml`, as the build step does. `uv` is already set up in that
+job.
 
-`why-fr.md` carries `writing_standard: elements-of-style` and `index.md` carries
-`writing_standard: none`. `fr.docs.model.parse_page` and `scripts/build-site.py`
+`why-fr.md` carries `writing_standard: elements-of-style`; `index.md` and `cli.md`
+carry `writing_standard: none`. `cli.md` is mostly the `<!-- generated:cli-tree -->`
+block that `scripts/sync-readme.py` writes from `fr`'s help lines, and
+`test_tripwire_readme_sync.py` pins it. Under `ste` it fails, because one help line can
+run to 40 words. The only fix is to rewrite `fr`'s help text, which is a code change
+outside this feature. So `cli.md` opts out; its hand-written paragraphs are still
+rewritten to `ste` language, without the gate. Rewriting the help lines is filed as a
+follow-up. `fr.docs.model.parse_page` and `scripts/build-site.py`
 ignore front matter keys they do not read, so the extra key changes neither the docs
 gate nor the landing page.
 
@@ -106,18 +117,35 @@ The blog-craft plugin is not installed in the session that runs this feature, so
 rewrite follows blog-craft's `skills/apply-writing-standard/SKILL.md` procedure by hand,
 pinned to the same commit as R5:
 
+0. Record the baseline once: `git merge-base HEAD origin/main`, in the plan journal.
+   If `main` is merged into the branch later, the pages `main` changed meanwhile are
+   checked and reviewed again against the new merge base.
 1. Rewrite a batch of 3 to 5 pages in place, language only.
-2. Run the checker on the batch with `--preserve-from origin/main --stats`. Fix every
+2. Run the checker on the batch with `--preserve-from <baseline> --stats`. Fix every
    FAIL and every `preserve` hit. No check is waived to pass.
 3. Review each page with a fact-keeper: a dispatched read-only agent whose instructions
-   are blog-craft's `agents/fact-keeper.md`, given the page from `origin/main` (written
-   outside the repository) and the rewrite. Fix every `lost` or `changed` fact, or
-   record why the change is correct.
+   are blog-craft's `agents/fact-keeper.md`, given the page at the baseline (written
+   outside the repository) and the rewrite. Fix every `lost`, `changed` or `added`
+   fact, or record why the rewrite is right.
 4. Record the batch in the plan journal: per page, the sentence count and average
    before and after, the checker result, the fact-keeper counts, and any warning kept
    with its reason (R9).
+5. Run the tests that pin page wording (R12) on the batch before committing it; the
+   full unit suite runs in CI on the pushed batch.
 
-The baseline is `origin/main`, not `HEAD`, because the branch accumulates rewrites.
+The baseline is the merge base, not `HEAD` (the branch accumulates rewrites) and not
+`origin/main` (it moves while the feature runs). The skill's per-batch stop for the
+operator's approval is replaced by the operator's decisions d-scope and d-verification:
+the fact-keeper review and the journal record take its place.
+
+Tripwires the rewrite must keep (R12):
+- `test_tripwire_fr_goal_question_rounds.py` forbids phrases such as "one set of
+  questions", "one round of questions" and "asks its questions once" on `01-fr-goal.md`
+  and `why-fr.md`, and requires the word "round" there.
+- `test_hermes_docs.py` pins strings in `docs/reference/hermes.md`.
+- `test_build_site.py` pins the `<!-- site:figure … -->` markers in `fr-wave-driver.md`
+  and `fr-exit-gates.md`. The checker does not preserve HTML comments, so R7 names them
+  and the batch's test run catches a lost one.
 Under `ste`, a page's headings may change. A heading that other pages link to keeps
 its anchor, or its inbound links are updated in the same batch. The explainers keep
 their purpose: they explain why a mechanism exists, in plain language.
@@ -128,7 +156,13 @@ their purpose: they explain why a mechanism exists, in plain language.
 - the group-to-standard mapping, and the two exceptions;
 - `bash scripts/check-writing-standards.sh <blog-craft-dir>` to check locally, with the
   same blog-craft checkout recipe the rule already gives for previews;
-- a pointer to each standard's reference file in blog-craft for the rules themselves.
+- a pointer to each standard's reference file in blog-craft for the rules themselves;
+- a new Enforcement bullet for `scripts/check-writing-standards.sh` in `site-build` and
+  its unit test.
+
+The rule is listed in `scripts/sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`, so the edit
+is followed by `scripts/sync-opencode.py` and the regenerated
+`.opencode/instructions/explainers-currency.md` is committed with it.
 
 The "Match the existing voice: second person, concrete, unhurried" paragraph is
 replaced. Its intent stays (explain why, for a newcomer), but the standards replace its
@@ -140,12 +174,12 @@ consumer repos choose their own standards.
 `tests/unit/test_pages_workflow.py` (or a sibling `test_writing_standards_docs.py`) pins:
 - the `site-build` step;
 - the script's two `--default` groups, which match `.fr/docs.yaml`'s page globs;
-- the front matter of `why-fr.md` and `index.md`;
+- the front matter of `why-fr.md`, `index.md` and `cli.md`;
 - that no other page carries a `writing_standard` key.
 
 ## Non-goals
 
-- Changing `fr` or the shipped `docs-currency` rule.
+- Changing `fr` (its help lines included, see `cli.md` in §1) or the shipped `docs-currency` rule.
 - Installing blog-craft as a plugin, or vendoring its checker into super-fr.
 - Pages outside `.fr/docs.yaml`'s globs (specs, plans, journals, README).
 - New standards, or changing blog-craft.
@@ -171,9 +205,18 @@ Pre-merge, in CI:
 
 Per batch, before it is accepted (recorded in the plan journal):
 
-4. `validate_writing_standard.py --preserve-from origin/main --stats` on the batch: no
+4. `validate_writing_standard.py --preserve-from <baseline> --stats` on the batch: no
    FAIL and no `preserve` hit.
-5. A fact-keeper review per page: no unresolved `lost` or `changed` fact.
+5. A fact-keeper review per page: no unresolved `lost`, `changed` or `added` fact.
+6. The plan journal names every warning a page keeps, and why (R9).
+7. The wording tripwires of R12 pass on the batch, and CI's full unit suite passes on
+   the pushed batch.
+
+At the end, in review:
+
+8. `.claude/rules/explainers-currency.md` names each group's standard and the three
+   exceptions, its local command is the one the CI step runs, and its OpenCode mirror is
+   in sync (`test_tripwire_opencode_instructions_sync.py`).
 
 ## Implementation Plans
 
