@@ -1500,3 +1500,8 @@ fr placement move --to stealth removes fr's files from the target's default bran
 ### pr1431-r3-resolved · finding [fixed] · resolves pr1431-r3: A reftable clone of a quiet repo reads as repo
 
 9c4a541b6: under reftable (reftable dir or extensions.refstorage) the switch sha, HEAD and branch names are read through git; files backends keep the filesystem path. tests/unit/test_placement_reftable.py, skipped only by a capability probe.
+
+<!-- fr:journal kind=finding scope=plan id=pr1431-r4-resolved created=2026-11-13T15:46:58+00:00 state=fixed resolves=pr1431-r4 -->
+### pr1431-r4-resolved · finding [fixed] · resolves pr1431-r4: git.history squash-unpushed writes fr attribution into the stealth target's history
+
+51a09c2f0: under stealth the squash message is the subject plus folded subjects with no fr attribution, and a folded subject naming fr refuses before rewriting; placement-stealth.sh squashes two commits and greps every commit body on the target.
