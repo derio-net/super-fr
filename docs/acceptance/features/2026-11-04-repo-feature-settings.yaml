@@ -227,15 +227,25 @@ rows:
       - super-fr:tests/unit/test_placement_merged.py#test_stealth_merged_status_comes_from_the_targets_default_ref
       - super-fr:tests/unit/test_placement_merged_archive.py#test_archive_branch_records_merged_and_moves_nothing
       - super-fr:tests/unit/test_placement_merged_archive.py#test_stealth_archive_records_in_the_tracking_repo_only
+      - super-fr:tests/unit/test_placement_merged.py#test_a_branch_fresh_from_the_default_ref_is_not_merged
+      - super-fr:tests/unit/test_placement_merged.py#test_a_squash_merge_is_found_only_through_the_forge
+      - super-fr:tests/unit/test_placement_merged.py#test_a_merged_feature_stays_merged_when_its_branch_moves_on
+      - super-fr:tests/unit/test_placement_merged.py#test_a_forged_record_for_a_deleted_branch_is_ignored
+      - super-fr:tests/unit/test_placement_merged.py#test_a_merged_features_later_amendment_is_pending_on_its_branch
+      - super-fr:tests/unit/test_placement_merged_archive.py#test_archive_records_a_deleted_branch_by_its_recorded_heads
       int:
       - super-fr:tests/integration/test_scenarios.py#test_placement_merged_status
     status: ci
-    notes: 'built in plan 2026-11-12-placement-resolver phase 5: under quiet and stealth
-      merged status and order come from the code branch''s merge into the default ref
-      (merged.yaml a cache, re-verified on every read), the fold orders merged features''
-      amendments by it, fr archive --branch appends merged in one pushed commit and
-      moves nothing, close-out and fr debt read it; the quiet scenario and the unit
-      tests (stealth included) run in CI'
+    notes: 'built in plan 2026-11-12-placement-resolver phase 5, fixed after its review:
+      under quiet and stealth a feature is merged when a head of its own (past the BASE
+      its root was claimed from; live refs, or the HEADS fr push records, or stealth''s
+      product head) is on the default ref, monotone once merged, or for a squash or
+      rebase merge when the forge''s merged PR (read by fr archive --branch and fr acceptance
+      status) has its merge commit on the first-parent line; merged.yaml is a cache
+      corroborated only by owned heads; merged features'' fragments are frozen at the
+      last pushed fr commit at or before the merge, in-place edits refused; the quiet
+      scenario (fresh branch unmerged, squash refusal without a forge, deleted branch
+      archived) and the unit tests (fake forge, stealth included) run in CI'
     scenario: tests/scenarios/placement-merged-status.sh
   - id: placement-fr-enabled
     capability: repo-feature-settings
