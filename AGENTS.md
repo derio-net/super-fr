@@ -323,8 +323,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `fr.proportionality.feature_diff` names; fail-closed: a rule-required lens that is not
     effective, or a remote whose default branch or merge-base cannot be read, is a `LensError`), and
     `review.py` (the `review-lens` block parser, `lens_review_rule`, the lens finding-id grammar
-    and the `lens_review` brief key). CLI: `fr lenses list|show|check|status`
-    (`commands/lenses_cmd.py`), read-only, so `lenses` is in `READ_ONLY_COMMANDS`.
+    and the `lens_review` brief key). The PR body's `## Review lenses` section is
+    `fr/record/pr_body.py`'s `_review_lenses` (not a required section). CLI: `fr lenses
+    list|show|check|status` (`commands/lenses_cmd.py`), read-only, so `lenses` is in
+    `READ_ONLY_COMMANDS`. Operator page: `docs/review-lenses.md`.
   - **Cloud triage** (2026-10-07 spec, `cloud-triage`) — the wave driver and its
     workers in Claude Code cloud sessions. `fr.forgeapi` resolves the one host
     setting `forge.api: rest | graphql` (`FR_FORGE_API`, else `~/.config/fr/forge.yaml`,
