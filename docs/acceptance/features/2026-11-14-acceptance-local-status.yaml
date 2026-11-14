@@ -115,3 +115,27 @@ rows:
     notes: The hop-by-hop chain test, the stamp-only migration and the validator, plus
       fr validate artifacts, run in CI
     verify: none
+amendments:
+  - row: acceptance-local-held-quiet-walk
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'walked live: the held quiet-placement walk resumed on rc.8 and delivered
+      with its row local, no gate and no issue'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-14T19:12:42Z'
+      evidence: '2026-11-14 on GitHub, fr 7.0.0-rc.8, private scratch repo derio-net/fr-walk-quiet
+        (quiet placement, fr services: ci none). The held run 2026-11-13-feat-whisper
+        resumed at deliver: the leftover refusal offered set-status --status local first;
+        whisper-lowercases was set local with level fr-walk-quiet:tests/test_whisper.py#test_whisper_lowercases_mixed_case;
+        deliver resolved (24174b7) and stamped the row (at 2026-11-14, tree, log full-suite.log@e0a6ea218ea5,
+        blob of tests/test_whisper.py). fr acceptance status shows [local 2026-11-14]
+        and no acceptance debt; fr debt shows 0 items. No tester gate was added and
+        the repo has no issue. Found on the way: the pending deliver record had to be
+        changed to local too (1456).'
+    why: 'walked live: the held quiet-placement walk resumed on rc.8 and delivered with
+      its row local, no gate and no issue'

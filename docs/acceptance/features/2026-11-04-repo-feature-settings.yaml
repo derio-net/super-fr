@@ -837,3 +837,26 @@ amendments:
     - derio-net/super-fr#1432
     why: 'plan 3 ships quiet and stealth; the live end-to-end walk on a real forge is
       post-merge, tracked by #1432'
+  - row: repo-settings-quiet-repo-live
+    op: set-status
+    base: 1
+    status: walked
+    notes: 'walked live on a real forge after plan 3 merged (quiet and stealth, steps
+      1 and 2 of the Test Plan); evidence on #1432'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-14T19:04:42Z'
+      evidence: '2026-11-13/14 on GitHub, fr 7.0.0-rc.3 to rc.8, private scratch repos
+        under derio-net. Quiet (fr-walk-quiet): feat/whisper is one squashed code-only
+        commit 44ecc3e, no fr file or chore(fr) commit; draft PR 1 has no label, comment
+        or fr section; every fr artifact is on the fr branch under features/feat__whisper/.
+        Stealth (fr-walk-stealth-target, tracking fr-walk-stealth-tracking): the target
+        carries code commits and one plain draft PR only, no fr file, label, comment
+        or issue; the tracking repo holds the records; a run interrupted after phase
+        1 resumed from the tracking repo in a fresh clone; a public tracking repo for
+        the private target was refused, exit 2, nothing written.'
+    why: 'walked live on a real forge after plan 3 merged (quiet and stealth, steps
+      1 and 2 of the Test Plan); evidence on #1432'
