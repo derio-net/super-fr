@@ -7292,6 +7292,8 @@ batches:
   rationale: Regenerates all three mirror sets (sync-opencode, sync-hermes, sync-readme), so it runs alone
     and last.
   wave: 21
+  after:
+  - consumer-delivery
 - id: retire-vk
   title: Retire VibeKanban support
   ids:
