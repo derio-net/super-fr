@@ -25,3 +25,8 @@ apply_record passes the record's name and per-row statuses into resolve_in_proce
 ### rev-1 · review · self-review of the diff: no findings
 
 Read the full diff. Both spellings are read only when they exist; a fragment with no local row still returns before the fold (review p2-r1 test still green). The record annotation only touches row leftovers whose id the record sets. Full suite: 16143 passed, 128 skipped. fr docs check clean after the two reviewed stamps.
+
+<!-- fr:journal kind=discovery scope=debug id=d-1 created=2026-11-14T19:52:14+00:00 -->
+### d-1 · discovery · Not fixed here: fr migrate artifacts does not rename a <slug>-design fragment to the one spelling (gh#1456's third point)
+
+deliver no longer misses such a fragment, so it is no longer silent. A follow-up issue is owed; filing it was not permitted in this session, so it is left to the operator.
