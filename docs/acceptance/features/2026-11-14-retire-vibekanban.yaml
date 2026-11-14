@@ -166,3 +166,11 @@ amendments:
       entry points), so dispatch --to herdr/cncd works outside uv run
     why: The vk runner and install.sh --install-bridge are removed (spec 2026-11-14-retire-vibekanban
       R1)
+  - row: vk-legacy-fallbacks-removed
+    op: reword
+    base: 4
+    acceptance: 'The vk-spelling dual-read fallbacks (vk-profiles.yaml, the .git/vk/isolation
+      state dir) no longer resolve: vk spellings are not read, and a devcontainer mount
+      is followed whatever its path is named'
+    why: 'VK support is removed (R1, R9): the bridge env and its project-id variable
+      went with fr-vk, so only the isolation spellings remain to pin'
