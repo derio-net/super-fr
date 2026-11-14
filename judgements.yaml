@@ -7189,6 +7189,7 @@ batches:
   - super-fr#1390
   - super-fr#1154
   - super-fr#1219
+  - super-fr#1461
   rationale: '#1394 must restore the 33 overwritten row notes, not only stop new damage (origins: fixes
     ship without repairing what older versions wrote).'
   wave: 17
