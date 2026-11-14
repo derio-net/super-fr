@@ -1,0 +1,77 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+- kind: review
+  id: review-p4
+  phase: 4
+  title: 'phase 4 review: 3 in-scope findings, all fixed; fact-keepers: 0 lost, 1 meaning shift fixed'
+  body: 'Code reviewer (separate context, read-only) checked the accuracy commits cce064d24, b54dd8b78, 858fa8213 and 5be371991 against the cited code (all true), the plain-language rewrite with per-page --preserve-from, meaning drift, inbound links, and built the site at HEAD and the merge base (no new raw list markers, tables and figures unchanged). Six blind fact-keepers, one per explainer, given only baseline and rewrite. Fixes in 5f7745866, a97de88c5, 5b2a89da9. CI went red on 5b2a89d from a date-bound test unrelated to the docs (p4-gh1369-clock), fixed in bd2924af3.'
+- kind: discovery
+  id: p4-fact-keeper
+  phase: 4
+  title: 'Fact-keeper results per page (R8): page | counts | resolution'
+  body: |
+    docs/explainers/fr-audit.md | kept 55, changed 1, lost 0, added 1 | 'before the figures were recorded' -> 'before fr recorded the figures': accepted, fr writes the usage file (fr/usage/capture.py); added = ISO acronym expansion
+    docs/explainers/fr-dispatch.md | kept 56, changed 0, lost 0, added 0
+    docs/explainers/fr-debugging.md | kept 41, changed 0, lost 0, added 0
+    docs/explainers/fr-devops-gate.md | kept 66, changed 0, lost 0, added 0
+    docs/explainers/fr-brainstorming-and-plan.md | kept 61, changed 0, lost 0, added 0
+    docs/explainers/fr-acceptance.md | kept 75, changed 1, lost 0, added 0 | revision 'written against' -> 'that it amends' is ambiguous about the base revision: fix to 'the revision of the row that the amendment was written against'
+- kind: discovery
+  id: p4-ws-acceptance-passive
+  phase: 4
+  title: 'Kept warning: passive "was written" in fr-acceptance.md:115'
+  body: 'Restoring p4-r2 brings back the passive "the row it was written against". The base-revision meaning needs the writing-time reference, and the active alternatives ("the row the author wrote it against") name an actor the fact does not have. Kept as a warning, not a fail.'
+- kind: finding
+  id: p4-r1
+  phase: 4
+  review_scope: in
+  title: 'fr-debugging.md: "fr derives the body" gave fr the skill''s job'
+  body: Raised by the phase 4 reviewer.
+- kind: finding
+  id: p4-r2
+  phase: 4
+  review_scope: in
+  title: 'fr-acceptance.md: amendment revision lost its written-against base'
+  body: Raised by the phase 4 reviewer and the fr-acceptance fact-keeper.
+- kind: finding
+  id: p4-r3
+  phase: 4
+  review_scope: in
+  title: 'fr-dispatch.md: "Commit and push it" points across a paragraph break'
+  body: Raised by the phase 4 reviewer.
+- kind: finding
+  id: p4-gh1369-clock
+  phase: 4
+  review_scope: out
+  title: 'test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds seeds a fixed 2026-10-30 date'
+  body: 'Past fr debt''s stale_days (14) from 2026-11-14 the plan reads as stale and the entry defaults to review; every branch and main fail shard 5. Not caused by this change; fixed here anyway (test-only) because it blocks this PR''s gate.'
+resolves:
+- id: p4-r1
+  state: fixed
+  body: 5f7745866
+- id: p4-r2
+  state: fixed
+  body: a97de88c5
+- id: p4-r3
+  state: fixed
+  body: 5b2a89da9
+- id: p4-gh1369-clock
+  state: fixed
+  body: 'bd2924af3: the fixture seeds its commit one day before now.'
+- id: p4-skill-acceptance-verify
+  state: out-of-scope
+  body: 'A stale claim in plugins/super-fr/skills/fr-acceptance/SKILL.md, not caused by a docs rewrite; to be filed at deliver.'
+- id: p4-plan-rework-help
+  state: out-of-scope
+  body: 'fr plan rework CLI help text (plan_cmd.py:365), not caused by this change; the page states the code behaviour; to be filed at deliver.'
+- id: p4-acceptance-backfill-render
+  state: out-of-scope
+  body: 'Pre-existing at the merge base (same class as p3-r8); fixing it moves numerals the preserve check compares; to be filed at deliver.'
+evidence:
+  review: review-p4
+  reviewer: a6cc3f6fb7a391d4e
+  model: claude-opus-5-5
