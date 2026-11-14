@@ -7104,6 +7104,8 @@ batches:
     even with the cached-durations rebalancing (6 shards sum ~1,695s), so it needs more shards, cheaper
     heavy files or a re-argued budget.'
   wave: 16
+  after:
+  - retire-vk
   skill: debug
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
