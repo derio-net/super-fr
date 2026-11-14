@@ -7095,11 +7095,11 @@ batches:
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
   - super-fr#1454
-  - super-fr#1456
   - super-fr#1395
   - super-fr#1303
-  rationale: 'Tier 2: deliver accepts a tests log not bound to its tree, and passes with local rows unstamped;
-    traceback on a transient forge read; wrappers hide the capture run. run_cmd.py.'
+  rationale: 'Tier 2: deliver accepts a tests log not bound to the code tree it ran on (#1454); traceback
+    on a transient forge read (#1395); wrappers hide the capture run (#1303). run_cmd.py. (#1456 fixed
+    in #1460.)'
   wave: 16
   skill: debug
 - id: owed-archive
