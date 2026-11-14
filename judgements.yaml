@@ -7088,6 +7088,17 @@ batches:
     ops gate stage 4/7 misreports. ledger.py, gate_cmd.py, ops/gate.py.'
   wave: 16
   skill: debug
+- id: deliver-evidence
+  title: Deliver and resolve witnesses that cannot pass falsely
+  ids:
+  - super-fr#1454
+  - super-fr#1456
+  - super-fr#1395
+  - super-fr#1303
+  rationale: 'Tier 2: deliver accepts a tests log not bound to its tree, and passes with local rows unstamped;
+    traceback on a transient forge read; wrappers hide the capture run. run_cmd.py.'
+  wave: 16
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
