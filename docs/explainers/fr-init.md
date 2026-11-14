@@ -76,7 +76,7 @@ things here. The interview confirms and fills gaps; it never asks something the 
 prompt to guess. The topics:
 
 - the **backend**: GitHub, GitLab or Gitea (skipped when the remote makes it obvious;
-  you confirm a self-hosted host with `--host`);
+  for a self-hosted host, the skill confirms it with you and passes it as `--host`);
 - the **profiles** you want: one `dev`, or a split such as read-only for review and admin
   with deploy credentials. Profiles differ by credentials first and tools second;
 - the **tools** to install, checked against the set `fr init scaffold --help` lists
