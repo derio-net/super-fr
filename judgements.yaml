@@ -7119,6 +7119,8 @@ batches:
     trusted by hooks and spawned python. Guard change: needs an independent adversarial review before
     merge.'
   wave: 17
+  after:
+  - suite-health
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
