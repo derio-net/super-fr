@@ -260,14 +260,23 @@ steps:
           lenses: docs-accuracy=unobserved:l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3;tests=unobserved:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4
           unobserved: reviewer,reviewer-return
   deliver:
-    state: running
-    at: '2026-11-14T01:53:33+00:00'
+    state: done
+    at: '2026-11-14T02:12:50+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1436
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-11-14T01:53:33+00:00'
           harness: claude-code
           session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
+          returned: '2026-11-14T02:12:46+00:00'
+          outcome: done
+        evidence:
+          tests: ci:c2cc1c1897f1b7d54c26262385ba05f25eafc503+ba5bf0cf099b35c83875da4bcb1b3d10e07b1ee9;tree=0695d16ff19460197e936324dad4fb1ff1b76a4b6b4c8db4ced613bd80fbbc87
+          proportionality: ba5bf0cf099b35c83875da4bcb1b3d10e07b1ee9:6819e9811f96c88457c6dae516ce90b8aeaf9ee30fe780623feef7e2397a431d
+          docs: ba5bf0cf099b35c83875da4bcb1b3d10e07b1ee9:91df8f78d1049ba8678368d6b751377a7aec73637e64eff35a231b89f8c4635a
+          visual: none
 driver: standalone
 fr_version: 7.0.0rc3
 pr: https://github.com/derio-net/super-fr/pull/1436

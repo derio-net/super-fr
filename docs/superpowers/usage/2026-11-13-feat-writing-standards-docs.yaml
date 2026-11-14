@@ -4,9 +4,10 @@ captures:
 - host: h-af404f4b
   harness: claude-code
   mode: host-worktree
-  captured_at: '2026-11-13T21:40:26+00:00'
+  captured_at: '2026-11-14T02:12:51+00:00'
   at:
   - resolve:brainstorm
+  - deliver
   sessions:
   - session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
     unavailable: no transcript found for this session on this host
