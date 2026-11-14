@@ -110,3 +110,10 @@ amendments:
     notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
     why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
       are deleted
+  - row: vk-legacy-fallbacks-removed
+    op: drop-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_bridge_cli.py
+    why: The VK_BRIDGE_* half went with the fr-vk bridge; the isolation spellings stay
+      covered by test_isolation.py
