@@ -7170,6 +7170,11 @@ batches:
   rationale: 'Tier 2: branch_slug not injective; resume backend from env not the recorded mode; scaffold
     names secrets after the worktree folder.'
   wave: 18
+  after:
+  - guard-trust
+  - gate-truth
+  - deliver-evidence
+  - owed-archive
   skill: debug
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
