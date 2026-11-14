@@ -158,3 +158,4 @@ steps:
           session: 08394382-d784-4733-ad56-9575e1c22a49
 fr_version: 7.0.0rc5
 issue: 1453
+pr: https://github.com/derio-net/super-fr/pull/1455
