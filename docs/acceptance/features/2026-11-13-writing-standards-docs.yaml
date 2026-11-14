@@ -35,9 +35,14 @@ rows:
     - spec:2026-11-13-writing-standards-docs#R5
     - spec:2026-11-13-writing-standards-docs#R6
     - spec:2026-11-13-writing-standards-docs#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_site_build_checks_the_writing_standards_after_the_build
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: ci
+    notes: site-build runs scripts/check-writing-standards.sh against the pinned blog-craft
+      after the build, then the real-checker test; green on the PR head.
     verify: none
   - id: writing-standards-docs-guides
     capability: published-docs
