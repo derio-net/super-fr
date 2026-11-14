@@ -46,3 +46,51 @@ stamp_local reuses _row_blocks/_amendment_starts/replace_row/render_amendment_bl
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 the hop is a stamp-only guard plus one validator helper; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-11-14T11:19:34+00:00 phase=1 -->
+### review-p1 · review · phase 1 review: 2 findings (2 in), both fixed, plus one fold crash found while testing the fix (phase 1)
+
+A code reviewer in a separate context, read-only, checked 616aa8cb3..HEAD (packages/, tests/) against spec R1, R2, R3, R5, R7 and §A-§C, and reproduced p1-r1 on a scratch fixture. Fixes are in edfdd9ade (p1-r1, plus the unhashable stamp the new merged-path test exposed) and c61b989cb (p1-r2). ruff and mypy are clean, and 1649 targeted acceptance/record/fold/debt/triage/gatebackfill/migration tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-14T11:19:34+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · a status-unchanged write (link-only --issue, note) on a local row drops its stamp and re-runs local_error, so a fresh row becomes unstamped debt and the write is refused once the repo has CI (phase 1)
+
+Raised by the phase 1 reviewer (record/apply.py pending Row rebuild, the merged move() set-status amendment, local_error on every local write).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-14T11:19:34+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · no test pins that a git ls-tree failure reads as debt, and the stale reason then names an unchanged file (phase 1)
+
+Raised by the phase 1 reviewer (acceptance/local.py head_blobs).
+
+<!-- fr:journal kind=finding scope=plan id=p1-fold-stamp-unhashable created=2026-11-14T11:19:34+00:00 phase=1 state=open review_scope=in -->
+### p1-fold-stamp-unhashable · finding [open] (reviewer: in scope) · a stamped set-status amendment is unhashable (LocalStamp.files is a dict), so the fold's Counter crashes on the first fragment deliver stamps (phase 1)
+
+Found by the orchestrator while writing the merged-path test for p1-r1. Every fr command that folds the matrix would have raised TypeError once phase 2 stamped a merged row's amendment.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-review-handoff-p2 created=2026-11-14T11:19:34+00:00 phase=2 -->
+### p1-review-handoff-p2 · discovery · For phase 2: head_blobs now returns None when git cannot read HEAD; the fold keeps an already-local row's stamp (phase 2)
+
+- `fr.acceptance.local.head_blobs(root, paths) -> dict[str, str] | None`: None means git could not read HEAD (not a repo, no commit). `_deliver_local_stamp_plan` must refuse on None, not build a stamp with empty files.
+- `fr.acceptance.fold._stamp_after(row, amendment)`: a set-status carrying a stamp replaces the row's own; one carrying none keeps an already-`local` row's stamp and leaves a row moving into `local` unstamped. `deliver` restamps via `stamp_local` (row block or latest pending set-status amendment), which replaces any kept stamp.
+- `local_error` runs on a move INTO `local` only; an already-`local` row is not re-checked (like `ci`).
+- `LocalStamp` hashes by value.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-14T11:19:34+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: a status-unchanged write (link-only --issue, note) on a local row drops its stamp and re-runs local_error, so a fresh row becomes unstamped debt and the write is refused once the repo has CI (phase 1)
+
+edfdd9ade. local_error only on a move into local (both record paths); the pending path keeps existing.local while the row stays local; the fold keeps an already-local row's stamp unless the amendment carries one. Spec R5 and §A amended. Tests cover the pending link-only write, the merged link-only write, and link-only after CI appears (promote to ci, not refused).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-14T11:19:34+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: no test pins that a git ls-tree failure reads as debt, and the stale reason then names an unchanged file (phase 1)
+
+c61b989cb. head_blobs returns None on a git failure, and local_debt reports 'stale: HEAD unreadable' for every stamped row. Tests cover a non-repo dir and a repo with no commit.
+
+<!-- fr:journal kind=finding scope=plan id=p1-fold-stamp-unhashable-resolved created=2026-11-14T11:19:34+00:00 phase=1 state=fixed resolves=p1-fold-stamp-unhashable -->
+### p1-fold-stamp-unhashable-resolved · finding [fixed] · resolves p1-fold-stamp-unhashable: a stamped set-status amendment is unhashable (LocalStamp.files is a dict), so the fold's Counter crashes on the first fragment deliver stamps (phase 1)
+
+edfdd9ade. LocalStamp.__hash__ hashes by value (files as sorted items). test_a_stamped_amendment_is_hashable plus the merged-path writer test fold a stamped amendment end to end.
+
+<!-- fr:journal kind=finding scope=plan id=p1-local-reset-clears-stamp-resolved created=2026-11-14T11:19:34+00:00 phase=1 state=fixed resolves=p1-local-reset-clears-stamp -->
+### p1-local-reset-clears-stamp-resolved · finding [fixed] · resolves p1-local-reset-clears-stamp: any write that sets a row local again clears its stamp, including set-status --issue (link-only) on a local row (phase 1)
+
+The executor's open finding is the same defect as p1-r1, fixed in edfdd9ade.
