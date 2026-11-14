@@ -191,3 +191,10 @@ Evidence: Every page was checked with validate_writing_standard.py --preserve-fr
 Step: A fact-keeper review per page: no unresolved `lost`, `changed` or `added` fact.
 
 Evidence: One blind fact-keeper per rewritten page (31): no lost fact; every changed or added fact fixed or justified (plan journal p2-, p3-, p4-, p5-, p6-fact-keeper).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-11-14T02:21:27+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: The plan journal names every warning a page keeps, and why (R9).
+
+Evidence: Each warning a page keeps is a p*-ws-* journal entry naming the warning and its reason (e.g. 'attempt' in herdr-control-sessions and 01-fr-goal, 'OPEN' in fr-devops-gate, the passive in fr-acceptance:115).
