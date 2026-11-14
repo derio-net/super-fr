@@ -62,3 +62,9 @@ amendments:
       up` and `rebuild` in devcontainer mode refuse, before starting a container, a
       profile that installs packages/fr-vk, naming the file and the segment to delete
     why: spec-review s-r7, the row cites R3 and must state it
+  - row: bridge-checkout-self-heal
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
