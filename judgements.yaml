@@ -7077,6 +7077,17 @@ batches:
     trusted by hooks and spawned python. Guard change: needs an independent adversarial review before
     merge.'
   wave: 16
+- id: gate-truth
+  title: Gate ledger and gate pass tell the truth
+  ids:
+  - super-fr#1399
+  - super-fr#1389
+  - super-fr#1293
+  - super-fr#1275
+  rationale: 'Tier 2: ledger loses archived runs'' rows; gate pass exits 0 on a failed tracker close;
+    ops gate stage 4/7 misreports. ledger.py, gate_cmd.py, ops/gate.py.'
+  wave: 16
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
