@@ -78,10 +78,10 @@ is true now, not from what it remembers. In order, a pass:
     pull request again. After those hand-backs the pull request shows under **Needs you now**.
     The driver never approves, and it never waits for CI inside a pass.
 
-3. **Closes out what merged.** The driver waits until the release commit that followed the
-   merge has landed, or until ten minutes have passed with none, for a pull request that
-   releases nothing. Then it fast-forwards its checkout and runs the repo's `post_merge`
-   argument list, once per merge. Next it closes the batch out. It records the batch's Test
+3. **Closes out what merged.** Once the release commit that followed the merge has landed
+   (or ten minutes have passed with none, for a pull request that releases nothing), the
+   driver fast-forwards its checkout. It then runs the repo's `post_merge` argument list,
+   once per merge. Next it closes the batch out. It records the batch's Test
    Plan outcomes and archives its run, together with the other landed batches of that repo,
    in one housekeeping pull request.
 
