@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-14 still true, deliver also stamps the feature's local rows, which this page does not detail (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-14 still true after gh#1456, deliver now also finds a -design-named fragment to stamp, which this page does not detail
 ---
 
 # Workflow shapes and the run cursor
