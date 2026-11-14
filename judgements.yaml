@@ -7234,6 +7234,11 @@ batches:
   rationale: 'Security: no author-trust gate on batch eligibility (#1252). Changes the driver itself,
     so it runs after the other truth fixes. triage_batch_cmd.py.'
   wave: 19
+  after:
+  - workspace-identity
+  - placement-truth
+  - release-truth
+  - acceptance-edits
   bump: minor
 - id: triage-collect
   title: Triage collect and settle correctness
