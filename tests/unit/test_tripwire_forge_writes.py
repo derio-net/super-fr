@@ -115,7 +115,6 @@ GATED: dict[str, str] = {
         "_require_quiet_ok: client_policy(labels[, issues])",
     "fr-dispatch/src/fr_dispatch/__init__.py::tick":
         "_forge_block(labels) for the dispatch stamp (client_policy)",
-    "fr-vk/src/fr_vk/pr_state.py::_default_close_gh_issue": "client_policy(issues)",
     # -- PR creation: git.pr (R11, R12) -----------------------------------------------------
     "fr/src/fr/commands/pr_cmd.py::create_cmd":
         "fr pr create: require_approval under git.pr: ask; always a draft",
@@ -129,9 +128,6 @@ GATED: dict[str, str] = {
         "the DevOps gate at the operator's terminal: R12's named internal opener",
     "fr/src/fr/commands/debt_cmd.py::_open_or_refresh":
         "the debt sweep's bot-owned branch PR, opened at the operator's command",
-    # -- not a forge write ------------------------------------------------------------------
-    "fr-vk/src/fr_vk/dispatch.py::dispatch_phase":
-        "not a forge write: `mcp.create_issue` makes a VibeKanban card",
 }  # fmt: skip
 
 

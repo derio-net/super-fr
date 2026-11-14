@@ -153,7 +153,7 @@ def test_default_host_backends_table() -> None:
 
 class TestBackendForHostname:
     """The plain heuristic tier alone, for callers with no repo_root to
-    read explicit config from (see fr_vk.pr_observe)."""
+    read explicit config from."""
 
     def test_github_com(self) -> None:
         assert backend_for_hostname("github.com") == "github"
@@ -248,9 +248,8 @@ class TestBackendForUrl:
 
 
 def test_tag_for_backend_and_inverse() -> None:
-    """Shared with fr_vk._cardref (card-title tag) and fr_dispatch.prompt
-    (dispatched-agent wording) — lives in fr._hosts since fr_dispatch
-    depends only on fr, never on fr_vk."""
+    """Shared with fr_dispatch.prompt (dispatched-agent wording) — lives in
+    fr._hosts since fr_dispatch depends only on fr, never on an adapter."""
     assert TAG_FOR_BACKEND == {"github": "gh", "gitlab": "gl", "gitea": "gt"}
     assert BACKEND_FOR_TAG == {v: k for k, v in TAG_FOR_BACKEND.items()}
 
@@ -297,9 +296,9 @@ class TestDetectBackendWarnsOnce:
     def test_backend_for_hostname_itself_stays_silent(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """`backend_for_hostname` is called per-PR-URL by `fr_vk.pr_observe`
-        across many repos — it must never warn, or the bridge log becomes
-        noise. Only `detect_backend` warns."""
+        """`backend_for_hostname` may be called per-PR-URL across many
+        repos — it must never warn, or a daemon's log becomes noise. Only
+        `detect_backend` warns."""
         assert backend_for_hostname("gitlab.local.corp") == "github"
         assert backend_for_hostname("gitlab.local.corp") == "github"
         assert capsys.readouterr().err == ""

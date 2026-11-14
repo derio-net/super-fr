@@ -11,12 +11,15 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import link_state, runner_packages, uv_tool_bin_dir
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 
 
+@pytest.mark.xfail(strict=True, reason="install.sh VK pieces removed in phase 2")
 def test_install_bridge_flag_writes_wrapper(tmp_path: Path) -> None:
     wrapper_path = tmp_path / "wrapper" / "run.sh"
     # Do not let this integration test depend on whichever `fr` uv tool happens

@@ -41,7 +41,6 @@ def _lock_members() -> set[str]:
         "fr-cncd",
         "fr-dispatch",
         "fr-herdr",
-        "fr-vk",
         "super-fr-workspace",
     }
 
@@ -57,7 +56,6 @@ def test_surfaces_cover_every_known_manifest_in_this_repo() -> None:
         "packages/fr-cncd/pyproject.toml",
         "packages/fr-dispatch/pyproject.toml",
         "packages/fr-herdr/pyproject.toml",
-        "packages/fr-vk/pyproject.toml",
         "packages/fr-opencode-plugin/package.json",
         "plugins/super-fr/.claude-plugin/plugin.json",
         "plugins/super-fr-dispatch/.claude-plugin/plugin.json",

@@ -13,9 +13,8 @@ part: per-item accumulation, one bad item never aborts the loop, a raising
 Issue creation stays operator-only (`skip_issue_create=True` — the
 2026-05-18 incident, sfv#196-#214 / sfv#216-#234).
 
-These tests use a `FakeRunner` implementing the v2 protocol directly rather
-than `VkRunner`, so they pin the *framework's* doctrine independent of any
-adapter. The adapters move in Phase 4.
+These tests use a `FakeRunner` implementing the v2 protocol directly, so they
+pin the *framework's* doctrine independent of any adapter.
 """
 
 from __future__ import annotations
@@ -861,8 +860,8 @@ def test_existing_dispatches_receives_this_tick_s_items():
     honest source for that mapping is the item list itself. Passing it
     removes the alternative — an adapter caching the items from an earlier
     `preflight(items)` call and silently returning an empty snapshot if the
-    two are ever reordered (VkRunner did exactly that: duplicate cards and
-    workspaces on a re-ordered tick).
+    two are ever reordered (an adapter once did exactly that: duplicate
+    dispatches on a re-ordered tick).
     """
     import inspect
 
@@ -1119,17 +1118,11 @@ class _UnitLimitedRunner(FakeRunner):
 
     def existing_dispatches(self, items: Any) -> set[str]:
         self.existing_dispatches_seen = list(items)
-        return _titles_to_ids(items)
+        # An adapter inverts board state via `item.payload.get("issue_number")`,
+        # so a mixed list is exactly where a `KeyError` would live.
+        return {i.id for i in items if i.payload.get("issue_number") in self._board}
 
-
-def _titles_to_ids(items: Any) -> set[str]:
-    """`fr_vk.dedup.map_titles_to_item_ids`, exercised through the framework.
-
-    Its inversion reads `item.payload["issue_number"]`, so a mixed list is
-    exactly where a `KeyError` would live."""
-    from fr_vk.dedup import map_titles_to_item_ids
-
-    return map_titles_to_item_ids(set(), items)
+    _board: frozenset[int] = frozenset()
 
 
 def _mixed_items(plan, repo: str, issue_number: int):
@@ -1210,20 +1203,6 @@ def test_the_unit_refusal_runs_before_the_backend_is_asked_to_dispatch(monkeypat
         if item.unit != "phase":
             assert item.id not in dispatched_ids
             assert any(item.id in f for f in result.failures), result.failures
-
-
-def test_map_titles_to_item_ids_survives_a_mixed_list() -> None:
-    """Unit-level, so the guarantee does not depend on tick's shape."""
-    from fr_vk._cardref import DISPATCH_BACKEND, TAG_FOR_BACKEND
-    from fr_vk.dedup import map_titles_to_item_ids
-
-    plan, repo, issue_number = _one_phase_plan()
-    items = _mixed_items(plan, repo, issue_number)
-    tag = TAG_FOR_BACKEND[DISPATCH_BACKEND]
-
-    resolved = map_titles_to_item_ids({f"{tag}#{issue_number}: [{repo}]"}, items)
-
-    assert resolved == {items[0].id}
 
 
 # --- R9 (amended), p3-r2: the bridge's label writes answer to the repo's forge policy ---

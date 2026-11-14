@@ -1,7 +1,7 @@
 """End-to-end acceptance tests for `fr_dispatch.tick`.
 
 Each test composes the full pipeline — observe → render → diff → apply →
-per-phase dispatch — against a tmp_path plan + FakeGhClient + FakeMcpClient.
+per-phase dispatch — against a tmp_path plan + FakeGhClient + the framework's FakeRunner.
 The docstrings repeat the Given/When/Then from the v2-bridge-rebuild spec
 (F1, F4, F5, H7) so `pytest -v` reads like a BDD report.
 """
@@ -12,9 +12,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from fr_vk.runner import VkRunner
-
-from tests.unit.fakes import FakeGhClient, FakeMcpClient
+from tests.unit.fakes import FakeGhClient
+from tests.unit.test_tick_workitem import FakeRunner
 
 
 def _write_minimal_plan(plan_dir: Path, *, target_repo: str, phases: list[dict[str, Any]]) -> None:
@@ -105,7 +104,7 @@ def _preload_repo_labels(gh: FakeGhClient, repo: str) -> None:
 def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     """
     GIVEN a fixture multi-phase plan with mixed depends_on shape
-    AND   a FakeMcpClient + FakeGhClient pre-loaded with the dispatched Issues
+    AND   a FakeRunner + FakeGhClient pre-loaded with the dispatched Issues
     WHEN  fr_dispatch.tick() runs one tick
     THEN  the resulting label state on every Issue matches the documented
           expectation:
@@ -113,7 +112,7 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
           - blocked phases (deps not done) → vk-blocked (no vk-ready, no vk-synced)
           - completed phases → no lifecycle label, state CLOSED
           - manual phases → manual label
-    AND   the resulting workspace count == count of root phases just synced
+    AND   the dispatched item count == count of root phases just synced
     """
     from fr import parse
     from fr_dispatch import tick
@@ -181,8 +180,8 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     # Phase 4: manual — gets `manual` label projected
     gh.add_issue(repo, 400, state="OPEN", labels={"phase:4", "plan:e2e-fixture"})
 
-    mcp = FakeMcpClient()
-    result = tick(plan, gh, VkRunner(mcp))
+    runner = FakeRunner()
+    result = tick(plan, gh, runner)
 
     # End-state assertions per the spec's projection rules.
     p1_labels = gh.issues[(repo, 100)].labels
@@ -214,14 +213,11 @@ def test_tick_end_state_matches_legacy_for_fixture(tmp_path: Path) -> None:
     p4_labels = gh.issues[(repo, 400)].labels
     assert "manual" in p4_labels
 
-    # Workspace count == root phases just synced. Phase 1 is the only
-    # root-and-not-complete phase, so exactly one workspace should exist.
+    # Dispatch count == root phases just synced. Phase 1 is the only
+    # root-and-not-complete phase, so exactly one item is dispatched.
     assert result.synced == 1, f"expected synced=1 got {result.synced} (failures={result.failures})"
-    workspaces = [c for c in mcp.calls if c[0] == "start_workspace"]
-    assert len(workspaces) == 1
-    # VK indexes by short name; the bridge resolves derio-net/superpowers-for-vk
-    # → "superpowers-for-vk" → the matching uuid from list_repos.
-    assert workspaces[0][1]["repo_id"] == "uuid-superpowers-for-vk"
+    assert len(runner.dispatched) == 1
+    assert runner.dispatched[0].repo == repo
 
 
 # ── F4: Idempotency — re-running tick yields no further mutations ──────
@@ -260,14 +256,14 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
     gh = FakeGhClient()
     _preload_repo_labels(gh, repo)
     gh.add_issue(repo, 42, state="OPEN", labels={"fr:ready", "phase:1", "plan:e2e-fixture"})
-    mcp = FakeMcpClient()
+    runner = FakeRunner()
 
-    # Tick 1: brings the plan to steady state (vk-synced applied + body update)
-    tick(plan, gh, VkRunner(mcp))
+    # Tick 1: brings the plan to steady state (fr:synced applied + body update)
+    tick(plan, gh, runner)
 
     # Snapshot post-first-tick state.
     gh_calls_after_first = list(gh.calls)
-    mcp_calls_after_first = list(mcp.calls)
+    dispatched_after_first = len(runner.dispatched)
     issue_after_first = (
         gh.issues[(repo, 42)].state,
         frozenset(gh.issues[(repo, 42)].labels),
@@ -275,20 +271,12 @@ def test_tick_is_idempotent(tmp_path: Path) -> None:
     )
 
     # Tick 2: should be a no-op.
-    tick(plan, gh, VkRunner(mcp))
+    tick(plan, gh, runner)
 
-    # The 2nd tick may issue read-only MCP calls (list_workspaces,
-    # list_issues, list_repos) for slot/dedup/config — those are not
-    # mutations. The mutation-shaped calls must NOT have grown.
-    mutation_methods = {
-        "create_issue",
-        "update_issue",
-        "start_workspace",
-        "link_workspace_issue",
-    }
-    new_mcp = mcp.calls[len(mcp_calls_after_first) :]
-    new_mcp_mutations = [c for c in new_mcp if c[0] in mutation_methods]
-    assert new_mcp_mutations == [], f"second tick produced MCP mutations: {new_mcp_mutations}"
+    # The 2nd tick dispatches nothing new.
+    assert len(runner.dispatched) == dispatched_after_first, (
+        f"second tick dispatched again: {runner.dispatched[dispatched_after_first:]}"
+    )
 
     # No new per-issue GH mutations (label/state/body). `ensure_labels` is
     # idempotent label-vocabulary maintenance, not an issue mutation —
@@ -358,16 +346,12 @@ def test_standalone_fr_ready_issue_without_plan_is_ignored(tmp_path: Path) -> No
     snapshot_state = gh.issues[(repo, 9999)].state
     snapshot_body = gh.issues[(repo, 9999)].body
 
-    mcp = FakeMcpClient()
-    tick(plan, gh, VkRunner(mcp))
+    runner = FakeRunner()
+    tick(plan, gh, runner)
 
-    # No MCP calls referenced the orphan Issue.
-    orphan_token = "9999"
-    for name, args in mcp.calls:
-        for value in args.values():
-            assert orphan_token not in str(value), (
-                f"MCP call {name!r} touched orphan issue 9999: {args}"
-            )
+    # No dispatched item referenced the orphan Issue.
+    for item in runner.dispatched:
+        assert item.payload.get("issue_number") != 9999, f"dispatched orphan 9999: {item}"
 
     # The orphan Issue is untouched on the gh side.
     for name, args in gh.calls:
@@ -387,9 +371,8 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
     GIVEN a plan with target_repo='derio-net/foo' and a phase with
           tracking_issue='https://github.com/derio-net/bar/issues/100'
     WHEN  fr_dispatch.tick() runs
-    THEN  fr_dispatch.dispatch is called with workspace branch repo='derio-net/bar'
-    AND   the vk-synced label is added on derio-net/bar#100 (NOT derio-net/foo)
-    AND   the workspace name follows '<simple_id> -> gh#100' convention
+    THEN  the runner is handed an item for repo='derio-net/bar'
+    AND   the fr:synced label is added on derio-net/bar#100 (NOT derio-net/foo)
     """
     from fr import parse
     from fr_dispatch import tick
@@ -433,33 +416,18 @@ def test_cross_repo_phase_dispatches_to_correct_repo(tmp_path: Path) -> None:
         foreign_repo, 100, state="OPEN", labels={"fr:ready", "phase:1", "plan:e2e-fixture"}
     )
 
-    # Advertise both repos in VK's registry (short names, with ids) so
-    # `fr_dispatch.config.is_known_repo` accepts the dispatch and
-    # `repo_id_for` returns the canonical Uuid. VK indexes by short name
-    # only — no `owner/`.
-    mcp = FakeMcpClient()
-    mcp._repos = [
-        {"id": "uuid-foo", "name": "foo"},
-        {"id": "uuid-bar", "name": "bar"},
-    ]
-    result = tick(plan, gh, VkRunner(mcp))
+    runner = FakeRunner()
+    result = tick(plan, gh, runner)
 
     assert result.synced == 1, f"expected synced=1 got {result.synced} ({result.failures})"
 
-    # The workspace went to the FOREIGN repo, not target_repo. After the
-    # 2026-05-18 wire-shape fix, this means start_workspace was called
-    # with repo_id pointing at `bar`, not `foo`.
-    ws_calls = [c for c in mcp.calls if c[0] == "start_workspace"]
-    assert len(ws_calls) == 1
-    args = ws_calls[0][1]
-    assert args["repo_id"] == "uuid-bar", (
-        f"workspace dispatched to wrong repo: repo_id={args['repo_id']!r} (want 'uuid-bar')"
+    # The item went to the FOREIGN repo, not target_repo.
+    assert len(runner.dispatched) == 1
+    assert runner.dispatched[0].repo == foreign_repo, (
+        f"dispatched to wrong repo: {runner.dispatched[0].repo!r} (want {foreign_repo!r})"
     )
 
-    # Workspace name follows the canonical `<plan>-P<n> -> gh#<n>` convention.
-    assert "-> gh#100" in args["name"]
-
-    # vk-synced landed on the FOREIGN issue.
+    # fr:synced landed on the FOREIGN issue.
     foreign_labels = gh.issues[(foreign_repo, 100)].labels
     assert "fr:synced" in foreign_labels
 

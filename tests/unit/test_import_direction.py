@@ -1,10 +1,10 @@
 """Package boundary enforcement (super-fr split, B2 style).
 
 Dependency direction is the architecture: `fr` imports neither sibling;
-`fr_dispatch` never imports `fr_vk` (adapters plug in via the Runner
+`fr_dispatch` never imports an adapter (adapters plug in via the Runner
 protocol / entry points). A violation here is a design regression, not
 a style nit — the whole point of the split is that the base ships
-without the dispatch stack and the framework ships without VibeKanban.
+without the dispatch stack and the framework ships without any adapter.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def test_every_sibling_package_is_an_offender(tmp_path: Path) -> None:
     `packages/*/src/` other than `fr` itself is a sibling, including ones added
     after this test was written."""
     siblings = {p.parent.name for p in PACKAGES.glob("*/src/*/__init__.py")} - {"fr"}
-    assert {"fr_claude_cloud", "fr_cncd", "fr_dispatch", "fr_herdr", "fr_vk"} <= siblings
+    assert {"fr_claude_cloud", "fr_cncd", "fr_dispatch", "fr_herdr"} <= siblings
     for name in siblings:
         (tmp_path / f"imports_{name}.py").write_text(f"from {name}.x import y\n")
     offenders = _sibling_offenders(tmp_path)
@@ -68,12 +68,12 @@ def test_every_sibling_package_is_an_offender(tmp_path: Path) -> None:
 
 def test_a_third_fr_dispatch_import_is_refused(tmp_path: Path) -> None:
     """The soft points are a closed pair: any other module importing
-    fr_dispatch, and a soft point importing fr_vk, are offenders."""
+    fr_dispatch, and a soft point importing an adapter, are offenders."""
     commands = tmp_path / "commands"
     commands.mkdir()
     (commands / "triage_batch_cmd.py").write_text("    from fr_dispatch.registry import x\n")
     (commands / "other_cmd.py").write_text("    from fr_dispatch.registry import x\n")
-    (commands / "apply_cmd.py").write_text("    import fr_vk\n")
+    (commands / "apply_cmd.py").write_text("    import fr_cncd\n")
     offenders = _sibling_offenders(tmp_path)
     assert set(offenders) == {str(commands / "other_cmd.py"), str(commands / "apply_cmd.py")}
 
@@ -89,15 +89,6 @@ def test_soft_points_are_guarded() -> None:
         assert "uv tool install --with fr-dispatch fr" in src, name
 
 
-def test_fr_dispatch_never_imports_fr_vk() -> None:
-    offenders = {
-        str(f): roots & {"fr_vk"}
-        for f, roots in _imports_of(PACKAGES / "fr-dispatch" / "src" / "fr_dispatch").items()
-        if "fr_vk" in roots
-    }
-    assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
-
-
 def test_fr_dispatch_never_imports_fr_cncd() -> None:
     offenders = {
         str(f): roots & {"fr_cncd"}
@@ -107,24 +98,24 @@ def test_fr_dispatch_never_imports_fr_cncd() -> None:
     assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
 
 
+_ADAPTERS = ("fr_cncd", "fr_herdr", "fr_claude_cloud")
+
+
 def test_adapters_never_import_each_other() -> None:
-    """fr_cncd is a peer of fr_vk: each may import the base and the
-    framework, never the sibling adapter."""
-    cncd_offenders = {
-        str(f): roots & {"fr_vk"}
-        for f, roots in _imports_of(PACKAGES / "fr-cncd" / "src" / "fr_cncd").items()
-        if "fr_vk" in roots
-    }
-    assert not cncd_offenders, f"fr_cncd must not import fr_vk: {cncd_offenders}"
-    vk_offenders = {
-        str(f): roots & {"fr_cncd"}
-        for f, roots in _imports_of(PACKAGES / "fr-vk" / "src" / "fr_vk").items()
-        if "fr_cncd" in roots
-    }
-    assert not vk_offenders, f"fr_vk must not import fr_cncd: {vk_offenders}"
+    """The runner adapters are peers: each may import the base and the
+    framework, never a sibling adapter."""
+    offenders = {}
+    for adapter in _ADAPTERS:
+        src = PACKAGES / adapter.replace("_", "-") / "src" / adapter
+        assert (src / "__init__.py").is_file(), src
+        for f, roots in _imports_of(src).items():
+            hit = roots & (set(_ADAPTERS) - {adapter})
+            if hit:
+                offenders[str(f)] = hit
+    assert not offenders, f"an adapter must not import a sibling adapter: {offenders}"
 
 
-def test_fr_vk_strings_stay_in_the_adapter() -> None:
+def test_fr_dispatch_carries_no_vk_vocabulary() -> None:
     """The framework carries no VK vocabulary: no MCP client types, no
     VibeKanban wire shapes, no willikins metric names."""
     banned = re.compile(r"VkMcpClient|vibe-kanban|willikins|project_id|VK_[A-Z]", re.I)

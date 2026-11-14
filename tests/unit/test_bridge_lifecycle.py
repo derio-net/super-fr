@@ -1,21 +1,16 @@
-"""D5 — `FR_LIFECYCLE_HOOK_SCRIPT` is invoked on successful dispatch.
+"""D5 — `fr_dispatch.lifecycle.invoke_lifecycle_hook` runs `FR_LIFECYCLE_HOOK_SCRIPT`.
 
-When the env var points at an executable script, dispatch must call
-it with `(issue_url, "in-progress")` after the VK card is created.
-When the env var is unset, no external process is invoked.
-
-A hook crash (script missing / non-zero exit / timeout) must NOT
-break dispatch — the bridge is a best-effort notifier, not a
+When the env var points at an executable script, the hook is called with
+`(issue_url, transition)`. When the env var is unset, no external process
+is invoked. A hook crash (script missing / non-zero exit / timeout) is
+logged and swallowed — the caller is a best-effort notifier, not a
 transactional supervisor.
 """
 
 from __future__ import annotations
 
-import os
 import stat
 from pathlib import Path
-
-from tests.unit.fakes import FakeMcpClient
 
 
 def _write_recorder_script(tmp_path: Path) -> tuple[Path, Path]:
@@ -30,81 +25,9 @@ def _write_recorder_script(tmp_path: Path) -> tuple[Path, Path]:
     return script, log
 
 
-def _phase_with_tracking(repo: str, issue_n: int):
-    from fr import parse
-
-    plan = parse(Path(__file__).parent / "fixtures" / "v2_plan_minimal")
-    phase = plan.phases[0].model_copy(
-        update={
-            "phase": plan.phases[0].phase.model_copy(
-                update={"tracking_issue": f"https://github.com/{repo}/issues/{issue_n}"}
-            )
-        }
-    )
-    return plan, phase
-
-
-def test_lifecycle_hook_invoked_with_issue_url_and_transition(tmp_path, monkeypatch):
-    """Configured hook script gets `(issue_url, "in-progress")` on successful dispatch."""
-    from fr_vk.dispatch import dispatch_phase
-
-    script, log = _write_recorder_script(tmp_path)
-    monkeypatch.setenv("FR_LIFECYCLE_HOOK_SCRIPT", str(script))
-
-    repo = "derio-net/superpowers-for-vk"
-    issue_n = 42
-    plan, phase = _phase_with_tracking(repo, issue_n)
-    mcp = FakeMcpClient()
-
-    dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
-
-    assert log.exists(), "hook script was not invoked"
-    recorded = log.read_text().strip()
-    expected_url = f"https://github.com/{repo}/issues/{issue_n}"
-    assert expected_url in recorded
-    assert "in-progress" in recorded
-
-
-def test_lifecycle_hook_not_invoked_when_env_unset(tmp_path, monkeypatch):
-    from fr_vk.dispatch import dispatch_phase
-
-    monkeypatch.delenv("FR_LIFECYCLE_HOOK_SCRIPT", raising=False)
-
-    repo = "derio-net/superpowers-for-vk"
-    issue_n = 42
-    plan, phase = _phase_with_tracking(repo, issue_n)
-    mcp = FakeMcpClient()
-
-    # No script set, no external process — dispatch_phase returns cleanly.
-    dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
-
-    # Nothing was written anywhere — best we can do is sanity-check that
-    # the env stays unset (the absence-of-side-effect is asserted by
-    # the dispatch returning without exception and the FakeMcpClient
-    # call sequence completing normally).
-    assert os.environ.get("FR_LIFECYCLE_HOOK_SCRIPT") is None
-
-
-def test_lifecycle_hook_failure_does_not_break_dispatch(tmp_path, monkeypatch, caplog):
-    """A non-zero exit / missing script / timeout must NOT raise."""
-    from fr_vk.dispatch import dispatch_phase
-
-    missing = tmp_path / "definitely-does-not-exist.sh"
-    monkeypatch.setenv("FR_LIFECYCLE_HOOK_SCRIPT", str(missing))
-
-    repo = "derio-net/superpowers-for-vk"
-    issue_n = 42
-    plan, phase = _phase_with_tracking(repo, issue_n)
-    mcp = FakeMcpClient()
-
-    # No exception — dispatch swallows the hook failure.
-    result = dispatch_phase(plan, phase, mcp, project_id="test-vk-project-id")
-    assert result.card_id  # dispatch completed normally
-
-
 def test_lifecycle_hook_invoked_directly_via_helper(tmp_path, monkeypatch):
     """`invoke_lifecycle_hook` is the public surface; tests can use it
-    independently of dispatch_phase to assert the env-gated behaviour.
+    independently of any runner to assert the env-gated behaviour.
     """
     from fr_dispatch.lifecycle import invoke_lifecycle_hook
 
@@ -114,3 +37,22 @@ def test_lifecycle_hook_invoked_directly_via_helper(tmp_path, monkeypatch):
     invoke_lifecycle_hook("https://example/issues/7", "in-progress")
     assert log.exists()
     assert "in-progress" in log.read_text()
+
+
+def test_lifecycle_hook_not_invoked_when_env_unset(tmp_path, monkeypatch):
+    from fr_dispatch.lifecycle import invoke_lifecycle_hook
+
+    _script, log = _write_recorder_script(tmp_path)
+    monkeypatch.delenv("FR_LIFECYCLE_HOOK_SCRIPT", raising=False)
+
+    invoke_lifecycle_hook("https://example/issues/7", "in-progress")
+    assert not log.exists()
+
+
+def test_lifecycle_hook_failure_is_logged_not_raised(tmp_path, monkeypatch, caplog):
+    from fr_dispatch.lifecycle import invoke_lifecycle_hook
+
+    monkeypatch.setenv("FR_LIFECYCLE_HOOK_SCRIPT", str(tmp_path / "missing.sh"))
+
+    invoke_lifecycle_hook("https://example/issues/7", "in-progress")  # no raise
+    assert any("lifecycle hook" in r.getMessage() for r in caplog.records)
