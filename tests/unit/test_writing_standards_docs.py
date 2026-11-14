@@ -167,3 +167,25 @@ def test_site_build_checks_the_writing_standards_after_the_build() -> None:
     assert checks[0] > build
     sha = (REPO / ".github/blog-craft.ref").read_text().strip()
     assert sha not in ci_text
+
+
+def test_the_docs_accuracy_lens_is_required_for_every_published_page() -> None:
+    """R15: `.fr/lenses.yaml` defines `docs-accuracy` and requires it for exactly the
+    page globs `.fr/docs.yaml` names."""
+    config = yaml.safe_load((REPO / ".fr/lenses.yaml").read_text())
+    lens = config["lenses"]["docs-accuracy"]
+    assert lens["title"].strip()
+    assert "`covers:`" in lens["brief"]
+    assert "file:line" in lens["brief"]
+    rules = [r for r in config["require"] if "docs-accuracy" in r["lenses"]]
+    assert len(rules) == 1
+    assert sorted(rules[0]["paths"]) == sorted(_page_globs())
+
+
+def test_the_authoring_rule_says_how_a_page_stays_accurate() -> None:
+    """R16: the rule names the lens, and says a page edited outside a run is checked
+    against its `covers:` code by hand."""
+    rule = " ".join((REPO / ".claude/rules/explainers-currency.md").read_text().split()).casefold()
+    assert "`docs-accuracy`" in rule
+    assert "outside an fr-goal run" in rule
+    assert "`covers:` code" in rule

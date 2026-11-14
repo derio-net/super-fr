@@ -90,6 +90,14 @@ bash scripts/check-writing-standards.sh /tmp/bc
 The standards set the language; the purpose stays. An explainer explains *why* a
 mechanism exists, not only what it does, for a reader who has never seen this repo.
 
+A page also stays true to the code it covers. In an fr-goal run, every change that edits
+a page is reviewed under the `docs-accuracy` lens (`.fr/lenses.yaml` requires it for the
+three page globs of `.fr/docs.yaml`): each claim the change adds or edits, and each claim
+on a touched page whose covered code the change also touched, is checked against that
+code, and a false or stale one is reported with the page line and the code's file:line.
+Outside an fr-goal run there is no lens review: check the page against its `covers:` code
+by hand before you commit it.
+
 ## Previewing a page locally
 
 CI builds the whole site on every pull request (`site-build`), so a page that does not
@@ -130,5 +138,8 @@ and look at the pages: a renderer change shows up in every page at once.
 - `scripts/check-writing-standards.sh` — the writing-standard check, run by CI's `site-build`
   job; `tests/unit/test_writing_standards_docs.py` pins its page-group mapping and the three
   front-matter exceptions.
+- `.fr/lenses.yaml` — the `docs-accuracy` lens and the path rule that requires it for every
+  page (`fr lenses check` validates it); `tests/unit/test_writing_standards_docs.py` pins both
+  and this rule's accuracy paragraph.
 - `tests/unit/test_tripwire_fr_goal_question_rounds.py` — the question-round wording on
   `01-fr-goal.md` and `index.md`.
