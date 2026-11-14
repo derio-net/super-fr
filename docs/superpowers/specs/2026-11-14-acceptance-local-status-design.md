@@ -182,3 +182,9 @@ gate: acceptance-local-held-quiet-walk=tester
    Set its unit-tested rows `local` and resolve `deliver`. Expected: `deliver` passes with
    those rows stamped, no tester gate added and no issue filed; `fr acceptance status` and
    `fr debt` list the rows as `local` and do not count them as debt.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-14-acceptance-local-status | `derio-net/super-fr` | `2026-11-14-acceptance-local-status` | — |

@@ -1,0 +1,114 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Deliver stamps local rows and offers local, plus the scenario and docs
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - acceptance-local-deliver-stamp
+  - acceptance-local-status-listed
+  - acceptance-local-earned
+  - acceptance-local-stale
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/acceptance/*.py
+  - tests/unit/*.py
+  - tests/integration/test_scenarios.py
+  - tests/scenarios/acceptance-local-status.sh
+  - docs/acceptance/features/2026-11-14-acceptance-local-status.yaml
+  - .claude/rules/acceptance-matrix.md
+  - .opencode/instructions/acceptance-matrix.md
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - .opencode/skills/fr-acceptance/SKILL.md
+  - .hermes/skills/fr/fr-acceptance/SKILL.md
+  - docs/*.md
+  - docs/explainers/*.md
+  - docs/reference/*.md
+  - README.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: The deliver stamp plan and write (R4, spec §D)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      [RED] In-process deliver tests (follow the existing deliver tests in tests/unit that drive `fr run resolve --step deliver` over a fixture repo; services declare `ci none`): a feature row set `local` with a resolving unit ref is stamped (at, tree = HEAD code tree, log = the witness, files = HEAD blobs) in the same commit as the resolve; a pending set-status amendment is stamped in place; `tests: reuse` stamps with the witness's tree; a fresh log with an uncommitted code path refuses, exit 2, naming the row, nothing written; a refusal from a LATER gate (the PR gate on a first, pr-less resolve) leaves the fragment byte-identical and commits no stamp; a `--record` resolve that refuses restores the fragment; under quiet placement the fragment is written and committed in the artifact root while blobs come from the product checkout. RED.
+  - id: P2.T1.S2
+    text: |-
+      [GREEN] Add `_deliver_local_stamp_plan` right after `_deliver_leftovers_gate` (build stamps in memory, refuse; no write) and `_deliver_local_stamp_write` beside `_flush_gate_decisions` (write_text_atomic through `_remember`, then `_note_record_write`), in packages/fr/src/fr/commands/run_cmd.py, using fr.acceptance.edit.stamp_local and the shared ref-path helper. Green.
+  - id: P2.T1.S3
+    text: |-
+      [REFACTOR] Keep the witness parsing (fresh log vs reused:) in one helper next to `_reuse_tests_witness`. Tests green.
+- number: 2
+  title: The leftover refusal offers local under ci none (R6)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      [RED] Test fr.record.pr_body.unaccounted: under ci none an owed row's fix starts with `fr acceptance set-status --id <row> --status local --level unit=<repo>:<path>#<test> --notes "<which test verifies it>"` plus the `--feature` flag, then the gate; with CI the fix is unchanged. RED.
+  - id: P2.T2.S2
+    text: |-
+      [GREEN] Implement it in pr_body.py with fr.acceptance.ci.ci_active. Green.
+- number: 3
+  title: The scenario (R9)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write tests/scenarios/acceptance-local-status.sh in the style of tests/scenarios/acceptance-fragments-amendments.sh (source _common.sh, portable): a `git init` fixture with `.devcontainer/fr-profiles.yaml` declaring `ci: none`, a committed tests/test_x.py; set-status local with no level → refused; with the level → written; write the stamp as deliver would (a fragment edit, committed); `fr acceptance status` and `fr debt` list it as local, not debt; edit the test and commit → `fr acceptance check` reports `local, stale`; a row set local with no stamp → `local, unstamped`; declare CI → set-status local refused. Wire it into tests/integration/test_scenarios.py like its neighbours, and run that test.
+  - id: P2.T3.S2
+    text: |-
+      Move the rows with the evidence: `uv run fr acceptance set-status --id <row> --status ci --level unit=super-fr:<test path>#<test> --notes "..."` for acceptance-local-deliver-stamp and acceptance-local-artifact-migration, and the scenario rows with `--level int=super-fr:tests/integration/test_scenarios.py#<test>` and `--scenario tests/scenarios/acceptance-local-status.sh`. Run `uv run fr acceptance check`.
+- number: 4
+  title: Docs, rule, skill and mirrors (R8)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Describe `local` in .claude/rules/acceptance-matrix.md (status list, how it is earned at deliver, stale and promote-to-ci debt), plugins/super-fr/skills/fr-acceptance/SKILL.md, and fr.acceptance.scaffold.RULE_TEMPLATE (leave MATRIX_TEMPLATE unchanged). Run `uv run fr docs check --base origin/main` and update every page it names (or its `reviewed` stamp when still true). Run `uv run --no-project python scripts/sync-opencode.py`, `uv run --no-project python scripts/sync-hermes.py`, `uv run --no-project python scripts/sync-readme.py`, then `uv run pytest -q --no-cov tests/unit -k "tripwire or sync or scaffold or writing_standards"`.
+  - id: P2.T4.S2
+    text: |-
+      Run the full suite into a log outside the repo after the last code commit: `uv run pytest -q --no-cov -n auto > $TMPDIR/p2-suite.log 2>&1`; ruff check/format and mypy. Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
