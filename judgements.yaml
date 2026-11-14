@@ -7270,6 +7270,8 @@ batches:
   after:
   - guard-trust
   - release-truth
+  - triage-intake
+  - triage-collect
   bump: minor
 - id: docs-wording
   title: Docs, help and skill wording sweep
