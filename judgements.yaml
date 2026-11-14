@@ -7158,6 +7158,8 @@ batches:
   rationale: 'Tier 2: journal resolve closes the owed issue before the fix reaches main; a refused archive
     still files issues; archive gets a dry run. journal_cmd.py, archive_cmd.py.'
   wave: 17
+  after:
+  - suite-health
   bump: minor
 - id: workspace-identity
   title: Workspace identity
