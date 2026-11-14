@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 import typer
 from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.registry import ARTIFACT_KINDS
 from fr.artifacts.trigger import ensure_artifacts_current
 from fr.cli import app
 from fr.isolation.hostworktree import HostWorktreeTarget
@@ -28,7 +29,10 @@ from tests.unit.settings_repo import git, make_repo
 from tests.unit.test_placement_quiet import QUIET
 
 FRAG = f"{KIND_DIRS['acceptance-fragment']}/2026-02-01-live.yaml"
-FRAG_TEXT = "schema_version: 1\nfeature: 2026-02-01-live\nrepo: derio-net/widgets\nrows: []\n"
+FRAG_TEXT = (
+    f"schema_version: {ARTIFACT_KINDS['acceptance-fragment'].current_version}\n"
+    "feature: 2026-02-01-live\nrepo: derio-net/widgets\nrows: []\n"
+)
 
 
 @pytest.fixture(autouse=True)

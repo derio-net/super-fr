@@ -116,8 +116,8 @@ def test_tiles_computed_from_rows(tmp_path: Path) -> None:
     )
     (tiles_line,) = [ln for ln in html.splitlines() if '<div class="tiles">' in ln]
     values = [chunk.split("</div>")[0] for chunk in tiles_line.split('<div class="v">')[1:]]
-    # ci, scheduled, walked, manual, unwired, walk-owed, not-impl, failing
-    assert values == ["2", "0", "0", "0", "1", "0", "0", "0"]
+    # ci, scheduled, walked, manual, local, unwired, walk-owed, not-impl, failing
+    assert values == ["2", "0", "0", "0", "0", "1", "0", "0", "0"]
 
 
 def test_both_renderings_name_the_folded_fragments_as_their_source(tmp_path: Path) -> None:
