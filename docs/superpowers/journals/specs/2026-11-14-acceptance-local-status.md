@@ -244,3 +244,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-14-acceptance-local-status-p2 created=2026-11-14T09:26:06+00:00 -->
 ### phase-split-2026-11-14-acceptance-local-status-p2 · decision · ask: deliver's stamping and its leftover offer (R4, R6) are their own reviewable ask
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-14-acceptance-local-status-p2 created=2026-11-14T09:26:07+00:00 -->
+### tier-2026-11-14-acceptance-local-status-p2 · decision · hard: inserts a write into deliver's gate sequence, which every run relies on (commit-on-refusal, restore, placement)
