@@ -52,9 +52,14 @@ rows:
     - spec:2026-11-13-writing-standards-docs#R7
     - spec:2026-11-13-writing-standards-docs#R8
     - spec:2026-11-13-writing-standards-docs#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: manual
+    notes: 'The STE standard is enforced on every guide and reference page by site-build''s
+      check (ci). That every fact, command, link and number was kept is a per-rewrite
+      human-or-agent comparison, never automatable: one blind fact-keeper per page plus
+      a phase review, recorded in the plan journal (p2-fact-keeper, p3-fact-keeper).'
     verify: none
   - id: writing-standards-docs-explainers
     capability: published-docs
