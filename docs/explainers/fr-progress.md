@@ -116,7 +116,8 @@ fr archive docs/superpowers/plans/<name>
 The move is a gate-checked `git mv` into `docs/superpowers/implemented/plans/`. The gate
 wants every phase complete: a dispatched phase by evidence on GitHub, an agentic one
 fully ticked and on the default branch, a manual one ticked locally. `--force` overrides
-for one plan. The owning spec follows once all its rows are implemented.
+for one plan. The owning spec follows once every plan in its Implementation Plans table has reached the
+archive.
 
 fr stages the moves and does not commit them, so you commit them. `--branch <merged-branch>`
 archives everything that branch added, and prints `held:` for anything not yet ready. The
