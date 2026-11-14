@@ -7116,7 +7116,7 @@ batches:
   rationale: 'Tier 2: the edit gate silently off after archiving the last plan; relative PATH and cwd
     trusted by hooks and spawned python. Guard change: needs an independent adversarial review before
     merge.'
-  wave: 16
+  wave: 17
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
