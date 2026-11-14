@@ -691,3 +691,78 @@ packages/fr/src/fr/commands/plan_cmd.py:365 help "Path to parent plan folder (Co
 ### p4-acceptance-backfill-render · finding [open] (reviewer: out of scope) · fr-acceptance.md backfill list already renders broken at the merge base: step 4 merges into step 3's paragraph (phase 4)
 
 docs/explainers/fr-acceptance.md "How do you backfill...": the paragraph after step 3's fenced example is followed directly by "4. Run ..." with no blank line, so Python-Markdown folds steps 4 and 5 into that paragraph as raw "4. "/"5. " text (built-site <p> scan, same at the merge base 63764b879 and at HEAD). Adding the blank line fixes the render but the checker then reports numerals 4 and 5 as disappeared (`preserve`), so it cannot land in a language-only rewrite. Same class as p3-r8.
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-11-14T00:13:26+00:00 phase=4 -->
+### review-p4 · review · phase 4 review: 3 in-scope findings, all fixed; fact-keepers: 0 lost, 1 meaning shift fixed (phase 4)
+
+Code reviewer (separate context, read-only) checked the accuracy commits cce064d24, b54dd8b78, 858fa8213 and 5be371991 against the cited code (all true), the plain-language rewrite with per-page --preserve-from, meaning drift, inbound links, and built the site at HEAD and the merge base (no new raw list markers, tables and figures unchanged). Six blind fact-keepers, one per explainer, given only baseline and rewrite. Fixes in 5f7745866, a97de88c5, 5b2a89da9. CI went red on 5b2a89d from a date-bound test unrelated to the docs (p4-gh1369-clock), fixed in bd2924af3.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-fact-keeper created=2026-11-14T00:13:26+00:00 phase=4 -->
+### p4-fact-keeper · discovery · Fact-keeper results per page (R8): page | counts | resolution (phase 4)
+
+docs/explainers/fr-audit.md | kept 55, changed 1, lost 0, added 1 | 'before the figures were recorded' -> 'before fr recorded the figures': accepted, fr writes the usage file (fr/usage/capture.py); added = ISO acronym expansion
+docs/explainers/fr-dispatch.md | kept 56, changed 0, lost 0, added 0
+docs/explainers/fr-debugging.md | kept 41, changed 0, lost 0, added 0
+docs/explainers/fr-devops-gate.md | kept 66, changed 0, lost 0, added 0
+docs/explainers/fr-brainstorming-and-plan.md | kept 61, changed 0, lost 0, added 0
+docs/explainers/fr-acceptance.md | kept 75, changed 1, lost 0, added 0 | revision 'written against' -> 'that it amends' is ambiguous about the base revision: fix to 'the revision of the row that the amendment was written against'
+
+<!-- fr:journal kind=discovery scope=plan id=p4-ws-acceptance-passive created=2026-11-14T00:13:26+00:00 phase=4 -->
+### p4-ws-acceptance-passive · discovery · Kept warning: passive "was written" in fr-acceptance.md:115 (phase 4)
+
+Restoring p4-r2 brings back the passive "the row it was written against". The base-revision meaning needs the writing-time reference, and the active alternatives ("the row the author wrote it against") name an actor the fact does not have. Kept as a warning, not a fail.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-14T00:13:26+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · fr-debugging.md: "fr derives the body" gave fr the skill's job (phase 4)
+
+Raised by the phase 4 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-14T00:13:26+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · fr-acceptance.md: amendment revision lost its written-against base (phase 4)
+
+Raised by the phase 4 reviewer and the fr-acceptance fact-keeper.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-14T00:13:26+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · fr-dispatch.md: "Commit and push it" points across a paragraph break (phase 4)
+
+Raised by the phase 4 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-gh1369-clock created=2026-11-14T00:13:26+00:00 phase=4 state=open review_scope=out -->
+### p4-gh1369-clock · finding [open] (reviewer: out of scope) · test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds seeds a fixed 2026-10-30 date (phase 4)
+
+Past fr debt's stale_days (14) from 2026-11-14 the plan reads as stale and the entry defaults to review; every branch and main fail shard 5. Not caused by this change; fixed here anyway (test-only) because it blocks this PR's gate.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-14T00:13:26+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: fr-debugging.md: "fr derives the body" gave fr the skill's job (phase 4)
+
+5f7745866
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-14T00:13:26+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: fr-acceptance.md: amendment revision lost its written-against base (phase 4)
+
+a97de88c5
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-14T00:13:26+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: fr-dispatch.md: "Commit and push it" points across a paragraph break (phase 4)
+
+5b2a89da9
+
+<!-- fr:journal kind=finding scope=plan id=p4-gh1369-clock-resolved created=2026-11-14T00:13:26+00:00 phase=4 state=fixed resolves=p4-gh1369-clock -->
+### p4-gh1369-clock-resolved · finding [fixed] · resolves p4-gh1369-clock: test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds seeds a fixed 2026-10-30 date (phase 4)
+
+bd2924af3: the fixture seeds its commit one day before now.
+
+<!-- fr:journal kind=finding scope=plan id=p4-skill-acceptance-verify-resolved created=2026-11-14T00:13:26+00:00 phase=4 state=open resolves=p4-skill-acceptance-verify out_of_scope=true -->
+### p4-skill-acceptance-verify-resolved · finding [out-of-scope] · resolves p4-skill-acceptance-verify: fr-acceptance SKILL.md:116 says a --verify row keeps nagging in fr acceptance status whatever its status, under Post-merge owed (phase 4)
+
+A stale claim in plugins/super-fr/skills/fr-acceptance/SKILL.md, not caused by a docs rewrite; to be filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p4-plan-rework-help-resolved created=2026-11-14T00:13:26+00:00 phase=4 state=open resolves=p4-plan-rework-help out_of_scope=true -->
+### p4-plan-rework-help-resolved · finding [out-of-scope] · resolves p4-plan-rework-help: fr plan rework help says the parent is "(Complete + archived)"; rework_create accepts a live or incomplete parent (phase 4)
+
+fr plan rework CLI help text (plan_cmd.py:365), not caused by this change; the page states the code behaviour; to be filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p4-acceptance-backfill-render-resolved created=2026-11-14T00:13:26+00:00 phase=4 state=open resolves=p4-acceptance-backfill-render out_of_scope=true -->
+### p4-acceptance-backfill-render-resolved · finding [out-of-scope] · resolves p4-acceptance-backfill-render: fr-acceptance.md backfill list already renders broken at the merge base: step 4 merges into step 3's paragraph (phase 4)
+
+Pre-existing at the merge base (same class as p3-r8); fixing it moves numerals the preserve check compares; to be filed at deliver.
