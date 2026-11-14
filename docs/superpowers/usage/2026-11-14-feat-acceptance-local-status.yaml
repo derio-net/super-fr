@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-14-feat-acceptance-local-status
+captures:
+- host: h-b7aab0c0
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-14T09:14:55+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 08394382-d784-4733-ad56-9575e1c22a49
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 42
+        cache_write: 141806
+        cache_read: 2750932
+        output: 19719
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 10
+      other:
+        usd: null
+        turns: 4
+      paperwork:
+        usd: null
+        turns: 6
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 4
+        cache_write: 94942
+        cache_read: 144142
+        output: 391
+      brainstorm:
+        usd: null
+        turns: 18
+        input: 38
+        cache_write: 46864
+        cache_read: 2606790
+        output: 19328
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 4
+          cache_write: 94942
+          cache_read: 144142
+          output: 391
+        brainstorm:
+          usd: null
+          turns: 18
+          input: 38
+          cache_write: 46864
+          cache_read: 2606790
+          output: 19328

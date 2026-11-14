@@ -1,0 +1,76 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-14-acceptance-local-status
+repo: derio-net/super-fr
+rows:
+  - id: acceptance-local-status-listed
+    capability: Acceptance matrix
+    acceptance: A row may be `local`; status, debt, the report, the digest and the triage
+      board list it with its stamp date and never count a fresh one as debt
+    origin:
+    - spec:2026-11-14-acceptance-local-status#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/acceptance-local-status.sh
+  - id: acceptance-local-earned
+    capability: Acceptance matrix
+    acceptance: Setting `local` is refused by every writer unless the row has a level
+      ref resolving to an existing test, and refused while the repo has CI; an existing
+      `local` row in a repo with CI is debt (promote to ci)
+    origin:
+    - spec:2026-11-14-acceptance-local-status#R2
+    - spec:2026-11-14-acceptance-local-status#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/acceptance-local-status.sh
+  - id: acceptance-local-stale
+    capability: Acceptance matrix
+    acceptance: A `local` row whose stamped test file changed or vanished, or that has
+      no stamp, counts as debt and `fr acceptance check` reports it
+    origin:
+    - spec:2026-11-14-acceptance-local-status#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/acceptance-local-status.sh
+  - id: acceptance-local-deliver-stamp
+    capability: fr-goal deliver
+    acceptance: Under ci none, deliver stamps the run's `local` rows from its verified
+      local suite log (or a reuse of one), refuses otherwise, and its leftover refusal
+      offers `local` before the tester gate
+    origin:
+    - spec:2026-11-14-acceptance-local-status#R4
+    - spec:2026-11-14-acceptance-local-status#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: acceptance-local-held-quiet-walk
+    capability: fr-goal deliver
+    acceptance: A real repo with no CI delivers a unit-tested feature with its rows
+      `local`, no tester gate and no issue
+    origin:
+    - spec:2026-11-14-acceptance-local-status#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: acceptance-local-artifact-migration
+    capability: Artifact versioning
+    acceptance: Fragments and step records written before `local` existed migrate to
+      the new stamps, and the validator refuses a malformed local stamp
+    origin:
+    - spec:2026-11-14-acceptance-local-status#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
