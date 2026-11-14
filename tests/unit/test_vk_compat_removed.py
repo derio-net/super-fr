@@ -200,8 +200,30 @@ def test_wrapper_needs_super_fr_in_its_text(tmp_path: Path) -> None:
 # --- spec 2026-11-14-retire-vibekanban: the fr-vk package is gone ------------------
 
 
-@pytest.mark.xfail(strict=True, reason="fr-vk still present (P1.T2)")
 def test_no_vk_runner_entry_point() -> None:
     from importlib.metadata import entry_points
 
     assert "vk" not in {ep.name for ep in entry_points(group="fr.runners")}
+
+
+def test_scaffold_runner_packages_name_no_vk() -> None:
+    from fr.isolation import scaffold
+
+    assert "fr-vk" not in scaffold.RUNNER_PACKAGES
+    assert "packages/fr-vk" not in scaffold.POST_CREATE
+
+
+@pytest.mark.parametrize("profile", ["dev", "admin"])
+def test_repo_profiles_install_no_vk(profile: str) -> None:
+    text = (REPO / ".devcontainer" / profile / "devcontainer.json").read_text()
+    assert "packages/fr-vk" not in text
+
+
+def test_apply_to_vk_is_unknown_runner() -> None:
+    # `fr apply --to vk` refuses through `runner_names()` (apply_cmd's unknown-runner
+    # path), and the registry's own lookup refuses the name as not installed.
+    from fr_dispatch.registry import RunnerLoadError, runner_names, runner_units
+
+    assert "vk" not in runner_names()
+    with pytest.raises(RunnerLoadError, match="not installed"):
+        runner_units("vk")

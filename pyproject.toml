@@ -4,9 +4,9 @@
 [project]
 name = "super-fr-workspace"
 version = "7.0.0"
-description = "super-fr workspace root (fr / fr-dispatch / fr-vk / fr-cncd / fr-herdr / fr-claude-cloud)"
+description = "super-fr workspace root (fr / fr-dispatch / fr-cncd / fr-herdr / fr-claude-cloud)"
 requires-python = ">=3.11"
-dependencies = ["fr", "fr-dispatch", "fr-vk", "fr-cncd", "fr-herdr", "fr-claude-cloud"]
+dependencies = ["fr", "fr-dispatch", "fr-cncd", "fr-herdr", "fr-claude-cloud"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
@@ -15,7 +15,6 @@ exclude = ["packages/fr-opencode-plugin"]
 [tool.uv.sources]
 fr = { workspace = true }
 fr-dispatch = { workspace = true }
-fr-vk = { workspace = true }
 fr-cncd = { workspace = true }
 fr-herdr = { workspace = true }
 fr-claude-cloud = { workspace = true }
@@ -55,7 +54,7 @@ testpaths = ["tests"]
 addopts = "--strict-markers --cov --cov-report=term-missing --cov-fail-under=75"
 
 [tool.coverage.run]
-source = ["fr", "fr_dispatch", "fr_vk", "fr_cncd", "fr_herdr", "fr_claude_cloud"]
+source = ["fr", "fr_dispatch", "fr_cncd", "fr_herdr", "fr_claude_cloud"]
 omit = ["packages/fr/src/fr/__main__.py"]
 
 [tool.mypy]
