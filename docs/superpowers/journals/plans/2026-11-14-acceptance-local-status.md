@@ -94,3 +94,57 @@ edfdd9ade. LocalStamp.__hash__ hashes by value (files as sorted items). test_a_s
 ### p1-local-reset-clears-stamp-resolved · finding [fixed] · resolves p1-local-reset-clears-stamp: any write that sets a row local again clears its stamp, including set-status --issue (link-only) on a local row (phase 1)
 
 The executor's open finding is the same defect as p1-r1, fixed in edfdd9ade.
+
+<!-- fr:journal kind=decision scope=plan id=p2-stamp-plan-shape created=2026-11-14T13:05:45+00:00 phase=2 -->
+### p2-stamp-plan-shape · decision · deliver's stamp is planned after the leftovers gate and written beside _flush_gate_decisions (phase 2)
+
+`run_cmd._deliver_local_stamp_plan(repo_root, state, tests)` runs right after
+`_deliver_leftovers_gate`, reading the deliver unit's verified `tests` from the
+cursor (`units.evidence_of`). It finds the feature fragment at
+`artifact_root(repo_root)/docs/acceptance/features/<spec slug>.yaml`, takes the rows
+that fragment holds at `local` plus the rows whose latest `set-status` amendment in
+it is `local`, keeps those whose effective status is `local`, and builds every stamp
+in memory with `stamp_local` (refusing, exit 2, each row it cannot stamp: a witness
+that is not a fresh log or `reused:`, an uncommitted code path, an unreadable HEAD,
+a path not committed at HEAD). `_deliver_local_stamp_write` writes it with
+`write_text_atomic` through `_remember` and `_note_record_write`, immediately before
+`_flush_gate_decisions`, after `_refuse_missing_emits` and the PR gate. The witness
+parsing is `_local_stamp_witness`, beside `_reuse_tests_witness`. The stamp's `at`
+is the UTC date; `log` is the witness without its `;tree=` suffix.
+
+<!-- fr:journal kind=finding scope=plan id=p2-move-into-local-level-order created=2026-11-14T13:05:45+00:00 phase=2 state=open review_scope=in -->
+### p2-move-into-local-level-order · finding [open] (reviewer: in scope) · set-status --status local --level on a MERGED row was refused as having no level ref (phase 2)
+
+`fr.record.apply._Amending.move` planned the `set-status` amendment before the
+`add-level` ones, and `amend` checks `local_error` on the row after the set-status
+alone, so a merged row moved into `local` with its `--level` in the same command was
+always refused ("needs a level ref"). Phase 1 tested the pending-row path only.
+Found by tests/unit/test_deliver_local_stamp.py::test_a_pending_set_status_amendment_is_stamped_in_place.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-tracking-none-offers-local created=2026-11-14T13:05:45+00:00 phase=2 -->
+### p2-tracking-none-offers-local · discovery · under tracking none (no CI) the leftover fix now offers local before the gate (phase 2)
+
+tests/unit/test_deliver_leftovers.py::test_under_tracking_none_only_the_gate_route_applies
+asserted no `set-status` in the fix; its fixture has no CI, so R6 now offers
+`set-status --status local`, which needs no tracker. The test now asserts there is no
+`--issue` route, which is what it was guarding.
+
+<!-- fr:journal kind=finding scope=plan id=p2-move-into-local-level-order-resolved created=2026-11-14T13:05:45+00:00 phase=2 state=fixed resolves=p2-move-into-local-level-order -->
+### p2-move-into-local-level-order-resolved · finding [fixed] · resolves p2-move-into-local-level-order: set-status --status local --level on a MERGED row was refused as having no level ref (phase 2)
+
+a move into local now plans its level amendments before the set-status (87627d6c9); covered by the deliver amendment test
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-14T13:05:45+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the R6 fix is one conditional prefix in unaccounted, reusing _feature_flag; nothing to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-14T13:05:45+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+a scenario script and its one-line test wiring; no production code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-14T13:05:45+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+docs, rule, skill text and regenerated mirrors only; no code to refactor
