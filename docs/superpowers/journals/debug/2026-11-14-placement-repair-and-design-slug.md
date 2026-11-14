@@ -30,3 +30,8 @@ requirements.origin_fragment matches a logical origin only when fragment_slug_fo
 ### 0227e3f82f2c · root-cause · paths_dirty asks the repo_root checkout about paths another checkout holds
 
 archive.paths_dirty takes the product checkout as the home of every path. Under quiet and stealth the superpowers dir sits in the fr worktree / tracking clone, a different working tree (stealth: a different repository), so the pathspec is outside the repository; git exits 128 and check=True turns that into a traceback rather than a refusal.
+
+<!-- fr:journal kind=finding scope=debug id=f-paths-dirty created=2026-11-14T01:24:58+00:00 state=fixed -->
+### f-paths-dirty · finding [fixed] · paths_dirty asks each path's own checkout; a git failure is GitStatusError, and fr repair refuses (exit 2) on it
+
+archive.paths_dirty groups paths by the checkout holding them (repo_root for a path below it, else the nearest existing directory), and raises GitStatusError (an ArchiveError) instead of CalledProcessError. fr repair --yes guards the superpowers dir AND the repo's plan-config.yaml, and prints a refusal on GitStatusError. Pinned by tests/unit/test_placement_repair_and_design_slug.py (paths_dirty_reads_a_path_held_by_another_checkout, refuses_rather_than_raising, fr_repair_yes_under_quiet_*), red before the fix with the walk's exact CalledProcessError.
