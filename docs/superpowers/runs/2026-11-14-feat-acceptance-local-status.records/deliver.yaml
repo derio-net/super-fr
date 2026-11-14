@@ -1,0 +1,9 @@
+schema_version: 12
+run: 2026-11-14-feat-acceptance-local-status
+step: deliver
+outcome: done
+acceptance: []
+emitted: {}
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/full-suite.log
+  walk: /Users/idermitzakis/.cache/fr/walks/2026-11-14-feat-acceptance-local-status/20261114T135356Z.log
