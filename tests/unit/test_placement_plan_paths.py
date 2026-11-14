@@ -293,3 +293,27 @@ def test_pickup_names_a_quiet_plans_prose_by_a_readable_path(
     flat = " ".join(out.split())
     assert f"read `{plan_dir}/_prose.md`" in flat.replace("\n", ""), out
     assert (plan_dir / "_prose.md").is_file()
+
+
+def test_pickup_run_refuses_a_run_id_two_features_hold(
+    quiet: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review F8: the base clone took whichever feature root sorted first."""
+    import shutil
+
+    worktree, feature = quiet
+    run_id = _delivered(worktree)
+    cursor = feature / KIND_DIRS["run"] / f"{run_id}.yaml"
+    other = feature.parent / "feat__other" / KIND_DIRS["run"]
+    other.mkdir(parents=True)
+    shutil.copy(cursor, other / cursor.name)
+    base = tmp_path / "work"
+    monkeypatch.chdir(base)
+    for argv in (
+        ("pickup", "--run", run_id),
+        ("closeout", "outcome", "--run", run_id, "--step", "1", "--na", "--reason", "r"),
+    ):
+        code, out = _fr(base, *argv)
+        flat = " ".join(out.split())
+        assert code == 2, out
+        assert "feat__q" in flat and "feat__other" in flat, out

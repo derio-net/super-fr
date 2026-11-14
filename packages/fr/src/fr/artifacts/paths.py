@@ -220,6 +220,10 @@ def product_checkout_for(layout_root: Path, toplevel: Path) -> Path | None:
     return None
 
 
+class AmbiguousArtifactError(Exception):
+    """More than one feature root holds the artifact a lookup asked for."""
+
+
 def feature_of_artifact(repo_root: Path, rel: str) -> tuple[Path, Path | None] | None:
     """Under quiet or stealth, the feature root holding *rel* (an artifact path relative
     to an artifact root, `<runs dir>/<id>.yaml`) when this checkout's own feature does
@@ -233,9 +237,15 @@ def feature_of_artifact(repo_root: Path, rel: str) -> tuple[Path, Path | None] |
     space = space_for(root, create=False)
     if (feature_root(space) / rel).exists():
         return None
-    for froot in feature_roots(space):
-        if (froot / rel).exists():
-            return froot, product_checkout_for(froot, space.root)
+    holders = [froot for froot in feature_roots(space) if (froot / rel).exists()]
+    if len(holders) > 1:
+        # Review F8 of PR #1437: never read whichever sorts first.
+        raise AmbiguousArtifactError(
+            f"{rel} is held by more than one feature: "
+            + ", ".join(f"{h.name} ({h})" for h in holders)
+        )
+    if holders:
+        return holders[0], product_checkout_for(holders[0], space.root)
     return None
 
 

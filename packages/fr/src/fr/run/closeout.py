@@ -113,7 +113,7 @@ def run_checkout(repo_root: Path, run_id: str) -> Path:
     read as it did when the run was delivered. *repo_root* otherwise, unchanged.
     `RunElsewhereError` (naming how to bring the workspace back) when the feature's
     workspace is gone: its run is still on the placement branch."""
-    from fr.artifacts.paths import KIND_DIRS, feature_of_artifact
+    from fr.artifacts.paths import KIND_DIRS, AmbiguousArtifactError, feature_of_artifact
     from fr.placement.quiet import owner_of
     from fr.settings import SettingsError
 
@@ -121,6 +121,11 @@ def run_checkout(repo_root: Path, run_id: str) -> Path:
         found = feature_of_artifact(repo_root, f"{KIND_DIRS['run']}/{run_id}.yaml")
     except SettingsError:
         return repo_root
+    except AmbiguousArtifactError as e:
+        raise RunElsewhereError(
+            f"run {run_id}: {e}. A run id names one run; fr will not pick one, so run this "
+            "from the workspace of the feature you mean"
+        ) from e
     if found is None:
         return repo_root
     froot, checkout = found
