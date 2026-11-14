@@ -1,0 +1,93 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: review-phase
+item: phase/5
+outcome: done
+journal:
+- kind: review
+  id: review-p5
+  phase: 5
+  title: 'phase 5 review: 6 findings (5 in, 1 out), all fixed; fact-keepers: 0 lost, 0 changed facts'
+  body: 'Code reviewer (separate context, read-only) checked the accuracy commits 20b266de1, 3e48a4c5f, 16ce3f6e4, 9c5471bb5 and da33c2035 against the cited code (all true), the plain-language rewrite with per-page --preserve-from, meaning drift, inbound links, and built the site at HEAD and the merge base (no new raw list markers; tables and figures unchanged). Six blind fact-keepers, one per explainer. Fixes in d5cbd8c90, c2a0f6884, 694431383, c98992699, c2c26d6e3; ci-ok green on c2c26d6. The one kept warning (fr-progress passive) went away with the p5-r6 content correction.'
+- kind: discovery
+  id: p5-fact-keeper
+  phase: 5
+  title: 'Fact-keeper results per page (R8): page | counts | resolution'
+  body: |
+    docs/explainers/fr-progress.md | kept 44, changed 0, lost 0, added 0
+    docs/explainers/fr-init.md | kept 51, changed 1, lost 0, added 0 | 'how work is isolated' -> 'how fr isolates work': accepted, wording only and true (fr isolation)
+    docs/explainers/fr-exit-gates.md | kept 48, changed 0, lost 0, added 0
+    docs/explainers/fr-triage.md | kept 64, changed 0, lost 0, added 0
+    docs/explainers/fr-isolation.md | kept 74, changed 0, lost 0, added 0
+    docs/explainers/fr-wave-driver.md | kept 81, changed 0, lost 0, added 2 | 'the label is removed' -> 'fr removes the label': verified true, fr/triage/approval.py settle_approvals voids a moved head's approval by removing approved-fr then recording the void; 'We built the driver around...' adds the authors' voice only, no claim
+- kind: finding
+  id: p5-r1
+  phase: 5
+  review_scope: in
+  title: 'fr-triage.md: "Nobody commits the state" widened the subject and is false'
+  body: Raised by the phase 5 reviewer.
+- kind: finding
+  id: p5-r2
+  phase: 5
+  review_scope: in
+  title: 'fr-isolation.md: "stops there" pointed across a new paragraph break'
+  body: Raised by the phase 5 reviewer.
+- kind: finding
+  id: p5-r3
+  phase: 5
+  review_scope: in
+  title: 'fr-init.md: the --host confirmation moved from the skill to the operator'
+  body: Raised by the phase 5 reviewer.
+- kind: finding
+  id: p5-r4
+  phase: 5
+  review_scope: in
+  title: 'fr-wave-driver.md: red recovery omitted the gone-session path to Needs you now'
+  body: Raised by the phase 5 reviewer.
+- kind: finding
+  id: p5-r5
+  phase: 5
+  review_scope: in
+  title: 'fr-triage.md: "fr-goal is the run a batch becomes" contradicted the debug-batch line'
+  body: Raised by the phase 5 reviewer.
+- kind: finding
+  id: p5-r6
+  phase: 5
+  review_scope: out
+  title: 'fr-progress.md: "its rows are implemented" read as acceptance rows'
+  body: Raised by the phase 5 reviewer; present at the merge base.
+resolves:
+- id: p5-r1
+  state: fixed
+  body: d5cbd8c90
+- id: p5-r2
+  state: fixed
+  body: c2a0f6884
+- id: p5-r3
+  state: fixed
+  body: '694431383'
+- id: p5-r4
+  state: fixed
+  body: c98992699
+- id: p5-r5
+  state: fixed
+  body: d5cbd8c90
+- id: p5-r6
+  state: fixed
+  body: 'c2c26d6e3: content correction, every plan in the spec''s Implementation Plans table archived (migrate.py:884-905).'
+- id: p5-init-tool-help-markup
+  state: out-of-scope
+  body: 'fr init scaffold --help Rich markup defect, not caused by this change; to be filed at deliver.'
+- id: p5-progress-skill-status-yes
+  state: out-of-scope
+  body: 'Stale claim in plugins/super-fr/skills/fr-progress/SKILL.md, not caused by this change; to be filed at deliver.'
+- id: p5-triage-skill-schema
+  state: out-of-scope
+  body: 'Stale schema number in plugins/super-fr/skills/fr-triage/SKILL.md, not caused by this change; to be filed at deliver.'
+- id: p5-exit-gates-code-render
+  state: out-of-scope
+  body: 'Pre-existing at the merge base; re-indenting changes fenced bytes the preserve check compares; to be filed at deliver.'
+evidence:
+  review: review-p5
+  reviewer: a868a15c0015503db
+  model: claude-opus-5-5
