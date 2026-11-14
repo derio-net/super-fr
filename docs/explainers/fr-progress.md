@@ -83,7 +83,7 @@ unticked steps, and a manual phase needs `--note` saying what was done.
 ## Before you touch `docs/superpowers/` by hand
 
 Do not create, move or archive files under it yourself. In a repo you have not worked in,
-run this in order (`status`, `repair` and `migrate` preview unless you pass `--yes`):
+run this in order (`status` only reads and takes no `--yes`; `repair` and `migrate` preview unless you pass `--yes`):
 
 ```bash
 fr --help                 # fr is installed, and the repo is fr-managed
