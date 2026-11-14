@@ -73,7 +73,7 @@ FEATURE_PLACEHOLDER = "<spec-slug>"
 
 def _origin_feature(repo_root: Path, origins: tuple[str, ...]) -> str | None:
     """The fragment slug of the one spec *origins* name, or None (none, or several)."""
-    from fr.acceptance.logical import is_logical, origin_spec_path, parse_logical
+    from fr.acceptance.logical import is_logical, origin_spec_path, parse_logical, spec_slug
 
     slugs: set[str] = set()
     for origin in origins:
@@ -83,7 +83,7 @@ def _origin_feature(repo_root: Path, origins: tuple[str, ...]) -> str | None:
             except AcceptanceError:
                 continue
             if ref.kind == "spec":
-                slugs.add(fragment_slug_for_spec(ref.slug))
+                slugs.add(spec_slug(ref.slug))
             continue
         path = origin_spec_path(origin, repo_root)
         if path is not None:

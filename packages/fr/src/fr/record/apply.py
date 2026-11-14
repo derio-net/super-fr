@@ -1137,7 +1137,7 @@ def _reword_pending(
     logical form, R18) and any new acceptance or capability. A merged row is refused:
     its origins are history, and no amendment op carries them."""
     from fr.acceptance.edit import replace_row
-    from fr.acceptance.logical import is_logical, parse_logical, to_logical
+    from fr.acceptance.logical import canonical, is_logical, parse_logical, spec_slug, to_logical
     from fr.acceptance.model import AcceptanceError, split_ref
 
     where = f"acceptance {item.row}"
@@ -1153,7 +1153,10 @@ def _reword_pending(
         raise RecordRefusedError(f"{where}: no such row pending on this branch")
     existing = next(r for r in frags[owner].rows if r.id == item.row)
     own = (amending.identity() or "").partition("/")[2]
-    new_origins = tuple(to_logical(o, own_repo=own) for o in (origins or {})[item.row])
+    new_origins = tuple(
+        canonical(o) if is_logical(o) else to_logical(o, own_repo=own)
+        for o in (origins or {})[item.row]
+    )
     try:
         for ref in new_origins:
             parse_logical(ref) if is_logical(ref) else split_ref(ref)
@@ -1174,7 +1177,7 @@ def _reword_pending(
     moved = f"{item.row}: origin {', '.join(existing.origin) or '—'} -> {', '.join(new_origins)}"
 
     def spec_slugs(refs: tuple[str, ...]) -> set[str]:
-        return {parse_logical(o).slug for o in refs if o.startswith("spec:")}
+        return {spec_slug(parse_logical(o).slug) for o in refs if o.startswith("spec:")}
 
     # Review F6: only a changed set of origin specs re-files the row; a correction within
     # the same spec keeps it where it is (`--feature` may have put it there).
@@ -1243,7 +1246,7 @@ def _acceptance_writes(
     )
     from fr.acceptance.fold import fold_outside_with, fold_texts, has_fragments
     from fr.acceptance.fragment import FRAGMENTS_DIR, Fragment, parse_fragment
-    from fr.acceptance.logical import is_logical, parse_logical, to_logical
+    from fr.acceptance.logical import canonical, is_logical, parse_logical, spec_slug, to_logical
     from fr.acceptance.model import (
         AcceptanceError,
         Row,
@@ -1365,7 +1368,12 @@ def _acceptance_writes(
 
         def logical(refs: tuple[str, ...] | list[str]) -> tuple[str, ...]:
             # R18: a spec or plan path is written in its logical form.
-            return tuple(to_logical(r, own_repo=own) for r in refs)
+            # A logical spec ref is stored in its one spelling (`spec_slug`).
+            # `to_logical`'s output already is in that spelling (and a
+            # `-design-design.md` spec must keep one `-design`).
+            return tuple(
+                canonical(r) if is_logical(r) else to_logical(r, own_repo=own) for r in refs
+            )
 
         try:
             if creates:
@@ -1465,7 +1473,9 @@ def _acceptance_writes(
         if existing is None:
             feature = (features or {}).get(item.id)
             if feature is None:
-                slugs = {parse_logical(o).slug for o in row.origin if o.startswith("spec:")}
+                slugs = {
+                    spec_slug(parse_logical(o).slug) for o in row.origin if o.startswith("spec:")
+                }
                 if len(slugs) != 1 and default_feature is not None:
                     slugs = {default_feature}  # a run's row belongs to the run's spec
                 if len(slugs) != 1:

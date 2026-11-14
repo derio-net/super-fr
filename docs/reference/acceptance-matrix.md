@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-14 a spec:<stem>-design origin names its spec and is stored as spec:<stem> (debug 2026-11-14-placement-repair-and-design-slug)
 ---
 
 # The acceptance matrix
@@ -53,7 +53,9 @@ origins of a merged row are history: for such a row, `--origin` stops with an er
 Rows cite fr's own artifacts **logically**: `spec:<slug>#R<n>` for a spec requirement,
 `plan:<slug>` for a plan. The slug is the spec's file name without `-design.md`. So the
 slug is the same before and after `fr archive` moves the spec, and an archive never
-rewrites a row. Code keeps its path form, `<repo>:<path>#<test>`.
+rewrites a row. An origin can use the whole file stem, `spec:<slug>-design#R<n>`. It names
+the same spec, and fr stores it as `spec:<slug>#R<n>` in that spec's fragment. Code keeps
+its path form, `<repo>:<path>#<test>`.
 
 `fr migrate artifacts --yes` migrates a repo that still has the single
 `docs/acceptance/matrix.yaml` of earlier fr versions. It splits the rows by origin spec,

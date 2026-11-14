@@ -33,7 +33,7 @@ from pathlib import Path
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
-from fr.artifacts.paths import kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.plan_config import strip_dead_keys
 from fr.refs import RefResolution
 
@@ -319,11 +319,19 @@ def repair_repo(
             except OSError as e:  # pragma: no cover
                 out.failures.append(f"{meta_path}: {e}")
     if only_plans is None:
+        cfg = plan_config_path(repo_root)
         try:
-            _repair_plan_config(sp / "plan-config.yaml", out, write=write)
+            _repair_plan_config(cfg, out, write=write)
         except OSError as e:  # pragma: no cover
-            out.failures.append(f"{sp / 'plan-config.yaml'}: {e}")
+            out.failures.append(f"{cfg}: {e}")
     return out
+
+
+def plan_config_path(repo_root: Path) -> Path:
+    """The repo's `plan-config.yaml`: repository configuration, so the product
+    checkout's under every placement (`fr.artifacts.paths.REPO_CONFIG_KINDS`), never
+    the quiet or stealth feature root the plans and specs sit in."""
+    return Path(repo_root) / KIND_DIRS["plan-config"]
 
 
 def _repair_plan_config(cfg: Path, out: RepairResult, *, write: bool) -> None:

@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-14 still true after fr repair's quiet/stealth dirty guard and the one logical spec slug spelling (debug 2026-11-14-placement-repair-and-design-slug)
 ---
 
 ## Why is there nothing to sync?
