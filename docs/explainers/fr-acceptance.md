@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-14 still true after fr repair's quiet/stealth dirty guard and the one logical spec slug spelling (debug 2026-11-14-placement-repair-and-design-slug)
+reviewed: 2026-11-14 the local status for repos with no CI, and how deliver stamps it (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## What does the matrix record?
@@ -51,6 +51,7 @@ Statuses move explicitly, with a reason, never silently:
 | `ci`, `scheduled` | automated: the safe end |
 | `walked` | proven live, dated by its latest passing walk |
 | `manual` | a process that will never be automatable |
+| `local` | a test anyone can run, in a repo with no CI, stamped when it was delivered |
 | `unwired` | a test exists, but not in CI (debt) |
 | `walk-owed` | a live or post-merge run is owed (debt) |
 | `not-implemented` | nothing exists yet (debt) |
@@ -58,6 +59,14 @@ Statuses move explicitly, with a reason, never silently:
 
 When you cannot decide between `ci` and `unwired`, choose `unwired`. The skill's own rule
 is that you must not inflate coverage, because the operator audits the statuses at review.
+
+`local` exists because a repo with no CI could not honestly hold a tested row: `ci` was
+refused and `unwired` counted it as debt forever. A `local` row must name a real test in
+the repo, and fr refuses it once the repo has CI. When the run delivers, fr stamps the row
+with the suite log it ran and the version of each test file at that commit. If a test file
+changes later, the row turns back into debt (`local, stale`) until a run delivers it again.
+A `local` row that was never stamped is debt too, and so is one in a repo that now has CI,
+which should move it to `ci`.
 
 ## A worked example
 

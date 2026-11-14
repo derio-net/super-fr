@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-14 still true, the board's acceptance line also lists local rows and counts local debt (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?

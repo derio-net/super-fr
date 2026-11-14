@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-14 a spec:<stem>-design origin names its spec and is stored as spec:<stem> (debug 2026-11-14-placement-repair-and-design-slug)
+reviewed: 2026-11-14 the local status, its stamp and its debt (spec 2026-11-14-acceptance-local-status)
 ---
 
 # The acceptance matrix
@@ -84,10 +84,29 @@ nag say "disabled by repo setting" and report no debt.
 | `ci`, `scheduled` | Automated, so it cannot quietly drift. |
 | `walked` | Proven live; dated by its latest passing walk. |
 | `manual` | A process that will never be automated. Listed, not debt. |
+| `local` | A test that anyone can run, in a repo with no CI. Listed, not debt, while its stamp is current. |
 | `unwired` | A test exists but CI does not run it. Debt. |
 | `walk-owed` | A live or post-merge walk is still owed. Debt. |
 | `not-implemented` | Nothing exists yet. Debt. |
 | `failing` | Known red. Fails CI on purpose until fixed or reclassified with a reason. |
+
+### The `local` status
+
+Use `local` only in a repo with no CI (`fr services` shows `ci none`).
+
+- A `local` row must have a level ref. Each level ref must name an existing test in this
+  repo. All writers refuse other `local` rows.
+- All writers refuse `local` when the repo has CI. Use `ci` or `unwired`.
+- `deliver` stamps each `local` row that the run's feature added or set. The stamp is
+  `local: {at, tree, log, files}`. `files` has the HEAD blob of each file that the level
+  refs name. `deliver` stamps only from a fresh suite log with no uncommitted code path,
+  or from `tests: reuse`. Other test evidence stops `deliver` (exit 2).
+- A `local` row is debt when it has no stamp (`local, unstamped`), when a stamped file
+  changed or is missing at HEAD (`local, stale: <path>`), and when the repo has CI
+  (`local, promote to ci`). `fr acceptance check` shows each of these rows.
+- To make a stale row current again, set it to `local` again and deliver.
+- With no CI, the `deliver` leftover refusal gives the `set-status --status local`
+  command first.
 
 ## How rows are born and move
 

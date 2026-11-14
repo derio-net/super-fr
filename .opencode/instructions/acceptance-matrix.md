@@ -33,12 +33,25 @@ Statuses move **explicitly, never silently** — and they move with
 `fr acceptance set-status`, never a hand-edit: `ci` | `scheduled` (automated
 — the safe end) · `walked` (proven live, dated by its latest passing walk —
 `set-status --walk … --status walked` is the move after a walk) · `manual` (a
-process that is never automatable) · `unwired` (a test exists, not in CI —
+process that is never automatable) · `local` (an automated test anyone can run,
+in a repo with no CI — see below) · `unwired` (a test exists, not in CI —
 debt) · `walk-owed` (a live or post-merge walk is owed — debt) ·
 `not-implemented` (nothing exists — debt) · `failing` (fails CI). The debt set
-is `DEBT_STATUSES` (`fr.acceptance.model`); `walked` and `manual` are listed,
-never debt. The old `skipped` (matrix v4) is refused by name — `fr migrate
-artifacts --yes` splits it.
+is `DEBT_STATUSES` (`fr.acceptance.model`); `walked`, `manual` and a fresh
+`local` are listed, never debt. The old `skipped` (matrix v4) is refused by name
+— `fr migrate artifacts --yes` splits it.
+
+**`local`** (spec `2026-11-14-acceptance-local-status`) is for a repo with no CI
+(`fr services` reports `ci none`). Setting it needs at least one level ref naming an
+existing test in this repo, and every writer refuses it while the repo has CI (use
+`ci`, or `unwired`). `deliver` earns it: it stamps each `local` row the run's
+feature added or set, `local: {at, tree, log, files}`, from its fresh local suite log
+(no uncommitted code path) or a `tests: reuse`, with the HEAD blob of every file the
+row's level refs name, in the resolve's own commit. A `local` row is debt when it has
+no stamp (`local, unstamped`), when a stamped file changed or vanished at HEAD or its
+level refs moved (`local, stale: <path>`), and once the repo has CI (`local, promote
+to ci`). A later run re-earns a stale row by setting it `local` again and delivering.
+Under `ci none`, `deliver`'s leftover refusal offers `set-status --status local` first.
 
 ## How
 

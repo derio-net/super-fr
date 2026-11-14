@@ -85,9 +85,16 @@ origin spec. The effective matrix is never stored — `fr` folds the fragments.
 
 Statuses move **explicitly, never silently**: `ci` | `scheduled` (automated
 — the safe end) · `walked` (proven live, dated by its walk) · `manual` (a
-process that is never automatable) · `unwired` (a test exists, not in CI —
-debt) · `walk-owed` (a live or post-merge walk is owed — debt) ·
-`not-implemented` (nothing exists — debt) · `failing` (fails CI).
+process that is never automatable) · `local` (an automated test anyone can
+run, in a repo with no CI) · `unwired` (a test exists, not in CI — debt) ·
+`walk-owed` (a live or post-merge walk is owed — debt) · `not-implemented`
+(nothing exists — debt) · `failing` (fails CI).
+
+`local` needs a level ref naming an existing test in this repo, and is refused
+while the repo has CI. `deliver` earns it: it stamps the row with the suite log
+and the HEAD blob of every test file the row names. A `local` row is debt when
+it has no stamp (`local, unstamped`), when a stamped file changed
+(`local, stale: <path>`), and once the repo has CI (`local, promote to ci`).
 
 ## How
 

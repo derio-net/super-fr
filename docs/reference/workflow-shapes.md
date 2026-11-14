@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-14 still true, deliver also stamps the feature's local rows, which this page does not detail (spec 2026-11-14-acceptance-local-status)
 ---
 
 # Workflow shapes and the run cursor
