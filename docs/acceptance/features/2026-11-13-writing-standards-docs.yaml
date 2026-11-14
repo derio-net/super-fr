@@ -74,9 +74,12 @@ rows:
       and run the same check CI runs.
     origin:
     - spec:2026-11-13-writing-standards-docs#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_the_authoring_rule_says_how_a_page_stays_accurate
+    status: ci
+    notes: The explainers-currency rule names each group's standard and the script CI
+      runs; its accuracy paragraph is pinned by the unit test.
     verify: none
   - id: writing-standards-docs-accuracy
     capability: published-docs
