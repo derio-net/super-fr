@@ -1,0 +1,158 @@
+schema_version: 12
+run: 2026-11-14-feat-acceptance-local-status
+step: lens-review
+outcome: done
+journal:
+- kind: review
+  id: review-lenses
+  global: true
+  title: 'lens review: docs-accuracy 5, errors 3, tests 5 findings, all in scope, all fixed'
+  body: 'Three read-only reviewers, one per lens, reviewed the whole diff from merge base 616aa8cb3. docs-accuracy
+    and errors independently found the unknown-CI fail-open (one fix). Fixes: fa950cb3b, 2c123e3c7, b1dc5c31c,
+    8de5630a1 (spec R3/R7), 394531162 (tests, each shown red under the reviewer''s mutation and green
+    after revert), 2fa26d493 (lint). Local-status tests 105 passed; pinned-file tests 1763 passed; ruff,
+    mypy, fr docs check and the writing-standards check clean.'
+- kind: finding
+  id: l-docs-accuracy-r1
+  global: true
+  review_scope: in
+  title: pages, rule and skill said every writer refuses local; the code refuses a move into local and
+    keeps the stamp on a link or note write
+  body: Raised by the docs-accuracy lens reviewer.
+- kind: finding
+  id: l-docs-accuracy-r2
+  global: true
+  review_scope: in
+  title: rule and RULE_TEMPLATE said at least one / a level ref; local_error requires every level ref
+    in this repo and resolving
+  body: Raised by the docs-accuracy lens reviewer.
+- kind: finding
+  id: l-docs-accuracy-r3
+  global: true
+  review_scope: in
+  title: 'no doc named stale: HEAD unreadable; RULE_TEMPLATE omitted missing files and moved refs; DebtRow
+    docstring listed three reasons'
+  body: Raised by the docs-accuracy lens reviewer.
+- kind: finding
+  id: l-docs-accuracy-r4
+  global: true
+  review_scope: in
+  title: fr-acceptance explainer said fr acceptance status lists a row only while debt or contested; it
+    also lists walked and fresh local rows
+  body: Raised by the docs-accuracy lens reviewer.
+- kind: finding
+  id: l-docs-accuracy-r5
+  global: true
+  review_scope: in
+  title: ci_active is False on a ServicesError, so a malformed fr-profiles.yaml permits local, makes R6
+    offer it and hides promote to ci
+  body: Raised by the docs-accuracy lens reviewer.
+- kind: finding
+  id: l-errors-r1
+  global: true
+  review_scope: in
+  title: 'a malformed CI declaration makes ci_active False: local rows in a CI repo never promote to ci,
+    local_error allows them, the PR body offers local, the parse error discarded'
+  body: Raised by the errors lens reviewer.
+- kind: finding
+  id: l-errors-r2
+  global: true
+  review_scope: in
+  title: a malformed local stamp (empty tree/log, non-date at) reads as fresh; neither LocalStamp nor
+    the validator checks its shape
+  body: Raised by the errors lens reviewer.
+- kind: finding
+  id: l-errors-r3
+  global: true
+  review_scope: in
+  title: the 1->2 migration refusal said fix by hand without naming the fix, against the never-hand-edit
+    rule
+  body: Raised by the errors lens reviewer.
+- kind: finding
+  id: l-tests-r1
+  global: true
+  review_scope: in
+  title: the refused-resolve-no-stamp test pinned the write only after the PR gate
+  body: Raised by the tests lens reviewer.
+- kind: finding
+  id: l-tests-r2
+  global: true
+  review_scope: in
+  title: report, digest, summary and gate-backfill reader never shown to compute local debt from a real
+    fold
+  body: Raised by the tests lens reviewer.
+- kind: finding
+  id: l-tests-r3
+  global: true
+  review_scope: in
+  title: no test that a fresh local row is left out of fr status's open count
+  body: Raised by the tests lens reviewer.
+- kind: finding
+  id: l-tests-r4
+  global: true
+  review_scope: in
+  title: deliver refusals not committed at HEAD and git cannot read HEAD untested; a non-local tests witness
+    never exercised through deliver
+  body: Raised by the tests lens reviewer.
+- kind: finding
+  id: l-tests-r5
+  global: true
+  review_scope: in
+  title: contested plus local-debt double-count guard in acceptance_from_matrix untested
+  body: Raised by the tests lens reviewer.
+resolves:
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: 'b1dc5c31c: rule, reference, explainer, skill and RULE_TEMPLATE now say a MOVE to local is checked
+    and a write that keeps a row local keeps its stamp.'
+- id: l-docs-accuracy-r2
+  state: fixed
+  body: 'b1dc5c31c (rule, skill) and 2fa26d493 (RULE_TEMPLATE wording rewrapped): every level ref must
+    name an existing test in this repo.'
+- id: l-docs-accuracy-r3
+  state: fixed
+  body: 'b1dc5c31c: every surface names all reasons (stale: <path> incl. missing file and moved refs,
+    stale: HEAD unreadable, promote to ci, ci unknown); debt/model.py docstring too.'
+- id: l-docs-accuracy-r4
+  state: fixed
+  body: 'b1dc5c31c: the explainer describes status''s walked and fresh-local lines and says ''as open''
+    for the owed-verification sentence.'
+- id: l-docs-accuracy-r5
+  state: fixed
+  body: 'fa950cb3b: ci_unknown/ci_known_none; writers refuse local naming the error, R6 offers local only
+    where fr knows there is no CI, a local row is debt as ci unknown. Spec R3 amended in 8de5630a1. Tests
+    in test_acceptance_local_writers.py and test_deliver_leftovers.py fail without the fix.'
+- id: l-errors-r1
+  state: fixed
+  body: Same defect as l-docs-accuracy-r5, fixed in fa950cb3b.
+- id: l-errors-r2
+  state: fixed
+  body: '2c123e3c7: LocalStamp requires an ISO date, git shas for tree and files, a non-empty log; parametrised
+    test_a_malformed_stamp_is_refused. Spec R7 amended in 8de5630a1.'
+- id: l-errors-r3
+  state: fixed
+  body: '2c123e3c7: the refusal names both fixes (restamp schema_version 2 after a merge, or move the
+    rows off local with fr acceptance set-status) and the migrate command to rerun.'
+- id: l-tests-r1
+  state: fixed
+  body: '394531162: test_the_last_refusal_missing_emits_writes_no_stamp[record|flags] and test_the_exit_guard_refusal_writes_no_stamp;
+    the flag forms fail with the write moved after the PR gate.'
+- id: l-tests-r2
+  state: fixed
+  body: '394531162: five tests over a real no-CI repo (report, summary, digest, gate-backfill EvidenceReader,
+    fr debt engine), each failing when its local_reasons call is replaced by {}.'
+- id: l-tests-r3
+  state: fixed
+  body: '394531162: test_fr_status_open_count_leaves_out_a_fresh_local_row (1 open unstamped, 0 open fresh);
+    fails when every local row counts.'
+- id: l-tests-r4
+  state: fixed
+  body: '394531162: three deliver-level tests, exit 2 naming the row, no stamp; each fails under its own
+    mutation.'
+- id: l-tests-r5
+  state: fixed
+  body: '394531162: test_a_contested_local_debt_row_is_counted_once; fails when the guard is removed.'
+evidence:
+  review: review-lenses
+  reviewer: docs-accuracy=ad9804d4f8c09fd56,errors=ab2a0b556767f73e4,tests=a44e44db111e21341
+  model: claude-opus-5-5
