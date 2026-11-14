@@ -7249,6 +7249,15 @@ batches:
   rationale: Regenerates all three mirror sets (sync-opencode, sync-hermes, sync-readme), so it runs alone
     and last.
   wave: 21
+- id: retire-vk
+  title: Retire VibeKanban support
+  ids:
+  - super-fr#1459
+  rationale: 'Decision recorded in #1459: the only VK deployment was retired 2026-11-13. Removes packages/fr-vk,
+    its tests and fixtures, the VK dispatch wording and the fr-runner skill''s VK operations. Runs alone
+    first: it touches packaging, install.sh, tests and mirrors, which most later batches also touch, and
+    it shrinks the suite (#1428).'
+  wave: 15
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
