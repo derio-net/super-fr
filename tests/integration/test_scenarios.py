@@ -264,6 +264,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "acceptance-effective-matrix-fold",
         "acceptance-matrix-migration",
         "acceptance-fragments-amendments",
+        "acceptance-local-status",
     }
     assert on_disk == here
 
@@ -546,6 +547,10 @@ def test_acceptance_matrix_migration(installed: Path, tmp_path: Path) -> None:
 
 def test_acceptance_fragments_amendments(installed: Path, tmp_path: Path) -> None:
     _scenario("acceptance-fragments-amendments", installed, tmp_path)
+
+
+def test_acceptance_local_status(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-local-status", installed, tmp_path)
 
 
 def test_acceptance_reports_derived_published(installed: Path, tmp_path: Path) -> None:
