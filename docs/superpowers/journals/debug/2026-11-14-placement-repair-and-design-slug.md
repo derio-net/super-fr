@@ -40,3 +40,8 @@ archive.paths_dirty groups paths by the checkout holding them (repo_root for a p
 ### f-plan-config-home · finding [fixed] · fr repair read plan-config.yaml from the quiet/stealth feature root; it is repo configuration in the product checkout
 
 Found auditing the other repair steps: repair_repo stripped dead keys from kind_dir('superpowers')/plan-config.yaml, i.e. the feature root under quiet/stealth, though plan-config is a REPO_CONFIG_KINDS kind read from the product checkout. repair.plan_config_path names it. The migration runner (_quiet_fr_root, _quiet_feature_groups) and fr validate artifacts were already placement-aware; fr archive moves nothing off-product (R25), so its paths_dirty callers only run under repo, where the change is behaviour-preserving.
+
+<!-- fr:journal kind=finding scope=debug id=f-design-slug created=2026-11-14T01:25:01+00:00 state=fixed -->
+### f-design-slug · finding [fixed] · a logical spec slug has one spelling: readers compare spec_slug(), writers store canonical()
+
+fr.acceptance.logical.spec_slug (stem minus -design) and canonical(). requirements.origin_fragment and record apply's fragment choice compare spec_slug(logical.slug), as amend.py already did; record apply (fr acceptance add, set-status, step records, --origin corrections) stores canonical(to_logical(ref)), so a new spec:<stem>-design row lands in the run's own <stem>.yaml fragment. Rows already committed with the -design spelling (the live stealth walk's) now match. The frozen matrix_fragments migration's to_logical is untouched. Pinned by the design-slug tests in the same file.
