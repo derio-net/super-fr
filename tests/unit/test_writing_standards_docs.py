@@ -149,3 +149,21 @@ def test_the_script_checks_its_own_repo_whatever_the_callers_directory(tmp_path:
     code, calls, blog_craft = _run_script(tmp_path, outside, ste_exit=0, other_exit=0)
     assert code == 0
     _assert_both_groups_ran_at_the_toplevel(calls, blog_craft)
+
+
+def test_site_build_checks_the_writing_standards_after_the_build() -> None:
+    """R6: ci.yml's site-build job runs the script over the blog-craft checkout it
+    already makes, after the build, and names no blog-craft SHA itself."""
+    ci_text = (REPO / ".github/workflows/ci.yml").read_text()
+    steps = yaml.safe_load(ci_text)["jobs"]["site-build"]["steps"]
+    runs = [s.get("run", "") for s in steps]
+    build = next(i for i, r in enumerate(runs) if "scripts/build-site.py" in r)
+    checks = [
+        i
+        for i, r in enumerate(runs)
+        if r.strip() == "bash scripts/check-writing-standards.sh .blog-craft"
+    ]
+    assert len(checks) == 1, runs
+    assert checks[0] > build
+    sha = (REPO / ".github/blog-craft.ref").read_text().strip()
+    assert sha not in ci_text

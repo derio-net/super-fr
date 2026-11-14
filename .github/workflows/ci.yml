@@ -342,6 +342,8 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Build the site
         run: uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py _site --ref "$GITHUB_SHA" --blog-craft .blog-craft
+      - name: Check the pages against their writing standards
+        run: bash scripts/check-writing-standards.sh .blog-craft
 
   # One stable check name for a future required-check rule (#706).
   ci-ok:
