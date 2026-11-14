@@ -184,3 +184,10 @@ Evidence: fr docs check: 32 page(s) current on main c0fdbce; the docs-check CI j
 Step: `validate_writing_standard.py --preserve-from <baseline> --stats` on the batch: no FAIL and no `preserve` hit.
 
 Evidence: Every page was checked with validate_writing_standard.py --preserve-from <its baseline> --stats in its phase: no FAIL and no preserve hit (plan journal p2..p6-ws-* entries, 37 of them, and each phase review re-ran it); the whole-repo check is OK on main.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-14T02:21:25+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: A fact-keeper review per page: no unresolved `lost`, `changed` or `added` fact.
+
+Evidence: One blind fact-keeper per rewritten page (31): no lost fact; every changed or added fact fixed or justified (plan journal p2-, p3-, p4-, p5-, p6-fact-keeper).
