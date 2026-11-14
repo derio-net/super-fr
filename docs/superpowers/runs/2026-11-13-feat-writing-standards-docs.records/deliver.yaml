@@ -1,0 +1,9 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1436
+evidence:
+  tests: ci
