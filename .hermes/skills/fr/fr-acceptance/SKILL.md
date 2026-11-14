@@ -17,14 +17,9 @@ The acceptance matrix is the registry of business-level acceptance tests × veri
 
 ## Statuses — the honesty scale
 
-`ci` / `scheduled` = automated · `walked` = proven live (dated by its walk) ·
-`manual` = never automatable · `local` = a test anyone can run, in a repo with
-no CI (`fr services` says `ci none`): it needs a level ref naming an existing test,
-is refused while the repo has CI, and is earned when `deliver` stamps it from its
-local suite log · debt: `unwired` (test not in CI), `walk-owed`,
-`not-implemented`, and a `local` row that is `unstamped`, `stale: <path>` (its test
-file changed at HEAD) or `promote to ci` · `failing` = known red, `fr acceptance
-check` exits 2.
+`ci` / `scheduled` = automated · `walked` = proven live (dated by its walk) · `manual` = never automatable ·
+`local` = a test anyone can run, in a repo with no CI (needs a resolving level ref; `deliver` stamps it) ·
+debt: `unwired`, `walk-owed`, `not-implemented`, a `local` row `unstamped` / `stale: <path>` / `promote to ci` · `failing` = known red, `fr acceptance check` exits 2.
 Statuses move **explicitly, never silently** — with `fr acceptance
 set-status`, never a hand-edit; when in doubt between ci and unwired,
 **choose unwired**. Do not inflate coverage; the operator audits at review.
