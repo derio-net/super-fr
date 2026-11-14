@@ -151,3 +151,8 @@ Not caused by this change: fr's help text predates it and is code this docs feat
 ### d-accuracy · decision · Pages must be (and stay) accurate: accuracy pass before each rewrite, docs-accuracy lens after
 
 Operator, asked whether the rewrite is based on the code or the prose: "yes, I want the documents to be (and stay) accurate". Adds R13-R16.
+
+<!-- fr:journal kind=finding scope=spec id=s1-help-lines-resolved-2 created=2026-11-14T01:53:56+00:00 state=open resolves=s1-help-lines tracked_by=https://github.com/derio-net/super-fr/issues/1440 -->
+### s1-help-lines-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1440] · resolves s1-help-lines: fr's CLI help lines are too long for STE, so docs/reference/cli.md's generated tree cannot meet the guides' standard
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1440.
