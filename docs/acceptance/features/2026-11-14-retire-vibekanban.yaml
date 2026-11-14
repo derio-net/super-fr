@@ -117,3 +117,10 @@ amendments:
     ref: super-fr:tests/unit/test_bridge_cli.py
     why: The VK_BRIDGE_* half went with the fr-vk bridge; the isolation spellings stay
       covered by test_isolation.py
+  - row: dispatch-unit-declared-by-shape
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_bridge_shape_binding.py
+    why: That test drove the deleted fr-vk bridge daemon; the shape-declared unit stays
+      covered by the item-graph, no-PR-shape and spec-fanout tests
