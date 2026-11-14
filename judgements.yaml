@@ -7103,7 +7103,7 @@ batches:
     #1225 is the host overload parallel sessions cause; #1428: ci.yml is 335-674s against a 240s budget
     even with the cached-durations rebalancing (6 shards sum ~1,695s), so it needs more shards, cheaper
     heavy files or a re-argued budget.'
-  wave: 15
+  wave: 16
   skill: debug
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
