@@ -69,9 +69,14 @@ rows:
     - spec:2026-11-13-writing-standards-docs#R7
     - spec:2026-11-13-writing-standards-docs#R8
     - spec:2026-11-13-writing-standards-docs#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: manual
+    notes: 'Plain language (why-fr: Elements of Style) is enforced on every explainer
+      by site-build''s check (ci); kept warnings are journaled with reasons. Fact preservation
+      was proven per page by blind fact-keepers and phase reviews (p4-, p5-, p6-fact-keeper),
+      a process that is never automatable.'
     verify: none
   - id: writing-standards-docs-authoring-rule
     capability: published-docs
