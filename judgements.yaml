@@ -7151,6 +7151,17 @@ batches:
   rationale: '#1394 must restore the 33 overwritten row notes, not only stop new damage (origins: fixes
     ship without repairing what older versions wrote).'
   wave: 17
+- id: triage-intake
+  title: Triage intake trust and driver correctness
+  ids:
+  - super-fr#1252
+  - super-fr#1213
+  - super-fr#1406
+  - super-fr#1299
+  rationale: 'Security: no author-trust gate on batch eligibility (#1252). Changes the driver itself,
+    so it runs after the other truth fixes. triage_batch_cmd.py.'
+  wave: 18
+  bump: minor
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
