@@ -134,8 +134,8 @@ searchable. `fr journal render --scope debug --slug <slug>` prints it as Markdow
    git policy (`git.*` in `fr settings show`). Under `push: ask` or `pr: ask`, each one
    refuses once and prints a request id. The agent asks you, records your approval in the
    debug journal, and runs the command again. `fr push` also checks commit subjects
-   against the repo's templates. fr derives the body from the debug journal: root cause,
-   fix, and the failing-test-first story.
+   against the repo's templates, and the skill writes the body from the rendered debug
+   journal: root cause, fix, and the failing-test-first story.
 4. **Record the review.** Add a `review` entry. There is no run cursor here to enforce
    it, so nothing fails if you skip it. That is exactly why the skill writes it down
    rather than assume it.
