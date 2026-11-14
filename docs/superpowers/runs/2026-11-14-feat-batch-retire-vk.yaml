@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-14-retire-vibekanban-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-14T21:22:33+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-14T21:22:33+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: 82a2f34f-741e-478c-935c-3730af67eecb
   plan:
     state: pending
   plan-review:
