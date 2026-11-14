@@ -212,3 +212,10 @@ Evidence: The R12 tripwires (question rounds, hermes docs, build_site, explainer
 Step: Per page, the plan journal holds the accuracy review's claims and each one's outcome (corrected with its commit, or refuted with evidence) (R13, R14).
 
 Evidence: The plan journal holds 65 p*-acc-* entries: per page, each accuracy-review claim with its code evidence and outcome (corrected in its docs(<page>): correct commit, or refuted/left with evidence).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-9 created=2026-11-14T02:21:30+00:00 -->
+### test-plan-step-9 · discovery · Test Plan step 9: ran
+
+Step: `uv run fr lenses check` passes, and `uv run fr lenses status` on this branch lists `docs-accuracy` as required by the path rule; a unit test pins the lens and its rule (R15).
+
+Evidence: fr lenses check: .fr/lenses.yaml is fine; on the feature branch fr lenses status listed docs-accuracy as required by the path rule (rule docs/explainers/*.md, docs/*.md, docs/reference/*.md), and its lens review ran; test_the_docs_accuracy_lens_is_required_for_every_published_page pins lens and rule.
