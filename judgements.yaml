@@ -7099,6 +7099,17 @@ batches:
     traceback on a transient forge read; wrappers hide the capture run. run_cmd.py.'
   wave: 16
   skill: debug
+- id: owed-archive
+  title: Owed trackers and archive side effects
+  ids:
+  - super-fr#1400
+  - super-fr#1183
+  - super-fr#1301
+  - super-fr#1184
+  rationale: 'Tier 2: journal resolve closes the owed issue before the fix reaches main; a refused archive
+    still files issues; archive gets a dry run. journal_cmd.py, archive_cmd.py.'
+  wave: 16
+  bump: minor
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
