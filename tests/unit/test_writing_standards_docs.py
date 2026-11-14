@@ -116,8 +116,16 @@ def _assert_both_groups_ran_at_the_toplevel(calls: list[list[str]], blog_craft: 
     checker = blog_craft.resolve() / "tools/validate_writing_standard.py"
     prefix = f"run --isolated --no-project --with pyyaml python {checker} --default "
     assert [cwd for cwd, _ in calls] == [str(REPO), str(REPO)]
-    assert sorted(args.removeprefix(prefix).split()[0] for _, args in calls) == sorted(GROUPS)
     assert all(args.startswith(prefix) for _, args in calls)
+    # Each group's standard reaches the checker with every page of its globs, no more.
+    sent = {}
+    for _, args in calls:
+        standard, *pages = args.removeprefix(prefix).split()
+        sent[standard] = sorted(pages)
+    assert sent == {
+        standard: sorted(p.relative_to(REPO).as_posix() for g in globs for p in REPO.glob(g))
+        for standard, globs in GROUPS.items()
+    }
 
 
 def test_the_script_runs_every_group_from_the_toplevel_and_exits_with_the_highest_code(
@@ -165,6 +173,10 @@ def test_site_build_checks_the_writing_standards_after_the_build() -> None:
     ]
     assert len(checks) == 1, runs
     assert checks[0] > build
+    # ...and runs the real-checker test against that same checkout, so it is never skipped.
+    real = [i for i, s in enumerate(steps) if "-k real_checker" in s.get("run", "")]
+    assert len(real) == 1, runs
+    assert steps[real[0]].get("env", {}).get("BLOG_CRAFT_DIR") == ".blog-craft"
     sha = (REPO / ".github/blog-craft.ref").read_text().strip()
     assert sha not in ci_text
 
@@ -189,3 +201,55 @@ def test_the_authoring_rule_says_how_a_page_stays_accurate() -> None:
     assert "`docs-accuracy`" in rule
     assert "outside an fr-goal run" in rule
     assert "`covers:` code" in rule
+
+
+# The real checker, not the stand-in: skipped unless a blog-craft checkout is given
+# (CI's site-build job passes the one it already makes, at the pinned ref).
+BLOG_CRAFT_DIR = os.environ.get("BLOG_CRAFT_DIR")
+
+_PAGES = {
+    "docs/guide.md": "Run the command.",
+    "docs/reference/ref.md": "Run the command.",
+    "docs/explainers/good.md": "Open a PR when the work is ready.",
+    "docs/explainers/bad.md": "You shall read this page.",
+}
+
+
+def _real_run(repo: Path) -> subprocess.CompletedProcess[str]:
+    assert BLOG_CRAFT_DIR is not None
+    return subprocess.run(
+        ["bash", str(repo / "scripts/check-writing-standards.sh"), os.path.abspath(BLOG_CRAFT_DIR)],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.skipif(not BLOG_CRAFT_DIR, reason="needs BLOG_CRAFT_DIR (a blog-craft checkout)")
+def test_real_checker_fails_a_page_and_reads_the_terms_file(tmp_path: Path) -> None:
+    """R2, R4, R6 with blog-craft's own checker: a FAIL on one page fails the script,
+    and `.writing-standard-terms` at the repo root is what lets a listed term pass."""
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "scripts/check-writing-standards.sh").write_text(SCRIPT.read_text())
+    for rel, body in _PAGES.items():
+        page = repo / rel
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text(f'---\ntitle: "{page.stem}"\n---\n\n{body}\n')
+    (repo / ".writing-standard-terms").write_text("PR\n")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+
+    failed = _real_run(repo)
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    fails = [line for line in failed.stdout.splitlines() if line.startswith("FAIL:")]
+    assert fails and all(line.startswith("FAIL: docs/explainers/bad.md:") for line in fails)
+    assert "abbreviations" not in failed.stdout
+
+    (repo / "docs/explainers/bad.md").unlink()
+    assert _real_run(repo).returncode == 0
+
+    (repo / ".writing-standard-terms").unlink()
+    unlisted = _real_run(repo)
+    assert unlisted.returncode == 0
+    assert "docs/explainers/good.md:5: abbreviations: 'PR'" in unlisted.stdout

@@ -344,6 +344,10 @@ jobs:
         run: uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py _site --ref "$GITHUB_SHA" --blog-craft .blog-craft
       - name: Check the pages against their writing standards
         run: bash scripts/check-writing-standards.sh .blog-craft
+      - name: Check the writing-standards script against the real checker
+        env:
+          BLOG_CRAFT_DIR: .blog-craft
+        run: uv run --isolated --no-project --with pytest --with pyyaml pytest -q -o addopts= --noconftest -p no:cacheprovider tests/unit/test_writing_standards_docs.py -k real_checker
 
   # One stable check name for a future required-check rule (#706).
   ci-ok:
