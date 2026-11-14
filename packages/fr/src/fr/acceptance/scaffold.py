@@ -90,9 +90,10 @@ run, in a repo with no CI) · `unwired` (a test exists, not in CI — debt) ·
 `walk-owed` (a live or post-merge walk is owed — debt) · `not-implemented`
 (nothing exists — debt) · `failing` (fails CI).
 
-A move to `local` needs a level ref, every level ref naming an existing test in
-this repo, and is refused while the repo has CI. `deliver` earns it: it stamps the row with the suite log
-and the HEAD blob of every test file the row names. A `local` row is debt when
+A move to `local` needs a level ref, every level ref naming an existing test
+in this repo, and is refused while the repo has CI. `deliver` earns it: it
+stamps the row with the suite log and the HEAD blob of every test file the row
+names. A `local` row is debt when
 it has no stamp (`local, unstamped`), when a stamped file changed or vanished
 or its level refs moved (`local, stale: <path>`), and once the repo has CI
 (`local, promote to ci`).

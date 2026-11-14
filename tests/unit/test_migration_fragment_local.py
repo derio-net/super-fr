@@ -107,7 +107,8 @@ def test_the_validator_refuses_a_stamp_on_a_set_status_that_is_not_local(tmp_pat
     text = (
         "schema_version: 2\n" + BODY + "amendments:\n"
         "  - row: r1\n    op: set-status\n    base: 0\n    status: ci\n    notes: n\n"
-        "    local: {at: '2026-11-14', tree: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, log: suite.log@0123456789ab, files: {t.py: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}}\n    why: w\n"
+        f"    local: {{at: '2026-11-14', tree: {'a' * 40}, log: suite.log@0123456789ab, "
+        f"files: {{t.py: {'b' * 40}}}}}\n    why: w\n"
     )
     problems = validate_fragment(_fragment(tmp_path, text))
     assert problems and any("r1" in p and "local" in p for p in problems)
