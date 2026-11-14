@@ -7218,6 +7218,12 @@ batches:
   rationale: '#1394 must restore the 33 overwritten row notes, not only stop new damage (origins: fixes
     ship without repairing what older versions wrote).'
   wave: 18
+  after:
+  - guard-trust
+  - gate-truth
+  - deliver-evidence
+  - owed-archive
+  - workspace-identity
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
