@@ -7225,7 +7225,7 @@ batches:
   - super-fr#1271
   rationale: Shares the OpenCode plugin with guard-trust and install.sh with release-truth, so it waits
     for both.
-  wave: 19
+  wave: 20
   after:
   - guard-trust
   - release-truth
