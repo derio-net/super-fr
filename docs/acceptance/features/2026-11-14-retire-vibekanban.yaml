@@ -54,3 +54,11 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: stale-vk-profile-refused
+    op: reword
+    base: 0
+    acceptance: Scaffolding and this repo's profiles install no fr-vk, and `fr isolation
+      up` and `rebuild` in devcontainer mode refuse, before starting a container, a
+      profile that installs packages/fr-vk, naming the file and the segment to delete
+    why: spec-review s-r7, the row cites R3 and must state it

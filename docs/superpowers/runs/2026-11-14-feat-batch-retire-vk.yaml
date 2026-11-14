@@ -3,7 +3,7 @@ run: 2026-11-14-feat-batch-retire-vk
 workflow: fr-goal@1
 branch: feat/batch-retire-vk
 started: '2026-11-14T21:14:23+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-14-retire-vibekanban-design.md
   spec-review:
-    state: running
-    at: '2026-11-14T21:22:33+00:00'
+    state: done
+    at: '2026-11-14T21:29:39+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-11-14T21:22:33+00:00'
+          agent: ac1b57f5820f70630
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: claude-opus-5-5
           session: 82a2f34f-741e-478c-935c-3730af67eecb
+          returned: '2026-11-14T21:29:38+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: ac1b57f5820f70630
+          findings: s-r1,s-r2,s-r3,s-r4,s-r5,s-r6,s-r7,s-r8
   plan:
     state: pending
   plan-review:
