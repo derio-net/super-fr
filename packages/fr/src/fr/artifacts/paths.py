@@ -189,8 +189,16 @@ def product_checkout_for(layout_root: Path, toplevel: Path) -> Path | None:
     def candidates() -> Iterator[Path]:
         env = os.environ.get("FR_REPO_ROOT")
         here: list[Path] = []
-        for start in ([Path(env)] if env else []) + [Path.cwd()]:
-            cur = start.resolve()
+        starts = [Path(env)] if env else []
+        try:
+            starts.append(Path.cwd())
+        except OSError:
+            pass  # a deleted working directory names no checkout (review F7)
+        for start in starts:
+            try:
+                cur = start.resolve()
+            except OSError:
+                continue
             while True:
                 if (cur / ".git").exists():
                     here.append(cur)

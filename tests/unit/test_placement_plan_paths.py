@@ -317,3 +317,21 @@ def test_pickup_run_refuses_a_run_id_two_features_hold(
         flat = " ".join(out.split())
         assert code == 2, out
         assert "feat__q" in flat and "feat__other" in flat, out
+
+
+def test_parsing_a_quiet_plan_from_a_deleted_cwd_does_not_raise(
+    quiet: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review F7: `parse` asks the working directory for a product-checkout candidate,
+    and a deleted one raised `FileNotFoundError` from inside the lookup."""
+    from fr.parser import parse
+
+    worktree, _ = quiet
+    plan_dir = _create(worktree, tmp_path, SPEC)
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    monkeypatch.chdir(gone)
+    gone.rmdir()
+    monkeypatch.delenv("FR_REPO_ROOT", raising=False)
+    plan = parse(plan_dir)  # the isolation states still name the workspace
+    assert plan.repo_root == worktree.resolve()
