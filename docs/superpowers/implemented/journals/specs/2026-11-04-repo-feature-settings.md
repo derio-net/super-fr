@@ -1010,3 +1010,8 @@ after: kinds ['candidate', 'live'], gates ['tester']
 answered_by: none
 lowered: []
 ```
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved-2 created=2026-11-14T19:04:13+00:00 state=fixed resolves=test-plan-step-1 -->
+### test-plan-step-1-resolved-2 · finding [fixed] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Walked 2026-11-13/14 on GitHub in the private scratch repo derio-net/fr-walk-quiet (fr 7.0.0-rc.3 to rc.8), fr settings init --quiet with forge labels/comments/issues off, pr_body minimal, git push ask, pr ask, history squash-unpushed. A small fr-goal run reached delivery. fr asked before each push (requests push-feat-whisper-bfeeaadcd59b and push-feat-whisper-44ecc3e50dbb) and before the PR (pr-feat-whisper-44ecc3e50dbb); the operator approved each. feat/whisper is one squashed commit 44ecc3e whose body reads 'Squashed by fr push (git.history: squash-unpushed)' and holds code only (README, src, tests, uv.lock), no fr file. The fr branch holds features/feat__whisper/ with the plan, journals and fragment. Draft PR 1 has no label, no comment and no fr section; the repo has no issue and only GitHub's default labels. Defects found and fixed during the walk: 1435, 1437, 1451; the deliver refusal under ci none led to the local status, 1453/1455.
