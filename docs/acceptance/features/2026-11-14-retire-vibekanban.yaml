@@ -138,3 +138,10 @@ amendments:
     ref: super-fr:tests/integration/test_bridge_shape_binding.py
     why: That test drove the deleted fr-vk bridge daemon; test_capabilities.py still
       covers the preflight refusal
+  - row: gitlab-selfhosted-host-targeting
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_pr_observe.py
+    why: test_pr_observe.py tested the deleted fr_vk.pr_observe; the host targeting
+      stays covered by the _hosts, hostclient and glab tests
