@@ -15,3 +15,8 @@ Reproduced in-process on main (= rc5) against the stealth plan: three `## Verifi
 ### 47837ccefc7f · ruled-out · the absolute spec ref in _meta.yaml is not the cause of the stealth self-review failure
 
 fr.parser.parse resolves it below the plan's layout root (resolve_spec_ref_below) and records spec_path relative to the feature root, so every self-review check gets the same relative path it would get from a bare filename.
+
+<!-- fr:journal kind=ruled-out scope=debug id=2a30d6146da8 created=2026-11-14T01:19:28+00:00 -->
+### 2a30d6146da8 · ruled-out · the stealth placement is not the cause of the self-review failure
+
+load_spec_matrix from the stealth workspace returns all three rows of the feature's fragment. The quiet walk passes only because its rows spell the origin spec:2026-11-13-whisper#R<n> (stem minus -design); the stealth rows spell spec:2026-11-13-textkit-whisper-cli-design#R<n>.
