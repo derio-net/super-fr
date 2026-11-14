@@ -131,9 +131,9 @@ keeps neither in its checkout, so the hook also reads the switch directly: the l
 `origin/fr` carrying `placement: quiet` (and a repo with an origin remote), or a workspace
 whose marker records `placement: quiet` or `stealth`. The switch has exactly one spelling,
 the line `placement: quiet`, which `fr settings init --quiet` writes and fr itself insists
-on; a switch the hook cannot read positively as `placement: repo` (quoted, commented,
-indented, anything else) counts as quiet, so an odd spelling closes the gate rather than
-opening it. These direct reads need no `fr`. A plain repo stops there and starts no `fr` at
+on. A commented-out line is skipped, and no live line naming placement means repo; any
+other live spelling (quoted, with a trailing comment, indented, in flow style, written
+twice) counts as quiet, so an odd spelling closes the gate rather than opening it. These direct reads need no `fr`. A plain repo stops there and starts no `fr` at
 all, which keeps every edit fast; only when an `origin/fr` ref exists does the hook ask
 `fr settings paths --no-create`, bounded by a timeout, read-only (it never creates the `fr`
 branch or worktree) and only from an `fr` in an absolute PATH entry, never one a relative
