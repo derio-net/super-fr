@@ -100,7 +100,10 @@ rows:
     origin:
     - spec:2026-11-13-writing-standards-docs#R15
     - spec:2026-11-13-writing-standards-docs#R16
-    levels: {}
-    status: not-implemented
-    notes: lens and rule owed (phase 6)
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_the_docs_accuracy_lens_is_required_for_every_published_page
+    status: ci
+    notes: docs-accuracy lens and its path rule over the three page globs pinned; fr
+      lenses check passes and the lens ran in this PR's lens review.
     verify: none
