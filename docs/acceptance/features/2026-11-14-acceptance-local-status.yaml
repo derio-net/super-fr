@@ -34,9 +34,17 @@ rows:
     origin:
     - spec:2026-11-14-acceptance-local-status#R2
     - spec:2026-11-14-acceptance-local-status#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_local_writers.py#test_add_local_with_no_level_is_refused
+      - super-fr:tests/unit/test_acceptance_local_writers.py#test_set_status_local_in_a_repo_with_ci_is_refused
+      - super-fr:tests/unit/test_acceptance_local_writers.py#test_amend_set_status_local_with_a_missing_test_is_refused
+      - super-fr:tests/unit/test_acceptance_local.py#test_a_local_row_in_a_repo_with_ci_is_promote_to_ci
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_local_status
+    status: ci
+    notes: Every writer's refusals unit-tested; the scenario shows the no-level refusal,
+      the write, and the refusal once CI is declared; run in CI
     verify: candidate
     scenario: tests/scenarios/acceptance-local-status.sh
   - id: acceptance-local-stale
