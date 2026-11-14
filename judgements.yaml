@@ -7213,7 +7213,7 @@ batches:
   - super-fr#1300
   rationale: collect writes a label in a read command; BLOCKED counted as conflict; retired-scope issues
     never settle; facts schema pinned in three places. triage_cmd.py, triage/model.py.
-  wave: 18
+  wave: 19
   skill: debug
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
