@@ -7202,7 +7202,7 @@ batches:
   - super-fr#1299
   rationale: 'Security: no author-trust gate on batch eligibility (#1252). Changes the driver itself,
     so it runs after the other truth fixes. triage_batch_cmd.py.'
-  wave: 18
+  wave: 19
   bump: minor
 - id: triage-collect
   title: Triage collect and settle correctness
