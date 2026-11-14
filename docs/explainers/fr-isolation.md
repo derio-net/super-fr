@@ -138,7 +138,7 @@ line, and no live line naming placement means repo. Any other live spelling (quo
 trailing comment, indented, in flow style, written twice) counts as quiet. So an odd
 spelling closes the gate rather than opening it. These direct reads need no `fr`.
 
-A plain repo stops there and starts no `fr` at all, which keeps every edit fast. Only when
+A plain repo stops after these direct reads and starts no `fr` at all, which keeps every edit fast. Only when
 an `origin/fr` ref exists does the hook ask `fr settings paths --no-create`. A timeout bounds
 that call, and it is read-only: it never creates the `fr` branch or worktree. The hook runs
 it only from an `fr` in an absolute PATH entry, never one a relative entry could find inside
