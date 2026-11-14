@@ -64,7 +64,8 @@ is that you must not inflate coverage, because the operator audits the statuses 
 refused `ci` and `unwired` counted it as debt forever. A `local` row must name a real test in
 the repo, and fr refuses it once the repo has CI. When the run delivers, fr stamps the row
 with the suite log it ran and the version of each test file at that commit. If a test file
-changes later, the row turns back into debt (`local, stale`) until a run delivers it again.
+changes later, the row turns back into debt (`local, stale`) until a run sets it `local`
+again and delivers.
 A `local` row that no delivery stamped is debt too, and so is one in a repo that now has CI,
 which should move it to `ci`.
 

@@ -92,7 +92,8 @@ expect_grep 'earned \[local 2026-11-14\]' "$out" "status lists the fresh local r
 refuse_grep 'earned \[local,' "$out" "a fresh local row is not debt"
 run_fr out debt --offline
 require_exit 0 "$out"
-refuse_grep 'earned.*(stale|unstamped|promote)' "$out" "debt does not count a fresh local row"
+expect_grep 'earned \[local 2026-11-14\]' "$out" "debt lists the fresh local row as local"
+refuse_grep 'earned \[local,' "$out" "debt does not count a fresh local row"
 run_fr out acceptance check
 require_exit 0 "$out"
 refuse_grep 'earned' "$out" "check reports nothing for a fresh local row"
@@ -105,6 +106,10 @@ require_exit 0 "$out"
 expect_grep 'earned.*local, stale: tests/test_x.py' "$out" "check reports the stale row"
 run_fr out acceptance status
 expect_grep 'earned \[local, stale: tests/test_x.py\]' "$out" "status shows the stale row as debt"
+run_fr out debt --offline
+require_exit 0 "$out"
+expect_grep 'earned \[local, stale: tests/test_x.py\]' "$out" "debt counts the stale row"
+refuse_grep 'earned \[local 2026' "$out" "debt no longer lists the stale row as fresh"
 
 # R5: a local row with no stamp is debt.
 run_fr out acceptance set-status --id bare --status local \

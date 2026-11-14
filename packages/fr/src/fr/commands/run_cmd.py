@@ -7371,9 +7371,14 @@ def _local_stamp_plan(
 
     try:
         wanted = _feature_local_ids(parse_fragment(text, source=path.name))
-        rows = {r.id: r for r in effective(repo_root).matrix.rows}
     except AcceptanceError as e:
         refuse([f"{path.name}: {e}"])
+    if not wanted:
+        return None  # review p2-r1: no `local` row, no fold, deliver as before
+    try:
+        rows = {r.id: r for r in effective(repo_root).matrix.rows}
+    except AcceptanceError as e:
+        refuse([f"the acceptance matrix: {e}"])
     local = [rows[rid] for rid in dict.fromkeys(wanted) if rid in rows]
     local = [r for r in local if r.status == "local"]
     if not local:

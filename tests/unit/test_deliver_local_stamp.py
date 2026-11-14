@@ -406,3 +406,31 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
         "files": {TEST: _blob(root, TEST)},
     }
     assert git(root, "status", "--porcelain").strip() == "", "the product checkout is untouched"
+
+
+def test_a_fragment_with_no_local_row_never_folds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p2-r1: deliver with no `local` row behaves exactly as before; the plan
+    returns before the fold, so no fold failure can refuse it in the stamp's name."""
+    from fr.acceptance import fold as fold_mod
+    from fr.commands import run_cmd
+
+    root = _at_deliver(tmp_path)
+    out = fr(
+        root,
+        [
+            *("acceptance", "add", "--id", ROW, "--capability", "Widget"),
+            *("--acceptance", "loc-1 holds", "--origin", "spec:spec#R1", "--status", "unwired"),
+            *("--level", LEVEL, "--notes", "a test exists"),
+        ],
+    )
+    assert out.exit_code == 0, out.output
+    commit_all(root, "unwired")
+    assert (root / FRAGMENT).is_file()
+
+    def boom(*_a: object, **_k: object) -> object:
+        raise AssertionError("the stamp plan folded a fragment with no local row")
+
+    monkeypatch.setattr(fold_mod, "effective", boom)
+    assert run_cmd._local_stamp_plan(root, "spec", "suite.log", today="2026-11-14") is None
