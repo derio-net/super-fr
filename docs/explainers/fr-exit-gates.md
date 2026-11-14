@@ -19,21 +19,21 @@ covers:
 reviewed: 2026-11-13 writing-standards-docs phase 3, the guides it covers were corrected and rewritten to ste; nothing this page describes changed
 ---
 
-## Overview: the work that cannot finish in the pull request
+## What work cannot finish in the pull request?
 
 A reviewed, green pull request proves what CI and a reviewer can see. It cannot prove that
 the new release installs on a clean machine, that a feature works against the real service,
-or that the secret the change needs has been rotated. Those can only be checked **after**
-the merge, by someone who is not the agent that wrote it.
+or that someone has rotated the secret the change needs. Only someone who is not the agent
+that wrote the change can check those, and only **after** the merge.
 
 fr makes that owed work visible instead of leaving it in a PR description. Every run has an
 **exit**: the kinds of verification that apply to it, and the **gates** that name who must
 act. While a gate is held, the merged pull request says so in its labels, the triage board
-lists it, the run is not closed out, and the project does not publish a final release.
+lists it, the run's close-out waits, and the project does not publish a final release.
 
 <!-- site:figure gate-ledger -->
 
-## The six gates
+## What are the six gates?
 
 A gate names a role. There are six: `developer`, `reviewer`, `tester`, `devops`, `owner` and
 `security`. Only two of them hold anything after the merge:
@@ -44,15 +44,15 @@ A gate names a role. There are six: `developer`, `reviewer`, `tester`, `devops`,
 | `devops` | the same, and the merge itself when it goes through the triage merge path |
 | the other four | nothing: they are recorded, never enforced |
 
-`devops` is the stricter of the two because the work it guards, a key that must exist or a
-service to restart, often has to be done before or around the merge, not only after it. The
-triage merge path refuses a pull request that holds `gate:devops` without
-`gate:devops-passed`. A merge made by hand in the forge's own UI is not blocked, which is why
-the label is the ledger and not a lock.
+`devops` is the stricter of the two, because of the work it guards: a key that must exist,
+or a service to restart. That work often has to happen before or around the merge, not only
+after it. The triage merge path refuses a pull request that holds `gate:devops` without
+`gate:devops-passed`. Nothing blocks a merge you make by hand in the forge's own UI, which
+is why the label is the ledger and not a lock.
 
-## Which gate a run gets
+## Which gate does a run get?
 
-You do not choose a gate at the end. It is decided from the spec, first match wins:
+You do not choose a gate at the end. fr decides it from the spec, and the first match wins:
 
 1. a `gate: <gate>` line in the spec's `## Verification` section sets the run's gate, and
    `gate: <row-id>=<gate>` sets one acceptance row's;
@@ -63,24 +63,25 @@ You do not choose a gate at the end. It is decided from the spec, first match wi
 4. `none`.
 
 On top of that, a run whose plan carries manual operations gets `devops` added, whatever the
-spec says. `fr verification exit --run <id>` prints the kinds and gates the rules give. A repo can switch the whole
-thing off with `artifacts.gates: off`; then no gate is computed, labelled or held.
+spec says. `fr verification exit --run <id>` prints the kinds and gates the rules give. A
+repo can switch the whole thing off with `artifacts.gates: off`; then fr computes, labels and
+holds no gate.
 
-## The labels are the ledger
+## Why are the labels the ledger?
 
-When the run is delivered, fr puts a `verification:<kind>` label and a `gate:<gate>` label
+When fr delivers the run, it puts a `verification:<kind>` label and a `gate:<gate>` label
 for each post-merge gate on the pull request. A gate is **held** while the pull request has
-`gate:<g>` and no `gate:<g>-passed`. The passed label is the record of a pass and is never
-removed. Nothing about a gate lives in a file in the repo, so passing one needs no commit.
+`gate:<g>` and no `gate:<g>-passed`. The passed label is the record of a pass, and nothing
+removes it. Nothing about a gate lives in a file in the repo, so passing one needs no commit.
 
-## How a gate is passed
+## Who passes a gate?
 
-A person passes a gate, or the work that the gate guards is recorded as done.
+A person passes a gate, or a record shows that the work the gate guards is done.
 
 - **Tester.** When the gate has acceptance rows and every one of them reads `walked` on the
   default branch, the triage driver passes the gate itself. It never does for a run-level gate
   that no row inherits, nor for a `devops` gate added because the plan has operations: those
-  are passed explicitly. Otherwise you walk the rows
+  need an explicit pass. Otherwise you walk the rows
   ([fr-acceptance](fr-acceptance.md)) or record the pass by hand:
 
   ```bash
@@ -96,14 +97,14 @@ A person passes a gate, or the work that the gate guards is recorded as done.
 tracker issues fr filed for that pull request and gate. When it was the pull request's last
 gate it prints the command that cuts the final release.
 
-## Release candidates while a gate waits
+## What gets released while a gate waits?
 
 This is where the gates meet the release. On every push to `main`, and once a day because a
 gate can pass with no push, the release script looks at every pull request merged since the
 last **final** tag. If any still holds a post-merge gate:
 
 - it cuts a **release candidate**, `vX.Y.Z-rc.N`, published as a pre-release. It consumes no
-  change fragments, so the version the final will have is not spent;
+  change fragments, so it does not spend the version the final will have;
 - or it cuts nothing, when nothing installable changed since the newest candidate (or since
   the last final). Documentation, tests and a fragment on its own are not installable.
 
@@ -111,16 +112,22 @@ Once no pull request waits, the next run cuts the **final** release and consumes
 fragments. People who install candidates test what merged while the gates are open; people
 who install finals only ever get what every gate passed.
 
-Release candidates are the safe direction when fr is unsure. If the labels cannot be read, the
-read of merged pull requests comes back at its limit, a pull request the git log names is missing
-from it, or the decision itself fails, the state is **unknown**, and unknown cuts a
-candidate, never a final and never an error. A token that cannot read labels therefore means
-candidates only, until it is fixed. An explicit `--version` releases a final without asking the
-ledger: it is the operator's override, not a way around a hold.
+Release candidates are the safe direction when fr is unsure. The state is **unknown** when
+one of these happens:
+
+- the script cannot read the labels;
+- the read of merged pull requests comes back at its limit;
+- a pull request the git log names is missing from that read;
+- the decision itself fails.
+
+Unknown cuts a candidate, never a final and never an error. A token that cannot read
+labels therefore means candidates only, until someone fixes it. An explicit `--version`
+releases a final without asking the ledger: it is the operator's override, not a way around
+a hold.
 
 `fr release status` lists what is waiting.
 
-## Old work, and the DevOps stage
+## What about old work, and the DevOps stage?
 
 Work that merged before gates existed has its asks scattered in rows, manual phases and
 closed issues. `fr gate backfill` finds them and puts each where the ledger and the board look;

@@ -15,13 +15,13 @@ covers:
 reviewed: 2026-11-13 init's writers refuse in a stealth workspace (placement-resolver p4-r3)
 ---
 
-## Overview: the profile is the contract
+## Why is the profile the contract?
 
 [fr-isolation](fr-isolation.md) runs every build inside a container, and a container has
 to be built from something. A **profile** is that something: a devcontainer definition
 committed under `.devcontainer/<profile>/`, plus a record of which secret *names* the
 profile expects. The values never enter the repo. They live in a file on your machine,
-`~/.config/fr/secrets/<repo>/<profile>.env`, and are passed to the container when it
+`~/.config/fr/secrets/<repo>/<profile>.env`, and fr passes them to the container when it
 starts.
 
 You reach for fr-init when a repo has no profile yet, or when you want a second one. The
@@ -35,7 +35,7 @@ is a decision that belongs to you, so the skill is exempt from the unattended co
 Inside an [fr-goal](01-fr-goal.md) run, a missing profile pauses the run, you do the
 interview, and the run resumes.
 
-## A worked example
+## What does a worked example look like?
 
 A Python repo with a Node front end, where you want a day-to-day profile and a separate
 one that can deploy:
@@ -64,25 +64,25 @@ fr isolation up --branch feat/something --profile admin
 Leaving `--profile` off uses the default, which is why the default should be the
 least-privileged one: that is what unattended runs get.
 
-## What the skill does, in order
+## What does the skill do, in order?
 
-**1. Scan first.** Before asking anything it reads what the repo already says: manifests
-and lockfiles for languages, CI workflows for what gets installed, any existing
-`.devcontainer/`, the origin remote for the forge, `.env*` patterns and CI secret names
-for the credential surface, and the Makefile or scripts for how people run things here.
-The interview confirms and fills gaps; it never asks something the scan answered.
+**1. Scan first.** Before asking anything it reads what the repo already says. It reads
+manifests and lockfiles for languages, CI workflows for what gets installed, any existing
+`.devcontainer/` and the origin remote for the forge. It reads `.env*` patterns and CI
+secret names for the credential surface, and the Makefile or scripts for how people run
+things here. The interview confirms and fills gaps; it never asks something the scan answered.
 
 **2. Interview, at most four questions a round.** An unanswered round is a stop, not a
 prompt to guess. The topics:
 
 - the **backend**: GitHub, GitLab or Gitea (skipped when the remote makes it obvious;
-  a self-hosted host is confirmed with `--host`);
+  you confirm a self-hosted host with `--host`);
 - the **profiles** you want: one `dev`, or a split such as read-only for review and admin
   with deploy credentials. Profiles differ by credentials first and tools second;
 - the **tools** to install, checked against the set `fr init scaffold --help` lists
   (`docker-in-docker`, `go`, `java`, `kubectl`, `maven`, `node`, `python`, `rust`,
   `terraform`, `uv`). For Java, confirm the major version, because scaffold's own
-  detection reads only version files and the POM;
+  detection reads only version files and the Project Object Model (POM);
 - the **secret names** per profile. Names only, never values. It does not ask for a
   forge token by default: push and pull request creation run on the authenticated host,
   so the container needs none for the standard pipeline;
@@ -90,23 +90,24 @@ prompt to guess. The topics:
   profile's purpose.
 
 **3. Scaffold.** One `fr init scaffold` call per profile, as above. A tool is
-`<tool>` or `<tool>@<version>`; an unknown tool is refused, and `--feature <ref>` takes a
-raw devcontainer feature for a toolchain the list lacks. The forge CLI is installed to
-match the backend. Pass `--backend` (and `--host` for a self-hosted instance) on every
-call for a non-GitHub forge.
+`<tool>` or `<tool>@<version>`, and scaffold refuses an unknown tool; `--feature <ref>`
+takes a raw devcontainer feature for a toolchain the list lacks. Scaffold adds the forge
+CLI that matches the backend. For a non-GitHub forge, pass `--backend` (and `--host` for a
+self-hosted instance) on every call.
 
 **4. Hand back.** The skill tells you which placeholder files to fill. Scaffold has
 already committed the profile, because `fr isolation up` builds from the committed tree;
 two cases leave the commit to you. On the quiet placement fr makes no commit on a product
 branch, so scaffold writes the files and tells you to commit them, and when `.devcontainer`
-is git-ignored it warns and commits nothing. Add
-`--no-commit` to write the files only, for example when you must open a pull request to
-get them onto a protected branch. In a stealth workspace (a run whose records live in a
+is git-ignored it warns and commits nothing.
+
+Add `--no-commit` to write the files only, for example when you must open a pull request
+to get them onto a protected branch. In a stealth workspace (a run whose records live in a
 separate tracking repository) `fr init scaffold`, `fr init agents` and `fr init
 validator-wrapper` refuse before writing anything: no fr file
 may reach a stealth target.
 
-## Services: forge, CI, tracking
+## Which services does the repo record?
 
 `.devcontainer/fr-profiles.yaml` also records three services for the repo: `forge`, `ci`
 and `tracking`, each with a type and an optional host. `fr services` prints what resolved
@@ -115,16 +116,16 @@ and where each value came from (`--json` for machines). Scaffold takes
 `--tracking none|github|gitlab|gitea|auto`. When `auto` cannot decide, it exits 2 and
 names the flag to pass, and you re-run it explicitly instead of accepting a guess.
 
-## Limits
+## What does fr-init not do?
 
-- fr-init sets up *how* work is isolated, not whether a run is safe. The credentials you
+- fr-init sets up *how* fr isolates work, not whether a run is safe. The credentials you
   grant a profile are the credentials its runs can use.
 - Adding a profile later is one more `scaffold` call; the per-profile folder layout
   needs no migration.
 - It writes no secret values. If the env file is empty, the container simply gets no
   secrets, which is normal for a default profile.
 
-## Where to go next
+## Where do you go next?
 
 - [fr-isolation](fr-isolation.md) uses the profile you just made.
 - [fr-brainstorming-and-plan](fr-brainstorming-and-plan.md) is where most runs start once

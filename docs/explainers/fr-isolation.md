@@ -17,32 +17,31 @@ covers:
 reviewed: 2026-11-13 placement-resolver phase 6 review, no fr on a plain repo, a trusted bounded read-only fr, one switch spelling (R26)
 ---
 
-## Overview: two boundaries and a bridge
+## What are the two boundaries and the bridge?
 
 Hand an autonomous agent write access to your real checkout and two things go wrong
 fast: it collides with your in-flight work, and its generated commands inherit your full
 credentials. fr-isolation removes both by construction.
 
-Every run is nested inside two independent boundaries. A **git worktree**, a throwaway
+fr nests every run inside two independent boundaries. A **git worktree**, a throwaway
 copy of the repo physically outside your clone, absorbs all the checkouts, stashes and
 commits. A **devcontainer** wraps execution, so generated code only ever sees the
-credentials that workspace was explicitly granted. File edits land on the host-visible
-worktree; everything runnable is funnelled into the container through one command, the
-exec-bridge.
+credentials the workspace's profile explicitly grants. File edits land on the host-visible
+worktree. One command, the exec-bridge, funnels everything runnable into the container.
 
-Isolation is not asked for. It is the only door in.
+You do not ask for isolation. It is the only door in.
 
-Two docker-less modes sit beside the default for hosts and pods with no container
-runtime: **host-worktree** (`FR_ISOLATION_TARGET=worktree`: the worktree, the host's own
-environment, no profile) and **external**, where the environment's preparer writes the
-marker itself and fr adopts it. The worktree boundary and the edit gate are the same in
-all three.
+Two docker-less modes sit beside the default, for hosts and pods with no container
+runtime. The **host-worktree** mode (`FR_ISOLATION_TARGET=worktree`) has the worktree and
+the host's own environment, and no profile. In the **external** mode, the environment's
+preparer writes the marker itself and fr adopts it. The worktree boundary and the edit gate
+are the same in all three.
 
-## How it works: where the work lives, where it runs
+## Where does the work live, and where does it run?
 
-The base checkout is never a participant. Edits happen on the worktree; execution is
-proxied into the sealed container; a small marker file ties the whole thing to the
-enforcement layer.
+The base checkout is never a participant. Edits happen on the worktree, and the
+exec-bridge proxies execution into the sealed container. A small marker file ties the whole
+thing to the enforcement layer.
 
 ```mermaid
 flowchart LR
@@ -65,19 +64,21 @@ flowchart LR
 
 The marker closes the loop. On `up`, fr writes `.fr-isolation` into the worktree root and
 adds it to the repo's exclude list: gitignored, never committed, backed by a CI tripwire.
-Every edit the agent attempts is checked against it.
+A hook checks every edit the agent attempts against it.
 
-The marker also records where fr keeps its own records for this workspace. Under the
-**stealth** placement (`fr isolation up --stealth <tracking-repo>@<branch>`, or
-`--target <path>` from a clone of the tracking repository) it carries
-`placement: stealth` and the tracking ref, and fr keeps the run's records in a clone of
-that separate repository at `~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>`
-instead of on your branch. `up` refuses before creating anything when the tracking
-repository cannot be reached, lacks the branch, or is more visible than the target, and
+The marker also records where fr keeps its own records for this workspace. You choose the
+**stealth** placement with `fr isolation up --stealth <tracking-repo>@<branch>`, or with
+`--target <path>` from a clone of the tracking repository. The marker then carries
+`placement: stealth` and the tracking ref. fr keeps the run's records in a clone of that
+separate repository at `~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>` instead of
+on your branch.
+
+`up` refuses before creating anything when it cannot reach the tracking repository, when
+that repository lacks the branch, or when it is more visible than the target.
 `--resume <run-id>` brings a stealth run up on another host. The
 [fr-goal explainer](01-fr-goal.md) tells the whole story.
 
-## Who creates worktrees
+## Who creates worktrees?
 
 Four things can create a worktree. fr owns or routes all of them, and knows which agent
 session holds each workspace.
@@ -91,29 +92,29 @@ session holds each workspace.
 
 `fr isolation status` lists the sessions holding each workspace. The shipped script
 `plugins/super-fr/scripts/fr-statusline-segment.sh` prints the branch a session works on and
-its worktree, green when it is an fr workspace and purple when not, and
-`fr-statusline-claude.sh` is a ready-made Claude Code status line built on it.
+its worktree, green when it is an fr workspace and purple when not.
+`fr-statusline-claude.sh` is a ready-made Claude Code status line built on that script.
 
 In the default devcontainer mode, a repo with no profile is a stop, not a degraded mode (the
-two docker-less modes above need none): the `fr-init` skill scans
-the repo, interviews you about tools, credentials and working patterns, and scaffolds the
-profiles with `fr init scaffold`. You pay that once per repo. And `fr isolation down` refuses
+two docker-less modes above need none). The `fr-init` skill scans the repo, interviews you
+about tools, credentials and working patterns, and scaffolds the profiles with
+`fr init scaffold`. You pay that once per repo. And `fr isolation down` refuses
 while the branch's PR is still open unless you pass `--force`, so cleanup cannot race your
 final pushes.
 
-## Enforcement: a staircase a faked marker can't climb
+## Why can't a faked marker get past the gate?
 
 A `PreToolUse` hook runs on every edit tool call, in any session, forever. It accepts an
 edit only if the marker survives a series of descending checks, each one written to defeat
 a specific way of cheating. (On OpenCode and Hermes the same decision runs from their own
-hook points; the shell is judged by a sibling guard while a pipeline is live.)
+hook points; while a pipeline is live, a sibling guard judges the shell.)
 
 1. **Is there a `.fr-isolation` marker at the file's git root?** If not, and the path is
-   not on the allow-list, the edit is refused outright.
+   not on the allow-list, the hook refuses the edit outright.
 2. **Does the marker's recorded root match the actual root?** This defeats a worktree
    copied elsewhere: the recorded path no longer resolves to here.
 3. **Is the mode one fr knows?** `worktree` (devcontainer or host-worktree) and `external`
-   are valid; anything unknown or mistyped fails closed rather than being waved through.
+   are valid; anything unknown or mistyped fails closed instead of slipping through.
 4. **Does the mode's own check pass?** For `worktree`, the toplevel must be a genuine linked
    worktree (`git-common-dir` differs from `git-dir`), which defeats a marker copied into
    your base clone, where those two paths are identical, so even a byte-perfect forgery
@@ -122,57 +123,64 @@ hook points; the shell is judged by a sibling guard while a pipeline is live.)
    on a bare host never validates.
 5. **For `worktree`: is HEAD still on the marker's branch?** This defeats a workspace that
    drifted: a `git checkout -b` inside it leaves fr's state describing one branch while you
-   edit another. A detached HEAD, as in the middle of a rebase, still passes, and the way
-   back (`git switch <registered branch>`) is never blocked.
+   edit another. A detached HEAD, as in the middle of a rebase, still passes, and nothing
+   blocks the way back (`git switch <registered branch>`).
 
-Before step 1 the hook asks whether the repo is fr-enabled at all, and that answer is not
-only "has a devcontainer profile or a plans directory". A repo on the **quiet** placement
-keeps neither in its checkout, so the hook also reads the switch directly: the last fetched
-`origin/fr` carrying `placement: quiet` (and a repo with an origin remote), or a workspace
-whose marker records `placement: quiet` or `stealth`. The switch has exactly one spelling,
-the line `placement: quiet`, which `fr settings init --quiet` writes and fr itself insists
-on. A commented-out line is skipped, and no live line naming placement means repo; any
-other live spelling (quoted, with a trailing comment, indented, in flow style, written
-twice) counts as quiet, so an odd spelling closes the gate rather than opening it. These direct reads need no `fr`. A plain repo stops there and starts no `fr` at
-all, which keeps every edit fast; only when an `origin/fr` ref exists does the hook ask
-`fr settings paths --no-create`, bounded by a timeout, read-only (it never creates the `fr`
-branch or worktree) and only from an `fr` in an absolute PATH entry, never one a relative
-entry could find inside the repo. A missing, failing, slow or garbled `fr` can therefore only
-fail to add a "yes", never turn one into a "no", so the gate is never weaker for lack of the
-binary. The OpenCode plugin and the Hermes hook make the same decision (one shared
-definition each).
+Before step 1 the hook asks whether the repo is fr-enabled at all. That answer is not only
+"has a devcontainer profile or a plans directory". A repo on the **quiet** placement keeps
+neither in its checkout, so the hook also reads the switch directly. It looks for the last
+fetched `origin/fr` carrying `placement: quiet` (and a repo with an origin remote), or a
+workspace whose marker records `placement: quiet` or `stealth`.
+
+The switch has exactly one spelling, the line `placement: quiet`, which
+`fr settings init --quiet` writes and fr itself insists on. The hook skips a commented-out
+line, and no live line naming placement means repo. Any other live spelling (quoted, with a
+trailing comment, indented, in flow style, written twice) counts as quiet. So an odd
+spelling closes the gate rather than opening it. These direct reads need no `fr`.
+
+A plain repo stops there and starts no `fr` at all, which keeps every edit fast. Only when
+an `origin/fr` ref exists does the hook ask `fr settings paths --no-create`. A timeout bounds
+that call, and it is read-only: it never creates the `fr` branch or worktree. The hook runs
+it only from an `fr` in an absolute PATH entry, never one a relative entry could find inside
+the repo. A missing, failing, slow or garbled `fr` can therefore only fail to add a "yes",
+never turn one into a "no", so the gate is never weaker for lack of the binary. The OpenCode
+plugin and the Hermes hook make the same decision (one shared definition each).
 
 Only a marker that clears every step allows the edit, with one structural exception. Under
 quiet and stealth, fr keeps a feature's spec, plan and journals outside the workspace: in the
 repo's own `fr` worktree, or in the clone of the tracking repo. Neither carries a marker, so
-the gate recognises them by their shape instead. The `fr` worktree must be a linked worktree
-of the same repository, at exactly the path fr gives it (`~/.cache/fr/worktrees/<repo>/fr`),
-on branch `fr`, while the switch says `placement: quiet`; a worktree of another repo parked at
-that path, or a branch named `fr` anywhere else, does not qualify. The tracking clone must be
-named `stealth--…`, sit beside a workspace whose marker is valid and says `placement: stealth`,
-and have the origin and branch that marker names. The skills ask `fr settings paths --shell`
-for the directories (`FR_SPECS_DIR`, `FR_PLANS_DIR` and the rest) rather than writing to
-`docs/superpowers/` in the workspace. There are three ways around the gate, all deliberate:
+the gate recognises them by their shape instead.
+
+The `fr` worktree must be a linked worktree of the same repository, at exactly the path fr
+gives it (`~/.cache/fr/worktrees/<repo>/fr`), on branch `fr`, while the switch says
+`placement: quiet`. A worktree of another repo parked at that path, or a branch named `fr`
+anywhere else, does not qualify. The tracking clone must have a `stealth--…` name, sit
+beside a workspace whose marker is valid and says `placement: stealth`, and have the origin
+and branch that marker names. The skills ask `fr settings paths --shell` for the directories
+(`FR_SPECS_DIR`, `FR_PLANS_DIR` and the rest) rather than writing to `docs/superpowers/` in
+the workspace.
+
+There are three ways around the gate, all deliberate:
 
 - **`FR_BASE_OK=1`**: a one-shot environment override for a deliberate, knowing edit to the
   base clone.
 - **`.fr-isolation-allow`**: a root glob-list for operator-managed paths (data, caches,
   memory) that legitimately live outside isolation.
 - **Self-heal**: the Bash guard's sentinel records every workspace your session bound. It
-  stays armed while any survives, and retires once they are all gone, so you are never
-  deadlocked.
+  stays armed while any survives, and retires once they are all gone, so it never
+  deadlocks you.
 
 The gate answers one question only: is this fr work happening in an fr-enabled repo's base
 clone instead of its workspace? It is not a filesystem sandbox or a credential boundary,
 and it says nothing about paths outside an fr-enabled repo.
 
-## Tradeoffs: three scars, each a shipped bug
+## Which three shipped bugs shaped the design?
 
-The sharp edges of isolation were not designed in the abstract. They are fixes, and the
+Nobody designed the sharp edges of isolation in the abstract. They are fixes, and the
 design docs say so.
 
 - **Committed, not written: the profile has to be on the branch.** A worktree is cut from
-  the committed tree. A devcontainer profile that was only written to disk, never
+  the committed tree. A devcontainer profile that existed only on disk, never
   committed, silently vanished from the worktree, surfacing as a cryptic "config not
   found". Scaffolding now commits the profile by default; a write-only escape stays for the
   rare case.
@@ -183,10 +191,10 @@ design docs say so.
   code claimed.
 - **No new daemon: garbage collection without a scheduler.** "I don't want another
   scheduler on each host." So there is no cron. Instead every `up` and `down` fires a
-  detached, best-effort sweep. Steady-state leakage is bounded to at most one stale
+  detached, best-effort sweep. Steady-state leakage stays at most one stale
   workspace, host-wide, the accepted price of keeping the system daemon-free.
 
-## Try it: drive the boundary by hand
+## How do you drive the boundary by hand?
 
 The lifecycle is a plain-shell CLI any agent or human runs identically: edits on the host,
 every command through the bridge.
@@ -203,11 +211,13 @@ fr isolation down --branch feat/rate-limit               # after the PR merges
 The container is disposable; the worktree is the work. So the verbs that touch only the
 container (`restart`, `stop`, `rebuild`) never touch your uncommitted files or the run's
 cursor, and a changed profile is a rebuild, not a teardown. Even a forced `down` keeps fr's
-own records under `docs/superpowers/` (unless you pass `--no-preserve`): it preserves them
+own records under `docs/superpowers/` (unless you pass `--no-preserve`). It preserves them
 inside the repository's git directory, and the `up --branch` that re-creates the worktree
-puts them back. The restore only ever adds: a file that changed since the teardown is
-reported as a conflict and its copy kept, a recorded deletion is reported but never
-re-applied, and a different branch re-created under the same name gets nothing.
+puts them back.
+
+The restore only ever adds. When a file changed since the teardown, fr reports it as a
+conflict and keeps the preserved copy. The restore reports a recorded deletion but never
+re-applies it, and a different branch re-created under the same name gets nothing.
 
 Or watch the boundary bite with no container at all: in any isolation-enabled repo, have an
 agent edit a tracked file from the base clone with no active workspace. The hook refuses it
