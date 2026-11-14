@@ -252,6 +252,11 @@ class LocalStamp(BaseModel):
             raise ValueError("local.files: a stamp names at least one file")
         return v
 
+    def __hash__(self) -> int:
+        # `files` is a dict, which pydantic's frozen hash cannot take; the fold keys a
+        # Counter on amendments, so a stamped `set-status` must hash by value.
+        return hash((self.at, self.tree, self.log, tuple(sorted(self.files.items()))))
+
 
 class Row(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")

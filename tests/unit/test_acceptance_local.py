@@ -90,12 +90,30 @@ def test_set_status_to_local_with_a_stamp_puts_it_on_the_row() -> None:
     assert out.local is not None and out.local.tree == "a" * 40
 
 
-def test_set_status_to_local_without_a_stamp_clears_an_older_one() -> None:
+def test_set_status_keeping_a_row_local_without_a_stamp_keeps_its_stamp() -> None:
+    """Review p1-r1: a link or a note on a row that stays `local` keeps its stamp; R5's
+    blob comparison, not the write, decides whether it is still fresh."""
     from fr.acceptance.fold import apply_amendment
 
     out = apply_amendment(_row(local=STAMP), _set_status("local"))
     assert out.status == "local"
+    assert out.local == _row(local=STAMP).local
+
+
+def test_set_status_moving_a_row_into_local_without_a_stamp_leaves_it_unstamped() -> None:
+    from fr.acceptance.fold import apply_amendment
+
+    out = apply_amendment(_row(status="unwired"), _set_status("local"))
+    assert out.status == "local"
     assert out.local is None
+
+
+def test_a_stamp_on_the_amendment_replaces_the_rows_own() -> None:
+    from fr.acceptance.fold import apply_amendment
+
+    newer = {**STAMP, "tree": "c" * 40}
+    out = apply_amendment(_row(local=STAMP), _set_status("local", local=newer))
+    assert out.local is not None and out.local.tree == "c" * 40
 
 
 def test_set_status_to_another_status_drops_the_stamp() -> None:
@@ -104,6 +122,15 @@ def test_set_status_to_another_status_drops_the_stamp() -> None:
     out = apply_amendment(_row(local=STAMP), _set_status("ci"))
     assert out.status == "ci"
     assert out.local is None
+
+
+def test_a_stamped_amendment_is_hashable() -> None:
+    """The fold counts a branch's amendments against the merged ones with a Counter keyed
+    on the amendment, so a stamped `set-status` must hash (review of phase 1: the fold
+    crashed on the first fragment `deliver` stamped)."""
+    a, b = _set_status("local", local=STAMP), _set_status("local", local=dict(STAMP))
+    assert hash(a) == hash(b) and a == b
+    assert hash(_set_status("local", local={**STAMP, "files": {"x.py": "c" * 40}})) != hash(a)
 
 
 def test_level_amendments_keep_the_stamp() -> None:
@@ -166,6 +193,30 @@ def test_a_local_row_with_no_stamp_is_unstamped(repo: Path) -> None:
     from fr.acceptance.local import local_debt
 
     assert local_debt([_local_row(repo, stamp=False)], repo, ci_active=False) == {"r1": "unstamped"}
+
+
+def test_a_checkout_git_cannot_read_makes_every_stamped_row_debt(
+    repo: Path, tmp_path: Path
+) -> None:
+    """p1-r2: an unreadable HEAD is debt with its own reason, never fresh, and never
+    blamed on a file that did not change."""
+    from fr.acceptance.local import head_blobs, local_debt
+
+    row = _local_row(repo)
+    elsewhere = tmp_path / "not-a-repo"
+    elsewhere.mkdir()
+    assert head_blobs(elsewhere, ["tests/test_x.py"]) is None
+    assert local_debt([row], elsewhere, ci_active=False) == {"r1": "stale: HEAD unreadable"}
+
+
+def test_a_repo_with_no_commit_makes_every_stamped_row_debt(repo: Path, tmp_path: Path) -> None:
+    from fr.acceptance.local import local_debt
+
+    row = _local_row(repo)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    _git(empty, "init", "-q")
+    assert local_debt([row], empty, ci_active=False) == {"r1": "stale: HEAD unreadable"}
 
 
 def test_rows_of_other_statuses_are_never_local_debt(repo: Path) -> None:

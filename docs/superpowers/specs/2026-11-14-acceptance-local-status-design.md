@@ -56,9 +56,12 @@ current level refs name, or when a file the stamp names is missing at HEAD, or w
 file's HEAD blob differs from the stamped one. Blob shas are compared, not commits, so a
 squash merge does not make a row stale. A stale row, and a `local` row with no stamp,
 counts as debt whatever its status, shown as `local, stale: <path>` or
-`local, unstamped`. `fr acceptance check` reports each one (debt, exit 0, like every
-other debt row). A later run re-earns the stamp by setting the row `local` again, which
-clears the old stamp, and delivering.
+`local, unstamped`; when git cannot read HEAD of the product checkout, every stamped row
+is debt as `local, stale: HEAD unreadable`. `fr acceptance check` reports each one (debt,
+exit 0, like every other debt row). A later run re-earns the stamp by setting the row
+`local` again and delivering, which replaces the old stamp. A write that leaves a `local`
+row `local` (a link-only `--issue`, a note) keeps its stamp and is not re-checked by R2 or
+R3, as a row already `ci` is not.
 
 R6. Under `ci none`, `deliver`'s leftover refusal for an owed row (`not-implemented`,
 `unwired`, `walk-owed`) offers a runnable `fr acceptance set-status --id <row> --status
@@ -96,8 +99,11 @@ does not. `Row` and the fragment's `SetStatus` amendment gain an optional
 `tree`, `log`, `files` (a non-empty `dict[str, str]`).
 
 In the fold (`fr.acceptance.fold.apply_amendment`), a `set-status` amendment to `local`
-replaces the row's stamp with its own (`None` when it carries none, so an earlier stamp
-never survives a re-set). A `set-status` to any other status drops the stamp.
+that carries a stamp replaces the row's stamp with it. One that carries none leaves a row
+moving into `local` unstamped and keeps the stamp of a row already `local` (a link or a
+note changes no test file; R5 still holds the kept stamp to HEAD). A `set-status` to any
+other status drops the stamp. `LocalStamp` hashes by value, since the fold counts
+amendments in a `Counter`.
 `add-level` and `drop-level` leave the stamp alone; R5's key comparison then reports the
 row stale.
 

@@ -89,3 +89,105 @@ def test_set_status_local_under_ci_none_moves_the_row(no_ci: Path) -> None:
     row = _target(no_ci)
     assert row.status == "local"
     assert row.local is None  # only deliver stamps
+
+
+# --- review p1-r1: a write that does not move the status keeps the stamp ---------------
+
+
+def _stamped(root: Path) -> None:
+    """Set `target` local and stamp it as `deliver` would, then commit."""
+    from fr.acceptance.edit import stamp_local
+    from fr.acceptance.local import head_blobs, level_ref_paths
+    from fr.acceptance.model import LocalStamp
+
+    assert _fr("set-status", "--id", "target", "--status", "local", "--notes", "n").exit_code == 0
+    blobs = head_blobs(root, level_ref_paths(_target(root)))
+    assert blobs
+    stamp = LocalStamp(at="2026-11-14", tree="t", log="l", files=blobs)
+    for p in (root / "docs" / "acceptance" / "features").glob("*.yaml"):
+        try:
+            p.write_text(stamp_local(p.read_text(), "target", stamp))
+        except Exception:  # noqa: BLE001 - only the fragment that holds the row stamps
+            continue
+    commit_all(root, "stamp")
+    assert _target(root).local is not None
+
+
+def test_a_link_only_write_keeps_a_local_rows_stamp(no_ci: Path) -> None:
+    from fr.acceptance.local import local_reasons
+
+    _stamped(no_ci)
+    out = _fr("set-status", "--id", "target", "--issue", "o/demo#5")
+    assert out.exit_code == 0, out.output
+    row = _target(no_ci)
+    assert row.status == "local" and row.local is not None
+    assert local_reasons(load_effective(no_ci).rows, no_ci) == {}
+
+
+def test_a_link_only_write_on_a_local_row_is_allowed_once_the_repo_has_ci(no_ci: Path) -> None:
+    from fr.acceptance.local import local_reasons
+
+    _stamped(no_ci)
+    wf = no_ci / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(
+        "name: ci\non: push\njobs: {t: {runs-on: x, steps: [{run: pytest}]}}\n"
+    )
+    commit_all(no_ci, "ci")
+    out = _fr("set-status", "--id", "target", "--issue", "o/demo#6")
+    assert out.exit_code == 0, out.output
+    assert local_reasons(load_effective(no_ci).rows, no_ci) == {"target": "promote to ci"}
+
+
+def test_a_link_only_write_on_a_merged_local_row_keeps_its_stamp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The merged path (p1-r1): set-status on a merged row writes a `set-status`
+    amendment; a link-only one that keeps the row `local` must not clear the stamp
+    `deliver` wrote on the earlier amendment, and is not refused once CI exists."""
+    from fr.acceptance.edit import stamp_local
+    from fr.acceptance.local import head_blobs, level_ref_paths, local_reasons
+    from fr.acceptance.model import LocalStamp
+
+    from tests.unit.acceptance_helpers import FRAGMENTS_REL
+    from tests.unit.test_acceptance_amend import SLUG_B, invoke, merged_repo
+
+    root = merged_repo(tmp_path)
+    monkeypatch.chdir(root)
+    git(root, "rm", "-rq", ".github")
+    commit_all(root, "drop ci")
+    out = invoke(
+        root, monkeypatch, "set-status", "--id", "r", "--status", "local",
+        "--notes", "unit tests", "--feature", SLUG_B,
+    )  # fmt: skip
+    assert out.exit_code == 0, out.output
+    frag = root / FRAGMENTS_REL / f"{SLUG_B}.yaml"
+    row = next(r for r in _rows(root) if r.id == "r")
+    stamp = LocalStamp(
+        at="2026-11-14", tree="t", log="l", files=head_blobs(root, level_ref_paths(row))
+    )
+    frag.write_text(stamp_local(frag.read_text(), "r", stamp))
+    commit_all(root, "stamp")
+
+    out = invoke(root, monkeypatch, "set-status", "--id", "r", "--issue", "o/demo#5",
+                 "--feature", SLUG_B)  # fmt: skip
+    assert out.exit_code == 0, out.output
+    rows = _rows(root)
+    assert next(r for r in rows if r.id == "r").local == stamp
+    assert local_reasons(rows, root) == {}
+
+    wf = root / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text("on: push\n")
+    commit_all(root, "ci")
+    out = invoke(root, monkeypatch, "set-status", "--id", "r", "--issue", "o/demo#6",
+                 "--feature", SLUG_B)  # fmt: skip
+    assert out.exit_code == 0, out.output
+    assert local_reasons(_rows(root), root) == {"r": "promote to ci"}
+
+
+def _rows(root: Path):
+    from fr.acceptance.fold import clear_fold_cache
+
+    clear_fold_cache()
+    return load_effective(root).rows

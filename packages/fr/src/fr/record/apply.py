@@ -1034,7 +1034,10 @@ class _Amending:
                 raise RecordRefusedError(f"{where}: {why}")
             if (why := walked_error(new)) is not None:
                 raise RecordRefusedError(f"{where}: {why}")
-            if new.status == "local":
+            # R2, R3: checked on a move INTO `local` only. A row already `local` is left
+            # alone, as `ci` is below: refusing it would block every unrelated edit to it,
+            # and R3 keeps it, in a repo with CI, as `local, promote to ci` (p1-r1).
+            if new.status == "local" and old.status != "local":
                 from fr.acceptance.local import local_error
 
                 own = (self.identity() or "").rpartition("/")[2] or None
@@ -1431,6 +1434,11 @@ def _acceptance_writes(
                     issues=_union(existing.issues, item.issues),
                     harnesses=_union(existing.harnesses, item.harnesses),
                     walks=existing.walks + ((item.walk,) if item.walk is not None else ()),
+                    # Spec §A: a row that stays `local` keeps its stamp (R5 still holds it
+                    # to HEAD); any move drops it, and only `deliver` stamps (p1-r1).
+                    local=existing.local
+                    if item.status == "local" and existing.status == "local"
+                    else None,
                 )
             if item.verify is not None and (why := strategy_error(item.verify, repo_root)):
                 raise RecordRefusedError(f"acceptance {item.id}: {why}")
@@ -1459,8 +1467,8 @@ def _acceptance_writes(
             raise RecordRefusedError(f"acceptance {item.id}: {why}")
         # Spec 2026-11-14-acceptance-local-status R2, R3: `local` names resolving tests in
         # this repo, and only a repo with no CI holds it. Checked on every entry that sets
-        # it, since setting `local` again clears the row's stamp.
-        if row.status == "local":
+        # it as a move; a row already `local` is left alone, like `ci` below (p1-r1).
+        if row.status == "local" and (existing is None or existing.status != "local"):
             from fr.acceptance.local import local_error
 
             if (why := local_error(row, repo_root, own=identity().rpartition("/")[2])) is not None:
