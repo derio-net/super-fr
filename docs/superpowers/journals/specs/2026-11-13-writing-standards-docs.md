@@ -177,3 +177,10 @@ Evidence: tests/unit/test_writing_standards_docs.py passes on main c0fdbce with 
 Step: `fr docs check` passes (every changed page is a covered page that changed).
 
 Evidence: fr docs check: 32 page(s) current on main c0fdbce; the docs-check CI job was green on every pushed head of #1436.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-14T02:21:24+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: `validate_writing_standard.py --preserve-from <baseline> --stats` on the batch: no FAIL and no `preserve` hit.
+
+Evidence: Every page was checked with validate_writing_standard.py --preserve-from <its baseline> --stats in its phase: no FAIL and no preserve hit (plan journal p2..p6-ws-* entries, 37 of them, and each phase review re-ran it); the whole-repo check is OK on main.
