@@ -94,16 +94,16 @@ nag say "disabled by repo setting" and report no debt.
 
 Use `local` only in a repo with no CI (`fr services` shows `ci none`).
 
-- A `local` row must have a level ref. Each level ref must name an existing test in this
-  repo. All writers refuse other `local` rows.
-- All writers refuse `local` when the repo has CI. Use `ci` or `unwired`.
+- A `local` row must have a level ref. Each level ref must name a test that is in this
+  repo. All writers do not accept other `local` rows.
+- All writers do not accept `local` when the repo has CI. Use `ci` or `unwired`.
 - `deliver` stamps each `local` row that the run's feature added or set. The stamp is
   `local: {at, tree, log, files}`. `files` has the HEAD blob of each file that the level
   refs name. `deliver` stamps only from a fresh suite log with no uncommitted code path,
   or from `tests: reuse`. Other test evidence stops `deliver` (exit 2).
-- A `local` row is debt when it has no stamp (`local, unstamped`), when a stamped file
-  changed or is missing at HEAD (`local, stale: <path>`), and when the repo has CI
-  (`local, promote to ci`). `fr acceptance check` shows each of these rows.
+- A `local` row is debt when it has no stamp (`local, unstamped`). It is debt when a
+  stamped file changed or is not at HEAD (`local, stale: <path>`). It is debt when the
+  repo has CI (`local, promote to ci`). `fr acceptance check` shows each of these rows.
 - To make a stale row current again, set it to `local` again and deliver.
 - With no CI, the `deliver` leftover refusal gives the `set-status --status local`
   command first.
