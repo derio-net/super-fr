@@ -13,9 +13,17 @@ rows:
       board list it with its stamp date and never count a fresh one as debt
     origin:
     - spec:2026-11-14-acceptance-local-status#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_local.py#test_local_is_a_listed_status_and_never_debt
+      - super-fr:tests/unit/test_acceptance_local_surfaces.py#test_a_fresh_local_row_is_listed_not_debt_until_its_test_changes
+      - super-fr:tests/unit/test_acceptance_local_surfaces.py#test_the_report_shows_local_with_its_date_or_reason
+      - super-fr:tests/unit/test_acceptance_local_surfaces.py#test_the_board_counts_local_debt
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_local_status
+    status: ci
+    notes: Unit tests over status, debt, the report, digest and board, and the installed-candidate
+      scenario (fresh local row listed, not debt), run in CI
     verify: candidate
     scenario: tests/scenarios/acceptance-local-status.sh
   - id: acceptance-local-earned
