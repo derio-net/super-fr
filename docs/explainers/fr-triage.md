@@ -93,8 +93,8 @@ owner for `--org`; `--repo A/B,C/D` is a group.
 | `judgements.yaml` | **you**, plus the `batch` verbs | tiers, rankings, kinds, patterns, batches |
 | `triage.html`, `board.html` | `render`, `board` | the pages |
 
-Never write the facts yourself. Nobody commits the state; its durable copy is an orphan
-branch, `refs/heads/fr-triage/<scope-id>`, which fr fetches before reading and pushes after
+Never write the facts yourself. fr does not commit the state by default; its durable copy
+is an orphan branch, `refs/heads/fr-triage/<scope-id>`, which fr fetches before reading and pushes after
 every change. `fr triage state export --to <dir>` and `import --from <dir>` copy it to and
 from a repo.
 
@@ -200,6 +200,7 @@ each linked to the batch that addresses it and a one-line process change.
 
 ## Where do you go next?
 
-- [fr-goal](01-fr-goal.md) is the run a batch becomes.
+- [fr-goal](01-fr-goal.md) is the run a batch becomes (fr-debugging for a batch created
+  with the debug skill).
 - [fr-audit](fr-audit.md) draws the architecture page and the cost of a run.
 - [fr-acceptance](fr-acceptance.md) covers the post-merge walks that keep an issue open.
