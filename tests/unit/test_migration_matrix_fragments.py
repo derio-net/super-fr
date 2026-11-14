@@ -104,7 +104,9 @@ def test_no_row_is_lost_or_duplicated_and_only_refs_change(tmp_path: Path) -> No
     run_migrations(root, dry_run=False)
 
     effective = fold(root)
-    got = {r.id: r.model_dump() for r in effective.matrix.rows}
+    # `local` (fragment kind 2) postdates the frozen v5 row: never set by the split.
+    got = {r.id: r.model_dump(exclude={"local"}) for r in effective.matrix.rows}
+    assert all(r.local is None for r in effective.matrix.rows)
     assert len(got) == len(effective.matrix.rows) == len(old.rows)
     for row in old.rows:
         want = row.model_dump()

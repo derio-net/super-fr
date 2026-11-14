@@ -38,8 +38,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fr.acceptance.fragment import FRAGMENTS_DIR, Amendment, Fragment, parse_fragment
-from fr.acceptance.model import LEVELS, AcceptanceError, Matrix, Row
+from fr.acceptance.fragment import FRAGMENTS_DIR, Amendment, Fragment, SetStatus, parse_fragment
+from fr.acceptance.model import LEVELS, AcceptanceError, LocalStamp, Matrix, Row
 
 if TYPE_CHECKING:
     from fr.artifacts.paths import ArtifactSpace
@@ -280,6 +280,13 @@ def _working_fragments(root: Path) -> dict[str, str]:
     }
 
 
+def _stamp_after(amendment: SetStatus) -> LocalStamp | None:
+    """The row's `local` stamp after *amendment* (spec 2026-11-14-acceptance-local-status
+    §A): a set-status to `local` replaces it with its own, `None` when it carries none,
+    so an earlier stamp never survives a re-set; any other status drops it."""
+    return amendment.local if amendment.status == "local" else None
+
+
 def apply_amendment(row: Row, amendment: Amendment) -> Row:
     """*row* with *amendment* applied (R16 op semantics, plan journal `fold-op-semantics`)."""
     if amendment.op == "reword":
@@ -297,6 +304,7 @@ def apply_amendment(row: Row, amendment: Amendment) -> Row:
             "notes": amendment.notes,
             "walks": walks,
             "issues": issues,
+            "local": _stamp_after(amendment),
         }
         if amendment.verify is not None:
             update["verify"] = amendment.verify
