@@ -63,9 +63,10 @@ def test_locators_never_reach_archived_artifacts() -> None:
 
 
 def test_the_acceptance_fragment_kind_is_registered() -> None:
-    """Spec 2026-11-04-repo-feature-settings R19: its own locator, a yaml stamp, born at 1."""
+    """Spec 2026-11-04-repo-feature-settings R19: its own locator, a yaml stamp, born at 1;
+    at 2 since spec 2026-11-14-acceptance-local-status R7 (the `local` status)."""
     kind = ARTIFACT_KINDS["acceptance-fragment"]
-    assert kind.current_version == 1
+    assert kind.current_version == 2
     assert kind.locator == "docs/acceptance/features/*.yaml"
     assert "schema_version" in kind.stamp
     assert ARTIFACT_KINDS["matrix"].locator == "docs/acceptance/matrix.yaml", "matrix untouched"

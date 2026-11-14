@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -359,17 +359,20 @@ def acceptance_from_matrix(
     matrix: Matrix,
     contested: frozenset[str] = frozenset(),
     retired: Sequence[Row] = (),
+    local: Mapping[str, str] | None = None,
 ) -> AcceptanceDebt:
     """The Acceptance section of a matrix already in hand (the digest's seam);
     *contested* is the fold's contested rows (spec 2026-11-04 R17), debt whatever
     their status, and a *retired* row among them is debt too, listed as retired
-    (`open_rows` is the same definition)."""
+    (`open_rows` is the same definition). *local* is
+    `fr.acceptance.local.local_reasons`: a `local` row with a reason is debt too."""
+    reasons = local or {}
     by_status: dict[str, int] = {}
     for r in matrix.rows:
         by_status[r.status] = by_status.get(r.status, 0) + 1
 
     def debt(r: Row) -> bool:
-        return is_debt(r.status, contested=r.id in contested)
+        return is_debt(r.status, contested=r.id in contested, local=reasons.get(r.id))
 
     gone = [r for r in retired if r.id in contested]
     gone_ids = {r.id for r in gone}
@@ -388,12 +391,17 @@ def acceptance_from_matrix(
             walked_at=latest_passing_walk_at(r) if r.status == "walked" else None,
             contested=r.id in contested,
             retired=r.id in gone_ids,
+            local_at=r.local.at if r.status == "local" and r.local is not None else None,
+            local_debt=reasons.get(r.id),
         )
         for r in ordered
     )
     extra = len(gone)
     extra += sum(1 for r in matrix.rows if r.id in contested and r.status not in DEBT_STATUSES)
-    return AcceptanceDebt(by_status=by_status, rows=rows, available=True, contested=extra)
+    local_debt = sum(1 for r in matrix.rows if r.id in reasons and r.id not in contested)
+    return AcceptanceDebt(
+        by_status=by_status, rows=rows, available=True, contested=extra, local_debt=local_debt
+    )
 
 
 def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, SourceStatus]:
@@ -413,7 +421,10 @@ def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, Sou
         why = " ".join(str(e).split())
         return AcceptanceDebt(available=False), None, SourceStatus(state="unavailable", why=why)
     matrix = folded.matrix
-    debt = acceptance_from_matrix(matrix, folded.contested, folded.retired)
+    from fr.acceptance.local import local_reasons
+
+    local = local_reasons(matrix.rows, repo_root)
+    debt = acceptance_from_matrix(matrix, folded.contested, folded.retired, local)
     return debt, matrix, SourceStatus(state="read")
 
 

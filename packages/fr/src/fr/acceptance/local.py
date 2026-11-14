@@ -150,3 +150,21 @@ def local_error(row: Row, root: Path, *, own: str | None = None) -> str | None:
             "use `ci` when CI runs the test, or `unwired` while it does not"
         )
     return None
+
+
+def local_reasons(rows: Iterable[Row], product_root: Path) -> dict[str, str]:
+    """`local_debt` for a debt surface: CI asked only when a row is `local`, so a fold
+    with none costs nothing. The ONE call each surface makes per fold."""
+    local = [r for r in rows if r.status == "local"]
+    if not local:
+        return {}
+    from fr.acceptance.ci import ci_active
+
+    return local_debt(local, product_root, ci_active=ci_active(product_root))
+
+
+def local_tag(row: Row, reason: str | None) -> str:
+    """How a `local` row is shown: `local <date>` when fresh, `local, <reason>` as debt."""
+    if reason is not None:
+        return f"local, {reason}"
+    return f"local {row.local.at[:10]}" if row.local is not None else "local"

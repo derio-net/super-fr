@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 from fr.acceptance.anchors import is_python, line_of, node_line
@@ -34,6 +35,7 @@ STATUS_LABEL = {
     "walk-owed": ("walk owed", "live"),
     "walked": ("walked live", "sched"),
     "manual": ("manual", "sched"),
+    "local": ("local · no CI", "sched"),
     "not-implemented": ("not implemented", "none"),
     "failing": ("FAILING", "fail"),
 }
@@ -44,16 +46,23 @@ STATUS_PANELS: tuple[tuple[str, str], ...] = (
     ("Walk owed — a live or post-merge walk is owed", "walk-owed"),
     ("Walked — proven live, dated by its latest passing walk", "walked"),
     ("Manual — a process that is never automatable", "manual"),
+    ("Local — an automated test anyone can run; no CI runs it", "local"),
 )
 FOOTER = (
     "Statuses: ci / scheduled cannot drift silently; unwired, walk-owed and "
     "not-implemented are acceptance debt, CI warnings gated by the backfill rule; "
-    "walked and manual are listed, never debt; failing fails CI."
+    "walked, manual and a fresh local are listed, never debt; a stale or unstamped "
+    "local is debt; failing fails CI."
 )
 
 
-def _walked_suffix(row: Row) -> str:
-    """` (walked <date>)` for a `walked` row with a passing walk, else ``."""
+def _suffix(row: Row, local: Mapping[str, str]) -> str:
+    """` (walked <date>)` for a `walked` row with a passing walk, ` (local <date>)` or
+    ` (local, <reason>)` for a `local` row (spec 2026-11-14 R1, R5), else ``."""
+    if row.status == "local":
+        from fr.acceptance.local import local_tag
+
+        return f" ({local_tag(row, local.get(row.id))})"
     at = latest_passing_walk_at(row) if row.status == "walked" else None
     return f" (walked {at[:10]})" if at else ""
 
@@ -197,9 +206,12 @@ def esc(s: str) -> str:
     return html.escape(str(s or ""), quote=True)
 
 
-def render(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
+def render(
+    matrix: Matrix, links: LinkBuilder, stamp: str, local: Mapping[str, str] | None = None
+) -> str:
     from collections import Counter
 
+    reasons = local or {}
     rows = matrix.rows
     counts = Counter(r.status for r in rows)
     caps: dict[str, list[Row]] = {}
@@ -226,6 +238,7 @@ def render(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
         ("sched", counts.get("scheduled", 0), "automated scheduled"),
         ("sched", counts.get("walked", 0), "walked live"),
         ("sched", counts.get("manual", 0), "manual process"),
+        ("sched", counts.get("local", 0), "local — no CI runs it"),
         ("warn", counts.get("unwired", 0), "unwired — CI wiring owed"),
         ("warn", counts.get("walk-owed", 0), "walk owed"),
         ("bad", counts.get("not-implemented", 0), "not implemented"),
@@ -278,7 +291,7 @@ def render(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
         if not items:
             return
         lis = "".join(
-            f"<li><b>{esc(r.id)}</b>{esc(_walked_suffix(r))} — {esc(r.acceptance)}. "
+            f"<li><b>{esc(r.id)}</b>{esc(_suffix(r, reasons))} — {esc(r.acceptance)}. "
             f"<i>{esc(r.notes)}</i></li>"
             for r in items
         )
@@ -300,12 +313,15 @@ def md_cell(s: str) -> str:
     return str(s or "").replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ").strip()
 
 
-def render_markdown(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
+def render_markdown(
+    matrix: Matrix, links: LinkBuilder, stamp: str, local: Mapping[str, str] | None = None
+) -> str:
     """The matrix as GitHub-flavored Markdown — same information as `render()`
     but a format github.com renders inline (an `.html` file is shown as
     source). Links use `[repo:name](url)` via the same LinkBuilder."""
     from collections import Counter
 
+    reasons = local or {}
     rows = matrix.rows
     counts = Counter(r.status for r in rows)
     caps: dict[str, list[Row]] = {}
@@ -335,6 +351,7 @@ def render_markdown(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
         (counts.get("scheduled", 0), "CI · scheduled"),
         (counts.get("walked", 0), "walked live"),
         (counts.get("manual", 0), "manual process"),
+        (counts.get("local", 0), "local — no CI runs it"),
         (counts.get("unwired", 0), "unwired — CI wiring owed"),
         (counts.get("walk-owed", 0), "walk owed"),
         (counts.get("not-implemented", 0), "not implemented"),
@@ -376,7 +393,7 @@ def render_markdown(matrix: Matrix, links: LinkBuilder, stamp: str) -> str:
         out.append("")
         for r in items:
             out.append(
-                f"- **{md_cell(r.id)}**{md_cell(_walked_suffix(r))} — {md_cell(r.acceptance)}. "
+                f"- **{md_cell(r.id)}**{md_cell(_suffix(r, reasons))} — {md_cell(r.acceptance)}. "
                 f"_{md_cell(r.notes)}_"
             )
         out.append("")
@@ -472,5 +489,8 @@ def render_report(
     stamp = f"matrix @ {ts} · links: {link_mode}" + (
         f" (ref {ref})" if link_mode == "github" else ""
     )
+    from fr.acceptance.local import local_reasons
+
+    local = local_reasons(matrix.rows, root)
     renderer = render_markdown if fmt == "md" else render
-    return renderer(matrix, links, stamp)
+    return renderer(matrix, links, stamp, local)

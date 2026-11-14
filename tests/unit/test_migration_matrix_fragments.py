@@ -154,7 +154,8 @@ def test_an_existing_fragment_the_split_targets_gains_the_rows_it_lacks(tmp_path
     root = _repo(tmp_path)
     (root / FEATURES).mkdir(parents=True)
     existing = root / FEATURES / "legacy.yaml"
-    head = "schema_version: 1\nfeature: legacy\nrepo: derio-net/super-fr\nrows:\n"
+    version = artifact_kind("acceptance-fragment").current_version
+    head = f"schema_version: {version}\nfeature: legacy\nrepo: derio-net/super-fr\nrows:\n"
     existing.write_text(head)
 
     report = run_migrations(root, dry_run=False)

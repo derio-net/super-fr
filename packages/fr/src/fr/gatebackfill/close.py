@@ -27,6 +27,7 @@ from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_OWED
 
 if TYPE_CHECKING:
+    from fr.acceptance.model import Row
     from fr.archive import MergeEvidence
     from fr.debt.engine import JournalsRead
     from fr.gatebackfill.forge import BackfillForge
@@ -48,16 +49,28 @@ class EvidenceReader:
         self.evidence = evidence
 
     @cached_property
-    def statuses(self) -> dict[str, str]:
-        """Row id -> status; empty when the matrix is absent or unreadable."""
+    def _rows(self) -> tuple[Row, ...]:
+        """The effective matrix's rows; none when it is absent or unreadable."""
         from fr.acceptance.fold import load_effective
         from fr.acceptance.model import AcceptanceError
 
         try:
-            matrix = load_effective(self.root)
+            return load_effective(self.root).rows
         except (AcceptanceError, OSError):
-            return {}
-        return {r.id: r.status for r in matrix.rows}
+            return ()
+
+    @cached_property
+    def statuses(self) -> dict[str, str]:
+        """Row id -> status; empty when the matrix is absent or unreadable."""
+        return {r.id: r.status for r in self._rows}
+
+    @cached_property
+    def local_debt(self) -> dict[str, str]:
+        """Why each `local` row is debt (spec 2026-11-14-acceptance-local-status §B):
+        a stale, unstamped or promote-to-ci `local` row is not delivery evidence."""
+        from fr.acceptance.local import local_reasons
+
+        return local_reasons(self._rows, self.root)
 
     @cached_property
     def journals(self) -> JournalsRead:
@@ -153,7 +166,7 @@ def _positive_evidence(reader: EvidenceReader, key: str) -> str | None:
 
     kind, name, n = split_key(key)
     status = reader.statuses.get(name) if kind == "row" else None
-    if status in DEBT_STATUSES:
+    if status in DEBT_STATUSES or (kind == "row" and name in reader.local_debt):
         return None  # a journal never overrides a row in a debt status (R14)
     if key in reader.fixed_keys:
         return f"the journal's owed entry for {key} was resolved fixed"
