@@ -32,7 +32,7 @@ fr run start <shape> --branch <b>     # resolve the shape, ensure the workspace,
 fr run advance <run-id>               # run the next cli step, or print the next agent brief
 fr run resolve <run-id> --step <id> --state done   # record an agent step's outcome
 fr run status <run-id>                # the cursor and every step's state
-fr run adopt <plan-dir>               # give work already under way a cursor (preview unless --yes)
+fr run adopt <plan-dir>               # give work already under way a cursor (writes it at once)
 fr run adopt <plan-dir> --supersede   # replace a stranded run, keeping its history (preview unless --yes)
 fr run reshape <run-id>               # move a drifted cursor onto the shape's current steps (preview unless --yes)
 fr workflow check <shape>             # validate a shape; --all checks every one found
