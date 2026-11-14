@@ -125,8 +125,8 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
     if phases is None:
         return Report(
             None,
-            f"proportionality: the plan {_rel(repo_root, plan.dir)} is not committed at "
-            "HEAD; commit it, then rerun.\n",
+            f"proportionality: the plan {_artifact_repo(repo_root, plan.dir)[1]} is not "
+            "committed at HEAD; commit it, then rerun.\n",
         )
     changes = feature_diff(repo_root, merge_base)
     globs = [g for ph in phases for g in ph.files]
@@ -151,9 +151,12 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
 
 def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]:
     """The `## Phases` section (§D): agentic phases against the asks they
-    serve, all read at HEAD. Report-only, like every other section."""
+    serve, the plan, spec and journals read at HEAD of the repository holding them.
+    The acceptance fold is HEAD's under `repo`; under quiet and stealth, where the
+    product HEAD holds no fragment, it is the placement's fold of the working
+    fragments (fr commits every fragment write itself). Report-only."""
     from fr._urls import is_cross_repo_spec
-    from fr.acceptance.fold import fold
+    from fr.acceptance.fold import effective, fold, quiet_root
     from fr.acceptance.model import AcceptanceError
     from fr.journal.model import (
         JournalParseError,
@@ -184,7 +187,12 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
         return ["spec has no Requirements list; asks cannot be counted."]
 
     try:
-        matrix = fold(repo_root, ref="HEAD", include_pending=False).matrix
+        if quiet_root(repo_root) is not None:
+            # Quiet or stealth: the product HEAD holds no fragment (R23, R24); fr commits
+            # every fragment write on the artifact branch, so its fold is the committed one.
+            matrix = effective(repo_root).matrix
+        else:
+            matrix = fold(repo_root, ref="HEAD", include_pending=False).matrix
     except AcceptanceError:
         return ["acceptance matrix unreadable at HEAD; asks cannot be derived."]
     if not matrix.rows and matrix.repo is None:
@@ -198,7 +206,7 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
         journal_path(repo_root, "spec", slug),
         archived_journal_path(repo_root, "spec", slug),
     ):
-        text = _show_head(repo_root, _rel(repo_root, path))
+        text = _show_artifact_at_head(repo_root, path)
         if text is None:
             continue
         try:
@@ -235,7 +243,7 @@ def _meta_at_head(repo_root: Path, plan: Plan) -> dict[str, object]:
     `spec:` edit cannot change the bytes `deliver` hashes (review r2)."""
     import yaml
 
-    text = _show_head(repo_root, f"{_rel(repo_root, plan.dir)}/_meta.yaml")
+    text = _show_artifact_at_head(repo_root, plan.dir / "_meta.yaml")
     if text is None:
         return {}
     try:
@@ -260,8 +268,14 @@ def _spec_at_head(repo_root: Path, ref: str) -> tuple[str, str] | None:
         name = slug if slug.endswith(".md") else f"{slug}.md"
         candidates += [f"{KIND_DIRS['superpowers']}/{root}/{name}" for root in SPEC_ROOTS]
     candidates.append(ref.strip())
+    from fr.artifacts.paths import artifact_root
+
+    # Relative to the artifact root (the run cursor's convention), read at the HEAD of
+    # the repository holding it: under quiet or stealth that is the `fr` worktree or
+    # tracking clone, never the product branch.
+    base = artifact_root(repo_root)
     for rel in candidates:
-        text = _show_head(repo_root, rel)
+        text = _show_artifact_at_head(repo_root, base / rel)
         if text is not None:
             return rel, text
     return None
@@ -390,7 +404,7 @@ def _justifiers(repo_root: Path, plan: Plan) -> list[JournalEntry]:
         journal_path(repo_root, "plan", slug),
         archived_journal_path(repo_root, "plan", slug),
     ):
-        text = _show_head(repo_root, _rel(repo_root, path))
+        text = _show_artifact_at_head(repo_root, path)
         if text is not None:
             break
     if text is None:
@@ -415,14 +429,14 @@ def _phases_at_head(repo_root: Path, plan: Plan) -> list[PhaseHeader] | None:
 
     from fr.types import PhaseHeader
 
-    rel = _rel(repo_root, plan.dir)
-    listing = git_answer(repo_root, "ls-tree", "-z", "--name-only", "HEAD", "--", f"{rel}/")
+    git_root, rel = _artifact_repo(repo_root, plan.dir)
+    listing = git_answer(git_root, "ls-tree", "-z", "--name-only", "HEAD", "--", f"{rel}/")
     names = sorted(
         n for n in listing.stdout.split("\0") if re.fullmatch(r"\d{2}\.yaml", PurePosixPath(n).name)
     )
     headers: list[PhaseHeader] = []
     for name in names:
-        text = _show_head(repo_root, name)
+        text = _show_head(git_root, name)
         if text is None:
             continue
         headers.append(PhaseHeader.model_validate(yaml.safe_load(text)["phase"]))
@@ -434,8 +448,32 @@ def _show_head(repo_root: Path, rel: str) -> str | None:
     return res.stdout if res.returncode == 0 else None
 
 
-def _rel(repo_root: Path, path: Path) -> str:
-    return path.resolve().relative_to(repo_root.resolve()).as_posix()
+def _artifact_repo(repo_root: Path, path: Path) -> tuple[Path, str]:
+    """The repository that holds the artifact at *path*, and *path* relative to it: the
+    product checkout under `repo`; the `fr` worktree or stealth tracking clone, which
+    carry their own HEAD, when the artifact lives there (quiet, stealth; debug journal
+    2026-11-13-placement-plan-paths). "As committed at HEAD" is that repository's
+    HEAD: an fr artifact is never committed on the product branch under those
+    placements (R23)."""
+    resolved = path.resolve()
+    root = repo_root.resolve()
+    if resolved.is_relative_to(root):
+        return root, resolved.relative_to(root).as_posix()
+    cur = resolved
+    while cur.parent != cur:
+        if (cur / ".git").exists():
+            return cur, resolved.relative_to(cur).as_posix()
+        cur = cur.parent
+    raise ValueError(f"{path} is in no git checkout")
+
+
+def _show_artifact_at_head(repo_root: Path, path: Path) -> str | None:
+    """The artifact at *path* as committed at its own repository's HEAD, or None."""
+    try:
+        git_root, rel = _artifact_repo(repo_root, path)
+    except ValueError:
+        return None
+    return _show_head(git_root, rel)
 
 
 def _size(changes: list[_Change], estimate: int | None) -> list[str]:

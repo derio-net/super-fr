@@ -155,7 +155,9 @@ def ops_gap(
         plan_dir = plan_dir if plan_dir.is_absolute() else root / plan_dir
         if ops_none(plan_dir) is not None or plan_has_ops(root, plan_dir):
             return []
-    spec = root / spec_rel
+    from fr.artifacts.paths import emitted_path
+
+    spec = emitted_path(root, spec_rel)  # below the artifact root, as a cursor's spec
     if not spec.is_file():
         return []
     return command_steps(test_plan_steps(spec.read_text(), source=spec_rel), exit_gates)

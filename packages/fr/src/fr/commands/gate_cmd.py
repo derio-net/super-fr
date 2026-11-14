@@ -67,9 +67,7 @@ def find_run(root: Path, run: str) -> RunState:
             try:
                 return parse_run_state(path.read_text())
             except (RunStateError, OSError) as exc:
-                raise RunLookupError(
-                    f"cannot read run {run!r} ({path.relative_to(root)}): {exc}"
-                ) from exc
+                raise RunLookupError(f"cannot read run {run!r} ({path}): {exc}") from exc
     raise RunLookupError(f"no run {run!r} in this checkout (live or archived)")
 
 
@@ -90,7 +88,7 @@ def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
             state = parse_run_state(path.read_text())
         except (RunStateError, OSError) as exc:
             _refuse(
-                f"cannot read run cursor {path.relative_to(root)}: {exc}; it may be this PR's "
+                f"cannot read run cursor {path}: {exc}; it may be this PR's "
                 "run, so no run is assumed: fix it, or pass --run <id>"
             )
         if head_ref and state.branch == head_ref:

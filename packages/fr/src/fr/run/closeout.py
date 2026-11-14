@@ -101,6 +101,60 @@ def primary_checkout(repo_root: Path) -> Path:
     return repo_root
 
 
+class RunElsewhereError(Exception):
+    """The run lives in another feature's root whose workspace is gone."""
+
+
+def run_checkout(repo_root: Path, run_id: str) -> Path:
+    """The checkout a close-out command reads run *run_id* through. Under quiet or
+    stealth, the base clone's own feature is the default branch and holds no run: the
+    run lives in the merged feature's root (debug journal
+    2026-11-13-placement-plan-paths), and that feature's own checkout resolves every
+    read as it did when the run was delivered. *repo_root* otherwise, unchanged.
+    `RunElsewhereError` (naming how to bring the workspace back) when the feature's
+    workspace is gone: its run is still on the placement branch."""
+    from fr.artifacts.paths import KIND_DIRS, AmbiguousArtifactError, feature_of_artifact
+    from fr.placement.quiet import owner_of
+    from fr.settings import SettingsError
+
+    try:
+        found = feature_of_artifact(repo_root, f"{KIND_DIRS['run']}/{run_id}.yaml")
+    except SettingsError:
+        return repo_root
+    except AmbiguousArtifactError as e:
+        raise RunElsewhereError(
+            f"run {run_id}: {e}. A run id names one run; fr will not pick one, so run this "
+            "from the workspace of the feature you mean"
+        ) from e
+    if found is None:
+        return repo_root
+    froot, checkout = found
+    if checkout is None:
+        owner = owner_of(froot.parent.parent, froot.name) or "<branch>"
+        raise RunElsewhereError(
+            f"run {run_id} belongs to feature {froot.name} ({froot}), whose workspace is "
+            f"gone. Bring it back with `fr isolation up --branch {owner}` from this base "
+            "clone, then run the command again."
+        )
+    return checkout
+
+
+def closeout_checkout(repo_root: Path) -> Path:
+    """Where a run's close-out runs: the base clone (`primary_checkout`), except under
+    stealth, where only the workspace's marker names the tracking repo that holds the
+    run and its feature (R24), so the workspace itself (debug journal
+    2026-11-13-placement-plan-paths). Quiet's base clone reads the `fr` branch."""
+    from fr.artifacts.paths import STEALTH, outside_repo
+    from fr.settings import SettingsError
+
+    try:
+        if outside_repo(repo_root) == STEALTH:
+            return repo_root
+    except SettingsError:
+        pass
+    return primary_checkout(repo_root)
+
+
 def _emitted(state: RunState, name: str) -> str | None:
     """The value a step recorded under `name`, wherever the shape's steps put
     it — mirrors `run_cmd._emitted_plan`, generalised to any artifact name."""
@@ -226,20 +280,35 @@ def branch_closeout_brief(
         if run_extras.plan_path:
             lines.append(f"plan: {run_extras.plan_path}")
     lines.append("")
-    if run_extras is not None:
+    from fr.artifacts.paths import outside_repo
+
+    placement = outside_repo(repo_root)
+    if placement == "stealth":
+        lines.append(
+            f"Run this from {closeout_checkout(repo_root)} — this stealth workspace, after "
+            f"{branch}'s PR has merged (only its marker names the tracking repo that holds "
+            "the run, R24)."
+        )
+    elif placement == "quiet" and run_extras is not None:
+        lines.append(
+            f"Run this from {closeout_checkout(repo_root)} — the base clone, after the PR "
+            "above has merged (the run file lives on the `fr` branch, which the base clone "
+            "reads)."
+        )
+    elif run_extras is not None:
         # p4-r3: name the checkout — the transient "start a NEW session in
         # <workspace>" line printed by the delivering session is gone by the
         # time a brand-new session reads this brief back, and the run file
         # itself now lives on the default branch (the feature workspace it
         # was written in may already be reaped).
         lines.append(
-            f"Run this from {primary_checkout(repo_root)} — the base clone, on the default "
+            f"Run this from {closeout_checkout(repo_root)} — the base clone, on the default "
             "branch, after the PR above has merged (the run file lives there; the feature "
             "workspace this run happened in may already be reaped)."
         )
     else:
         lines.append(
-            f"Run this from {primary_checkout(repo_root)} — the base clone, after {branch}'s "
+            f"Run this from {closeout_checkout(repo_root)} — the base clone, after {branch}'s "
             "PR has merged."
         )
     lines.append("")
@@ -262,6 +331,8 @@ def branch_closeout_brief(
             lines.append(
                 "  record each step's outcome — `fr archive` holds the plan until every "
                 "step has one:"
+                if placement is None
+                else "  record each step's outcome:"
             )
             for n, text in run_extras.test_plan_steps:
                 lines.append(f"    step {n}: {text}")
@@ -287,6 +358,24 @@ def branch_closeout_brief(
             # only the `--issues` line below depends on the declaration
             lines.append(f"  WARNING: {warning}")
     lines.append("  fr status")
+
+    if placement is not None:
+        # R25: under quiet and stealth the archive records the merge on the placement's
+        # branch and pushes it; nothing moves, so there is no product commit and no
+        # housekeeping workspace or PR to bring up (debug journal
+        # 2026-11-13-placement-plan-paths).
+        if out_of_scope:
+            lines.append(
+                f"  out-of-scope findings — file each one yourself (`fr archive --issues` "
+                f"is not available under placement {placement}):"
+            )
+            lines.extend(f"  - {qid}: {title}" for qid, title in out_of_scope)
+        lines.append(
+            f"  fr archive --branch {branch}   # from the checkout above: records the "
+            f"merge on the {placement} branch and pushes it; nothing moves"
+        )
+        lines.append(f"  fr isolation down --branch {branch}   # from the base clone")
+        return "\n".join(lines)
 
     # p4-r2: exact commands, not a "# on a housekeeping branch" comment that
     # leaves it to the reader to invent one — a fresh session with no memory
@@ -467,9 +556,10 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
     problem: str | None = None
     missing: list[tuple[int, str]] = []
     if spec_path:
+        from fr.artifacts.paths import emitted_path
         from fr.spec import TestPlanHeadingError, find_test_plan_heading
 
-        spec_file = repo_root / spec_path
+        spec_file = emitted_path(repo_root, spec_path)  # below the artifact root (R1)
         try:
             has_test_plan = find_test_plan_heading(spec_file.read_text()) is not None
         except OSError:

@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-13 placement-resolver phase 5 review, merged fragments frozen at the merge, in-place edits refused under quiet
+reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
 ---
 
 # The acceptance matrix
@@ -43,6 +43,12 @@ acceptance check` does not accept an in-place edit of its merged row.
 `fr acceptance status` lists the merged features in that order, and the unmerged ones with
 the reason why. A row that another merged feature created changes only by an amendment in
 your feature's fragment (`fr acceptance amend`, or `set-status`, which writes one).
+
+A row that is still pending on your branch has no history yet. Thus you can correct a
+mistyped origin in place with `fr acceptance amend --id <row> --op reword --origin
+spec:<slug>#R<n> --why "<reason>"`. This command rewrites the row. If the corrected origin
+names another spec, the command also moves the row to the fragment of that spec. The
+origins of a merged row are history: for such a row, `--origin` stops with an error.
 
 Rows cite fr's own artifacts **logically**: `spec:<slug>#R<n>` for a spec requirement,
 `plan:<slug>` for a plan. The slug is the spec's file name without `-design.md`. So the

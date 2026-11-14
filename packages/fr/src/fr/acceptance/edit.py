@@ -337,6 +337,17 @@ FRAGMENT_HEADER = """\
 """
 
 
+def remove_row(text: str, row_id: str) -> str:
+    """`text` without `row_id`'s block, every other byte kept (the lines that end the
+    block introduce the next row, as in `replace_row`, so they stay)."""
+    lines = text.splitlines(keepends=True)
+    start, end = _row_span(text, row_id)
+    indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
+    while end - 1 > start and _is_between_rows(lines[end - 1], len(indent)):
+        end -= 1
+    return "".join(lines[:start]) + "".join(lines[end:])
+
+
 def render_fragment(feature: str, repo: str, rows: Iterable[Row]) -> str:
     """A whole fragment's text: the header, its identity, then every row through
     `render_row_block` — the one renderer, so a fragment re-rendered from its own

@@ -12,6 +12,7 @@
 # repo removed mid-run makes the next resolve exit 2. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
+. "$here/_placement_walk.sh"
 scenario_require_fresh_repo
 
 HOME="$(mktemp -d)" && export HOME           # the worktrees and the tracking clone
@@ -119,6 +120,32 @@ expect_grep '^local--origin/features/feat__s/docs/superpowers/plans/2026-11-12-s
   "$tracked" "the tracking repo holds the plan"
 expect_grep "^local--origin/features/feat__s/docs/superpowers/runs/$run_id.stealth.json$" \
   "$tracked" "the tracking repo holds the product head beside the cursor"
+
+# Whole runs under stealth (debug journal 2026-11-13-placement-plan-paths): a
+# fr-goal-light run and a two-phase fr-goal run through every step, each closed out from
+# the target's base clone; nothing of either reaches the target's remote.
+walk_fake_forge
+WALK_STATE="$track main local--origin/"
+for b in feat/sl feat/sf; do
+  cd "$target" || fail "cd $target"
+  run_fr out isolation up --branch "$b" --stealth "$track@main"
+  require_exit 0 "$out"
+  cd "$HOME/.cache/fr/worktrees/$repo/${b//\//__}" || fail "no workspace for $b"
+  if [ "$b" = feat/sl ]; then
+    run_fr out acceptance init   # this repo keeps acceptance rows from here on
+    require_exit 0 "$out"
+    walk_run fr-goal-light "$b" 2026-11-13-sl rsl 1
+    walk_closeout "$target" "$origin" "$b" rsl
+  else
+    walk_run fr-goal "$b" 2026-11-13-sf rsf 2
+    walk_closeout "$target" "$origin" "$b" rsf
+  fi
+done
+for ref in main feat/sl feat/sf; do
+  fr_paths="$(git --git-dir="$origin" ls-tree -r --name-only "$ref" 2>/dev/null | grep -E '^(docs/(superpowers|acceptance)/|features/)' || true)"
+  [ -z "$fr_paths" ] || fail "origin $ref carries fr paths after the walks: $fr_paths"
+done
+cd "$wt" || fail "cd $wt"
 
 # Another host: a fresh HOME and a fresh clone of the target resume from the tracking repo.
 host_one="$HOME"

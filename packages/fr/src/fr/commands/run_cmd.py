@@ -417,9 +417,9 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
     orchestrator acts on, and printed after the closeout it became the last
     thing acted on while the closeout line went unrelayed.
     """
-    from fr.run.closeout import primary_checkout
+    from fr.run.closeout import closeout_checkout
 
-    base = primary_checkout(repo_root)
+    base = closeout_checkout(repo_root)
     closeout = [
         f"closeout: after the PR merges, start a NEW session in {base} and run",
         f"  fr pickup --run {run_id}",
@@ -431,7 +431,10 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
             *closeout,
         ]
     try:
-        sha = git_answer(repo_root, "rev-parse", "--short", "HEAD").stdout.strip()
+        from fr.artifacts.paths import artifact_root
+
+        # The cursor's commit is in the repository holding the runs dir (R23).
+        sha = git_answer(artifact_root(repo_root), "rev-parse", "--short", "HEAD").stdout.strip()
     except GitUnavailableError:
         sha = None
     if sha:
