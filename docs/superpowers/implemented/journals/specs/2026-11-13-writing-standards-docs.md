@@ -156,3 +156,73 @@ Operator, asked whether the rewrite is based on the code or the prose: "yes, I w
 ### s1-help-lines-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1440] · resolves s1-help-lines: fr's CLI help lines are too long for STE, so docs/reference/cli.md's generated tree cannot meet the guides' standard
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1440.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-14T02:21:20+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: `site-build` builds every page with the new pin and runs `scripts/check-writing-standards.sh .blog-craft`: no FAIL.
+
+Evidence: CI site-build green on the merged PR head 7082ff0dd (run 43545039044): it built every page at blog-craft 3b0c7d0 and ran scripts/check-writing-standards.sh .blog-craft (no FAIL), then the real-checker test; locally on main c0fdbce the script prints WRITING STANDARD OK for both groups (16 + 14 checked, 0 FAIL).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-14T02:21:21+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: The unit test of §5 passes.
+
+Evidence: tests/unit/test_writing_standards_docs.py passes on main c0fdbce with BLOG_CRAFT_DIR set (13 tests incl. the real-checker test); in CI the unit tests pass in the test shards and site-build runs the real-checker test.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-14T02:21:22+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: `fr docs check` passes (every changed page is a covered page that changed).
+
+Evidence: fr docs check: 32 page(s) current on main c0fdbce; the docs-check CI job was green on every pushed head of #1436.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-14T02:21:24+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: `validate_writing_standard.py --preserve-from <baseline> --stats` on the batch: no FAIL and no `preserve` hit.
+
+Evidence: Every page was checked with validate_writing_standard.py --preserve-from <its baseline> --stats in its phase: no FAIL and no preserve hit (plan journal p2..p6-ws-* entries, 37 of them, and each phase review re-ran it); the whole-repo check is OK on main.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-14T02:21:25+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: A fact-keeper review per page: no unresolved `lost`, `changed` or `added` fact.
+
+Evidence: One blind fact-keeper per rewritten page (31): no lost fact; every changed or added fact fixed or justified (plan journal p2-, p3-, p4-, p5-, p6-fact-keeper).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-11-14T02:21:27+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: The plan journal names every warning a page keeps, and why (R9).
+
+Evidence: Each warning a page keeps is a p*-ws-* journal entry naming the warning and its reason (e.g. 'attempt' in herdr-control-sessions and 01-fr-goal, 'OPEN' in fr-devops-gate, the passive in fr-acceptance:115).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-7 created=2026-11-14T02:21:28+00:00 -->
+### test-plan-step-7 · discovery · Test Plan step 7: ran
+
+Step: The wording tripwires of R12 pass on the batch, and CI's full unit suite passes on the pushed batch.
+
+Evidence: The R12 tripwires (question rounds, hermes docs, build_site, explainers_fresh) pass on main c0fdbce (490 passed with the writing-standards and opencode-sync tests); CI's full unit suite (12 shards + split-check, ci-ok) passed on every phase's pushed head and on the merged head 7082ff0dd.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-8 created=2026-11-14T02:21:29+00:00 -->
+### test-plan-step-8 · discovery · Test Plan step 8: ran
+
+Step: Per page, the plan journal holds the accuracy review's claims and each one's outcome (corrected with its commit, or refuted with evidence) (R13, R14).
+
+Evidence: The plan journal holds 65 p*-acc-* entries: per page, each accuracy-review claim with its code evidence and outcome (corrected in its docs(<page>): correct commit, or refuted/left with evidence).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-9 created=2026-11-14T02:21:30+00:00 -->
+### test-plan-step-9 · discovery · Test Plan step 9: ran
+
+Step: `uv run fr lenses check` passes, and `uv run fr lenses status` on this branch lists `docs-accuracy` as required by the path rule; a unit test pins the lens and its rule (R15).
+
+Evidence: fr lenses check: .fr/lenses.yaml is fine; on the feature branch fr lenses status listed docs-accuracy as required by the path rule (rule docs/explainers/*.md, docs/*.md, docs/reference/*.md), and its lens review ran; test_the_docs_accuracy_lens_is_required_for_every_published_page pins lens and rule.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-10 created=2026-11-14T02:21:32+00:00 -->
+### test-plan-step-10 · discovery · Test Plan step 10: ran
+
+Step: `.claude/rules/explainers-currency.md` names each group's standard and the three exceptions, its local command is the one the CI step runs, and its OpenCode mirror is in sync (`test_tripwire_opencode_instructions_sync.py`).
+
+Evidence: explainers-currency.md names each group's standard and the three exceptions and the same scripts/check-writing-standards.sh command site-build runs; test_tripwire_opencode_instructions_sync.py passes on main c0fdbce.
