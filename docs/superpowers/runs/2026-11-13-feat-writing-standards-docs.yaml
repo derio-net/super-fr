@@ -260,7 +260,14 @@ steps:
           lenses: docs-accuracy=unobserved:l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3;tests=unobserved:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4
           unobserved: reviewer,reviewer-return
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-14T01:53:33+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-14T01:53:33+00:00'
+          harness: claude-code
+          session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
 driver: standalone
 fr_version: 7.0.0rc3
 pr: https://github.com/derio-net/super-fr/pull/1436
