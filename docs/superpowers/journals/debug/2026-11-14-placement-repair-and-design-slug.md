@@ -20,3 +20,8 @@ fr.parser.parse resolves it below the plan's layout root (resolve_spec_ref_below
 ### 2a30d6146da8 · ruled-out · the stealth placement is not the cause of the self-review failure
 
 load_spec_matrix from the stealth workspace returns all three rows of the feature's fragment. The quiet walk passes only because its rows spell the origin spec:2026-11-13-whisper#R<n> (stem minus -design); the stealth rows spell spec:2026-11-13-textkit-whisper-cli-design#R<n>.
+
+<!-- fr:journal kind=root-cause scope=debug id=335db4371b34 created=2026-11-14T01:19:30+00:00 -->
+### 335db4371b34 · root-cause · origin_fragment compares a logical spec slug verbatim with the stem minus -design, while resolve_logical accepts both spellings
+
+requirements.origin_fragment matches a logical origin only when fragment_slug_for_spec(spec path) == logical.slug, and fragment_slug_for_spec strips `-design`, so spec:<stem>-design never matches. fr.acceptance.logical.candidates looks for <slug>-design.md AND <slug>.md, so the same origin resolves and `fr acceptance check`, add and the step record all accept it. Two definitions of a spec's logical slug disagree; every reader of rows_citing / is_cited silently sees no row. Not placement-specific.
