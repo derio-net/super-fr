@@ -266,6 +266,7 @@ EOF
 )"
   mkdir -p "$(dirname "$RECORD")" && printf '%s\n' "$deliver_record" > "$RECORD"
   : > "$FAKE_PR_BODY"   # no PR body yet: an earlier run's must not stand in for this one's
+  : > "$FAKE_GH_LOG"
   run_fr out run resolve "$run" --step deliver --record "$RECORD"
   local body
   if [ "$FR_PLACEMENT" = stealth ]; then
@@ -288,6 +289,14 @@ EOF
     require_exit 0 "$out"
   fi
   expect_grep "fr pickup --run $run" "$out" "deliver names the close-out"
+  # The forge was asked exactly what the fake serves, the PR's body (R24 lets a stealth
+  # run read its target's forge, never write it), and nothing a swallowed failure would
+  # hide.
+  local calls stray
+  calls="$(cat "$FAKE_GH_LOG")"
+  [ -n "$calls" ] || fail "deliver never read the PR body back from the forge"
+  stray="$(printf '%s\n' "$calls" | grep -Ev '^pr view .*--json body' || true)"
+  [ -z "$stray" ] || fail "deliver asked the forge something else: $stray"
   local sha
   sha="$(printf '%s\n' "$out" | sed -n 's/^cursor committed as \([0-9a-f]*\).*/\1/p')"
   [ -n "$sha" ] && git -C "$FR_ARTIFACT_ROOT" cat-file -e "$sha^{commit}" \
@@ -319,6 +328,14 @@ walk_closeout() {
   run_fr out archive --branch "$branch"
   require_exit 0 "$out"
   expect_grep "recorded: $branch merged at" "$out" "archive records the merge (R25)"
+  # ...and pushed it: the remote state branch holds the feature's merged record.
+  # WALK_STATE = "<bare git dir> <branch> <prefix>" (quiet: origin's `fr`; stealth: the
+  # tracking repo's branch below the target's directory).
+  local state_git state_ref state_prefix
+  read -r state_git state_ref state_prefix <<<"$WALK_STATE"
+  git --git-dir="$state_git" cat-file -e \
+    "$state_ref:${state_prefix}features/${branch//\//__}/merged.yaml" \
+    || fail "the remote $state_ref has no merged record for $branch"
   cd "$base" || fail "cd $base"
   run_fr out isolation down --branch "$branch"
   require_exit 0 "$out"

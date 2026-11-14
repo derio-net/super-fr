@@ -125,6 +125,7 @@ expect_grep "^features/feat__q/docs/acceptance/features/legacy.yaml$" \
 # run and a two-phase fr-goal run through every step, each closed out from the base clone.
 # The second amends the first's merged row.
 walk_fake_forge
+WALK_STATE="$origin fr "
 for b in feat/ql feat/qf; do
   cd "$base" || fail "cd $base"
   run_fr out isolation up --branch "$b"

@@ -125,6 +125,7 @@ expect_grep "^local--origin/features/feat__s/docs/superpowers/runs/$run_id.steal
 # fr-goal-light run and a two-phase fr-goal run through every step, each closed out from
 # the target's base clone; nothing of either reaches the target's remote.
 walk_fake_forge
+WALK_STATE="$track main local--origin/"
 for b in feat/sl feat/sf; do
   cd "$target" || fail "cd $target"
   run_fr out isolation up --branch "$b" --stealth "$track@main"
