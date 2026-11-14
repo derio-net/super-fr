@@ -86,3 +86,9 @@ amendments:
     notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
     why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
       are deleted
+  - row: multibackend-vk-dispatch
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
