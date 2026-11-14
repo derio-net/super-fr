@@ -21,7 +21,7 @@ reviewed: 2026-11-13 writing-standards-docs phase 3, docs/cloud-setup.md was cor
 
 [fr-triage](fr-triage.md) ranks a backlog and groups related issues into **batches**. A batch
 is delivered the way any goal is, by one [fr-goal](01-fr-goal.md) run that ends in one pull
-request (a batch of defects runs fr-debugging instead). Twenty issues become five or six
+request (a batch created or edited with `--skill debug` runs fr-debugging instead). Twenty issues become five or six
 runs, and then the work that is left is bookkeeping: start the runs in the right order, keep
 only a few going at once, merge each pull request when it is ready, run the repo's install
 step so your tools match what merged, archive each finished run.
@@ -59,15 +59,20 @@ is true now, not from what it remembers. In order, a pass:
 1. **Reports what it will not touch.** A batch holding an issue that another scope has
    claimed is left alone. So is a pull request on a batch branch that is not that batch's,
    or by an author the repo has not allowed (`pr_authors` in `.fr/triage.yaml`, by default
-   you). They are named once, never merged.
+   you). A pull request that is not the batch's is named once and never merged; a batch
+   another scope holds is reported as held on every pass and left alone.
 2. **Merges what is ready.** Per repo it walks a merge train in order (wave, then merge
-   order, then id) and merges the head of it. A pull request merges only when it is not a
+   order, then id) and merges the head of it, then the next ready member in the same pass,
+   and so on until one does not merge. A pull request merges only when it is not a
    draft that you have not approved, its checks are green at that moment, and it carries
    **your** `approved-fr` label. An approved draft is marked ready first; an unapproved one is
    held as awaiting approval, and the train goes on past it. The merge is pinned to the head whose checks were judged, so a head that moved since is
    left for the next pass. A pull request that has fallen behind its base is updated and
-   merged on a later pass, once CI is green again. A failing check is reported once per
-   head. The driver never approves, and it never waits for CI inside a pass.
+   merged on a later pass, once CI is green again. A pull request whose checks fail is
+   handed back to the batch's session when that session is idle, at most twice per dispatch
+   (when the base has moved past fr's own update, the driver updates it again first); after
+   that it shows under **Needs you now**. The driver never approves, and it never waits for
+   CI inside a pass.
 3. **Closes out what merged.** Once the release commit that followed the merge has landed
    (or ten minutes have passed with none, for a pull request that releases nothing), the
    driver fast-forwards its checkout and runs the repo's `post_merge` argument list, once
@@ -75,15 +80,16 @@ is true now, not from what it remembers. In order, a pass:
    run is archived, together with the other landed batches of that repo, in one housekeeping
    pull request. A batch held by an unpassed `gate:tester` or `gate:devops` waits; see
    [exit gates](fr-exit-gates.md). Closed-out archive pull requests are merged by the driver
-   only when they are the repo's own, green, and touch only what an archive touches.
+   only when they are the repo's own, green, and touch only what an archive touches. A
+   finished wave's state can be exported at this point.
 4. **Dispatches what may start.** It counts the batches that are dispatched or have an open
    pull request, over every batch in the state file, and while that count is under the cap
    it starts the next batch by wave, then merge order, then id, skipping any whose `after`
    batches are not all merged. A merge that landed earlier in the same pass frees its slot
    at once.
-5. **Tidies.** A finished batch's sessions are closed, a finished wave's state can be
-   exported, and when a wave finishes while duplicate candidates exist, the driver prints
-   one `dedupe` line naming the `fr triage check` command to judge them.
+5. **Tidies.** A finished batch's sessions are closed, and when the driver sees a wave go
+   from unfinished to finished while duplicate candidates exist, it prints one `dedupe` line
+   naming the `fr triage check` command to judge them.
 
 Each action prints one line, in the same words whether the driver runs once or in a loop,
 and a pass ends with a one-line summary.
