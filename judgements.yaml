@@ -7200,6 +7200,11 @@ batches:
   rationale: 'Tier 2: cloud doctor reports ok on RC installs; tag without a Release; stray RC tag; cancelled
     dispatch runs; managed-cache leftovers.'
   wave: 18
+  after:
+  - guard-trust
+  - gate-truth
+  - deliver-evidence
+  - owed-archive
   skill: debug
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
