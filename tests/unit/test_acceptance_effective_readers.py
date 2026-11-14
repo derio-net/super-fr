@@ -248,5 +248,21 @@ def test_the_staleness_guard_counts_a_retired_rows_origin(
     assert load_effective(root).rows == ()
 
     check = _cli(root, monkeypatch, "check")
+    backfill = _cli(root, monkeypatch, "backfill")
 
     assert "staleness" not in check.output, check.output
+    # backfill reads the same citation set, so it offers no rows for removed behaviour
+    assert backfill.exit_code == 0, backfill.output
+    assert LIVE not in backfill.output, backfill.output
+
+
+def test_backfill_counts_a_logical_citation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fr acceptance backfill` and the staleness guard share one citation set: a spec
+    cited only by `spec:<slug>` is not listed as uncited, live or archived."""
+    for archived in (False, True):
+        root = _repo(tmp_path / str(archived), archived=archived)
+        backfill = _cli(root, monkeypatch, "backfill")
+        assert backfill.exit_code == 0, backfill.output
+        assert "(none — every Test Plan spec is cited)" in backfill.output, backfill.output

@@ -293,6 +293,41 @@ def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[st
     ]
 
 
+def cited_spec_paths(rows: Sequence[Row], own: str | None) -> set[str]:
+    """The own-repo spec paths *rows*' origins cite, each with its archive twin, so a
+    citation survives `fr archive` (trap 1). A logical origin names every path its slug
+    can take. The staleness guard and `fr acceptance backfill` both read this one set.
+
+    Pass the fold's retired rows with the live ones: a row retired by amendment still
+    cites its origin, because the retirement, recorded with its reason, is that Test
+    Plan's outcome (spec 2026-11-14-retire-vibekanban R9). An origin that does not
+    parse is skipped here; `check` reports it. *own* None (identity unknown) keeps a
+    path origin of any repo.
+    """
+    from fr.acceptance.logical import candidates, is_logical, parse_logical
+
+    referenced: set[str] = set()
+    for r in rows:
+        for ref in r.origin:
+            if is_logical(ref):
+                try:
+                    referenced.update(candidates(parse_logical(ref)))
+                except AcceptanceError:
+                    pass
+                continue
+            try:
+                repo, path, _ = split_ref(ref)
+            except AcceptanceError:
+                continue
+            if own is not None and not same_repo(repo, own):
+                continue
+            referenced.add(path)
+            twin = archive_twin(path)
+            if twin:
+                referenced.add(twin)
+    return referenced
+
+
 def check(
     matrix: Matrix, root: Path, sibling_root: str = "..", *, retired: Sequence[Row] = ()
 ) -> CheckResult:
@@ -305,10 +340,8 @@ def check(
     case_only: set[str] = set()
 
     from fr.acceptance.logical import (
-        candidates,
         feature_roots_of,
         is_logical,
-        parse_logical,
         resolution_problem,
     )
 
@@ -347,28 +380,8 @@ def check(
         )
 
     # Staleness guard: every own-repo spec with a Test Plan must be cited by
-    # >=1 row origin. A citation survives `fr archive` (twin-aware, trap 1). A row
-    # retired by amendment still cites its origin: the retirement, recorded with its
-    # reason, is that Test Plan's outcome (spec 2026-11-14-retire-vibekanban R9).
-    referenced: set[str] = set()
-    for r in (*matrix.rows, *retired):
-        for ref in r.origin:
-            if is_logical(ref):
-                try:
-                    referenced.update(candidates(parse_logical(ref)))
-                except AcceptanceError:
-                    pass  # already reported above
-                continue
-            try:
-                repo, path, _ = split_ref(ref)
-            except AcceptanceError:
-                continue  # already reported above
-            if not same_repo(repo, own):
-                continue
-            referenced.add(path)
-            twin = archive_twin(path)
-            if twin:
-                referenced.add(twin)
+    # >=1 row origin, live or retired (`cited_spec_paths`).
+    referenced = cited_spec_paths((*matrix.rows, *retired), own)
     from fr.settings import disabled
 
     # R6: under `acceptance: off` there is no matrix to cite a Test Plan from.

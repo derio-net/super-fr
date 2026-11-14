@@ -1470,24 +1470,18 @@ def backfill_cmd() -> None:
     """Emit the agent backfill protocol + deterministic inventory (markdown)."""
     import yaml
 
-    from fr.acceptance.check import SPEC_DIRS, spec_test_plan
-    from fr.acceptance.model import archive_twin, split_ref
+    from fr.acceptance.check import SPEC_DIRS, cited_spec_paths, resolve_identity, spec_test_plan
+    from fr.acceptance.fold import effective
 
     root = resolve_repo_root()
     _refuse_if_off(root, "`fr acceptance backfill` writes no row")
     matrix = _load(root)
 
-    referenced: set[str] = set()
-    for r in matrix.rows:
-        for ref in r.origin:
-            try:
-                _, path, _ = split_ref(ref)
-            except AcceptanceError:
-                continue
-            referenced.add(path)
-            twin = archive_twin(path)
-            if twin:
-                referenced.add(twin)
+    try:
+        own: str | None = resolve_identity(matrix, root)[1]
+    except AcceptanceError:
+        own = None  # no identity to filter by: every path origin counts, as before
+    referenced = cited_spec_paths((*matrix.rows, *effective(root).retired), own)
     from fr.artifacts.paths import artifact_root
 
     aroot = artifact_root(root)  # a quiet or stealth feature's specs live below it
