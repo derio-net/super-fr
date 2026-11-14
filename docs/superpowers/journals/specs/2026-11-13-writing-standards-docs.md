@@ -205,3 +205,10 @@ Evidence: Each warning a page keeps is a p*-ws-* journal entry naming the warnin
 Step: The wording tripwires of R12 pass on the batch, and CI's full unit suite passes on the pushed batch.
 
 Evidence: The R12 tripwires (question rounds, hermes docs, build_site, explainers_fresh) pass on main c0fdbce (490 passed with the writing-standards and opencode-sync tests); CI's full unit suite (12 shards + split-check, ci-ok) passed on every phase's pushed head and on the merged head 7082ff0dd.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-8 created=2026-11-14T02:21:29+00:00 -->
+### test-plan-step-8 · discovery · Test Plan step 8: ran
+
+Step: Per page, the plan journal holds the accuracy review's claims and each one's outcome (corrected with its commit, or refuted with evidence) (R13, R14).
+
+Evidence: The plan journal holds 65 p*-acc-* entries: per page, each accuracy-review claim with its code evidence and outcome (corrected in its docs(<page>): correct commit, or refuted/left with evidence).
