@@ -8,7 +8,6 @@ phase:
   tracking_issue: null
   acceptance:
   - vk-runner-removed
-  - stale-vk-profile-refused
   skeleton: true
   tier: standard
   files:

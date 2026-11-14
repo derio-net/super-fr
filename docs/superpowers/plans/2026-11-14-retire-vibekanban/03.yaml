@@ -8,7 +8,6 @@ phase:
   tracking_issue: null
   acceptance:
   - dispatch-docs-name-no-vk
-  - vk-runner-removed
   tier: standard
   files:
   - plugins/super-fr-dispatch/*
