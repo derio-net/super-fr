@@ -1713,6 +1713,7 @@ def apply_record(
             guard=guard,
             visual=record.visual,
             shape=record.shape,
+            record_rows=_record_rows(repo_root, record, record_file),
         )
     except BaseException:
         if not guard.landed:
@@ -1748,3 +1749,23 @@ def _commit(repo_root: Path, paths: list[Path], message: str) -> CommitOutcome:
     if not paths:
         return CommitOutcome(committed=False, reason="nothing written", unchanged=True)
     return commit_records(repo_root, paths, message)
+
+
+def _record_rows(
+    repo_root: Path, record: Any, record_file: Path | None
+) -> tuple[str, dict[str, str]] | None:
+    """gh#1456: the record's name and the status each of its `acceptance:` entries sets,
+    for a `deliver` refusal over a row the record (not the fragment) holds."""
+    statuses: dict[str, str] = {}
+    for item in record.acceptance:
+        row = getattr(item, "row", None) or getattr(item, "id", None)
+        if row is not None and item.status is not None:
+            statuses[row] = item.status
+    if not statuses:
+        return None
+    if record_file is None:
+        return ("being applied", statuses)
+    try:
+        return (str(record_file.resolve().relative_to(repo_root.resolve())), statuses)
+    except ValueError:
+        return (str(record_file), statuses)

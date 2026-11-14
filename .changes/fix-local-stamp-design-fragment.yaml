@@ -1,0 +1,2 @@
+bump: patch
+summary: "deliver stamps `local` rows in a feature fragment still named `<slug>-design.yaml`, and a leftovers refusal over a row the pending deliver record sets now names that record (#1456)"
