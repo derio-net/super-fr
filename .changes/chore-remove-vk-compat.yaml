@@ -1,2 +1,0 @@
-bump: major
-summary: "the retired vk command's compatibility paths are gone: fr init migrate, the vk-iso/work default (fr isolation up now requires --branch), VK_REPO_ROOT (now FR_REPO_ROOT), VK_INSTALL_SKIP_PREFLIGHT (now FR_INSTALL_SKIP_PREFLIGHT) and the vk_version plan key, which fr migrate artifacts removes"

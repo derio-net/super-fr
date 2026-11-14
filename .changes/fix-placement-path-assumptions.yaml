@@ -1,2 +1,0 @@
-bump: patch
-summary: "quiet/stealth: plans belong to their product checkout (spec paths relative to the artifact root), so plan self-review, plan create --spec $FR_SPECS_DIR/..., proportionality, deliver's commit lines, the acceptance staleness guard and the close-out (fr pickup --run, fr closeout outcome, the brief's steps) work end to end; fr acceptance amend --op reword --origin corrects a pending row's origin"

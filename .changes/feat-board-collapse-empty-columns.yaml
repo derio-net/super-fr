@@ -1,2 +1,0 @@
-bump: patch
-summary: "Batches board: empty columns collapse to a narrow rotated strip in the wide layout, so columns with cards get the width"

@@ -1,2 +1,0 @@
-bump: patch
-summary: "Quiet and stealth: `fr run resolve --emitted spec=|plan=` resolves the path below the feature's artifact root (logical, absolute or fr-root spelling) and every reader of the recorded path follows it (cli-step `{{ artifacts.* }}`, plan readers, `fr pickup`, step-record template); the dispatch brief's `record` template is no longer null there; and an `answered_by: operator` decision no longer has its window closed by an earlier entry of the same record"

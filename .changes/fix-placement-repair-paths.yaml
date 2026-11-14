@@ -1,2 +1,0 @@
-bump: patch
-summary: "`fr repair --yes` works under quiet and stealth (its dirty-tree guard asks the checkout that holds the plans, and a git failure is a refusal, never a traceback); a row citing `spec:<stem>-design#R<n>` now counts as citing its spec, and is stored as `spec:<stem>#R<n>` in the run's own fragment"

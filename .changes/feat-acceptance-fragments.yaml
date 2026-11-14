@@ -1,2 +1,0 @@
-bump: minor
-summary: acceptance rows live in per-feature fragments folded from git history; reports are derived, never committed
