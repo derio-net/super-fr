@@ -74,9 +74,20 @@ rows:
     origin:
     - spec:2026-11-14-acceptance-local-status#R4
     - spec:2026-11-14-acceptance-local-status#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_deliver_local_stamp.py#test_a_local_row_is_stamped_in_the_deliver_commit
+      - super-fr:tests/unit/test_deliver_local_stamp.py#test_a_later_refusal_writes_no_stamp
+      - super-fr:tests/unit/test_deliver_local_stamp.py#test_a_fresh_log_over_an_uncommitted_code_path_refuses_naming_the_row
+      - super-fr:tests/unit/test_deliver_local_stamp.py#test_tests_reuse_stamps_with_the_witness_tree
+      - super-fr:tests/unit/test_deliver_local_stamp.py#test_a_pending_set_status_amendment_is_stamped_in_place
+      - super-fr:tests/unit/test_deliver_local_stamp.py#test_under_quiet_the_fragment_is_written_in_the_artifact_root
+      - super-fr:tests/unit/test_deliver_leftovers.py#test_under_ci_none_the_row_fix_offers_local_first
+      - super-fr:tests/unit/test_deliver_leftovers.py#test_with_ci_the_row_fix_is_unchanged
+    status: ci
+    notes: 'In-process deliver resolves over a no-CI fixture: the stamp in the resolve
+      commit, no stamp on a later refusal, a dirty tree refused, reuse, an amendment,
+      quiet placement; the leftover fix offers local; run in CI'
     verify: none
   - id: acceptance-local-held-quiet-walk
     capability: fr-goal deliver
