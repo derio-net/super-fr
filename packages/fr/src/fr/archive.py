@@ -914,7 +914,10 @@ def outcome_hold(repo_root: Path, plan: Plan, plan_rel: Path) -> list[str]:
     except GitStatusError as e:
         return [str(e)]
     if dirty:
-        rel = journal.relative_to(repo_root).as_posix()
+        # Under quiet and stealth the journal sits in the feature root, not below
+        # repo_root (`fr debt` reads this under every placement).
+        home = repo_root if journal.is_relative_to(repo_root) else artifact_root(repo_root)
+        rel = journal.relative_to(home).as_posix() if journal.is_relative_to(home) else journal
         return [
             f"{rel} holds uncommitted Test Plan outcomes — commit it on a branch "
             "(not the default branch), then re-run fr archive"

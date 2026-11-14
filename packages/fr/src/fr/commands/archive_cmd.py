@@ -1033,9 +1033,9 @@ def archive_command(
             dirty, msg = True, f"{target.name}: {e}"
         if dirty:
             if not all_plans:
-                err_console.print(f"refusing to archive — {msg}")
+                err_console.print(f"refusing to archive — {msg}", soft_wrap=True, markup=False)
                 raise typer.Exit(2)
-            skipped.append(f"{target.name}: skipped — dirty worktree")
+            skipped.append(msg.replace(f"{target.name}: ", f"{target.name}: skipped — ", 1))
             continue
 
         try:
