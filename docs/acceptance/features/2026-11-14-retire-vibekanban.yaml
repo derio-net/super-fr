@@ -199,3 +199,10 @@ amendments:
     ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_vk_runner_entry_point
     why: phase 1 landed the runner-removal evidence; the source tripwire half (R10)
       lands in phase 3
+  - row: vk-runner-removed
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_apply_to_vk_is_unknown_runner
+    why: phase 1 landed the runner-removal evidence; the source tripwire half (R10)
+      lands in phase 3
