@@ -135,8 +135,8 @@ Quote every title and note in the YAML: an unquoted `: ` breaks the file.
 
 ## Batches and the driver
 
-A **batch** is a group of judged issues delivered as one [fr-goal](01-fr-goal.md) run and
-one pull request. The `fr triage batch` verbs are `list`, `create`, `edit`, `cancel`,
+A **batch** is a group of judged issues delivered as one [fr-goal](01-fr-goal.md) run (an
+fr-debugging run for a batch created or edited with `--skill debug`) and one pull request. The `fr triage batch` verbs are `list`, `create`, `edit`, `cancel`,
 `suggest` (candidate groupings; input, never the answer), `dispatch`, `adopt`, `merge`,
 `closeout`, `drive`, `replace` and `focus`. `dispatch`, `merge` and `cancel` write to the
 forge only with `--yes`; without it they print the plan.
