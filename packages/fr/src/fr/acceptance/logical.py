@@ -65,6 +65,33 @@ def parse_logical(ref: str) -> LogicalRef:
     return LogicalRef(kind, slug, anchor)
 
 
+DESIGN_SUFFIX = "-design"
+
+
+def spec_slug(slug: str) -> str:
+    """A logical spec slug's one spelling: the spec file's stem minus `-design` (R18,
+    `fragment_slug_for_spec`). `candidates` resolves `spec:<stem>-design` too (it tries
+    `<slug>.md`), so a row an agent cited by the file's full stem resolves, and every
+    reader that compares a spec's slug compares this, never the slug as written (debug
+    journal 2026-11-14-placement-repair-and-design-slug: self-review saw no row citing
+    a spec whose rows spelled the stem)."""
+    return slug.removesuffix(DESIGN_SUFFIX)
+
+
+def canonical(ref: str) -> str:
+    """*ref* with a logical spec slug in its one spelling (`spec_slug`); every other ref,
+    and a logical ref that does not parse, unchanged. What a writer stores."""
+    if not is_logical(ref):
+        return ref
+    try:
+        logical = parse_logical(ref)
+    except AcceptanceError:
+        return ref
+    if logical.kind != "spec":
+        return ref
+    return str(LogicalRef("spec", spec_slug(logical.slug), logical.anchor))
+
+
 def to_logical(ref: str, *, own_repo: str | None = None) -> str:
     """The logical form of a path ref to a spec or a plan folder; any other ref unchanged.
 

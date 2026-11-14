@@ -87,8 +87,13 @@ walk_run() {
   walk_brief "$run"
   walk_expect brainstorm
   rows="" splits=""
+  local cite
   for n in $(seq 1 "$phases"); do
-    rows="$rows  - {id: $slug-r$n, capability: c$n, acceptance: requirement $n holds, origin: ['spec:$slug#R$n'], status: not-implemented}
+    # Row 1 cites the spec by its file's whole stem, as the 7.0.0rc5 stealth walk's agent
+    # did (debug journal 2026-11-14-placement-repair-and-design-slug); it is stored in the
+    # one spelling, `spec:<stem minus -design>`, in the run's own fragment.
+    cite="$slug"; [ "$n" = 1 ] && cite="$slug-design"
+    rows="$rows  - {id: $slug-r$n, capability: c$n, acceptance: requirement $n holds, origin: ['spec:$cite#R$n'], status: not-implemented}
 "
     [ "$n" -gt 1 ] && splits="$splits  - {kind: decision, id: phase-split-$slug-p$n, title: 'ask: phase $n serves R$n'}
 "
@@ -110,6 +115,10 @@ evidence:
 EOF
   grep -q "spec: docs/superpowers/specs/$spec" "$FR_RUNS_DIR/$run.yaml" \
     || fail "the cursor does not record the spec below the feature root: $(cat "$FR_RUNS_DIR/$run.yaml")"
+  [ ! -e "$FR_ACCEPTANCE_FRAGMENTS_DIR/$slug-design.yaml" ] \
+    || fail "a -design spelled origin filed its row in a fragment of its own"
+  expect_grep "spec:$slug#R1" "$(cat "$FR_ACCEPTANCE_FRAGMENTS_DIR/$slug.yaml")" \
+    "a -design spelled origin is stored in its one spelling"
   ident="$(sed -n 's/^repo: //p' "$FR_ACCEPTANCE_FRAGMENTS_DIR/$slug.yaml")"
   repo_id="${ident#*/}"
   [ -n "$repo_id" ] || fail "the brainstorm fragment names no repo"
@@ -161,6 +170,28 @@ EOF
   require_exit 0 "$out"
   refuse_grep 'serves no ask|no matrix row citing|unknown acceptance row|features/' "$out" \
     "self-review reads the plan where it lives"
+  # A plan 7.0.0rc4's `plan create` left: an absolute spec path in _meta.yaml, committed
+  # where the plan lives. Self-review passes it, and `fr repair --yes` (whose dirty guard
+  # asked the product checkout's git, exit 128) rewrites it to the bare file name.
+  local meta="$FR_PLANS_DIR/$slug/_meta.yaml" holder
+  holder="$(git -C "$FR_PLANS_DIR" rev-parse --show-toplevel)"
+  sed "s|^spec: .*|spec: $FR_SPECS_DIR/$spec|" "$meta" > "$WALK_TMP/meta" && cp "$WALK_TMP/meta" "$meta"
+  git -C "$holder" add -A -- "$meta" && git -C "$holder" commit -qm "a stale absolute spec ref" \
+    || fail "commit the stale spec ref"
+  run_fr out plan self-review "$FR_PLANS_DIR/$slug"
+  require_exit 0 "$out"
+  run_fr out repair
+  require_exit 0 "$out"
+  expect_grep "would repair: _meta.yaml.* spec: .*$spec" "$(printf '%s' "$out" | tr -d '\n')" \
+    "repair plans the rewrite"
+  run_fr out repair --yes
+  require_exit 0 "$out"
+  refuse_grep 'Traceback|CalledProcessError' "$out" "repair --yes runs its guard where the plan lives"
+  grep -qx "spec: $spec" "$meta" || fail "repair did not restore the bare spec file: $(cat "$meta")"
+  git -C "$holder" add -A -- "$meta" && git -C "$holder" commit -qm "fr repair" \
+    || fail "commit the repair"
+  run_fr out plan self-review "$FR_PLANS_DIR/$slug"
+  require_exit 0 "$out"
   walk_resolve "$run" plan <<EOF
 schema_version: 12
 run: $run

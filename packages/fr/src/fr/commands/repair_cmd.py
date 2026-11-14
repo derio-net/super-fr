@@ -12,10 +12,10 @@ import json as _json
 import typer
 from rich.console import Console
 
-from fr.archive import paths_dirty
+from fr.archive import GitStatusError, paths_dirty
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import require_migrated_layout, resolve_repo_root
-from fr.repair import RepairResult, repair_repo
+from fr.repair import RepairResult, plan_config_path, repair_repo
 
 console = Console()
 err_console = Console(stderr=True)
@@ -59,12 +59,23 @@ def repair_command(
     repo_root = resolve_repo_root()
     sp = kind_dir("superpowers", space_for(repo_root))
 
-    if yes and paths_dirty(repo_root, sp):
-        err_console.print(
-            f"refusing to repair: uncommitted changes under {KIND_DIRS['superpowers']}/ — "
-            "commit or stash first (dirty tree)."
-        )
-        raise typer.Exit(2)
+    # The guard covers every file repair may write, each asked of its own checkout: under
+    # quiet and stealth the plans and specs sit in the `fr` worktree or the tracking
+    # clone, while `plan-config.yaml` (repo configuration) stays in this checkout.
+    if yes:
+        try:
+            dirty = paths_dirty(repo_root, sp, plan_config_path(repo_root))
+        except GitStatusError as e:
+            err_console.print(f"refusing to repair: {e}", soft_wrap=True, markup=False)
+            raise typer.Exit(2) from e
+        if dirty:
+            err_console.print(
+                f"refusing to repair: uncommitted changes under {KIND_DIRS['superpowers']}/ "
+                f"({sp}) — commit or stash first (dirty tree).",
+                soft_wrap=True,
+                markup=False,
+            )
+            raise typer.Exit(2)
 
     result = repair_repo(repo_root, write=yes)
 

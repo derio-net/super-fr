@@ -165,7 +165,7 @@ def origin_fragment(origin: str, spec_ref: str) -> str | None:
     `spec_ref` (`<repo>:<spec-path>`), else `None`. Twin-aware, so a citation
     survives `fr archive`; a logical `spec:<slug>[#R<n>]` origin (spec 2026-11-04
     R18) names the spec whose slug it carries, live or archived."""
-    from fr.acceptance.logical import is_logical, parse_logical, spec_dirs
+    from fr.acceptance.logical import is_logical, parse_logical, spec_dirs, spec_slug
 
     if is_logical(origin):
         try:
@@ -178,7 +178,11 @@ def origin_fragment(origin: str, spec_ref: str) -> str | None:
         in_specs = any(
             ref_path.startswith(d) and "/" not in ref_path[len(d) :] for d in spec_dirs()
         )
-        if logical.kind == "spec" and in_specs and fragment_slug_for_spec(ref_path) == logical.slug:
+        if (
+            logical.kind == "spec"
+            and in_specs
+            and fragment_slug_for_spec(ref_path) == spec_slug(logical.slug)
+        ):
             return logical.anchor
         return None
     try:

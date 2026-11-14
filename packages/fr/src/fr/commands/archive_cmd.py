@@ -32,6 +32,7 @@ from rich.markup import escape
 
 from fr.archive import (
     ArchiveError,
+    GitStatusError,
     MergeEvidence,
     MoveLog,
     SpecSweepResult,
@@ -447,7 +448,11 @@ def _archive_branch_plan(
     hold = outcome_hold(repo_root, report.plan, plan_rel)
     if hold:
         return "\n".join(hold)
-    if paths_dirty(repo_root, target):
+    try:
+        dirty = paths_dirty(repo_root, target)
+    except GitStatusError as e:
+        return str(e)
+    if dirty:
         return "worktree dirty at the plan path — commit or stash first"
     try:
         archive_plan_dir(repo_root, target)
@@ -494,7 +499,11 @@ def _archive_follower(repo_root: Path, a: BranchArtifact) -> Path | str:
     A follower with uncommitted edits is held, as a dirty plan path is:
     `git mv` would stage the rename with the edit folded in (review p2 #4)."""
     live = repo_root / a.path
-    if live.exists() and paths_dirty(repo_root, live):
+    try:
+        dirty = live.exists() and paths_dirty(repo_root, live)
+    except GitStatusError as e:
+        return str(e)
+    if dirty:
         return f"worktree dirty at {a.path} — commit or stash first"
     if a.kind == "journal":
         return _archive_branch_journal(repo_root, a)
@@ -1017,8 +1026,12 @@ def archive_command(
             skipped.append(f"{target.name}: skipped — " + "\n".join(hold))
             continue
 
-        if paths_dirty(repo_root, target):
+        try:
+            dirty = paths_dirty(repo_root, target)
             msg = f"{target.name}: worktree dirty at the plan path — commit or stash first"
+        except GitStatusError as e:
+            dirty, msg = True, f"{target.name}: {e}"
+        if dirty:
             if not all_plans:
                 err_console.print(f"refusing to archive — {msg}")
                 raise typer.Exit(2)

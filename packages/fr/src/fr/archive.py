@@ -66,6 +66,7 @@ __all__ = [
     "find_run_for_plan",
     "landed_for",
     "merge_evidence",
+    "GitStatusError",
     "paths_dirty",
     "recording_moves",
     "spec_archive_sweep",
@@ -359,15 +360,49 @@ class SpecSweepResult:
     notes: tuple[str, ...]
 
 
+class GitStatusError(ArchiveError):
+    """git could not report a path's status: a refusal, never "clean"."""
+
+
+def _checkout_of(repo_root: Path, path: Path) -> Path:
+    """The directory to ask git about *path* from: *repo_root* for a path below it, else
+    the nearest existing directory at or above *path*. Under quiet and stealth an
+    artifact sits in the `fr` worktree or the tracking clone, another working tree (for
+    stealth another repository) than the product checkout, whose git refuses a pathspec
+    outside it (debug journal 2026-11-14-placement-repair-and-design-slug)."""
+    root = Path(repo_root).resolve()
+    if not Path(path).is_absolute():
+        return root  # git reads a relative pathspec against the checkout it runs in
+    anchor = Path(os.path.normpath(path))
+    if anchor.resolve().is_relative_to(root):
+        return root
+    while not anchor.is_dir() and anchor.parent != anchor:
+        anchor = anchor.parent
+    return anchor
+
+
 def paths_dirty(repo_root: Path, *paths: Path) -> bool:
-    """True iff `git status --porcelain` reports changes under any path."""
-    out = subprocess.run(
-        ["git", "-C", str(repo_root), "status", "--porcelain", "--", *map(str, paths)],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    return bool(out.strip())
+    """True iff `git status --porcelain` reports changes under any path, each asked of
+    the checkout that holds it. `GitStatusError` when git cannot answer."""
+    groups: dict[Path, list[str]] = {}
+    for p in paths:
+        p = Path(p)
+        groups.setdefault(_checkout_of(repo_root, p), []).append(str(p))
+    for checkout, group in groups.items():
+        done = subprocess.run(
+            ["git", "-C", str(checkout), "status", "--porcelain", "--", *group],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if done.returncode != 0:
+            raise GitStatusError(
+                f"cannot read the git status of {', '.join(group)} in {checkout}: "
+                f"{(done.stderr or '').strip() or f'git exited {done.returncode}'}"
+            )
+        if done.stdout.strip():
+            return True
+    return False
 
 
 @dataclass
@@ -874,7 +909,11 @@ def outcome_hold(repo_root: Path, plan: Plan, plan_rel: Path) -> list[str]:
     # hold yet (an outcome written on the default branch, where fr never commits)
     # would break the spec sweep's `git mv` half-way. Refuse before any move.
     journal = journal_path(repo_root, "spec", spec_slug_of(spec))
-    if journal.exists() and paths_dirty(repo_root, journal):
+    try:
+        dirty = journal.exists() and paths_dirty(repo_root, journal)
+    except GitStatusError as e:
+        return [str(e)]
+    if dirty:
         rel = journal.relative_to(repo_root).as_posix()
         return [
             f"{rel} holds uncommitted Test Plan outcomes — commit it on a branch "
