@@ -328,3 +328,8 @@ Same defect as l-docs-accuracy-r5, fixed in fa950cb3b.
 ### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: contested plus local-debt double-count guard in acceptance_from_matrix untested
 
 394531162: test_a_contested_local_debt_row_is_counted_once; fails when the guard is removed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-11-14T14:29:51+00:00 state=open resolves=p2-r4 tracked_by=derio-net/super-fr#1454 -->
+### p2-r4-resolved-2 · finding [deferred → derio-net/super-fr#1454] · resolves p2-r4: a fresh deliver tests log is not tied to the tree it ran on, so a commit after the suite still stamps HEAD's tree
+
+Real but not caused by this change (deliver's fresh-log witness has never bound a tree); filed as derio-net/super-fr#1454.
