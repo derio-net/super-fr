@@ -7179,7 +7179,7 @@ batches:
   - super-fr#1202
   rationale: 'Tier 2: cloud doctor reports ok on RC installs; tag without a Release; stray RC tag; cancelled
     dispatch runs; managed-cache leftovers.'
-  wave: 17
+  wave: 18
   skill: debug
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
