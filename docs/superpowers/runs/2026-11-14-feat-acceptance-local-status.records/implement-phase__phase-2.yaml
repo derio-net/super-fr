@@ -52,4 +52,3 @@ resolves:
     state: fixed
     body: "a move into local now plans its level amendments before the set-status (87627d6c9); covered by the deliver amendment test"
 acceptance: []
-evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p2-suite.log}
