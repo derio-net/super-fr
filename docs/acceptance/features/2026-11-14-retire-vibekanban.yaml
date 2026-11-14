@@ -59,6 +59,7 @@ rows:
       int:
       - super-fr:tests/integration/test_install_sh.py#TestVkResidue
       - super-fr:tests/integration/test_runner_package_lists.py#test_install_bridge_names_no_fr_vk
+      - super-fr:tests/integration/test_install_sh.py#TestUninstall::test_removes_vk_from_mcp_config
     status: ci
     notes: 'install.sh over a fixture home: no vibe_kanban entry or VK warning, the
       entry and an fr-written vk-bridge wrapper (default path and VK_BRIDGE_WRAPPER_PATH)
