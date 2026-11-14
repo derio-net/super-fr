@@ -1,0 +1,64 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-14-retire-vibekanban
+repo: derio-net/super-fr
+rows:
+  - id: vk-runner-removed
+    capability: Dispatch
+    acceptance: No `vk` runner is registered or installed, `fr apply --to vk` refuses
+      it as an unknown runner, and no shipped source names fr_vk, fr-vk or vibe_kanban
+      outside the named exceptions
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R1
+    - spec:2026-11-14-retire-vibekanban#R7
+    - spec:2026-11-14-retire-vibekanban#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: dispatch-docs-name-no-vk
+    capability: Dispatch
+    acceptance: The dispatch plugin ships no fr-runner skill, and its skills, plugin
+      manifest and published docs describe no VibeKanban runner
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R6
+    - spec:2026-11-14-retire-vibekanban#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: stale-vk-profile-refused
+    capability: Isolation
+    acceptance: '`fr isolation up` and `rebuild` in devcontainer mode refuse, before
+      starting a container, a profile that installs packages/fr-vk, naming the file
+      and the segment to delete'
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R3
+    - spec:2026-11-14-retire-vibekanban#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: installer-removes-vk-residue
+    capability: Install
+    acceptance: install.sh writes no VK pieces, removes a vibe_kanban MCP entry and
+      an fr-written vk-bridge wrapper when present, and `--install-bridge` refuses naming
+      the removal
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+amendments:
+  - row: stale-vk-profile-refused
+    op: reword
+    base: 0
+    acceptance: Scaffolding and this repo's profiles install no fr-vk, and `fr isolation
+      up` and `rebuild` in devcontainer mode refuse, before starting a container, a
+      profile that installs packages/fr-vk, naming the file and the segment to delete
+    why: spec-review s-r7, the row cites R3 and must state it

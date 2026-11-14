@@ -195,3 +195,13 @@ def test_wrapper_needs_super_fr_in_its_text(tmp_path: Path) -> None:
     kept = tmp_path / "b.sh"
     kept.write_text("# super-fr\n" + DELEGATE)
     assert is_super_fr_validator_wrapper(kept)
+
+
+# --- spec 2026-11-14-retire-vibekanban: the fr-vk package is gone ------------------
+
+
+@pytest.mark.xfail(strict=True, reason="fr-vk still present (P1.T2)")
+def test_no_vk_runner_entry_point() -> None:
+    from importlib.metadata import entry_points
+
+    assert "vk" not in {ep.name for ep in entry_points(group="fr.runners")}

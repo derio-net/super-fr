@@ -1,0 +1,2 @@
+bump: major
+summary: "VibeKanban support removed: the fr-vk package, the `vk` runner, the fr-bridge daemon and install.sh --install-bridge are gone; a devcontainer scaffolded earlier must delete its `--with '…#subdirectory=packages/fr-vk'` segment from postCreateCommand (spec 2026-11-14-retire-vibekanban R11)"

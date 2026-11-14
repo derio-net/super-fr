@@ -1,0 +1,87 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Skills, docs, kept-code wording and the residue tripwire (R6, R7, R8, R10)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - dispatch-docs-name-no-vk
+  tier: standard
+  files:
+  - plugins/super-fr-dispatch/*
+  - packages/fr/src/fr/*
+  - packages/fr-dispatch/src/*
+  - packages/fr-cncd/src/*
+  - scripts/readme-skill-summaries.yaml
+  - README.md
+  - AGENTS.md
+  - HERMES.md
+  - docs/explainers/fr-dispatch.md
+  - docs/reference/*.md
+  - docs/*.md
+  - tests/unit/test_vk_compat_removed.py
+  - tests/unit/test_*skill*.py
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: The residue tripwire, red first (R10)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      [RED] In tests/unit/test_vk_compat_removed.py, add `test_no_vk_residue_in_shipped_sources`. It scans every git-tracked file under packages/*/src, plugins/, scripts/, .devcontainer/, .github/, .fr/, plus the root pyproject.toml and HERMES.md, case-insensitively, for fr_vk, fr-vk, vibe_kanban and vibe.?kanban, and for fr-runner under plugins/, scripts/ and packages/fr/src/fr/commands/. A match passes only if it is in ALLOWED, a literal tuple of (path, line-regex) pairs: the phase-2 needle constant in local.py, the cleanup_vk_residue lines and --install-bridge refusal in install.sh, the uninstall removal, plan_vk_version.py and its registrations, and the vk- vocabulary notes in labels.py/diff.py. Add `test_vk_residue_allowlist_has_no_dead_entries` (every ALLOWED pair matches at least one line), plus a helper-level test that a planted fr_vk line in a tmp tree fails and a planted VibeKanban line under plugins/ fails. Run: RED, listing the residue.
+- number: 2
+  title: Delete fr-runner and fix the dispatch plugin (R6)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      `git rm -r plugins/super-fr-dispatch/skills/fr-runner`. Remove its row from packages/fr/src/fr/commands/skills_cmd.py:78 and scripts/readme-skill-summaries.yaml:18, then run `uv run --no-project python scripts/sync-readme.py`. In plugin.json, drop "(VibeKanban adapter included)" from the description and the `vibekanban` keyword. In fr-dispatch/SKILL.md: replace the "send to VK" trigger with "send to a runner", make the `--to vk` example `--to herdr` (`runner:herdr`), and add one sentence on the up-front `unit_mismatch` refusal (a phase-unit Issue labelled for a runner that never takes that unit is refused by `fr apply --to`). Update any skill test pinning fr-runner. Run `sync-opencode.py --check` and `sync-hermes.py --check`; fr-dispatch has no mirror, so expect no change.
+- number: 3
+  title: Kept-code wording (R7)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Rewrite every docstring, comment and help string that the tripwire flags, or that names VK as a live caller, implementation or example, so that it names no VK. The files: fr_dispatch/{__init__,protocols,registry,metrics,prompt}.py; fr_cncd/{__init__,runner}.py; fr/{_hosts,hostclient,ghclient,real_ghrestclient,real_glabclient,render,parser}.py; fr/workflow/shapes.py; fr/artifacts/commit.py:426; fr/isolation/{local,hostworktree}.py (incl. local.py:1606, :2161-2162); fr/commands/{apply_cmd,undispatch_cmd}.py (`--to vk` help becomes `--to herdr`). Where a comment explains why something exists only for VK, say what now uses it (e.g. URL-only resolution: the triage batch verbs, gate_cmd, release_cmd, cloud). Change no behaviour. If the CLI help moved, run `sync-readme.py` again (docs/reference/cli.md). Run the tripwire: still red only on the docs that T4 fixes, or green.
+- number: 4
+  title: Docs and repo notes (R8), then green
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Retitle docs/explainers/fr-dispatch.md to dispatch alone, rewrite its tldr and any fr-runner/VK passages around the remaining runners, and drop fr-runner/SKILL.md and packages/fr-vk/src/** from `covers:`. Update docs/reference/{components,dispatch-lifecycle,install}.md, README.md and AGENTS.md: remove the fr-vk repo-shape bullet, and rewrite the "Bridge audit rule" to name fr_dispatch.* and the remaining adapters (packages/fr-dispatch/src/, packages/fr-herdr/src/, packages/fr-cncd/src/). Update HERMES.md's remaining VK text. Bump each touched page's `reviewed:` stamp (2026-11-14, note "VK support removed"). Leave docs/superpowers/implemented/, docs/audits/, docs/triage/, CHANGELOG.md and earlier specs and brainstorms alone. Run `uv run fr docs check` (green) and `bash scripts/check-writing-standards.sh` if a pinned blog-craft checkout is at hand; otherwise CI's site-build covers it.
+  - id: P3.T4.S2
+    text: |-
+      [GREEN] The tripwire suite is green. Run `uv run ruff check packages/ tests/`, `ruff format`, the CI mypy command, `uv run fr acceptance check --no-fetch` and the issue's done-when grep (`git grep -niE 'vibe.?kanban|fr_vk|fr-vk' -- ':!docs/superpowers/implemented' ':!docs/audits' ':!docs/triage' ':!CHANGELOG.md' ':!tests/fixtures' ':!tests/scenarios/fixtures'`): every hit is historical or allowlisted. Run the full suite LAST, after the last code commit, into a log outside the repo, and record it as the phase's tests evidence.
+  - id: P3.T4.S3
+    text: |-
+      [REFACTOR] Drop any ALLOWED pair that only matched before the rewording, so the allowlist stays minimal. Tests green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
