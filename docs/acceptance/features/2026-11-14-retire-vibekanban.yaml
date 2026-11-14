@@ -55,9 +55,15 @@ rows:
       the removal
     origin:
     - spec:2026-11-14-retire-vibekanban#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_sh.py#TestVkResidue
+      - super-fr:tests/integration/test_runner_package_lists.py#test_install_bridge_names_no_fr_vk
+    status: ci
+    notes: 'install.sh over a fixture home: no vibe_kanban entry or VK warning, the
+      entry and an fr-written vk-bridge wrapper (default path and VK_BRIDGE_WRAPPER_PATH)
+      removed with one line each, a foreign file kept, --install-bridge exits 2 naming
+      the removal, --uninstall still removes the entry.'
     verify: none
 amendments:
   - row: stale-vk-profile-refused
