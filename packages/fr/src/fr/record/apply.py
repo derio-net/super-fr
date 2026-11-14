@@ -1120,6 +1120,12 @@ class _Amending:
                 planned.append(
                     AmendmentItem(row=item.id, op="drop-level", level=lv, ref=ref, why=why)
                 )
+        if item.status == "local" and old.status != "local":
+            # R2 judges the row the move leaves: its level refs must already be on it when
+            # the `set-status` to `local` is checked, so the level amendments go first.
+            planned = [a for a in planned if a.op != "set-status"] + [
+                a for a in planned if a.op == "set-status"
+            ]
         for amendment in planned:
             self.amend(amendment, write, no_ci)
         new = self.rows[item.id]
