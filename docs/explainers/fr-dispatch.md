@@ -61,7 +61,7 @@ name against the registered runners, and enforces the reachability gate. `--yes`
 Afterwards fr prints the URLs of the issues it created. It stages the `tracking_issue`
 line into each affected phase file.
 
-Commit and push it, and name the issue URLs in the
+Commit and push that change, and name the issue URLs in the
 commit body. Then the runner's checkout can see them, and you have a trail if a dispatch
 turns out to be wrong.
 
