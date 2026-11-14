@@ -75,6 +75,18 @@ def test_repo_a_same_spec_correction_keeps_the_row_in_its_fragment(
     assert "moved" not in res.output
 
 
+def test_repo_a_moved_row_says_where_it_went(tmp_path: Path, monkeypatch) -> None:
+    """F9: the CLI line says the row moved, not only "corrected in place"."""
+    root = merged_repo(tmp_path)
+    _add_pending(root, monkeypatch, "--origin", "spec:2026-03-03-typo#R1")
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "p", "--op", "reword",
+        "--origin", f"spec:{SLUG_A}#R1", "--why", "w",
+    )  # fmt: skip
+    assert res.exit_code == 0, res.output
+    assert f"moved to {FRAGMENTS_REL}/{SLUG_A}.yaml" in " ".join(res.output.split())
+
+
 def test_repo_a_line_anchored_origin_is_refused(tmp_path: Path, monkeypatch) -> None:
     """F4: `add` refuses a `#L<n>` origin, so the correction does too."""
     root = merged_repo(tmp_path)

@@ -639,7 +639,7 @@ def _apply_rows(
     repo: str | None = None,
     amend_feature: str | None = None,
     origins: dict[str, tuple[str, ...]] | None = None,
-) -> None:
+) -> Any:
     """A one-entry record through the step-record engine (spec 2026-09-25
     §5.C.6): the fragment edit, one commit holding only the fragment.
     `amend_feature` is the fragment an amendment is written to (R16).
@@ -670,6 +670,7 @@ def _apply_rows(
     for notice in outcome.notices:
         if notice.startswith("warning"):
             err_console.print(f"[yellow]{notice}[/yellow]")
+    return outcome
 
 
 def _check_set_status_form(
@@ -1034,16 +1035,20 @@ def amend_cmd(
     except ValueError as e:
         err_console.print(f"[red]error:[/red] {escape(str(e))}; nothing changed")
         raise typer.Exit(2) from e
-    _apply_rows(
+    outcome = _apply_rows(
         root,
         item,
         f"chore(fr): acceptance — {'correct' if origin else 'amend'} {row_id} ({op})",
         amend_feature=None if origin else resolve_feature(root, feature),
         origins={row_id: tuple(origin)} if origin else None,
     )
-    typer.echo(
-        f"{row_id}: origin corrected in place" if origin else f"{row_id}: {op} amendment written"
-    )
+    if origin:
+        # The engine's own line: the old and new origins, and where the row moved to
+        # when its origin names another spec (review F9).
+        said = next((n for n in outcome.notices if n.startswith(f"{row_id}: origin ")), None)
+        typer.echo(said or f"{row_id}: origin corrected in place")
+    else:
+        typer.echo(f"{row_id}: {op} amendment written")
 
 
 def _rebase(root: Path) -> None:
