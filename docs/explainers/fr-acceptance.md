@@ -112,7 +112,7 @@ commands fr prints for one (the walk close-out, `fr gate pass --keep`, deliver's
 link) name that feature's `--feature` for you. An agent's step record says the same thing
 with an `acceptance:` entry `{row, op, why, ...}`.
 
-Each amendment records the **revision** of the row that it amends: how many
+Each amendment records the **revision** of the row it was written against: how many
 amendments the row had then. If another feature amends the row and merges first, your
 amendment's base is stale. `fr acceptance check` and `deliver` fetch the default branch
 and refuse it (exit 2), and name both revisions.
