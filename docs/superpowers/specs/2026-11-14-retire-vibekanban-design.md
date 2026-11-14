@@ -152,7 +152,9 @@ earlier specs and brainstorms.
 
 R9. Acceptance rows whose capability is VK-only are retired by amendment. Rows that also
 cover a surviving capability drop their VK level refs by amendment. No row cites a deleted
-test.
+test. A row retired by amendment still cites its origin for the
+staleness guard and for `fr acceptance backfill`: the retirement is that Test Plan's recorded
+outcome, so a spec whose every row is retired is not uncited.
 
 R10. A tripwire test fails when `fr_vk`, `fr-vk`, `vibe_kanban` or `VibeKanban`
 (case-insensitive) appears in shipped sources: `packages/*/src`, `plugins/`, `scripts/`,

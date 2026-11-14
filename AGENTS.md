@@ -455,7 +455,7 @@ watch-list tripwire) until it is either named in `ci-budget.yml`'s
 `-n auto` is ~6x faster than serial (~150 s vs ~870 s on a 12-core host).
 A test that passes serially but fails under `-n auto` is order-dependent or
 wall-clock-tight, not an xdist bug: reset process-global state in an autouse
-fixture in `tests/conftest.py` (see `_fresh_vk_repo_cache`) rather than
+fixture in `tests/conftest.py` (see `_fresh_forge_policy_cache`) rather than
 pinning tests to one worker.
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,

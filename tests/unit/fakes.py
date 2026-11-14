@@ -513,13 +513,3 @@ class FakeGhClient:
         for lbl in labels:
             name = lbl if isinstance(lbl, str) else lbl.name
             bag.add(name)
-
-
-def forge_of(client: object) -> str:
-    """The forge a real `GhClient` adapter targets, for asserting on the
-    resolved client a seam now passes instead of a backend string (gh#490)."""
-    return {
-        "RealGhClient": "github",
-        "RealGlabClient": "gitlab",
-        "RealTeaClient": "gitea",
-    }[type(client).__name__]
