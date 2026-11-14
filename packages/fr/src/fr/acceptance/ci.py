@@ -106,3 +106,23 @@ def ci_reason(root: Path) -> str | None:
 
 def ci_active(root: Path) -> bool:
     return ci_reason(root) is None
+
+
+def ci_unknown(root: Path) -> str | None:
+    """Why fr cannot tell whether this repo has CI (its services declaration does not
+    resolve), or None when it can. `ci_reason` reads that state as "no CI", which fails
+    closed for `ci`; status `local` (spec 2026-11-14-acceptance-local-status R3) needs
+    the opposite answer, so it asks this first and fails closed too."""
+    from fr.services.model import ServicesError
+    from fr.services.resolve import resolve_services
+
+    try:
+        resolve_services(root)
+    except ServicesError as exc:
+        return f"{exc} (see `fr services`)"
+    return None
+
+
+def ci_known_none(root: Path) -> bool:
+    """True only when fr KNOWS this repo has no CI: R3 and R6 offer `local` then."""
+    return ci_unknown(root) is None and not ci_active(root)

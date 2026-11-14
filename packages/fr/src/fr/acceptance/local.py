@@ -16,6 +16,7 @@ from fr.acceptance.model import LEVELS, AcceptanceError, Row, same_repo, split_r
 PROMOTE = "promote to ci"
 UNSTAMPED = "unstamped"
 HEAD_UNREADABLE = "stale: HEAD unreadable"
+CI_UNKNOWN = "ci unknown: fix .devcontainer/fr-profiles.yaml (fr services)"
 
 
 def level_ref_paths(row: Row) -> tuple[str, ...]:
@@ -149,8 +150,13 @@ def local_error(row: Row, root: Path, *, own: str | None = None) -> str | None:
             )
         if (why := ref_problem(row.id, ref, root)) is not None:
             return f"{why} — status local needs every level ref to name an existing test"
-    from fr.acceptance.ci import ci_active
+    from fr.acceptance.ci import ci_active, ci_unknown
 
+    if (unknown := ci_unknown(root)) is not None:
+        return (
+            f"row {row.id}: status local is for a repo with no CI, and fr cannot tell "
+            f"whether this one has CI: {unknown}"
+        )
     if ci_active(root):
         return (
             f"row {row.id}: status local is for a repo with no CI, and this repo has CI — "
@@ -165,8 +171,11 @@ def local_reasons(rows: Iterable[Row], product_root: Path) -> dict[str, str]:
     local = [r for r in rows if r.status == "local"]
     if not local:
         return {}
-    from fr.acceptance.ci import ci_active
+    from fr.acceptance.ci import ci_active, ci_unknown
 
+    if ci_unknown(product_root) is not None:
+        # Unknown is debt, never fresh: a `local` row is honest only where there is no CI.
+        return {r.id: CI_UNKNOWN for r in local}
     return local_debt(local, product_root, ci_active=ci_active(product_root))
 
 

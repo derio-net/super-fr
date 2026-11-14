@@ -524,9 +524,11 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
         )
         fix = f"{gate}  — or —  {issue}" if tracker else gate
         if no_ci is None:
-            from fr.acceptance.ci import ci_active
+            from fr.acceptance.ci import ci_known_none
 
-            no_ci = not ci_active(repo_root)
+            # Only where fr KNOWS there is no CI: an unreadable declaration offers no
+            # `local`, which every writer would refuse (lens docs-accuracy r5).
+            no_ci = ci_known_none(repo_root)
         if no_ci:
             # Spec 2026-11-14-acceptance-local-status R6: with no CI, a row a test
             # verifies is `local`, earned at this deliver; the gate stays for the rest.

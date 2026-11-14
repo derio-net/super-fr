@@ -191,3 +191,32 @@ def _rows(root: Path):
 
     clear_fold_cache()
     return load_effective(root).rows
+
+
+# --- lens docs-accuracy r5: CI that fr cannot read is not "no CI" -----------------------
+
+BROKEN_SERVICES = "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\nci: {type: bogus}\n"
+
+
+def _break_services(root: Path) -> None:
+    (root / ".devcontainer").mkdir(exist_ok=True)
+    (root / ".devcontainer" / "fr-profiles.yaml").write_text(BROKEN_SERVICES)
+    commit_all(root, "broken services")
+
+
+def test_local_is_refused_while_fr_cannot_tell_whether_the_repo_has_ci(no_ci: Path) -> None:
+    _break_services(no_ci)
+    before = _acceptance_files(no_ci)
+    out = _fr("set-status", "--id", "target", "--status", "local", "--notes", "n")
+    assert out.exit_code == 2, out.output
+    assert "fr-profiles.yaml" in out.output and "fr services" in out.output
+    assert _acceptance_files(no_ci) == before
+
+
+def test_a_local_row_is_debt_while_fr_cannot_tell_whether_the_repo_has_ci(no_ci: Path) -> None:
+    from fr.acceptance.local import local_reasons
+
+    _stamped(no_ci)
+    _break_services(no_ci)
+    reasons = local_reasons(_rows(no_ci), no_ci)
+    assert reasons["target"].startswith("ci unknown")

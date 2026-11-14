@@ -373,3 +373,18 @@ def test_the_gate_refuses_a_close_over_an_unanswered_narrowing(
         run_cmd._refuse_premature_closes(root, load_run_state(root, RUN), "Closes #4\n")
     err = capsys.readouterr().err.replace("\n", " ")
     assert "d1" in err and "Refs o/proj#4" in err
+
+
+def test_an_unreadable_ci_declaration_offers_no_local(tmp_path: Path) -> None:
+    """Lens docs-accuracy r5: `local` is offered only when fr KNOWS the repo has no CI;
+    a services file it cannot read fails closed, as `ci` does."""
+    root = _repo(tmp_path, rows={"owed-row": None})
+    _rows(root, [{"id": "owed-row", "status": "unwired"}])
+    (root / ".devcontainer").mkdir()
+    (root / ".devcontainer/fr-profiles.yaml").write_text(
+        "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\nci: {type: bogus}\n"
+    )
+    _journal(root, *_out_of_scope(), _owed(), _narrowing())
+    _commit(root)
+
+    assert "--status local" not in _row_fix(root, "owed-row")
