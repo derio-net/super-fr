@@ -1,0 +1,123 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-13-writing-standards-docs
+repo: derio-net/super-fr
+rows:
+  - id: writing-standards-docs-groups
+    capability: published-docs
+    acceptance: 'Each published page is held to its group''s writing standard: guides
+      and reference to STE, explainers to plain language, why-fr to Elements of Style,
+      the landing page to none.'
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R1
+    - spec:2026-11-13-writing-standards-docs#R2
+    - spec:2026-11-13-writing-standards-docs#R3
+    - spec:2026-11-13-writing-standards-docs#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_the_script_maps_each_group_to_its_standard
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_only_the_three_exceptions_carry_a_writing_standard_key
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: ci
+    notes: Mapping, exceptions and the page set each group sends are unit-tested; the
+      real blog-craft checker runs in site-build (terms file read, FAIL fails the script).
+    verify: none
+  - id: writing-standards-docs-ci-gate
+    capability: published-docs
+    acceptance: A pull request that leaves a published page failing its writing standard
+      fails CI, against the pinned blog-craft checker, and every page still renders.
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R5
+    - spec:2026-11-13-writing-standards-docs#R6
+    - spec:2026-11-13-writing-standards-docs#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_site_build_checks_the_writing_standards_after_the_build
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: ci
+    notes: site-build runs scripts/check-writing-standards.sh against the pinned blog-craft
+      after the build, then the real-checker test; green on the PR head.
+    verify: none
+  - id: writing-standards-docs-guides
+    capability: published-docs
+    acceptance: Every guide and reference page reads to STE with every fact, command,
+      link and number of the previous version kept.
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R7
+    - spec:2026-11-13-writing-standards-docs#R8
+    - spec:2026-11-13-writing-standards-docs#R9
+    levels:
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: manual
+    notes: 'The STE standard is enforced on every guide and reference page by site-build''s
+      check (ci). That every fact, command, link and number was kept is a per-rewrite
+      human-or-agent comparison, never automatable: one blind fact-keeper per page plus
+      a phase review, recorded in the plan journal (p2-fact-keeper, p3-fact-keeper).'
+    verify: none
+  - id: writing-standards-docs-explainers
+    capability: published-docs
+    acceptance: Every explainer reads to plain language (why-fr to Elements of Style)
+      with every fact, command, link and number kept, and any remaining warning justified.
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R7
+    - spec:2026-11-13-writing-standards-docs#R8
+    - spec:2026-11-13-writing-standards-docs#R9
+    levels:
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: manual
+    notes: 'Plain language (why-fr: Elements of Style) is enforced on every explainer
+      by site-build''s check (ci); kept warnings are journaled with reasons. Fact preservation
+      was proven per page by blind fact-keepers and phase reviews (p4-, p5-, p6-fact-keeper),
+      a process that is never automatable.'
+    verify: none
+  - id: writing-standards-docs-authoring-rule
+    capability: published-docs
+    acceptance: An author editing a published page can find which standard it follows
+      and run the same check CI runs.
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_the_authoring_rule_says_how_a_page_stays_accurate
+    status: ci
+    notes: The explainers-currency rule names each group's standard and the script CI
+      runs; its accuracy paragraph is pinned by the unit test.
+    verify: none
+  - id: writing-standards-docs-accuracy
+    capability: published-docs
+    acceptance: 'Every published page says what the code does: each claim was checked
+      against the code it covers, and each wrong or stale one was corrected or shown
+      true, with evidence.'
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R13
+    - spec:2026-11-13-writing-standards-docs#R14
+    levels: {}
+    status: manual
+    notes: 'Every published page was reviewed claim by claim against the code it covers
+      before its rewrite; each wrong or stale claim was corrected in its own docs(<page>):
+      correct commit or refuted with evidence (plan journal p*-acc-* discoveries), and
+      the docs-accuracy lens re-checked the whole change. Staying accurate is the docs-accuracy
+      lens''s job on every later PR.'
+    verify: none
+  - id: writing-standards-docs-accuracy-lens
+    capability: published-docs
+    acceptance: Every later change to a published page, made through an fr-goal run,
+      gets a review of that page against the code, so pages stay accurate.
+    origin:
+    - spec:2026-11-13-writing-standards-docs#R15
+    - spec:2026-11-13-writing-standards-docs#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_the_docs_accuracy_lens_is_required_for_every_published_page
+    status: ci
+    notes: docs-accuracy lens and its path rule over the three page globs pinned; fr
+      lenses check passes and the lens ran in this PR's lens review.
+    verify: none

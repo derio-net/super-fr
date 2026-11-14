@@ -19,23 +19,23 @@ covers:
 reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
-## Overview: judgement in a file, engine around it
+## Why keep the judgement in a file, with an engine around it?
 
 Triage is two jobs. One is mechanical: fetch the issues, notice what changed, draw the
 page. The other needs judgement: which issue costs most if ignored, which two are the same
 bug, which five belong in one change. fr splits them cleanly. The **engine**, `fr triage`,
 does the mechanical job and is the same on every harness. The **skill** holds only the
-discipline for the judging, and your judgements are written to a file the engine reads.
+discipline for the judging, and you write your judgements to a file the engine reads.
 
 The consequence is cheap sync. A second triage is the same loop, and `check` names only
 what arrived, shipped or went missing since your last pass, so nothing is re-judged.
 
-You reach for it when you are asked to triage, rank or organise the open issues of a repo
-or a whole organisation, want a board of "what next", or want to refresh a triage you did
-before. You reach for **fr-origins** when the question is where recent bugs came from and
+You reach for it when someone asks you to triage, rank or organise the open issues of a
+repo or a whole organisation. You also reach for it to get a board of "what next", or to
+refresh a triage you did before. You reach for **fr-origins** when the question is where recent bugs came from and
 which process change would have prevented them.
 
-## A worked example
+## What does a worked example look like?
 
 ```bash
 fr triage collect --repo example-org/example-repo
@@ -81,7 +81,7 @@ fr triage batch create merged-trust --repo example-org/example-repo --title "Sto
     --issue "example-repo#435" --issue "example-repo#469"
 ```
 
-## State: three files, three owners
+## Which files hold the state, and who writes them?
 
 Everything lives in the scope's state directory: `.fr/triage-state/<scope>/` in a clone,
 `~/.cache/fr/triage/<scope>/` outside one. A scope is `owner--repo` for `--repo`, or the
@@ -93,12 +93,12 @@ owner for `--org`; `--repo A/B,C/D` is a group.
 | `judgements.yaml` | **you**, plus the `batch` verbs | tiers, rankings, kinds, patterns, batches |
 | `triage.html`, `board.html` | `render`, `board` | the pages |
 
-Never write the facts yourself. State is not committed; its durable copy is an orphan
-branch, `refs/heads/fr-triage/<scope-id>`, which fr fetches before reading and pushes after
+Never write the facts yourself. fr does not commit the state by default; its durable copy
+is an orphan branch, `refs/heads/fr-triage/<scope-id>`, which fr fetches before reading and pushes after
 every change. `fr triage state export --to <dir>` and `import --from <dir>` copy it to and
 from a repo.
 
-## What `check` tells you
+## What does `check` tell you?
 
 It always exits 0 and prints sets, not verdicts:
 
@@ -112,11 +112,11 @@ It always exits 0 and prints sets, not verdicts:
   that went quiet, issues waiting on a post-merge walk, issues in no batch, and pairs the
   engine proposes as duplicates. A proposal is not a verdict: you judge every group.
 
-Open pull requests are triaged in the same loop. Each carries an intent anchor, the thing
-that says what the PR is for (the issue it closes, a spec, a debug journal, or none), and you mark it `delivers`, `partial`, `drift` or
-`unanchored` with one line. It is shallow by design: never a code review.
+You triage open pull requests in the same loop. Each carries an intent anchor, the thing
+that says what the PR is for: the issue it closes, a spec, a debug journal, or none. You mark
+it `delivers`, `partial`, `drift` or `unanchored` with one line. It is shallow by design: never a code review.
 
-## How to judge
+## How do you judge?
 
 1. **Tier by what the failure costs**: lost work first, then a failure that looks like
    success, then friction. Never by age, label, reporter or how loud the issue is.
@@ -133,10 +133,10 @@ that says what the PR is for (the issue it closes, a spec, a debug journal, or n
 
 Quote every title and note in the YAML: an unquoted `: ` breaks the file.
 
-## Batches and the driver
+## What are batches and the driver?
 
-A **batch** is a group of judged issues delivered as one [fr-goal](01-fr-goal.md) run and
-one pull request. The `fr triage batch` verbs are `list`, `create`, `edit`, `cancel`,
+A **batch** is a group of judged issues delivered as one [fr-goal](01-fr-goal.md) run (an
+fr-debugging run for a batch created or edited with `--skill debug`) and one pull request. The `fr triage batch` verbs are `list`, `create`, `edit`, `cancel`,
 `suggest` (candidate groupings; input, never the answer), `dispatch`, `adopt`, `merge`,
 `closeout`, `drive`, `replace` and `focus`. `dispatch`, `merge` and `cancel` write to the
 forge only with `--yes`; without it they print the plan.
@@ -146,17 +146,21 @@ may run at the same time; a batch names the wave it belongs to, or the batch it 
 `after`. The driver merges ready pull requests one after another in a fixed order (a merge
 train), closes out what has landed, and dispatches what may start. Merging a batch
 pull request needs the operator's `approved-fr` label. The driver never approves its own
-work. `fr triage board` draws `board.html`, a Kanban of every batch by lifecycle column, with
-four "Needs you" lanes (developer, reviewer, tester, devops) decided from the run's cursor
-and the merged PR's gate labels, never from a session's status. On a wide screen a column
+work.
+
+`fr triage board` draws `board.html`, a Kanban of every batch by lifecycle column. It has
+four "Needs you" lanes (developer, reviewer, tester, devops), which the board decides from
+the run's cursor and the merged PR's gate labels, never from a session's status. On a wide
+screen a column
 with no cards folds to a narrow strip with its title turned on its side, so the columns that
 hold cards get the room.
 
 Several scopes can work one repo, so a scope **claims** each issue it plans to act on with an
 `fr:claimed` label and a marker comment. Another scope's claim is hands-off. Taking one over
-(`fr triage claim take`) or releasing it is the operator's call, never yours. Runners, restarts
-and the cloud driver are covered in the [herdr guide](../herdr-control-sessions.md) and the
-[cloud guide](../cloud-setup.md). [The wave driver](fr-wave-driver.md) walks through what one pass does and where you act.
+(`fr triage claim take`) or releasing it is the operator's call, never yours. The
+[herdr guide](../herdr-control-sessions.md) and the [cloud guide](../cloud-setup.md) cover
+runners, restarts and the cloud driver. [The wave driver](fr-wave-driver.md) walks through
+what one pass does and where you act.
 
 ## fr-origins: where did the bugs come from?
 
@@ -170,8 +174,8 @@ fr triage origins render  --repo example-org/example-repo
 ```
 
 `collect` writes `origins-facts.json`; you write `origins.yaml`, one classification per
-issue; `render` builds `origins.html`. A window wider than one page is refused, naming a
-`--since` it does cover. The categories describe what the defect *is*, not who noticed it:
+issue; `render` builds `origins.html`. Collect refuses a window wider than one page, and
+names a `--since` that the page does cover. The categories describe what the defect *is*, not who noticed it:
 
 - **latent**: always there, nothing changed it;
 - **regression**: a change broke something that worked, and you can name the pull request;
@@ -185,17 +189,18 @@ regression with no `pr:` is invalid, and one bad entry makes every verb that rea
 exit 2. Read the body and the code; a title is a hypothesis. The page ends with `causes:`,
 each linked to the batch that addresses it and a one-line process change.
 
-## Limits
+## What does triage not do?
 
 - The engine ranks nothing. Every tier is your judgement.
 - `check` is as current as the last `collect`.
-- Pages are rewritten on each render; hand-written analysis goes in the fragments listed in
+- Each render rewrites the pages; hand-written analysis goes in the fragments listed in
   each page's `manifest.yaml`, never in an edited page.
 - Keep state and pages local for any repo that is not yours. A privacy guard refuses to
   batch a private repo's issue into a scope whose state repo is public.
 
-## Where to go next
+## Where do you go next?
 
-- [fr-goal](01-fr-goal.md) is the run a batch becomes.
+- [fr-goal](01-fr-goal.md) is the run a batch becomes (fr-debugging for a batch created
+  with the debug skill).
 - [fr-audit](fr-audit.md) draws the architecture page and the cost of a run.
 - [fr-acceptance](fr-acceptance.md) covers the post-merge walks that keep an issue open.

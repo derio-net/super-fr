@@ -8,24 +8,25 @@ covers:
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
 reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+writing_standard: none
 ---
 
 # The fr command line
 
 `fr` is the engine behind the skills: plans, isolation, the run cursor, the acceptance
 matrix, triage and the rest. You rarely type it for a normal feature, because the skills
-call it for you, but every step they take is a plain command you can run yourself. Add
-`--help` to any command for its flags.
+call it for you. But every step that they take is a plain command that you can run
+yourself. Add `--help` to any command for its flags.
 
-Inside a clone of this repo, run `uv run fr ...` so you get the CLI of the code you are
-reading rather than whatever was installed globally.
+Inside a clone of this repo, run `uv run fr ...`. Then you get the CLI of the code that you
+read, not the one that was installed globally.
 
 ## The ones you will meet first
 
 | Command | What it does |
 |---|---|
 | `fr isolation up --branch <b>` | Create the isolated workspace for a branch. See [fr-isolation](../explainers/fr-isolation.md). |
-| `fr isolation exec -- <cmd>` | Run a build, test or lint command inside that workspace's container. |
+| `fr isolation exec -- <cmd>` | Run a build, test or lint command inside that workspace: in its container in devcontainer mode, in the workspace's checkout in the docker-less modes. |
 | `fr status` | Read-only report on every plan: phases, steps, tracking issues. Never writes. |
 | `fr apply <plan>` | Mirror a plan to tracking issues. Dry run unless you add `--yes`; `--to <runner>` also queues its phases. See [dispatch](../explainers/fr-dispatch.md). |
 | `fr acceptance status` | The open acceptance debt in one screen. See [the acceptance matrix](acceptance-matrix.md). |
@@ -33,26 +34,30 @@ reading rather than whatever was installed globally.
 | `fr docs check` | Fail when code a page covers changed and the page did not. See [docs currency](../docs-currency.md). |
 | `fr archive` | Move finished plans and their specs under `implemented/`. |
 
-Commands that write to the forge or rewrite many files at once (`fr apply`, `fr repair`,
-`fr migrate`, `fr undispatch`, `fr repos sync`) preview by default and say what they would
-do; add `--yes` to apply. Commands that make one named change (`fr plan create`,
+Some commands write to the forge or rewrite many files at once (`fr apply`, `fr repair`,
+`fr migrate`, `fr undispatch`, `fr repos sync`). They preview by default and say what they
+would do. Add `--yes` to apply. Commands that make one named change (`fr plan create`,
 `fr plan edit`, `fr acceptance add`, `fr acceptance set-status`, `fr isolation up`) act at
 once. `fr skills` prints a short map of the skills and the commands each one drives.
 
 
-## Moving between placements
+## Move between placements
 
 `fr placement move --to repo|quiet|stealth [--tracking <repo>@<branch>]` moves a whole
-repository's fr files to another placement: copy, verify (files, acceptance fold and
-`fr validate artifacts` must agree), switch, remove. Each step is idempotent and the
-state lives under the git directory, so re-running the same command after an
-interruption finishes the move. It refuses while any workspace has uncommitted work, it
-never force-pushes, and out of `repo` it removes the files through a pushed branch and a
-printed `fr pr create` command. `--run <id>`, in a stealth workspace, moves that one run.
-A branch left under the old placement is refused by every fr command, `fr push`,
-`deliver` and `fr validate artifacts` until `fr placement migrate-branch`, run in its
-workspace, moves its files (one commit on each side, both pushed). Nothing else migrates
-it, CI included.
+repository's fr files to another placement. It copies, checks (files, acceptance fold and
+`fr validate artifacts` must agree), switches and removes. Each step is idempotent, and the
+state lives under the git directory. So if the move stops, the same command run again
+finishes it.
+
+The move does not start while any workspace has uncommitted work, and it never
+force-pushes. Out of `repo`, it removes the files through a pushed branch and a printed
+`fr pr create` command. `--run <id>`, in a stealth workspace, moves that one run.
+
+A branch left under the old placement is stopped by fr's CLI-entry gate, `fr push`,
+`deliver` and `fr validate artifacts`. The gate covers every command except the read-only
+ones, `fr migrate` and `fr placement`. This continues until `fr placement migrate-branch`,
+run in its workspace, moves its files (one commit on each side, both pushed). Nothing else
+migrates it, CI included.
 
 ## Every command
 
@@ -252,5 +257,5 @@ one artifact kind.
   - `fr pr create`: Open this run's PR as a draft and record it on the run cursor.
 <!-- /generated:cli-tree -->
 
-The list above is generated from the command tree by `scripts/sync-readme.py`; a test fails
-when it is stale, so it cannot drift from the code.
+`scripts/sync-readme.py` generates the list above from the command tree. A test fails when
+the list is stale, so it cannot drift from the code.

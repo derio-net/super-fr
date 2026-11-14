@@ -39,6 +39,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - scripts/release.py
 reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+writing_standard: none
 ---
 
 ## How a run goes
