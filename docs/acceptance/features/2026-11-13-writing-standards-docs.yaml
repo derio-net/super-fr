@@ -100,8 +100,12 @@ rows:
     - spec:2026-11-13-writing-standards-docs#R13
     - spec:2026-11-13-writing-standards-docs#R14
     levels: {}
-    status: not-implemented
-    notes: per-page accuracy reviews owed (phases 2-6)
+    status: manual
+    notes: 'Every published page was reviewed claim by claim against the code it covers
+      before its rewrite; each wrong or stale claim was corrected in its own docs(<page>):
+      correct commit or refuted with evidence (plan journal p*-acc-* discoveries), and
+      the docs-accuracy lens re-checked the whole change. Staying accurate is the docs-accuracy
+      lens''s job on every later PR.'
     verify: none
   - id: writing-standards-docs-accuracy-lens
     capability: published-docs
