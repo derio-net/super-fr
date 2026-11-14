@@ -39,9 +39,14 @@ rows:
     origin:
     - spec:2026-11-14-retire-vibekanban#R3
     - spec:2026-11-14-retire-vibekanban#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_vk_profile.py
+      - super-fr:tests/unit/test_vk_compat_removed.py
+    status: ci
+    notes: 'Refusal in the shared _devcontainer_up path; up (workspace recorded, no
+      container), rebuild, a customised postCreateCommand, a clean profile and an absent
+      config pinned with a fake runner. Scaffold/this repo''s profiles: phase 1 (test_vk_compat_removed).'
     verify: none
   - id: installer-removes-vk-residue
     capability: Install
