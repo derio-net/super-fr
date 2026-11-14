@@ -1,0 +1,63 @@
+# The 14 subsystems of the 2026-10-02 hand-built architecture page, as engine input.
+# "then" is v4.14.3, the last release before 2026-09-22 (the triage window's start).
+subsystems:
+  - name: run engine & deliver gates
+    path: ["packages/fr/src/fr/run/*", "packages/fr/src/fr/workflow/*", "packages/fr/src/fr/commands/run_cmd.py", "packages/fr/src/fr/proportionality.py"]
+    then_ref: v4.14.3
+    themes: [run-evidence-gates, run-contracts, gate-provenance, requirements-trace, ui-evidence, release-gate]
+  - name: step records
+    path: ["packages/fr/src/fr/record/*"]
+    then_ref: v4.14.3
+    themes: [step-records]
+  - name: skills & agents
+    path: ["plugins/super-fr/skills/*", "plugins/super-fr/agents/*", "plugins/super-fr/workflows/*"]
+    then_ref: v4.14.3
+    themes: [plan-sizing, opencode-dispatch, output-tone, filing, documentation]
+  - name: usage & audit
+    path: ["packages/fr/src/fr/usage/*", "packages/fr/src/fr/commands/usage_cmd.py"]
+    then_ref: v4.14.3
+    themes: [usage-capture, cost-measurement, telemetry-evidence]
+  - name: isolation
+    path: ["packages/fr/src/fr/isolation/*", "packages/fr/src/fr/commands/isolation_cmd.py"]
+    then_ref: v4.14.3
+    themes: [isolation-lifecycle, isolation-reap, isolation-scaffold, isolation-enforcement, isolation, isolation-branch-selection, worktree-compatibility, git-seam]
+  - name: harness parity & hooks
+    path: ["packages/fr/src/fr/harness/*", "plugins/super-fr/hooks/*", "packages/fr-opencode-plugin/src/*"]
+    then_ref: v4.14.3
+    themes: [harness-neutrality, harness-parity, harness-conformance, harness-maintainability, statusline, codex-adapter]
+  - name: plan ops & archive
+    path: ["packages/fr/src/fr/plan/*", "packages/fr/src/fr/plan_ops.py", "packages/fr/src/fr/archive.py", "packages/fr/src/fr/closeout.py", "packages/fr/src/fr/commands/plan_cmd.py", "packages/fr/src/fr/commands/archive_cmd.py", "packages/fr/src/fr/commands/status_cmd.py"]
+    then_ref: v4.14.3
+    themes: [plan-scaffold, plan-shape, plan-tooling, plan-reviewability, archive-workflow, archive-safety, archive-hygiene, closeout, spec-refs]
+  - name: dispatch & runners
+    path: ["packages/fr-dispatch/src/*", "packages/fr-vk/src/*", "packages/fr-cncd/src/*", "packages/fr-herdr/src/*"]
+    then_ref: v4.14.3
+    themes: [runner-dispatch, herdr-runner, bridge-observability]
+  - name: acceptance matrix
+    path: ["packages/fr/src/fr/acceptance/*", "packages/fr/src/fr/commands/acceptance_cmd.py"]
+    then_ref: v4.14.3
+    themes: [acceptance-evidence, acceptance-editing, acceptance, acceptance-debt, live-evidence]
+  - name: triage & wave driver
+    path: ["packages/fr/src/fr/triage/*", "packages/fr/src/fr/commands/triage_*"]
+    then_ref: v4.14.3
+    themes: [triage, triage-batches, triage-board, triage-drive, driver-trust]
+  - name: journal
+    path: ["packages/fr/src/fr/journal/*", "packages/fr/src/fr/commands/journal_cmd.py"]
+    then_ref: v4.14.3
+    themes: [journal, journal-integrity]
+  - name: install, CI & test suite
+    path: ["scripts/install.sh", "tests/*", ".github/workflows/*"]
+    then_ref: v4.14.3
+    themes: [ci, test-flake, test-tripwire, test-isolation, ci-security, installer-lifecycle, install-env]
+  - name: release & versioning
+    path: ["scripts/changes.py", "scripts/release.py", "scripts/version_surfaces.py", "scripts/bump-version.py", "scripts/check-change-fragment.py"]
+    then_ref: v4.14.3
+    themes: [release, fr-version]
+  - name: models & forges
+    path: ["packages/fr/src/fr/models.py", "packages/fr/src/fr/tracker/*", "packages/fr/src/fr/services/*", "packages/fr/src/fr/gh.py", "packages/fr/src/fr/ghclient.py", "packages/fr/src/fr/glab.py", "packages/fr/src/fr/tea.py", "packages/fr/src/fr/hostclient.py", "packages/fr/src/fr/real_*client.py"]
+    then_ref: v4.14.3
+    themes: [model-bindings, forge-adapter, forge-parity, self-hosted-forge, cli-diagnostics]
+  - name: artifact framework
+    path: ["packages/fr/src/fr/artifacts/*"]
+    then_ref: v4.14.3
+    themes: []
