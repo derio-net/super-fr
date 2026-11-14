@@ -7065,6 +7065,18 @@ batches:
     #1225 is the host overload parallel sessions cause.'
   wave: 15
   skill: debug
+- id: guard-trust
+  title: Guards that switch off or trust the wrong binary
+  ids:
+  - super-fr#1277
+  - super-fr#1429
+  - super-fr#1230
+  - super-fr#1279
+  - super-fr#1259
+  rationale: 'Tier 2: the edit gate silently off after archiving the last plan; relative PATH and cwd
+    trusted by hooks and spawned python. Guard change: needs an independent adversarial review before
+    merge.'
+  wave: 16
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
