@@ -7110,6 +7110,16 @@ batches:
     still files issues; archive gets a dry run. journal_cmd.py, archive_cmd.py.'
   wave: 16
   bump: minor
+- id: workspace-identity
+  title: Workspace identity
+  ids:
+  - super-fr#1419
+  - super-fr#1166
+  - super-fr#1243
+  rationale: 'Tier 2: branch_slug not injective; resume backend from env not the recorded mode; scaffold
+    names secrets after the worktree folder.'
+  wave: 17
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
