@@ -7140,6 +7140,17 @@ batches:
     dispatch runs; managed-cache leftovers.'
   wave: 17
   skill: debug
+- id: acceptance-edits
+  title: Acceptance edits and artifact adoption
+  ids:
+  - super-fr#1439
+  - super-fr#1394
+  - super-fr#1390
+  - super-fr#1154
+  - super-fr#1219
+  rationale: '#1394 must restore the 33 overwritten row notes, not only stop new damage (origins: fixes
+    ship without repairing what older versions wrote).'
+  wave: 17
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
