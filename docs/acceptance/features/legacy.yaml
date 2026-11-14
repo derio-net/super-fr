@@ -719,3 +719,23 @@ rows:
     status: ci
     notes: gh#1315. One matcher (fr.spec.find_test_plan_heading); the near-miss error
       is deliberately not a ValueError.
+amendments:
+  - row: pages-deploy-survives-report-refusal
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'Walked from evidence: run 37562684062 published the placeholder and the
+      explainers and went red; no Pages run was ever cancelled (cancel-in-progress:
+      false). The placeholder''s text naming the commit is no longer observable.'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-10-07T00:00:00Z'
+      evidence: 'Pages run 37562684062 (b44d9f45c, 2026-10-07): placeholder step success,
+        deploy-pages success, report-status job failed (run red); 157 Pages runs, 0
+        cancelled, concurrency cancel-in-progress false'
+    why: 'Walked from evidence: run 37562684062 published the placeholder and the explainers
+      and went red; no Pages run was ever cancelled (cancel-in-progress: false). The
+      placeholder''s text naming the commit is no longer observable.'
