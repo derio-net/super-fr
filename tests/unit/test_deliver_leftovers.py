@@ -159,7 +159,46 @@ def test_under_tracking_none_only_the_gate_route_applies(tmp_path: Path) -> None
 
     assert {(left.kind, left.id) for left in found} == {("row", "owed-row"), ("row", "issued")}
     for left in found:
-        assert "fr verification set" in left.fix and "set-status" not in left.fix
+        # No issue route; this repo has no CI, so `local` is offered (R6 of spec
+        # 2026-11-14-acceptance-local-status), which needs no tracker.
+        assert "fr verification set" in left.fix and "--issue" not in left.fix
+
+
+def _row_fix(root: Path, rid: str) -> str:
+    return next(left.fix for left in _leftovers(root) if left.id == rid)
+
+
+def test_under_ci_none_the_row_fix_offers_local_first(tmp_path: Path) -> None:
+    """Spec 2026-11-14-acceptance-local-status R6: a repo with no CI is offered `local`,
+    with the `--feature` flag of the issue route, before the tester gate."""
+    root = _repo(tmp_path, rows={"owed-row": None})
+    _rows(root, [{"id": "owed-row", "status": "unwired"}])
+    _commit(root)
+
+    fix = _row_fix(root, "owed-row")
+
+    local = (
+        "fr acceptance set-status --id owed-row --status local "
+        '--level unit=<repo>:<path>#<test> --notes "<which test verifies it>" --feature '
+    )
+    assert fix.startswith(local), fix
+    first = fix.split("  — or —  ")[0]
+    issue = next(p for p in fix.split("  — or —  ") if "--issue" in p)
+    assert first.rpartition("--feature ")[2] == issue.rpartition("--feature ")[2]
+    assert fix.index("--status local") < fix.index("fr verification set")
+
+
+def test_with_ci_the_row_fix_is_unchanged(tmp_path: Path) -> None:
+    root = _repo(tmp_path, rows={"owed-row": None})
+    _rows(root, [{"id": "owed-row", "status": "unwired"}])
+    (root / ".github/workflows").mkdir(parents=True)
+    (root / ".github/workflows/ci.yml").write_text("on: push\njobs: {}\n")
+    _commit(root)
+
+    fix = _row_fix(root, "owed-row")
+
+    assert "--status local" not in fix
+    assert fix.startswith("fr verification set --run w1 --row owed-row --gate tester")
 
 
 def test_the_deliver_gate_refuses_printing_every_leftover_and_its_fix(

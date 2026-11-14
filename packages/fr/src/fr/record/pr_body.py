@@ -472,7 +472,8 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
 
     Under `forge.issues: off` (or `tracking: none`) only the gate route applies: the
     journal kinds stay recorded in the journal and the PR body, and a row's only fix is
-    its gate.
+    its gate. In a repo with no CI a row's fix offers `local` first (R6 of spec
+    2026-11-14-acceptance-local-status).
     `exit` is `None` when it cannot be read; no row is then judged here (the
     label sync refuses an unreadable exit)."""
     from fr.gates import POST_MERGE_GATES
@@ -480,6 +481,7 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
     from fr.journal.model import open_owed_ids, owed_filed_as
 
     tracker = _has_tracker(repo_root)
+    no_ci: bool | None = None  # asked once, and only when a row is owed
     out: list[Leftover] = []
     if tracker:
         for scope, slug, entries in _journals(repo_root, state, strict=True):
@@ -521,6 +523,19 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
             + _feature_flag(repo_root, row.id, state)
         )
         fix = f"{gate}  — or —  {issue}" if tracker else gate
+        if no_ci is None:
+            from fr.acceptance.ci import ci_active
+
+            no_ci = not ci_active(repo_root)
+        if no_ci:
+            # Spec 2026-11-14-acceptance-local-status R6: with no CI, a row a test
+            # verifies is `local`, earned at this deliver; the gate stays for the rest.
+            local = (
+                f"fr acceptance set-status --id {row.id} --status local "
+                '--level unit=<repo>:<path>#<test> --notes "<which test verifies it>" '
+                + _feature_flag(repo_root, row.id, state)
+            )
+            fix = f"{local}  — or —  {fix}"
         out.append(Leftover("row", row.id, f"{row.status}, neither gated nor tracked", fix))
     return out
 
