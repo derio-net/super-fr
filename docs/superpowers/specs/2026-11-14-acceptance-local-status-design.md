@@ -32,8 +32,10 @@ refuses otherwise, changing nothing: `fr acceptance add`, `fr acceptance set-sta
 
 R3. Setting `local` is refused, by every writer of R2, while the repo has CI
 (`fr.acceptance.ci.ci_active`); the refusal names `ci` (or `unwired`) as the status to
-use. A row already `local` in a repo that has CI counts as debt, shown as
-`local, promote to ci`.
+use. It is refused too while fr cannot read the repo's CI declaration
+(`fr.acceptance.ci.ci_unknown`): unknown is never "no CI". A row already `local` in a repo
+that has CI counts as debt, shown as `local, promote to ci`; while the declaration is
+unreadable, as `local, ci unknown: …`.
 
 R4. `deliver` stamps every row whose effective status is `local` and that this run's
 feature added or set to `local` (its row, or its `set-status` amendment, in the
@@ -72,7 +74,9 @@ CI, the refusal is unchanged.
 R7. The `acceptance-fragment` kind moves from 1 to 2 with a registered stamp-only
 migration. Every fragment writer writes the registry's current version. The fragment
 validator (`fr.artifacts.structure`) checks a `local` stamp's shape and refuses a stamp on
-a row whose status is not `local`. No other kind changes shape. Step records' acceptance
+a row whose status is not `local`. The shape is closed in `LocalStamp` itself: `at` an ISO
+date, `tree` and every `files` value a git sha, `log` non-empty, so a malformed stamp is
+refused wherever it is read, never taken as fresh. No other kind changes shape. Step records' acceptance
 `status` is a `StrictStr`, and records never carry a stamp.
 
 R8. The acceptance rule (`.claude/rules/acceptance-matrix.md`), the `fr-acceptance`

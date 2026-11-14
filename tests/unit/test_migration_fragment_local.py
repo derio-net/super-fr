@@ -67,7 +67,11 @@ def test_a_v1_fragment_migrates_by_its_stamp_alone(tmp_path: Path) -> None:
 
 
 def test_a_v1_fragment_already_holding_local_is_refused_and_left_alone(tmp_path: Path) -> None:
-    text = "schema_version: 1\n" + BODY + LOCAL_ROW.format(status="local", files="t.py: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    text = (
+        "schema_version: 1\n"
+        + BODY
+        + LOCAL_ROW.format(status="local", files="t.py: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    )
     path = _fragment(tmp_path, text)
     report = run_migrations(tmp_path, dry_run=False)
     assert not report.ok
@@ -75,7 +79,11 @@ def test_a_v1_fragment_already_holding_local_is_refused_and_left_alone(tmp_path:
 
 
 def test_the_validator_accepts_a_well_formed_stamp(tmp_path: Path) -> None:
-    text = "schema_version: 2\n" + BODY + LOCAL_ROW.format(status="local", files="t.py: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    text = (
+        "schema_version: 2\n"
+        + BODY
+        + LOCAL_ROW.format(status="local", files="t.py: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    )
     assert validate_fragment(_fragment(tmp_path, text)) == []
 
 
@@ -86,7 +94,11 @@ def test_the_validator_refuses_a_malformed_stamp(tmp_path: Path) -> None:
 
 
 def test_the_validator_refuses_a_stamp_on_a_row_that_is_not_local(tmp_path: Path) -> None:
-    text = "schema_version: 2\n" + BODY + LOCAL_ROW.format(status="unwired", files="t.py: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    text = (
+        "schema_version: 2\n"
+        + BODY
+        + LOCAL_ROW.format(status="unwired", files="t.py: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    )
     problems = validate_fragment(_fragment(tmp_path, text))
     assert problems and any("r2" in p and "local" in p for p in problems)
 

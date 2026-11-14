@@ -196,7 +196,12 @@ def _local_row(root: Path, row_id: str = "r1", *, stamp: bool = True, **over: ob
     levels = over.pop("levels", {"unit": ["demo:tests/test_x.py#test_y"]})
     paths = sorted({ref.split(":", 1)[1].split("#")[0] for refs in levels.values() for ref in refs})  # type: ignore[union-attr]
     local = (
-        {"at": "2026-11-14", "tree": "a" * 40, "log": "suite.log@0123456789ab", "files": {p: _blob(root, p) for p in paths}}
+        {
+            "at": "2026-11-14",
+            "tree": "a" * 40,
+            "log": "suite.log@0123456789ab",
+            "files": {p: _blob(root, p) for p in paths},
+        }
         if stamp
         else None
     )

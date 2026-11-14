@@ -15,7 +15,12 @@ from tests.unit.test_acceptance_local_writers import no_ci as no_ci  # noqa: F40
 from tests.unit.test_acceptance_local_writers import repo as repo  # noqa: F401  (fixture)
 from tests.unit.test_record_apply import commit_all, git
 
-STAMP = LocalStamp(at="2026-11-14", tree="a" * 40, log="suite.log@0123456789ab", files={"tests/test_a.py": "b" * 40})
+STAMP = LocalStamp(
+    at="2026-11-14",
+    tree="a" * 40,
+    log="suite.log@0123456789ab",
+    files={"tests/test_a.py": "b" * 40},
+)
 
 
 def _matrix() -> Matrix:
