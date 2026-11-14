@@ -7303,6 +7303,12 @@ batches:
     first: it touches packaging, install.sh, tests and mirrors, which most later batches also touch, and
     it shrinks the suite (#1428).'
   wave: 15
+  events:
+  - kind: dispatch
+    at: '2026-11-14T21:13:43.307434Z'
+    runner: herdr
+    handle: w3D:p1
+    branch: feat/batch-retire-vk
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
