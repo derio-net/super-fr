@@ -1,0 +1,3230 @@
+{
+  "schema_version": 2,
+  "batches": {
+    "plan-table-header": "merged",
+    "isolation-timeouts": "merged",
+    "one-phase-plans": "merged",
+    "tests-gate": "cancelled",
+    "runner-provisioning": "cancelled",
+    "release-scripts": "merged",
+    "tests-window": "merged",
+    "container-git-ownership": "merged",
+    "archive-repair-scope": "merged",
+    "usage-opencode-empty": "merged",
+    "verify-merge-rewrites": "merged",
+    "batch-launch": "merged",
+    "branch-diff-robustness": "merged",
+    "package-lists": "merged",
+    "apply-runner-units": "merged",
+    "tests-opencode-detach": "merged",
+    "journal-clock": "merged",
+    "tests-gate-remainder": "merged",
+    "triage-themes": "merged",
+    "spec-ref-writers": "merged",
+    "ci-hardening": "merged",
+    "reverted-merge": "merged",
+    "tests-var-binding": "merged",
+    "opencode-identity": "merged",
+    "closeout-always": "cancelled",
+    "revert-detection": "merged",
+    "opencode-xdg": "merged",
+    "spec-ref-followups": "merged",
+    "phase-sizing": "cancelled",
+    "pr-body-cost": "merged",
+    "closeout-queue": "proposed",
+    "cursor-model": "cancelled",
+    "forge-remainder": "merged",
+    "fr-binary-identity": "cancelled",
+    "record-first-run": "cancelled",
+    "macos-log-path": "cancelled",
+    "brainstorm-gate-advance": "cancelled",
+    "deliver-no-remote": "cancelled",
+    "requirements-gate": "cancelled",
+    "spec-fidelity": "merged",
+    "ui-evidence": "cancelled",
+    "service-split": "cancelled",
+    "raw-input-relay": "cancelled",
+    "light-path": "merged",
+    "dedupe-filing": "cancelled",
+    "question-order": "merged",
+    "closeout-always-2": "merged",
+    "phase-sizing-2": "merged",
+    "requirements-gate-2": "cancelled",
+    "ui-evidence-2": "merged",
+    "service-split-2": "merged",
+    "raw-input-relay-2": "merged",
+    "herdr-short-labels": "cancelled",
+    "requirements-grammar": "merged",
+    "coverage-as-written": "merged",
+    "acceptance-init-no-ci": "merged",
+    "opencode-observe": "cancelled",
+    "spec-review-loop": "cancelled",
+    "plan-inputs": "merged",
+    "requirements-precheck": "merged",
+    "acceptance-init-commit": "merged",
+    "handoff-in-agents": "merged",
+    "deliver-handoff": "merged",
+    "closeout-run": "merged",
+    "isolation-reap-names": "merged",
+    "release-confidence": "merged",
+    "closing-keywords": "merged",
+    "opencode-observe-2": "merged",
+    "forge-honesty": "merged",
+    "verify-merge-false-landed": "merged",
+    "ci-health": "merged",
+    "usage-accuracy": "merged",
+    "acceptance-integrity": "merged",
+    "plan-and-records": "merged",
+    "gate-ordering": "merged",
+    "housekeeping": "merged",
+    "arch-card-clip": "merged",
+    "unplaced-prs": "merged",
+    "drive-forge-resilience": "merged",
+    "drive-cap-held": "merged",
+    "drive-closeout-recognition": "merged",
+    "drive-scoped-collect": "merged",
+    "arch-stage-dump": "merged",
+    "drive-close-tabs": "merged",
+    "drive-release-behind": "merged",
+    "driver-pr-trust": "merged",
+    "post-merge-install-lock": "merged",
+    "ci-python-floor": "merged",
+    "drive-merge-train": "merged",
+    "triage-state-integrity": "merged",
+    "triage-dedupe": "merged",
+    "triage-pages-goal": "merged",
+    "acceptance-unittest-anchors": "merged",
+    "run-upgrade-midflight": "merged",
+    "drive-checks-pending": "merged",
+    "drive-restart-forge": "merged",
+    "herdr-dispatch-reliability": "merged",
+    "debug-journal-push": "merged",
+    "release-major-plans": "merged",
+    "fr-binary-path": "merged",
+    "opencode-tier-question": "merged",
+    "board-followups": "merged",
+    "drive-adopt-and-trust": "merged",
+    "run-evidence-witness": "merged",
+    "pickup-record-drift": "merged",
+    "verification-kinds": "merged",
+    "glab-host-trust": "merged",
+    "drive-board-lows": "merged",
+    "closing-keyword-gate": "merged",
+    "pages-deploy": "merged",
+    "state-sync-race": "merged",
+    "driver-sessions": "merged",
+    "model-bindings": "merged",
+    "cost-evidence": "merged",
+    "archive-followups": "merged",
+    "triage-claims": "merged",
+    "checks-latest-run": "merged",
+    "needs-you-columns": "proposed",
+    "batch-finish-labels": "proposed",
+    "adopt-fixes": "proposed",
+    "models-hardening": "proposed",
+    "merge-queue": "proposed",
+    "claims-pr-authors": "proposed",
+    "adopt-multi-repo": "proposed",
+    "issue-from-transcript": "proposed"
+  },
+  "issues": {
+    "super-fr#1456": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1454": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1453": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1450": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1449": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1448": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1447": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1446": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1445": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1444": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1443": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1442": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1441": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1440": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1439": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1438": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1433": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1432": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1430": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1429": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1428": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1421": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1419": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1412": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1406": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1404": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1402": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1400": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1399": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1395": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1394": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1393": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1391": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1390": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1389": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1385": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1384": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1382": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1381": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1380": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1375": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1367": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1366": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1365": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1364": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1363": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1362": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1361": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1360": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1359": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1358": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1357": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1356": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1355": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1354": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1353": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1352": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1351": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1350": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1349": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1348": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1347": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1346": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1345": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1344": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1343": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1342": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1341": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1340": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1339": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1338": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1336": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1318": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1312": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1310": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1309": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1308": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1306": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1303": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1302": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1301": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1300": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1299": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1294": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1293": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1291": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1290": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1289": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1288": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1287": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1286": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1284": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1280": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1279": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1277": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1275": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1271": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1268": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1265": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1263": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1260": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1259": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1257": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1252": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1243": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1242": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1238": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1233": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1230": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1229": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1225": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1219": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1216": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1214": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1213": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1212": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1211": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1210": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1207": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1206": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1205": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1202": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1201": {
+      "state": "open",
+      "tier": 2
+    },
+    "super-fr#1199": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1197": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1194": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1193": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1192": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1191": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1187": {
+      "state": "open",
+      "tier": null
+    },
+    "super-fr#1186": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1184": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1183": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1179": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1175": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1174": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1166": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#1156": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1154": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1152": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1142": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1116": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1108": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1103": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1077": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1075": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1074": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1073": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1072": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1070": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#923": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#881": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#879": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#875": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#795": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#623": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#611": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#601": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#597": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#580": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#556": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#555": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#552": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#511": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#510": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#509": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#477": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#454": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#453": {
+      "state": "open",
+      "tier": 3
+    },
+    "super-fr#411": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#410": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#363": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#333": {
+      "state": "open",
+      "tier": 4
+    },
+    "super-fr#1000": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1001": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1002": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#1003": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1004": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#1005": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1013": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1014": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#1015": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1025": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#1029": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#1043": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#1051": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#1055": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1057": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1060": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1062": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#1065": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1066": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1069": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1071": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1076": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1081": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1082": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#1085": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1086": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#1104": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1117": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1159": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1162": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1163": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1181": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1182": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1185": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1198": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1220": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1273": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1292": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1296": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1297": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#1298": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#1378": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#438": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#441": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#455": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#456": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#457": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#458": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#463": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#469": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#470": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#471": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#489": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#490": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#491": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#502": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#505": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#525": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#526": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#528": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#530": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#531": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#537": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#538": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#544": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#550": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#553": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#558": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#561": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#563": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#569": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#574": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#575": {
+      "state": "closed",
+      "tier": 1
+    },
+    "super-fr#576": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#577": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#578": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#587": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#591": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#593": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#594": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#598": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#603": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#607": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#618": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#619": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#624": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#625": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#626": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#627": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#629": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#630": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#631": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#632": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#636": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#637": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#638": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#639": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#640": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#643": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#644": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#645": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#646": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#647": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#648": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#650": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#653": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#654": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#655": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#656": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#659": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#661": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#662": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#663": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#665": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#667": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#669": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#670": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#671": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#673": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#675": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#676": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#680": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#681": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#683": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#686": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#687": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#690": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#691": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#699": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#700": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#704": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#705": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#706": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#707": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#709": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#710": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#711": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#715": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#716": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#717": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#719": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#720": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#724": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#733": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#739": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#740": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#741": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#742": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#745": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#746": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#749": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#750": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#756": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#757": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#758": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#760": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#761": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#763": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#764": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#768": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#769": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#773": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#774": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#775": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#776": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#777": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#778": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#779": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#780": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#781": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#783": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#785": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#793": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#797": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#799": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#800": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#803": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#804": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#805": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#806": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#808": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#809": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#810": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#811": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#812": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#813": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#814": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#815": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#816": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#818": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#821": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#822": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#823": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#824": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#825": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#826": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#838": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#843": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#844": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#848": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#854": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#855": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#861": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#868": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#869": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#871": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#878": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#880": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#882": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#883": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#884": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#885": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#886": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#887": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#888": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#889": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#891": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#892": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#893": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#899": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#900": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#901": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#902": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#909": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#910": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#911": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#912": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#913": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#917": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#918": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#919": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#921": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#924": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#927": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#930": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#931": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#936": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#937": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#938": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#940": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#941": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#942": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#947": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#952": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#954": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#956": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#959": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#962": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#964": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#965": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#968": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#970": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#971": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#985": {
+      "state": "closed",
+      "tier": 4
+    },
+    "super-fr#987": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#988": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#990": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#991": {
+      "state": "closed",
+      "tier": 2
+    },
+    "super-fr#998": {
+      "state": "closed",
+      "tier": 3
+    },
+    "super-fr#999": {
+      "state": "closed",
+      "tier": 4
+    }
+  },
+  "prs": {
+    "derio-net/super-fr#1458": {
+      "state": "OPEN",
+      "draft": false,
+      "checks": {
+        "pass": 24,
+        "fail": 0,
+        "pending": 2
+      }
+    },
+    "derio-net/super-fr#1457": {
+      "state": "OPEN",
+      "draft": false,
+      "checks": {
+        "pass": 29,
+        "fail": 0,
+        "pending": 0
+      }
+    },
+    "derio-net/super-fr#1250": {
+      "state": "OPEN",
+      "draft": false,
+      "checks": {
+        "pass": 28,
+        "fail": 2,
+        "pending": 0
+      }
+    },
+    "derio-net/super-fr#1107": {
+      "state": "OPEN",
+      "draft": true,
+      "checks": {
+        "pass": 0,
+        "fail": 0,
+        "pending": 0
+      }
+    },
+    "derio-net/super-fr#1080": {
+      "state": "OPEN",
+      "draft": true,
+      "checks": {
+        "pass": 8,
+        "fail": 0,
+        "pending": 0
+      }
+    },
+    "derio-net/super-fr#1079": {
+      "state": "OPEN",
+      "draft": true,
+      "checks": {
+        "pass": 8,
+        "fail": 0,
+        "pending": 0
+      }
+    },
+    "derio-net/super-fr#476": {
+      "state": "OPEN",
+      "draft": true,
+      "checks": {
+        "pass": 8,
+        "fail": 0,
+        "pending": 0
+      }
+    },
+    "derio-net/super-fr#1008": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1009": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1033": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1031": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1149": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1024": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1037": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1050": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1048": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1052": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1158": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1150": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1138": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1151": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1140": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#581": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#929": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#586": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1040": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#616": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#866": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#865": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#928": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#633": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#592": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#736": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#974": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#559": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#859": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#873": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#571": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#568": {
+      "state": "CLOSED",
+      "draft": true,
+      "checks": {}
+    },
+    "derio-net/super-fr#579": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#738": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1042": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1041": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#693": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#696": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#651": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#652": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#635": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#728": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#694": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#894": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#713": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#695": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#862": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#688": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#730": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#729": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#679": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#674": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#718": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1195": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#678": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#754": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#858": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#697": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#723": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#867": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#897": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#727": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#743": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#737": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#735": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#731": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#734": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#732": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#790": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#753": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#755": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#994": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#792": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#978": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#752": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#772": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#874": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#819": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#794": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#832": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#787": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#827": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#786": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#788": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#833": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#791": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#789": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#820": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#784": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#837": {
+      "state": "CLOSED",
+      "draft": true,
+      "checks": {}
+    },
+    "derio-net/super-fr#828": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#836": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#834": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1012": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#860": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#975": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1032": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#973": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1007": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#979": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1023": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#976": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#977": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#972": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#922": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#905": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#906": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#916": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#934": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#915": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#920": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#966": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1034": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#933": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1028": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#939": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#946": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#945": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#951": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#995": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    },
+    "derio-net/super-fr#1010": {
+      "state": "MERGED",
+      "draft": false,
+      "checks": {}
+    }
+  },
+  "acceptance": {
+    "counts": {
+      "ci": 547,
+      "walk-owed": 41,
+      "manual": 4,
+      "walked": 42,
+      "not-implemented": 15,
+      "unwired": 1,
+      "scheduled": 1
+    },
+    "rows": {
+      "acceptance-init-scaffold": "ci",
+      "acceptance-check-gate": "ci",
+      "acceptance-archive-twin": "ci",
+      "acceptance-pipeline-rows": "walk-owed",
+      "acceptance-added-since": "manual",
+      "acceptance-nag-channels": "walked",
+      "concurrent-acceptance-rows-merge-clean": "ci",
+      "acceptance-local-status-listed": "ci",
+      "acceptance-local-earned": "ci",
+      "acceptance-local-stale": "ci",
+      "acceptance-init-no-ci": "ci",
+      "acceptance-init-commits-writes": "ci",
+      "acceptance-refuses-pipeline-evidence": "ci",
+      "acceptance-python-refs-name-their-test": "ci",
+      "acceptance-add-flush-left-rows": "ci",
+      "acceptance-set-status-names-the-change": "ci",
+      "acceptance-report-drift-gate": "ci",
+      "acceptance-report-formats": "ci",
+      "acceptance-report-dual": "ci",
+      "repair-quiet-on-pending": "ci",
+      "spec-sweep-pending-slice-hold": "ci",
+      "archive-no-spec-sweep-flag": "ci",
+      "archive-repair-warns-once": "ci",
+      "lifecycle-journal-resolve": "ci",
+      "lifecycle-acceptance-set-status": "ci",
+      "lifecycle-acceptance-drop-level": "ci",
+      "artifacts-migrate-on-next-command": "ci",
+      "migration-commit-is-path-scoped": "ci",
+      "daemon-refuses-stale-artifacts": "ci",
+      "in-flight-work-is-adoptable": "ci",
+      "every-artifact-declares-its-version": "not-implemented",
+      "migration-is-idempotent": "ci",
+      "artifact-structure-validator-per-version": "ci",
+      "archived-plans-survive-a-major-bump": "ci",
+      "run-legacy-cursors-still-migrate": "ci",
+      "run-migration-atomic-per-cursor": "ci",
+      "run-upgrade-mid-run-keeps-holder": "ci",
+      "plan-vk-version-repaired": "ci",
+      "archived-plans-readable-after-repair": "ci",
+      "acceptance-local-artifact-migration": "ci",
+      "triage-repo-local": "ci",
+      "triage-org-scope": "ci",
+      "triage-unranked-visible": "ci",
+      "triage-stage-derived": "ci",
+      "triage-untrusted-text-inert": "ci",
+      "triage-skill-claude-code": "walked",
+      "triage-skill-opencode": "walked",
+      "triage-skill-hermes": "not-implemented",
+      "triage-open-prs": "ci",
+      "triage-pr-judgement": "ci",
+      "triage-batch-state": "ci",
+      "triage-batch-dispatch": "ci",
+      "triage-batch-forge-visible": "ci",
+      "triage-batch-version-reserve": "ci",
+      "triage-batch-merge-queue": "ci",
+      "triage-batch-session-model": "ci",
+      "triage-batch-debug-skill": "ci",
+      "drive-collect-carries-closed": "ci",
+      "drive-collect-views-what-changed": "ci",
+      "collect-stays-full": "ci",
+      "drive-collect-cost-line": "ci",
+      "drive-pass-fast-on-settled-backlog": "walk-owed",
+      "drive-carry-keeps-settled-set": "walk-owed",
+      "triage-severity-and-duplicates": "ci",
+      "triage-state-sync-verbs": "ci",
+      "triage-pages-skills-documented": "ci",
+      "drive-post-merge-restart": "ci",
+      "drive-idle-session-report": "ci",
+      "board-idle-session": "ci",
+      "triage-batch-adopt": "walk-owed",
+      "triage-batch-adopt-branch-rename": "walk-owed",
+      "triage-batch-adopt-refusals": "ci",
+      "triage-batch-adopt-list": "ci",
+      "triage-batch-adopt-resumable": "ci",
+      "cloud-triage-github-rest": "walk-owed",
+      "cloud-triage-state-ref": "ci",
+      "cloud-triage-privacy-guard": "ci",
+      "cloud-triage-driver-lease": "ci",
+      "cloud-triage-driver-end-to-end": "not-implemented",
+      "cloud-triage-version-drift": "ci",
+      "cloud-triage-repo-agents": "ci",
+      "cloud-triage-cloud-remedy": "ci",
+      "closeout-branch-brief": "ci",
+      "archive-branch-every-artifact": "ci",
+      "status-reports-owed-artifacts": "ci",
+      "fr-debugging-relays-closeout": "ci",
+      "debug-journal-sweep-keeps-refs": "ci",
+      "closeout-branch-live-run": "walked",
+      "every-pr-flow-relays-closeout": "ci",
+      "bridge-checkout-self-heal": "ci",
+      "bridge-pr-autoclose": "ci",
+      "bridge-done-issue-close": "ci",
+      "ci-under-time-budget": "walk-owed",
+      "ci-budget-ticket-dedup": "ci",
+      "ci-budget-watch-list-complete": "ci",
+      "ci-actions-sha-pinned": "ci",
+      "ci-actions-dependabot-updates": "walk-owed",
+      "ci-ok-single-required-check": "ci",
+      "fr-repo-root-override": "ci",
+      "cncd-runner-ingest-dispatch": "ci",
+      "invariants-tripwires": "ci",
+      "agent-skill-instructions-are-executable": "ci",
+      "fr-ops-gate-stage": "ci",
+      "fr-ops-live-first-run": "walked",
+      "dispatch-unit-declared-by-shape": "not-implemented",
+      "multi-repo-spec-fanout": "not-implemented",
+      "reachability-derived-from-inputs": "ci",
+      "vk-dispatch-unchanged-after-cutover": "ci",
+      "shape-resolution-fails-loud": "ci",
+      "harness-detect-nearest-in-mixed-env": "ci",
+      "harness-parity-declared": "ci",
+      "harness-parity-derived-check": "ci",
+      "harness-tool-neutrality": "ci",
+      "harness-gate-degrades-loudly": "ci",
+      "harness-gate-provenance": "ci",
+      "run-dispatch-harness-neutral": "walked",
+      "run-idle-stop-guard": "ci",
+      "run-idle-guard-never-wedges": "ci",
+      "run-idle-guard-allows-waiting": "ci",
+      "run-idle-reprompt-opencode": "walked",
+      "run-idle-guard-acts-once-per-position": "ci",
+      "harness-argument-neutrality": "ci",
+      "hermes-skills-delivery": "ci",
+      "hermes-rules-soul-block": "ci",
+      "hermes-isolation-gate-edits": "ci",
+      "hermes-isolation-gate-bash": "ci",
+      "hermes-fr-goal-delegation": "walk-owed",
+      "installer-names-no-vk-residue": "ci",
+      "isolation-suite-lifecycle": "walked",
+      "isolation-guard-base-deny": "ci",
+      "isolation-fr-rename": "ci",
+      "isolation-up-add-dir-hint": "ci",
+      "plan-validator-wrapper-lifecycle": "ci",
+      "init-migrate-removed": "ci",
+      "isolation-up-requires-branch": "ci",
+      "guard-run-start-enters-isolation": "ci",
+      "scaffold-uv-env-outside-bind-mount": "ci",
+      "isolation-gc-fetch-is-bounded": "ci",
+      "down-all-blast-radius": "ci",
+      "isolation-external-adopt": "ci",
+      "isolation-host-worktree-e2e": "ci",
+      "isolation-no-silent-degradation": "ci",
+      "isolation-external-marker-enforcement": "ci",
+      "isolation-rebuild-keeps-worktree": "ci",
+      "isolation-stop-and-resume": "ci",
+      "isolation-down-preserves-run": "ci",
+      "run-missing-explains-teardown": "ci",
+      "isolation-up-reuses-remote-branch": "ci",
+      "isolation-gc-host-worktree": "ci",
+      "isolation-gc-external-verdict": "ci",
+      "isolation-gc-ownership-boundary": "ci",
+      "isolation-gc-json-contract": "ci",
+      "sentinel-three-state-guard": "ci",
+      "guard-denial-truthful": "ci",
+      "verify-merge-after-gc": "ci",
+      "isolation-down-verified": "ci",
+      "isolation-gc-reconciles-merged": "ci",
+      "isolation-reap-preserves-uncommitted": "ci",
+      "isolation-reap-preserves-unlanded": "ci",
+      "isolation-reap-force-escape": "ci",
+      "isolation-reap-guards-dont-strand": "ci",
+      "journal-deferred-finding": "ci",
+      "journal-ambiguous-id-protection": "ci",
+      "journal-loud-duplicate-create": "ci",
+      "usage-reconstruct-cross-harness": "ci",
+      "usage-captured-at-deliver": "ci",
+      "usage-readable-on-any-host": "ci",
+      "usage-privacy-no-host-identity": "ci",
+      "usage-devcontainer-captures": "walked",
+      "step-record-one-resolve": "ci",
+      "step-record-atomic-refusal": "ci",
+      "stale-session-resumes-record": "ci",
+      "bookkeeping-turns-per-step": "not-implemented",
+      "deliver-pr-body-sections": "ci",
+      "audit-pages-regenerated": "ci",
+      "deliver-pr-body-every-forge": "ci",
+      "cloud-triage-ci-evidence": "ci",
+      "auto-archive-merged-plans": "ci",
+      "migrate-creates-missing-spec-table": "ci",
+      "migrate-stages-git-changes": "ci",
+      "multibackend-gitlab-tracking": "walked",
+      "multibackend-gitea-tracking": "ci",
+      "multibackend-isolation-lifecycle": "ci",
+      "multibackend-vk-dispatch": "ci",
+      "multibackend-scaffold": "ci",
+      "gitlab-contents-reads-live": "walked",
+      "gitlab-selfhosted-host-targeting": "walk-owed",
+      "forge-errors-are-not-absence": "ci",
+      "opencode-skills-in-repo": "walked",
+      "opencode-skills-installer": "walked",
+      "opencode-isolation-enforcement": "ci",
+      "opencode-commands-in-repo": "walked",
+      "opencode-commands-installer": "walked",
+      "opencode-2-plugin-loads": "ci",
+      "opencode-2-edit-gate": "walked",
+      "opencode-2-bash-gate": "walked",
+      "opencode-2-store-read": "ci",
+      "opencode-2-v1-refusal": "ci",
+      "opencode-2-session-export": "walked",
+      "opencode-2-idle-nudge": "walked",
+      "opencode-2-status-line": "walked",
+      "opencode-2-push-guard": "ci",
+      "opencode-2-claim": "ci",
+      "opencode-2-pin": "ci",
+      "opencode-2-nag": "walked",
+      "opencode-2-sentinel": "walked",
+      "opencode-2-bind-unbind": "walked",
+      "opencode-plugin-single-idle-nudge": "ci",
+      "opencode-plugin-delivered": "ci",
+      "opencode-subagent-mirror": "ci",
+      "opencode-subagent-dispatch": "walked",
+      "opencode-subagent-tiering": "ci",
+      "opencode-subagent-installer": "ci",
+      "opencode-tier-binding-reaches-dispatch": "ci",
+      "herdr-opencode-restart": "ci",
+      "plan-manual-phase-trailing": "ci",
+      "status-sweep-merge-evidence": "ci",
+      "archive-refuses-unmerged-plan": "ci",
+      "plan-create-creates-missing-table": "ci",
+      "plan-create-table-errors-name-header": "ci",
+      "plan-rework-missing-table-stays-strict": "ci",
+      "cli-starts-from-a-clean-install": "unwired",
+      "smoke-suite-automated": "not-implemented",
+      "release-on-merge": "not-implemented",
+      "prs-never-conflict-on-version": "ci",
+      "version-floor-guard": "ci",
+      "run-resolve-advances": "ci",
+      "run-dispatch-holder-recorded": "ci",
+      "run-dispatch-refuses-second": "ci",
+      "run-dispatch-abandon": "ci",
+      "run-unit-cost-per-attempt": "ci",
+      "run-unit-review-evidence": "ci",
+      "run-idle-detected": "ci",
+      "run-unit-record-migrates": "ci",
+      "run-adopted-cursor-refuses-double-dispatch": "ci",
+      "run-adopt-writes-unit-records": "ci",
+      "run-abandoned-attempt-is-measured": "ci",
+      "run-status-cost-under-holder": "ci",
+      "run-review-evidence-cannot-be-faked": "ci",
+      "run-legacy-reviews-not-retro-failed": "ci",
+      "run-stalled-reported-not-failed": "ci",
+      "run-cost-attributed-by-agent-id": "ci",
+      "run-pickup-on-another-host": "not-implemented",
+      "run-cost-never-misattributed-across-sessions": "ci",
+      "run-review-findings-gate": "ci",
+      "run-resolve-requires-briefing": "ci",
+      "run-model-only-for-dispatched-work": "ci",
+      "run-gate-verified-from-transcript": "ci",
+      "run-review-by-a-separate-context": "ci",
+      "run-deliver-needs-an-orchestrator-test-run": "ci",
+      "run-records-observed-models": "walked",
+      "run-deliver-tests-log-opencode": "ci",
+      "run-records-dir-holds-only-records": "ci",
+      "run-deliver-tests-log-background-command": "ci",
+      "run-deliver-tests-log-opencode-detached": "ci",
+      "opencode-child-claims-open-unit": "ci",
+      "run-tests-log-claude-code-self-detached": "ci",
+      "run-cursor-durable": "ci",
+      "run-advance-refuses-running": "ci",
+      "run-resolve-teaches-item-flag": "ci",
+      "run-manual-phase-never-dispatched": "ci",
+      "runner-capability-refusal": "ci",
+      "tracker-partial-mapping": "ci",
+      "runner-unit-refusal": "ci",
+      "spec-writers-one-canonical-form": "ci",
+      "spec-status-warns-malformed-row": "ci",
+      "fr-ops-testplan-tags": "ci",
+      "triage-closed-recovery": "ci",
+      "triage-closed-recovery-refusals": "ci",
+      "triage-closed-recovery-repair": "ci",
+      "triage-closed-recovery-live": "walk-owed",
+      "run-flat-step-evidence-debt": "ci",
+      "workflow-shape-selection": "ci",
+      "workflow-repo-authored": "ci",
+      "workflow-manifest-validated": "ci",
+      "workflow-without-evidence-unchanged": "ci",
+      "run-start-binds-session": "ci",
+      "matrix-status-split": "ci",
+      "debt-ci-scaffold-refresh": "ci",
+      "step-record-status-migration": "ci",
+      "visual-evidence-row-flag": "ci",
+      "pages-acceptance-report-published": "walk-owed",
+      "pages-explainers-preserved": "walk-owed",
+      "pages-acceptance-report-discoverable": "ci",
+      "matrix-parse-libyaml": "ci",
+      "pages-deploy-survives-report-refusal": "walk-owed",
+      "archive-prices-earlier-closeouts": "ci",
+      "archive-retargets-matrix-refs": "ci",
+      "archive-files-open-ends": "ci",
+      "auto-migrate-workspace-commits-alone": "ci",
+      "auto-migrate-ci-in-place": "ci",
+      "auto-migrate-refuses-outside-workspace": "ci",
+      "auto-migrate-git-guards-hold": "ci",
+      "auto-migrate-live-sweep": "walked",
+      "auto-migrate-nag-surfaces-commit": "ci",
+      "test-plan-repair-covers-refused": "ci",
+      "spec-contract-record-v7": "ci",
+      "herdr-batch-replace": "ci",
+      "vk-bridge-init-timeout-graceful": "ci",
+      "ci-merge-group-trigger": "ci",
+      "ci-shards-complete": "ci",
+      "ci-coverage-newest-leg": "ci",
+      "ci-budget-watcher-files-breach": "walk-owed",
+      "closeout-brief-files-via-archive": "ci",
+      "closeout-step-outcomes": "ci",
+      "owed-durable-at-archive": "ci",
+      "test-plan-heading-near-miss-refused": "ci",
+      "debt-report": "ci",
+      "debt-weekly-issue-rename": "walk-owed",
+      "debt-archive-pr-weekly": "walk-owed",
+      "debt-owed-discharge": "ci",
+      "fr-ops-deliver-section": "ci",
+      "docs-check-flags-uncovered-change": "ci",
+      "docs-check-structure": "ci",
+      "docs-deliver-refuses-stale-docs": "ci",
+      "docs-currency-every-flow": "ci",
+      "docs-check-default-base-readonly": "ci",
+      "exit-gates-declared-exit": "ci",
+      "exit-gates-set-downgrade": "ci",
+      "exit-gates-verify-without-section": "ci",
+      "exit-gates-deliver-accounting": "ci",
+      "exit-gates-board-lanes": "ci",
+      "exit-gates-install-channels": "ci",
+      "exit-gates-pr-labels": "walked",
+      "exit-gates-driver-routing": "walked",
+      "exit-gates-collected-closeout": "walk-owed",
+      "exit-gates-release-gating": "walk-owed",
+      "forge-adapter-debt-ops": "ci",
+      "forge-calls-through-adapter": "ci",
+      "isolation-lookups-every-forge": "ci",
+      "glab-host-trust-gate": "ci",
+      "scaffold-unknown-tool-refused": "ci",
+      "scaffold-jvm-toolchain": "walked",
+      "scaffold-host-cli-arch": "ci",
+      "pinned-host-cli-assets-resolve": "scheduled",
+      "installed-fr-carries-every-runner": "ci",
+      "isolation-mode-from-state": "ci",
+      "fr-ops-model-carriers": "ci",
+      "fr-ops-status": "ci",
+      "fr-ops-apply-idempotent": "ci",
+      "fr-ops-profile-guard": "ci",
+      "fr-ops-evidence-attest": "ci",
+      "fr-ops-seal-no-plaintext": "ci",
+      "fr-ops-probe-trust": "ci",
+      "ops-none-acknowledgement": "ci",
+      "ops-gap-advisory": "ci",
+      "ops-gate-gap-refusal": "ci",
+      "ops-gate-step-probe": "ci",
+      "ops-gate-answer-grammar": "ci",
+      "ops-gate-probes-first-real-use": "walk-owed",
+      "ops-stub-cli": "ci",
+      "pipeline-guard-second-repo-reachable": "ci",
+      "pipeline-guard-base-repo-still-denied": "ci",
+      "acceptance-local-deliver-stamp": "ci",
+      "acceptance-local-held-quiet-walk": "not-implemented",
+      "opencode-run-session": "ci",
+      "opencode-child-dispatch": "ci",
+      "opencode-observe-take10-rerun": "walk-owed",
+      "phase-executor-worktree-refused": "ci",
+      "phase-executor-correct-dispatch-allowed": "ci",
+      "phase-executor-allowlist-message-repaired": "ci",
+      "phase-executor-allowlist-repair-is-line-scoped": "ci",
+      "goal-executor-refuses-tick": "walk-owed",
+      "executor-long-commands-per-harness": "ci",
+      "phase-executor-description-rules-out-second-worktree": "ci",
+      "fr-goal-run-journal": "ci",
+      "fr-goal-subagent-per-phase": "walk-owed",
+      "fr-goal-journal-handoff-complete": "walk-owed",
+      "fr-goal-phase-tiering": "ci",
+      "fr-goal-pr-body-derived": "ci",
+      "fr-debugging-journal": "walked",
+      "fr-journal-scope-keyed": "ci",
+      "phase-header-fields-survive-phases-file": "ci",
+      "phase-tier-reaches-the-dispatch-brief": "ci",
+      "plan-self-review-flags-tier-gaps": "ci",
+      "closeout-verify-merge-default-branch": "ci",
+      "closeout-wrapper-ships-with-first-plan": "ci",
+      "closeout-fr-commits-own-records": "ci",
+      "closeout-pickup-run-handoff": "ci",
+      "goal-explicit-handoff": "ci",
+      "goal-cost-visible": "ci",
+      "handoff-closed-entries-bounded": "ci",
+      "handoff-entries-always-tagged": "ci",
+      "executor-context-discipline": "ci",
+      "run-telemetry-measured-claude-code": "ci",
+      "fr-goal-main-session-cost": "walk-owed",
+      "light-path-shape": "ci",
+      "light-path-one-review": "ci",
+      "deliver-suite-reuse": "ci",
+      "light-path-benchmark": "walk-owed",
+      "visual-evidence-gate": "ci",
+      "visual-evidence-reviewer-own-eyes": "ci",
+      "visual-evidence-capture-script": "ci",
+      "visual-evidence-live-run": "walk-owed",
+      "goal-per-phase-review-loop": "ci",
+      "goal-phase-one-skeleton-smoke": "ci",
+      "goal-refactor-or-justify": "ci",
+      "goal-agentic-dispatch-purity": "ci",
+      "goal-dispatch-lint-precision": "ci",
+      "fr-goal-out-of-scope-findings": "ci",
+      "fr-goal-proportionality-report": "ci",
+      "fr-goal-independent-spec-review": "ci",
+      "deliver-tests-log-dot-dir": "ci",
+      "fr-goal-question-batch-sized-to-feature": "ci",
+      "fr-goal-second-round-announced-and-verified": "ci",
+      "fr-goal-contract-prose-two-rounds": "ci",
+      "plan-one-phase-is-first-class": "ci",
+      "deliver-tests-log-background": "ci",
+      "deliver-tests-log-shell-variable": "ci",
+      "phase-sizing-ask-floor": "ci",
+      "phase-sizing-split-reason": "ci",
+      "phase-sizing-proportionality": "ci",
+      "phase-sizing-manual-verification": "ci",
+      "phase-sizing-plan-guidance": "ci",
+      "requirements-post-merge-rows": "ci",
+      "light-path-structured-returns": "ci",
+      "spec-contract-plain-requirements": "ci",
+      "spec-contract-dry-run": "walked",
+      "plan-skeleton-is-not-the-whole-plan": "ci",
+      "spec-contract-no-input-gates": "ci",
+      "visual-evidence-browser-check-prose": "ci",
+      "goal-executor-contract": "ci",
+      "pipeline-guard-allowance-carries-no-rider": "ci",
+      "pipeline-guard-retirement-aimed-at-this-repo": "ci",
+      "profiles-services-schema": "ci",
+      "profiles-services-defaults": "ci",
+      "profiles-services-migration": "ci",
+      "profiles-services-ci-drives-acceptance": "ci",
+      "profiles-services-no-ci-delivery": "ci",
+      "profiles-services-no-tracker": "ci",
+      "profiles-services-cli": "ci",
+      "profiles-services-init-detect": "ci",
+      "vk-mcp-timeout-survives-slow-ops": "ci",
+      "vk-mcp-post-timeout-correctness": "ci",
+      "gate-backfill-dry-run-plan": "ci",
+      "gate-backfill-apply-ledger": "ci",
+      "gate-backfill-delivering-pr": "ci",
+      "gate-backfill-tracker-trust": "ci",
+      "gate-pass-closes-backfill-trackers": "ci",
+      "board-lanes-gated-prs": "ci",
+      "gate-backfill-first-real-sweep": "walked",
+      "printed-commands-run": "ci",
+      "gate-backfill-digest-not-lookalike": "ci",
+      "gate-pass-keep": "ci",
+      "gate-backfill-closes-discharged": "ci",
+      "fr-ops-devops-gate-hold": "ci",
+      "parity-observe-declarations": "ci",
+      "fr-binary-identity": "ci",
+      "fr-binary-pin-live": "not-implemented",
+      "herdr-opencode-launch": "walk-owed",
+      "herdr-restart-idle": "ci",
+      "herdr-restart-idle-live": "walk-owed",
+      "herdr-outside-refusal": "ci",
+      "herdr-opencode-live": "walked",
+      "herdr-opencode-closeout-live": "walked",
+      "isolation-network-calls-bounded": "ci",
+      "verify-merge-survives-later-rewrites": "ci",
+      "native-worktree-sessions-land-in-fr": "ci",
+      "nested-up-files-under-main-checkout": "ci",
+      "superpowers-worktree-skill-routed-to-fr": "ci",
+      "agent-worktrees-reaped-by-fr": "ci",
+      "container-record-commits": "ci",
+      "scaffold-trusts-workspace": "ci",
+      "gc-reaps-empty-repo-dirs": "ci",
+      "session-workspace-binding": "ci",
+      "statusline-harness-neutral-segment": "ci",
+      "statusline-shows-bound-workspace": "ci",
+      "isolation-session-bound-without-flags": "ci",
+      "journal-review-entry-per-phase": "ci",
+      "journal-require-reviews-gate": "ci",
+      "models-dead-reason-trimmed": "ci",
+      "models-corrupt-config-reported": "ci",
+      "model-binding-set-probe": "ci",
+      "model-binding-replacement": "ci",
+      "model-binding-check-report": "ci",
+      "model-binding-run-integration": "ci",
+      "model-binding-live-opencode": "walk-owed",
+      "model-binding-probe-cache": "ci",
+      "opencode-operator-answers": "ci",
+      "answered-by-no-default": "ci",
+      "site-builds-from-sources": "ci",
+      "site-published-from-sources": "walked",
+      "docs-every-skill-has-page": "ci",
+      "site-landing-two-acts": "ci",
+      "site-landing-figures": "ci",
+      "site-landing-look-and-motion": "ci",
+      "site-landing-refuses-malformed-figures-and-acts": "ci",
+      "site-wave-driver-and-exit-gates-pages": "ci",
+      "site-front-page-second-pass-published": "walked",
+      "site-front-page-landing": "ci",
+      "site-landing-build-refuses-malformed": "ci",
+      "site-top-bar-every-page": "ci",
+      "site-why-fr-essay-kept": "ci",
+      "site-front-page-published": "walked",
+      "writing-standards-docs-groups": "ci",
+      "writing-standards-docs-ci-gate": "ci",
+      "writing-standards-docs-guides": "manual",
+      "writing-standards-docs-explainers": "manual",
+      "writing-standards-docs-authoring-rule": "ci",
+      "writing-standards-docs-accuracy": "manual",
+      "writing-standards-docs-accuracy-lens": "ci",
+      "release-pushes-as-app": "walk-owed",
+      "main-requires-ci-ok": "walk-owed",
+      "main-protection-script": "ci",
+      "release-staged-suite-sharded": "walked",
+      "release-superseded-not-retried": "walk-owed",
+      "release-skips-rc-nothing-installable": "ci",
+      "release-noop-first-real-use": "walked",
+      "readme-generated-tables": "ci",
+      "repo-settings-file": "ci",
+      "repo-settings-policy-off": "ci",
+      "repo-settings-forge-quiet": "ci",
+      "repo-settings-git-policy": "ci",
+      "acceptance-fragments-amendments": "ci",
+      "acceptance-matrix-migration": "ci",
+      "acceptance-reports-derived-published": "ci",
+      "placement-quiet": "ci",
+      "placement-stealth": "ci",
+      "placement-move-and-drift": "ci",
+      "repo-settings-quiet-repo-live": "walk-owed",
+      "acceptance-effective-matrix-fold": "ci",
+      "placement-resolver": "ci",
+      "placement-merged-status": "ci",
+      "placement-fr-enabled": "ci",
+      "review-lenses-effective-set": "ci",
+      "review-lenses-path-rules": "ci",
+      "review-lenses-reviewer-return-checked": "ci",
+      "review-lenses-shown-on-pr": "ci",
+      "review-lenses-accumulate": "ci",
+      "review-phase-findings-block": "ci",
+      "cost-evidence-bound-model": "ci",
+      "cost-evidence-phase-table": "ci",
+      "adopt-supersede-carries-provenance": "ci",
+      "run-reshape-drifted-cursor": "ci",
+      "run-read-drifted-cursor": "ci",
+      "run-claim-first-wins": "ci",
+      "historical-review-evidence": "ci",
+      "runner-close-optional": "ci",
+      "tracker-done-closes-issue": "ci",
+      "session-observer-protocol": "ci",
+      "awaiting-live-triage": "ci",
+      "triage-drive-conflict-handback": "not-implemented",
+      "triage-drive-conflict-handback-live": "walked",
+      "triage-adopt-holds-agent": "ci",
+      "triage-adopt-default-branch": "ci",
+      "triage-adopt-list-columns": "ci",
+      "triage-adopt-live-sweep": "walk-owed",
+      "triage-debt-panel": "ci",
+      "triage-skill-board-columns": "ci",
+      "triage-board-columns": "ci",
+      "triage-board-card-detail": "ci",
+      "triage-board-jump-focus": "ci",
+      "triage-board-session-status": "ci",
+      "triage-board-refresh": "ci",
+      "triage-board-untrusted-text": "ci",
+      "triage-board-live-herdr": "walked",
+      "batch-waves-and-deps": "ci",
+      "batch-drive-pass": "ci",
+      "batch-drive-operator-boundary": "ci",
+      "batch-closeout-after-merge": "ci",
+      "wave-driven-live": "walk-owed",
+      "drive-merge-train-head-only": "ci",
+      "drive-merge-train-step-over": "ci",
+      "drive-merge-train-output": "ci",
+      "drive-merge-train-live-wave": "walk-owed",
+      "drive-wave-workspaces": "ci",
+      "drive-closes-finished-sessions": "ci",
+      "drive-herdr-sessions-live": "walk-owed",
+      "drive-exports-finished-wave": "ci",
+      "drive-exports-finished-wave-live": "walk-owed",
+      "driver-once-dispatch-refused": "ci",
+      "driver-unreadable-visibility-retries": "ci",
+      "rest-rulesets-free-plan-403": "ci",
+      "merge-train-red-recovery": "ci",
+      "merge-train-queue": "ci",
+      "merge-train-strict-up-to-date": "ci",
+      "quota-reset-wait": "ci",
+      "quota-floor-essential-pass": "ci",
+      "quota-quiet-pass": "ci",
+      "visibility-conditional-read": "ci",
+      "quota-board-footer": "ci",
+      "quota-shared-token-live": "walk-owed",
+      "quota-secondary-backoff": "ci",
+      "quota-floor-config": "ci",
+      "quota-partial-carry": "ci",
+      "quota-etag-consistency": "ci",
+      "quota-lease-safe-wait": "ci",
+      "merge-train-label-gate": "ci",
+      "approval-label-created": "ci",
+      "batch-merge-skip-held": "ci",
+      "triage-batch-self-hosted-host": "ci",
+      "triage-in-progress-release": "ci",
+      "triage-closed-in-progress-set": "ci",
+      "triage-config-skew-visible": "ci",
+      "triage-closeout-card-front": "ci",
+      "triage-cancelled-batch-terminal": "ci",
+      "triage-nav-present-pages": "ci",
+      "triage-closed-issues-unclaimed": "ci",
+      "triage-release-pending-true": "ci",
+      "triage-claim-take-recorded-first": "ci",
+      "triage-retire-then-sync": "ci",
+      "triage-archive-pr-visible": "ci",
+      "triage-archive-pr-draft-merged": "ci",
+      "triage-archive-pr-conflict-handed": "ci",
+      "triage-default-branch-unknown-held": "ci",
+      "triage-waitout-no-graphql": "ci",
+      "triage-post-merge-truth-live": "walk-owed",
+      "approval-board-and-briefs": "ci",
+      "triage-claims-identity": "ci",
+      "triage-claims-hands-off": "ci",
+      "triage-claims-expiry": "ci",
+      "triage-claims-writes": "ci",
+      "triage-claims-driver": "ci",
+      "triage-claims-board-publish": "ci",
+      "triage-claims-trusted-authors": "ci",
+      "triage-dedupe-candidates": "ci",
+      "triage-dedupe-judged": "ci",
+      "triage-dedupe-board": "ci",
+      "triage-dedupe-driver": "ci",
+      "triage-dedupe-skill": "ci",
+      "triage-scope-groups": "ci",
+      "board-decision-views": "ci",
+      "defect-origins-page": "ci",
+      "architecture-page": "ci",
+      "triage-page-goals": "ci",
+      "triage-board-first-screen": "ci",
+      "triage-board-batch-filter": "ci",
+      "triage-history-page": "ci",
+      "triage-fragments-every-page": "ci",
+      "triage-origins-schema-2": "ci",
+      "run-cost-positive-attribution": "ci",
+      "cost-evidence-unit-attribution": "ci",
+      "cost-evidence-usage-v2-migration": "ci",
+      "cost-evidence-usage-compare": "ci",
+      "usage-no-session-is-unavailable-not-free": "ci",
+      "usage-dispatched-model-observed": "ci",
+      "usage-priced-after-session-exit": "ci",
+      "verification-strategy-resolution": "ci",
+      "shipped-verification-strategies": "ci",
+      "spec-verification-section": "ci",
+      "candidate-walk-gates-deliver": "not-implemented",
+      "premerge-owed-pr-section": "not-implemented",
+      "closes-refused-while-awaiting-walk": "not-implemented",
+      "walk-recording-prints-close": "ci",
+      "prerelease-on-demand": "walked",
+      "super-fr-candidate-contract": "ci",
+      "prerelease-command-shape": "ci",
+      "verification-unrunnable-strategy": "ci",
+      "opencode-visual-reads": "ci",
+      "vk-legacy-fallbacks-removed": "ci",
+      "fr-goal-review-gate-is-cursor-enforced": "ci"
+    }
+  },
+  "figures": {
+    "open": 173,
+    "unranked": 0,
+    "in flight": 0,
+    "settled": 278,
+    "repos": 1,
+    "unplaced": 0,
+    "batches": 125
+  },
+  "debt": {
+    "derio-net/super-fr": {
+      "acceptance_available": true,
+      "acceptance": {
+        "ci": 500,
+        "manual": 1,
+        "not-implemented": 14,
+        "scheduled": 1,
+        "unwired": 1,
+        "walk-owed": 40,
+        "walked": 39
+      },
+      "plans": {
+        "archivable": 0,
+        "stale": 0,
+        "manual_open": 0
+      },
+      "local_debt": 0,
+      "owed": 16,
+      "total": 71,
+      "generated_at": "2026-11-09T14:22:55.677020+00:00"
+    }
+  }
+}

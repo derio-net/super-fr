@@ -2301,10 +2301,10 @@ issues:
     theme: acceptance-evidence
     cx: M
     severity: med
-    kind: feature
+    kind: parked
     verified: true
     detail: 'No `local` status exists: `packages/fr/src/fr/acceptance/model.py:47` `DEBT_STATUSES` holds `unwired`, and `LISTED_STATUSES` (:51) adds only `walked`/`manual`. So in a `ci: none` repo a unit-tested row stays debt, and `deliver` offers only a tester gate with a reason that is false. Still live.'
-    note: 'Needs an acceptance-fragment stamp bump, a migration and a validator under the artifact-versioning rule. Related to the `ci: none` and quiet walk (`super-fr#1432`).'
+    note: 'Shipped in #1455 (archive #1457 merged); close it, or let the quiet walk record it. Follow-ups: super-fr#1454, super-fr#1456.'
   super-fr#1446:
     tier: 4
     theme: docs-site
@@ -3300,6 +3300,45 @@ issues:
     note: 'Close as superseded (unrun): `gh pr close 1107 --repo derio-net/super-fr --comment ''Superseded: board Needs-you lanes shipped on main.''`'
     delivery: drift
     delivery_note: 'Draft backup PR (refs #1086, now CLOSED). It conflicts (DIRTY) and has been untouched since 2026-10-09. It edits the retired `docs/acceptance/matrix.yaml` and committed reports that `fr acceptance check` now refuses. Main''s board already has Needs-you lanes (`views.needs_you`, `mergeability.py`). It looks superseded: close it once anything worth keeping has been salvaged.'
+  super-fr#1454:
+    tier: 2
+    theme: run-evidence-gates
+    cx: S-M
+    severity: high
+    kind: defect
+    verified: true
+    detail: '`_verify_tests_log` (`commands/run_cmd.py:3170`) checks the log''s writer and time, never the code tree it ran on. A commit after the suite and before `deliver` leaves a clean tree, and the log is accepted as covering HEAD. Since #1453 this also reaches `local` stamps. **Still live** on main.'
+    note: 'Bind the fresh log to `fr.run.code_tree` at write time; batch with super-fr#1456 (same deliver path).'
+  super-fr#1456:
+    tier: 2
+    theme: run-evidence-gates
+    cx: S
+    severity: high
+    kind: defect
+    verified: true
+    detail: '`_local_stamp_plan` (`commands/run_cmd.py:7340`) reads only `<fragment_slug_for_spec(spec)>.yaml` and returns `None` when it is not a file (:7358), so a fragment named before #1451 (`…-design.yaml`) is skipped and `deliver` passes with `local` rows unstamped, which is debt. **Still live** on main.'
+    note: 'Stamp wherever the fold finds the row, or refuse naming it; the refusal should also say to fix the pending record. Batch with super-fr#1454.'
+  super-fr#1458:
+    tier: 4
+    theme: live-evidence
+    cx: XS
+    severity: low
+    kind: feature
+    verified: true
+    detail: 'Records the quiet and stealth live walks of spec `2026-11-04-repo-feature-settings`: its acceptance fragment and the archived spec journal only.'
+    note: 'Merge when the 2 pending checks are green.'
+    delivery: delivers
+    delivery_note: 'Unanchored by the engine, but it is the walk record for spec `2026-11-04-repo-feature-settings` (the walks #1432 and #1380 wait on). Touches only that fragment and the archived journal; 24 checks pass, 2 pending.'
+  super-fr#1457:
+    tier: 4
+    theme: closeout
+    cx: XS
+    severity: low
+    kind: feature
+    verified: true
+    detail: 'Archive PR for `2026-11-14-acceptance-local-status`; merged as 581853312.'
+    delivery: delivers
+    delivery_note: 'Pure archive move of the #1453 run (plan, spec, journals, run cursor, usage). Merged.'
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -6624,9 +6663,10 @@ features:
   - super-fr#1303
   - super-fr#1395
   - super-fr#1391
-  - super-fr#1453
   - super-fr#1260
-  why: 'Real runs refused or crashing at evidence gates: wrappers like `timeout` (#1303), traceback on a transient forge read (#1395); `local` status for no-CI repos (#1453).'
+  - super-fr#1454
+  - super-fr#1456
+  why: 'Real runs refused, crashing or passing falsely at evidence gates: wrappers like `timeout` (#1303), traceback on a transient forge read (#1395), a deliver log not bound to its tree (#1454), `local` rows left unstamped (#1456).'
   start: '/fr-debugging #1303 #1395 #1391'
 - rank: 10
   title: Triage drive design
