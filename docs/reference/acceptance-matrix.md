@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-14 a spec:<stem>-design origin names its spec and is stored as spec:<stem> (debug 2026-11-14-placement-repair-and-design-slug)
+reviewed: 2026-11-14 the local status, its stamp and its debt (spec 2026-11-14-acceptance-local-status)
 ---
 
 # The acceptance matrix
@@ -84,10 +84,35 @@ nag say "disabled by repo setting" and report no debt.
 | `ci`, `scheduled` | Automated, so it cannot quietly drift. |
 | `walked` | Proven live; dated by its latest passing walk. |
 | `manual` | A process that will never be automated. Listed, not debt. |
+| `local` | A test that anyone can run, in a repo with no CI. Listed, not debt, while its stamp is current. |
 | `unwired` | A test exists but CI does not run it. Debt. |
 | `walk-owed` | A live or post-merge walk is still owed. Debt. |
 | `not-implemented` | Nothing exists yet. Debt. |
 | `failing` | Known red. Fails CI on purpose until fixed or reclassified with a reason. |
+
+### The `local` status
+
+Use `local` only in a repo with no CI (`fr services` shows `ci none`).
+
+- A row that moves to `local` must have a level ref. Each level ref must name a test
+  that is in this repo. If not, all writers stop the move.
+- All writers stop a move to `local` when the repo has CI. Use `ci` or `unwired`. All
+  writers also stop the move when fr cannot read the CI declaration.
+- A write that keeps a row `local` (a link-only `--issue` or a note) does not do these
+  checks again. The row keeps its stamp.
+- `deliver` stamps each `local` row that the run's feature added or set. The stamp is
+  `local: {at, tree, log, files}`. `files` has the HEAD blob of each file that the level
+  refs name. `deliver` stamps only from a fresh suite log with no uncommitted code path,
+  or from `tests: reuse`. Other test evidence stops `deliver` (exit 2).
+- A `local` row is debt when it has no stamp (`local, unstamped`). It is debt when a
+  stamped file changed or is not at HEAD, or when its level refs changed
+  (`local, stale: <path>`). It is debt when git cannot read HEAD
+  (`local, stale: HEAD unreadable`). It is debt when the repo has CI
+  (`local, promote to ci`). It is debt when fr cannot read the CI declaration
+  (`local, ci unknown`). `fr acceptance check` shows each of these rows.
+- To make a stale row current again, set it to `local` again and deliver.
+- With no CI, the `deliver` leftover refusal gives the `set-status --status local`
+  command first.
 
 ## How rows are born and move
 

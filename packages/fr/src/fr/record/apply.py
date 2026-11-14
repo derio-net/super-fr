@@ -1034,6 +1034,15 @@ class _Amending:
                 raise RecordRefusedError(f"{where}: {why}")
             if (why := walked_error(new)) is not None:
                 raise RecordRefusedError(f"{where}: {why}")
+            # R2, R3: checked on a move INTO `local` only. A row already `local` is left
+            # alone, as `ci` is below: refusing it would block every unrelated edit to it,
+            # and R3 keeps it, in a repo with CI, as `local, promote to ci` (p1-r1).
+            if new.status == "local" and old.status != "local":
+                from fr.acceptance.local import local_error
+
+                own = (self.identity() or "").rpartition("/")[2] or None
+                if (why := local_error(new, self.repo_root, own=own)) is not None:
+                    raise RecordRefusedError(f"{where}: {why}")
             if no_ci is not None and new.status == "ci" and old.status != "ci":
                 raise RecordRefusedError(
                     f"{where}: status `ci` needs a CI run as its evidence, but {no_ci}. "
@@ -1111,6 +1120,12 @@ class _Amending:
                 planned.append(
                     AmendmentItem(row=item.id, op="drop-level", level=lv, ref=ref, why=why)
                 )
+        if item.status == "local" and old.status != "local":
+            # R2 judges the row the move leaves: its level refs must already be on it when
+            # the `set-status` to `local` is checked, so the level amendments go first.
+            planned = [a for a in planned if a.op != "set-status"] + [
+                a for a in planned if a.op == "set-status"
+            ]
         for amendment in planned:
             self.amend(amendment, write, no_ci)
         new = self.rows[item.id]
@@ -1425,6 +1440,11 @@ def _acceptance_writes(
                     issues=_union(existing.issues, item.issues),
                     harnesses=_union(existing.harnesses, item.harnesses),
                     walks=existing.walks + ((item.walk,) if item.walk is not None else ()),
+                    # Spec §A: a row that stays `local` keeps its stamp (R5 still holds it
+                    # to HEAD); any move drops it, and only `deliver` stamps (p1-r1).
+                    local=existing.local
+                    if item.status == "local" and existing.status == "local"
+                    else None,
                 )
             if item.verify is not None and (why := strategy_error(item.verify, repo_root)):
                 raise RecordRefusedError(f"acceptance {item.id}: {why}")
@@ -1451,6 +1471,14 @@ def _acceptance_writes(
         # p1-r2: `walked` means proven by a passing walk, on the row or in this entry.
         if (why := walked_error(row)) is not None:
             raise RecordRefusedError(f"acceptance {item.id}: {why}")
+        # Spec 2026-11-14-acceptance-local-status R2, R3: `local` names resolving tests in
+        # this repo, and only a repo with no CI holds it. Checked on every entry that sets
+        # it as a move; a row already `local` is left alone, like `ci` below (p1-r1).
+        if row.status == "local" and (existing is None or existing.status != "local"):
+            from fr.acceptance.local import local_error
+
+            if (why := local_error(row, repo_root, own=identity().rpartition("/")[2])) is not None:
+                raise RecordRefusedError(f"acceptance {item.id}: {why}")
         # gh#775: `ci` means a CI run is the evidence, so a row moves there only
         # in a repo with CI. A row already `ci` is left alone — refusing it
         # would block every unrelated edit to it.

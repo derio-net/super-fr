@@ -40,10 +40,15 @@ class DebtRow(_Frozen):
     retired: bool = False
     """Retired, yet a merged amendment still names it: contested, so debt, though it has
     left the matrix (plan journal `fold-merged-stale-targets`)."""
+    local_at: str | None = None
+    """The stamp date of a `local` row (spec 2026-11-14-acceptance-local-status R1)."""
+    local_debt: str | None = None
+    """Why a `local` row is debt (`fr.acceptance.local`): `promote to ci`, `unstamped`,
+    `stale: <path>`, `stale: HEAD unreadable` or `ci unknown: …`."""
 
     @property
     def is_debt(self) -> bool:
-        return is_debt(self.status, contested=self.contested)
+        return is_debt(self.status, contested=self.contested, local=self.local_debt)
 
 
 class AcceptanceDebt(_Frozen):
@@ -57,8 +62,13 @@ class AcceptanceDebt(_Frozen):
     """Contested rows whose status is not itself debt, and every retired contested row
     (each counted once; `by_status` counts only rows still in the matrix)."""
 
+    local_debt: int = 0
+    """`local` rows with a debt reason that are not already counted as contested
+    (spec 2026-11-14-acceptance-local-status R3, R5)."""
+
     def debt_count(self) -> int:
-        return sum(n for s, n in self.by_status.items() if s in DEBT_STATUSES) + self.contested
+        debt = sum(n for s, n in self.by_status.items() if s in DEBT_STATUSES)
+        return debt + self.contested + self.local_debt
 
 
 class ArchivablePlan(_Frozen):

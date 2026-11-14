@@ -3433,6 +3433,46 @@ def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
     return f"{REUSED_PREFIX}{unit}:{witness}"
 
 
+_FRESH_LOG_WITNESS = re.compile(r"^[^;]+@[0-9a-f]{12}$")
+"""A fresh `tests=<log>` witness, `<shown>@<sha256[:12]>` (`_log_witness`)."""
+
+
+def _local_stamp_witness(repo_root: Path, tests: str | None) -> tuple[str, str] | str:
+    """`(log, tree)` a `local` stamp records for `deliver`'s verified `tests` witness, or
+    why that witness cannot earn one (spec 2026-11-14-acceptance-local-status R4).
+
+    A `reused:` witness (`_reuse_tests_witness`) carries the tree its phase log covered.
+    A fresh log (`_verify_tests_log`, observed or `unobserved=tests`) covers HEAD's code
+    tree only when no code path is uncommitted. Anything else (`tests: ci`, no witness)
+    is no local run of the suite."""
+    from fr.run.code_tree import code_tree, dirty_code_paths
+
+    if tests is not None and tests.startswith(REUSED_PREFIX):
+        log, sep, tree = tests.rpartition(_TREE_SEP)
+        if not sep or not tree:
+            return f"tests: {tests} names no code tree"
+        return log, tree
+    if tests is None or not _FRESH_LOG_WITNESS.match(tests):
+        shown = "none" if tests is None else tests
+        return (
+            f"tests: {shown} is not a local suite log — a `local` row is earned by a "
+            "fresh suite log or a `tests: reuse` of a phase's"
+        )
+    try:
+        own = _own_log_path(repo_root, tests)
+        dirty = [p for p in dirty_code_paths(repo_root) if p != own]
+        tree = code_tree(repo_root)
+    except GitUnavailableError as e:
+        return f"cannot compute the code tree: {e}"
+    if dirty:
+        n = len(dirty)
+        return (
+            f"{n} code path{'' if n == 1 else 's'} uncommitted (e.g. {dirty[0]}), so the "
+            "suite log does not cover HEAD — commit, run the suite again and name the new log"
+        )
+    return tests, tree
+
+
 def _unit_evidence(state: RunState, key: str) -> dict[str, str]:
     """`key`'s evidence, from whichever step holds that unit (`{}` if none)."""
     for record in state.steps.values():
@@ -7259,6 +7299,131 @@ def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
     raise typer.Exit(2)
 
 
+@dataclass(frozen=True)
+class _LocalStamps:
+    """The feature fragment with every `local` stamp `deliver` owes written in, built in
+    memory by `_deliver_local_stamp_plan` and written by `_deliver_local_stamp_write`."""
+
+    path: Path
+    text: str
+    rows: tuple[str, ...]
+
+
+def _deliver_local_stamp_plan(
+    repo_root: Path, state: RunState, tests: str | None
+) -> _LocalStamps | None:
+    """Spec 2026-11-14-acceptance-local-status R4, §D: the stamps for the `local` rows
+    this run's feature added or set `local`, checked with `deliver`'s other refusals —
+    exit 2 naming each row that cannot be stamped. Writes nothing."""
+    from fr.acceptance.fragment import fragment_slug_for_spec
+    from fr.requirements import run_spec
+
+    spec = run_spec(state)
+    if spec is None:
+        return None
+    return _local_stamp_plan(repo_root, fragment_slug_for_spec(spec), tests, today=_now()[:10])
+
+
+def _feature_local_ids(fragment: Any) -> list[str]:
+    """The rows *fragment* (one feature's) sets `local`: its own rows at `local`, and the
+    rows whose latest `set-status` amendment in it is to `local`."""
+    own = {r.id for r in fragment.rows}
+    latest: dict[str, str] = {}
+    for a in fragment.amendments:
+        if a.op == "set-status" and a.row not in own:
+            latest[a.row] = a.status
+    return [r.id for r in fragment.rows if r.status == "local"] + [
+        rid for rid, status in latest.items() if status == "local"
+    ]
+
+
+def _local_stamp_plan(
+    repo_root: Path, feature: str, tests: str | None, *, today: str
+) -> _LocalStamps | None:
+    """`_deliver_local_stamp_plan` for *feature*'s fragment, read where the placement
+    keeps it (the artifact root); the blobs come from the product checkout's HEAD."""
+    from fr.acceptance.edit import stamp_local
+    from fr.acceptance.fold import effective
+    from fr.acceptance.fragment import FRAGMENTS_DIR, parse_fragment
+    from fr.acceptance.local import head_blobs, level_ref_paths
+    from fr.acceptance.model import AcceptanceError, LocalStamp
+    from fr.settings import SettingsError, disabled
+
+    try:
+        if disabled(repo_root, "acceptance"):
+            return None
+    except SettingsError:
+        pass  # the settings' own gates refuse an unreadable file
+    path = artifact_root(repo_root) / FRAGMENTS_DIR / f"{feature}.yaml"
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8")
+
+    def refuse(lines: list[str]) -> NoReturn:
+        shown = "\n".join(f"  {line}" for line in lines)
+        err_console.print(
+            "refused: deliver cannot stamp this feature's `local` rows (each needs a "
+            f"stamp of the suite run that covers it):\n{shown}",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+    try:
+        wanted = _feature_local_ids(parse_fragment(text, source=path.name))
+    except AcceptanceError as e:
+        refuse([f"{path.name}: {e}"])
+    if not wanted:
+        return None  # review p2-r1: no `local` row, no fold, deliver as before
+    try:
+        rows = {r.id: r for r in effective(repo_root).matrix.rows}
+    except AcceptanceError as e:
+        refuse([f"the acceptance matrix: {e}"])
+    local = [rows[rid] for rid in dict.fromkeys(wanted) if rid in rows]
+    local = [r for r in local if r.status == "local"]
+    if not local:
+        return None
+    witness = _local_stamp_witness(repo_root, tests)
+    if isinstance(witness, str):
+        refuse([f"row {r.id}: {witness}" for r in local])
+    log, tree = witness
+    blobs = head_blobs(repo_root, (p for r in local for p in level_ref_paths(r)))
+    if blobs is None:
+        refuse([f"row {r.id}: git cannot read HEAD of {repo_root}" for r in local])
+    problems: list[str] = []
+    for r in local:
+        paths = level_ref_paths(r)
+        missing = [p for p in paths if p not in blobs]
+        if not paths:
+            problems.append(f"row {r.id}: names no test path (add `--level unit=...`)")
+            continue
+        if missing:
+            problems.append(f"row {r.id}: {missing[0]} is not committed at HEAD")
+            continue
+        stamp = LocalStamp(at=today, tree=tree, log=log, files={p: blobs[p] for p in paths})
+        try:
+            text = stamp_local(text, r.id, stamp)
+        except AcceptanceError as e:
+            problems.append(f"row {r.id}: {e}")
+    if problems:
+        refuse(problems)
+    return _LocalStamps(path, text, tuple(r.id for r in local))
+
+
+def _deliver_local_stamp_write(repo_root: Path, plan: _LocalStamps | None) -> None:
+    """Write `_deliver_local_stamp_plan`'s fragment — called beside
+    `_flush_gate_decisions`, after `deliver`'s last refusal, so a refused resolve
+    writes no stamp; remembered for a `--record` restore and committed with the
+    resolve (in the artifact root's checkout under quiet or stealth)."""
+    if plan is None:
+        return
+    from fr.artifacts.atomic import write_text_atomic
+
+    _remember(plan.path)
+    write_text_atomic(plan.path, plan.text)
+    _note_record_write(repo_root, plan.path)
+
+
 def _answered_by_or_exit(value: str | None) -> AnsweredBy | None:
     """Narrow an `answered_by` string where it ENTERS fr — the flag, or a
     record's evidence key — to the closed set (spec §F). Refused rather than
@@ -7543,6 +7708,7 @@ def _resolve_body(
         harness=harness,
         model=model,
     )
+    local_stamps: _LocalStamps | None = None
     if "pr" in step.emits and state_value == "done":
         # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
         # form and a record reach the same one — before the cursor moves.
@@ -7550,6 +7716,9 @@ def _resolve_body(
         _deliver_placement_gate(repo_root)
         _deliver_acceptance_gate(repo_root)
         _deliver_leftovers_gate(repo_root, state)
+        local_stamps = _deliver_local_stamp_plan(
+            repo_root, state, units.evidence_of(state.steps[step_id], flat_key).get("tests")
+        )
         _deliver_pr_gate(repo_root, state, pr)
         _deliver_exit_guard(repo_root, state)
         _deliver_label_sync(repo_root, state, pr, run_id)
@@ -7575,6 +7744,7 @@ def _resolve_body(
         # cleared at all.
         answered_by=gate_by,
     )
+    _deliver_local_stamp_write(repo_root, local_stamps)
     _flush_gate_decisions(repo_root)
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")

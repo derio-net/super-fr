@@ -52,6 +52,9 @@ def clean_figures(raw: dict[str, Any] | None) -> dict[str, Any] | None:
             for k in PLAN_CATEGORIES
             if (n := _count((plans if isinstance(plans, dict) else {}).get(k))) is not None
         },
+        # Local debt (spec 2026-11-14-acceptance-local-status §B): `local` rows that are
+        # debt by their stamp, not their status; absent from an older digest.
+        "local_debt": _count(raw.get("acceptance_local_debt")) or 0,
         "owed": _count(raw.get("owed")),
         "total": _count(raw.get("total")),
         "generated_at": raw["generated_at"][:40]

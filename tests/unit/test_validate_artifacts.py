@@ -1057,7 +1057,11 @@ def _fragment_problems(tmp_path: Path, text: str, *, sibling: str | None = None)
 
 
 def test_a_valid_fragment_passes(tmp_path: Path) -> None:
-    sibling = "feature: 2019-03-05-other\nrepo: derio-net/super-fr\nrows: []\n"
+    version = ARTIFACT_KINDS["acceptance-fragment"].current_version
+    sibling = (
+        f"schema_version: {version}\nfeature: 2019-03-05-other\nrepo: derio-net/super-fr\n"
+        "rows: []\n"
+    )
     assert _fragment_problems(tmp_path, GOOD_FRAGMENT, sibling=sibling) == ""
 
 

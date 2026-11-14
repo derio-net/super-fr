@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from fr.acceptance.model import LEVELS, AcceptanceError, Row
+from fr.acceptance.model import LEVELS, AcceptanceError, LocalStamp, Row
 
 if TYPE_CHECKING:
     from fr.acceptance.fragment import Amendment
@@ -77,6 +77,9 @@ def render_row_block(row: Row, indent: str = "  ") -> str:
         data["harnesses"] = list(row.harnesses)
     if row.walks:
         data["walks"] = [w.model_dump() for w in row.walks]
+    # Fragment kind 2 (spec 2026-11-14-acceptance-local-status R4): absent when unset.
+    if row.local is not None:
+        data["local"] = row.local.model_dump()
     block = yaml.dump([data], default_flow_style=False, sort_keys=False, allow_unicode=True)
     return "".join(
         (indent + line if line.strip() else line) + "\n" for line in block.rstrip("\n").split("\n")
@@ -352,8 +355,12 @@ def render_fragment(feature: str, repo: str, rows: Iterable[Row]) -> str:
     """A whole fragment's text: the header, its identity, then every row through
     `render_row_block` — the one renderer, so a fragment re-rendered from its own
     parse is byte-identical (spec 2026-11-04 R19)."""
+    from fr.artifacts.registry import ARTIFACT_KINDS
+
+    version = ARTIFACT_KINDS["acceptance-fragment"].current_version
     body = "".join(render_row_block(row) for row in rows)
-    return f"{FRAGMENT_HEADER}schema_version: 1\nfeature: {feature}\nrepo: {repo}\nrows:\n{body}"
+    head = f"{FRAGMENT_HEADER}schema_version: {version}\nfeature: {feature}\nrepo: {repo}\n"
+    return f"{head}rows:\n{body}"
 
 
 _AMENDMENTS_KEY_RE = re.compile(r"^amendments:\s*(#.*)?$")
@@ -436,3 +443,58 @@ def rebase_amendment(text: str, index: int, base: int) -> str:
             lines[i] = f"{m.group(1)}base: {base}\n"
             return "".join(lines)
     raise AcceptanceError(f"amendment {index} carries no `base:` line")
+
+
+def _keep_tail(lines: list[str], start: int, end: int, indent: int) -> int:
+    """*end* moved up past the blank and comment lines that close a block: they
+    introduce whatever follows, so a rewrite keeps them."""
+    while end - 1 > start and _is_between_rows(lines[end - 1], indent):
+        end -= 1
+    return end
+
+
+def stamp_local(text: str, row_id: str, stamp: LocalStamp) -> str:
+    """*text* with *stamp* written onto *row_id* (spec 2026-11-14-acceptance-local-status
+    §C): the row block when this fragment holds the row, else its latest `set-status`
+    amendment. Only that block is re-rendered; every other byte is kept. Raises
+    `AcceptanceError` when the fragment neither holds nor amends the row to `local`."""
+    from pydantic import ValidationError
+
+    from fr.acceptance.fragment import SetStatus
+
+    lines = text.splitlines(keepends=True)
+    has_rows = any(_ROWS_KEY_RE.match(ln) for ln in lines)
+    for start, end, parsed in _row_blocks(text) if has_rows else ():
+        if parsed.get("id") != row_id:
+            continue
+        try:
+            row = Row.model_validate(parsed)
+        except ValidationError as e:
+            raise AcceptanceError(f"row {row_id}: {e}") from e
+        if row.status != "local":
+            raise AcceptanceError(f"row {row_id} is {row.status}, not local: nothing to stamp")
+        return replace_row(text, row_id, row.model_copy(update={"local": stamp}))
+    _, starts, stop = _amendment_starts(lines)
+    for k in reversed(range(len(starts))):
+        start = starts[k]
+        end = starts[k + 1] if k + 1 < len(starts) else stop
+        parsed_list = yaml.safe_load("".join(lines[start:end]))
+        item = parsed_list[0] if isinstance(parsed_list, list) and parsed_list else None
+        if not isinstance(item, dict) or item.get("row") != row_id:
+            continue
+        if item.get("op") != "set-status":
+            continue
+        try:
+            amendment = SetStatus.model_validate(item)
+        except ValidationError as e:
+            raise AcceptanceError(f"row {row_id}: amendment {k}: {e}") from e
+        if amendment.status != "local":
+            raise AcceptanceError(
+                f"row {row_id}: its latest set-status is {amendment.status}, not local"
+            )
+        first = lines[start]
+        indent = first[: len(first) - len(first.lstrip())]
+        end = _keep_tail(lines, start, end, len(indent))
+        block = render_amendment_block(amendment.model_copy(update={"local": stamp}), indent)
+        return "".join(lines[:start]) + block + "".join(lines[end:])
+    raise AcceptanceError(f"this fragment neither holds nor amends row {row_id} to local")

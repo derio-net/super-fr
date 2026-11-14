@@ -1,0 +1,168 @@
+schema_version: 2
+phase:
+  number: 1
+  title: The local status, its stamp, staleness, writers, debt surfaces and the fragment
+    version
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - acceptance-local-status-listed
+  - acceptance-local-earned
+  - acceptance-local-stale
+  - acceptance-local-artifact-migration
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/acceptance/*.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/commands/status_cmd.py
+  - packages/fr/src/fr/debt/*.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/gatebackfill/close.py
+  - packages/fr/src/fr/artifacts/*.py
+  - docs/acceptance/features/*.yaml
+  - tests/unit/*.py
+  - .changes/feat-acceptance-local-status.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: 'Smoke: a trivial test of the new module, suite green'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create packages/fr/src/fr/acceptance/local.py with a module docstring naming spec 2026-11-14-acceptance-local-status, and tests/unit/test_acceptance_local.py with one test importing it. Add .changes/feat-acceptance-local-status.yaml (`bump: minor`, summary: "acceptance: a `local` status for rows verified by automated tests in a repo with no CI"). Run `uv run pytest -q --no-cov tests/unit/test_acceptance_local.py` — green. Commit.
+- number: 2
+  title: Status value, LocalStamp, and the fold's stamp rules (R1, R5, spec §A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      [RED] In tests/unit/test_acceptance_local.py: `Row(status="local")` parses; `"local"` is in LISTED_STATUSES and not DEBT_STATUSES; `LocalStamp` is closed (extra key refused, empty `files` refused); `Row.local` and fragment `SetStatus.local` accept a stamp. Fold tests (fr.acceptance.fold.apply_amendment): a set-status→local amendment with a stamp puts it on the row; one without a stamp clears an older stamp; a set-status to `ci` drops the stamp; add-level/drop-level keep it. Run: RED.
+  - id: P1.T2.S2
+    text: |-
+      [GREEN] Add "local" to fr.acceptance.model.Status and LISTED_STATUSES, `LocalStamp` (at, tree, log, files) and `local: LocalStamp | None = None` on Row and fr.acceptance.fragment.SetStatus; implement the fold rules in apply_amendment. Green; also run `uv run pytest -q --no-cov tests/unit -k "acceptance or fold or fragment"`.
+  - id: P1.T2.S3
+    text: |-
+      [REFACTOR] Keep the stamp rule in one helper the fold calls. Tests green.
+- number: 3
+  title: local_debt and local_error (R2, R3, R5, spec §A, §C)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      [RED] Tests over a `git init` fixture (tmp_path, a committed tests/test_x.py with `def test_y`): `local_debt(rows, root, ci_active=False)` → {} for a fresh stamp matching HEAD blobs (via `git ls-tree -r HEAD`); `unstamped` with no stamp; `stale: tests/test_x.py` after a committed edit, after the file is deleted, and when the stamp's files keys differ from the row's current level-ref paths; `promote to ci` when ci_active=True; uncommitted working-tree edits do NOT make it stale (HEAD is the source); one git subprocess for many rows (monkeypatch-count). `local_error`: no level ref; a ref into another repo (`other:tests/x.py`); a missing file; a missing Python test name; an archived-twin warning-only resolution; CI active (message names `ci` or `unwired`) — each a reason; a resolving own-repo ref under ci none → None. RED.
+  - id: P1.T3.S2
+    text: |-
+      [GREEN] Implement both in fr.acceptance.local. local_error uses a returning wrapper over fr.acceptance.check._resolve_ref/_check_python_anchor (a CheckResult with any error or warning → unresolved) and fr.acceptance.ci.ci_active. `is_debt(status, *, contested=False, local=None)` treats a local reason as debt. Green.
+  - id: P1.T3.S3
+    text: |-
+      [REFACTOR] One function computes the ref paths a row names (shared by local_debt, local_error and the later deliver stamp). Tests green.
+- number: 4
+  title: Writers refuse what local_error refuses (R2, R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      [RED] CLI tests (the existing acceptance_cmd test style with a fixture repo): `fr acceptance add --status local` with no level, `set-status --status local` in a repo with CI, `amend --op set-status --status local` with a missing test, and a step record acceptance entry with `status: local` and an unresolved ref (fr.record.apply) — each exit 2, the fragment byte-identical; the valid case under ci none writes the row. RED.
+  - id: P1.T4.S2
+    text: |-
+      [GREEN] Call local_error in acceptance_cmd add/set-status/amend and record/apply.py where walked_error is called. Green.
+- number: 5
+  title: Renderers write local and the current fragment version (R7, spec §C, §E)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      [RED] Tests: fr.acceptance.edit.render_row_block and render_amendment_block round-trip a `local:` stamp through parse_fragment; render_fragment writes the registry's current acceptance-fragment version; `stamp_local(text, row_id, stamp)` rewrites a pending row block, and the latest set-status amendment block for a row the fragment only amends, leaving every other byte unchanged; it raises on a row the fragment neither holds nor amends. RED.
+  - id: P1.T5.S2
+    text: |-
+      [GREEN] Implement them in fr/acceptance/edit.py (render_fragment reads fr.artifacts.registry's current_version). Green.
+- number: 6
+  title: Fragment kind 1 → 2, migration, validator (R7)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      [RED] tests/unit/test_migration_fragment_local.py: the acceptance-fragment kind is at 2; a version-1 fragment migrates to 2 by stamp only (body otherwise byte-identical); the chain from 1 reaches 2 hop by hop; `fr validate artifacts` (fr.artifacts.structure.validate_fragment) refuses a malformed `local` stamp and a stamp on a row whose status is not local. RED.
+  - id: P1.T6.S2
+    text: |-
+      [GREEN] Move current_version to 2 in fr/artifacts/registry.py; add fr/artifacts/fragment_local.py with a stamp-only SchemaMigration 1→2, imported from fr/artifacts/__init__.py; extend validate_fragment. Run `uv run fr migrate artifacts --yes` in the workspace and commit the migrated fragments. Run `uv run fr validate artifacts` and `uv run pytest -q --no-cov tests/unit -k "migration or validate or registry or tripwire_artifact"` — green.
+- number: 7
+  title: Debt surfaces count and list local (R1, R3, R5, spec §B)
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      [RED] Tests: fr acceptance status (check.open_rows) lists a fresh local row with its date as non-debt and a stale/unstamped/promote-to-ci one as debt with its reason; fr.debt.engine gives DebtRow local_at/local_debt and DebtAcceptance.local_debt, debt_count adds it; fr.debt.render figures carry it (digest figures round-trip through parse_figures); triage/render's board debt counts it; status_cmd's open count counts it; fr.acceptance.report shows `local` in its status/legend/count maps with the date or reason; gatebackfill.close treats a local row with a debt reason as debt; `fr acceptance check` reports stale and unstamped local rows, exit 0. RED.
+  - id: P1.T7.S2
+    text: |-
+      [GREEN] Wire local_debt (product checkout root; the fold from wherever fr.acceptance.fold reads it under the placement) through each surface. Green.
+  - id: P1.T7.S3
+    text: |-
+      [REFACTOR] Each surface obtains the local reasons from one call per fold, not per row. Then run the full suite into a log outside the repo after the last code commit: `uv run pytest -q --no-cov -n auto > $TMPDIR/p1-suite.log 2>&1`; ruff check/format and mypy as AGENTS.md lists. Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T7.S1:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T7.S2:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+    P1.T7.S3:
+      state: x
+      ticked_at: '2026-11-14T11:06:05+00:00'
+      note: null
+  completion:
+    at: '2026-11-14T11:06:05+00:00'
+    note: null
+    observed_prs: []

@@ -72,6 +72,7 @@ from fr.artifacts import matrix_strategies as _matrix_strategies  # noqa: F401  
 from fr.artifacts import matrix_status_split as _matrix_status_split  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_anchors as _matrix_anchors  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_fragments as _matrix_fragments  # noqa: F401  (isort: skip)
+from fr.artifacts import fragment_local as _fragment_local  # noqa: F401  (isort: skip)
 from fr.artifacts import profiles_services as _profiles_services  # noqa: F401  (isort: skip)
 from fr.artifacts import agents_kind as _agents_kind  # noqa: F401  (isort: skip)
 from fr.artifacts import journal_owed as _journal_owed  # noqa: F401  (isort: skip)

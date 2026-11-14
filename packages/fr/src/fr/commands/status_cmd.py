@@ -385,7 +385,10 @@ def _acceptance_section(root: Path) -> str | None:
         matrix = folded.matrix
         counts = Counter(r.status for r in matrix.rows)
         summary = ", ".join(f"{s}: {n}" for s, n in sorted(counts.items())) or "empty"
-        n_open = len(open_rows(matrix, folded.contested, folded.retired))
+        from fr.acceptance.local import local_reasons
+
+        local = local_reasons(matrix.rows, root)
+        n_open = len(open_rows(matrix, folded.contested, folded.retired, local))
         return f"\nAcceptance: {summary} — {n_open} open (details: fr acceptance status)"
     except Exception as e:  # noqa: BLE001 — a broken matrix must not break status
         return f"\nAcceptance: matrix unreadable ({e}) — fr acceptance check"

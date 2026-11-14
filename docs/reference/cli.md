@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-14 still true after fr repair's quiet/stealth dirty guard and the one logical spec slug spelling (debug 2026-11-14-placement-repair-and-design-slug)
+reviewed: 2026-11-14 still true after the local acceptance status, the commands and their help are unchanged (spec 2026-11-14-acceptance-local-status)
 writing_standard: none
 ---
 

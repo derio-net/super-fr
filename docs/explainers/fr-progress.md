@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-14 still true after fr repair's quiet/stealth dirty guard and the one logical spec slug spelling (debug 2026-11-14-placement-repair-and-design-slug)
+reviewed: 2026-11-14 still true, fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## Why is there nothing to sync?

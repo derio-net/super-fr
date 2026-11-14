@@ -40,6 +40,7 @@ from pydantic import (
 from fr.acceptance.model import (
     LEVELS,
     AcceptanceError,
+    LocalStamp,
     Row,
     Status,
     Walk,
@@ -97,6 +98,9 @@ class SetStatus(_AmendmentBase):
     `amend-set-status-verify-scenario`: `set-status --verify` on a merged row)."""
     scenario: StrictStr | None = None
     """The row's walk scenario, replaced when given (as `verify`)."""
+    local: LocalStamp | None = None
+    """The `local` stamp `deliver` writes (spec 2026-11-14-acceptance-local-status R4);
+    the fold puts it on the row, and a set-status without one clears the row's."""
 
     @field_validator("status", mode="before")
     @classmethod

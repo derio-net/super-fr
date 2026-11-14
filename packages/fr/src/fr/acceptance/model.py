@@ -36,25 +36,29 @@ Status = Literal[
     "walk-owed",
     "walked",
     "manual",
+    "local",
     "not-implemented",
     "failing",
 ]
 """A row's status (spec 2026-10-11-debt-engine §D, R5). Matrix kind 4 -> 5
 split the old `skipped` into `unwired` (a test exists but does not run in CI),
 `walk-owed` (a live or post-merge walk is owed), `walked` (proven live, dated by
-its walk) and `manual` (a process that is never automatable)."""
+its walk) and `manual` (a process that is never automatable). Fragment kind 1 -> 2
+(spec 2026-11-14-acceptance-local-status R1) adds `local`: verified by an automated
+test anyone can run on any checkout, which no CI runs."""
 
 DEBT_STATUSES: frozenset[str] = frozenset({"not-implemented", "unwired", "walk-owed", "failing"})
 """The acceptance debt statuses (R2), defined once: every surface that counts
 acceptance debt counts these. `walked` and `manual` are listed, never debt."""
 
-LISTED_STATUSES: frozenset[str] = DEBT_STATUSES | {"walked", "manual"}
+LISTED_STATUSES: frozenset[str] = DEBT_STATUSES | {"walked", "manual", "local"}
 
 
-def is_debt(status: str, *, contested: bool = False) -> bool:
-    """The one definition of a debt row: a `DEBT_STATUSES` status, or a row the fold
-    marks contested whatever its status (spec 2026-11-04 R17)."""
-    return contested or status in DEBT_STATUSES
+def is_debt(status: str, *, contested: bool = False, local: str | None = None) -> bool:
+    """The one definition of a debt row: a `DEBT_STATUSES` status, a row the fold
+    marks contested whatever its status (spec 2026-11-04 R17), or a `local` row with a
+    reason from `fr.acceptance.local.local_debt` (spec 2026-11-14 R3, R5)."""
+    return contested or local is not None or status in DEBT_STATUSES
 
 
 """What `fr debt` lists per row: the debt statuses plus `walked` and `manual`
@@ -230,6 +234,60 @@ def check_status(value: object) -> None:
         )
 
 
+_GIT_SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}(?:$|T)")
+
+
+class LocalStamp(BaseModel):
+    """What earned a `local` row (spec 2026-11-14-acceptance-local-status R4): the date,
+    the code tree the suite log covered, the log, and the HEAD blob of every path the
+    row's level refs name. Written only by `deliver`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    at: StrictStr
+    tree: StrictStr
+    log: StrictStr
+    files: dict[StrictStr, StrictStr]
+
+    @field_validator("files")
+    @classmethod
+    def _names_a_file(cls, v: dict[str, str]) -> dict[str, str]:
+        if not v:
+            raise ValueError("local.files: a stamp names at least one file")
+        for path, blob in v.items():
+            if not _GIT_SHA.fullmatch(blob):
+                raise ValueError(f"local.files[{path}]: {blob!r} is not a git blob sha")
+        return v
+
+    # Lens errors r2: a stamp holds only what `deliver` writes, so a hand-made one with
+    # an empty tree or log, or no date, is refused where it is read, never taken as fresh.
+    @field_validator("at")
+    @classmethod
+    def _iso_date(cls, v: str) -> str:
+        if not _ISO_DATE.match(v):
+            raise ValueError(f"local.at: {v!r} is not an ISO date (YYYY-MM-DD)")
+        return v
+
+    @field_validator("tree")
+    @classmethod
+    def _tree_sha(cls, v: str) -> str:
+        if not _GIT_SHA.fullmatch(v):
+            raise ValueError(f"local.tree: {v!r} is not a git tree sha")
+        return v
+
+    @field_validator("log")
+    @classmethod
+    def _names_a_log(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("local.log: a stamp names the suite log that earned it")
+        return v
+
+    def __hash__(self) -> int:
+        # `files` is a dict, which pydantic's frozen hash cannot take; the fold keys a
+        # Counter on amendments, so a stamped `set-status` must hash by value.
+        return hash((self.at, self.tree, self.log, tuple(sorted(self.files.items()))))
+
+
 class Row(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     # StrictStr: YAML scalars like `yes` / `1.0` arrive as bool/float and must
@@ -260,6 +318,10 @@ class Row(BaseModel):
     issues: tuple[StrictStr, ...] = ()
     harnesses: tuple[StrictStr, ...] = ()
     walks: tuple[Walk, ...] = ()
+    # Fragment kind 2 (spec 2026-11-14-acceptance-local-status R4): what earned a
+    # `local` row, written by `deliver`; `fr.artifacts.structure` refuses it on a row
+    # of any other status.
+    local: LocalStamp | None = None
 
     @field_validator("status", mode="before")
     @classmethod

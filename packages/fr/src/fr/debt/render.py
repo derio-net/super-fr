@@ -71,6 +71,7 @@ def figures(report: DebtReport) -> dict[str, Any]:
         "schema": 1,
         "acceptance": dict(sorted(report.acceptance.by_status.items())),
         "acceptance_available": report.acceptance.available,
+        "acceptance_local_debt": report.acceptance.local_debt,
         "plans": {
             "archivable": len(report.plans.archivable),
             "stale": len(report.plans.stale),
@@ -164,14 +165,22 @@ def _acceptance_off(report: DebtReport) -> bool:
 def _status(r: DebtRow) -> str:
     """A row's status, with `contested` beside it when a stale amendment merged on it
     (and `retired` before that when the row has left the matrix)."""
-    return status_tag(r.status, retired=r.retired, contested=r.contested)
+    return status_tag(r.status, retired=r.retired, contested=r.contested, local=r.local_debt)
 
 
-def status_tag(status: str, *, retired: bool = False, contested: bool = False) -> str:
-    """`<status>[, retired][, contested]`: the one rendering `fr debt`, the digest and
-    `fr acceptance status` share."""
+def status_tag(
+    status: str, *, retired: bool = False, contested: bool = False, local: str | None = None
+) -> str:
+    """`<status>[, retired][, contested][, <local reason>]`: the one rendering `fr debt`,
+    the digest and `fr acceptance status` share (`local, stale: <path>`, spec
+    2026-11-14-acceptance-local-status R5)."""
     return ", ".join(
-        [status, *(["retired"] if retired else []), *(["contested"] if contested else [])]
+        [
+            status,
+            *(["retired"] if retired else []),
+            *(["contested"] if contested else []),
+            *([local] if local else []),
+        ]
     )
 
 
@@ -298,6 +307,11 @@ def text(report: DebtReport) -> str:
         out.append(f"  {_counts_line(acc.by_status)}")
         out += [f"  {r.id} [{_status(r)}] {_cell(r.acceptance)}" for r in acc.rows if r.is_debt]
         out += [f"  {r.id} [{_walked(r.walked_at)}]" for r in acc.rows if r.status == "walked"]
+        out += [
+            f"  {r.id} [local {r.local_at[:10] if r.local_at else 'undated'}]"
+            for r in acc.rows
+            if r.status == "local" and not r.is_debt
+        ]
     out.append("Plans:")
     p = report.plans
     out += [

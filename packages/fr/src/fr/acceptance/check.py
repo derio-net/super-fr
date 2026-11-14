@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import subprocess
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -111,10 +111,14 @@ def _age_key(row: Row) -> str:
 
 
 def open_rows(
-    matrix: Matrix, contested: frozenset[str] = frozenset(), retired: Sequence[Row] = ()
+    matrix: Matrix,
+    contested: frozenset[str] = frozenset(),
+    retired: Sequence[Row] = (),
+    local: Mapping[str, str] | None = None,
 ) -> list[Row]:
-    """The nag set: the debt rows (`is_debt`: a `DEBT_STATUSES` status, or one of
-    the fold's *contested* rows), oldest origin first. A *retired* row a merged
+    """The nag set: the debt rows (`is_debt`: a `DEBT_STATUSES` status, one of
+    the fold's *contested* rows, or a `local` row with a *local* reason from
+    `fr.acceptance.local.local_reasons`), oldest origin first. A *retired* row a merged
     amendment still names is contested too (plan journal `fold-merged-stale-targets`),
     and debt like any other: it is listed although it left the matrix.
 
@@ -122,7 +126,12 @@ def open_rows(
     """
     from fr.acceptance.model import is_debt
 
-    opens = [r for r in matrix.rows if is_debt(r.status, contested=r.id in contested)]
+    reasons = local or {}
+    opens = [
+        r
+        for r in matrix.rows
+        if is_debt(r.status, contested=r.id in contested, local=reasons.get(r.id))
+    ]
     opens += [r for r in retired if r.id in contested]
     return sorted(opens, key=_age_key)
 
@@ -132,6 +141,8 @@ class CheckResult:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     warning_rows: list[Row] = field(default_factory=list)
+    local: dict[str, str] = field(default_factory=dict)
+    """Why each `local` row among `warning_rows` is debt (spec 2026-11-14 R5)."""
     failing_ids: list[str] = field(default_factory=list)
     summary: str = ""
 
@@ -392,7 +403,10 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
 
     result.errors.extend(why for row in matrix.rows if (why := walked_error(row)) is not None)
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]
-    result.warning_rows = open_rows(matrix)
+    from fr.acceptance.local import local_reasons
+
+    result.local = local_reasons(matrix.rows, root)
+    result.warning_rows = open_rows(matrix, local=result.local)
     result.summary = (
         f"acceptance matrix check: {len(matrix.rows)} rows OK "
         f"({dict(Counter(r.status for r in matrix.rows))})"

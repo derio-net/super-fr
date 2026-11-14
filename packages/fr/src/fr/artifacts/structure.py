@@ -453,7 +453,24 @@ def validate_fragment(path: Path) -> list[str]:
                 f"`repo: {fragment.repo}` disagrees with {sibling.name} (`repo: {theirs}`): "
                 "every fragment names the same repo"
             )
+    problems += _local_stamp_problems(fragment)
     return problems + _matrix_strategy_problems(fragment, path.parents[3])
+
+
+def _local_stamp_problems(fragment: Any) -> list[str]:
+    """A `local` stamp only on a `local` row or set-status (spec
+    2026-11-14-acceptance-local-status R7): its shape is the model's check."""
+    out = [
+        f"row {r.id}: carries a `local` stamp but its status is {r.status}, not local"
+        for r in fragment.rows
+        if r.local is not None and r.status != "local"
+    ]
+    out += [
+        f"amendment {k} (row {a.row}): carries a `local` stamp but sets {a.status}, not local"
+        for k, a in enumerate(fragment.amendments)
+        if a.op == "set-status" and a.local is not None and a.status != "local"
+    ]
+    return out
 
 
 def _matrix_strategy_problems(matrix: Any, repo_root: Path) -> list[str]:

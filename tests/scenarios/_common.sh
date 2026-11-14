@@ -81,7 +81,7 @@ matrix_fragment() {
     /^org:/ && !rows { org = $2; next }
     /^repo:/ && !rows { repo = $2; next }
     /^rows:/ && !rows {
-      print "schema_version: 1"; print "feature: " feature; print "repo: " org "/" repo
+      print "schema_version: 2"; print "feature: " feature; print "repo: " org "/" repo
       print; rows = 1; next
     }
     rows { print }

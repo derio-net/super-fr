@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/gatebackfill/**
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-14 a local row that is debt is not delivery evidence (spec 2026-11-14-acceptance-local-status)
 ---
 
 # `fr gate backfill` — bring old owed work into the gate lanes
@@ -207,7 +207,7 @@ A key counts as discharged only on positive evidence, when no source but its own
 
 | Key | Evidence |
 |---|---|
-| `row:` | the row exists, with a status outside the debt statuses |
+| `row:` | the row exists, with a status outside the debt statuses, and is not a `local` row that is debt (`unstamped`, `stale` or `promote to ci`) |
 | `plan:` | the phase exists, with at least one step, and every step is ticked or n/a |
 | `spec:` | the step's effective outcome is a recorded `discovery` (what `--ran` and `--na` write) |
 | any but `issue:` | its journal `owed` entry was resolved fixed, unless a `row:` is in a debt status, which the journal never overrides |

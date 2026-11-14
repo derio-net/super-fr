@@ -63,7 +63,15 @@ def _write(root: Path, rel: str, text: str) -> None:
 
 
 def _fragment(feature: str, rows: list[dict[str, Any]], amendments: list[dict[str, Any]]) -> str:
-    doc: dict[str, Any] = {"schema_version": 1, "feature": feature, "repo": REPO, "rows": rows}
+    from fr.artifacts.registry import ARTIFACT_KINDS
+
+    version = ARTIFACT_KINDS["acceptance-fragment"].current_version
+    doc: dict[str, Any] = {
+        "schema_version": version,
+        "feature": feature,
+        "repo": REPO,
+        "rows": rows,
+    }
     if amendments:
         doc["amendments"] = amendments
     return yaml.safe_dump(doc, sort_keys=False)

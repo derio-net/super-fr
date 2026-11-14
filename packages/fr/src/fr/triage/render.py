@@ -1047,7 +1047,10 @@ def _debt_repo(facts: Facts, repo: str, since: SnapshotDiff | None, show_note: l
     # Debt is the DEBT_STATUSES only; `walked` and `manual` are listed beside it, never
     # counted, and `ci` or `scheduled` rows are not debt at all.
     names = sorted((set(fig["acceptance"]) | set(acc_before or {})) & DEBT_STATUSES)
-    acc = ", ".join(_moved(n, fig["acceptance"].get(n, 0), acc_before) for n in names) or "none"
+    parts = [_moved(n, fig["acceptance"].get(n, 0), acc_before) for n in names]
+    if fig.get("local_debt"):  # local rows that are debt by their stamp (spec 2026-11-14 §B)
+        parts.append(f"local debt {fig['local_debt']}")
+    acc = ", ".join(parts) or "none"
     listed = (
         ", ".join(
             f"{n} {fig['acceptance'][n]}"
