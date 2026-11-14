@@ -1,5 +1,5 @@
 ---
-title: "Running super-fr under Hermes Agent"
+title: "Run super-fr under Hermes Agent"
 tldr: |
   What the installer puts in a Hermes home, how the isolation guards work there, and how model bindings and phase dispatch differ from Claude Code.
 standalone_style: broadsheet
@@ -12,16 +12,16 @@ covers:
 reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
 ---
 
-# Running super-fr under Hermes Agent
+# Run super-fr under Hermes Agent
 
 super-fr runs on three agent harnesses: Claude Code, OpenCode and
 [Hermes Agent](https://github.com/NousResearch/hermes-agent). The skills are the same
-everywhere; what differs is how they are installed and how enforcement is wired.
+everywhere. What is different is how they are installed and how enforcement is wired.
 
 ## Install
 
 The installer does this by itself when `~/.hermes` exists. To force it on a fresh Hermes
-setup, from a checkout of this repo:
+setup, run this from a checkout of this repo:
 
 ```bash
 HERMES_SKILLS_INSTALL=1 bash scripts/install.sh
@@ -34,8 +34,8 @@ HERMES_SKILLS_INSTALL=1 bash scripts/install.sh
 | Hooks | `~/.hermes/super-fr-hooks/` | a copied tree; `config.yaml` `hooks:` entries point at it |
 | Approvals | `~/.hermes/shell-hooks-allowlist.json` | pre-recorded so runs without a terminal register the hooks without a prompt |
 
-The parts that edit your Hermes config are done by a tested subcommand rather than by shell,
-and each is undone by its inverse:
+A tested subcommand, not the shell, does the parts that edit your Hermes config. The inverse
+subcommand undoes each part:
 
 ```bash
 fr hermes install   --source <super-fr checkout> [--home ~/.hermes]
@@ -47,21 +47,25 @@ super-fr's own files are touched. `--home` defaults to `$HERMES_HOME`, then `~/.
 
 ## Enforcement
 
-Hermes runs shell hooks over the same block protocol as Claude Code, so the isolation guards
-are the same scripts. They gate edits (`write_file`, `patch`) and shell commands
-(`terminal`, `execute_code`: git and gh changes outside isolation, and pushes to a merged
-PR's branch). A first-turn hook shows open acceptance debt. The escapes are unchanged:
-`fr isolation up`, `.fr-isolation-allow`, and `FR_BASE_OK=1`. The rule is explained in
-[fr-isolation](../explainers/fr-isolation.md).
+Hermes accepts a Claude-Code-style block decision. So super-fr ships Hermes versions of the
+isolation guards (`plugins/super-fr/hooks/hermes/`), which share the decision library of the
+Claude Code hooks. The Claude Code shell guard acts only while a pipeline is live. The Hermes
+shell guard judges by the workspace marker, on every git or gh change.
+
+The guards gate edits (`write_file`, `patch`) and shell commands (`terminal`,
+`execute_code`: git and gh changes outside isolation, and pushes to a merged PR's branch). A
+first-turn hook shows open acceptance debt. The escapes are unchanged:
+`fr isolation up`, `.fr-isolation-allow`, and `FR_BASE_OK=1`. The
+[fr-isolation](../explainers/fr-isolation.md) explainer explains the rule.
 
 ## Models and phase dispatch
 
 super-fr ships no Hermes model bindings. `fr models resolve --harness hermes --tier <t>`
-prints nothing until you bind one, so `fr-goal` asks which model to use for each tier on its
-first run and saves the answer with `fr models set`.
+prints nothing until you bind one. So on its first run, `fr-goal` asks which model to use for
+each tier, and saves the answer with `fr models set`.
 
 `fr-goal` hands each plan phase to a subagent with `delegate_task(goal, context)`. A Hermes
 subagent starts with a fresh conversation, so the whole brief travels in `context`.
 
-Working on this repo with Hermes? [HERMES.md](../../HERMES.md) is the project context file;
-it outranks `AGENTS.md`, so read both.
+Do you work on this repo with Hermes? [HERMES.md](../../HERMES.md) is the project context
+file. It outranks `AGENTS.md`, so read both.

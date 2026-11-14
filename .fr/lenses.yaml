@@ -1,0 +1,13 @@
+lenses:
+  docs-accuracy:
+    title: Docs accuracy
+    brief: |
+      Review every published page this change touches for whether what it says is true
+      of the code. Check each claim the change adds or edits, and each claim on a touched
+      page whose covered code (`covers:`) the change also touched, against that code:
+      commands and options, defaults, file paths, behaviour, order of steps. Report each
+      false or stale claim with the page line and the code's file:line.
+      A problem you see outside this lens is still reported, as an ordinary finding.
+require:
+  - paths: ["docs/explainers/*.md", "docs/*.md", "docs/reference/*.md"]
+    lenses: [docs-accuracy]

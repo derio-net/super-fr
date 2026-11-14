@@ -1,0 +1,145 @@
+schema_version: 2
+phase:
+  number: 6
+  title: 01-fr-goal and why-fr, then the CI gate
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - writing-standards-docs-accuracy-lens
+  - writing-standards-docs-ci-gate
+  - writing-standards-docs-explainers
+  - writing-standards-docs-accuracy
+  tier: standard
+  files:
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/why-fr.md
+  - .github/workflows/ci.yml
+  - tests/unit/test_writing_standards_docs.py
+  - tests/unit/test_pages_workflow.py
+  - .fr/lenses.yaml
+  - .claude/rules/explainers-currency.md
+  - .opencode/instructions/explainers-currency.md
+  estimate_lines: 1800
+tasks:
+- number: 1
+  title: 01-fr-goal (the longest page; it alone is one batch)
+  steps:
+  - id: P6.T1.S1
+    text: "[ACCURACY] Before any language change: the orchestrator's brief carries an accuracy review per page (claims checked against the code the page `covers:` and names). Verify each finding against\
+      \ the code yourself; correct the true ones in ONE content commit per page (`docs(<page>): correct <what>`), and journal each claim (discovery, phase-tagged): claim, page line, code file:line, correction\
+      \ \u2014 or refuted with the code evidence. That commit is the page's baseline for the rest of this task (no corrections \u2192 the merge-base baseline from the plan journal). [RED] Show the standard\
+      \ fails today and capture the baseline: run `bash scripts/check-writing-standards.sh /home/user/blog-craft` scoped to this batch \u2014 `uv run --isolated --no-project --with pyyaml python /home/user/blog-craft/tools/validate_writing_standard.py\
+      \ --default plain-language --stats docs/explainers/01-fr-goal.md` \u2014 and record each page's FAIL/WARN counts and sentence stats. Write each page's baseline version (`git show $BASE:./<path>`,\
+      \ BASE = the page's baseline: its accuracy commit, else the merge base recorded in the plan journal) to a per-run scratch directory outside the repository, keeping the repo-relative path, for the\
+      \ fact review."
+  - id: P6.T1.S2
+    text: '[GREEN] Rewrite each page in place to `plain-language`, language only, following blog-craft''s skills/apply-writing-standard/SKILL.md and standards/plain-language.md at /home/user/blog-craft:
+      keep front matter keys and values (title/tldr prose may be reworded), section order, fenced code, inline code, link targets, numerals and HTML comment markers. A heading other pages link to keeps
+      its anchor, or its inbound links are updated in the batch. Then run the checker with `--default plain-language --preserve-from <page baseline> --stats docs/explainers/01-fr-goal.md` until no FAIL
+      and no `preserve` hit; fix every warning you can and journal each one kept with its reason (R9).'
+  - id: P6.T1.S3
+    text: '[REFACTOR] Run the wording tripwires on the batch: `uv run pytest -q --no-cov tests/unit/test_tripwire_fr_goal_question_rounds.py tests/unit/test_hermes_docs.py tests/unit/test_build_site.py
+      tests/unit/test_writing_standards_docs.py tests/unit/test_tripwire_explainers_fresh.py`, and `uv run fr docs check`; fix what fails. Journal per page: sentences and average before -> after, checker
+      result, kept warnings with reasons, the baseline path written in S1. Commit and push; CI on the pushed head is the evidence (tests: ci).'
+- number: 2
+  title: why-fr to elements-of-style
+  steps:
+  - id: P6.T2.S1
+    text: "[ACCURACY] Before any language change: the orchestrator's brief carries an accuracy review per page (claims checked against the code the page `covers:` and names). Verify each finding against\
+      \ the code yourself; correct the true ones in ONE content commit per page (`docs(<page>): correct <what>`), and journal each claim (discovery, phase-tagged): claim, page line, code file:line, correction\
+      \ \u2014 or refuted with the code evidence. That commit is the page's baseline for the rest of this task (no corrections \u2192 the merge-base baseline from the plan journal). [RED] Show the standard\
+      \ fails today and capture the baseline: run `bash scripts/check-writing-standards.sh /home/user/blog-craft` scoped to this batch \u2014 `uv run --isolated --no-project --with pyyaml python /home/user/blog-craft/tools/validate_writing_standard.py\
+      \ --default elements-of-style --stats docs/explainers/why-fr.md` \u2014 and record each page's FAIL/WARN counts and sentence stats. Write each page's baseline version (`git show $BASE:./<path>`, BASE\
+      \ = the page's baseline: its accuracy commit, else the merge base recorded in the plan journal) to a per-run scratch directory outside the repository, keeping the repo-relative path, for the fact\
+      \ review."
+  - id: P6.T2.S2
+    text: '[GREEN] Rewrite each page in place to `elements-of-style`, language only, following blog-craft''s skills/apply-writing-standard/SKILL.md and standards/elements-of-style.md at /home/user/blog-craft:
+      keep front matter keys and values (title/tldr prose may be reworded), section order, fenced code, inline code, link targets, numerals and HTML comment markers. A heading other pages link to keeps
+      its anchor, or its inbound links are updated in the batch. Then run the checker with `--default elements-of-style --preserve-from <page baseline> --stats docs/explainers/why-fr.md` until no FAIL and
+      no `preserve` hit; fix every warning you can and journal each one kept with its reason (R9).'
+  - id: P6.T2.S3
+    text: '[REFACTOR] Run the wording tripwires on the batch: `uv run pytest -q --no-cov tests/unit/test_tripwire_fr_goal_question_rounds.py tests/unit/test_hermes_docs.py tests/unit/test_build_site.py
+      tests/unit/test_writing_standards_docs.py tests/unit/test_tripwire_explainers_fresh.py`, and `uv run fr docs check`; fix what fails. Journal per page: sentences and average before -> after, checker
+      result, kept warnings with reasons, the baseline path written in S1. Commit and push; CI on the pushed head is the evidence (tests: ci).'
+- number: 3
+  title: Turn the gate on (R6, R11)
+  steps:
+  - id: P6.T3.S1
+    text: "[ACCURACY] Before any language change: the orchestrator's brief carries an accuracy review per page (claims checked against the code the page `covers:` and names). Verify each finding against\
+      \ the code yourself; correct the true ones in ONE content commit per page (`docs(<page>): correct <what>`), and journal each claim (discovery, phase-tagged): claim, page line, code file:line, correction\
+      \ \u2014 or refuted with the code evidence. That commit is the page's baseline for the rest of this task (no corrections \u2192 the merge-base baseline from the plan journal). [RED] In tests/unit/test_writing_standards_docs.py\
+      \ (or test_pages_workflow.py): ci.yml's site-build job has a step running `bash scripts/check-writing-standards.sh .blog-craft` after the build, and names no blog-craft SHA. Run: RED."
+  - id: P6.T3.S2
+    text: '[GREEN] Add the step to .github/workflows/ci.yml''s site-build job. Run `bash scripts/check-writing-standards.sh /home/user/blog-craft` locally: exit 0 (no FAIL on any page). Test green.'
+  - id: P6.T3.S3
+    text: "[REFACTOR] Run the full local suite once: `uv run pytest -q --no-cov -n auto` (long \u2014 see the long_commands rule). Commit, push, confirm CI `ci-ok` green on the pushed head, which now includes\
+      \ the new gate (tests: ci)."
+- number: 4
+  title: The docs-accuracy lens and the authoring rule's accuracy paragraph (R15, R16)
+  steps:
+  - id: P6.T4.S1
+    text: '[RED] In tests/unit/test_writing_standards_docs.py: `.fr/lenses.yaml` defines lens `docs-accuracy` (title, brief naming `covers:` and file:line evidence) and a path rule requiring it for exactly
+      the three page globs of `.fr/docs.yaml`; `.claude/rules/explainers-currency.md` has the accuracy paragraph (names the lens, says that outside a run the author checks a page against its `covers:` code).
+      Run: RED.'
+  - id: P6.T4.S2
+    text: "[GREEN] Write `.fr/lenses.yaml` exactly as spec \xA73b shows; add the accuracy paragraph to the rule; run `python3 scripts/sync-opencode.py` and commit the mirror. Run `uv run fr lenses check`\
+      \ (exit 0) and `uv run fr lenses status` (lists docs-accuracy, required by the path rule). Tests green."
+  - id: P6.T4.S3
+    text: '[REFACTOR] Run `uv run pytest -q --no-cov tests/unit/test_writing_standards_docs.py tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_tripwire_skill_tool_neutrality.py` and
+      `uv run fr docs check`; commit and push; CI `ci-ok` green on the pushed head (tests: ci).'
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T1.S3:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T2.S3:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T3.S2:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T3.S3:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T4.S1:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T4.S2:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+    P6.T4.S3:
+      state: x
+      ticked_at: '2026-11-14T01:39:55+00:00'
+      note: null
+  completion:
+    at: '2026-11-14T01:39:55+00:00'
+    note: null
+    observed_prs: []

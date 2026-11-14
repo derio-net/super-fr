@@ -59,8 +59,44 @@ A relative link to another page's `.md` becomes its route; a link to any other t
 becomes a GitHub link at the built commit; a link to a path git does not track fails the
 build. `./acceptance/` is the one site route a page may name directly.
 
-Match the existing voice: second person, concrete, unhurried, explaining *why* a mechanism
-exists rather than only what it does, for a reader who has never seen this repo.
+## Writing standards
+
+Every page follows a writing standard from `derio-net/blog-craft`, checked by its
+`tools/validate_writing_standard.py`. The standard depends on the page's group:
+
+- guides (`docs/*.md`) and reference pages (`docs/reference/*.md`): `ste`;
+- explainers (`docs/explainers/*.md`): `plain-language`.
+
+Three pages depart from their group, and each says so in its own front matter:
+`docs/explainers/why-fr.md` (the argument essay) carries `writing_standard:
+elements-of-style`; `docs/explainers/index.md` (the landing page) and
+`docs/reference/cli.md` (its command tree is generated from `fr`'s help text) carry
+`writing_standard: none`. No other page carries the key: a new page takes its group's
+standard. The rules themselves live in blog-craft, one file per standard:
+`skills/apply-writing-standard/standards/ste.md`, `plain-language.md` and
+`elements-of-style.md`. Product terms a page cannot avoid (abbreviations such as `PR` and
+`CI`, fr nouns such as `finding`) are listed once in `.writing-standard-terms` at the repo
+root; add one there only when no plainer word would do.
+
+`scripts/check-writing-standards.sh <blog-craft-dir>` holds the mapping and runs the
+checker over every page `.fr/docs.yaml` names; a FAIL fails it, warnings do not. CI's
+`site-build` job runs it against its pinned checkout. To run it locally, check out the
+pinned blog-craft as in the preview recipe below, then:
+
+```bash
+bash scripts/check-writing-standards.sh /tmp/bc
+```
+
+The standards set the language; the purpose stays. An explainer explains *why* a
+mechanism exists, not only what it does, for a reader who has never seen this repo.
+
+A page also stays true to the code it covers. In an fr-goal run, every change that edits
+a page is reviewed under the `docs-accuracy` lens (`.fr/lenses.yaml` requires it for the
+three page globs of `.fr/docs.yaml`): each claim the change adds or edits, and each claim
+on a touched page whose covered code the change also touched, is checked against that
+code, and a false or stale one is reported with the page line and the code's file:line.
+Outside an fr-goal run there is no lens review: check the page against its `covers:` code
+by hand before you commit it.
 
 ## Previewing a page locally
 
@@ -99,5 +135,11 @@ and look at the pages: a renderer change shows up in every page at once.
   the landing and top-bar renderers, and that this repo's own `index.md` is a valid landing;
   `/`, `/01-fr-goal.html` and `/fr-isolation.html` stay published.
 - `tests/unit/test_pages_workflow.py` — the deploy's triggers, the build step and the pin.
+- `scripts/check-writing-standards.sh` — the writing-standard check, run by CI's `site-build`
+  job; `tests/unit/test_writing_standards_docs.py` pins its page-group mapping and the three
+  front-matter exceptions.
+- `.fr/lenses.yaml` — the `docs-accuracy` lens and the path rule that requires it for every
+  page (`fr lenses check` validates it); `tests/unit/test_writing_standards_docs.py` pins both
+  and this rule's accuracy paragraph.
 - `tests/unit/test_tripwire_fr_goal_question_rounds.py` — the question-round wording on
   `01-fr-goal.md` and `index.md`.

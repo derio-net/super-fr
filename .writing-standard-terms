@@ -1,0 +1,31 @@
+# Terms blog-craft's writing-standard checker accepts in super-fr's published
+# docs (scripts/check-writing-standards.sh; spec 2026-11-13-writing-standards-docs
+# R4). One term per line. List a term only when a standard would otherwise flag
+# a word the page cannot avoid; never to silence a sentence that should change.
+
+# Abbreviations that are the name readers know the thing by, in prose, commands
+# and UI labels alike. Spelling them out at first use would name something the
+# reader then has to translate back.
+API
+CI
+CLI
+HEAD
+HTML
+ID
+PATH
+PR
+README
+REST
+SSH
+UI
+URL
+YAML
+
+# fr nouns that end in -ing. Each names a thing (a journal entry kind, a check
+# severity, a status, a skill), not an action, so no verb can
+# replace it.
+debugging
+finding
+pending
+sibling
+warning
