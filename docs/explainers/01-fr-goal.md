@@ -105,7 +105,7 @@ flowchart TD
 This is autonomous work, not blind work. `fr-goal` stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(`plugins/super-fr/skills/fr-goal/SKILL.md:14-27`, `:42-53`). The reviews shown above are
+(`plugins/super-fr/skills/fr-goal/SKILL.md:14-27` and §1). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.
 
@@ -169,7 +169,7 @@ steps:
     kind: agent
     skill: super-fr:fr-brainstorming
     gate: operator
-    emits: [spec, journal:spec]
+    emits: [spec, journal:spec, acceptance]
 
   - id: plan-review
     kind: cli
@@ -250,7 +250,7 @@ ways that are very hard to see. `fr workflow check` validates a shape before
 you rely on it: unique step ids, no cycles, every `needs` satisfiable, and only
 capabilities drawn from a known list, so a typo is an error you see rather than
 a step that quietly never runs
-(`docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`,
+(`docs/superpowers/implemented/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`,
 section 4.A).
 
 **A second shape ships beside it, for small goals.** Much of what a run costs
@@ -268,7 +268,7 @@ else has moved, and only onto a shape that begins with that same step. The
 light `plan` step then refuses a plan with more than one agentic phase and
 names them. So "this goal is small" is checked when the plan is written; it is
 not a hope carried through the run
-(`docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md`, section A).
+(`docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md`, section A).
 
 ### The run keeps its place
 
@@ -449,24 +449,11 @@ which is usually the one worth reading.
 
 There is one record per phase and every attempt lives on it, so a phase that had
 to be dispatched twice keeps both rather than letting the retry overwrite what
-came before. Each attempt also carries its own cost, printed by `fr run status`
-directly beneath the holder that incurred it. Identity and spend on the same
-line is the whole point: a number with no agent beside it cannot be argued with,
-and the spend that produced nothing is usually the spend worth looking at.
-
-Two numbers appear there, and they are deliberately never blended into one. The
-first is an **estimate**, computed as the brief goes out: how much context this
-dispatch is about to be handed — the journal, the handoff, the specification,
-the plan. The second is a **measurement**, taken when the attempt closes and
-read out of the harness's own accounting for that particular agent. On a real
-phase of this feature's own run the estimate was about 23,600 tokens and the
-measurement 56,092,764 — a factor of roughly two thousand, more than three
-orders of magnitude apart. Neither number is wrong. The estimate describes one
-prompt. The measurement is everything the harness billed across every turn the
-agent took, cached reads included, which over a long phase is largely the same
-context re-sent dozens of times. Averaged into a single figure they would
-produce a number that is true of nothing, so `fr` prints both, beneath the same
-holder, and says in writing that the two are not comparable.
+came before. `fr run status` shows who held each attempt and since when. It
+shows no cost: what a run spent is kept in the run's usage file, described
+below, and `fr run cost` prints it. Cursors written before that change carried a
+per-attempt estimate and measurement; those survive only in the frozen older
+cursor shapes.
 
 A measurement is also refused more often than you might expect, and each refusal
 is a fact rather than a gap. The transcript an attempt is measured from lives on
@@ -495,8 +482,8 @@ never ran the run, as two tables. The first has a row per step, and splits each
 step into what the orchestrating session spent itself and what its subagents
 spent: turns, cache-read and output tokens, and dollars for each. The second
 has a row per phase: the tier it was dispatched at, the model that tier was
-bound to, the model that actually ran (marked `≠` when the two are different
-models), and what the executor, the reviewer and the orchestrator each spent
+bound to, the model that actually ran (marked `≠` when the model that ran is from a
+different family than the bound one), and what the executor, the reviewer and the orchestrator each spent
 on that phase. The same honesty rule applies: a figure nobody could observe
 prints `—`, never `0`, and so does the model that ran on a phase recorded
 before the tool kept the binding and the observation apart — back then one
@@ -537,8 +524,9 @@ to let the turn end and hand the next command back, which is what it does — at
 most once per position in the run, so that a command which keeps failing cannot
 trap the session in a loop, and so that stopping on purpose needs nothing more
 than stopping a second time. On OpenCode a stop cannot be refused at all; there
-the plugin continues the session with that command instead, which is weaker, and
-is recorded as weaker — it has not yet been proved on a live session. Where no
+the plugin continues the session with that command instead, which is weaker than a
+refusal, and is recorded as such. It was proved on a live OpenCode session
+in October 2026 and is declared enforced. Where no
 adapter exists, the wording above is all there is.
 
 The Claude Code guard costs two things worth knowing about. It calls whichever
@@ -603,7 +591,7 @@ question round, sized to those decisions, recommended choices first — a
 second round follows only when it was announced before the first question,
 or you ask for one, and there is never a third. A deployed change may include
 a question about how you will verify it in the real environment
-(`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md`, §1).
 
 This is the shape's one operator gate, and an unanswered round is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
@@ -638,9 +626,10 @@ resolving the gate looks for an answered question since the gate blocked:
 one found records `operator`, whatever the agent typed. None found refuses
 the resolve, unless the agent clears the gate on the record, saying why no
 decision was needed (`--no-questions --reason`). That records `agent` and
-writes the reason to the spec journal. Only where fr cannot observe the
-session does the typed claim stand (`agent` unless stated), and it is marked
-unverified. `fr run gates <run-id>` prints that provenance, so a reviewer
+writes the reason to the spec journal. Where fr cannot observe the
+session, the resolve refuses until the agent states who answered
+(`answered_by: operator` or `agent`); there is no default, and the stated
+answer is marked unverified. `fr run gates <run-id>` prints that provenance, so a reviewer
 reading the delivered pull request can tell a human-answered round from one
 the agent cleared on its own, rather than trust silence.
 
@@ -671,7 +660,7 @@ harness lets `fr` read the conversation, must be a reviewer this session really
 dispatched — and no finding left open. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
-(`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`,
+(`plugins/super-fr/skills/fr-goal/SKILL.md`, §1;
 `plugins/super-fr/skills/fr-brainstorming/SKILL.md`).
 
 The important promises also become **acceptance tests**: concrete statements of
@@ -691,12 +680,12 @@ overtaken, so two features changing one promise cannot silently undo each
 other (`plugins/super-fr/skills/fr-acceptance/SKILL.md`).
 Under `fr-goal`, the agent presents these rows and a short defense for each
 during the spec review rather than asking for another approval
-(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:67-79`,
+(`plugins/super-fr/skills/fr-brainstorming/SKILL.md`, §3 "Acceptance rows";
 `plugins/super-fr/skills/fr-plan/SKILL.md:63-91`).
 
 Not every promise can be automated immediately. Any remaining acceptance debt
 stays visible in the final pull request instead of being quietly described as
-done (`plugins/super-fr/skills/fr-goal/SKILL.md:99-111`).
+done (`plugins/super-fr/skills/fr-goal/SKILL.md`, §8).
 
 The specification also says how the work will be **verified before it merges**,
 in a short `## Verification` section. You are asked once, early, because the
@@ -736,7 +725,8 @@ for one review. The walking skeleton, which smokes the delivery path before the
 expensive work starts, is folded into the first ask's phase as its first task
 rather than standing as a phase with nothing to deliver.
 
-Reviewing that plan is the shape's one command step, and a good illustration of
+Reviewing that plan is one of the shape's two command steps (the other is
+`journal-check`, step 7), and a good illustration of
 why the distinction between kinds matters. `fr plan self-review` runs against
 the plan the previous step emitted, and its exit code decides whether the run
 moves on; nobody has to judge whether the output "looks fine." The CLI errors on
@@ -761,7 +751,7 @@ time, for the same reason it errors on manual work in an agentic phase: both
 assign work to an actor that cannot do it. The executor is told to refuse as
 well, and to leave the step unticked, because a tick is a claim of performance.
 It warns about unresolved local spec references
-(`packages/fr/src/fr/plan_ops.py:1135-1311`). The agent
+(`self_review` in `packages/fr/src/fr/plan_ops.py`). The agent
 fixes what it reports and advances the run again; there is nothing to record by
 hand, because a command step completes itself.
 
@@ -788,7 +778,7 @@ Back-loading is the default. The final PR labels the phase as unimplemented,
 and the operator performs it and records a completion note on the same branch.
 Front-loading is reserved for genuine prerequisites; then the manual
 instructions are themselves the first deliverable
-(`plugins/super-fr/skills/fr-goal/SKILL.md:62-70`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md`, §3).
 
 Not everything a human does deserves a phase, though. A manual phase is for a
 prerequisite the agentic work depends on, or for a real dispatch or deploy. An
@@ -853,7 +843,7 @@ from one phase to the next: findings, decisions, and discoveries are written
 down rather than being remembered, which is what makes a phase handover
 survivable at all. Progress is recorded step by step, and acceptance rows are
 updated only when there is honest test evidence
-(`plugins/super-fr/skills/fr-goal/SKILL.md:75-88`,
+(`plugins/super-fr/skills/fr-goal/SKILL.md`, §5;
 `plugins/super-fr/skills/fr-execute/SKILL.md:52-100`).
 
 At each completed phase the agent reviews the spec, plan, and code together — the
@@ -863,7 +853,7 @@ with tests. It may reject a finding only with explicit, factual reasoning;
 silent dismissal is not allowed. Each finding is recorded as open, fixed, or
 refuted, and that durable list — not anyone's memory of the review — is what
 the pull-request description is later written from
-(`plugins/super-fr/skills/fr-goal/SKILL.md:90-94`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md`, §6).
 
 A review is judgment work, the same kind of step as `brainstorm` or `plan`. Like
 those, it finishes simply by being marked done, and on its own that leaves no
@@ -944,7 +934,7 @@ passes the same way one who wrote three careful paragraphs does. What it
 closes is narrower and still worth having — a skipped review can no longer
 pass for free. Manual phases are exempt, because no agent review ever runs on
 them
-(`plugins/super-fr/skills/fr-goal/SKILL.md:96-97`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md`, §7).
 
 Inside a run that walked the whole plan this step now finds nothing to
 complain about, because the evidence gate in the loop above already refused to
@@ -977,12 +967,12 @@ how many files its reviewer examined and how each finding closed. The
 [review lenses guide](../review-lenses.md) has the four texts fr ships and the
 config.
 
-### 8. Keep delivery in draft until the checks pass (`deliver`)
+### 8. Deliver a draft, and leave it a draft (`deliver`)
 
 The agent opens one **draft pull request**, a visible change that GitHub marks as
-not ready to merge. It remains a draft while reviews and fixes continue. Only
-after the full test suite and plan checks pass does `fr-goal` mark it ready for
-your review (`plugins/super-fr/skills/fr-goal/SKILL.md:99-111`).
+not ready to merge, and leaves it a draft. Marking it ready is yours: you do it
+once CI is green, you have given an explicit review ok, and nothing was
+committed since (`plugins/super-fr/skills/fr-goal/SKILL.md`, §8).
 
 This ordering follows a recurring failure: implementers opened mergeable PRs
 before orchestration review, operators merged them, and later fixes were pushed
@@ -1137,7 +1127,7 @@ and one PR. A coordinating spec may cover several repositories, but `fr-goal`
 locates each checkout and assigns one isolated agent per other repository, each
 running this same pipeline from planning onward in its own repo. Dependencies
 between repositories live in the spec and PR order, not in a plan phase's local
-`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:55-60`).
+`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md`, §1 and §2).
 
 The shape decides the granularity at which its work is handed out, by declaring
 one of three units: a whole run as a single item, which is what the shipped
@@ -1164,7 +1154,7 @@ than looking for a flag that bends this one.
 | Devcontainer profile | `.devcontainer/<profile>/devcontainer.json` | Defines isolated execution. |
 | Profile secrets | `~/.config/fr/secrets/<repo>/<profile>.env` | Exposes only configured runtime secrets. |
 | Spec | `docs/superpowers/specs/` | Records design, acceptance tests, and optional manual Test Plan. |
-| Acceptance matrix | `docs/acceptance/matrix.yaml` | Tracks each business promise and the evidence proving it. |
+| Acceptance matrix | `docs/acceptance/features/<spec-slug>.yaml`, one fragment per feature, folded into the effective matrix (never stored) | Tracks each business promise and the evidence proving it. |
 | Plan | `docs/superpowers/plans/<slug>/` | Defines phases, TDD steps, and acceptance-test links. |
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
@@ -1502,7 +1492,7 @@ Expect this visible sequence:
    and fixing each one before moving to the next.
 6. Once every phase is done, it confirms each one's review left a record —
    before any pull request exists.
-7. It opens a draft PR, verifies, and marks it ready once the checks pass.
+7. It opens a draft PR and verifies it. Marking it ready is yours.
 8. You complete any disclosed manual phase and merge the PR.
 9. After you report the merge, it verifies the merged content.
 10. When a manual Test Plan exists, it guides you through each real-world check.
