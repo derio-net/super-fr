@@ -1,0 +1,154 @@
+schema_version: 12
+run: 2026-11-14-feat-acceptance-local-status
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-r1
+  title: deliver's stamp is written before gates that can still refuse, and a refused resolve commits
+    it
+  body: 'target: spec
+
+    evidence: run_cmd.py:7552-7560 gates after the proposed slot; run_cmd.py:448-478 commits on every
+    exit path. Build and check after leftovers, write beside _flush_gate_decisions with _remember/_note_record_write.'
+  review_scope: in
+- kind: finding
+  id: sr-r2
+  title: the stamp design ignores quiet/stealth placement, the very placement its Test Plan walks
+  body: 'target: spec
+
+    evidence: fold.py:410-447 fragments live in artifact_root under quiet; blobs come from the product
+    checkout.'
+  review_scope: in
+- kind: finding
+  id: sr-r3
+  title: a fresh deliver tests log vouches for no tree and no clean checkout
+  body: 'target: spec
+
+    evidence: run_cmd.py:3170-3233 _verify_tests_log has no dirty-code check; reuse witness names tree
+    and log (3382-3433). Refuse dirty code paths, take tree from HEAD; decide unobserved=tests.'
+  review_scope: in
+- kind: finding
+  id: sr-r4
+  title: several debt surfaces count by status, not is_debt
+  body: 'target: spec
+
+    evidence: debt/model.py:44-61, debt/render.py:68-83, triage/render.py:1047-1058, status_cmd.py:388,
+    gatebackfill/close.py:151-161, report.py maps.'
+  review_scope: in
+- kind: finding
+  id: sr-r5
+  title: the fragment writer and renderer changes are missing; new fragments would be born stale
+  body: 'target: spec
+
+    evidence: acceptance/edit.py:43-83, 356, 363, 425; matrix_fragments.py:86,209.'
+  review_scope: in
+- kind: finding
+  id: sr-r6
+  title: the fold's stamp rules leave old stamps alive and miss level refs added after the stamp
+  body: 'target: spec
+
+    evidence: fold.py:292-313 apply_amendment.'
+  review_scope: in
+- kind: finding
+  id: sr-r7
+  title: level refs into sibling repos and archived twins are undefined for local_error and the blob stamp
+  body: 'target: spec
+
+    evidence: check.py:147-191, 313-322.'
+  review_scope: in
+- kind: finding
+  id: sr-r8
+  title: the record kind 12→13 bump is justified by a closed model that does not exist
+  body: 'target: spec
+
+    evidence: record/model.py:232, 277 status is StrictStr.'
+  review_scope: in
+- kind: finding
+  id: sr-r9
+  title: decision q5's scenario is not in the spec
+  body: 'target: spec
+
+    evidence: decision q5-verify; spec Verification and Design lacked the scenario.'
+  review_scope: in
+- kind: finding
+  id: sr-r10
+  title: the leftover refusal offers a local command that R2 would refuse for a typical owed row
+  body: 'target: spec
+
+    evidence: pr_body.py:507-524; owed rows often have no levels.'
+  review_scope: in
+- kind: finding
+  id: sr-r11
+  title: R8's scaffold status comment points at the retired matrix header a migration still writes
+  body: 'target: spec
+
+    evidence: acceptance/scaffold.py:25-49 MATRIX_TEMPLATE vs 86-90 RULE_TEMPLATE.'
+  review_scope: in
+- kind: finding
+  id: sr-r12
+  title: the staleness check mixes index, working-tree and HEAD blobs
+  body: 'target: spec
+
+    evidence: spec R4 vs §A; use git ls-tree HEAD, batched.'
+  review_scope: in
+- kind: review
+  id: spec-review
+  title: 'independent spec review: 12 findings'
+  body: fr-spec-reviewer checked decisions q1-q6, the named code at cited lines, the Verification grammar
+    and the fragment's rows. Raised sr-r1..sr-r12, all in scope; all fixed in the spec.
+- kind: lens
+  lens: tests
+  title: deliver stamp, fold stamp rules and five debt surfaces need refusal-path tests, not only happy
+    paths
+- kind: lens
+  lens: errors
+  title: deliver's new write sits among refusing gates; commit-on-refusal and restore must hold
+resolves:
+- id: sr-r1
+  state: fixed
+  body: '§D: plan built after the leftovers gate, written beside _flush_gate_decisions after every refusal,
+    through _remember and _note_record_write; R4 says a refused resolve writes no stamp.'
+- id: sr-r2
+  state: fixed
+  body: '§A and §D: fold and fragment from the artifact root, blobs and tree from the product checkout;
+    the write is committed in the artifact root''s checkout.'
+- id: sr-r3
+  state: fixed
+  body: 'R4 and §D: a fresh log refuses dirty code paths and takes HEAD''s code tree; reuse takes the
+    witness tree; unobserved=tests stamps as deliver accepts it today.'
+- id: sr-r4
+  state: fixed
+  body: §B names every surface; DebtRow gains local_at/local_debt, DebtAcceptance a local_debt count added
+    like contested and carried in the figures; gate backfill treats local debt as debt.
+- id: sr-r5
+  state: fixed
+  body: '§C: render_row_block/render_amendment_block render local, render_fragment writes the current
+    version, new stamp_local editor.'
+- id: sr-r6
+  state: fixed
+  body: '§A: a set-status to local replaces the stamp (None clears it), other statuses drop it; R5 compares
+    stamp keys with current ref paths.'
+- id: sr-r7
+  state: fixed
+  body: 'R2: refs into another repo refused, a warning-only resolution does not count; §C names the returning
+    wrapper.'
+- id: sr-r8
+  state: fixed
+  body: 'R7 and §E: record bump dropped; only acceptance-fragment changes shape.'
+- id: sr-r9
+  state: fixed
+  body: 'R9 added: the scenario, what it walks and the rows it covers.'
+- id: sr-r10
+  state: fixed
+  body: 'R6 and §C: the printed command carries --level and the --feature flag.'
+- id: sr-r11
+  state: fixed
+  body: R8 names RULE_TEMPLATE and leaves MATRIX_TEMPLATE alone.
+- id: sr-r12
+  state: fixed
+  body: '§A and R5: HEAD blobs via one batched git ls-tree.'
+acceptance: []
+evidence:
+  review: spec-review
+  reviewer: a0b7a72fd7f4b498b
