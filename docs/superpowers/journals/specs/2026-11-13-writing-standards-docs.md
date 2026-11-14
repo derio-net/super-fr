@@ -198,3 +198,10 @@ Evidence: One blind fact-keeper per rewritten page (31): no lost fact; every cha
 Step: The plan journal names every warning a page keeps, and why (R9).
 
 Evidence: Each warning a page keeps is a p*-ws-* journal entry naming the warning and its reason (e.g. 'attempt' in herdr-control-sessions and 01-fr-goal, 'OPEN' in fr-devops-gate, the passive in fr-acceptance:115).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-7 created=2026-11-14T02:21:28+00:00 -->
+### test-plan-step-7 · discovery · Test Plan step 7: ran
+
+Step: The wording tripwires of R12 pass on the batch, and CI's full unit suite passes on the pushed batch.
+
+Evidence: The R12 tripwires (question rounds, hermes docs, build_site, explainers_fresh) pass on main c0fdbce (490 passed with the writing-standards and opencode-sync tests); CI's full unit suite (12 shards + split-check, ci-ok) passed on every phase's pushed head and on the merged head 7082ff0dd.
