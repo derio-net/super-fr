@@ -7192,7 +7192,7 @@ batches:
   - super-fr#1461
   rationale: '#1394 must restore the 33 overwritten row notes, not only stop new damage (origins: fixes
     ship without repairing what older versions wrote).'
-  wave: 17
+  wave: 18
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
