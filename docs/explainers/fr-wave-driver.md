@@ -75,7 +75,8 @@ is true now, not from what it remembers. In order, a pass:
     and merges it on a later pass, once CI is green again. When a pull request's checks fail,
     the driver hands it back to the batch's session if that session is idle, at most twice
     per dispatch. When the base has moved past fr's own update, the driver first updates the
-    pull request again. After those hand-backs the pull request shows under **Needs you now**.
+    pull request again. If the session is gone, or after those two hand-backs, the pull
+    request shows under **Needs you now**.
     The driver never approves, and it never waits for CI inside a pass.
 
 3. **Closes out what merged.** Once the release commit that followed the merge has landed
