@@ -3339,6 +3339,42 @@ issues:
     detail: 'Archive PR for `2026-11-14-acceptance-local-status`; merged as 581853312.'
     delivery: delivers
     delivery_note: 'Pure archive move of the #1453 run (plan, spec, journals, run cursor, usage). Merged.'
+  super-fr#1463:
+    tier: 3
+    theme: test-flake
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Two lock tests in `tests/unit/test_hooks_worktree.py` (:463, :499) failed once each on 2026-11-14 and passed on rerun; the second blocked the v7.0.0 release until shard 3 was rerun (a red shard publishes nothing). Either the worktree lock races or the tests are timing-tight under `-n auto`.'
+    note: 'Batch suite-health (wave 15). Decide race vs timing before marking flaky.'
+  super-fr#1462:
+    tier: 2
+    theme: run-evidence-gates
+    cx: S
+    severity: high
+    kind: defect
+    verified: true
+    detail: '`_feature_local_ids` (`commands/run_cmd.py:7352`) counts merged `local` rows too, and `stamp_local` (`acceptance/edit.py:456`) writes into the row block: an in-place edit of a merged row. The fold keeps the merged definition (row still unstamped) and `fr acceptance check` fails "edited in place", while deliver exits 0. From #1455, widened by #1460. **Still live** on main.'
+    note: 'A merged row must be stamped by an amendment, never in place. Batch deliver-evidence.'
+  super-fr#1461:
+    tier: 4
+    theme: artifact-migration
+    cx: S-M
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Fragments created before #1451 are `<slug>-design.yaml` with `feature: <slug>-design`; writers since create `<slug>.yaml`, so a feature can end up with two fragments. Wanted: a `Repair` on `acceptance-fragment` renaming it, merging or refusing by row id.'
+    note: 'Repair under the artifact-versioning rule. Batch acceptance-edits.'
+  super-fr#1459:
+    tier: 4
+    theme: dispatch
+    cx: L
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Decision recorded: drop VibeKanban (its only deployment retired 2026-11-13). Removes `packages/fr-vk/` (16 modules), ~78 test and fixture files (117 `.test_durations` entries), the `super-fr-dispatch` VK wording and the `fr-runner` skill''s VK operations.'
+    note: 'Touches packaging, install.sh, tests and skill mirrors, so it conflicts with most batches: run it as its own wave. It also shrinks the suite, which helps #1428.'
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -7062,6 +7098,7 @@ batches:
   - super-fr#1289
   - super-fr#1288
   - super-fr#1428
+  - super-fr#1463
   rationale: 'Wave 15 alone: every later batch runs TDD on this suite; #1280 leaves 13 tests red locally,
     #1225 is the host overload parallel sessions cause; #1428: ci.yml is 335-674s against a 240s budget
     even with the cached-durations rebalancing (6 shards sum ~1,695s), so it needs more shards, cheaper
@@ -7410,6 +7447,12 @@ features:
   - super-fr#454
   why: Claims owed a live run on Hermes, Gitea and OpenCode; valuable, but each needs a live session to close.
   start: /fr-goal super-fr#556
+- rank: 21
+  title: Retire VibeKanban
+  ids:
+  - super-fr#1459
+  why: 'Decision already made: the only VK deployment is retired. Large removal that conflicts with most batches, so it wants a wave of its own; it shrinks the test suite (#1428).'
+  start: '/fr-goal drop VibeKanban support (#1459)'
 exports:
 - wave: '1'
   repo: derio-net/super-fr
