@@ -434,3 +434,145 @@ def test_a_fragment_with_no_local_row_never_folds(
 
     monkeypatch.setattr(fold_mod, "effective", boom)
     assert run_cmd._local_stamp_plan(root, "spec", "suite.log", today="2026-11-14") is None
+
+
+# --- tests-lens gaps (l-tests-r1, l-tests-r4) ------------------------------------------
+
+
+def _deliver_record_no_pr(root: Path):
+    data = {"run": RUN, "step": "deliver", "outcome": "done", "evidence": {"tests": "suite.log"}}
+    rec = write_record(root, data)
+    return fr(root, ["run", "resolve", RUN, "--step", "deliver", "--record", str(rec)])
+
+
+def _deliver_flags_no_pr(root: Path):
+    return fr(
+        root,
+        [
+            *("run", "resolve", RUN, "--step", "deliver", "--state", "done"),
+            *("--evidence", "tests=suite.log"),
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "deliver", [_deliver_record_no_pr, _deliver_flags_no_pr], ids=["record", "flags"]
+)
+def test_the_last_refusal_missing_emits_writes_no_stamp(
+    tmp_path: Path, live: dict[str, str], deliver
+) -> None:  # type: ignore[no-untyped-def]
+    """l-tests-r1: the PR gate passes (the live body carries every section) and the
+    exit guard and label sync pass too; `_refuse_missing_emits`, the resolve's last
+    refusal, refuses a `done` naming no `pr`. The stamp, planned before every one of
+    them, is never written."""
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    first = _deliver_flags(root)  # renders the body; the PR gate refuses
+    assert first.exit_code == 2, first.output
+    live["body"] = _body(root).read_text()
+    before = (root / FRAGMENT).read_bytes()
+
+    out = deliver(root)
+
+    assert out.exit_code == 2, out.output
+    assert "without the artifact(s) it declares: pr" in " ".join(out.output.split())
+    assert (root / FRAGMENT).read_bytes() == before
+    assert "local" not in _row(root)
+    assert load_run_state(root, RUN).steps["deliver"].state == "running"
+
+
+def test_the_exit_guard_refusal_writes_no_stamp(
+    tmp_path: Path, live: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-tests-r1: a refusal by `_deliver_exit_guard`, after the PR gate passes."""
+    import fr.verification.baseline as baseline
+
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    first = _deliver_flags(root)
+    assert first.exit_code == 2, first.output
+    live["body"] = _body(root).read_text()
+    before = (root / FRAGMENT).read_bytes()
+    monkeypatch.setattr(baseline, "unaccounted_lowerings", lambda *_a, **_k: ["R1 lowered"])
+
+    out = _deliver_flags(root)
+
+    assert out.exit_code == 2, out.output
+    assert "R1 lowered" in out.output
+    assert (root / FRAGMENT).read_bytes() == before
+    assert "local" not in _row(root)
+
+
+def test_a_level_ref_not_committed_at_head_refuses_naming_the_row(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """l-tests-r4: the row's test file is in the working tree (ignored, so no code path
+    is dirty) but not in HEAD: deliver refuses, naming the row and the path."""
+    root = _at_deliver(tmp_path)
+    (root / ".gitignore").write_text("tests/test_new.py\n")
+    commit_all(root, "ignore")
+    (root / "tests" / "test_new.py").write_text("def test_z():\n    assert True\n")
+    out = fr(
+        root,
+        [
+            *("acceptance", "add", "--id", ROW, "--capability", "Widget"),
+            *("--acceptance", "loc-1 holds", "--origin", "spec:spec#R1", "--status", "local"),
+            *("--level", "unit=t:tests/test_new.py#test_z", "--notes", "test_z verifies it"),
+        ],
+    )
+    assert out.exit_code == 0, out.output
+    commit_all(root, "local")
+    assert git(root, "ls-files", "tests/test_new.py").strip() == ""
+    before = (root / FRAGMENT).read_bytes()
+
+    out = _deliver_flags(root)
+
+    assert out.exit_code == 2, out.output
+    flat = " ".join(out.output.split())
+    assert f"row {ROW}: tests/test_new.py is not committed at HEAD" in flat
+    assert (root / FRAGMENT).read_bytes() == before
+    assert not _body(root).exists(), "refused before the PR gate"
+
+
+def test_git_unable_to_read_head_refuses_naming_the_row(
+    tmp_path: Path, live: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-tests-r4: `head_blobs` answering None (git cannot read HEAD) refuses deliver,
+    naming every row, before the PR gate."""
+    from fr.acceptance import local as local_mod
+
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    before = (root / FRAGMENT).read_bytes()
+    monkeypatch.setattr(local_mod, "head_blobs", lambda *_a, **_k: None)
+
+    out = _deliver_flags(root)
+
+    assert out.exit_code == 2, out.output
+    assert f"row {ROW}: git cannot read HEAD" in " ".join(out.output.split())
+    assert (root / FRAGMENT).read_bytes() == before
+    assert not _body(root).exists(), "refused before the PR gate"
+
+
+def test_a_tests_witness_that_is_no_local_run_refuses_through_deliver(
+    tmp_path: Path, live: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-tests-r4: a `tests: ci` witness the forge vouched for is neither a fresh log
+    nor a reuse: deliver refuses to stamp, naming the row. The forge's answer is the
+    one thing faked (this sandbox has no forge)."""
+    from fr.run import ci_evidence
+
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    before = (root / FRAGMENT).read_bytes()
+    witness = "ci:abc+def;tree=0123"
+    monkeypatch.setattr(ci_evidence, "verify_ci", lambda *_a, **_k: witness)
+
+    out = _deliver_flags(root, tests="ci")
+
+    assert out.exit_code == 2, out.output
+    flat = " ".join(out.output.split())
+    assert f"row {ROW}: tests: {witness} is not a local suite log" in flat
+    assert not _body(root).exists(), "refused before the PR gate"
+    assert (root / FRAGMENT).read_bytes() == before
+    assert "local" not in _row(root)

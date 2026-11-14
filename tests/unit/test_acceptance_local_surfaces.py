@@ -179,3 +179,74 @@ def test_fr_status_counts_local_debt(no_ci: Path, monkeypatch: pytest.MonkeyPatc
     _set_local(no_ci)
     line = _acceptance_section(no_ci)
     assert line is not None and "1 open" in line
+
+
+# --- tests-lens gaps: each surface computes local debt from a real fold (l-tests-r2) ----
+
+
+def test_the_report_marks_an_unstamped_local_row_as_debt(no_ci: Path) -> None:  # noqa: F811
+    _set_local(no_ci)
+    out = _fr("report", "--format", "md", "--out", "r.md")
+    assert out.exit_code == 0, out.output
+    assert "local, unstamped" in (no_ci / "r.md").read_text()
+
+
+def test_summary_counts_an_unstamped_local_row_as_open_debt(no_ci: Path) -> None:  # noqa: F811
+    _set_local(no_ci)
+    out = _fr("summary")
+    assert out.exit_code == 0, out.output
+    assert "### Open acceptance debt (1)" in out.output
+    assert "<code>target</code> [local]" in out.output
+
+
+def test_digest_lists_an_unstamped_local_row_as_debt(no_ci: Path) -> None:  # noqa: F811
+    _set_local(no_ci)
+    out = _fr("digest")
+    assert out.exit_code == 0, out.output
+    assert "local, unstamped" in out.output
+
+
+def test_gate_backfill_reads_local_debt_from_the_fold(no_ci: Path) -> None:  # noqa: F811
+    from fr.gatebackfill.close import EvidenceReader, _positive_evidence
+
+    _set_local(no_ci)
+    reader = EvidenceReader(no_ci)
+    assert reader.local_debt == {"target": "unstamped"}
+    assert _positive_evidence(reader, "row:target") is None
+
+
+def test_fr_debt_counts_an_unstamped_local_row_from_the_fold(no_ci: Path) -> None:  # noqa: F811
+    from fr.debt.engine import acceptance_debt
+
+    _set_local(no_ci)
+    debt, _, source = acceptance_debt(no_ci)
+    assert source.state == "read"
+    assert debt.local_debt == 1
+    row = next(r for r in debt.rows if r.id == "target")
+    assert row.local_debt == "unstamped" and row.is_debt
+
+
+# --- l-tests-r3: a fresh `local` row is not in `fr status`'s open count ----------------
+
+
+def test_fr_status_open_count_leaves_out_a_fresh_local_row(no_ci: Path) -> None:  # noqa: F811
+    from fr.commands.status_cmd import _acceptance_section
+
+    _set_local(no_ci)
+    unstamped = _acceptance_section(no_ci)
+    assert unstamped is not None and "— 1 open" in unstamped
+    _stamp(no_ci)
+    fresh = _acceptance_section(no_ci)
+    assert fresh is not None and "— 0 open" in fresh, fresh
+
+
+# --- l-tests-r5: a contested row with a local reason is counted once ------------------
+
+
+def test_a_contested_local_debt_row_is_counted_once() -> None:
+    from fr.debt.engine import acceptance_from_matrix
+
+    acc = acceptance_from_matrix(_matrix(), frozenset({"stale"}), (), LOCAL)
+    assert acc.contested == 1
+    assert acc.local_debt == 0, "already counted as contested"
+    assert acc.debt_count() == 2  # owed (unwired) + stale, once
