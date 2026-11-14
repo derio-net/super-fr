@@ -74,7 +74,5 @@ resolves:
   body: '52a8fae41: the test file is main''s again; main''s --stale-days fix stands and this branch''s duplicate fixture change is gone.'
 evidence:
   review: review-lenses
-  reviewer:
-    docs-accuracy: ace47026177da1fa2
-    tests: a91179e5b51261b5d
+  reviewer: docs-accuracy=ace47026177da1fa2,tests=a91179e5b51261b5d
   model: claude-opus-5-5
