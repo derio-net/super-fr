@@ -1034,6 +1034,12 @@ class _Amending:
                 raise RecordRefusedError(f"{where}: {why}")
             if (why := walked_error(new)) is not None:
                 raise RecordRefusedError(f"{where}: {why}")
+            if new.status == "local":
+                from fr.acceptance.local import local_error
+
+                own = (self.identity() or "").rpartition("/")[2] or None
+                if (why := local_error(new, self.repo_root, own=own)) is not None:
+                    raise RecordRefusedError(f"{where}: {why}")
             if no_ci is not None and new.status == "ci" and old.status != "ci":
                 raise RecordRefusedError(
                     f"{where}: status `ci` needs a CI run as its evidence, but {no_ci}. "
@@ -1451,6 +1457,14 @@ def _acceptance_writes(
         # p1-r2: `walked` means proven by a passing walk, on the row or in this entry.
         if (why := walked_error(row)) is not None:
             raise RecordRefusedError(f"acceptance {item.id}: {why}")
+        # Spec 2026-11-14-acceptance-local-status R2, R3: `local` names resolving tests in
+        # this repo, and only a repo with no CI holds it. Checked on every entry that sets
+        # it, since setting `local` again clears the row's stamp.
+        if row.status == "local":
+            from fr.acceptance.local import local_error
+
+            if (why := local_error(row, repo_root, own=identity().rpartition("/")[2])) is not None:
+                raise RecordRefusedError(f"acceptance {item.id}: {why}")
         # gh#775: `ci` means a CI run is the evidence, so a row moves there only
         # in a repo with CI. A row already `ci` is left alone — refusing it
         # would block every unrelated edit to it.
