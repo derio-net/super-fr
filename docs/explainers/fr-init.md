@@ -48,7 +48,8 @@ fr init scaffold --repo . --profile admin --purpose "deploys and forge writes" \
 ```
 
 The first call writes `.devcontainer/dev/devcontainer.json`, adds the profile to
-`.devcontainer/fr-profiles.yaml`, marks it the default, and commits both. The second adds
+`.devcontainer/fr-profiles.yaml`, marks it the default, and commits both (on the quiet
+placement it writes them and leaves the commit to you). The second adds
 a profile that expects two secret names. For each secret, scaffold writes a commented
 placeholder into the host-only env file and never overwrites a value you have already
 put there.
@@ -94,8 +95,11 @@ raw devcontainer feature for a toolchain the list lacks. The forge CLI is instal
 match the backend. Pass `--backend` (and `--host` for a self-hosted instance) on every
 call for a non-GitHub forge.
 
-**4. Hand back.** The skill tells you which placeholder files to fill. Scaffold already
-committed the profile, because `fr isolation up` builds from the committed tree. Add
+**4. Hand back.** The skill tells you which placeholder files to fill. Scaffold has
+already committed the profile, because `fr isolation up` builds from the committed tree;
+two cases leave the commit to you. On the quiet placement fr makes no commit on a product
+branch, so scaffold writes the files and tells you to commit them, and when `.devcontainer`
+is git-ignored it warns and commits nothing. Add
 `--no-commit` to write the files only, for example when you must open a pull request to
 get them onto a protected branch. In a stealth workspace (a run whose records live in a
 separate tracking repository) `fr init scaffold`, `fr init agents` and `fr init
