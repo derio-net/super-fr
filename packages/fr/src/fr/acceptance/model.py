@@ -54,10 +54,11 @@ acceptance debt counts these. `walked` and `manual` are listed, never debt."""
 LISTED_STATUSES: frozenset[str] = DEBT_STATUSES | {"walked", "manual", "local"}
 
 
-def is_debt(status: str, *, contested: bool = False) -> bool:
-    """The one definition of a debt row: a `DEBT_STATUSES` status, or a row the fold
-    marks contested whatever its status (spec 2026-11-04 R17)."""
-    return contested or status in DEBT_STATUSES
+def is_debt(status: str, *, contested: bool = False, local: str | None = None) -> bool:
+    """The one definition of a debt row: a `DEBT_STATUSES` status, a row the fold
+    marks contested whatever its status (spec 2026-11-04 R17), or a `local` row with a
+    reason from `fr.acceptance.local.local_debt` (spec 2026-11-14 R3, R5)."""
+    return contested or local is not None or status in DEBT_STATUSES
 
 
 """What `fr debt` lists per row: the debt statuses plus `walked` and `manual`
