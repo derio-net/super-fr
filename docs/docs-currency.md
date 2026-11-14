@@ -210,7 +210,7 @@ up to 860 px wide, or up to 1079 px inside an article page. Only a page with a f
 - Use inline Markdown links. A relative image, a reference-style link definition and a raw HTML
   `href` fail the build. Absolute URLs are fine.
 - Fence all code, and name the language. Link to sibling pages with relative `.md` paths.
-- The build drops the first `# H1` from every article page, because the renderer prints the title
+- The build drops a `# H1` that opens the body of an article page, because the renderer prints the title
   itself. Keep it in the source, so that the file reads well on GitHub.
 - To preview, build into a directory outside the repo:
 

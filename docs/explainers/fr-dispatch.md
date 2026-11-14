@@ -87,7 +87,7 @@ is why `fr apply` is safe to run before a PR merges: it can only set `pr-ready` 
 A repo can opt out of these writes in its `.fr/settings.yaml`. Under `forge.issues: off`
 or `forge.labels: off`, `fr apply --yes` refuses with exit 2, and the dry run warns that
 it would. Under `forge.issues: off`, `fr undispatch --yes` refuses with exit 2 too. The
-bridge skips the label writes that are off for the repo. See
+bridge skips each kind of write (labels or issues) that is off for the repo. See
 [the dispatch lifecycle reference](../reference/dispatch-lifecycle.md).
 
 ## What do you check before you dispatch?
