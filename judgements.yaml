@@ -7128,6 +7128,18 @@ batches:
   rationale: 'Tier 2: silent fallback to the fr worktree; HEADS recorded before the push. parser.py, git_policy/product.py.'
   wave: 17
   skill: debug
+- id: release-truth
+  title: Release robustness
+  ids:
+  - super-fr#1201
+  - super-fr#1290
+  - super-fr#1393
+  - super-fr#1291
+  - super-fr#1202
+  rationale: 'Tier 2: cloud doctor reports ok on RC installs; tag without a Release; stray RC tag; cancelled
+    dispatch runs; managed-cache leftovers.'
+  wave: 17
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
