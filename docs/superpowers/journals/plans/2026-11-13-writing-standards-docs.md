@@ -1175,3 +1175,53 @@ a010ef9, 786b523, bb39620, d5ac113: groups, ci-gate, authoring-rule and accuracy
 ### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: after the main merge, the gh#1369 test carried a false comment and a redundant workaround
 
 52a8fae41: the test file is main's again; main's --stale-days fix stands and this branch's duplicate fixture change is gone.
+
+<!-- fr:journal kind=finding scope=plan id=p3-ops-seal-encrypt-help-resolved-2 created=2026-11-14T01:54:12+00:00 phase=3 state=open resolves=p3-ops-seal-encrypt-help tracked_by=https://github.com/derio-net/super-fr/issues/1441 -->
+### p3-ops-seal-encrypt-help-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1441] · resolves p3-ops-seal-encrypt-help: ops_cmd.py `fr ops seal --encrypt` help says {target} is the target's name; it is the shell-quoted full path (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1441.
+
+<!-- fr:journal kind=finding scope=plan id=p3-build-site-marker-resolved-2 created=2026-11-14T01:54:12+00:00 phase=3 state=open resolves=p3-build-site-marker tracked_by=https://github.com/derio-net/super-fr/issues/1442 -->
+### p3-build-site-marker-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1442] · resolves p3-build-site-marker: scripts/build-site.py fill_pages replaces <!-- site:pages --> even inside inline code (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1442.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved-2 created=2026-11-14T01:54:12+00:00 phase=3 state=open resolves=p3-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1443 -->
+### p3-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1443] · resolves p3-r8: docs-currency.md and merge-protection.md lists already rendered broken at the merge base (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1443.
+
+<!-- fr:journal kind=finding scope=plan id=p4-skill-acceptance-verify-resolved-2 created=2026-11-14T01:54:12+00:00 phase=4 state=open resolves=p4-skill-acceptance-verify tracked_by=https://github.com/derio-net/super-fr/issues/1444 -->
+### p4-skill-acceptance-verify-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1444] · resolves p4-skill-acceptance-verify: fr-acceptance SKILL.md:116 says a --verify row keeps nagging in fr acceptance status whatever its status, under Post-merge owed (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1444.
+
+<!-- fr:journal kind=finding scope=plan id=p4-plan-rework-help-resolved-2 created=2026-11-14T01:54:12+00:00 phase=4 state=open resolves=p4-plan-rework-help tracked_by=https://github.com/derio-net/super-fr/issues/1445 -->
+### p4-plan-rework-help-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1445] · resolves p4-plan-rework-help: fr plan rework help says the parent is "(Complete + archived)"; rework_create accepts a live or incomplete parent (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1445.
+
+<!-- fr:journal kind=finding scope=plan id=p4-acceptance-backfill-render-resolved-2 created=2026-11-14T01:54:12+00:00 phase=4 state=open resolves=p4-acceptance-backfill-render tracked_by=https://github.com/derio-net/super-fr/issues/1446 -->
+### p4-acceptance-backfill-render-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1446] · resolves p4-acceptance-backfill-render: fr-acceptance.md backfill list already renders broken at the merge base: step 4 merges into step 3's paragraph (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1446.
+
+<!-- fr:journal kind=finding scope=plan id=p5-init-tool-help-markup-resolved-2 created=2026-11-14T01:54:12+00:00 phase=5 state=open resolves=p5-init-tool-help-markup tracked_by=https://github.com/derio-net/super-fr/issues/1447 -->
+### p5-init-tool-help-markup-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1447] · resolves p5-init-tool-help-markup: fr init scaffold --help prints `<tool>;` - Rich markup eats `[@<version>]` (phase 5)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1447.
+
+<!-- fr:journal kind=finding scope=plan id=p5-progress-skill-status-yes-resolved-2 created=2026-11-14T01:54:12+00:00 phase=5 state=open resolves=p5-progress-skill-status-yes tracked_by=https://github.com/derio-net/super-fr/issues/1448 -->
+### p5-progress-skill-status-yes-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1448] · resolves p5-progress-skill-status-yes: fr-progress SKILL.md lists fr status among the commands that preview until --yes (phase 5)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1448.
+
+<!-- fr:journal kind=finding scope=plan id=p5-triage-skill-schema-resolved-2 created=2026-11-14T01:54:12+00:00 phase=5 state=open resolves=p5-triage-skill-schema tracked_by=https://github.com/derio-net/super-fr/issues/1449 -->
+### p5-triage-skill-schema-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1449] · resolves p5-triage-skill-schema: fr-triage SKILL.md says a first run creates judgements with schema: 11; the engine writes 12 (phase 5)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1449.
+
+<!-- fr:journal kind=finding scope=plan id=p5-exit-gates-code-render-resolved-2 created=2026-11-14T01:54:12+00:00 phase=5 state=open resolves=p5-exit-gates-code-render tracked_by=https://github.com/derio-net/super-fr/issues/1450 -->
+### p5-exit-gates-code-render-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1450] · resolves p5-exit-gates-code-render: fr-exit-gates.md tester bullet's fenced example renders as inline code, at the merge base too (phase 5)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1450.
