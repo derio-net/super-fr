@@ -46,7 +46,15 @@ steps:
           returned: '2026-11-14T21:31:42+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: failed
+    at: '2026-11-14T21:31:45+00:00'
+    exit: 1
+    stdout: "[error] phase 1 serves no ask of its own — its asks R1, R10, R3, R4,\
+      \ R7 are all \nalso served by phase(s) 2, 3. Fix: link the rows of the ask it\
+      \ serves, fold its \nwork into the phase that serves that ask, or record why\
+      \ it exists: `fr journal \nadd --scope spec --slug 2026-11-14-retire-vibekanban\
+      \ --kind decision --id \nphase-split-2026-11-14-retire-vibekanban-p1 --title\
+      \ \"<reason>: …\"` with <reason>\none of tier:, risk-first:, review-size:.\n"
   implement:
     state: pending
     members:
