@@ -25,7 +25,7 @@ SUPER_FR_GIT = "git+https://github.com/derio-net/super-fr"
 
 # `tool install` logs its argv one per line; `tool dir` names a tool dir whose
 # `fr` runs (install.sh's smoke check) and whose python cannot import anything
-# (so `--install-bridge` reaches its refusal and prints the recovery hint).
+# (so nothing could import a runner through it).
 _UV_STUB = r"""#!/bin/sh
 case "$1 $2" in
 "tool dir")
@@ -102,8 +102,10 @@ def test_install_bridge_names_no_fr_vk(stub_env: dict[str, str]) -> None:
         text=True,
         env={**stub_env, "VK_BRIDGE_WRAPPER_PATH": str(Path(stub_env["HOME"]) / "run.sh")},
     )
-    assert result.returncode != 0
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "VibeKanban support was removed" in result.stdout + result.stderr
     assert "packages/fr-vk" not in result.stdout + result.stderr, result.stderr
+    assert not (Path(stub_env["HOME"]) / "run.sh").exists()
 
 
 def test_scaffold_runner_packages_are_the_workspace_runners() -> None:

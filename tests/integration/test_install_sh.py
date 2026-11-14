@@ -1,12 +1,11 @@
 """Integration tests for scripts/install.sh.
 
 Each test runs install.sh with a fake $HOME so nothing touches the real
-user directory.  The VK MCP binary requirement is satisfied by a tiny
-stub script.
+user directory.
 
 install.sh handles Claude Code plugin registration, OpenCode skill/command
-delivery, MCP config, rules, the fr CLI, stale skill cleanup, and the
-PostToolUse hook hint.
+delivery, rules, the fr CLI, stale skill cleanup, removal of what earlier
+installs wrote for the retired VibeKanban runner, and the PostToolUse hook hint.
 """
 
 from __future__ import annotations
@@ -33,13 +32,6 @@ def fake_home(tmp_path: Path) -> Path:
     """Set up a fake HOME with the minimal structure install.sh expects."""
     home = tmp_path / "home"
     home.mkdir()
-
-    # Stub VK MCP binary — install.sh checks -x $HOME/bin/vibe-kanban-mcp
-    vk_bin = home / "bin" / "vibe-kanban-mcp"
-    vk_bin.parent.mkdir(parents=True)
-    vk_bin.write_text("#!/bin/sh\necho stub\n")
-    vk_bin.chmod(0o755)
-
     seed_claude_files(home)
     return home
 
@@ -221,47 +213,85 @@ class TestInstallRules:
         assert (fake_home / ".claude" / "rules" / "fr-plan-override.md").exists()
 
 
-# ── MCP config ───────────────────────────────────────────────────────
+# ── VibeKanban residue (spec 2026-11-14-retire-vibekanban R5) ───────
+
+# What `install.sh --install-bridge` wrote before VK support was removed.
+_FR_WRAPPER = '#!/bin/bash\nexec "/opt/py/bin/python" -m fr_vk.bridge "$@"\n'
 
 
-class TestMcpConfig:
-    def test_creates_mcp_config_from_scratch(self, fake_home: Path) -> None:
-        _run_install(fake_home)
+class TestVkResidue:
+    def test_install_writes_no_vk_mcp_entry_and_no_vk_warning(self, fake_home: Path) -> None:
+        result = _run_install(fake_home)
 
         mcp = fake_home / ".claude" / ".mcp.json"
-        assert mcp.exists()
-        data = json.loads(mcp.read_text())
-        vk = data["mcpServers"]["vibe_kanban"]
-        assert vk["command"] == str(fake_home / "bin" / "vibe-kanban-mcp")
-        assert vk["args"] == ["--mode", "global"]
-        assert vk["env"]["VIBE_BACKEND_URL"] == "http://localhost:8081"
+        if mcp.exists():
+            assert "vibe_kanban" not in json.loads(mcp.read_text()).get("mcpServers", {})
+        assert "vibe-kanban" not in result.stdout + result.stderr
+        assert "VK MCP" not in result.stdout + result.stderr
 
-    def test_preserves_existing_mcp_servers(self, fake_home: Path) -> None:
-        """Installing should not clobber other MCP servers in .mcp.json."""
+    def test_removes_only_the_vibe_kanban_entry_and_says_so(self, fake_home: Path) -> None:
         mcp = fake_home / ".claude" / ".mcp.json"
+        other = {"command": "other", "args": []}
         mcp.write_text(
-            json.dumps({"mcpServers": {"other-server": {"command": "other", "args": []}}})
+            json.dumps({"mcpServers": {"other-server": other, "vibe_kanban": {"command": "/old"}}})
         )
 
-        _run_install(fake_home)
+        result = _run_install(fake_home)
 
-        data = json.loads(mcp.read_text())
-        assert "other-server" in data["mcpServers"]
-        assert "vibe_kanban" in data["mcpServers"]
+        assert json.loads(mcp.read_text())["mcpServers"] == {"other-server": other}
+        lines = [ln for ln in result.stdout.splitlines() if "vibe_kanban" in ln]
+        assert len(lines) == 1 and "Removed" in lines[0], result.stdout
 
-    def test_updates_existing_vk_entry(self, fake_home: Path) -> None:
-        """If vibe_kanban already exists, it gets overwritten with current config."""
+    def test_an_mcp_config_without_the_entry_is_byte_identical(self, fake_home: Path) -> None:
         mcp = fake_home / ".claude" / ".mcp.json"
-        mcp.write_text(
-            json.dumps({"mcpServers": {"vibe_kanban": {"command": "/old/path", "args": []}}})
-        )
+        original = '{ "mcpServers": {"other-server": {"command": "other"}} }\n'
+        mcp.write_text(original)
 
-        _run_install(fake_home)
+        result = _run_install(fake_home)
 
-        data = json.loads(mcp.read_text())
-        assert data["mcpServers"]["vibe_kanban"]["command"] == str(
-            fake_home / "bin" / "vibe-kanban-mcp"
-        )
+        assert mcp.read_text() == original
+        assert "vibe_kanban" not in result.stdout
+
+    def test_removes_an_fr_written_wrapper_at_the_default_path(self, fake_home: Path) -> None:
+        wrapper = fake_home / ".local" / "bin" / "vk-bridge"
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        wrapper.write_text(_FR_WRAPPER)
+
+        result = _run_install(fake_home)
+
+        assert not wrapper.exists()
+        assert f"Removed {wrapper}" in result.stdout
+
+    def test_removes_an_fr_written_wrapper_at_vk_bridge_wrapper_path(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        wrapper = tmp_path / "opt" / "vk-bridge" / "run.sh"
+        wrapper.parent.mkdir(parents=True)
+        wrapper.write_text(_FR_WRAPPER)
+
+        result = _run_install(fake_home, extra_env={"VK_BRIDGE_WRAPPER_PATH": str(wrapper)})
+
+        assert not wrapper.exists()
+        assert f"Removed {wrapper}" in result.stdout
+
+    def test_keeps_a_foreign_file_at_the_wrapper_path(self, fake_home: Path) -> None:
+        wrapper = fake_home / ".local" / "bin" / "vk-bridge"
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        wrapper.write_text("#!/bin/sh\necho my own tool\n")
+
+        result = _run_install(fake_home)
+
+        assert wrapper.read_text() == "#!/bin/sh\necho my own tool\n"
+        assert str(wrapper) not in result.stdout
+
+    def test_install_bridge_refuses_naming_the_removal(self, fake_home: Path) -> None:
+        wrapper = fake_home / ".local" / "bin" / "vk-bridge"
+
+        result = _run_install(fake_home, "--install-bridge", expect_fail=True)
+
+        assert result.returncode == 2
+        assert "VibeKanban support was removed" in result.stdout + result.stderr
+        assert not wrapper.exists()
 
 
 # ── Stale skill cleanup ─────────────────────────────────────────────
@@ -283,46 +313,6 @@ class TestUserSkillsUntouched:
     def test_installs_with_no_skills_dir(self, fake_home: Path) -> None:
         """A home with no user-level skills directory installs cleanly."""
         _run_install(fake_home)  # no skills dir pre-existing
-
-
-# ── Missing binary graceful degradation ──────────────────────────────
-
-
-class TestMissingBinary:
-    def test_warns_without_mcp_binary(self, tmp_path: Path) -> None:
-        """Missing binary emits a WARNING (not ERROR) and doesn't abort early."""
-        home = tmp_path / "home"
-        home.mkdir()
-        (home / ".claude").mkdir()
-        seed_claude_files(home)
-
-        result = _run_install(home, expect_fail=True)
-
-        assert "WARNING" in result.stderr, (
-            f"Expected WARNING in stderr:\n  stderr={result.stderr!r}"
-        )
-        assert "vibe-kanban-mcp" in result.stderr
-        # Script should continue past the binary check (installing rules, etc.)
-        assert "Installing super-fr" in result.stdout
-
-    def test_warns_if_binary_not_executable(self, tmp_path: Path) -> None:
-        """A non-executable binary triggers a WARNING, not a fatal error."""
-        home = tmp_path / "home"
-        home.mkdir()
-        (home / ".claude").mkdir()
-        seed_claude_files(home)
-        vk_bin = home / "bin" / "vibe-kanban-mcp"
-        vk_bin.parent.mkdir(parents=True)
-        vk_bin.write_text("not executable")
-        vk_bin.chmod(0o644)
-
-        result = _run_install(home, expect_fail=True)
-
-        assert "WARNING" in result.stderr, (
-            f"Expected WARNING in stderr:\n  stderr={result.stderr!r}"
-        )
-        # Script should continue past the binary check
-        assert "Installing super-fr" in result.stdout
 
 
 # ── Uninstall path ───────────────────────────────────────────────────
@@ -376,11 +366,11 @@ class TestUninstall:
         assert not (fake_home / ".claude" / "rules" / "fr-plan-override.md").exists()
 
     def test_removes_vk_from_mcp_config(self, fake_home: Path) -> None:
-        _run_install(fake_home)
+        mcp = fake_home / ".claude" / ".mcp.json"
+        mcp.write_text(json.dumps({"mcpServers": {"vibe_kanban": {"command": "/old"}}}))
+
         _run_install(fake_home, "--uninstall")
 
-        mcp = fake_home / ".claude" / ".mcp.json"
-        assert mcp.exists()
         data = json.loads(mcp.read_text())
         assert "vibe_kanban" not in data["mcpServers"]
 
