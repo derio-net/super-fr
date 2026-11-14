@@ -7250,6 +7250,11 @@ batches:
   rationale: collect writes a label in a read command; BLOCKED counted as conflict; retired-scope issues
     never settle; facts schema pinned in three places. triage_cmd.py, triage/model.py.
   wave: 19
+  after:
+  - workspace-identity
+  - placement-truth
+  - release-truth
+  - acceptance-edits
   skill: debug
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
