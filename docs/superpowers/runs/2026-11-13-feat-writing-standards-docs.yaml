@@ -3,7 +3,7 @@ run: 2026-11-13-feat-writing-standards-docs
 workflow: fr-goal@1
 branch: feat/writing-standards-docs
 started: '2026-11-13T21:36:25+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -53,8 +53,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-14T01:39:59+00:00'
+    state: done
+    at: '2026-11-14T01:45:24+00:00'
     members:
     - implement-phase
     - review-phase
@@ -219,11 +219,20 @@ steps:
           tests: ci:d5fc3b7a91702ccb98e32d4488bf8d6964707449+ba5bf0cf099b35c83875da4bcb1b3d10e07b1ee9;tree=75189476611f86f60df6729a3cd276465e073c3879e878e3ba094a2b547a60c3
           visual: none
       phase/6/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-14T01:39:59+00:00'
           harness: claude-code
+          model: claude-opus-5-5
           session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
+          returned: '2026-11-14T01:45:24+00:00'
+          outcome: done
+        evidence:
+          review: review-p6
+          reviewer: a86ef8f646932f9fe
+          visual: none
+          findings: p6-r1,p6-r2,p6-r3
+          unobserved: reviewer,reviewer-return
   journal-check:
     state: pending
   lens-review:

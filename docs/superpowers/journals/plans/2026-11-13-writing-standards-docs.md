@@ -1059,3 +1059,44 @@ one workflow step and one test; ruff format and the targeted tests left nothing 
 ### no-refactor-p6-t4 · discovery · no-refactor-because P6.T4 (phase 6)
 
 one config file, one rule paragraph and two tests; ruff, the mirror check and the targeted tests left nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p6 created=2026-11-14T01:45:24+00:00 phase=6 -->
+### review-p6 · review · phase 6 review: 3 in-scope findings, all fixed; fact-keepers: 0 lost, 2 actor/wording shifts fixed (phase 6)
+
+Code reviewer (separate context, read-only) checked the accuracy commits 2eb18d5c0 and 06f0c034f against the cited code (every finding corrected, none adds a false claim), the plain-language and elements-of-style rewrites with --preserve-from, the whole-repo gate script (exit 0), meaning drift over the full word diff, the pinned question-round wording, rendering at aa56236ba vs the merge base (tables, pre, mermaid unchanged; no raw list markers), inbound links, the site-build step (CI job on d5fc3b7a9 ran it against blog-craft 3b0c7d0 and passed), .fr/lenses.yaml against spec §3b (byte for byte; fr lenses check 0; docs-accuracy required), the R16 rule paragraph and its OpenCode mirror, and the main-merge rewrite of the acceptance-matrix --origin paragraph. Two blind fact-keepers. Fixes in 43956e3e7. The phase executor was lost to a container restart after it had committed and pushed; the orchestrator merged origin/main (d5fc3b7a9) and made the review fixes.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-fact-keeper created=2026-11-14T01:45:24+00:00 phase=6 -->
+### p6-fact-keeper · discovery · Fact-keeper results per page (R8): page | counts | resolution (phase 6)
+
+docs/explainers/why-fr.md | kept 39, changed 3, lost 0, added 1 | 'credentials that profile was explicitly granted' -> 'you explicitly granted that profile': accepted (the operator grants a profile's secrets, fr-init); 'Workspaces are reconciled and torn down' -> 'Close-out reconciles ...': wrong actor (fr isolation reconciles on every up/down, gc), fixed; 'structured' dropped from plans: restored
+docs/explainers/01-fr-goal.md | kept ~470 (clustered), changed 0, lost 0, added 2 | added: AI acronym expansion; 'the orchestrator dispatched an agent' names the dispatcher (true: only the orchestrator dispatches and claims). tldr thinned ('a short YAML file listing the steps', 'the autonomous run'): restored
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-11-14T01:45:24+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · 01-fr-goal.md: "Only the transcripts write any of it down" (transcripts record) (phase 6)
+
+Raised by the phase 6 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-11-14T01:45:24+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · 01-fr-goal.md: self-review "when you write the plan" moved plan authoring to the operator (phase 6)
+
+Raised by the phase 6 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3 created=2026-11-14T01:45:24+00:00 phase=6 state=open review_scope=in -->
+### p6-r3 · finding [open] (reviewer: in scope) · 01-fr-goal.md: the OWNER-collision refusal sentences were muddled (phase 6)
+
+Raised by the phase 6 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-11-14T01:45:24+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: 01-fr-goal.md: "Only the transcripts write any of it down" (transcripts record) (phase 6)
+
+43956e3e7
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-11-14T01:45:24+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: 01-fr-goal.md: self-review "when you write the plan" moved plan authoring to the operator (phase 6)
+
+43956e3e7
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3-resolved created=2026-11-14T01:45:24+00:00 phase=6 state=fixed resolves=p6-r3 -->
+### p6-r3-resolved · finding [fixed] · resolves p6-r3: 01-fr-goal.md: the OWNER-collision refusal sentences were muddled (phase 6)
+
+43956e3e7
