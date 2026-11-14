@@ -17,9 +17,15 @@ rows:
     - spec:2026-11-13-writing-standards-docs#R2
     - spec:2026-11-13-writing-standards-docs#R3
     - spec:2026-11-13-writing-standards-docs#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_the_script_maps_each_group_to_its_standard
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_only_the_three_exceptions_carry_a_writing_standard_key
+      int:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_real_checker_fails_a_page_and_reads_the_terms_file
+    status: ci
+    notes: Mapping, exceptions and the page set each group sends are unit-tested; the
+      real blog-craft checker runs in site-build (terms file read, FAIL fails the script).
     verify: none
   - id: writing-standards-docs-ci-gate
     capability: published-docs
