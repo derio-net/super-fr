@@ -10,3 +10,8 @@ Reproduced read-only against the stealth walk workspace: `paths_dirty(<product w
 ### c66868cf85fd · repro · stealth walk: fr plan self-review finds no row citing the spec though three rows cite spec:<stem>-design#R<n>
 
 Reproduced in-process on main (= rc5) against the stealth plan: three `## Verification` grammar errors (rows citing the spec: none) and 'phase 1/2 serves no ask'. The plan parses with a RELATIVE spec_path and the product checkout as repo_root despite the absolute `spec:` in _meta.yaml, and the fold returns all three rows.
+
+<!-- fr:journal kind=ruled-out scope=debug id=47837ccefc7f created=2026-11-14T01:19:27+00:00 -->
+### 47837ccefc7f · ruled-out · the absolute spec ref in _meta.yaml is not the cause of the stealth self-review failure
+
+fr.parser.parse resolves it below the plan's layout root (resolve_spec_ref_below) and records spec_path relative to the feature root, so every self-review check gets the same relative path it would get from a bare filename.
