@@ -7162,6 +7162,17 @@ batches:
     so it runs after the other truth fixes. triage_batch_cmd.py.'
   wave: 18
   bump: minor
+- id: triage-collect
+  title: Triage collect and settle correctness
+  ids:
+  - super-fr#1268
+  - super-fr#1197
+  - super-fr#1210
+  - super-fr#1300
+  rationale: collect writes a label in a read command; BLOCKED counted as conflict; retired-scope issues
+    never settle; facts schema pinned in three places. triage_cmd.py, triage/model.py.
+  wave: 18
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
