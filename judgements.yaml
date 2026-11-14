@@ -7126,7 +7126,7 @@ batches:
   - super-fr#1275
   rationale: 'Tier 2: ledger loses archived runs'' rows; gate pass exits 0 on a failed tracker close;
     ops gate stage 4/7 misreports. ledger.py, gate_cmd.py, ops/gate.py.'
-  wave: 16
+  wave: 17
   skill: debug
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
