@@ -15,6 +15,7 @@ from fr.acceptance.model import LEVELS, AcceptanceError, Row, same_repo, split_r
 
 PROMOTE = "promote to ci"
 UNSTAMPED = "unstamped"
+HEAD_UNREADABLE = "stale: HEAD unreadable"
 
 
 def level_ref_paths(row: Row) -> tuple[str, ...]:
@@ -36,11 +37,13 @@ def level_ref_paths(row: Row) -> tuple[str, ...]:
     return tuple(sorted(paths))
 
 
-def head_blobs(product_root: Path, paths: Iterable[str]) -> dict[str, str]:
-    """path → HEAD blob sha of the product checkout, for those of *paths* HEAD holds.
+def head_blobs(product_root: Path, paths: Iterable[str]) -> dict[str, str] | None:
+    """path → HEAD blob sha of the product checkout, for those of *paths* HEAD holds,
+    or None when git cannot read HEAD there (not a repo, no commit): never `{}`, which
+    would read as "every file is gone" and blame a path that did not change (p1-r2).
 
     One batched `git ls-tree` (spec §A): HEAD is the source, never the index or the
-    working tree (review sr-r12). A checkout git cannot read holds nothing."""
+    working tree (review sr-r12)."""
     wanted = sorted(set(paths))
     if not wanted:
         return {}
@@ -52,7 +55,7 @@ def head_blobs(product_root: Path, paths: Iterable[str]) -> dict[str, str]:
         check=False,
     )
     if out.returncode != 0:
-        return {}
+        return None
     blobs: dict[str, str] = {}
     for entry in out.stdout.split("\0"):
         meta, sep, path = entry.partition("\t")
@@ -89,6 +92,10 @@ def local_debt(rows: Iterable[Row], product_root: Path, *, ci_active: bool) -> d
     out = {r.id: UNSTAMPED for r in local if r.local is None}
     stamped = [r for r in local if r.local is not None]
     blobs = head_blobs(product_root, (p for r in stamped if r.local for p in r.local.files))
+    if blobs is None:
+        # Unknown is debt, never fresh: a stamp is only as good as the HEAD it is held to.
+        out.update({r.id: HEAD_UNREADABLE for r in stamped})
+        return out
     for r in stamped:
         if (path := stale_path(r, blobs)) is not None:
             out[r.id] = f"stale: {path}"
