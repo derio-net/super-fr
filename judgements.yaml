@@ -3479,11 +3479,17 @@ batches:
     handle: archived
     archived: 0
 - id: one-phase-plans
-  title: 'fr-plan/fr-goal: a one-phase plan is a first-class shape (skeleton gate only for 2+ agentic phases)'
+  title: 'fr-plan/fr-goal: a one-phase plan is a first-class shape (skeleton gate only for 2+ agentic
+    phases)'
   ids:
   - super-fr#673
   - super-fr#662
-  rationale: 'Operator-flagged fix-now. #673: gate _skeleton_issues on two or more agentic phases, and rewrite the fr-plan/fr-goal prose (size phases to the change) in both mirrors (sync-opencode.py AND sync-hermes.py). #662 is one assertion in the same plan_ops tests. Plan this batch as ONE agentic phase. Until this fix lands, the installed gate refuses that, so the operator authorizes the override for this batch''s own plan: log fr journal add --scope spec --kind decision --id skeleton-override-<plan-slug> citing this batch before fr plan self-review.'
+  rationale: 'Operator-flagged fix-now. #673: gate _skeleton_issues on two or more agentic phases, and
+    rewrite the fr-plan/fr-goal prose (size phases to the change) in both mirrors (sync-opencode.py AND
+    sync-hermes.py). #662 is one assertion in the same plan_ops tests. Plan this batch as ONE agentic
+    phase. Until this fix lands, the installed gate refuses that, so the operator authorizes the override
+    for this batch''s own plan: log fr journal add --scope spec --kind decision --id skeleton-override-<plan-slug>
+    citing this batch before fr plan self-review.'
   order: 1
   bump: minor
   launch:
@@ -3502,13 +3508,22 @@ batches:
     handle: archived
     archived: 0
 - id: tests-gate
-  title: 'deliver tests= gate: accept a backgrounded suite, refuse an unobserved log, and keep resolve''s evidence honest'
+  title: 'deliver tests= gate: accept a backgrounded suite, refuse an unobserved log, and keep resolve''s
+    evidence honest'
   ids:
   - super-fr#594
   - super-fr#638
   - super-fr#587
   - super-fr#632
-  rationale: 'One gate, one surface. #594 (canonical for #607 and #631, both duplicates: fold #607''s fix direction of ending the window at the background task-notification): the tests= window must accept a suite run in the background, which the long_commands rule mandates, and a log path held in a shell variable. #638: on OpenCode the window is None and any log passes; refuse or flag unobserved=tests in the PR body, add a tests-evidence parity row, and stop .records/*.log reaching main (record/apply.py deletes only the step record). #587 and #632: resolve must not accept a gated step as done without its declared emits, must record operator answers as the operator''s, and must persist unobserved for a cli-step gate. Files: commands/run_cmd.py, run/telemetry.py, harness/long_commands.py, parity.yaml, record/apply.py. Size phases to the change.'
+  rationale: 'One gate, one surface. #594 (canonical for #607 and #631, both duplicates: fold #607''s
+    fix direction of ending the window at the background task-notification): the tests= window must accept
+    a suite run in the background, which the long_commands rule mandates, and a log path held in a shell
+    variable. #638: on OpenCode the window is None and any log passes; refuse or flag unobserved=tests
+    in the PR body, add a tests-evidence parity row, and stop .records/*.log reaching main (record/apply.py
+    deletes only the step record). #587 and #632: resolve must not accept a gated step as done without
+    its declared emits, must record operator answers as the operator''s, and must persist unobserved for
+    a cli-step gate. Files: commands/run_cmd.py, run/telemetry.py, harness/long_commands.py, parity.yaml,
+    record/apply.py. Size phases to the change.'
   order: 1
   launch:
     runner: herdr
@@ -3523,13 +3538,21 @@ batches:
   - kind: cancel
     at: '2026-09-26T10:32:56.801075Z'
 - id: runner-provisioning
-  title: 'Installed fr is the fr the tests run: fr-herdr installed, runner packages in the devcontainer, fr''s commits work in the container'
+  title: 'Installed fr is the fr the tests run: fr-herdr installed, runner packages in the devcontainer,
+    fr''s commits work in the container'
   ids:
   - super-fr#650
   - super-fr#645
   - super-fr#626
   - super-fr#644
-  rationale: 'Pattern: install.sh and the scaffold POST_CREATE provision a narrower env than the uv workspace the tests use, by hand-kept lists. #650: install.sh never installs fr-herdr, so triage batch dispatch --to herdr fails on every installed fr (seen live 09-26). #645: the container''s uv-tool fr cannot import fr_vk.bridge. #626: add safe.directory for the bind-mounted worktree in POST_CREATE (and -c safe.directory on fr''s own commits) so fr commits its records inside the devcontainer. #644: fr apply --to herdr must refuse a runner that does not take unit=phase before touching the forge. Derive the runner package list once and test both installers against it. Files: scripts/install.sh, isolation/scaffold.py, both regenerated profiles, fr apply''s runner check.'
+  rationale: 'Pattern: install.sh and the scaffold POST_CREATE provision a narrower env than the uv workspace
+    the tests use, by hand-kept lists. #650: install.sh never installs fr-herdr, so triage batch dispatch
+    --to herdr fails on every installed fr (seen live 09-26). #645: the container''s uv-tool fr cannot
+    import fr_vk.bridge. #626: add safe.directory for the bind-mounted worktree in POST_CREATE (and -c
+    safe.directory on fr''s own commits) so fr commits its records inside the devcontainer. #644: fr apply
+    --to herdr must refuse a runner that does not take unit=phase before touching the forge. Derive the
+    runner package list once and test both installers against it. Files: scripts/install.sh, isolation/scaffold.py,
+    both regenerated profiles, fr apply''s runner check.'
   order: 1
   launch:
     runner: herdr
@@ -3544,12 +3567,18 @@ batches:
   - kind: cancel
     at: '2026-09-26T10:33:10.468106Z'
 - id: release-scripts
-  title: 'Release scripts: TOML rewrite anchored to [project], fragment rule covers plugins/*/skills, CI runs uv-managed python'
+  title: 'Release scripts: TOML rewrite anchored to [project], fragment rule covers plugins/*/skills,
+    CI runs uv-managed python'
   ids:
   - super-fr#669
   - super-fr#671
   - super-fr#670
-  rationale: 'The release bot now rewrites version surfaces on main unattended (4.24.0, #666). #669: _TOML_VERSION_RE in scripts/version_surfaces.py rewrites the first version = in any table; anchor it to [project]. #671: check-change-fragment.py requires_bump matches only plugins/super-fr/{skills,rules}/ while AGENTS.md documents plugins/*/skills/**; widen the code to match the docs (an unreleased skill change is the stranding fragments exist to prevent). #670: ci.yml runs the check with bare python; use uv run --no-project python. Files: scripts/, .github/workflows/ci.yml, tests. Small: plan it as one phase.'
+  rationale: 'The release bot now rewrites version surfaces on main unattended (4.24.0, #666). #669: _TOML_VERSION_RE
+    in scripts/version_surfaces.py rewrites the first version = in any table; anchor it to [project].
+    #671: check-change-fragment.py requires_bump matches only plugins/super-fr/{skills,rules}/ while AGENTS.md
+    documents plugins/*/skills/**; widen the code to match the docs (an unreleased skill change is the
+    stranding fragments exist to prevent). #670: ci.yml runs the check with bare python; use uv run --no-project
+    python. Files: scripts/, .github/workflows/ci.yml, tests. Small: plan it as one phase.'
   order: 1
   launch:
     runner: herdr
@@ -3572,7 +3601,14 @@ batches:
   - super-fr#594
   - super-fr#607
   - super-fr#631
-  rationale: 'Operator priority. One root cause: the tests= provenance window (_verify_tests_log, run_cmd.py:1773; orchestrator_wrote_since, run/telemetry.py:652) requires the log to be written inside a (tool_use, tool_result) window, but a backgrounded Bash returns its result at once, and harness/long_commands.py:22-23 tells executors to background any suite over ~120 s. Two contracts contradict each other. Also unmatched: a log path held in a shell variable ($L redirect targets). #607 and #631 are duplicates of #594 (close them with Closes lines too); #607 adds the fix direction: end the window at the background task-notification. #688 just added the OpenCode reader in the same function; build on it. Bug, so work debugging-first: reproduce with a failing test, then fix. One phase.'
+  rationale: 'Operator priority. One root cause: the tests= provenance window (_verify_tests_log, run_cmd.py:1773;
+    orchestrator_wrote_since, run/telemetry.py:652) requires the log to be written inside a (tool_use,
+    tool_result) window, but a backgrounded Bash returns its result at once, and harness/long_commands.py:22-23
+    tells executors to background any suite over ~120 s. Two contracts contradict each other. Also unmatched:
+    a log path held in a shell variable ($L redirect targets). #607 and #631 are duplicates of #594 (close
+    them with Closes lines too); #607 adds the fix direction: end the window at the background task-notification.
+    #688 just added the OpenCode reader in the same function; build on it. Bug, so work debugging-first:
+    reproduce with a failing test, then fix. One phase.'
   order: 1
   launch:
     runner: herdr
@@ -3593,7 +3629,12 @@ batches:
   title: fr commits its own records inside the devcontainer (safe.directory for the bind-mounted worktree)
   ids:
   - super-fr#626
-  rationale: 'Operator priority. One root cause: inside the devcontainer, git refuses the bind-mounted worktree as dubious ownership, so fr''s own record commits (gh#610, artifacts/commit.py:485 commit_paths) fail there. Fix both ends: add safe.directory for the worktree to the scaffold''s POST_CREATE (isolation/scaffold.py:426) and regenerate both committed profiles, and pass -c safe.directory=<toplevel> on fr''s own git calls so existing containers work without a rebuild. package-lists (#650/#645) edits the same POST_CREATE and waits for this. Bug, so work debugging-first: reproduce with a failing test, then fix. One phase.'
+  rationale: 'Operator priority. One root cause: inside the devcontainer, git refuses the bind-mounted
+    worktree as dubious ownership, so fr''s own record commits (gh#610, artifacts/commit.py:485 commit_paths)
+    fail there. Fix both ends: add safe.directory for the worktree to the scaffold''s POST_CREATE (isolation/scaffold.py:426)
+    and regenerate both committed profiles, and pass -c safe.directory=<toplevel> on fr''s own git calls
+    so existing containers work without a rebuild. package-lists (#650/#645) edits the same POST_CREATE
+    and waits for this. Bug, so work debugging-first: reproduce with a failing test, then fix. One phase.'
   order: 1
   launch:
     runner: herdr
@@ -3611,10 +3652,20 @@ batches:
     handle: archived
     archived: 0
 - id: archive-repair-scope
-  title: 'fr archive <one plan> repairs only that plan''s refs, and repair and plan create agree on the canonical spec: form'
+  title: 'fr archive <one plan> repairs only that plan''s refs, and repair and plan create agree on the
+    canonical spec: form'
   ids:
   - super-fr#686
-  rationale: 'Wave 1 (optional). Two defects, one surface. (1) Scope: archive_cmd.py:63 and :227 call repair_repo(repo_root, write=True) on a single-plan archive, rewriting OTHER live plans'' _meta.yaml spec: refs (seen while archiving for PR #684; left unstaged, one git add -A away from shipping in an unrelated PR). Scope the repair to the archived plan''s own rows; a repo-wide repair stays available as fr repair. (2) Canonical form: repair writes a bare ''<name>-design.md'' while plan create writes ''docs/superpowers/specs/<name>-design.md''; pick one, make both write it, and make the validator accept the other for back-compat. Every batch closeout runs fr archive while other batches are live, so this bites parallel closeouts. Bug, so work debugging-first: reproduce with a failing test, then fix. One phase. Do not touch run/telemetry.py, commands/run_cmd.py or isolation/: other batches are editing them.'
+  rationale: 'Wave 1 (optional). Two defects, one surface. (1) Scope: archive_cmd.py:63 and :227 call
+    repair_repo(repo_root, write=True) on a single-plan archive, rewriting OTHER live plans'' _meta.yaml
+    spec: refs (seen while archiving for PR #684; left unstaged, one git add -A away from shipping in
+    an unrelated PR). Scope the repair to the archived plan''s own rows; a repo-wide repair stays available
+    as fr repair. (2) Canonical form: repair writes a bare ''<name>-design.md'' while plan create writes
+    ''docs/superpowers/specs/<name>-design.md''; pick one, make both write it, and make the validator
+    accept the other for back-compat. Every batch closeout runs fr archive while other batches are live,
+    so this bites parallel closeouts. Bug, so work debugging-first: reproduce with a failing test, then
+    fix. One phase. Do not touch run/telemetry.py, commands/run_cmd.py or isolation/: other batches are
+    editing them.'
   order: 1
   launch:
     runner: herdr
@@ -3632,10 +3683,20 @@ batches:
     handle: archived
     archived: 0
 - id: usage-opencode-empty
-  title: 'fr usage records an explicit ''unavailable'' capture instead of sessions: [] when it finds no session'
+  title: 'fr usage records an explicit ''unavailable'' capture instead of sessions: [] when it finds no
+    session'
   ids:
   - super-fr#636
-  rationale: 'Wave 1 (optional), scoped to the cheapest cut. capture() (usage/capture.py:95-170) finds sessions through candidates(), which on OpenCode finds none, and deliver/closeout then write ''sessions: []'' as a successful capture (implemented/usage/2026-09-26-fix-models-opencode-noop-505.yaml); require_sessions is only set on a new host''s first resolve. Fix: when no session is found, write an explicit unavailable entry with the reason (for example ''no session found for harness opencode''), so every reader renders ''—'' with that reason and nothing reads an empty list as a free run; keep the capture never-raising. Do NOT change session discovery in run/telemetry.py (current_session): the tests-window batch is editing that file, and OpenCode discovery needs super-fr#537 first. If the usage file shape changes, follow .claude/rules/artifact-versioning.md (stamp bump, migration, validator). Bug, so work debugging-first: reproduce with a failing test, then fix. One phase.'
+  rationale: 'Wave 1 (optional), scoped to the cheapest cut. capture() (usage/capture.py:95-170) finds
+    sessions through candidates(), which on OpenCode finds none, and deliver/closeout then write ''sessions:
+    []'' as a successful capture (implemented/usage/2026-09-26-fix-models-opencode-noop-505.yaml); require_sessions
+    is only set on a new host''s first resolve. Fix: when no session is found, write an explicit unavailable
+    entry with the reason (for example ''no session found for harness opencode''), so every reader renders
+    ''—'' with that reason and nothing reads an empty list as a free run; keep the capture never-raising.
+    Do NOT change session discovery in run/telemetry.py (current_session): the tests-window batch is editing
+    that file, and OpenCode discovery needs super-fr#537 first. If the usage file shape changes, follow
+    .claude/rules/artifact-versioning.md (stamp bump, migration, validator). Bug, so work debugging-first:
+    reproduce with a failing test, then fix. One phase.'
   order: 1
   launch:
     runner: herdr
@@ -3653,10 +3714,21 @@ batches:
     handle: archived
     archived: 0
 - id: verify-merge-rewrites
-  title: verify-merge accepts a merged PR whose own added lines a later merge rewrote, and checks against the fetched remote branch
+  title: verify-merge accepts a merged PR whose own added lines a later merge rewrote, and checks against
+    the fetched remote branch
   ids:
   - super-fr#665
-  rationale: 'Wave 1 (optional). branch_changes_present (isolation/local.py:287) requires every line the branch ADDED to survive on origin/<default>, so a later merge rewriting the same lines (generated acceptance reports; version lines before #666) reads as NOT verified. Seen when two batch closeouts refused right after fr triage batch merge merged them back to back. First re-check the repro after #666 (PRs no longer edit versions): the generated-report half should still reproduce. Fix direction (super-fr#598 option 1): a differing file counts as landed when the branch''s blob equals <c>:path for some commit c in merge_base..origin/<default> (the line existed on main after the merge, then moved on). Also the issue''s second half: verify against the fetched remote branch, not a stale local one. Keep refusing on dirty or unpushed work. It fails safe (a STOP), so do not weaken it to a pass. Bug, so work debugging-first: reproduce with a failing test, then fix. One phase. Do not touch isolation/scaffold.py or artifacts/commit.py: container-git-ownership is editing them.'
+  rationale: 'Wave 1 (optional). branch_changes_present (isolation/local.py:287) requires every line the
+    branch ADDED to survive on origin/<default>, so a later merge rewriting the same lines (generated
+    acceptance reports; version lines before #666) reads as NOT verified. Seen when two batch closeouts
+    refused right after fr triage batch merge merged them back to back. First re-check the repro after
+    #666 (PRs no longer edit versions): the generated-report half should still reproduce. Fix direction
+    (super-fr#598 option 1): a differing file counts as landed when the branch''s blob equals <c>:path
+    for some commit c in merge_base..origin/<default> (the line existed on main after the merge, then
+    moved on). Also the issue''s second half: verify against the fetched remote branch, not a stale local
+    one. Keep refusing on dirty or unpushed work. It fails safe (a STOP), so do not weaken it to a pass.
+    Bug, so work debugging-first: reproduce with a failing test, then fix. One phase. Do not touch isolation/scaffold.py
+    or artifacts/commit.py: container-git-ownership is editing them.'
   order: 1
   launch:
     runner: herdr
@@ -3674,11 +3746,26 @@ batches:
     handle: archived
     archived: 0
 - id: batch-launch
-  title: 'triage batches: the session starts on the orchestrator binding, subagents use the configured tiers; a batch declares its skill (fr-goal | fr-debugging)'
+  title: 'triage batches: the session starts on the orchestrator binding, subagents use the configured
+    tiers; a batch declares its skill (fr-goal | fr-debugging)'
   ids:
   - super-fr#704
   - super-fr#687
-  rationale: 'Operator priority: wave 1 ran every subagent on one blanket model, which cost an afternoon and four blocked sessions. Both issues live in the same brief renderer. #704: resolve_launch (triage/batch.py:306) should take the SESSION model from the batch''s --model, else defaults.launch.model, else the orchestrator binding (fr models resolve --harness <h> --tier orchestrator), and refuse only when all are unset. render_brief (triage/batch_dispatch.py:87) must stop writing ''Use <model> for every subagent and every model tier'': by default the brief says nothing about subagent models, and fr-goal resolves each phase''s tier through fr models. Add explicit, opt-in overrides only if cheap (e.g. --subagent-model). #687: a batch declares skill: goal | debug (default goal, so existing judgements keep their meaning), with --skill on create/edit; a debug batch''s brief starts /fr-debugging, uses branch fix/batch-<id>, and states fr-debugging''s two stops; batch create --skill debug warns when members carry different themes. Keep schema-2 files loading unchanged; judgements.yaml is not an artifact kind. THIS RUN''S OWN MODELS: this batch''s --model (claude-opus-5-5, the orchestrator binding) is the session model only. Ignore the brief''s ''every subagent and every model tier'' line below (the bug this batch fixes): dispatch every subagent, executors and reviewers alike, on its configured tier via fr models resolve --harness claude-code --tier <tier>. Size phases to the change.'
+  rationale: 'Operator priority: wave 1 ran every subagent on one blanket model, which cost an afternoon
+    and four blocked sessions. Both issues live in the same brief renderer. #704: resolve_launch (triage/batch.py:306)
+    should take the SESSION model from the batch''s --model, else defaults.launch.model, else the orchestrator
+    binding (fr models resolve --harness <h> --tier orchestrator), and refuse only when all are unset.
+    render_brief (triage/batch_dispatch.py:87) must stop writing ''Use <model> for every subagent and
+    every model tier'': by default the brief says nothing about subagent models, and fr-goal resolves
+    each phase''s tier through fr models. Add explicit, opt-in overrides only if cheap (e.g. --subagent-model).
+    #687: a batch declares skill: goal | debug (default goal, so existing judgements keep their meaning),
+    with --skill on create/edit; a debug batch''s brief starts /fr-debugging, uses branch fix/batch-<id>,
+    and states fr-debugging''s two stops; batch create --skill debug warns when members carry different
+    themes. Keep schema-2 files loading unchanged; judgements.yaml is not an artifact kind. THIS RUN''S
+    OWN MODELS: this batch''s --model (claude-opus-5-5, the orchestrator binding) is the session model
+    only. Ignore the brief''s ''every subagent and every model tier'' line below (the bug this batch fixes):
+    dispatch every subagent, executors and reviewers alike, on its configured tier via fr models resolve
+    --harness claude-code --tier <tier>. Size phases to the change.'
   order: 1
   bump: minor
   launch:
@@ -3697,11 +3784,20 @@ batches:
     handle: archived
     archived: 0
 - id: branch-diff-robustness
-  title: 'branch_changes_present: a failed git diff is not ''all changes present'', and paths are read with -z'
+  title: 'branch_changes_present: a failed git diff is not ''all changes present'', and paths are read
+    with -z'
   ids:
   - super-fr#705
   - super-fr#717
-  rationale: 'Wave 2. One root cause, one function: the two ''git diff --name-only'' calls in branch_changes_present (fr/isolation/local.py) are trusted blindly. #705 (tier 2): neither call''s exit status is checked, so a git failure yields changed=[] / differing=[] and reads as ALL CHANGES PRESENT in the guard behind verify-merge, the down/gc reap hazard and gc''s _merged_by_content. Raise IsolationError on non-zero exit (already mapped to ''unverifiable'' / not verified). #717: without -z, git C-quotes non-ASCII or special paths, which then name no file; use -z and split on NUL. Red-first tests: a runner whose git diff fails; a non-ASCII path. Keep failing safe. Other wave-2 batches own install.sh, isolation/scaffold.py, commands/apply_cmd.py, run/telemetry.py, run/long_commands.py and the journal model; do not edit them. #716 (reverted merges) is a later batch in this same function: leave it.'
+  rationale: 'Wave 2. One root cause, one function: the two ''git diff --name-only'' calls in branch_changes_present
+    (fr/isolation/local.py) are trusted blindly. #705 (tier 2): neither call''s exit status is checked,
+    so a git failure yields changed=[] / differing=[] and reads as ALL CHANGES PRESENT in the guard behind
+    verify-merge, the down/gc reap hazard and gc''s _merged_by_content. Raise IsolationError on non-zero
+    exit (already mapped to ''unverifiable'' / not verified). #717: without -z, git C-quotes non-ASCII
+    or special paths, which then name no file; use -z and split on NUL. Red-first tests: a runner whose
+    git diff fails; a non-ASCII path. Keep failing safe. Other wave-2 batches own install.sh, isolation/scaffold.py,
+    commands/apply_cmd.py, run/telemetry.py, run/long_commands.py and the journal model; do not edit them.
+    #716 (reverted merges) is a later batch in this same function: leave it.'
   order: 1
   skill: debug
   launch:
@@ -3719,11 +3815,20 @@ batches:
     handle: archived
     archived: 0
 - id: package-lists
-  title: 'Installed fr is the fr the tests run: one runner package list for install.sh and the devcontainer POST_CREATE'
+  title: 'Installed fr is the fr the tests run: one runner package list for install.sh and the devcontainer
+    POST_CREATE'
   ids:
   - super-fr#650
   - super-fr#645
-  rationale: 'Wave 2. One root cause across two installers: runner packages are hand-kept lists. #650: scripts/install.sh installs fr with only --with packages/fr-vk, so fr-herdr (and fr-cncd) are never registered and the installed fr cannot dispatch to herdr; every batch dispatch today needs ''uv run fr''. #645: the scaffold''s POST_CREATE (fr/isolation/scaffold.py) installs fr with no runner packages, so install.sh --install-bridge fails inside the devcontainer; regenerate both committed .devcontainer profiles. Derive the fr.runners packages once (from packages/*/pyproject.toml entry points) and add a test that asserts both installers carry every one. POST_CREATE already has safe.directory from #694; keep it. Other wave-2 batches own fr/isolation/local.py, commands/apply_cmd.py, run/telemetry.py, run/long_commands.py and the journal model; do not edit them.'
+  rationale: 'Wave 2. One root cause across two installers: runner packages are hand-kept lists. #650:
+    scripts/install.sh installs fr with only --with packages/fr-vk, so fr-herdr (and fr-cncd) are never
+    registered and the installed fr cannot dispatch to herdr; every batch dispatch today needs ''uv run
+    fr''. #645: the scaffold''s POST_CREATE (fr/isolation/scaffold.py) installs fr with no runner packages,
+    so install.sh --install-bridge fails inside the devcontainer; regenerate both committed .devcontainer
+    profiles. Derive the fr.runners packages once (from packages/*/pyproject.toml entry points) and add
+    a test that asserts both installers carry every one. POST_CREATE already has safe.directory from #694;
+    keep it. Other wave-2 batches own fr/isolation/local.py, commands/apply_cmd.py, run/telemetry.py,
+    run/long_commands.py and the journal model; do not edit them.'
   order: 1
   skill: debug
   launch:
@@ -3744,7 +3849,13 @@ batches:
   title: fr apply --to <runner> refuses a runner that never takes phase units, before touching the forge
   ids:
   - super-fr#644
-  rationale: Wave 2. fr apply --to checks only runner_names() (commands/apply_cmd.py ~492-500) and labels phase issues runner:herdr, but HerdrRunner.can_dispatch takes only unit == 'run' (fr_herdr/runner.py:128). The refusal lands later in fr_dispatch tick (fr_dispatch/__init__.py ~489-497), mislabelled 'unknown repo', and the issues wait forever. Declare each runner's accepted units, refuse in apply before any forge write, and make tick's message name the real reason. Read fr_dispatch.* and fr_vk.* end-to-end first (AGENTS.md bridge audit rule). Other wave-2 batches own install.sh, fr/isolation/, run/telemetry.py, run/long_commands.py and the journal model; do not edit them.
+  rationale: Wave 2. fr apply --to checks only runner_names() (commands/apply_cmd.py ~492-500) and labels
+    phase issues runner:herdr, but HerdrRunner.can_dispatch takes only unit == 'run' (fr_herdr/runner.py:128).
+    The refusal lands later in fr_dispatch tick (fr_dispatch/__init__.py ~489-497), mislabelled 'unknown
+    repo', and the issues wait forever. Declare each runner's accepted units, refuse in apply before any
+    forge write, and make tick's message name the real reason. Read fr_dispatch.* and fr_vk.* end-to-end
+    first (AGENTS.md bridge audit rule). Other wave-2 batches own install.sh, fr/isolation/, run/telemetry.py,
+    run/long_commands.py and the journal model; do not edit them.
   order: 1
   skill: debug
   launch:
@@ -3765,7 +3876,17 @@ batches:
   title: deliver tests= gate accepts a suite OpenCode's own long-command rule detached
   ids:
   - super-fr#719
-  rationale: 'Wave 2. OpenCode''s long-command rule (fr/run/long_commands.py) tells the executor to detach a suite longer than 10 minutes: ''(cmd; echo "exit=$?") > log 2>&1 & echo $! > log.pid''. That call returns at once, so _opencode_wrote_since (fr/run/telemetry.py) sees a zero-length window and the deliver tests= gate refuses the log the detached suite really wrote. #693/#702 fixed Claude Code''s run_in_background by ending the window at the harness''s completion notice; OpenCode has no such event. Give the gate a completion signal it can verify (the pid file plus the exit= marker the rule already writes, or a later foreground command that waits on the pid), or change the rule to a form the gate can window. Must not accept a log nothing of the orchestrator''s wrote. Red-first test with the rule''s exact command shape. #720 ($VAR binding by syntax) is a different root cause in the same file: leave it. Other wave-2 batches own fr/isolation/, install.sh, commands/apply_cmd.py and the journal model; do not edit them.'
+  rationale: 'Wave 2. OpenCode''s long-command rule (fr/run/long_commands.py) tells the executor to detach
+    a suite longer than 10 minutes: ''(cmd; echo "exit=$?") > log 2>&1 & echo $! > log.pid''. That call
+    returns at once, so _opencode_wrote_since (fr/run/telemetry.py) sees a zero-length window and the
+    deliver tests= gate refuses the log the detached suite really wrote. #693/#702 fixed Claude Code''s
+    run_in_background by ending the window at the harness''s completion notice; OpenCode has no such event.
+    Give the gate a completion signal it can verify (the pid file plus the exit= marker the rule already
+    writes, or a later foreground command that waits on the pid), or change the rule to a form the gate
+    can window. Must not accept a log nothing of the orchestrator''s wrote. Red-first test with the rule''s
+    exact command shape. #720 ($VAR binding by syntax) is a different root cause in the same file: leave
+    it. Other wave-2 batches own fr/isolation/, install.sh, commands/apply_cmd.py and the journal model;
+    do not edit them.'
   order: 1
   skill: debug
   launch:
@@ -3783,10 +3904,19 @@ batches:
     handle: archived
     archived: 0
 - id: journal-clock
-  title: fr journal timestamps carry a UTC offset, so a review written in the container is not read hours early on the host
+  title: fr journal timestamps carry a UTC offset, so a review written in the container is not read hours
+    early on the host
   ids:
   - super-fr#625
-  rationale: 'Wave 2. Naive datetime.now() writers (commands/journal_cmd.py ~54, record/apply.py ~226) stamp local time; journal_stamp_as_utc (journal/model.py ~360-375) localises in the READER''s zone. A review written in a UTC container is read on a UTC+N host as hours earlier, and fr run resolve (run_cmd.py ~1719-1728; second caller journal/operator.py ~53) refuses a valid review; west of UTC a stale review is accepted. Write an explicit offset (or UTC ''Z'') from every writer and parse both old naive and new stamps. A journal is an artifact kind: check .claude/rules/artifact-versioning.md and decide explicitly whether the new stamp form is a shape change (old fr must still parse the field). Red-first test that pins TZ for writer and reader separately. Other wave-2 batches own fr/isolation/, install.sh, commands/apply_cmd.py, run/telemetry.py and run/long_commands.py; do not edit them.'
+  rationale: 'Wave 2. Naive datetime.now() writers (commands/journal_cmd.py ~54, record/apply.py ~226)
+    stamp local time; journal_stamp_as_utc (journal/model.py ~360-375) localises in the READER''s zone.
+    A review written in a UTC container is read on a UTC+N host as hours earlier, and fr run resolve (run_cmd.py
+    ~1719-1728; second caller journal/operator.py ~53) refuses a valid review; west of UTC a stale review
+    is accepted. Write an explicit offset (or UTC ''Z'') from every writer and parse both old naive and
+    new stamps. A journal is an artifact kind: check .claude/rules/artifact-versioning.md and decide explicitly
+    whether the new stamp form is a shape change (old fr must still parse the field). Red-first test that
+    pins TZ for writer and reader separately. Other wave-2 batches own fr/isolation/, install.sh, commands/apply_cmd.py,
+    run/telemetry.py and run/long_commands.py; do not edit them.'
   order: 1
   skill: debug
   launch:
@@ -3804,12 +3934,26 @@ batches:
     handle: archived
     archived: 0
 - id: tests-gate-remainder
-  title: 'fr run resolve: require a done step''s declared emits, and persist unobserved for a cli-step gate'
+  title: 'fr run resolve: require a done step''s declared emits, and persist unobserved for a cli-step
+    gate'
   ids:
   - super-fr#587
   - super-fr#632
   - super-fr#690
-  rationale: 'Stranded remainder of the cancelled tests-gate batch (dispatched 2026-09-26 10:05, blocked at fr-goal brainstorm within 8s, withdrawn 10:33 -- bug work routed through the feature pipeline, the exact mismatch #687 fixed). #594 and #638 were later covered by tests-window (PR #693) and an independent debug-lane fix (PR #688); #587 and #632 were never re-dispatched and are still live on main. #587: fr run resolve --state done validates --emitted names (run_cmd.py ~1248) but never requires a step''s declared emits, so e.g. brainstorm can be marked done with no spec -- the provenance half (answered_by) was already fixed by #689. #632: on a kind: cli step, resolve runs _gate_provenance (run_cmd.py ~3965, notes unobserved=operator-gate at ~1038) but the cli branch never calls _take_unobserved() (only the agent-step call sites do at ~3622/~4061), so the note is silently lost; no shipped manifest hits this today, only repo overrides. One surface (fr run resolve''s evidence/emits gate), one phase. CAUTION: both touch commands/run_cmd.py; Wave 2''s journal-clock batch (fix/batch-journal-clock, PR #728, open) also edits run_cmd.py around ~1719-1728 (the stale-review refusal) -- different functions, but rebase before merging if journal-clock lands first. Do not touch fr/isolation/, install.sh, commands/apply_cmd.py, run/telemetry.py or run/long_commands.py -- other wave-2 batches own those.'
+  rationale: 'Stranded remainder of the cancelled tests-gate batch (dispatched 2026-09-26 10:05, blocked
+    at fr-goal brainstorm within 8s, withdrawn 10:33 -- bug work routed through the feature pipeline,
+    the exact mismatch #687 fixed). #594 and #638 were later covered by tests-window (PR #693) and an
+    independent debug-lane fix (PR #688); #587 and #632 were never re-dispatched and are still live on
+    main. #587: fr run resolve --state done validates --emitted names (run_cmd.py ~1248) but never requires
+    a step''s declared emits, so e.g. brainstorm can be marked done with no spec -- the provenance half
+    (answered_by) was already fixed by #689. #632: on a kind: cli step, resolve runs _gate_provenance
+    (run_cmd.py ~3965, notes unobserved=operator-gate at ~1038) but the cli branch never calls _take_unobserved()
+    (only the agent-step call sites do at ~3622/~4061), so the note is silently lost; no shipped manifest
+    hits this today, only repo overrides. One surface (fr run resolve''s evidence/emits gate), one phase.
+    CAUTION: both touch commands/run_cmd.py; Wave 2''s journal-clock batch (fix/batch-journal-clock, PR
+    #728, open) also edits run_cmd.py around ~1719-1728 (the stale-review refusal) -- different functions,
+    but rebase before merging if journal-clock lands first. Do not touch fr/isolation/, install.sh, commands/apply_cmd.py,
+    run/telemetry.py or run/long_commands.py -- other wave-2 batches own those.'
   order: 1
   skill: debug
   launch:
@@ -3830,7 +3974,12 @@ batches:
   title: 'triage: theme comparisons ignore case and surrounding space (mixed_themes, suggest)'
   ids:
   - super-fr#724
-  rationale: 'Wave 3. One root cause: Judgement.theme is free text compared raw. mixed_themes (fr/triage/batch.py:381, new in #723: the debug-batch one-root-cause warning) and suggest''s theme signal both treat ''Docs'', ''docs'' and ''docs '' as different themes. Normalise at ONE shared comparison point (casefold + strip); keep the stored spelling for display; do not rewrite judgements.yaml. Red-first test for each caller. XS. Other running batches own fr/isolation/, install.sh, commands/apply_cmd.py, run/telemetry.py and run/long_commands.py; do not edit them.'
+  rationale: 'Wave 3. One root cause: Judgement.theme is free text compared raw. mixed_themes (fr/triage/batch.py:381,
+    new in #723: the debug-batch one-root-cause warning) and suggest''s theme signal both treat ''Docs'',
+    ''docs'' and ''docs '' as different themes. Normalise at ONE shared comparison point (casefold + strip);
+    keep the stored spelling for display; do not rewrite judgements.yaml. Red-first test for each caller.
+    XS. Other running batches own fr/isolation/, install.sh, commands/apply_cmd.py, run/telemetry.py and
+    run/long_commands.py; do not edit them.'
   order: 1
   skill: debug
   launch:
@@ -3848,12 +3997,20 @@ batches:
     handle: archived
     archived: 0
 - id: spec-ref-writers
-  title: 'spec: writers agree on canonical_spec_ref: repo-escaping refs kept, one repair per archive, v1 migration canonical'
+  title: 'spec: writers agree on canonical_spec_ref: repo-escaping refs kept, one repair per archive,
+    v1 migration canonical'
   ids:
   - super-fr#709
   - super-fr#710
   - super-fr#711
-  rationale: 'Wave 3 chore, one phase. Three small leftovers from #697''s Opus re-review, all around canonical_spec_ref (fr/refs.py) and its writers. #709: a relative spec: ref that escapes the repo and whose target is absent gets shortened to a same-slug local spec; keep any ref whose normalised path leaves repo_root verbatim. #710: fr archive runs repair_repo twice when specs move (_report_sweep, then the tail of archive_command), printing warnings twice; run it once, and check the --sweep-only path. #711: the v1->v2 migration (fr/migrate.py ~278) writes spec: verbatim; pass it through canonical_spec_ref. A test per item. Other running batches own fr/isolation/, install.sh, commands/apply_cmd.py, run/telemetry.py, run/long_commands.py and fr/triage/; do not edit them.'
+  rationale: 'Wave 3 chore, one phase. Three small leftovers from #697''s Opus re-review, all around canonical_spec_ref
+    (fr/refs.py) and its writers. #709: a relative spec: ref that escapes the repo and whose target is
+    absent gets shortened to a same-slug local spec; keep any ref whose normalised path leaves repo_root
+    verbatim. #710: fr archive runs repair_repo twice when specs move (_report_sweep, then the tail of
+    archive_command), printing warnings twice; run it once, and check the --sweep-only path. #711: the
+    v1->v2 migration (fr/migrate.py ~278) writes spec: verbatim; pass it through canonical_spec_ref. A
+    test per item. Other running batches own fr/isolation/, install.sh, commands/apply_cmd.py, run/telemetry.py,
+    run/long_commands.py and fr/triage/; do not edit them.'
   order: 1
   launch:
     runner: herdr
@@ -3870,11 +4027,22 @@ batches:
     handle: archived
     archived: 0
 - id: ci-hardening
-  title: 'CI: third-party actions pinned by commit SHA, and one aggregating test job for future required checks'
+  title: 'CI: third-party actions pinned by commit SHA, and one aggregating test job for future required
+    checks'
   ids:
   - super-fr#707
   - super-fr#706
-  rationale: 'Wave 3 chore, one phase. #707 (security): every workflow under .github/workflows pins third-party actions by mutable tag; release.yml pushes to main and tags releases with a write token, and acceptance-report.yml and ci-budget.yml have issues: write. Pin every uses: to a full commit SHA with the tag in a trailing comment, add Dependabot for the github-actions ecosystem so pins do not rot, and add a tripwire test that fails on any third-party uses: not pinned by SHA. Resolve each SHA from the tag you replace, and verify it; do not guess. #706: since #703 the test job is a 4-way matrix (contexts test (1)..test (4)) and main requires no checks; add an aggregating job (e.g. test-all, needs: test) so a future required-check rule has one stable name. Do NOT change main''s ruleset; that is the operator''s call, and the release bot would need a bypass actor. The new job must be covered by ci-budget (see AGENTS.md: a new workflow file fails CI until watched or excluded). Other running batches own packages/ source files; do not edit them.'
+  rationale: 'Wave 3 chore, one phase. #707 (security): every workflow under .github/workflows pins third-party
+    actions by mutable tag; release.yml pushes to main and tags releases with a write token, and acceptance-report.yml
+    and ci-budget.yml have issues: write. Pin every uses: to a full commit SHA with the tag in a trailing
+    comment, add Dependabot for the github-actions ecosystem so pins do not rot, and add a tripwire test
+    that fails on any third-party uses: not pinned by SHA. Resolve each SHA from the tag you replace,
+    and verify it; do not guess. #706: since #703 the test job is a 4-way matrix (contexts test (1)..test
+    (4)) and main requires no checks; add an aggregating job (e.g. test-all, needs: test) so a future
+    required-check rule has one stable name. Do NOT change main''s ruleset; that is the operator''s call,
+    and the release bot would need a bypass actor. The new job must be covered by ci-budget (see AGENTS.md:
+    a new workflow file fails CI until watched or excluded). Other running batches own packages/ source
+    files; do not edit them.'
   order: 1
   launch:
     runner: herdr
@@ -3894,7 +4062,12 @@ batches:
   title: 'verify-merge/gc: a merge that was later reverted no longer reads as landed'
   ids:
   - super-fr#716
-  rationale: 'Wave 4. From #696''s review: _branch_blob_was_on_base (fr/isolation/local.py:281) accepts a blob that was on the default branch at any commit after the merge-base, so a reverted merge still passes the blob-history fallback and down/gc can reap the reverted branch''s workspace. Require the path''s current base blob to descend from the matched commit, or refuse when it no longer reaches origin/<default>. Red-first test with a merge then a revert. One function, one phase. Stay out of commands/run_cmd.py, run/telemetry.py and fr/harness/ (other wave-4 batches own those).'
+  rationale: 'Wave 4. From #696''s review: _branch_blob_was_on_base (fr/isolation/local.py:281) accepts
+    a blob that was on the default branch at any commit after the merge-base, so a reverted merge still
+    passes the blob-history fallback and down/gc can reap the reverted branch''s workspace. Require the
+    path''s current base blob to descend from the matched commit, or refuse when it no longer reaches
+    origin/<default>. Red-first test with a merge then a revert. One function, one phase. Stay out of
+    commands/run_cmd.py, run/telemetry.py and fr/harness/ (other wave-4 batches own those).'
   order: 1
   skill: debug
   launch:
@@ -3915,7 +4088,11 @@ batches:
   title: 'deliver tests= gate: only a top-level assignment binds a $VAR log path'
   ids:
   - super-fr#720
-  rationale: 'Wave 4. From #693''s review: _ASSIGNMENT (fr/run/telemetry.py:638) binds $VAR log paths by syntax alone, so ''echo L=...'' and assignments inside a subshell bind too, the same forgery class as ''echo ok > log''. Only top-level assignments should bind. Red-first tests for each false binding. XS, one phase. Stay out of commands/run_cmd.py, fr/isolation/ and fr/harness/ (other wave-4 batches own those).'
+  rationale: 'Wave 4. From #693''s review: _ASSIGNMENT (fr/run/telemetry.py:638) binds $VAR log paths
+    by syntax alone, so ''echo L=...'' and assignments inside a subshell bind too, the same forgery class
+    as ''echo ok > log''. Only top-level assignments should bind. Red-first tests for each false binding.
+    XS, one phase. Stay out of commands/run_cmd.py, fr/isolation/ and fr/harness/ (other wave-4 batches
+    own those).'
   order: 1
   skill: debug
   launch:
@@ -3933,11 +4110,18 @@ batches:
     handle: archived
     archived: 0
 - id: opencode-identity
-  title: 'fr names the right holder of an OpenCode dispatch: explicit harness and child identity beat ambient CLAUDE_* env'
+  title: 'fr names the right holder of an OpenCode dispatch: explicit harness and child identity beat
+    ambient CLAUDE_* env'
   ids:
   - super-fr#537
   - super-fr#530
-  rationale: 'Wave 4. One root cause: fr''s record of who holds an OpenCode-dispatched unit comes from the wrong source. #537: harness detection (fr/harness/detect.py:32-42) prefers ambient CLAUDECODE/CLAUDE_* markers, so a claude-launched OpenCode names the wrong holder, and the tier agent that ran never reaches the cursor. #530: the OpenCode plugin sees the child''s sessionID first but fr run claim needs a named step/item, so the holder can''t be named while it holds the unit. Fix #537 first. #530 is attribution only; the open record already prevents duplicate dispatch. Stay out of commands/run_cmd.py resolve gates, run/telemetry.py and fr/isolation/ (other wave-4 batches own those).'
+  rationale: 'Wave 4. One root cause: fr''s record of who holds an OpenCode-dispatched unit comes from
+    the wrong source. #537: harness detection (fr/harness/detect.py:32-42) prefers ambient CLAUDECODE/CLAUDE_*
+    markers, so a claude-launched OpenCode names the wrong holder, and the tier agent that ran never reaches
+    the cursor. #530: the OpenCode plugin sees the child''s sessionID first but fr run claim needs a named
+    step/item, so the holder can''t be named while it holds the unit. Fix #537 first. #530 is attribution
+    only; the open record already prevents duplicate dispatch. Stay out of commands/run_cmd.py resolve
+    gates, run/telemetry.py and fr/isolation/ (other wave-4 batches own those).'
   order: 1
   skill: debug
   launch:
@@ -3955,10 +4139,17 @@ batches:
     handle: archived
     archived: 0
 - id: closeout-always
-  title: 'Close-out is an always condition of every fr flow: branch-keyed, archives every artifact the branch added'
+  title: 'Close-out is an always condition of every fr flow: branch-keyed, archives every artifact the
+    branch added'
   ids:
   - super-fr#733
-  rationale: Wave 5, after reverted-merge (#716 edits the branch-diff code in fr/isolation/local.py that this reuses). fr-debugging has no close-out, and fr archive moves only plans and specs, so 26 debug journals have never been archived. One close-out keyed on the branch (verify-merge, archive everything the branch added including debug journals, housekeeping PR, isolation down), with fr pickup --run as a caller. A structural check reports live artifacts whose PR has merged, and fr-debugging's deliver relays the close-out line. The first run sweeps the 26. closeout-queue (#667) builds on this. The issue's design is a direction; the brainstorm decides the shape.
+  rationale: Wave 5, after reverted-merge (#716 edits the branch-diff code in fr/isolation/local.py that
+    this reuses). fr-debugging has no close-out, and fr archive moves only plans and specs, so 26 debug
+    journals have never been archived. One close-out keyed on the branch (verify-merge, archive everything
+    the branch added including debug journals, housekeeping PR, isolation down), with fr pickup --run
+    as a caller. A structural check reports live artifacts whose PR has merged, and fr-debugging's deliver
+    relays the close-out line. The first run sweeps the 26. closeout-queue (#667) builds on this. The
+    issue's design is a direction; the brainstorm decides the shape.
   order: 2
   bump: minor
   launch:
@@ -3972,13 +4163,20 @@ batches:
     branch: feat/batch-closeout-always
   - kind: cancel
     at: '2026-09-28T18:44:54.678346Z'
-    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs and shown last-first (#783). Retried once #783''s fix merges.'
+    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs
+      and shown last-first (#783). Retried once #783''s fix merges.'
 - id: revert-detection
-  title: 'branch_changes_present: a reverted --no-ff landing and a three-way revert no longer read as landed'
+  title: 'branch_changes_present: a reverted --no-ff landing and a three-way revert no longer read as
+    landed'
   ids:
   - super-fr#741
   - super-fr#739
-  rationale: 'Wave 5. One function (fr/isolation/local.py branch_changes_present / _branch_blob_was_on_base), two revert shapes #735 left open, both pinned as strict xfails in tests/unit/test_isolation.py: remove each xfail as its case passes. #741 first (ancestor branch: compare from the landing merge''s first parent), then #739 (read the patch in the same git call; a revert removes every line the branch added). Keep #665''s rewrite case green. Stay out of archive.py and run/closeout.py (closeout-always owns them).'
+  rationale: 'Wave 5. One function (fr/isolation/local.py branch_changes_present / _branch_blob_was_on_base),
+    two revert shapes #735 left open, both pinned as strict xfails in tests/unit/test_isolation.py: remove
+    each xfail as its case passes. #741 first (ancestor branch: compare from the landing merge''s first
+    parent), then #739 (read the patch in the same git call; a revert removes every line the branch added).
+    Keep #665''s rewrite case green. Stay out of archive.py and run/closeout.py (closeout-always owns
+    them).'
   order: 1
   skill: debug
   launch:
@@ -3996,10 +4194,15 @@ batches:
     handle: archived
     archived: 0
 - id: opencode-xdg
-  title: OpenCode provenance reads the session db OpenCode actually uses (XDG_DATA_HOME), and an unreadable db is not 'no writer'
+  title: OpenCode provenance reads the session db OpenCode actually uses (XDG_DATA_HOME), and an unreadable
+    db is not 'no writer'
   ids:
   - super-fr#740
-  rationale: 'Wave 5. OpenCodeReader.database() in fr/run/telemetry.py ignores XDG_DATA_HOME, so every soft gate silently degrades and deliver refuses a valid suite log. Two parts, one root: resolve FR_OPENCODE_DB > XDG_DATA_HOME/opencode > ~/.local/share/opencode; and a db without the run''s session must return None (unobserved), never [] (observed: no writer). One phase. Stay out of commands/run_cmd.py and fr/isolation/.'
+  rationale: 'Wave 5. OpenCodeReader.database() in fr/run/telemetry.py ignores XDG_DATA_HOME, so every
+    soft gate silently degrades and deliver refuses a valid suite log. Two parts, one root: resolve FR_OPENCODE_DB
+    > XDG_DATA_HOME/opencode > ~/.local/share/opencode; and a db without the run''s session must return
+    None (unobserved), never [] (observed: no writer). One phase. Stay out of commands/run_cmd.py and
+    fr/isolation/.'
   order: 1
   skill: debug
   launch:
@@ -4017,11 +4220,15 @@ batches:
     handle: archived
     archived: 0
 - id: spec-ref-followups
-  title: 'spec: refs: decide verbatim before warning ambiguous, and test the path token, not the decorated value'
+  title: 'spec: refs: decide verbatim before warning ambiguous, and test the path token, not the decorated
+    value'
   ids:
   - super-fr#749
   - super-fr#750
-  rationale: 'Wave 5. Both from #737''s review, both in canonical_spec_ref''s verbatim decision: #749 repair._repair_meta warns ''ambiguous'' before learning the ref is kept verbatim; #750 the escape test reads a backtick-annotated value raw. Decide verbatim-vs-rewrite once, on the extracted path token, and warn only when a rewrite is on the table. XS, one phase. Stay out of archive.py (closeout-always).'
+  rationale: 'Wave 5. Both from #737''s review, both in canonical_spec_ref''s verbatim decision: #749
+    repair._repair_meta warns ''ambiguous'' before learning the ref is kept verbatim; #750 the escape
+    test reads a backtick-annotated value raw. Decide verbatim-vs-rewrite once, on the extracted path
+    token, and warn only when a rewrite is on the table. XS, one phase. Stay out of archive.py (closeout-always).'
   order: 1
   skill: debug
   launch:
@@ -4039,10 +4246,15 @@ batches:
     handle: archived
     archived: 0
 - id: phase-sizing
-  title: 'fr-plan sizes phases to the asks: one phase per independently reviewable ask, a manual step is not a phase'
+  title: 'fr-plan sizes phases to the asks: one phase per independently reviewable ask, a manual step
+    is not a phase'
   ids:
   - super-fr#745
-  rationale: 'Wave 5. #674 made a one-phase plan legal; #745 shows fr-plan still over-splits (4 phases for 2 asks; the orchestrator 71% of cost, 419 turns). Make the ask count the default phase count, a [manual] operator action a Test Plan line, and have proportionality/self-review flag a phase with no ask of its own. Edits the fr-plan skill (and both mirrors) and fr/proportionality.py; closeout-always edits the fr-goal and fr-debugging skills: if both touch fr-goal SKILL.md, rebase before merging.'
+  rationale: 'Wave 5. #674 made a one-phase plan legal; #745 shows fr-plan still over-splits (4 phases
+    for 2 asks; the orchestrator 71% of cost, 419 turns). Make the ask count the default phase count,
+    a [manual] operator action a Test Plan line, and have proportionality/self-review flag a phase with
+    no ask of its own. Edits the fr-plan skill (and both mirrors) and fr/proportionality.py; closeout-always
+    edits the fr-goal and fr-debugging skills: if both touch fr-goal SKILL.md, rebase before merging.'
   order: 1
   bump: minor
   launch:
@@ -4056,12 +4268,15 @@ batches:
     branch: feat/batch-phase-sizing
   - kind: cancel
     at: '2026-09-28T18:44:59.750696Z'
-    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs and shown last-first (#783). Retried once #783''s fix merges.'
+    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs
+      and shown last-first (#783). Retried once #783''s fix merges.'
 - id: pr-body-cost
   title: 'deliver''s PR body carries the run''s cost: capture usage before rendering the body'
   ids:
   - super-fr#680
-  rationale: 'Wave 5, first of the serial run_cmd.py chain (then cursor-model #637, then record-first-run #653/#655). _deliver_pr_gate renders the PR body before _capture_usage runs, and the harness writes its cost-state only at session end, so the cost table is near-empty. The only wave-5 batch in commands/run_cmd.py.'
+  rationale: 'Wave 5, first of the serial run_cmd.py chain (then cursor-model #637, then record-first-run
+    #653/#655). _deliver_pr_gate renders the PR body before _capture_usage runs, and the harness writes
+    its cost-state only at session end, so the cost table is near-empty. The only wave-5 batch in commands/run_cmd.py.'
   order: 1
   skill: debug
   launch:
@@ -4079,10 +4294,13 @@ batches:
     handle: archived
     archived: 0
 - id: closeout-queue
-  title: 'fr triage batch closeout: close a queue of merged batches in one session, one branch-keyed close-out each'
+  title: 'fr triage batch closeout: close a queue of merged batches in one session, one branch-keyed close-out
+    each'
   ids:
   - super-fr#667
-  rationale: 'Wave 6, after closeout-always (#733): the queue becomes a loop over its branch-keyed close-out, serialised so archives and usage captures never collide. #665 (its pair) is already fixed. The dispatch-time watcher on #667 is one proposed design; the brainstorm decides.'
+  rationale: 'Wave 6, after closeout-always (#733): the queue becomes a loop over its branch-keyed close-out,
+    serialised so archives and usage captures never collide. #665 (its pair) is already fixed. The dispatch-time
+    watcher on #667 is one proposed design; the brainstorm decides.'
   order: 3
   wave: 14
   bump: minor
@@ -4093,7 +4311,9 @@ batches:
   title: The cursor records the model an attempt ran on, not its tier binding
   ids:
   - super-fr#637
-  rationale: Wave 6, after pr-body-cost (both in commands/run_cmd.py). The cursor writes the tier binding as an attempt's model, so an executor dispatched without a model that ran on the orchestrator's model is recorded as the tier's. Read the model from the harness record, as fr usage already does.
+  rationale: Wave 6, after pr-body-cost (both in commands/run_cmd.py). The cursor writes the tier binding
+    as an attempt's model, so an executor dispatched without a model that ran on the orchestrator's model
+    is recorded as the tier's. Read the model from the harness record, as fr usage already does.
   order: 2
   skill: debug
   launch:
@@ -4107,7 +4327,9 @@ batches:
   ids:
   - super-fr#742
   - super-fr#892
-  rationale: 'Wave 5 (high severity): #742 is a high-severity regression (deliver never resolves on GitLab/Gitea); #744 fixed the hard gate and left a shrink-only allowlist, this empties it. #892 is the same bypass in the triage batch verbs (make_client drops the self-hosted host).'
+  rationale: 'Wave 5 (high severity): #742 is a high-severity regression (deliver never resolves on GitLab/Gitea);
+    #744 fixed the hard gate and left a shrink-only allowlist, this empties it. #892 is the same bypass
+    in the triage batch verbs (make_client drops the self-hosted host).'
   order: 3
   wave: 5
   after:
@@ -4146,7 +4368,10 @@ batches:
   title: A harness's shell and its plugin/hooks report the fr they run, and a disagreement is visible
   ids:
   - super-fr#746
-  rationale: Wave 6. zsh's .zshenv reorders PATH on every zsh -c, so a harness's shell and its shell-less plugin/hooks can run different fr binaries, which cost two live sessions. PATH order cannot be fixed from fr; make the mismatch observable (each surface reports the fr it resolved; the status line or a gate flags a disagreement). Design first (brainstorm).
+  rationale: Wave 6. zsh's .zshenv reorders PATH on every zsh -c, so a harness's shell and its shell-less
+    plugin/hooks can run different fr binaries, which cost two live sessions. PATH order cannot be fixed
+    from fr; make the mismatch observable (each surface reports the fr it resolved; the status line or
+    a gate flags a disagreement). Design first (brainstorm).
   order: 2
   bump: minor
   launch:
@@ -4160,7 +4385,8 @@ batches:
   ids:
   - super-fr#653
   - super-fr#655
-  rationale: 'Wave 7, last of the serial run_cmd.py chain (after cursor-model). #653: create the records directory at advance, drop derived keys from the brief''s evidence list; #655 same surface.'
+  rationale: 'Wave 7, last of the serial run_cmd.py chain (after cursor-model). #653: create the records
+    directory at advance, drop derived keys from the brief''s evidence list; #655 same surface.'
   order: 3
   skill: debug
   launch:
@@ -4173,7 +4399,9 @@ batches:
   title: deliver tests= gate matches a suite log under a symlinked dir (macOS /tmp)
   ids:
   - super-fr#758
-  rationale: Wave 6, after opencode-xdg (#755 edits the same file, fr/run/telemetry.py). _is_log compares the command's literal target against a resolved evidence path; resolve both sides. Red-first test with a symlinked log dir. XS, one phase.
+  rationale: Wave 6, after opencode-xdg (#755 edits the same file, fr/run/telemetry.py). _is_log compares
+    the command's literal target against a resolved evidence path; resolve both sides. Red-first test
+    with a symlinked log dir. XS, one phase.
   order: 2
   skill: debug
   launch:
@@ -4186,7 +4414,10 @@ batches:
   title: Standalone fr-brainstorming opens its operator gate before asking, so answers are observed
   ids:
   - super-fr#761
-  rationale: Wave 6. The gate opens only on fr run advance; standalone fr-brainstorming never says to run it before the first question, so every real answer is invisible and --no-questions records a falsehood. Skill fix (both mirrors), plus a check that refuses to ask while the gate is closed if it fits in one phase.
+  rationale: Wave 6. The gate opens only on fr run advance; standalone fr-brainstorming never says to
+    run it before the first question, so every real answer is invisible and --no-questions records a falsehood.
+    Skill fix (both mirrors), plus a check that refuses to ask while the gate is closed if it fits in
+    one phase.
   order: 1
   skill: debug
   launch:
@@ -4199,7 +4430,9 @@ batches:
   title: deliver resolves without a fetchable remote, and reports every derived-witness refusal together
   ids:
   - super-fr#768
-  rationale: Wave 6, serial run_cmd.py chain after pr-body-cost (#754), beside cursor-model. _proportionality_witness needs the remote default branch and resolve takes no --base; evaluate all derived witnesses before refusing.
+  rationale: Wave 6, serial run_cmd.py chain after pr-body-cost (#754), beside cursor-model. _proportionality_witness
+    needs the remote default branch and resolve takes no --base; evaluate all derived witnesses before
+    refusing.
   order: 3
   skill: debug
   launch:
@@ -4209,11 +4442,18 @@ batches:
   - kind: cancel
     at: '2026-10-02T16:33:28.895643Z'
 - id: requirements-gate
-  title: 'Requirements gate: a documented grammar, quotes with ", and the reviewer''s coverage recorded as the reviewer wrote it'
+  title: 'Requirements gate: a documented grammar, quotes with ", and the reviewer''s coverage recorded
+    as the reviewer wrote it'
   ids:
   - super-fr#776
   - super-fr#777
-  rationale: 'Wave 6, operator-prioritised. Both are the #759 gate''s interface with the agents that feed it (fr/requirements.py, the spec-review record, fr-goal/fr-brainstorming prose): in take 9 the orchestrator read fr''s source twice to get past it (1.9 + 2.2 min), and at spec-review it edited its own reviewer''s evidence. #776: grammar with one example per form in the skill, valid forms in the error, quotes may contain ", the pre-check says ''pending'' before the input entry is written. #777: accept the reviewer''s partition as written (tolerant parser) or compute it from per-span verdicts; a wrong shape re-dispatches the reviewer. Two causes, one surface: goal. Ahead of spec-fidelity (same module).'
+  rationale: 'Wave 6, operator-prioritised. Both are the #759 gate''s interface with the agents that feed
+    it (fr/requirements.py, the spec-review record, fr-goal/fr-brainstorming prose): in take 9 the orchestrator
+    read fr''s source twice to get past it (1.9 + 2.2 min), and at spec-review it edited its own reviewer''s
+    evidence. #776: grammar with one example per form in the skill, valid forms in the error, quotes may
+    contain ", the pre-check says ''pending'' before the input entry is written. #777: accept the reviewer''s
+    partition as written (tolerant parser) or compute it from per-span verdicts; a wrong shape re-dispatches
+    the reviewer. Two causes, one surface: goal. Ahead of spec-fidelity (same module).'
   order: 1
   bump: minor
   launch:
@@ -4227,12 +4467,17 @@ batches:
     branch: feat/batch-requirements-gate
   - kind: cancel
     at: '2026-09-28T18:45:08.608496Z'
-    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs and shown last-first (#783). Retried once #783''s fix merges.'
+    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs
+      and shown last-first (#783). Retried once #783''s fix merges.'
 - id: spec-fidelity
   title: Spec review checks fidelity and invention, not coverage alone
   ids:
   - super-fr#773
-  rationale: 'Wave 7, after requirements-gate (shared spec-review record shape, fr/requirements.py); the fix for take 9''s card-click invention. The spec reviewer also checks that each requirement keeps its span''s meaning and that Design adds no user-visible behaviour a requirement does not back; invented/reinterpreted findings block. Cut line from the talk plan: if it is not merged by Wednesday evening, take 10''s fr arm is recorded without it and the scorecard says so.'
+  rationale: 'Wave 7, after requirements-gate (shared spec-review record shape, fr/requirements.py); the
+    fix for take 9''s card-click invention. The spec reviewer also checks that each requirement keeps
+    its span''s meaning and that Design adds no user-visible behaviour a requirement does not back; invented/reinterpreted
+    findings block. Cut line from the talk plan: if it is not merged by Wednesday evening, take 10''s
+    fr arm is recorded without it and the scorecard says so.'
   order: 2
   bump: minor
   launch:
@@ -4253,7 +4498,12 @@ batches:
   title: 'UI evidence is visual: screenshots actually opened, and every named interaction exercised'
   ids:
   - super-fr#779
-  rationale: 'Wave 6, operator-prioritised. Take 9''s browser check was a script''s pass/fail: no screenshot opened, -, slider drag, the 20 cap and the range labels never tried, and four defects visible in one screenshot shipped. For a user-visible requirement, evidence at implement/review/deliver names the screenshots the agent opened (observable in the transcript) and the controls it used at their limits. Edits fr-execute and fr-goal prose and possibly an evidence reader; rebase against requirements-gate if both touch fr-goal SKILL.md.'
+  rationale: 'Wave 6, operator-prioritised. Take 9''s browser check was a script''s pass/fail: no screenshot
+    opened, -, slider drag, the 20 cap and the range labels never tried, and four defects visible in one
+    screenshot shipped. For a user-visible requirement, evidence at implement/review/deliver names the
+    screenshots the agent opened (observable in the transcript) and the controls it used at their limits.
+    Edits fr-execute and fr-goal prose and possibly an evidence reader; rebase against requirements-gate
+    if both touch fr-goal SKILL.md.'
   order: 1
   bump: minor
   launch:
@@ -4267,12 +4517,18 @@ batches:
     branch: feat/batch-ui-evidence
   - kind: cancel
     at: '2026-09-28T18:45:18.298656Z'
-    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs and shown last-first (#783). Retried once #783''s fix merges.'
+    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs
+      and shown last-first (#783). Retried once #783''s fix merges.'
 - id: service-split
-  title: 'fr-profiles: {type, host} per service with none for CI and tracking; acceptance init scaffolds CI only for a declared CI'
+  title: 'fr-profiles: {type, host} per service with none for CI and tracking; acceptance init scaffolds
+    CI only for a declared CI'
   ids:
   - super-fr#775
-  rationale: 'Wave 6, narrowed for take 10: #774 step 1 plus #775. Ship the forge / ci / tracking schema ({type, host} each), the defaults derived from today''s backend: key, and type: none for ci and tracking; acceptance init scaffolds a CI file only for a declared ci service, leaves no stray edits, and a row reaches ci only on a CI run. #774 is NOT a member, so the PR must say ''Refs #774'', not close it: Jenkins and Jira adapters are a later batch. Before forge-remainder (#742).'
+  rationale: 'Wave 6, narrowed for take 10: #774 step 1 plus #775. Ship the forge / ci / tracking schema
+    ({type, host} each), the defaults derived from today''s backend: key, and type: none for ci and tracking;
+    acceptance init scaffolds a CI file only for a declared ci service, leaves no stray edits, and a row
+    reaches ci only on a CI run. #774 is NOT a member, so the PR must say ''Refs #774'', not close it:
+    Jenkins and Jira adapters are a later batch. Before forge-remainder (#742).'
   order: 1
   bump: minor
   launch:
@@ -4286,12 +4542,18 @@ batches:
     branch: feat/batch-service-split
   - kind: cancel
     at: '2026-09-28T18:45:23.110011Z'
-    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs and shown last-first (#783). Retried once #783''s fix merges.'
+    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs
+      and shown last-first (#783). Retried once #783''s fix merges.'
 - id: raw-input-relay
-  title: implement-phase and review-phase briefs carry the verbatim input; the spec governs, a disagreement is a finding
+  title: implement-phase and review-phase briefs carry the verbatim input; the spec governs, a disagreement
+    is a finding
   ids:
   - super-fr#778
-  rationale: 'Wave 6, moved up from spec-fidelity: it changes only the dispatch briefs and does not depend on #773''s review rework, and it is the cheapest fix for the relay loss take 9 showed (0 brief phrases in the executor''s and reviewer''s sessions). Attach the spec journal''s kind=discovery input entry and the operator''s recorded answers read-only. Rebase against requirements-gate and ui-evidence if all touch fr-goal SKILL.md.'
+  rationale: 'Wave 6, moved up from spec-fidelity: it changes only the dispatch briefs and does not depend
+    on #773''s review rework, and it is the cheapest fix for the relay loss take 9 showed (0 brief phrases
+    in the executor''s and reviewer''s sessions). Attach the spec journal''s kind=discovery input entry
+    and the operator''s recorded answers read-only. Rebase against requirements-gate and ui-evidence if
+    all touch fr-goal SKILL.md.'
   order: 1
   bump: minor
   launch:
@@ -4305,12 +4567,20 @@ batches:
     branch: feat/batch-raw-input-relay
   - kind: cancel
     at: '2026-09-28T18:45:13.276027Z'
-    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs and shown last-first (#783). Retried once #783''s fix merges.'
+    reason: 'Stopped at the brainstorm question gate: split question rounds were sent as parallel dialogs
+      and shown last-first (#783). Retried once #783''s fix merges.'
 - id: light-path
-  title: 'fr-goal light path for small single-phase goals: one review dispatch, one bookkeeping call per step, deliver reuses the verified suite log'
+  title: 'fr-goal light path for small single-phase goals: one review dispatch, one bookkeeping call per
+    step, deliver reuses the verified suite log'
   ids:
   - super-fr#780
-  rationale: 'Wave 8, the ceremony tax. Take 9 (feature C, one phase) cost ≈2.3× plain''s money and ≈2.8× its time without #758; the orchestrator carries 76% of it, re-reading its context on every fr run bookkeeping step. Target from #780: ≤ 2× plain''s cost and ≤ 2.5× its time on feature C. Fold plan review into spec review for a one-phase plan; resolve+record+advance in one fr run call; deliver reuses the executor''s verified suite log when the tree is unchanged; subagents return structured results. After phase-sizing (#745) and the wave-6 fr-goal skill edits (rebase). Take 10''s plain-vs-fr gap is the benchmark.'
+  rationale: 'Wave 8, the ceremony tax. Take 9 (feature C, one phase) cost ≈2.3× plain''s money and ≈2.8×
+    its time without #758; the orchestrator carries 76% of it, re-reading its context on every fr run
+    bookkeeping step. Target from #780: ≤ 2× plain''s cost and ≤ 2.5× its time on feature C. Fold plan
+    review into spec review for a one-phase plan; resolve+record+advance in one fr run call; deliver reuses
+    the executor''s verified suite log when the tree is unchanged; subagents return structured results.
+    After phase-sizing (#745) and the wave-6 fr-goal skill edits (rebase). Take 10''s plain-vs-fr gap
+    is the benchmark.'
   order: 3
   bump: minor
   launch:
@@ -4328,10 +4598,15 @@ batches:
     handle: archived
     archived: 0
 - id: dedupe-filing
-  title: 'One fr filing path: search open and recently closed issues first, respect tracking: none, one closing keyword per issue'
+  title: 'One fr filing path: search open and recently closed issues first, respect tracking: none, one
+    closing keyword per issue'
   ids:
   - super-fr#781
-  rationale: 'Wave 7, after service-split (tracking: none comes from it). Issues per merged PR rose 0.9 → 1.21 with no duplicate check (#594/#607/#631; #725 of #724; #698 of #594). Skills file follow-ups through one fr command; it searches open and recently closed issues and comments or reopens on a likely match; with tracking: none the finding goes to the journal, PR body and hand-off; deliver checks one closing keyword per issue. Goes through the forge adapter, so forge-remainder (#742) builds on it.'
+  rationale: 'Wave 7, after service-split (tracking: none comes from it). Issues per merged PR rose 0.9
+    → 1.21 with no duplicate check (#594/#607/#631; #725 of #724; #698 of #594). Skills file follow-ups
+    through one fr command; it searches open and recently closed issues and comments or reopens on a likely
+    match; with tracking: none the finding goes to the journal, PR body and hand-off; deliver checks one
+    closing keyword per issue. Goes through the forge adapter, so forge-remainder (#742) builds on it.'
   order: 2
   bump: minor
   launch:
@@ -4345,12 +4620,21 @@ batches:
     branch: feat/batch-dedupe-filing
   - kind: cancel
     at: '2026-09-29T07:21:01.181097Z'
-    reason: 'Cancelled by the operator: searching the backlog for duplicates is not a pipeline run''s job — each feature would spend forge calls and inference on it mid-run. Duplicate detection belongs in an asynchronous sweep.'
+    reason: 'Cancelled by the operator: searching the backlog for duplicates is not a pipeline run''s
+      job — each feature would spend forge calls and inference on it mid-run. Duplicate detection belongs
+      in an asynchronous sweep.'
 - id: question-order
   title: fr-goal asks a split question round one dialog at a time, with one unambiguous label per question
   ids:
   - super-fr#783
-  rationale: 'Operator-prioritised: waves 5 and 6 were stopped because of it and are retried once it merges. fr-goal §1''s ''ceil(N/4) CONSECUTIVE calls, back-to-back'' is read as parallel question calls in one message, which Claude Code displays last-first; the per-call a–b label is read as a per-question sliding range. Fix the skill prose (and fr-brainstorming if it states the same rule): calls are sequential, each after the previous is answered, never more than one per message; one label per question, e.g. (Round 1 · question 2 of 5); split evenly. Check resolve''s transcript round counting (answered_rounds_since) against the new label and sequential calls, with a red-first test if it parses the label. Regenerate both mirrors (sync-opencode.py and sync-hermes.py). One phase.'
+  rationale: 'Operator-prioritised: waves 5 and 6 were stopped because of it and are retried once it merges.
+    fr-goal §1''s ''ceil(N/4) CONSECUTIVE calls, back-to-back'' is read as parallel question calls in
+    one message, which Claude Code displays last-first; the per-call a–b label is read as a per-question
+    sliding range. Fix the skill prose (and fr-brainstorming if it states the same rule): calls are sequential,
+    each after the previous is answered, never more than one per message; one label per question, e.g.
+    (Round 1 · question 2 of 5); split evenly. Check resolve''s transcript round counting (answered_rounds_since)
+    against the new label and sequential calls, with a red-first test if it parses the label. Regenerate
+    both mirrors (sync-opencode.py and sync-hermes.py). One phase.'
   order: 1
   skill: debug
   launch:
@@ -4368,10 +4652,18 @@ batches:
     handle: archived
     archived: 0
 - id: closeout-always-2
-  title: 'Close-out is an always condition of every fr flow: branch-keyed, archives every artifact the branch added'
+  title: 'Close-out is an always condition of every fr flow: branch-keyed, archives every artifact the
+    branch added'
   ids:
   - super-fr#733
-  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after question-order (#783) merges. Wave 5, after reverted-merge (#716 edits the branch-diff code in fr/isolation/local.py that this reuses). fr-debugging has no close-out, and fr archive moves only plans and specs, so 26 debug journals have never been archived. One close-out keyed on the branch (verify-merge, archive everything the branch added including debug journals, housekeeping PR, isolation down), with fr pickup --run as a caller. A structural check reports live artifacts whose PR has merged, and fr-debugging''s deliver relays the close-out line. The first run sweeps the 26. closeout-queue (#667) builds on this. The issue''s design is a direction; the brainstorm decides the shape.'
+  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after
+    question-order (#783) merges. Wave 5, after reverted-merge (#716 edits the branch-diff code in fr/isolation/local.py
+    that this reuses). fr-debugging has no close-out, and fr archive moves only plans and specs, so 26
+    debug journals have never been archived. One close-out keyed on the branch (verify-merge, archive
+    everything the branch added including debug journals, housekeeping PR, isolation down), with fr pickup
+    --run as a caller. A structural check reports live artifacts whose PR has merged, and fr-debugging''s
+    deliver relays the close-out line. The first run sweeps the 26. closeout-queue (#667) builds on this.
+    The issue''s design is a direction; the brainstorm decides the shape.'
   order: 3
   bump: minor
   launch:
@@ -4389,11 +4681,18 @@ batches:
     handle: archived
     archived: 0
 - id: phase-sizing-2
-  title: 'fr-plan sizes phases to the asks: one phase per independently reviewable ask, a manual step is not a phase'
+  title: 'fr-plan sizes phases to the asks: one phase per independently reviewable ask, a manual step
+    is not a phase'
   ids:
   - super-fr#745
   - super-fr#760
-  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after question-order (#783) merges. Wave 5. #674 made a one-phase plan legal; #745 shows fr-plan still over-splits (4 phases for 2 asks; the orchestrator 71% of cost, 419 turns). Make the ask count the default phase count, a [manual] operator action a Test Plan line, and have proportionality/self-review flag a phase with no ask of its own. Edits the fr-plan skill (and both mirrors) and fr/proportionality.py; closeout-always edits the fr-goal and fr-debugging skills: if both touch fr-goal SKILL.md, rebase before merging. Also closes #760 (fr-plan''s ''prefer 4–6 phases'' line contradicts one-phase-first), the same fix.'
+  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after
+    question-order (#783) merges. Wave 5. #674 made a one-phase plan legal; #745 shows fr-plan still over-splits
+    (4 phases for 2 asks; the orchestrator 71% of cost, 419 turns). Make the ask count the default phase
+    count, a [manual] operator action a Test Plan line, and have proportionality/self-review flag a phase
+    with no ask of its own. Edits the fr-plan skill (and both mirrors) and fr/proportionality.py; closeout-always
+    edits the fr-goal and fr-debugging skills: if both touch fr-goal SKILL.md, rebase before merging.
+    Also closes #760 (fr-plan''s ''prefer 4–6 phases'' line contradicts one-phase-first), the same fix.'
   order: 2
   bump: minor
   launch:
@@ -4411,11 +4710,20 @@ batches:
     handle: archived
     archived: 0
 - id: requirements-gate-2
-  title: 'Requirements gate: a documented grammar, quotes with ", and the reviewer''s coverage recorded as the reviewer wrote it'
+  title: 'Requirements gate: a documented grammar, quotes with ", and the reviewer''s coverage recorded
+    as the reviewer wrote it'
   ids:
   - super-fr#776
   - super-fr#777
-  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after question-order (#783) merges. Wave 6, operator-prioritised. Both are the #759 gate''s interface with the agents that feed it (fr/requirements.py, the spec-review record, fr-goal/fr-brainstorming prose): in take 9 the orchestrator read fr''s source twice to get past it (1.9 + 2.2 min), and at spec-review it edited its own reviewer''s evidence. #776: grammar with one example per form in the skill, valid forms in the error, quotes may contain ", the pre-check says ''pending'' before the input entry is written. #777: accept the reviewer''s partition as written (tolerant parser) or compute it from per-span verdicts; a wrong shape re-dispatches the reviewer. Two causes, one surface: goal. Ahead of spec-fidelity (same module).'
+  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after
+    question-order (#783) merges. Wave 6, operator-prioritised. Both are the #759 gate''s interface with
+    the agents that feed it (fr/requirements.py, the spec-review record, fr-goal/fr-brainstorming prose):
+    in take 9 the orchestrator read fr''s source twice to get past it (1.9 + 2.2 min), and at spec-review
+    it edited its own reviewer''s evidence. #776: grammar with one example per form in the skill, valid
+    forms in the error, quotes may contain ", the pre-check says ''pending'' before the input entry is
+    written. #777: accept the reviewer''s partition as written (tolerant parser) or compute it from per-span
+    verdicts; a wrong shape re-dispatches the reviewer. Two causes, one surface: goal. Ahead of spec-fidelity
+    (same module).'
   order: 2
   bump: minor
   launch:
@@ -4428,7 +4736,13 @@ batches:
   title: 'UI evidence is visual: screenshots actually opened, and every named interaction exercised'
   ids:
   - super-fr#779
-  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after question-order (#783) merges. Wave 6, operator-prioritised. Take 9''s browser check was a script''s pass/fail: no screenshot opened, -, slider drag, the 20 cap and the range labels never tried, and four defects visible in one screenshot shipped. For a user-visible requirement, evidence at implement/review/deliver names the screenshots the agent opened (observable in the transcript) and the controls it used at their limits. Edits fr-execute and fr-goal prose and possibly an evidence reader; rebase against requirements-gate if both touch fr-goal SKILL.md.'
+  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after
+    question-order (#783) merges. Wave 6, operator-prioritised. Take 9''s browser check was a script''s
+    pass/fail: no screenshot opened, -, slider drag, the 20 cap and the range labels never tried, and
+    four defects visible in one screenshot shipped. For a user-visible requirement, evidence at implement/review/deliver
+    names the screenshots the agent opened (observable in the transcript) and the controls it used at
+    their limits. Edits fr-execute and fr-goal prose and possibly an evidence reader; rebase against requirements-gate
+    if both touch fr-goal SKILL.md.'
   order: 2
   bump: minor
   launch:
@@ -4449,7 +4763,11 @@ batches:
   title: 'fr-profiles: forge, ci and tracking as {type, host} services with none allowed (#774 step 1)'
   ids:
   - super-fr#774
-  rationale: 'Retry after question-order (#783). #774 step 1 only: the forge / ci / tracking schema ({type, host} each), defaults derived from today''s backend: key, type: none for ci and tracking, and acceptance init / the ci status following the declared ci service (building on acceptance-init-no-ci, #775). Before merging, file the Jenkins and Jira adapters as a follow-up issue linked from #774, since this PR closes #774.'
+  rationale: 'Retry after question-order (#783). #774 step 1 only: the forge / ci / tracking schema ({type,
+    host} each), defaults derived from today''s backend: key, type: none for ci and tracking, and acceptance
+    init / the ci status following the declared ci service (building on acceptance-init-no-ci, #775).
+    Before merging, file the Jenkins and Jira adapters as a follow-up issue linked from #774, since this
+    PR closes #774.'
   order: 2
   bump: minor
   launch:
@@ -4467,10 +4785,16 @@ batches:
     handle: archived
     archived: 0
 - id: raw-input-relay-2
-  title: implement-phase and review-phase briefs carry the verbatim input; the spec governs, a disagreement is a finding
+  title: implement-phase and review-phase briefs carry the verbatim input; the spec governs, a disagreement
+    is a finding
   ids:
   - super-fr#778
-  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after question-order (#783) merges. Wave 6, moved up from spec-fidelity: it changes only the dispatch briefs and does not depend on #773''s review rework, and it is the cheapest fix for the relay loss take 9 showed (0 brief phrases in the executor''s and reviewer''s sessions). Attach the spec journal''s kind=discovery input entry and the operator''s recorded answers read-only. Rebase against requirements-gate and ui-evidence if all touch fr-goal SKILL.md.'
+  rationale: 'Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after
+    question-order (#783) merges. Wave 6, moved up from spec-fidelity: it changes only the dispatch briefs
+    and does not depend on #773''s review rework, and it is the cheapest fix for the relay loss take 9
+    showed (0 brief phrases in the executor''s and reviewer''s sessions). Attach the spec journal''s kind=discovery
+    input entry and the operator''s recorded answers read-only. Rebase against requirements-gate and ui-evidence
+    if all touch fr-goal SKILL.md.'
   order: 2
   bump: minor
   launch:
@@ -4491,7 +4815,13 @@ batches:
   title: herdr tabs are labelled '<wave> · <batch>', with the tab's identity kept outside the label
   ids:
   - super-fr#785
-  rationale: 'Operator request; dispatch after question-order (#783) merges, beside the six retried batches. herdr shows tabs in one row and the full item id label (derio-net/super-fr/run/batch-<id>) stops fitting after a wave. The label is load-bearing: existing_dispatches matches live tabs by label == item.id, so move identity to the agent name (already b-<batch>-<hash>) or a mapping, keep recognising old long-label tabs, and decide whether a batch gains an optional wave (batch create/edit --wave) or reuses order. Repo short name only for org-scope triage. Touches packages/fr-herdr and fr/triage batch; nothing else in the retried batches does.'
+  rationale: 'Operator request; dispatch after question-order (#783) merges, beside the six retried batches.
+    herdr shows tabs in one row and the full item id label (derio-net/super-fr/run/batch-<id>) stops fitting
+    after a wave. The label is load-bearing: existing_dispatches matches live tabs by label == item.id,
+    so move identity to the agent name (already b-<batch>-<hash>) or a mapping, keep recognising old long-label
+    tabs, and decide whether a batch gains an optional wave (batch create/edit --wave) or reuses order.
+    Repo short name only for org-scope triage. Touches packages/fr-herdr and fr/triage batch; nothing
+    else in the retried batches does.'
   order: 2
   bump: minor
   launch:
@@ -4507,10 +4837,18 @@ batches:
     at: '2026-09-28T19:38:18.213013Z'
     reason: Feature cancelled by the operator.
 - id: requirements-grammar
-  title: 'Requirements gate: document the row grammar, name the valid forms in its errors, accept quotes containing ", and word the pre-check as pending'
+  title: 'Requirements gate: document the row grammar, name the valid forms in its errors, accept quotes
+    containing ", and word the pre-check as pending'
   ids:
   - super-fr#776
-  rationale: 'Wave 6 bug, split from requirements-gate for fr-debugging (one root cause: the gate''s grammar is visible only in fr/requirements.py). Take 9 read fr''s source to pass (1.9 min). Put the grammar with one example per source form (input "…", decision <id>) into the fr-goal and fr-brainstorming skills; the error lists the valid forms and shows the offending row; a quote may contain " (verify first: the requirements-gate session found unescaped quotes already parse and the real failure is an escaped \" or a bare | / <br> breaking the match); the pre-check reports the input entry as pending before the resolve that writes it. Regenerate both mirrors. Runs beside coverage-as-written, which also edits fr/requirements.py: rebase before merge.'
+  rationale: 'Wave 6 bug, split from requirements-gate for fr-debugging (one root cause: the gate''s grammar
+    is visible only in fr/requirements.py). Take 9 read fr''s source to pass (1.9 min). Put the grammar
+    with one example per source form (input "…", decision <id>) into the fr-goal and fr-brainstorming
+    skills; the error lists the valid forms and shows the offending row; a quote may contain " (verify
+    first: the requirements-gate session found unescaped quotes already parse and the real failure is
+    an escaped \" or a bare | / <br> breaking the match); the pre-check reports the input entry as pending
+    before the resolve that writes it. Regenerate both mirrors. Runs beside coverage-as-written, which
+    also edits fr/requirements.py: rebase before merge.'
   order: 1
   skill: debug
   launch:
@@ -4528,10 +4866,17 @@ batches:
     handle: archived
     archived: 0
 - id: coverage-as-written
-  title: 'spec-review: fr records the reviewer''s coverage partition as the reviewer wrote it; the orchestrator never edits it'
+  title: 'spec-review: fr records the reviewer''s coverage partition as the reviewer wrote it; the orchestrator
+    never edits it'
   ids:
   - super-fr#777
-  rationale: 'Wave 6 bug, split from requirements-gate (one root cause: fr''s coverage matcher is strict enough that the orchestrator re-cut its reviewer''s partition to pass it, so the recorded evidence is not the reviewer''s). Make it structural rather than prose: fr parses the reviewer''s block tolerantly (spans, blanks, missing) or computes the partition from the reviewer''s per-span verdicts; a shape fr still cannot read re-dispatches the reviewer with fr''s exact message, never an orchestrator edit. Red-first test with take 9''s re-cut shape. Shares fr/requirements.py with requirements-grammar: merges after it (order 2).'
+  rationale: 'Wave 6 bug, split from requirements-gate (one root cause: fr''s coverage matcher is strict
+    enough that the orchestrator re-cut its reviewer''s partition to pass it, so the recorded evidence
+    is not the reviewer''s). Make it structural rather than prose: fr parses the reviewer''s block tolerantly
+    (spans, blanks, missing) or computes the partition from the reviewer''s per-span verdicts; a shape
+    fr still cannot read re-dispatches the reviewer with fr''s exact message, never an orchestrator edit.
+    Red-first test with take 9''s re-cut shape. Shares fr/requirements.py with requirements-grammar: merges
+    after it (order 2).'
   order: 2
   skill: debug
   launch:
@@ -4549,10 +4894,17 @@ batches:
     handle: archived
     archived: 0
 - id: acceptance-init-no-ci
-  title: fr acceptance init scaffolds no CI file on a repo without CI, leaves no stray edits, and rows reach ci only on a CI run
+  title: fr acceptance init scaffolds no CI file on a repo without CI, leaves no stray edits, and rows
+    reach ci only on a CI run
   ids:
   - super-fr#775
-  rationale: 'Wave 6 bug, split from service-split so it ships now. Take 9 on a GitLab project with no CI: acceptance init wrote .gitlab-ci.yml (installing fr from GitHub main), a .gitignore edit that dirtied the worktree and blocked isolation down at closeout (a stash left behind), and rows went to ci with no CI. Without the #774 service schema yet: scaffold a CI file only when the repo already has a CI config for its backend (or an explicit flag asks), make every write idempotent and byte-exact (no trailing-newline drift), and refuse set-status ci unless a CI run is the evidence. service-split-2 (#774 step 1) later turns the detection into a declared ci service.'
+  rationale: 'Wave 6 bug, split from service-split so it ships now. Take 9 on a GitLab project with no
+    CI: acceptance init wrote .gitlab-ci.yml (installing fr from GitHub main), a .gitignore edit that
+    dirtied the worktree and blocked isolation down at closeout (a stash left behind), and rows went to
+    ci with no CI. Without the #774 service schema yet: scaffold a CI file only when the repo already
+    has a CI config for its backend (or an explicit flag asks), make every write idempotent and byte-exact
+    (no trailing-newline drift), and refuse set-status ci unless a CI run is the evidence. service-split-2
+    (#774 step 1) later turns the detection into a declared ci service.'
   order: 1
   skill: debug
   launch:
@@ -4570,13 +4922,19 @@ batches:
     handle: archived
     archived: 0
 - id: opencode-observe
-  title: 'fr observes OpenCode sessions: the run''s session, each dispatched child, and what the child returned'
+  title: 'fr observes OpenCode sessions: the run''s session, each dispatched child, and what the child
+    returned'
   ids:
   - super-fr#823
   - super-fr#797
   - super-fr#809
   - super-fr#816
-  rationale: 'Wave 9, for the talk''s fr run on OpenCode. #823 is one issue and one run: learn the run''s session and each child session from opencode.db (the tests= gate and the usage reader already open it), then record the reviewer''s own coverage partition (#777 re-cut in take 10 B), verify the review-phase reviewer and findings (#816), read question answers and refuse a defaulted answered_by (#809), observe screenshot reads (#797), and fill the Cost table (#636 discovery half). Merge after spec-review-loop (both change spec-review).'
+  rationale: 'Wave 9, for the talk''s fr run on OpenCode. #823 is one issue and one run: learn the run''s
+    session and each child session from opencode.db (the tests= gate and the usage reader already open
+    it), then record the reviewer''s own coverage partition (#777 re-cut in take 10 B), verify the review-phase
+    reviewer and findings (#816), read question answers and refuse a defaulted answered_by (#809), observe
+    screenshot reads (#797), and fill the Cost table (#636 discovery half). Merge after spec-review-loop
+    (both change spec-review).'
   bump: minor
   launch:
     runner: herdr
@@ -4589,13 +4947,20 @@ batches:
     branch: feat/batch-opencode-observe
   - kind: cancel
     at: '2026-09-29T15:42:13.873603Z'
-    reason: 'Stopped by the operator while fr-goal goes back to the pre-4.29 shape (the spec is the contract; the input gates are being removed). Its work is preserved on feat/batch-opencode-observe (draft PR #837); the parts that don''t depend on the input gates (session identity, cost, question answers, screenshot reads) can be re-batched later.'
+    reason: 'Stopped by the operator while fr-goal goes back to the pre-4.29 shape (the spec is the contract;
+      the input gates are being removed). Its work is preserved on feat/batch-opencode-observe (draft
+      PR #837); the parts that don''t depend on the input gates (session identity, cost, question answers,
+      screenshot reads) can be re-batched later.'
 - id: spec-review-loop
-  title: 'spec-review: the coverage refusal names its divergence, re-dispatch is bounded and carries the last refusal, and a round raised in review is recorded'
+  title: 'spec-review: the coverage refusal names its divergence, re-dispatch is bounded and carries the
+    last refusal, and a round raised in review is recorded'
   ids:
   - super-fr#808
   - super-fr#810
-  rationale: Wave 9, for the talk run. Take 10 B spent 31 min (38% of delivery) on 13 reviewer dispatches because the partition refusal named no position (#808); a second operator round raised in spec review was recorded nowhere (#810). Merge after spec-fidelity (#819) and before opencode-observe; all three change spec-review.
+  rationale: Wave 9, for the talk run. Take 10 B spent 31 min (38% of delivery) on 13 reviewer dispatches
+    because the partition refusal named no position (#808); a second operator round raised in spec review
+    was recorded nowhere (#810). Merge after spec-fidelity (#819) and before opencode-observe; all three
+    change spec-review.
   bump: minor
   launch:
     runner: herdr
@@ -4608,14 +4973,19 @@ batches:
     branch: feat/batch-spec-review-loop
   - kind: cancel
     at: '2026-09-29T15:41:54.285748Z'
-    reason: 'Stopped by the operator: fr-goal is going back to the pre-4.29 shape, where the spec is the contract and nothing after brainstorm reads the raw input. The requirements/coverage/fidelity machinery this batch extended is being removed, not extended.'
+    reason: 'Stopped by the operator: fr-goal is going back to the pre-4.29 shape, where the spec is the
+      contract and nothing after brainstorm reads the raw input. The requirements/coverage/fidelity machinery
+      this batch extended is being removed, not extended.'
 - id: plan-inputs
-  title: 'fr-plan: tier criteria (standard by default, a reason above it), a home for plan create''s scratch inputs, and no misleading output lines'
+  title: 'fr-plan: tier criteria (standard by default, a reason above it), a home for plan create''s scratch
+    inputs, and no misleading output lines'
   ids:
   - super-fr#813
   - super-fr#812
   - super-fr#815
-  rationale: 'Wave 9, for the talk run. #813: both take-10 plans chose tier: hard unexplained, which put run A entirely on the costliest model. #812: scratch inputs under .records/ read as ''must be migrated'' (9 turns in A). #815: a stray ''none.'' in the PR body and a wrong ''no question reader'' message.'
+  rationale: 'Wave 9, for the talk run. #813: both take-10 plans chose tier: hard unexplained, which put
+    run A entirely on the costliest model. #812: scratch inputs under .records/ read as ''must be migrated''
+    (9 turns in A). #815: a stray ''none.'' in the PR body and a wrong ''no question reader'' message.'
   skill: debug
   launch:
     runner: herdr
@@ -4632,10 +5002,12 @@ batches:
     handle: archived
     archived: 0
 - id: requirements-precheck
-  title: 'Requirements pre-check: citations the pending resolve creates are pending, and errors name their section''s row shape'
+  title: 'Requirements pre-check: citations the pending resolve creates are pending, and errors name their
+    section''s row shape'
   ids:
   - super-fr#776
-  rationale: 'Wave 9, for the talk run. Reopened after #817: run A treated the pre-check''s refusal as an error and deleted the Deferred section; B found the row shape on its third try.'
+  rationale: 'Wave 9, for the talk run. Reopened after #817: run A treated the pre-check''s refusal as
+    an error and deleted the Deferred section; B found the row shape on its third try.'
   skill: debug
   launch:
     runner: herdr
@@ -4652,10 +5024,12 @@ batches:
     handle: archived
     archived: 0
 - id: acceptance-init-commit
-  title: 'fr acceptance init: every file it writes is committed, created vs modified is reported, process-directive rows are refused'
+  title: 'fr acceptance init: every file it writes is committed, created vs modified is reported, process-directive
+    rows are refused'
   ids:
   - super-fr#775
-  rationale: 'Wave 9, for the talk run. Reopened after #817: A''s worktree stayed dirty until close-out stashed init''s files; B was clean only because the orchestrator committed them by hand.'
+  rationale: 'Wave 9, for the talk run. Reopened after #817: A''s worktree stayed dirty until close-out
+    stashed init''s files; B was clean only because the orchestrator committed them by hand.'
   skill: debug
   launch:
     runner: herdr
@@ -4672,10 +5046,13 @@ batches:
     handle: archived
     archived: 0
 - id: handoff-in-agents
-  title: Executor and reviewer agents fetch the verbatim input themselves on every dispatch (fr journal handoff)
+  title: Executor and reviewer agents fetch the verbatim input themselves on every dispatch (fr journal
+    handoff)
   ids:
   - super-fr#778
-  rationale: 'Wave 9, for the talk run. Reopened after #817: A''s orchestrator replaced the input with a pointer, B''s re-dispatched reviewers got none. The agent definitions fetch it themselves, which works on every harness and doesn''t depend on the orchestrator''s relay.'
+  rationale: 'Wave 9, for the talk run. Reopened after #817: A''s orchestrator replaced the input with
+    a pointer, B''s re-dispatched reviewers got none. The agent definitions fetch it themselves, which
+    works on every harness and doesn''t depend on the orchestrator''s relay.'
   skill: debug
   launch:
     runner: herdr
@@ -4692,11 +5069,14 @@ batches:
     handle: archived
     archived: 0
 - id: deliver-handoff
-  title: 'deliver: the review approval and the ready transition are the operator''s, the closeout line is the last thing relayed, and the branch is pushed before the local suite'
+  title: 'deliver: the review approval and the ready transition are the operator''s, the closeout line
+    is the last thing relayed, and the branch is pushed before the local suite'
   ids:
   - super-fr#814
   - super-fr#799
-  rationale: Wave 9, for the talk run. Take 10 A's orchestrator ticked 'Explicit review ok' and marked its own MR ready; B didn't relay the closeout line (#814). Pushing before the local suite lets CI and the suite overlap (#799). After light-path, which also changes deliver.
+  rationale: Wave 9, for the talk run. Take 10 A's orchestrator ticked 'Explicit review ok' and marked
+    its own MR ready; B didn't relay the closeout line (#814). Pushing before the local suite lets CI
+    and the suite overlap (#799). After light-path, which also changes deliver.
   skill: debug
   launch:
     runner: herdr
@@ -4713,13 +5093,17 @@ batches:
     handle: archived
     archived: 0
 - id: closeout-run
-  title: 'Close-out runs clean: pickup/status in an unpulled clone, no lock-file dirt, housekeeping workspace downed, a harness-neutral validator wrapper'
+  title: 'Close-out runs clean: pickup/status in an unpulled clone, no lock-file dirt, housekeeping workspace
+    downed, a harness-neutral validator wrapper'
   ids:
   - super-fr#811
   - super-fr#824
   - super-fr#825
   - super-fr#826
-  rationale: 'Wave 9, for the talk run''s close-out. Take 10: pickup --run failed in an unpulled base clone and status said nothing owed (#811); devcontainer-lock.json made isolation down refuse (#824); the housekeeping workspace was never downed (#825); fr committed a wrapper that execs a Claude Code path (#826).'
+  rationale: 'Wave 9, for the talk run''s close-out. Take 10: pickup --run failed in an unpulled base
+    clone and status said nothing owed (#811); devcontainer-lock.json made isolation down refuse (#824);
+    the housekeeping workspace was never downed (#825); fr committed a wrapper that execs a Claude Code
+    path (#826).'
   skill: debug
   launch:
     runner: herdr
@@ -4736,13 +5120,16 @@ batches:
     handle: archived
     archived: 0
 - id: isolation-reap-names
-  title: 'isolation: gc no longer reaps a fresh workspace by branch name, and up leaves state consistent (info/exclude newline, failed postCreate record, marker branch)'
+  title: 'isolation: gc no longer reaps a fresh workspace by branch name, and up leaves state consistent
+    (info/exclude newline, failed postCreate record, marker branch)'
   ids:
   - super-fr#844
   - super-fr#843
   - super-fr#578
   - super-fr#553
-  rationale: Wave 10 of the post-talk closing order (2026-10-02). gc reaps a fresh workspace whose branch name matches a merged PR (#844 bit a close-out live), and three more ways isolation up leaves state wrong. The last class of lost work still open.
+  rationale: Wave 10 of the post-talk closing order (2026-10-02). gc reaps a fresh workspace whose branch
+    name matches a merged PR (#844 bit a close-out live), and three more ways isolation up leaves state
+    wrong. The last class of lost work still open.
   skill: debug
   launch:
     runner: herdr
@@ -4759,12 +5146,15 @@ batches:
     handle: archived
     archived: 0
 - id: release-confidence
-  title: 'release: test the staged tree at the new version before pushing, and refuse an explicit --fr-version that excludes the installed fr before writing anything'
+  title: 'release: test the staged tree at the new version before pushing, and refuse an explicit --fr-version
+    that excludes the installed fr before writing anything'
   ids:
   - super-fr#854
   - super-fr#855
   - super-fr#681
-  rationale: Wave 10 of the post-talk closing order (2026-10-02). 5.0.0 shipped refusing its own plans because no test ran at the new version. Run the version-sensitive tests on the staged tree before the release pushes; make --fr-version refuse before it writes.
+  rationale: Wave 10 of the post-talk closing order (2026-10-02). 5.0.0 shipped refusing its own plans
+    because no test ran at the new version. Run the version-sensitive tests on the staged tree before
+    the release pushes; make --fr-version refuse before it writes.
   skill: debug
   launch:
     runner: herdr
@@ -4781,11 +5171,14 @@ batches:
     handle: archived
     archived: 0
 - id: closing-keywords
-  title: 'deliver: refuse one closing keyword shared by several issues, and close a run-behaviour promise on live evidence'
+  title: 'deliver: refuse one closing keyword shared by several issues, and close a run-behaviour promise
+    on live evidence'
   ids:
   - super-fr#821
   - super-fr#822
-  rationale: Wave 10 of the post-talk closing order (2026-10-02). One closing keyword shared by several issues closes only the first (#544 stayed open), and a promise about run behaviour closes on the PR instead of its evidence.
+  rationale: Wave 10 of the post-talk closing order (2026-10-02). One closing keyword shared by several
+    issues closes only the first (#544 stayed open), and a promise about run behaviour closes on the PR
+    instead of its evidence.
   skill: debug
   launch:
     runner: herdr
@@ -4802,7 +5195,8 @@ batches:
     handle: archived
     archived: 0
 - id: opencode-observe-2
-  title: fr observes OpenCode sessions (run session, each child, what it returned); question answers, reviewer ids, cost and screenshot reads stop being the orchestrator's word
+  title: fr observes OpenCode sessions (run session, each child, what it returned); question answers,
+    reviewer ids, cost and screenshot reads stop being the orchestrator's word
   ids:
   - super-fr#823
   - super-fr#797
@@ -4810,7 +5204,9 @@ batches:
   - super-fr#816
   - super-fr#848
   - super-fr#561
-  rationale: 'Wave 11 of the post-talk closing order (2026-10-02). The one feature batch. fr learns the OpenCode run session and each child, so question answers, reviewer ids, cost and screenshot reads stop being the orchestrator''s word. Draft PR #837 is the salvage; it must not touch the input.'
+  rationale: 'Wave 11 of the post-talk closing order (2026-10-02). The one feature batch. fr learns the
+    OpenCode run session and each child, so question answers, reviewer ids, cost and screenshot reads
+    stop being the orchestrator''s word. Draft PR #837 is the salvage; it must not touch the input.'
   wave: 2
   bump: minor
   launch:
@@ -4847,13 +5243,16 @@ batches:
     - super-fr#848
     - super-fr#561
 - id: forge-honesty
-  title: 'forge writes honour tracking: none and the self-hosted host, and batch merge survives directory-rename detection'
+  title: 'forge writes honour tracking: none and the self-hosted host, and batch merge survives directory-rename
+    detection'
   ids:
   - super-fr#803
   - super-fr#490
   - super-fr#804
   - super-fr#800
-  rationale: 'Wave 12 of the post-talk closing order (2026-10-02). Writes that ignore the tracker setting or the self-hosted host, and the directory-rename conflict in batch merge. Fixing #800 lets you undo merge.directoryRenames=false.'
+  rationale: 'Wave 12 of the post-talk closing order (2026-10-02). Writes that ignore the tracker setting
+    or the self-hosted host, and the directory-rename conflict in batch merge. Fixing #800 lets you undo
+    merge.directoryRenames=false.'
   skill: debug
   launch:
     runner: herdr
@@ -4870,12 +5269,15 @@ batches:
     handle: archived
     archived: 0
 - id: verify-merge-false-landed
-  title: 'verify-merge and gc: a reverted fast-forward un-lands, a concurrent edit does not hide a landing, the git seam trusts only its own repo'
+  title: 'verify-merge and gc: a reverted fast-forward un-lands, a concurrent edit does not hide a landing,
+    the git seam trusts only its own repo'
   ids:
   - super-fr#715
   - super-fr#757
   - super-fr#700
-  rationale: Wave 12 of the post-talk closing order (2026-10-02). A fast-forward landing that was later reverted still reads as landed (#757), a concurrent base edit hides a real landing (#715, fails safe), and the git seam trusts any enclosing repo (#700). All are gaps in the checks that guard gc.
+  rationale: Wave 12 of the post-talk closing order (2026-10-02). A fast-forward landing that was later
+    reverted still reads as landed (#757), a concurrent base edit hides a real landing (#715, fails safe),
+    and the git seam trusts any enclosing repo (#700). All are gaps in the checks that guard gc.
   wave: 2
   skill: debug
   launch:
@@ -4913,7 +5315,8 @@ batches:
   - super-fr#630
   - super-fr#640
   - super-fr#643
-  rationale: Wave 12 of the post-talk closing order (2026-10-02). Four flaky or missing test guards. Cheap, and every other batch's CI is quieter without them.
+  rationale: Wave 12 of the post-talk closing order (2026-10-02). Four flaky or missing test guards. Cheap,
+    and every other batch's CI is quieter without them.
   wave: 2
   skill: debug
   launch:
@@ -4946,11 +5349,15 @@ batches:
     - super-fr#640
     - super-fr#643
 - id: usage-accuracy
-  title: 'usage: the cursor''s model is not the tier binding, and a run''s dollars refresh after its session ends'
+  title: 'usage: the cursor''s model is not the tier binding, and a run''s dollars refresh after its session
+    ends'
   ids:
   - super-fr#637
   - super-fr#756
-  rationale: 'Wave 10 of the post-talk closing order (2026-10-02). Two cost-figure defects. #637 is a misdiagnosis: the cursor records the tier binding as an attempt''s model, while the usage reader was right. #756: a run''s dollars are not refreshed after its session ends, cause not established. The talk''s numbers rest on both.'
+  rationale: 'Wave 10 of the post-talk closing order (2026-10-02). Two cost-figure defects. #637 is a
+    misdiagnosis: the cursor records the tier binding as an attempt''s model, while the usage reader was
+    right. #756: a run''s dollars are not refreshed after its session ends, cause not established. The
+    talk''s numbers rest on both.'
   skill: debug
   launch:
     runner: herdr
@@ -4967,7 +5374,8 @@ batches:
     handle: archived
     archived: 0
 - id: acceptance-integrity
-  title: 'acceptance matrix: anchors stop rotting silently, add no longer rolls back on valid input, set-status never commits a no-op, and the evidence refs are tested'
+  title: 'acceptance matrix: anchors stop rotting silently, add no longer rolls back on valid input, set-status
+    never commits a no-op, and the evidence refs are tested'
   ids:
   - super-fr#531
   - super-fr#470
@@ -4977,7 +5385,9 @@ batches:
   - super-fr#663
   - super-fr#676
   - super-fr#655
-  rationale: Wave 11 of the post-talk closing order (2026-10-02). The acceptance matrix is the gate the talk leaned on. Anchors rot silently, add rolls back on valid input, and a no-op commits as a status move. Mostly extra small.
+  rationale: Wave 11 of the post-talk closing order (2026-10-02). The acceptance matrix is the gate the
+    talk leaned on. Anchors rot silently, add rolls back on valid input, and a no-op commits as a status
+    move. Mostly extra small.
   skill: debug
   launch:
     runner: herdr
@@ -4994,7 +5404,8 @@ batches:
     handle: archived
     archived: 0
 - id: plan-and-records
-  title: 'plan and record tooling: self-review no longer crashes on its own parse error, a tick does not re-serialise the phase YAML, hand edits fail cleanly'
+  title: 'plan and record tooling: self-review no longer crashes on its own parse error, a tick does not
+    re-serialise the phase YAML, hand edits fail cleanly'
   ids:
   - super-fr#653
   - super-fr#525
@@ -5003,7 +5414,10 @@ batches:
   - super-fr#675
   - super-fr#763
   - super-fr#639
-  rationale: 'Wave 11 of the post-talk closing order (2026-10-02). The first-record-fails tax and the plan tooling: a crash on the parse error self-review exists to report, whole-file re-serialisation per tick, raw ValueError on a hand edit. #763 is narrower since the cut, and #653 is unconfirmed (its requirement gates are gone).'
+  rationale: 'Wave 11 of the post-talk closing order (2026-10-02). The first-record-fails tax and the
+    plan tooling: a crash on the parse error self-review exists to report, whole-file re-serialisation
+    per tick, raw ValueError on a hand edit. #763 is narrower since the cut, and #653 is unconfirmed (its
+    requirement gates are gone).'
   wave: 2
   skill: debug
   launch:
@@ -5039,12 +5453,15 @@ batches:
     - super-fr#763
     - super-fr#639
 - id: gate-ordering
-  title: 'gate ordering: brainstorm''s gate opens before the questions, spec review waits for the brainstorm record, deliver resolves without a fetchable remote'
+  title: 'gate ordering: brainstorm''s gate opens before the questions, spec review waits for the brainstorm
+    record, deliver resolves without a fetchable remote'
   ids:
   - super-fr#761
   - super-fr#699
   - super-fr#768
-  rationale: 'Wave 11 of the post-talk closing order (2026-10-02). Three timing bugs between a step and the record it needs: brainstorm''s gate never opens before the questions, spec review can run before the brainstorm record exists, and deliver cannot resolve without a fetchable remote.'
+  rationale: 'Wave 11 of the post-talk closing order (2026-10-02). Three timing bugs between a step and
+    the record it needs: brainstorm''s gate never opens before the questions, spec review can run before
+    the brainstorm record exists, and deliver cannot resolve without a fetchable remote.'
   skill: debug
   launch:
     runner: herdr
@@ -5061,7 +5478,8 @@ batches:
     handle: archived
     archived: 0
 - id: housekeeping
-  title: 'install and scaffold leftovers: one fr binary per machine, status line within budget, comments kept in fr-profiles.yaml, a current explainer'
+  title: 'install and scaffold leftovers: one fr binary per machine, status line within budget, comments
+    kept in fr-profiles.yaml, a current explainer'
   ids:
   - super-fr#746
   - super-fr#455
@@ -5072,7 +5490,9 @@ batches:
   - super-fr#648
   - super-fr#646
   - super-fr#691
-  rationale: 'Wave 12 of the post-talk closing order (2026-10-02). Install and scaffold leftovers: two fr binaries on one machine, a status line over budget, comments dropped from fr-profiles.yaml, and the explainer''s stale sentence on gate provenance (#691).'
+  rationale: 'Wave 12 of the post-talk closing order (2026-10-02). Install and scaffold leftovers: two
+    fr binaries on one machine, a status line over budget, comments dropped from fr-profiles.yaml, and
+    the explainer''s stale sentence on gate provenance (#691).'
   wave: 2
   skill: debug
   launch:
@@ -5174,7 +5594,8 @@ batches:
   ids:
   - super-fr#909
   - super-fr#910
-  rationale: 'Both from Test 16''s GitHub outage: a stalled read hung the loop 16 min, then its failure ended it'
+  rationale: 'Both from Test 16''s GitHub outage: a stalled read hung the loop 16 min, then its failure
+    ended it'
   wave: 1
   skill: debug
   events:
@@ -5237,7 +5658,8 @@ batches:
   - super-fr#912
   - super-fr#899
   - super-fr#900
-  rationale: 'All three are how the driver and board recognise a close-out it did not start; recording one event fixes #899 and #900 together'
+  rationale: 'All three are how the driver and board recognise a close-out it did not start; recording
+    one event fixes #899 and #900 together'
   wave: 2
   after:
   - drive-cap-held
@@ -5335,7 +5757,8 @@ batches:
   ids:
   - super-fr#918
   - super-fr#919
-  rationale: '#918 and #919 are the same runner-protocol extension (a wave/group hint and a close operation on the work item); one design covers both. Shares the close-out/archive path with drive-closeout-recognition.'
+  rationale: '#918 and #919 are the same runner-protocol extension (a wave/group hint and a close operation
+    on the work item); one design covers both. Shares the close-out/archive path with drive-closeout-recognition.'
   wave: 2
   after:
   - drive-closeout-recognition
@@ -5370,7 +5793,9 @@ batches:
   title: Drive treats a PR behind only by release commits and archive merges as up to date
   ids:
   - super-fr#927
-  rationale: 'Operator chose option 1 on #927, widened to archive merges (see its two comments): behind only by release: commits or docs/superpowers-only archive merges merges without an update. Touches the driver''s merge path; waits for drive-forge-resilience, which edits the same command module.'
+  rationale: 'Operator chose option 1 on #927, widened to archive merges (see its two comments): behind
+    only by release: commits or docs/superpowers-only archive merges merges without an update. Touches
+    the driver''s merge path; waits for drive-forge-resilience, which edits the same command module.'
   wave: 2
   after:
   - drive-forge-resilience
@@ -5399,10 +5824,13 @@ batches:
     keys:
     - super-fr#927
 - id: driver-pr-trust
-  title: triage drive and merge attribute a batch PR only from this repository and an allowed author, never a fork or a foreign author
+  title: triage drive and merge attribute a batch PR only from this repository and an allowed author,
+    never a fork or a foreign author
   ids:
   - super-fr#936
-  rationale: 'Security (gh#936): the unattended driver merges any non-draft green PR on a batch branch name; a fork or foreign-author PR could be merged. One root cause: batch_pr and the archive attribution check neither head repository nor author.'
+  rationale: 'Security (gh#936): the unattended driver merges any non-draft green PR on a batch branch
+    name; a fork or foreign-author PR could be merged. One root cause: batch_pr and the archive attribution
+    check neither head repository nor author.'
   wave: 1
   skill: debug
   launch:
@@ -5432,10 +5860,13 @@ batches:
     keys:
     - super-fr#936
 - id: post-merge-install-lock
-  title: 'the host fr install is serialised and atomic: overlapping post_merge installs cannot break fr or the Stop hook'
+  title: 'the host fr install is serialised and atomic: overlapping post_merge installs cannot break fr
+    or the Stop hook'
   ids:
   - super-fr#938
-  rationale: 'gh#938: a Stop-hook error during a day of many releases; suspected overlapping installs and a non-atomic fr replacement. Reproduce first, then serialise installs under a machine lock, replace fr atomically, keep the Stop hook silent on any fr failure.'
+  rationale: 'gh#938: a Stop-hook error during a day of many releases; suspected overlapping installs
+    and a non-atomic fr replacement. Reproduce first, then serialise installs under a machine lock, replace
+    fr atomically, keep the Stop hook silent on any fr failure.'
   wave: 3
   skill: debug
   launch:
@@ -5469,7 +5900,8 @@ batches:
   ids:
   - super-fr#940
   - super-fr#941
-  rationale: 'Operator decision on #940: keep the 3.11 floor and test it. #941 is the same file (ci.yml) and halves the CI load the wave is starving on.'
+  rationale: 'Operator decision on #940: keep the 3.11 floor and test it. #941 is the same file (ci.yml)
+    and halves the CI load the wave is starving on.'
   wave: 2
   skill: debug
   events:
@@ -5500,7 +5932,8 @@ batches:
   title: 'Drive merges ready PRs as a merge train: only the head is updated'
   ids:
   - super-fr#942
-  rationale: 'Operator decision (#942): a merge train. Same merge step as drive-release-behind (#927), so it builds on it.'
+  rationale: 'Operator decision (#942): a merge train. Same merge step as drive-release-behind (#927),
+    so it builds on it.'
   wave: 2
   after:
   - drive-release-behind
@@ -5531,7 +5964,8 @@ batches:
     keys:
     - super-fr#942
 - id: triage-state-integrity
-  title: 'Triage state reads what it should: scope-checked facts, owner-aware keys, schema stamp only where the shape moved, origins paging, list close-out column'
+  title: 'Triage state reads what it should: scope-checked facts, owner-aware keys, schema stamp only
+    where the shape moved, origins paging, list close-out column'
   ids:
   - super-fr#886
   - super-fr#954
@@ -5539,7 +5973,8 @@ batches:
   - super-fr#888
   - super-fr#882
   - super-fr#889
-  rationale: 'Wave 4 (artifact issues first): the data the triage pages are built from. All in fr/triage model/collect/state.'
+  rationale: 'Wave 4 (artifact issues first): the data the triage pages are built from. All in fr/triage
+    model/collect/state.'
   wave: 4
   skill: debug
   events:
@@ -5574,7 +6009,8 @@ batches:
   title: 'Triage owns duplicates: a sweep proposes duplicate open issues, judgements record duplicate_of'
   ids:
   - super-fr#971
-  rationale: 'Wave 4: operator 2026-10-05, finding duplicates is our job. After state-integrity: both touch the judgement model and keys.'
+  rationale: 'Wave 4: operator 2026-10-05, finding duplicates is our job. After state-integrity: both
+    touch the judgement model and keys.'
   wave: 4
   after:
   - triage-state-integrity
@@ -5605,12 +6041,14 @@ batches:
     keys:
     - super-fr#971
 - id: triage-pages-goal
-  title: 'Triage pages: one goal per page, one home per fact, authored sections everywhere, driver exports the state'
+  title: 'Triage pages: one goal per page, one home per fact, authored sections everywhere, driver exports
+    the state'
   ids:
   - super-fr#970
   - super-fr#968
   - super-fr#887
-  rationale: 'Wave 4: the artifact UX brainstorm. fr-goal starts with fr-brainstorming and will stop at its question round for the operator.'
+  rationale: 'Wave 4: the artifact UX brainstorm. fr-goal starts with fr-brainstorming and will stop at
+    its question round for the operator.'
   wave: 4
   bump: minor
   events:
@@ -5641,11 +6079,13 @@ batches:
     - super-fr#968
     - super-fr#887
 - id: acceptance-unittest-anchors
-  title: 'Acceptance: unittest-style Class.test anchors resolve, and the anchor repair recognises unittest classes'
+  title: 'Acceptance: unittest-style Class.test anchors resolve, and the anchor repair recognises unittest
+    classes'
   ids:
   - super-fr#965
   - super-fr#893
-  rationale: 'Wave 5 (high severity): #965 is a high-severity regression from #866; #893 is the same naming class in the repair.'
+  rationale: 'Wave 5 (high severity): #965 is a high-severity regression from #866; #893 is the same naming
+    class in the repair.'
   wave: 5
   skill: debug
   events:
@@ -5676,7 +6116,8 @@ batches:
   title: A run started on an older fr can be finished after an upgrade
   ids:
   - super-fr#891
-  rationale: 'Wave 5 (high severity): a run spanning an upgrade cannot finish; needs a design for adopt/supersede and historical evidence.'
+  rationale: 'Wave 5 (high severity): a run spanning an upgrade cannot finish; needs a design for adopt/supersede
+    and historical evidence.'
   wave: 5
   bump: minor
   events:
@@ -5705,12 +6146,15 @@ batches:
     keys:
     - super-fr#891
 - id: drive-checks-pending
-  title: 'No checks reported yet is pending, not an error: batch merge waits, the drive pass carries on, merge_ready applies R4'
+  title: 'No checks reported yet is pending, not an error: batch merge waits, the drive pass carries on,
+    merge_ready applies R4'
   ids:
   - super-fr#952
   - super-fr#947
   - super-fr#880
-  rationale: 'Wave 6 (medium severity): one root cause in two commands, plus the R4 gap in merge_ready. Moved to wave 5, first in merge order and no dependency (operator 2026-10-06): #952 stalled the wave twice in one morning.'
+  rationale: 'Wave 6 (medium severity): one root cause in two commands, plus the R4 gap in merge_ready.
+    Moved to wave 5, first in merge order and no dependency (operator 2026-10-06): #952 stalled the wave
+    twice in one morning.'
   order: 1
   wave: 5
   skill: debug
@@ -5740,12 +6184,14 @@ batches:
     - super-fr#947
     - super-fr#880
 - id: drive-restart-forge
-  title: 'Drive survives disruption: no second close-out after a restart, a degraded forge bounded everywhere, and a config key added by its own merges'
+  title: 'Drive survives disruption: no second close-out after a restart, a degraded forge bounded everywhere,
+    and a config key added by its own merges'
   ids:
   - super-fr#883
   - super-fr#921
   - super-fr#998
-  rationale: 'Wave 6: both in batch_drive/triage_batch_cmd; after drive-checks-pending to keep the driver files serial.'
+  rationale: 'Wave 6: both in batch_drive/triage_batch_cmd; after drive-checks-pending to keep the driver
+    files serial.'
   wave: 6
   after:
   - drive-checks-pending
@@ -5776,11 +6222,13 @@ batches:
     - super-fr#921
     - super-fr#998
 - id: herdr-dispatch-reliability
-  title: 'herdr dispatch: a brief is always submitted, a busy pane is retried, one failed dispatch does not end the drive'
+  title: 'herdr dispatch: a brief is always submitted, a busy pane is retried, one failed dispatch does
+    not end the drive'
   ids:
   - super-fr#956
   - super-fr#931
-  rationale: 'Wave 6: both seen live while driving waves; the runner and the drive loop. Pattern: the herdr runner assumes a ready, interactive pane.'
+  rationale: 'Wave 6: both seen live while driving waves; the runner and the drive loop. Pattern: the
+    herdr runner assumes a ready, interactive pane.'
   wave: 6
   after:
   - drive-restart-forge
@@ -5843,7 +6291,8 @@ batches:
   title: A major release migrates this repo's live plans, so install.sh's models apply is not refused
   ids:
   - super-fr#861
-  rationale: 'Wave 6 (medium): latent until the next major; release.py''s pre-push suite already catches it.'
+  rationale: 'Wave 6 (medium): latent until the next major; release.py''s pre-push suite already catches
+    it.'
   wave: 6
   skill: debug
   events:
@@ -5930,12 +6379,14 @@ batches:
     keys:
     - super-fr#538
 - id: board-followups
-  title: 'Board tells the truth: a stopped merge is not merge ready, a cancelled wave is shown, the wave table works at phone width'
+  title: 'Board tells the truth: a stopped merge is not merge ready, a cancelled wave is shown, the wave
+    table works at phone width'
   ids:
   - super-fr#987
   - super-fr#1000
   - super-fr#1001
-  rationale: 'Wave 4 (artifact issues first): three board defects found by #976''s and #980''s Test Plans. Board rendering only.'
+  rationale: 'Wave 4 (artifact issues first): three board defects found by #976''s and #980''s Test Plans.
+    Board rendering only.'
   wave: 4
   skill: debug
   events:
@@ -5964,12 +6415,14 @@ batches:
     - super-fr#1000
     - super-fr#1001
 - id: drive-adopt-and-trust
-  title: Drive adopts wave-less archived batches, plan mode never invents close-outs, and an archive PR merges only into the default branch
+  title: Drive adopts wave-less archived batches, plan mode never invents close-outs, and an archive PR
+    merges only into the default branch
   ids:
   - super-fr#990
   - super-fr#991
   - super-fr#1004
-  rationale: 'Wave 6: close-out recognition and archive-merge trust, all in the driver; after herdr-dispatch-reliability to keep the driver files serial.'
+  rationale: 'Wave 6: close-out recognition and archive-merge trust, all in the driver; after herdr-dispatch-reliability
+    to keep the driver files serial.'
   wave: 6
   after:
   - herdr-dispatch-reliability
@@ -6004,7 +6457,8 @@ batches:
   ids:
   - super-fr#1002
   - super-fr#999
-  rationale: 'Wave 6: two witness false negatives in fr/run; #1002 is the implement-phase half of the #594 class that #693 fixed for deliver.'
+  rationale: 'Wave 6: two witness false negatives in fr/run; #1002 is the implement-phase half of the
+    #594 class that #693 fixed for deliver.'
   wave: 6
   skill: debug
   events:
@@ -6062,12 +6516,17 @@ batches:
     keys:
     - super-fr#988
 - id: verification-kinds
-  title: 'Verification before merge: candidate walks for software repos, issues closed on live evidence, and merge conflicts handed back to the batch session'
+  title: 'Verification before merge: candidate walks for software repos, issues closed on live evidence,
+    and merge conflicts handed back to the batch session'
   ids:
   - super-fr#818
   - super-fr#822
   - super-fr#959
-  rationale: 'Wave 7 (operator 2026-10-06). #818: a pre-merge candidate walk replaces post-merge Test Plans for libraries and CLIs, gating deliver; live stays for infrastructure. #822: an issue whose promise is run behaviour closes on its live evidence (same deliver gate). #959: a real merge conflict goes back to the batch''s session instead of stalling the train (handed back by hand 6 times on 2026-10-05/06). Starts with a brainstorm: #818''s four open questions are the operator''s.'
+  rationale: 'Wave 7 (operator 2026-10-06). #818: a pre-merge candidate walk replaces post-merge Test
+    Plans for libraries and CLIs, gating deliver; live stays for infrastructure. #822: an issue whose
+    promise is run behaviour closes on its live evidence (same deliver gate). #959: a real merge conflict
+    goes back to the batch''s session instead of stalling the train (handed back by hand 6 times on 2026-10-05/06).
+    Starts with a brainstorm: #818''s four open questions are the operator''s.'
   wave: 7
   bump: minor
   events:
@@ -6098,12 +6557,14 @@ batches:
     - super-fr#822
     - super-fr#959
 - id: glab-host-trust
-  title: 'Forge host trust: glab gets the trust gate gh has, isolation applies GH_HOST, a host refusal is classified by type'
+  title: 'Forge host trust: glab gets the trust gate gh has, isolation applies GH_HOST, a host refusal
+    is classified by type'
   ids:
   - super-fr#1014
   - super-fr#1015
   - super-fr#1013
-  rationale: 'Wave 5 (high severity): #1014 can send GITLAB_TOKEN to a host a cloned repo''s config names. #1015 and #1013 are the same host-trust seam, filed by #994''s close-out.'
+  rationale: 'Wave 5 (high severity): #1014 can send GITLAB_TOKEN to a host a cloned repo''s config names.
+    #1015 and #1013 are the same host-trust seam, filed by #994''s close-out.'
   wave: 5
   skill: debug
   events:
@@ -6132,14 +6593,16 @@ batches:
     - super-fr#1015
     - super-fr#1013
 - id: drive-board-lows
-  title: 'Driver and board low-severity defects: archive moves vs matrix refs, a moved head, weak cap tests, a partial batch in Done'
+  title: 'Driver and board low-severity defects: archive moves vs matrix refs, a moved head, weak cap
+    tests, a partial batch in Done'
   ids:
   - super-fr#937
   - super-fr#962
   - super-fr#884
   - super-fr#985
   - super-fr#1025
-  rationale: 'Wave 8 (remaining defects): all in the driver and board code; after drive-adopt-and-trust, which touches the same files. #937 first: it can merge onto a red main.'
+  rationale: 'Wave 8 (remaining defects): all in the driver and board code; after drive-adopt-and-trust,
+    which touches the same files. #937 first: it can merge onto a red main.'
   wave: 8
   after:
   - drive-adopt-and-trust
@@ -6264,12 +6727,14 @@ batches:
     keys:
     - super-fr#1003
 - id: driver-sessions
-  title: 'Driver sessions stay current and portable: idle sessions restart on new plugins, and the driver runs outside herdr'
+  title: 'Driver sessions stay current and portable: idle sessions restart on new plugins, and the driver
+    runs outside herdr'
   ids:
   - super-fr#964
   - super-fr#878
   - super-fr#1029
-  rationale: 'Wave 9 feature 1: stale sessions after post_merge cost hand-offs all of 2026-10-06. After drive-board-lows (same driver files).'
+  rationale: 'Wave 9 feature 1: stale sessions after post_merge cost hand-offs all of 2026-10-06. After
+    drive-board-lows (same driver files).'
   wave: 9
   after:
   - drive-board-lows
@@ -6389,7 +6854,8 @@ batches:
     - super-fr#593
     - super-fr#627
 - id: archive-followups
-  title: 'Archive does its own follow-ups: price closed sessions, retarget matrix refs, offer issues for open ends'
+  title: 'Archive does its own follow-ups: price closed sessions, retarget matrix refs, offer issues for
+    open ends'
   ids:
   - super-fr#930
   - super-fr#528
@@ -6428,7 +6894,9 @@ batches:
   title: 'Triage across scopes and hosts: signed per-issue claims, and one named board per claim holder'
   ids:
   - super-fr#1043
-  rationale: 'Wave 10 (operator 2026-10-06). Overlapping scopes and hosts must keep clear of each other''s issues; each driving scope publishes its own board. Starts with a brainstorm: claim timing, expiry, take-over and the publishing hook are the operator''s.'
+  rationale: 'Wave 10 (operator 2026-10-06). Overlapping scopes and hosts must keep clear of each other''s
+    issues; each driving scope publishes its own board. Starts with a brainstorm: claim timing, expiry,
+    take-over and the publishing hook are the operator''s.'
   wave: 10
   bump: minor
   events:
@@ -6508,21 +6976,26 @@ batches:
     keys:
     - super-fr#1051
 - id: needs-you-columns
-  title: 'The board shows what waits on the operator: Needs-you columns from the run cursor, mergeable-aware merge ready, red CI relayed to the session'
+  title: 'The board shows what waits on the operator: Needs-you columns from the run cursor, mergeable-aware
+    merge ready, red CI relayed to the session'
   ids:
   - super-fr#1086
   - super-fr#1082
   - super-fr#1065
   - super-fr#1066
-  rationale: 'Wave 11 (operator priority 2026-10-07). Artifact issue, high severity: the board hides operator-owed states and shows merge ready on conflicting PRs. #1082 is #1086''s part D; #1065 and #1066 touch the same board and skill.'
+  rationale: 'Wave 11 (operator priority 2026-10-07). Artifact issue, high severity: the board hides operator-owed
+    states and shows merge ready on conflicting PRs. #1082 is #1086''s part D; #1065 and #1066 touch the
+    same board and skill.'
   wave: 11
   bump: minor
 - id: batch-finish-labels
-  title: 'A finished batch cleans up after itself: drop fr:in-progress at release, and batch merge skips only the held batch'
+  title: 'A finished batch cleans up after itself: drop fr:in-progress at release, and batch merge skips
+    only the held batch'
   ids:
   - super-fr#1085
   - super-fr#1076
-  rationale: 'Wave 12: medium defects in the batch finish and merge paths. After needs-you-columns, which also edits the driver pass.'
+  rationale: 'Wave 12: medium defects in the batch finish and merge paths. After needs-you-columns, which
+    also edits the driver pass.'
   wave: 12
   after:
   - needs-you-columns
@@ -6533,7 +7006,8 @@ batches:
   - super-fr#1081
   - super-fr#1069
   - super-fr#1071
-  rationale: 'Wave 12: the adopt defects from the 2026-10-07 host sweep (#1081 med). Adopt code only, so it runs beside batch-finish-labels.'
+  rationale: 'Wave 12: the adopt defects from the 2026-10-07 host sweep (#1081 med). Adopt code only,
+    so it runs beside batch-finish-labels.'
   wave: 12
   skill: debug
 - id: models-hardening
@@ -6545,19 +7019,23 @@ batches:
   wave: 13
   skill: debug
 - id: merge-queue
-  title: 'Merge race: require an up-to-date or merge-queued main, release bot bypass, the driver enqueues where a queue is required'
+  title: 'Merge race: require an up-to-date or merge-queued main, release bot bypass, the driver enqueues
+    where a queue is required'
   ids:
   - super-fr#1062
-  rationale: 'Wave 14 feature 1: removes the class of broken-main windows behind #1052''s red. Repo settings (ruleset, app token) are the operator''s. After batch-finish-labels (batch merge).'
+  rationale: 'Wave 14 feature 1: removes the class of broken-main windows behind #1052''s red. Repo settings
+    (ruleset, app token) are the operator''s. After batch-finish-labels (batch merge).'
   wave: 14
   after:
   - batch-finish-labels
   bump: minor
 - id: claims-pr-authors
-  title: 'Claims trust across hosts: a driving account outside pr_authors and the repo''s members is still recognised'
+  title: 'Claims trust across hosts: a driving account outside pr_authors and the repo''s members is still
+    recognised'
   ids:
   - super-fr#1075
-  rationale: 'Wave 14 feature 3: XS; two hosts as different forge users would otherwise distrust each other''s claims.'
+  rationale: 'Wave 14 feature 3: XS; two hosts as different forge users would otherwise distrust each
+    other''s claims.'
   wave: 14
   skill: debug
 - id: adopt-multi-repo
@@ -6576,6 +7054,17 @@ batches:
   rationale: Wave 14 feature 5.
   wave: 14
   bump: minor
+- id: suite-health
+  title: Green, unthrottled local suite
+  ids:
+  - super-fr#1280
+  - super-fr#1225
+  - super-fr#1289
+  - super-fr#1288
+  rationale: 'Wave 15 alone: every later batch runs TDD on this suite; #1280 leaves 13 tests red locally,
+    #1225 is the host overload parallel sessions cause.'
+  wave: 15
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
