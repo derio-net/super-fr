@@ -292,3 +292,134 @@ def test_is_debt_counts_a_local_reason() -> None:
 
     assert is_debt("local", local="unstamped")
     assert not is_debt("local", local=None)
+
+
+# --- Task 5: renderers write `local` and the current fragment version (R7, §C, §E) -------
+
+FRAG_ROW = """\
+schema_version: 2
+feature: f
+repo: o/demo
+rows:
+  - id: other
+    capability: C
+    acceptance: a
+    origin: []
+    levels: {}
+    status: unwired
+    notes: 'keep me'
+
+  - id: r1
+    capability: C
+    acceptance: a
+    origin: []
+    levels:
+      unit:
+      - demo:tests/test_x.py#test_y
+    status: local
+    notes: n
+# trailing comment
+"""
+
+FRAG_AMEND = """\
+schema_version: 2
+feature: f
+repo: o/demo
+rows: []
+amendments:
+  - row: r1
+    op: set-status
+    base: 0
+    status: local
+    notes: first
+    why: w
+  - row: other
+    op: reword
+    base: 0
+    acceptance: x
+    why: w
+
+  - row: r1
+    op: set-status
+    base: 1
+    status: local
+    notes: second
+    why: w
+  - row: r1
+    op: add-level
+    base: 2
+    level: unit
+    ref: demo:tests/test_z.py
+    why: w
+"""
+
+
+def test_render_row_block_round_trips_a_stamp() -> None:
+    from fr.acceptance.edit import render_fragment
+    from fr.acceptance.fragment import parse_fragment
+
+    row = _row(local=STAMP)
+    text = render_fragment("f", "o/demo", [row])
+    assert parse_fragment(text, source="f.yaml").rows[0] == row
+
+
+def test_render_amendment_block_round_trips_a_stamp() -> None:
+    from fr.acceptance.edit import append_amendment, render_fragment
+    from fr.acceptance.fragment import parse_fragment
+
+    amendment = _set_status("local", local=STAMP)
+    text = append_amendment(render_fragment("f", "o/demo", []), amendment)
+    assert parse_fragment(text, source="f.yaml").amendments[0] == amendment
+
+
+def test_render_fragment_writes_the_current_fragment_version() -> None:
+    import yaml
+    from fr.acceptance.edit import render_fragment
+    from fr.artifacts.registry import ARTIFACT_KINDS
+
+    data = yaml.safe_load(render_fragment("f", "o/demo", []))
+    assert data["schema_version"] == ARTIFACT_KINDS["acceptance-fragment"].current_version
+
+
+def _stamp():
+    from fr.acceptance.model import LocalStamp
+
+    return LocalStamp.model_validate(STAMP)
+
+
+def test_stamp_local_rewrites_a_pending_row_block_only() -> None:
+    from fr.acceptance.edit import stamp_local
+    from fr.acceptance.fragment import parse_fragment
+
+    out = stamp_local(FRAG_ROW, "r1", _stamp())
+    frag = parse_fragment(out, source="f.yaml")
+    assert frag.rows[1].local == _stamp()
+    head = FRAG_ROW[: FRAG_ROW.index("  - id: r1")]
+    assert out.startswith(head)
+    assert out.endswith("# trailing comment\n")
+    assert frag.rows[0] == parse_fragment(FRAG_ROW, source="f.yaml").rows[0]
+
+
+def test_stamp_local_rewrites_the_latest_set_status_amendment_only() -> None:
+    from fr.acceptance.edit import stamp_local
+    from fr.acceptance.fragment import parse_fragment
+
+    out = stamp_local(FRAG_AMEND, "r1", _stamp())
+    before = parse_fragment(FRAG_AMEND, source="f.yaml").amendments
+    after = parse_fragment(out, source="f.yaml").amendments
+    assert after[2].local == _stamp()  # type: ignore[union-attr]
+    assert [a for i, a in enumerate(after) if i != 2] == [a for i, a in enumerate(before) if i != 2]
+    cut = FRAG_AMEND.index("    notes: second")
+    assert out.startswith(FRAG_AMEND[:cut])
+    tail = FRAG_AMEND[FRAG_AMEND.index("  - row: r1\n    op: add-level") :]
+    assert out.endswith(tail)
+
+
+def test_stamp_local_refuses_a_row_the_fragment_neither_holds_nor_amends() -> None:
+    from fr.acceptance.edit import stamp_local
+    from fr.acceptance.model import AcceptanceError
+
+    with pytest.raises(AcceptanceError):
+        stamp_local(FRAG_ROW, "nope", _stamp())
+    with pytest.raises(AcceptanceError):
+        stamp_local(FRAG_ROW, "other", _stamp())  # held, but not local
