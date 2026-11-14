@@ -1,0 +1,80 @@
+schema_version: 12
+run: 2026-11-13-feat-writing-standards-docs
+step: lens-review
+outcome: done
+journal:
+- kind: review
+  id: review-lenses
+  global: true
+  title: 'lens review: docs-accuracy 3 findings, tests 4 findings, all fixed'
+  body: 'One reviewer per lens, each in its own context, given only its lens (docs-accuracy: required by the .fr/lenses.yaml path rule for every published page; tests: added at spec review). docs-accuracy sampled claims across all 31 rewritten pages and the rule, script and CI step against the code: three false or imprecise claims, fixed in 079e36ada and cdd83daeb (workflow-shapes adopt, fr-dispatch bridge writes, docs-currency H1). tests mutated scripts/check-writing-standards.sh in a scratch clone: the fake-uv tests did not pin which pages reach the checker and nothing exercised the real checker or .writing-standard-terms; both fixed in 52a8fae41 (page-set assertion; a real-checker test run by site-build at the pinned blog-craft). Acceptance rows moved to ci with their test refs; the gh#1369 fixture change was dropped for main''s own fix (#1437).'
+- kind: finding
+  id: l-docs-accuracy-r1
+  global: true
+  review_scope: in
+  title: 'workflow-shapes.md: plain fr run adopt said to preview unless --yes; it writes at once'
+  body: 'run/adopt.py:845-846, 950-952; run_cmd.py --yes help. Raised by the docs-accuracy lens reviewer.'
+- kind: finding
+  id: l-docs-accuracy-r2
+  global: true
+  review_scope: in
+  title: 'fr-dispatch.md: the bridge skips issue writes too, not only label writes'
+  body: 'fr_dispatch/__init__.py:356-362. Raised by the docs-accuracy lens reviewer.'
+- kind: finding
+  id: l-docs-accuracy-r3
+  global: true
+  review_scope: in
+  title: 'docs-currency.md: the build drops an H1 only when it opens the body'
+  body: 'scripts/build-site.py:290-299. Raised by the docs-accuracy lens reviewer.'
+- kind: finding
+  id: l-tests-r1
+  global: true
+  review_scope: in
+  title: 'fake-uv tests never asserted which pages reach the checker'
+  body: 'A script checking only the first page of each group passed every test. Raised by the tests lens reviewer.'
+- kind: finding
+  id: l-tests-r2
+  global: true
+  review_scope: in
+  title: 'nothing exercised the real checker or .writing-standard-terms (R4)'
+  body: 'Deleting the terms file moved 32 to 98 warnings with exit 0, unnoticed. Raised by the tests lens reviewer.'
+- kind: finding
+  id: l-tests-r3
+  global: true
+  review_scope: in
+  title: 'acceptance rows kept levels {} / not-implemented although their tests ship'
+  body: Raised by the tests lens reviewer.
+- kind: finding
+  id: l-tests-r4
+  global: true
+  review_scope: in
+  title: 'after the main merge, the gh#1369 test carried a false comment and a redundant workaround'
+  body: Raised by the tests lens reviewer.
+resolves:
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: 079e36ada
+- id: l-docs-accuracy-r2
+  state: fixed
+  body: cdd83daeb
+- id: l-docs-accuracy-r3
+  state: fixed
+  body: cdd83daeb
+- id: l-tests-r1
+  state: fixed
+  body: '52a8fae41: _assert_both_groups_ran_at_the_toplevel compares every page each group sends with its globs.'
+- id: l-tests-r2
+  state: fixed
+  body: '52a8fae41: test_real_checker_fails_a_page_and_reads_the_terms_file runs blog-craft''s checker; site-build runs it with BLOG_CRAFT_DIR=.blog-craft, and test_site_build_checks_the_writing_standards_after_the_build pins that step.'
+- id: l-tests-r3
+  state: fixed
+  body: 'a010ef9, 786b523, bb39620, d5ac113: groups, ci-gate, authoring-rule and accuracy-lens rows to ci with test refs.'
+- id: l-tests-r4
+  state: fixed
+  body: '52a8fae41: the test file is main''s again; main''s --stale-days fix stands and this branch''s duplicate fixture change is gone.'
+evidence:
+  review: review-lenses
+  reviewer:
+    docs-accuracy: ace47026177da1fa2
+    tests: a91179e5b51261b5d
+  model: claude-opus-5-5
