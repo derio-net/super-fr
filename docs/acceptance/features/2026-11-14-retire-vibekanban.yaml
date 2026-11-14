@@ -131,3 +131,10 @@ amendments:
     ref: super-fr:tests/integration/test_bridge_shape_binding.py
     why: That test drove the deleted fr-vk bridge daemon; test_plan_workflow_binding.py
       still covers the loud failure
+  - row: runner-capability-refusal
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_bridge_shape_binding.py
+    why: That test drove the deleted fr-vk bridge daemon; test_capabilities.py still
+      covers the preflight refusal
