@@ -145,3 +145,10 @@ amendments:
     ref: super-fr:tests/unit/test_pr_observe.py
     why: test_pr_observe.py tested the deleted fr_vk.pr_observe; the host targeting
       stays covered by the _hosts, hostclient and glab tests
+  - row: forge-calls-through-adapter
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_forge_error_kind.py#test_the_bridge_guard_backs_off_on_any_forges_rate_limit
+    why: That case drove the deleted fr-vk bridge's rate-limit guard; the adapter tripwire
+      tests remain
