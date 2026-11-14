@@ -170,3 +170,10 @@ Evidence: CI site-build green on the merged PR head 7082ff0dd (run 43545039044):
 Step: The unit test of §5 passes.
 
 Evidence: tests/unit/test_writing_standards_docs.py passes on main c0fdbce with BLOG_CRAFT_DIR set (13 tests incl. the real-checker test); in CI the unit tests pass in the test shards and site-build runs the real-checker test.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-14T02:21:22+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: `fr docs check` passes (every changed page is a covered page that changed).
+
+Evidence: fr docs check: 32 page(s) current on main c0fdbce; the docs-check CI job was green on every pushed head of #1436.
