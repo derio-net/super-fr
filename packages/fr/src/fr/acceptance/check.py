@@ -293,7 +293,12 @@ def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[st
     ]
 
 
-def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
+def check(
+    matrix: Matrix, root: Path, sibling_root: str = "..", *, retired: Sequence[Row] = ()
+) -> CheckResult:
+    """The gate over *matrix*. *retired* (the fold's retired rows) only answers the
+    staleness guard: a spec whose rows were retired by amendment has been accounted for.
+    """
     result = CheckResult()
     own = resolve_identity(matrix, root)[1]
     missing_repos: set[str] = set()
@@ -342,9 +347,11 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
         )
 
     # Staleness guard: every own-repo spec with a Test Plan must be cited by
-    # >=1 row origin. A citation survives `fr archive` (twin-aware, trap 1).
+    # >=1 row origin. A citation survives `fr archive` (twin-aware, trap 1). A row
+    # retired by amendment still cites its origin: the retirement, recorded with its
+    # reason, is that Test Plan's outcome (spec 2026-11-14-retire-vibekanban R9).
     referenced: set[str] = set()
-    for r in matrix.rows:
+    for r in (*matrix.rows, *retired):
         for ref in r.origin:
             if is_logical(ref):
                 try:

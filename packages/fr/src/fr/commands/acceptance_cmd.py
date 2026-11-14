@@ -161,7 +161,9 @@ def check_cmd(
         typer.echo(f"::warning title=acceptance-matrix::{w}")
     matrix = _load(root)
     try:
-        result = check(matrix, root, sibling_root)
+        from fr.acceptance.fold import effective
+
+        result = check(matrix, root, sibling_root, retired=effective(root).retired)
         added = _added_since(root, added_since, matrix) if added_since else []
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {escape(str(e))}")

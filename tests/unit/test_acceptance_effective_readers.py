@@ -217,3 +217,36 @@ def test_plan_self_review_links_rows_from_the_fragments(tmp_path: Path) -> None:
     assert not [i for i in ok if "acceptance" in i.message and i.severity == "error"]
     bad = review(tmp_path / "bad", "row-zzz")
     assert any("unknown acceptance row id 'row-zzz'" in i.message for i in bad)
+
+
+def test_the_staleness_guard_counts_a_retired_rows_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A spec whose every row a later feature retired by amendment has been answered:
+    the retirement is the recorded outcome of its Test Plan, so the guard must not
+    ask for a live row that would describe removed behaviour (spec
+    2026-11-14-retire-vibekanban R9)."""
+    root = _repo(tmp_path)
+    later = "2026-02-01-removal"
+    spec = root / f"docs/superpowers/specs/{later}-design.md"
+    spec.write_text("# Removal\n\n## Requirements\n\nR1. Gone.\n")
+    path = root / FRAGMENTS_REL / f"{later}.yaml"
+    path.write_text(
+        "schema_version: 2\n"
+        f"feature: {later}\n"
+        "repo: acme/widget\n"
+        "rows: []\n"
+        "amendments:\n"
+        + "".join(
+            f"  - row: {rid}\n    op: retire\n    base: 0\n    notes: removed\n    why: gone\n"
+            for rid in ("w-built", "w-owed")
+        )
+    )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "retire")
+    clear_fold_cache()
+    assert load_effective(root).rows == ()
+
+    check = _cli(root, monkeypatch, "check")
+
+    assert "staleness" not in check.output, check.output
