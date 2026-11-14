@@ -181,3 +181,14 @@ amendments:
     notes: test_isolation.py pins profiles_config and the state dir reading fr spellings
       only, and that a mounted env file is created whatever its path. Run in CI.
     why: 'test_bridge_cli.py was deleted with fr-vk (R9: no row cites a deleted test)'
+  - row: daemon-refuses-stale-artifacts
+    op: set-status
+    base: 0
+    status: ci
+    notes: 'Spec 3.C. discover_plans (fr_dispatch/__init__.py) no longer catches PlanSchemaError
+      as a quiet warning-and-continue; it logs ERROR, pushes a stale_artifact failure
+      metric, and reports the failure to its caller via a failures outparam that folds
+      into the tick error total -- one stale plan excludes only itself (I9 boundary),
+      the daemon never migrates or commits (issue #286). The "and CI" half is covered
+      by the ensure_artifacts_current CLI-entry gate (non-interactive when CI is set).'
+    why: bridge_cli.py was deleted with fr-vk; the note names the surviving tick caller
