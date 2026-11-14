@@ -7173,6 +7173,21 @@ batches:
     never settle; facts schema pinned in three places. triage_cmd.py, triage/model.py.
   wave: 18
   skill: debug
+- id: consumer-delivery
+  title: 'Consumer delivery: OpenCode rules and scaffolds'
+  ids:
+  - super-fr#1402
+  - super-fr#1375
+  - super-fr#1308
+  - super-fr#1186
+  - super-fr#1271
+  rationale: Shares the OpenCode plugin with guard-trust and install.sh with release-truth, so it waits
+    for both.
+  wave: 19
+  after:
+  - guard-trust
+  - release-truth
+  bump: minor
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
