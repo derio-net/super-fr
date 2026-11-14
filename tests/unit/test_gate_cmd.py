@@ -8,6 +8,7 @@ release dispatch, so a final follows the last pass (R20). The forge is faked.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -710,7 +711,10 @@ def _ambiguous_env(backfill_env: Any) -> tuple[Path, FakeGhClient]:
             "  plan:\n    state: done\n"
             f"    emitted: {{plan: docs/superpowers/plans/{AMBIG_PLAN}}}\n"
         )
-    commit_at(root, "seed", "2026-10-30T00:00:00+00:00")
+    # Seeded a day ago, not on a fixed date: past `fr debt`'s default stale_days (14) the
+    # plan reads as stale and the entry defaults to `review`, which is not what gh#1369 pins.
+    seeded = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="seconds")
+    commit_at(root, "seed", seeded)
     git(root, "update-ref", "refs/remotes/origin/main", "HEAD")  # published, without a push
     git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
     fake.add_pr(BACKFILL_REPO, 21, state="MERGED", head_ref="feat/ops")
