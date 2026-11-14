@@ -151,7 +151,10 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
 
 def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]:
     """The `## Phases` section (§D): agentic phases against the asks they
-    serve, all read at HEAD. Report-only, like every other section."""
+    serve, the plan, spec and journals read at HEAD of the repository holding them.
+    The acceptance fold is HEAD's under `repo`; under quiet and stealth, where the
+    product HEAD holds no fragment, it is the placement's fold of the working
+    fragments (fr commits every fragment write itself). Report-only."""
     from fr._urls import is_cross_repo_spec
     from fr.acceptance.fold import effective, fold, quiet_root
     from fr.acceptance.model import AcceptanceError
