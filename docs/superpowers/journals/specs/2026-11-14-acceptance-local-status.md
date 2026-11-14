@@ -247,3 +247,10 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-14-acceptance-local-status-p2 created=2026-11-14T09:26:07+00:00 -->
 ### tier-2026-11-14-acceptance-local-status-p2 · decision · hard: inserts a write into deliver's gate sequence, which every run relies on (commit-on-refusal, restore, placement)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-14T19:01:31+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: post-merge — operator-driven: on a release candidate carrying this change, resume the held quiet-placement walk of spec `2026-11-04-repo-feature-settings` (Test Plan step 1). Set its unit-tested rows `local` and resolve `deliver`. Expected: `deliver` passes with those rows stamped, no tester gate added and no issue filed; `fr acceptance status` and `fr debt` list the rows as `local` and do not count them as debt.
+
+Evidence: Walked on v7.0.0-rc.8 in a scratch repo (operator-reported): deliver refused with leftover rows and offered set-status --status local; the row was set local; deliver resolved and stamped it (at, tree, log, file blob); fr acceptance status and fr debt list it as [local 2026-11-14] with no debt.
