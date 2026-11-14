@@ -49,9 +49,10 @@ flowchart TD
 
 1. **Isolate (precondition).** Before a single line is written, the run moves into
    a private workspace: a throwaway copy of the repo, with its commands running in a
-   sealed container by default (on a host without Docker, or in a container someone
-   already prepared, the throwaway copy alone is the workspace). If the repo has never been set up, the run stops and interviews
-   you once. There is no "run it directly" fallback.
+   sealed container by default (on a host without Docker, in a Claude Code cloud
+   session, or in a container someone already prepared, the throwaway copy alone is the
+   workspace). If the repo has no container profile in that default mode, the run stops
+   and interviews you once. There is no "run it directly" fallback.
 2. **Brainstorm and one question round (you decide).** The agent designs the feature
    and asks one question round sized to the feature, rarely two, and only when
    announced up front or you ask, then commits to a written spec. Intent is pinned
@@ -62,10 +63,12 @@ flowchart TD
 4. **Build, test-first, phase by phase (agent).** Each slice is written the disciplined
    way: the test first, then the code that satisfies it. Every command runs inside the
    workspace, never against your own checkout.
-5. **Adversarial review at every stage (agent).** The spec, the plan and every
-   implementation slice face an independent review whose job is to find what is wrong.
-   Every finding is fixed before the work moves on, not deferred to a human's patience
-   later.
+5. **Adversarial review at every stage (agent).** The spec and every implementation
+   slice face an independent adversarial review whose job is to find what is wrong. The
+   plan is checked by a deterministic self-review against the spec (on the light path,
+   the spec reviewer reviews it too). Every in-scope finding is fixed before the work
+   moves on, not deferred to a human's patience later; a finding this change did not
+   cause is filed as a tracked issue and listed in the PR.
 6. **Deliver one pull request (agent).** The whole feature arrives as a single,
    coherent PR. It is pushed and opened through fr (`fr push`, `fr pr create`), so the
    repo's settings (`fr settings show`) can require it to ask you before the push and
@@ -73,9 +76,11 @@ flowchart TD
    merges its own work: delivery and approval are kept
    apart on purpose.
 7. **The manual phase, co-driven (you and the agent).** Anything a machine should not do
-   alone (secrets, a production toggle, a deploy) is quarantined into the plan's final
-   phase. The PR ships with it deliberately unfinished; you do that step, with the agent
-   scaffolding and guiding it, and push to the same PR.
+   alone (secrets, a production toggle, a deploy) is quarantined into a manual phase,
+   by default the plan's last. The PR ships with it deliberately unfinished; you do that
+   step, with the agent scaffolding and guiding it, and push to the same PR. When
+   agentic work depends on it, it comes first instead, and the run pauses after a
+   spec-and-plan PR.
 8. **Merge, then the Test Plan (you and the agent).** You review and merge. If the change
    ships to real users, the spec carries a post-merge Test Plan the agent walks through
    with you. It runs the checks it can reach and you confirm the ones it cannot, before
@@ -90,13 +95,15 @@ step is buying one of these properties for the code it produces.
 
 By default every run happens in two nested boundaries. A private worktree means your actual
 checkout is never touched: no stray branches, no half-finished state, nothing to clean
-up if the run goes wrong. A sealed container means the agent only ever holds the
-credentials that workspace was explicitly granted. The two docker-less modes keep
+up if the run goes wrong. A sealed container means the commands the agent runs hold
+only the credentials that profile was explicitly granted, and no SSH identity; pushes
+and PRs run on your host with your own forge login. The two docker-less modes keep
 the worktree and drop the container, so there the agent holds what the host process
 holds; [fr-isolation](fr-isolation.md) explains all three.
 
-- The default workspace is least-privileged: it carries no tokens at all, and a
-  privileged profile is a deliberate opt-in.
+- The default profile is least-privileged by convention: fr-init asks for no forge token
+  for it, and the standard pipeline needs none. Credentials belong in a separate profile
+  you select deliberately.
 - There is no unisolated mode. A repo that is not set up is a stop-and-configure moment,
   never a quiet fallback to running loose on your machine.
 
@@ -108,10 +115,10 @@ chasing a moving target. Construction is test-first, so behaviour is specified b
 is implemented. And judgment comes from independent adversarial reviews at each
 meaningful stage.
 
-- Reviews run against the spec, the plan and every implementation slice, not just once at
-  the end.
-- Every finding is fixed before the work advances. There is no backlog of "known issues"
-  quietly riding along in the PR.
+- Independent reviews run against the spec and every implementation slice, not just once
+  at the end; the plan gets a deterministic self-review against the spec.
+- Every in-scope finding is fixed before the work advances. A finding this change did not
+  cause is filed as a tracked issue and listed in the PR. Nothing rides along unrecorded.
 
 ### 3. Testable: proof the feature works, and stays honest
 
@@ -120,8 +127,8 @@ change in the real world, co-driven so nothing that needs a human's eyes gets ru
 stamped. The acceptance matrix tracks business-level truths ("an operator can do X") as
 first-class, durable tests.
 
-- Acceptance rows are born at design time, presented for defense in the same question
-  round, and linked to the plan phases that satisfy them.
+- Acceptance rows are born at design time, in the brainstorm record, defended one line
+  each at spec review, and linked to the plan phases that satisfy them.
 - Each row carries an honesty status (automated-and-cannot-drift, verified-but-manual,
   not-yet, or known-failing-on-purpose), so the matrix can never quietly overstate
   coverage.
@@ -129,8 +136,8 @@ first-class, durable tests.
 ### 4. Durable: the result survives contact with reality
 
 Durability is about the work holding together after the excitement of the build. The
-feature ships whole: the risky human step is back-loaded into the plan so the PR is never
-left half-integrated waiting on it. Cleanup is guaranteed, and guardrails stop the classic
+feature ships whole: the risky human step is collected into a manual phase, by default
+the plan's last, so it does not leave the PR half-integrated. Cleanup is guaranteed, and guardrails stop the classic
 after-the-fact mistakes.
 
 - A merged-PR guard refuses pushes onto a branch whose PR is already closed, so a late
