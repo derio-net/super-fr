@@ -7188,6 +7188,25 @@ batches:
   - guard-trust
   - release-truth
   bump: minor
+- id: docs-wording
+  title: Docs, help and skill wording sweep
+  ids:
+  - super-fr#1265
+  - super-fr#1441
+  - super-fr#1445
+  - super-fr#1440
+  - super-fr#1447
+  - super-fr#1446
+  - super-fr#1450
+  - super-fr#1443
+  - super-fr#1442
+  - super-fr#1421
+  - super-fr#1449
+  - super-fr#1444
+  - super-fr#1448
+  rationale: Regenerates all three mirror sets (sync-opencode, sync-hermes, sync-readme), so it runs alone
+    and last.
+  wave: 20
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
