@@ -207,3 +207,14 @@ rows:
     status: ci
     notes: 'Shipped in #1139: every client''s debt ops unit-tested in CI against recorded-command
       doubles (glab/tea not live-captured; a live walk of those forges is owed).'
+amendments:
+  - row: debt-weekly-issue-rename
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'tracked by derio-net/super-fr#1381. Half observed: github-actions renamed
+      #363 ''Acceptance debt'' -> ''super-fr: Technical debt'' on 2026-10-13, still
+      the only one (no duplicate). Still owed: closing at zero debt.'
+    why: 'tracked by derio-net/super-fr#1381. Half observed: github-actions renamed
+      #363 ''Acceptance debt'' -> ''super-fr: Technical debt'' on 2026-10-13, still
+      the only one (no duplicate). Still owed: closing at zero debt.'
