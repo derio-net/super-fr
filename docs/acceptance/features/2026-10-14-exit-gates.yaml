@@ -211,3 +211,16 @@ rows:
     issues:
     - derio-net/super-fr#1207
     - derio-net/super-fr#1348
+amendments:
+  - row: exit-gates-release-gating
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'tracked by derio-net/super-fr#1348. Half observed 2026-11-14: v7.0.0-rc.1..rc.9
+      were cut as pre-releases while gate-labelled PRs waited. Still owed: an automatic
+      final once none waits (v7.0.0 was a manual workflow_dispatch override, so it does
+      not count).'
+    why: 'tracked by derio-net/super-fr#1348. Half observed 2026-11-14: v7.0.0-rc.1..rc.9
+      were cut as pre-releases while gate-labelled PRs waited. Still owed: an automatic
+      final once none waits (v7.0.0 was a manual workflow_dispatch override, so it does
+      not count).'
