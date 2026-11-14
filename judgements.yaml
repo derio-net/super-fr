@@ -7134,6 +7134,7 @@ batches:
   - super-fr#1454
   - super-fr#1395
   - super-fr#1303
+  - super-fr#1462
   rationale: 'Tier 2: deliver accepts a tests log not bound to the code tree it ran on (#1454); traceback
     on a transient forge read (#1395); wrappers hide the capture run (#1303). run_cmd.py. (#1456 fixed
     in #1460.)'
