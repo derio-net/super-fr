@@ -174,3 +174,10 @@ amendments:
       is followed whatever its path is named'
     why: 'VK support is removed (R1, R9): the bridge env and its project-id variable
       went with fr-vk, so only the isolation spellings remain to pin'
+  - row: vk-legacy-fallbacks-removed
+    op: set-status
+    base: 5
+    status: ci
+    notes: test_isolation.py pins profiles_config and the state dir reading fr spellings
+      only, and that a mounted env file is created whatever its path. Run in CI.
+    why: 'test_bridge_cli.py was deleted with fr-vk (R9: no row cites a deleted test)'
