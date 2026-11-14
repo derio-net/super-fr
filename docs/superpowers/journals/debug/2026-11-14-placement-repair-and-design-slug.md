@@ -35,3 +35,8 @@ archive.paths_dirty takes the product checkout as the home of every path. Under 
 ### f-paths-dirty · finding [fixed] · paths_dirty asks each path's own checkout; a git failure is GitStatusError, and fr repair refuses (exit 2) on it
 
 archive.paths_dirty groups paths by the checkout holding them (repo_root for a path below it, else the nearest existing directory), and raises GitStatusError (an ArchiveError) instead of CalledProcessError. fr repair --yes guards the superpowers dir AND the repo's plan-config.yaml, and prints a refusal on GitStatusError. Pinned by tests/unit/test_placement_repair_and_design_slug.py (paths_dirty_reads_a_path_held_by_another_checkout, refuses_rather_than_raising, fr_repair_yes_under_quiet_*), red before the fix with the walk's exact CalledProcessError.
+
+<!-- fr:journal kind=finding scope=debug id=f-plan-config-home created=2026-11-14T01:25:00+00:00 state=fixed -->
+### f-plan-config-home · finding [fixed] · fr repair read plan-config.yaml from the quiet/stealth feature root; it is repo configuration in the product checkout
+
+Found auditing the other repair steps: repair_repo stripped dead keys from kind_dir('superpowers')/plan-config.yaml, i.e. the feature root under quiet/stealth, though plan-config is a REPO_CONFIG_KINDS kind read from the product checkout. repair.plan_config_path names it. The migration runner (_quiet_fr_root, _quiet_feature_groups) and fr validate artifacts were already placement-aware; fr archive moves nothing off-product (R25), so its paths_dirty callers only run under repo, where the change is behaviour-preserving.
