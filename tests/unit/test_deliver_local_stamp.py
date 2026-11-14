@@ -386,7 +386,7 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
 
     plan = run_cmd._local_stamp_plan(root, "spec", "suite.log@0123456789ab", today="2026-11-14")
 
-    assert plan is not None and plan.path == frag and plan.rows == ("q-1",)
+    assert plan is not None and [p for p, _ in plan.files] == [frag] and plan.rows == ("q-1",)
     assert not (root / KIND_DIRS["acceptance-fragment"]).exists()
     writes = run_cmd._RunWrites(verb="resolve")
     token = run_cmd._RUN_WRITES.set(writes)
@@ -576,3 +576,55 @@ def test_a_tests_witness_that_is_no_local_run_refuses_through_deliver(
     assert not _body(root).exists(), "refused before the PR gate"
     assert (root / FRAGMENT).read_bytes() == before
     assert "local" not in _row(root)
+
+
+# --- gh#1456: a `-design` fragment, and a record that holds the row --------------------
+
+
+def _rename_to_design(root: Path) -> Path:
+    """The feature's fragment as `7.0.0-rc.3` wrote it, before #1451: named and keyed
+    `<slug>-design`."""
+    design = FRAGMENT.with_name("spec-design.yaml")
+    data = _fragment(root)
+    data["feature"] = "spec-design"
+    (root / design).write_text(yaml.safe_dump(data, sort_keys=False))
+    (root / FRAGMENT).unlink()
+    commit_all(root, "fragment as rc.3 named it")
+    return design
+
+
+def test_a_local_row_in_a_design_named_fragment_is_stamped(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """gh#1456: deliver looked only for `<slug>.yaml` and passed with the row unstamped."""
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    design = _rename_to_design(root)
+
+    out = _deliver_twice(root, live)
+
+    assert out.exit_code == 0, out.output
+    row = next(r for r in yaml.safe_load((root / design).read_text())["rows"] if r["id"] == ROW)
+    assert row["local"]["files"] == {TEST: _blob(root, TEST)}
+    assert not (root / FRAGMENT).exists()
+    assert git(root, "status", "--porcelain", "--", str(design)).strip() == ""
+    status = fr(root, ["acceptance", "status"])
+    assert "unstamped" not in status.output, status.output
+
+
+def test_a_design_named_fragment_that_cannot_be_stamped_refuses(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """gh#1456: never a silent pass: the `-design` fragment's row is judged like any."""
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    design = _rename_to_design(root)
+    (root / TEST).write_text("def test_y():\n    assert 1\n")
+    before = (root / design).read_bytes()
+
+    out = _deliver_record(root)
+
+    assert out.exit_code == 2, out.output
+    flat = " ".join(out.output.split())
+    assert "cannot stamp" in flat and ROW in flat and TEST in flat, out.output
+    assert (root / design).read_bytes() == before

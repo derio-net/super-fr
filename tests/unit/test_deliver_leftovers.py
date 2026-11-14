@@ -388,3 +388,61 @@ def test_an_unreadable_ci_declaration_offers_no_local(tmp_path: Path) -> None:
     _commit(root)
 
     assert "--status local" not in _row_fix(root, "owed-row")
+
+
+def test_a_row_the_pending_record_sets_names_the_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """gh#1456: the deliver record is applied before this gate reads the fold, so a row
+    its `acceptance:` entry sets wins over the fragment; the refusal says so."""
+    from fr.commands import run_cmd
+
+    root = _repo(tmp_path, rows={"owed-row": None})
+    _rows(root, [{"id": "owed-row", "status": "unwired"}])
+    _commit(root)
+
+    token = run_cmd._RECORD_ROWS.set(
+        ("docs/superpowers/runs/r.records/deliver.yaml", {"owed-row": "unwired"})
+    )
+    try:
+        with pytest.raises(Exit) as exc:
+            run_cmd._deliver_leftovers_gate(root, load_run_state(root, RUN))
+    finally:
+        run_cmd._RECORD_ROWS.reset(token)
+
+    assert exc.value.exit_code == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert "the record docs/superpowers/runs/r.records/deliver.yaml sets this row unwired" in err
+    assert "wins over the fragment" in err
+    # the usual fixes still follow
+    assert "--status local" in err
+
+
+def test_record_rows_reads_rows_and_amendments(tmp_path: Path) -> None:
+    from fr.record.apply import _record_rows
+    from fr.record.model import StepRecord
+
+    record = StepRecord.model_validate(
+        {
+            "run": RUN,
+            "step": "deliver",
+            "outcome": "done",
+            "acceptance": [
+                {"id": "a", "status": "unwired", "notes": "n"},
+                {"row": "b", "op": "set-status", "why": "w", "status": "walk-owed", "notes": "n"},
+            ],
+        }  # fmt: skip
+    )
+    rec = tmp_path / "docs" / "deliver.yaml"
+    assert _record_rows(tmp_path, record, rec) == (
+        "docs/deliver.yaml",
+        {"a": "unwired", "b": "walk-owed"},
+    )
+    assert (
+        _record_rows(
+            tmp_path,
+            StepRecord.model_validate({"run": RUN, "step": "deliver", "outcome": "done"}),
+            rec,
+        )
+        is None
+    )

@@ -280,6 +280,13 @@ class _RunWrites:
 
 _RUN_WRITES: ContextVar[_RunWrites | None] = ContextVar("fr_run_writes", default=None)
 
+_RECORD_ROWS: ContextVar[tuple[str, dict[str, str]] | None] = ContextVar(
+    "fr_record_rows", default=None
+)
+"""gh#1456: the step record a resolve applies, by name, and the status its `acceptance:`
+entries set per row — the record is applied before the gates read the fold, so a row it
+sets wins over any fragment edit, and a refusal over that row has to say so."""
+
 
 # --- spec 2026-09-25 §5.B.7: transcript gates stop degrading silently ---------
 #
@@ -7289,6 +7296,24 @@ def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
     leftovers = _gate_journals(lambda: unaccounted(repo_root, state, exit_))
     if not leftovers:
         return
+    held = _RECORD_ROWS.get()
+    if held is not None:
+        import dataclasses
+
+        name, statuses = held
+        leftovers = [
+            dataclasses.replace(
+                left,
+                fix=(
+                    f"the record {name} sets this row {statuses[left.id]}, and the record "
+                    "wins over the fragment: change or drop its `acceptance:` entry for "
+                    f"{left.id} first. Then: {left.fix}"
+                ),
+            )
+            if left.kind == "row" and left.id in statuses
+            else left
+            for left in leftovers
+        ]
     lines = "\n".join(f"  {left.line()}" for left in leftovers)
     err_console.print(
         "refused: the run leaves work unaccounted for. File each leftover, gate it, or "
@@ -7301,11 +7326,11 @@ def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
 
 @dataclass(frozen=True)
 class _LocalStamps:
-    """The feature fragment with every `local` stamp `deliver` owes written in, built in
+    """The feature's fragments (gh#1456: one per spelling of its slug) with every `local`
+    stamp `deliver` owes written in, built in
     memory by `_deliver_local_stamp_plan` and written by `_deliver_local_stamp_write`."""
 
-    path: Path
-    text: str
+    files: tuple[tuple[Path, str], ...]
     rows: tuple[str, ...]
 
 
@@ -7354,10 +7379,6 @@ def _local_stamp_plan(
             return None
     except SettingsError:
         pass  # the settings' own gates refuse an unreadable file
-    path = artifact_root(repo_root) / FRAGMENTS_DIR / f"{feature}.yaml"
-    if not path.is_file():
-        return None
-    text = path.read_text(encoding="utf-8")
 
     def refuse(lines: list[str]) -> NoReturn:
         shown = "\n".join(f"  {line}" for line in lines)
@@ -7369,18 +7390,37 @@ def _local_stamp_plan(
         )
         raise typer.Exit(2)
 
-    try:
-        wanted = _feature_local_ids(parse_fragment(text, source=path.name))
-    except AcceptanceError as e:
-        refuse([f"{path.name}: {e}"])
+    # gh#1456: a fragment created before #1451 gave a spec slug one spelling may still be
+    # named `<slug>-design.yaml`. The fold reads it either way, so deliver reads it either
+    # way: a lookup that missed it passed deliver with its `local` rows unstamped.
+    folder = artifact_root(repo_root) / FRAGMENTS_DIR
+    texts: dict[Path, str] = {}
+    wanted: dict[Path, list[str]] = {}
+    for path in (folder / f"{feature}.yaml", folder / f"{feature}-design.yaml"):
+        if not path.is_file():
+            continue
+        texts[path] = path.read_text(encoding="utf-8")
+        try:
+            ids = _feature_local_ids(parse_fragment(texts[path], source=path.name))
+        except AcceptanceError as e:
+            refuse([f"{path.name}: {e}"])
+        if ids:
+            wanted[path] = ids
     if not wanted:
         return None  # review p2-r1: no `local` row, no fold, deliver as before
     try:
         rows = {r.id: r for r in effective(repo_root).matrix.rows}
     except AcceptanceError as e:
         refuse([f"the acceptance matrix: {e}"])
-    local = [rows[rid] for rid in dict.fromkeys(wanted) if rid in rows]
-    local = [r for r in local if r.status == "local"]
+    by_path = {
+        path: [
+            r
+            for r in (rows[rid] for rid in dict.fromkeys(ids) if rid in rows)
+            if r.status == "local"
+        ]
+        for path, ids in wanted.items()
+    }
+    local = [r for rs in by_path.values() for r in rs]
     if not local:
         return None
     witness = _local_stamp_witness(repo_root, tests)
@@ -7391,23 +7431,28 @@ def _local_stamp_plan(
     if blobs is None:
         refuse([f"row {r.id}: git cannot read HEAD of {repo_root}" for r in local])
     problems: list[str] = []
-    for r in local:
-        paths = level_ref_paths(r)
-        missing = [p for p in paths if p not in blobs]
-        if not paths:
-            problems.append(f"row {r.id}: names no test path (add `--level unit=...`)")
-            continue
-        if missing:
-            problems.append(f"row {r.id}: {missing[0]} is not committed at HEAD")
-            continue
-        stamp = LocalStamp(at=today, tree=tree, log=log, files={p: blobs[p] for p in paths})
-        try:
-            text = stamp_local(text, r.id, stamp)
-        except AcceptanceError as e:
-            problems.append(f"row {r.id}: {e}")
+    files: list[tuple[Path, str]] = []
+    for path, path_rows in by_path.items():
+        text = texts[path]
+        for r in path_rows:
+            paths = level_ref_paths(r)
+            missing = [p for p in paths if p not in blobs]
+            if not paths:
+                problems.append(f"row {r.id}: names no test path (add `--level unit=...`)")
+                continue
+            if missing:
+                problems.append(f"row {r.id}: {missing[0]} is not committed at HEAD")
+                continue
+            stamp = LocalStamp(at=today, tree=tree, log=log, files={p: blobs[p] for p in paths})
+            try:
+                text = stamp_local(text, r.id, stamp)
+            except AcceptanceError as e:
+                problems.append(f"row {r.id}: {e}")
+        if path_rows:
+            files.append((path, text))
     if problems:
         refuse(problems)
-    return _LocalStamps(path, text, tuple(r.id for r in local))
+    return _LocalStamps(tuple(files), tuple(r.id for r in local))
 
 
 def _deliver_local_stamp_write(repo_root: Path, plan: _LocalStamps | None) -> None:
@@ -7419,9 +7464,10 @@ def _deliver_local_stamp_write(repo_root: Path, plan: _LocalStamps | None) -> No
         return
     from fr.artifacts.atomic import write_text_atomic
 
-    _remember(plan.path)
-    write_text_atomic(plan.path, plan.text)
-    _note_record_write(repo_root, plan.path)
+    for path, text in plan.files:
+        _remember(path)
+        write_text_atomic(path, text)
+        _note_record_write(repo_root, path)
 
 
 def _answered_by_or_exit(value: str | None) -> AnsweredBy | None:
@@ -7835,6 +7881,7 @@ def resolve_in_process(
     guard: ResolveGuard | None = None,
     visual: tuple[VisualEvidence, ...] = (),
     shape: str | None = None,
+    record_rows: tuple[str, dict[str, str]] | None = None,
 ) -> InProcessResolve:
     """`fr run resolve` for the step-record engine: the SAME body the flags run
     (every gate included), with the engine's written paths noted into the same
@@ -7859,6 +7906,7 @@ def resolve_in_process(
     for path in also_commit:
         writes.note(repo_root, path)
     token = _RUN_WRITES.set(writes)
+    rows_token = _RECORD_ROWS.set(record_rows)
     held = io.StringIO()
     try:
         with contextlib.redirect_stdout(held):
@@ -7887,6 +7935,7 @@ def resolve_in_process(
         raise
     finally:
         _RUN_WRITES.reset(token)
+        _RECORD_ROWS.reset(rows_token)
     outcome = writes.last_outcome
     # The body's first line restates what the engine's line says; anything
     # after it (a group-done line, deliver's closeout handoff) is kept.
