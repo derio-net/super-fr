@@ -766,3 +766,113 @@ fr plan rework CLI help text (plan_cmd.py:365), not caused by this change; the p
 ### p4-acceptance-backfill-render-resolved · finding [out-of-scope] · resolves p4-acceptance-backfill-render: fr-acceptance.md backfill list already renders broken at the merge base: step 4 merges into step 3's paragraph (phase 4)
 
 Pre-existing at the merge base (same class as p3-r8); fixing it moves numerals the preserve check compares; to be filed at deliver.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-init-scaffold-commit created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-init-scaffold-commit · discovery · accuracy: fr-init.md said scaffold always commits the profile (corrected) (phase 5)
+
+Claim: fr-init.md:50-51 "commits both" and :97-98 "Scaffold already committed the profile". Code: packages/fr/src/fr/isolation/scaffold.py:666-673 (a git-ignored `.devcontainer`: warns, writes, does not commit) and :673-674, :695-711 (`quiet_leaves_uncommitted`: under the quiet placement fr writes the files and makes no commit on a product branch, telling the operator to commit). Correction (20b266de1): the worked example notes the quiet placement leaves the commit to you; the hand-back step names both cases. Stealth still refuses before writing, as the page said.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-isolation-switch-spelling created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-isolation-switch-spelling · discovery · accuracy: fr-isolation.md said a commented placement line counts as quiet (corrected) (phase 5)
+
+Claim: fr-isolation.md:133-136 "a switch the hook cannot read positively as `placement: repo` (quoted, commented, indented, anything else) counts as quiet". Code: plugins/super-fr/hooks/lib/fr-isolation-decision.sh:361-377 (`_fr_switch_enabled`) skips a line whose trimmed form starts with `#`; no live placement line returns 1 (repo); one live line exactly `placement: repo` is repo; any other live spelling (quoted, trailing comment, indented, flow, doubled) returns 0 (quiet). Correction (3e48a4c5f): a commented-out line is skipped, no live line means repo, any other live spelling, including one with a trailing comment, counts as quiet.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-progress-status-yes created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-progress-status-yes · discovery · accuracy: fr-progress.md said fr status previews unless you pass --yes (corrected) (phase 5)
+
+Claim: fr-progress.md:86 "`status`, `repair` and `migrate` preview unless you pass `--yes`". Code: packages/fr/src/fr/commands/status_cmd.py:1-7 (read-only, "no mutation vocabulary and no `--yes`"); repair_cmd.py:54 and migrate_cmd.py:29 take `--yes`. Correction (16ce3f6e4): `status` only reads and takes no `--yes`; `repair` and `migrate` preview unless you pass `--yes`.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-wave-debug-skill created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-wave-debug-skill · discovery · accuracy: fr-wave-driver.md and fr-triage.md tied fr-debugging to defects / said every batch is an fr-goal run (corrected) (phase 5)
+
+Claim: fr-wave-driver.md:23 "(a batch of defects runs fr-debugging instead)"; fr-triage.md:138 "a group of judged issues delivered as one fr-goal run". Code: packages/fr/src/fr/triage/model.py:1101 (`skill: BatchSkill = "goal"`), batch_dispatch.py:152-153 (`/fr-debugging` only when `batch.skill == "debug"`), the `--skill goal|debug` flag of `batch create|edit`. Nothing in the engine reads the issues' kind to choose. Correction: fr-wave-driver (9c5471bb5) and fr-triage (da33c2035): a batch created or edited with `--skill debug` runs fr-debugging. The fr-triage claim was not in the accuracy review; found while verifying the wave-driver one.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-wave-held-foreign created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-wave-held-foreign · discovery · accuracy: fr-wave-driver.md said held batches and foreign PRs are named once (corrected) (phase 5)
+
+Claim: fr-wave-driver.md:59-62 "They are named once, never merged". Code: packages/fr/src/fr/triage/batch_drive.py:1741-1753 appends a `held` action for a held batch on every pass; :1755-1764 reports a foreign PR only when `found.key not in snap.warned`. Correction (9c5471bb5): a PR that is not the batch's is named once and never merged; a batch another scope holds is reported as held on every pass and left alone.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-wave-merge-train created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-wave-merge-train · discovery · accuracy: fr-wave-driver.md said a pass merges only the head of the train (corrected) (phase 5)
+
+Claim: fr-wave-driver.md:63-64 "walks a merge train in order ... and merges the head of it". Code: packages/fr/src/fr/triage/batch_drive.py:1604-1673 (`_walk_merge_train`) emits a `merge` action for every approved, green, unmoved member, steps over failing ones, and stops at a moved or pending head. Correction (9c5471bb5): it merges the head, then the next ready member in the same pass, and so on until one does not merge.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-wave-red-recovery created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-wave-red-recovery · discovery · accuracy: fr-wave-driver.md said a failing check is reported once per head (corrected) (phase 5)
+
+Claim: fr-wave-driver.md:69-70 "A failing check is reported once per head". Code: packages/fr/src/fr/triage/batch_drive.py:887 (`RED_HANDBACKS_PER_DISPATCH = 2`), :893-934 (`red_decision`: skip if already handed back at this head; reupdate when fr's own update went stale against a moved base; needs_you after two delivered hand-backs; handback when the session is idle). Correction (9c5471bb5): failing checks are handed back to an idle batch session at most twice per dispatch, updating again first when the base moved past fr's own update; after that the PR shows under Needs you now.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-wave-pass-order created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-wave-pass-order · discovery · accuracy: fr-wave-driver.md placed the wave export after dispatch and gave no dedupe condition (corrected) (phase 5)
+
+Claim: fr-wave-driver.md:84-86 step 5 "a finished wave's state can be exported, and when a wave finishes ... dedupe". Code: packages/fr/src/fr/triage/batch_drive.py:1958-1964 (3a idle reports, 3b export) run before 4. Dispatch (:1966); 5 closes sessions (:2018); 6 dedupe fires only for a wave in `snap.finished & snap.unfinished_waves` (:2034-2041). Correction (9c5471bb5): the export moved to the close-out step; dedupe prints when the driver sees a wave go from unfinished to finished.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-acc-unverified-left created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-acc-unverified-left · discovery · accuracy: phase 5 unverified claims left as written; none refuted (phase 5)
+
+Not wrong per the reviews and not quickly verifiable, so the text stays: fr-exit-gates.md the gate-ledger figure content and "eight steps" for the DevOps stage (AGENTS.md says eight stages); fr-isolation.md "22+ orphaned containers" (history), the one-stale-workspace bound (design rationale), the profile's SSH identity and tokens; fr-progress.md the archive gate's per-kind evidence and acceptance rows untouched by fr archive; fr-triage.md the `causes:` link content and exit 2 for every verb on a bad entry; fr-wave-driver.md "keeps nothing of its own" (merge-stops.json and drive.lock exist), the herdr runner choice, the hand-back brief contents. Refuted: none; every wrong-or-stale item held against the code. fr-exit-gates had no correction, so its baseline is the merge base 63764b87921b4f741414cff4def0d5ee205547c9.
+
+<!-- fr:journal kind=finding scope=plan id=p5-init-tool-help-markup created=2026-11-14T00:33:23+00:00 phase=5 state=open review_scope=out -->
+### p5-init-tool-help-markup · finding [open] (reviewer: out of scope) · fr init scaffold --help prints `<tool>;` - Rich markup eats `[@<version>]` (phase 5)
+
+packages/fr/src/fr/commands/init_cmd.py:33 help "(repeatable; <tool>[@<version>]; ...)" renders as "<tool>;" in `fr init scaffold --help`, because Rich treats `[@<version>]` as markup. The page's `<tool>@<version>` matches the code (scaffold.py:97-102). A CLI help fix (escape the brackets), outside this docs feature.
+
+<!-- fr:journal kind=finding scope=plan id=p5-progress-skill-status-yes created=2026-11-14T00:33:23+00:00 phase=5 state=open review_scope=out -->
+### p5-progress-skill-status-yes · finding [open] (reviewer: out of scope) · fr-progress SKILL.md lists fr status among the commands that preview until --yes (phase 5)
+
+plugins/super-fr/skills/fr-progress/SKILL.md:29 "`fr status`/`fr repair`/`fr migrate v1-to-v2` preview by default, no `--yes`"; fr status takes no --yes at all (status_cmd.py:1-7). A skill wording fix, outside this docs feature.
+
+<!-- fr:journal kind=finding scope=plan id=p5-triage-skill-schema created=2026-11-14T00:33:23+00:00 phase=5 state=open review_scope=out -->
+### p5-triage-skill-schema · finding [open] (reviewer: out of scope) · fr-triage SKILL.md says a first run creates judgements with schema: 11; the engine writes 12 (phase 5)
+
+plugins/super-fr/skills/fr-triage/SKILL.md:44 "a first run creates the file with `schema: 11`"; packages/fr/src/fr/triage/model.py:86 `JUDGEMENTS_SCHEMA: Literal[12] = 12`, and the same SKILL.md's example (:62) says `schema: 12`. A skill wording fix, outside this docs feature.
+
+<!-- fr:journal kind=finding scope=plan id=p5-exit-gates-code-render created=2026-11-14T00:33:23+00:00 phase=5 state=open review_scope=out -->
+### p5-exit-gates-code-render · finding [open] (reviewer: out of scope) · fr-exit-gates.md tester bullet's fenced example renders as inline code, at the merge base too (phase 5)
+
+docs/explainers/fr-exit-gates.md "Who passes a gate?": the ```bash fence under the Tester bullet is indented 2 spaces, so Python-Markdown closes the list and renders the block as `<p><code>bash fr gate pass ...</code></p>` (built-site scan, identical at the merge base 63764b879 and at HEAD). Re-indenting the fence to 4 spaces fixes it but changes the fenced code the preserve check compares byte for byte, so it cannot land in a language-only rewrite. Same class as p3-r8 and p4-acceptance-backfill-render.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-ws-fr-exit-gates created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-ws-fr-exit-gates · discovery · plain-language rewrite: docs/explainers/fr-exit-gates.md (phase 5)
+
+Baseline: 63764b87921b4f741414cff4def0d5ee205547c9 (merge base; no corrections; `git show <sha>:docs/explainers/fr-exit-gates.md`). Sentences/avg 61 / 14.8 -> 66 / 13.9. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 14 WARN -> 0 FAIL, 0 WARN, no preserve hit. No warning kept. The unknown-state causes became a four-item list, every cause kept. Headings: "Overview: the work that cannot finish in the pull request" -> "What work cannot finish in the pull request?", "The six gates" -> "What are the six gates?", "Which gate a run gets" -> "Which gate does a run get?", "The labels are the ledger" -> "Why are the labels the ledger?", "How a gate is passed" -> "Who passes a gate?", "Release candidates while a gate waits" -> "What gets released while a gate waits?", "Old work, and the DevOps stage" -> "What about old work, and the DevOps stage?". No inbound anchor links (git grep '<page>.md#' finds none for any phase-5 page). Built site: no raw list marker, tables and the gate-ledger figure unchanged (HTML scan at the merge base and at HEAD); the tester example's pre-existing render break is p5-exit-gates-code-render.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-ws-fr-init created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-ws-fr-init · discovery · plain-language rewrite: docs/explainers/fr-init.md (phase 5)
+
+Baseline: 20b266de168921d47029d69e4c48631e2246851a. Sentences/avg 63 / 13.5 -> 65 / 13.4. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 8 WARN -> 0 FAIL, 0 WARN, no preserve hit. No warning kept. POM spelled out (Project Object Model). Headings: "Overview: the profile is the contract" -> "Why is the profile the contract?", "A worked example" -> "What does a worked example look like?", "What the skill does, in order" -> "What does the skill do, in order?", "Services: forge, CI, tracking" -> "Which services does the repo record?", "Limits" -> "What does fr-init not do?", "Where to go next" -> "Where do you go next?". The stealth refusal stays a refusal. Built site: no raw list marker introduced.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-ws-fr-isolation created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-ws-fr-isolation · discovery · plain-language rewrite: docs/explainers/fr-isolation.md (phase 5)
+
+Baseline: 3e48a4c5f1fbe7ab8ffd422fba784f5e3788ed0d. Sentences/avg 89 / 18.3 -> 108 / 15.4. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 30 WARN -> 0 FAIL, 0 WARN, no preserve hit. No warning kept. The fr-enabled paragraph split into four (switch reads, switch spelling, the bounded fr call, the structural exception's two shapes) with no pronoun across a break; the five-step staircase and the three escapes stay lists. Headings: "Overview: two boundaries and a bridge" -> "What are the two boundaries and the bridge?", "How it works: where the work lives, where it runs" -> "Where does the work live, and where does it run?", "Who creates worktrees" -> "Who creates worktrees?", "Enforcement: a staircase a faked marker can't climb" -> "Why can't a faked marker get past the gate?", "Tradeoffs: three scars, each a shipped bug" -> "Which three shipped bugs shaped the design?", "Try it: drive the boundary by hand" -> "How do you drive the boundary by hand?". "its copy kept" -> "keeps the preserved copy" (isolation/preserve.py:931-935: the checkout file stays, the preserved copy stays). test_build_site's fr-isolation route is unchanged. Built site: no raw list marker; both tables and the mermaid block unchanged.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-ws-fr-progress created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-ws-fr-progress · discovery · plain-language rewrite: docs/explainers/fr-progress.md (phase 5)
+
+Baseline: 16ce3f6e429ac1e0d116be4b77a9aac3f25d946f. Sentences/avg 47 / 13.2 -> 51 / 12.8. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 7 WARN -> 0 FAIL, 1 WARN, no preserve hit. Kept: passive "once all its rows are implemented" (:119). The spec archive sweep (commands/archive_cmd.py:1039-1056, `spec_archive_sweep`) decides from its plan-table rows; an active form ("read implemented", "you implement") would either suggest a literal status value or name an actor the fact does not have. The four status buckets became a list. Headings: "Overview: nothing to sync" -> "Why is there nothing to sync?", "A worked example" -> "What does a worked example look like?", "The commands" -> "Which commands are there?", "Before you touch `docs/superpowers/` by hand" -> "What do you run before you touch `docs/superpowers/` by hand?", "Archiving finished work" -> "How do you archive finished work?", "Limits" -> "What can these commands not tell you?", "Where to go next" -> "Where do you go next?". Built site: no raw list marker introduced.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-ws-fr-triage created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-ws-fr-triage · discovery · plain-language rewrite: docs/explainers/fr-triage.md (phase 5)
+
+Baseline: da33c2035b9424e7ace8d33abacec25b2e687b75. Sentences/avg 99 / 12.9 -> 102 / 12.9 (the RED figure was taken before the one-line accuracy fix, which changed no sentence count). Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 11 WARN -> 0 FAIL, 0 WARN, no preserve hit. No warning kept. The origins window refusal names its actor as Collect (triage/origins.py:157-160). Headings: "Overview: judgement in a file, engine around it" -> "Why keep the judgement in a file, with an engine around it?", "A worked example" -> "What does a worked example look like?", "State: three files, three owners" -> "Which files hold the state, and who writes them?", "What `check` tells you" -> "What does `check` tell you?", "How to judge" -> "How do you judge?", "Batches and the driver" -> "What are batches and the driver?", "Limits" -> "What does triage not do?", "Where to go next" -> "Where do you go next?" ("fr-origins: where did the bugs come from?" was already a question). Built site: no raw list marker introduced.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-ws-fr-wave-driver created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-ws-fr-wave-driver · discovery · plain-language rewrite: docs/explainers/fr-wave-driver.md (phase 5)
+
+Baseline: 9c5471bb5b47e187ad8797f0d3a828ad2dd3f429. Sentences/avg 86 / 17.8 -> 110 / 14.2. Checker (pin 3b0c7d0, `--default plain-language --preserve-from <baseline> --stats`): 0 FAIL, 39 WARN -> 0 FAIL, 0 WARN, no preserve hit. No warning kept. Steps 2 and 3 of the pass each got a second paragraph, indented 4 spaces inside the item (built HTML: one <ol>, both <p> inside the <li>); the merge refusals became a five-item list; the --once exit codes their own paragraph. "The driver is built around the few moments that are yours" -> "We built the driver around ...". Headings: "Overview: why a loop and not a checklist" -> "Why a loop and not a checklist?", "Batches, waves and `after`" -> "What are batches, waves and `after`?", "What one pass does" -> "What does one pass do?", "The cap" -> "Why is there a cap?", "When it merges, and what it refuses" -> "When does it merge, and what does it refuse?", "No state, so it resumes" -> "Why can you stop it and start it again?", "Where you act" -> "Where do you act?", "Where it runs" -> "Where does it run?". Built site: no raw list marker, the wave-of-batches figure unchanged.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-ws-totals created=2026-11-14T00:33:23+00:00 phase=5 -->
+### p5-ws-totals · discovery · phase 5 writing-standard totals: 0 FAIL -> 0, 109 WARN -> 1 over the 6 explainers (phase 5)
+
+Measured on the accuracy-corrected baselines (per-page sha in p5-ws-*): 0 FAIL, 109 WARN -> 0 FAIL, 1 WARN (fr-progress `are implemented`, kept with its reason). No page failed the average before the rewrite (highest fr-isolation 18.3); the warnings were passives, 26 long sentences (max 60 words) and 5 over-long paragraphs. Wording tripwires (test_tripwire_fr_goal_question_rounds, test_hermes_docs, test_build_site, test_writing_standards_docs, test_tripwire_explainers_fresh): 483 passed; `fr docs check`: 32 pages current. Site built at HEAD and at the merge base: no new raw list marker, tables, figures and code blocks unchanged. Fact-keeper reviews are owed in review-phase against `git show <sha>:<page>`.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-14T00:33:23+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+language-only rewrite; the refactor step is the wording tripwires and fr docs check, which passed with nothing to fix
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-11-14T00:33:23+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+language-only rewrite; the refactor step is the wording tripwires and fr docs check, which passed with nothing to fix
