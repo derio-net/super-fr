@@ -193,3 +193,138 @@ Raised by the phase 2 reviewer; R4 sanctions HEAD's tree at stamp time, and _ver
 ### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: a fresh deliver tests log is not tied to the tree it ran on, so a commit after the suite still stamps HEAD's tree (phase 2)
 
 Not caused by this change. deliver's fresh-log witness (_verify_tests_log) checks the writer and the time, never the tree, for every run; R4 adopts it as it is. Binding a fresh log to its tree is a deliver-wide change; to be filed at deliver.
+
+<!-- fr:journal kind=review scope=plan id=review-lenses created=2026-11-14T13:52:17+00:00 -->
+### review-lenses · review · lens review: docs-accuracy 5, errors 3, tests 5 findings, all in scope, all fixed
+
+Three read-only reviewers, one per lens, reviewed the whole diff from merge base 616aa8cb3. docs-accuracy and errors independently found the unknown-CI fail-open (one fix). Fixes: fa950cb3b, 2c123e3c7, b1dc5c31c, 8de5630a1 (spec R3/R7), 394531162 (tests, each shown red under the reviewer's mutation and green after revert), 2fa26d493 (lint). Local-status tests 105 passed; pinned-file tests 1763 passed; ruff, mypy, fr docs check and the writing-standards check clean.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · pages, rule and skill said every writer refuses local; the code refuses a move into local and keeps the stamp on a link or note write
+
+Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · rule and RULE_TEMPLATE said at least one / a level ref; local_error requires every level ref in this repo and resolving
+
+Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · no doc named stale: HEAD unreadable; RULE_TEMPLATE omitted missing files and moved refs; DebtRow docstring listed three reasons
+
+Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: in scope) · fr-acceptance explainer said fr acceptance status lists a row only while debt or contested; it also lists walked and fresh local rows
+
+Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r5 · finding [open] (reviewer: in scope) · ci_active is False on a ServicesError, so a malformed fr-profiles.yaml permits local, makes R6 offer it and hides promote to ci
+
+Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · a malformed CI declaration makes ci_active False: local rows in a CI repo never promote to ci, local_error allows them, the PR body offers local, the parse error discarded
+
+Raised by the errors lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · a malformed local stamp (empty tree/log, non-date at) reads as fresh; neither LocalStamp nor the validator checks its shape
+
+Raised by the errors lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · the 1->2 migration refusal said fix by hand without naming the fix, against the never-hand-edit rule
+
+Raised by the errors lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · the refused-resolve-no-stamp test pinned the write only after the PR gate
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · report, digest, summary and gate-backfill reader never shown to compute local debt from a real fold
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · no test that a fresh local row is left out of fr status's open count
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · deliver refusals not committed at HEAD and git cannot read HEAD untested; a non-local tests witness never exercised through deliver
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-14T13:52:17+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · contested plus local-debt double-count guard in acceptance_from_matrix untested
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: pages, rule and skill said every writer refuses local; the code refuses a move into local and keeps the stamp on a link or note write
+
+b1dc5c31c: rule, reference, explainer, skill and RULE_TEMPLATE now say a MOVE to local is checked and a write that keeps a row local keeps its stamp.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: rule and RULE_TEMPLATE said at least one / a level ref; local_error requires every level ref in this repo and resolving
+
+b1dc5c31c (rule, skill) and 2fa26d493 (RULE_TEMPLATE wording rewrapped): every level ref must name an existing test in this repo.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: no doc named stale: HEAD unreadable; RULE_TEMPLATE omitted missing files and moved refs; DebtRow docstring listed three reasons
+
+b1dc5c31c: every surface names all reasons (stale: <path> incl. missing file and moved refs, stale: HEAD unreadable, promote to ci, ci unknown); debt/model.py docstring too.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-docs-accuracy-r4 -->
+### l-docs-accuracy-r4-resolved · finding [fixed] · resolves l-docs-accuracy-r4: fr-acceptance explainer said fr acceptance status lists a row only while debt or contested; it also lists walked and fresh local rows
+
+b1dc5c31c: the explainer describes status's walked and fresh-local lines and says 'as open' for the owed-verification sentence.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-docs-accuracy-r5 -->
+### l-docs-accuracy-r5-resolved · finding [fixed] · resolves l-docs-accuracy-r5: ci_active is False on a ServicesError, so a malformed fr-profiles.yaml permits local, makes R6 offer it and hides promote to ci
+
+fa950cb3b: ci_unknown/ci_known_none; writers refuse local naming the error, R6 offers local only where fr knows there is no CI, a local row is debt as ci unknown. Spec R3 amended in 8de5630a1. Tests in test_acceptance_local_writers.py and test_deliver_leftovers.py fail without the fix.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: a malformed CI declaration makes ci_active False: local rows in a CI repo never promote to ci, local_error allows them, the PR body offers local, the parse error discarded
+
+Same defect as l-docs-accuracy-r5, fixed in fa950cb3b.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: a malformed local stamp (empty tree/log, non-date at) reads as fresh; neither LocalStamp nor the validator checks its shape
+
+2c123e3c7: LocalStamp requires an ISO date, git shas for tree and files, a non-empty log; parametrised test_a_malformed_stamp_is_refused. Spec R7 amended in 8de5630a1.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: the 1->2 migration refusal said fix by hand without naming the fix, against the never-hand-edit rule
+
+2c123e3c7: the refusal names both fixes (restamp schema_version 2 after a merge, or move the rows off local with fr acceptance set-status) and the migrate command to rerun.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: the refused-resolve-no-stamp test pinned the write only after the PR gate
+
+394531162: test_the_last_refusal_missing_emits_writes_no_stamp[record|flags] and test_the_exit_guard_refusal_writes_no_stamp; the flag forms fail with the write moved after the PR gate.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: report, digest, summary and gate-backfill reader never shown to compute local debt from a real fold
+
+394531162: five tests over a real no-CI repo (report, summary, digest, gate-backfill EvidenceReader, fr debt engine), each failing when its local_reasons call is replaced by {}.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: no test that a fresh local row is left out of fr status's open count
+
+394531162: test_fr_status_open_count_leaves_out_a_fresh_local_row (1 open unstamped, 0 open fresh); fails when every local row counts.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: deliver refusals not committed at HEAD and git cannot read HEAD untested; a non-local tests witness never exercised through deliver
+
+394531162: three deliver-level tests, exit 2 naming the row, no stamp; each fails under its own mutation.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-14T13:52:17+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: contested plus local-debt double-count guard in acceptance_from_matrix untested
+
+394531162: test_a_contested_local_debt_row_is_counted_once; fails when the guard is removed.

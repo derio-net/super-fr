@@ -3,7 +3,7 @@ run: 2026-11-14-feat-acceptance-local-status
 workflow: fr-goal@1
 branch: feat/acceptance-local-status
 started: '2026-11-14T09:07:51+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -124,8 +124,8 @@ steps:
     stdout: |
       1 out-of-scope finding(s): p2-r4
   lens-review:
-    state: running
-    at: '2026-11-14T13:17:48+00:00'
+    state: done
+    at: '2026-11-14T13:52:17+00:00'
     units:
       step/lens-review:
         attempts:
@@ -139,6 +139,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 08394382-d784-4733-ad56-9575e1c22a49
+          returned: '2026-11-14T13:52:17+00:00'
+          outcome: done
+        evidence:
+          review: review-lenses
+          reviewer: docs-accuracy=ad9804d4f8c09fd56,errors=ab2a0b556767f73e4,tests=a44e44db111e21341
+          findings: l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-docs-accuracy-r4,l-docs-accuracy-r5,l-errors-r1,l-errors-r2,l-errors-r3,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
+          lenses: docs-accuracy=26:l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-docs-accuracy-r4,l-docs-accuracy-r5;errors=21:l-errors-r1,l-errors-r2,l-errors-r3;tests=22:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
   deliver:
     state: pending
 fr_version: 7.0.0rc5
