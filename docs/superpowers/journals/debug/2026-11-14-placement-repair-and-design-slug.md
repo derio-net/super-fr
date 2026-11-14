@@ -25,3 +25,8 @@ load_spec_matrix from the stealth workspace returns all three rows of the featur
 ### 335db4371b34 · root-cause · origin_fragment compares a logical spec slug verbatim with the stem minus -design, while resolve_logical accepts both spellings
 
 requirements.origin_fragment matches a logical origin only when fragment_slug_for_spec(spec path) == logical.slug, and fragment_slug_for_spec strips `-design`, so spec:<stem>-design never matches. fr.acceptance.logical.candidates looks for <slug>-design.md AND <slug>.md, so the same origin resolves and `fr acceptance check`, add and the step record all accept it. Two definitions of a spec's logical slug disagree; every reader of rows_citing / is_cited silently sees no row. Not placement-specific.
+
+<!-- fr:journal kind=root-cause scope=debug id=0227e3f82f2c created=2026-11-14T01:19:31+00:00 -->
+### 0227e3f82f2c · root-cause · paths_dirty asks the repo_root checkout about paths another checkout holds
+
+archive.paths_dirty takes the product checkout as the home of every path. Under quiet and stealth the superpowers dir sits in the fr worktree / tracking clone, a different working tree (stealth: a different repository), so the pathspec is outside the repository; git exits 128 and check=True turns that into a traceback rather than a refusal.
