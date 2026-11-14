@@ -7183,6 +7183,11 @@ batches:
   - super-fr#1433
   rationale: 'Tier 2: silent fallback to the fr worktree; HEADS recorded before the push. parser.py, git_policy/product.py.'
   wave: 18
+  after:
+  - guard-trust
+  - gate-truth
+  - deliver-evidence
+  - owed-archive
   skill: debug
 - id: release-truth
   title: Release robustness
