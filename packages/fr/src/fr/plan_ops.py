@@ -301,6 +301,12 @@ def create(
     spec_path: Path | None = None
     if spec_str:
         candidate = (repo_root / spec_str).resolve()
+        if not candidate.exists():
+            # Under quiet or stealth the spec sits below the artifact root, so a
+            # logical `<specs dir>/<file>` resolves there, as a cursor's does.
+            from fr.artifacts.paths import emitted_path
+
+            candidate = emitted_path(repo_root, spec_str).resolve()
         if candidate.exists():
             _validate_spec_section(candidate)
             spec_path = candidate
@@ -1049,8 +1055,8 @@ def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[Rewo
 
             spec_path = None
             if plan.meta.spec:
-                if plan.spec_path is not None:
-                    spec_path = (repo_root / plan.spec_path).resolve()
+                if plan.spec_file is not None:
+                    spec_path = plan.spec_file.resolve()
                 else:
                     spec_path = (repo_root / plan.meta.spec).resolve()
             records.append(
@@ -1668,6 +1674,18 @@ def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
     ]
 
 
+def _plan_spec_file(plan: Plan, root: Path) -> Path:
+    """The plan's own-repo spec file: the resolved one below its artifact root, else
+    `meta.spec` read the way a run cursor's `emitted` spec is (below the checkout's
+    artifact root, `fr.artifacts.paths.emitted_path`), never joined onto the product
+    checkout, which under quiet or stealth holds no spec."""
+    if plan.spec_file is not None:
+        return plan.spec_file
+    from fr.artifacts.paths import emitted_path
+
+    return emitted_path(root, plan.meta.spec or "")
+
+
 def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     """Spec 2026-10-06-verification-strategies §B (R6, R10), each refused by
     name: a malformed `## Verification`; a row citing the spec whose effective
@@ -1734,7 +1752,7 @@ def _test_plan_heading_issues(plan: Plan) -> list[ReviewIssue]:
     if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
         return []
     try:
-        heading = find_test_plan_heading((root / spec_rel).read_text())
+        heading = find_test_plan_heading(_plan_spec_file(plan, root).read_text())
     except (OSError, ValueError):
         return []  # an unreadable spec is reported by the checks that need it
     if heading is None or heading.exact:
@@ -1760,7 +1778,7 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
         return []
     from fr.spec import find_test_plan_heading
 
-    spec_file = root / spec_rel
+    spec_file = _plan_spec_file(plan, root)
     # A near-miss heading still counts here: its rows are owed all the same, and
     # `_test_plan_heading_issues` refuses the heading itself (#1315).
     if not spec_file.exists() or find_test_plan_heading(spec_file.read_text()) is None:
@@ -1915,7 +1933,8 @@ def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
         return []
     issues: list[ReviewIssue] = []
     try:  # `SectionError` is a ValueError, as an undecodable spec's error is
-        spec_text = (root / spec_rel).read_text() if (root / spec_rel).is_file() else ""
+        spec_file = _plan_spec_file(plan, root)
+        spec_text = spec_file.read_text() if spec_file.is_file() else ""
     except (ValueError, OSError):
         return []
     try:
@@ -2195,7 +2214,7 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
     spec_rel = plan.spec_path or plan.meta.spec
     if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
         return []
-    spec_file = root / spec_rel
+    spec_file = _plan_spec_file(plan, root)
     if not spec_file.is_file():
         return []
     spec_text = spec_file.read_text()

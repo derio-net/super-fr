@@ -104,6 +104,11 @@ class RecordTarget:
     """Row id → the fragment (feature slug) a NEW row is written to, when its
     origins name no single spec (`fr acceptance add --feature`; spec 2026-11-04
     R16). Verb-only, like `acceptance_drops`."""
+    acceptance_origins: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """Row id → the corrected `origin` of a row still PENDING on this branch (`fr
+    acceptance amend --op reword --origin`): rewritten in place, never as an amendment,
+    since a merged row's origins are its history and no amendment op carries them.
+    Verb-only, like `acceptance_drops`: the `record` kind's shape is unchanged."""
     acceptance_repo: str | None = None
     """`<org>/<repo>` for the first fragment of a repo whose fragments name none and
     whose origin remote does not say (`fr acceptance add --repo`)."""
@@ -941,8 +946,24 @@ class _Amending:
 
     def merged_outside(self, own_rows: frozenset[str]) -> None:
         """Quiet and stealth: the rows the fold knows that this branch's own fragments do
-        not define are merged (the fold includes no unmerged feature but this one)."""
-        self._merged = frozenset(self._fold().owners) - own_rows
+        not define are merged (the fold includes no unmerged feature but this one), and
+        so is every row this branch's own feature defined when it merged: its fragments
+        frozen at the merge (PR #1437 review F2: a merged row of the branch's own feature
+        was read as pending, so `set-status` and `amend --origin` rewrote it in place)."""
+        from fr.acceptance.fold import own_merged_fragments
+        from fr.acceptance.fragment import parse_fragment
+        from fr.acceptance.model import AcceptanceError
+
+        merged = frozenset(self._fold().owners) - own_rows
+        try:
+            frozen = own_merged_fragments(self.repo_root)
+            if frozen is not None:
+                merged |= {
+                    r.id for rel, t in frozen[0].items() for r in parse_fragment(t, source=rel).rows
+                }
+        except AcceptanceError as e:
+            raise RecordRefusedError(f"the merged fragments do not fold: {e}") from e
+        self._merged = merged
 
     def feature(self) -> str:
         if self._feature is None:
@@ -1101,6 +1122,90 @@ class _Amending:
         ) + ")"
 
 
+def _reword_pending(
+    item: AmendmentItem,
+    origins: Mapping[str, tuple[str, ...]] | None,
+    frags: Mapping[Path, Any],
+    texts: dict[Path, str],
+    amending: Any,
+    rel: Any,
+    deleted: set[Path],
+) -> str:
+    """A `reword` that corrects a row's `origin` (debug journal
+    2026-11-13-placement-plan-paths): only a row still pending on this branch, in the
+    fragment that holds it, rewritten in place with its new origins (written in their
+    logical form, R18) and any new acceptance or capability. A merged row is refused:
+    its origins are history, and no amendment op carries them."""
+    from fr.acceptance.edit import replace_row
+    from fr.acceptance.logical import is_logical, parse_logical, to_logical
+    from fr.acceptance.model import AcceptanceError, split_ref
+
+    where = f"acceptance {item.row}"
+    if item.op != "reword":
+        raise RecordRefusedError(f"{where}: `--origin` corrects a row only with `--op reword`")
+    if amending.is_merged(item.row):
+        raise RecordRefusedError(
+            f"{where}: the row is merged, so its origins are history and no amendment op "
+            "carries them; `--origin` corrects only a row still pending on this branch"
+        )
+    owner = next((p for p, f in frags.items() if any(r.id == item.row for r in f.rows)), None)
+    if owner is None:
+        raise RecordRefusedError(f"{where}: no such row pending on this branch")
+    existing = next(r for r in frags[owner].rows if r.id == item.row)
+    own = (amending.identity() or "").partition("/")[2]
+    new_origins = tuple(to_logical(o, own_repo=own) for o in (origins or {})[item.row])
+    try:
+        for ref in new_origins:
+            parse_logical(ref) if is_logical(ref) else split_ref(ref)
+    except AcceptanceError as e:
+        raise RecordRefusedError(f"{where}: {e}") from e
+    from fr.acceptance.anchors import line_anchor_error
+
+    for ref in new_origins:  # review F4: what `add` refuses in an origin, so does this
+        if (why := line_anchor_error(ref)) is not None:
+            raise RecordRefusedError(f"{where}: {why}")
+    row = existing.model_copy(
+        update={
+            "origin": new_origins,
+            "acceptance": item.acceptance or existing.acceptance,
+            "capability": item.capability or existing.capability,
+        }
+    )
+    moved = f"{item.row}: origin {', '.join(existing.origin) or '—'} -> {', '.join(new_origins)}"
+
+    def spec_slugs(refs: tuple[str, ...]) -> set[str]:
+        return {parse_logical(o).slug for o in refs if o.startswith("spec:")}
+
+    # Review F6: only a changed set of origin specs re-files the row; a correction within
+    # the same spec keeps it where it is (`--feature` may have put it there).
+    slugs = spec_slugs(new_origins)
+    moves = len(slugs) == 1 and slugs != spec_slugs(existing.origin)
+    target = owner.parent / f"{next(iter(slugs))}.yaml" if moves else owner
+    if target == owner:
+        texts[owner] = replace_row(texts[owner], item.row, row)
+        return moved
+    # The row is owned by the feature of its one origin spec (R16): a corrected origin
+    # naming another spec moves it to that spec's fragment, still pending here.
+    from fr.acceptance.edit import insert_row, remove_row, render_fragment
+
+    if target in frags and any(r.id == item.row for r in frags[target].rows):
+        raise RecordRefusedError(f"{where}: {rel(target)} already holds a row {item.row}")
+    if any(r.id != item.row for r in frags[owner].rows) or frags[owner].amendments:
+        # Other rows, or this feature's amendments of merged rows, stay where they are.
+        texts[owner] = remove_row(texts[owner], item.row)
+    else:
+        del texts[owner]  # nothing else in it: the file goes (flushed by the caller)
+        deleted.add(owner)
+    if target not in texts:
+        texts[target] = (
+            target.read_text()
+            if target.is_file()
+            else render_fragment(target.stem, amending.identity() or "", ())
+        )
+    texts[target] = insert_row(texts[target], row)
+    return f"{moved} (moved to {rel(target)})"
+
+
 def _acceptance_writes(
     record: StepRecord,
     overlay: _Overlay,
@@ -1110,6 +1215,7 @@ def _acceptance_writes(
     features: Mapping[str, str] | None = None,
     repo: str | None = None,
     default_feature: str | None = None,
+    origins: Mapping[str, tuple[str, ...]] | None = None,
 ) -> tuple[dict[str, int], list[str]]:
     """The record's `acceptance:` entries as fragment writes (spec 2026-11-04 R16):
     a new row into the fragment of its one origin spec (or `features[id]`); a row
@@ -1164,6 +1270,7 @@ def _acceptance_writes(
         if t is not None:
             texts[p] = t
     before = dict(texts)
+    deleted: set[Path] = set()  # fragments a moved row emptied
 
     froot = artifact_root(repo_root)
 
@@ -1221,6 +1328,10 @@ def _acceptance_writes(
         counts["amendment"] = counts.get("amendment", 0) + 1
 
     for item in record.acceptance:
+        if isinstance(item, AmendmentItem) and (origins or {}).get(item.row):
+            lines.append(_reword_pending(item, origins, parsed(), texts, amending, rel, deleted))
+            counts["row moved"] = counts.get("row moved", 0) + 1
+            continue
         if isinstance(item, AmendmentItem):
             lines.append(amending.amend(item, write_amendment, no_ci))
             continue
@@ -1385,6 +1496,8 @@ def _acceptance_writes(
     for p, t in texts.items():
         if before.get(p) != t:
             overlay.put(p, t)
+    for p in deleted:
+        overlay.put(p, None)
     return counts, lines
 
 
@@ -1495,6 +1608,7 @@ def apply_record(
         features=target.acceptance_features,
         repo=target.acceptance_repo,
         default_feature=ctx.feature,
+        origins=target.acceptance_origins,
     )
     counts.update(row_counts)
     notices = (*journal_notices, *row_lines)
@@ -1570,7 +1684,11 @@ def apply_record(
         record_file.unlink(missing_ok=True)  # every write landed and every gate passed
     word = record.outcome if record.outcome != "blocked" else "blocked (resolved failed)"
     subject = " ".join(x for x in (record.step, record.item, word) if x)
-    sha = _short_head(repo_root) if result.committed else None
+    # The commit landed where the run's artifacts live (the `fr` worktree or tracking
+    # clone under quiet or stealth), so that repository's HEAD names it.
+    from fr.artifacts.paths import artifact_root
+
+    sha = _short_head(artifact_root(repo_root)) if result.committed else None
     parts = [subject, *summary_counts(counts), f"next: {result.next_step or 'none'}"]
     parts.append(sha if sha else "NOT committed")
     return ApplyOutcome(

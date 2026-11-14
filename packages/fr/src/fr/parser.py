@@ -72,7 +72,17 @@ class Plan:
         try:
             return self.dir.relative_to(self.repo_root)
         except ValueError:
-            return self.dir
+            pass
+        # A quiet or stealth plan sits below its artifact root, outside the product
+        # checkout: name it relative to that root, as `spec_path` is (review F1 of
+        # PR #1437: the absolute fallback put the operator's path in Issue bodies).
+        root = self.artifact_root
+        if root is not None:
+            try:
+                return self.dir.relative_to(root)
+            except ValueError:
+                pass
+        return self.dir
 
     @property
     def artifact_root(self) -> Path | None:
@@ -84,6 +94,15 @@ class Plan:
         from fr.artifacts.paths import plan_layout_root
 
         return plan_layout_root(self.dir) or self.repo_root
+
+    @property
+    def spec_file(self) -> Path | None:
+        """The resolved spec file: `spec_path` below the plan's artifact root (None when
+        the spec is unset, cross-repo or unresolvable)."""
+        root = self.artifact_root
+        if self.spec_path is None or root is None:
+            return None
+        return root / self.spec_path
 
 
 def _find_repo_root(start: Path) -> Path | None:
@@ -256,19 +275,31 @@ def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
 
     repo_root = _find_repo_root(plan_dir)
 
+    from fr.artifacts.paths import plan_layout_root, product_checkout_for
+
+    # A quiet or stealth plan hangs from a feature root BELOW the `fr` worktree's or
+    # tracking clone's toplevel. It belongs to the product checkout whose artifact root
+    # that is (debug journal 2026-11-13-placement-plan-paths): `repo_root` names that
+    # checkout, and `spec_path` is relative to the plan's artifact root, the run
+    # cursor's convention, so the same `<specs dir>/<file>` under every placement.
+    layout = plan_layout_root(plan_dir)
+    off_product = (
+        layout is not None and repo_root is not None and layout.resolve() != repo_root.resolve()
+    )
     spec_path: str | None = None
     if meta.spec and repo_root is not None and not is_cross_repo_spec(meta.spec):
-        from fr.artifacts.paths import plan_layout_root
-
-        # Below the plan's own artifact root (a quiet or stealth feature root sits below
-        # the `fr` worktree's or tracking clone's toplevel), else the repo's placement.
-        root = plan_layout_root(plan_dir)
-        if root is not None and root.resolve() != repo_root.resolve():
-            res = refs.resolve_spec_ref_below(meta.spec, root.resolve())
+        if off_product:
+            assert layout is not None
+            res = refs.resolve_spec_ref_below(meta.spec, layout.resolve())
+            if res.path is not None:
+                spec_path = res.path.relative_to(layout.resolve()).as_posix()
         else:
             res = refs.resolve_spec_ref(meta.spec, repo_root)
-        if res.path is not None:
-            spec_path = res.path.relative_to(repo_root).as_posix()
+            if res.path is not None:
+                spec_path = res.path.relative_to(repo_root).as_posix()
+    if off_product:
+        assert layout is not None and repo_root is not None
+        repo_root = product_checkout_for(layout, repo_root) or repo_root
 
     return Plan(
         dir=plan_dir,

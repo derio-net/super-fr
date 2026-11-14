@@ -229,7 +229,10 @@ def _stub_repo(tmp_path: Path, monkeypatch, *, ops: str | None = None, spec: boo
         (root / STUB_SPEC_REL).write_text(STUB_SPEC)
     monkeypatch.setattr(
         "fr.parser.parse",
-        lambda plan_dir: SimpleNamespace(spec_path=STUB_SPEC_REL if spec else None),
+        lambda plan_dir: SimpleNamespace(
+            spec_path=STUB_SPEC_REL if spec else None,
+            spec_file=None,  # `Plan.spec_file` unknown: the command joins the checkout
+        ),
     )
     monkeypatch.setattr(
         "fr.verification.exit.exit_for_spec", lambda *a, **k: SimpleNamespace(gates={"devops"})

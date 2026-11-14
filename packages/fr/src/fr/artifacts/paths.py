@@ -167,6 +167,96 @@ def plan_layout_root(plan_dir: Path) -> Path | None:
     return None
 
 
+def product_checkout_for(layout_root: Path, toplevel: Path) -> Path | None:
+    """The product checkout whose artifact root is *layout_root*, a quiet or stealth
+    feature root below *toplevel* (the `fr` worktree or tracking clone holding it), or
+    None when none can be named. A plan there belongs to that checkout: its repo
+    configuration, its acceptance fold and its placement are read from it, never from
+    the `fr` worktree, whose own space names no feature.
+
+    Candidates, each confirmed by asking its own space (never guessed from a name): the
+    checkout `FR_REPO_ROOT` or the working directory sits in, then (quiet) every
+    workspace the repository's isolation states record, since the `fr` worktree shares
+    the product repository's git dir. A stealth tracking clone is a separate repository,
+    so only the first two can name its checkout."""
+    import os
+
+    from fr.settings import SettingsError
+
+    target = Path(layout_root).resolve()
+    top = Path(toplevel).resolve()
+
+    def candidates() -> Iterator[Path]:
+        env = os.environ.get("FR_REPO_ROOT")
+        here: list[Path] = []
+        starts = [Path(env)] if env else []
+        try:
+            starts.append(Path.cwd())
+        except OSError:
+            pass  # a deleted working directory names no checkout (review F7)
+        for start in starts:
+            try:
+                cur = start.resolve()
+            except OSError:
+                continue
+            while True:
+                if (cur / ".git").exists():
+                    here.append(cur)
+                    yield cur
+                    break
+                if cur.parent == cur:
+                    break
+                cur = cur.parent
+        # The workspaces the repository's isolation states record: the `fr` worktree's
+        # (quiet: it shares the product's git dir), then this checkout's (stealth: the
+        # tracking clone is another repository, but the base clone records them).
+        for root in (top, *here):
+            yield from (Path(w) for w in _recorded_states(root))
+
+    seen: set[Path] = set()
+    for cand in candidates():
+        cand = cand.resolve()
+        if cand in seen or cand == top or not cand.is_dir():
+            continue
+        seen.add(cand)
+        try:
+            root = feature_root(space_for(cand, create=False))
+        except (SettingsError, OSError, ValueError):
+            continue
+        if root.resolve() == target:
+            return cand
+    return None
+
+
+class AmbiguousArtifactError(Exception):
+    """More than one feature root holds the artifact a lookup asked for."""
+
+
+def feature_of_artifact(repo_root: Path, rel: str) -> tuple[Path, Path | None] | None:
+    """Under quiet or stealth, the feature root holding *rel* (an artifact path relative
+    to an artifact root, `<runs dir>/<id>.yaml`) when this checkout's own feature does
+    not, and the product checkout that feature belongs to (None for the checkout: its
+    workspace is gone). None under `repo`, when this checkout's own root holds it, or
+    when no feature does. What a base clone's close-out reads a merged feature's run
+    with: its own feature is the default branch, which holds no run (R23)."""
+    root = Path(repo_root)
+    if outside_repo(root) is None:
+        return None
+    space = space_for(root, create=False)
+    if (feature_root(space) / rel).exists():
+        return None
+    holders = [froot for froot in feature_roots(space) if (froot / rel).exists()]
+    if len(holders) > 1:
+        # Review F8 of PR #1437: never read whichever sorts first.
+        raise AmbiguousArtifactError(
+            f"{rel} is held by more than one feature: "
+            + ", ".join(f"{h.name} ({h})" for h in holders)
+        )
+    if holders:
+        return holders[0], product_checkout_for(holders[0], space.root)
+    return None
+
+
 def kind_dir(kind: str, space: ArtifactSpace) -> Path:
     """The absolute path of *kind* in *space*; `KeyError` naming an unknown kind."""
     return feature_root(space) / _known(kind, KIND_DIRS)

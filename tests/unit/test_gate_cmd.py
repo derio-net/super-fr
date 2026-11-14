@@ -724,21 +724,27 @@ def test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds(
     import yaml
 
     _root, fake = _ambiguous_env(backfill_env)
+    # The fixture's commits are pinned in time; a far idle threshold keeps the plan from
+    # turning stale as the wall clock passes them (it did on 2026-11-14), which is not
+    # what this test is about.
+    never_stale = ["--stale-days", "36500"]
     plan = tmp_path / "home" / ".cache/fr/gate-backfill/example-org--widgets/plan.yaml"
-    assert CliRunner().invoke(app, ["gate", "backfill"]).exit_code == 0
+    assert CliRunner().invoke(app, ["gate", "backfill", *never_stale]).exit_code == 0
     (before,) = yaml.safe_load(plan.read_text())["entries"]
     assert before["key"] == AMBIG_KEY and before["ambiguous"] == [21, 22]
     assert before["decision"] == "review" and "--from" in before["why"]
 
     manifest = tmp_path / "m.yaml"
     manifest.write_text(f"schema: 1\nitems:\n  - {{key: '{AMBIG_KEY}', pr: 22}}\n")
-    dry = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest)])
+    dry = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), *never_stale])
     assert dry.exit_code == 0, dry.output
     (after,) = yaml.safe_load(plan.read_text())["entries"]
     assert after["pr"] == {"number": 22, "basis": "manifest", "planning": False}
     assert after["decision"] == "owed" and after["gate"] == "devops" and after["ambiguous"] == []
 
-    result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), "--yes"])
+    result = CliRunner().invoke(
+        app, ["gate", "backfill", "--from", str(manifest), "--yes", *never_stale]
+    )
 
     assert result.exit_code == 0, result.output
     assert fake.pr_labels.get((BACKFILL_REPO, 22)) == {"gate:devops"}

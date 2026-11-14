@@ -432,6 +432,13 @@ def effective(repo_root: Path, *, ref: str | None = None) -> Effective:
     return fold(root)
 
 
+def quiet_root(root: Path) -> Path | None:
+    """This checkout's feature root when it is not the checkout itself (quiet or
+    stealth), else None: the test a reader of the product's own git history asks
+    before trusting it to hold fragments."""
+    return _quiet_root(root)
+
+
 def _quiet_root(root: Path) -> Path | None:
     """This checkout's feature root when it is not the checkout itself (quiet), else None."""
     from fr.artifacts.paths import artifact_root

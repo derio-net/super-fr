@@ -75,7 +75,9 @@ artifacts --yes` splits it.
   an amendment appended to YOUR feature's fragment, never in place (`fr acceptance
   check` refuses an in-place edit of a row as it stands on the default ref):
   `fr acceptance amend --id <row> --op <op> --why "<reason>"`, one of `reword`
-  (`--acceptance`/`--capability`), `set-status` (`--status --notes`, optional
+  (`--acceptance`/`--capability`; `--origin`, repeatable, corrects the origins of a row
+  still PENDING on this branch, in place, moving it to the spec its origin names, and is
+  refused for a merged row), `set-status` (`--status --notes`, optional
   `--issue`/`--verify`/`--scenario`), `add-level` / `drop-level` (`--level
   <level>=<ref>`) or `retire` (`--notes`). `set-status` on a merged row writes the
   same amendments; a step record's `acceptance:` entry `{row, op, why, …}` (record

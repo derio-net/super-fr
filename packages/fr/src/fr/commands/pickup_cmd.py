@@ -72,6 +72,8 @@ def pickup_command(
             raise typer.Exit(2)
         repo_root = resolve_repo_root()
         path = run_path(repo_root, run)
+        if not path.exists():
+            repo_root, path = _feature_run(repo_root, run, path)
         if not path.exists():  # a present-but-unreadable file keeps its own error
             _missing_run_exit(repo_root, run, path)
         try:
@@ -156,7 +158,13 @@ def pickup_command(
     lines.extend(_record_section(plan, phase))
     lines.append("---")
     lines.append("")
-    lines.append(f"For plan-level context, read `{plan.repo_relative_dir}/_prose.md`.")
+    # A local brief: a quiet or stealth plan sits outside the checkout the agent works
+    # in, so it is named by the path the agent can read.
+    inside = plan.repo_root is not None and plan.dir.resolve().is_relative_to(
+        plan.repo_root.resolve()
+    )
+    prose_dir = plan.repo_relative_dir if inside else plan.dir
+    lines.append(f"For plan-level context, read `{prose_dir}/_prose.md`.")
     # Disable Rich markup parsing — the PR title contains literal "[repo]"
     # which Rich would otherwise interpret as a tag and strip.
     typer.echo("\n".join(lines))
@@ -183,6 +191,19 @@ def _commit_template_lines(repo_root: Path) -> list[str]:
         "Push with `fr push` (`uv run fr push` in a worktree), never `git push`.",
         "",
     ]
+
+
+def _feature_run(repo_root: Path, run_id: str, path: Path) -> tuple[Path, Path]:
+    """The run's own checkout and its path there (`fr.run.closeout.run_checkout`), or
+    *repo_root* and *path* unchanged."""
+    from fr.run.closeout import RunElsewhereError, run_checkout
+
+    try:
+        checkout = run_checkout(repo_root, run_id)
+    except RunElsewhereError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    return (checkout, run_path(checkout, run_id)) if checkout != repo_root else (repo_root, path)
 
 
 def _missing_run_exit(repo_root: Path, run_id: str, path: Path) -> NoReturn:

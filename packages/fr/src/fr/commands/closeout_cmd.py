@@ -117,6 +117,13 @@ def outcome(
         raise _refuse("give exactly one of --run or --spec")
 
     root = resolve_repo_root()
+    if run is not None:
+        from fr.run.closeout import RunElsewhereError, run_checkout
+
+        try:
+            root = run_checkout(root, run)  # a quiet feature's run, from the base clone
+        except RunElsewhereError as e:
+            raise _refuse(str(e)) from e
     spec_path = _spec_of_run(root, run) if run is not None else _spec_arg(root, spec or "")
     try:
         steps = test_plan_steps(spec_path.read_text(), source=display_path(root, spec_path))
