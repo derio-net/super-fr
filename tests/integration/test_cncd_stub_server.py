@@ -176,7 +176,7 @@ def test_cncd_registered_under_fr_runners_entry_point_group() -> None:
 
     names = runner_names()
     assert "cncd" in names
-    assert "vk" in names  # the split's first adapter is untouched
+    assert "vk" not in names  # the VK adapter is gone (spec 2026-11-14-retire-vibekanban)
     ep = available_runners()["cncd"]
     loaded = ep.load()  # type: ignore[attr-defined]
     from fr_cncd import CncdRunner

@@ -185,8 +185,8 @@ def test_load_runner_refuses_a_runner_without_from_env(monkeypatch: pytest.Monke
         load_runner("legacy")
 
 
-@pytest.mark.parametrize("name", ["vk", "cncd"])
-def test_the_real_vk_and_cncd_runners_are_refused_by_the_from_env_check(name: str) -> None:
+@pytest.mark.parametrize("name", ["cncd"])
+def test_the_real_cncd_runner_is_refused_by_the_from_env_check(name: str) -> None:
     with pytest.raises(RunnerLoadError, match="cannot be constructed outside its own bridge"):
         load_runner(name)
 
