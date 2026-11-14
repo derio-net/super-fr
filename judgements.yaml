@@ -7138,7 +7138,7 @@ batches:
   rationale: 'Tier 2: deliver accepts a tests log not bound to the code tree it ran on (#1454); traceback
     on a transient forge read (#1395); wrappers hide the capture run (#1303). run_cmd.py. (#1456 fixed
     in #1460.)'
-  wave: 16
+  wave: 17
   skill: debug
 - id: owed-archive
   title: Owed trackers and archive side effects
