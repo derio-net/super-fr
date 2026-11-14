@@ -156,3 +156,10 @@ Operator, asked whether the rewrite is based on the code or the prose: "yes, I w
 ### s1-help-lines-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1440] · resolves s1-help-lines: fr's CLI help lines are too long for STE, so docs/reference/cli.md's generated tree cannot meet the guides' standard
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1440.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-14T02:21:20+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: `site-build` builds every page with the new pin and runs `scripts/check-writing-standards.sh .blog-craft`: no FAIL.
+
+Evidence: CI site-build green on the merged PR head 7082ff0dd (run 43545039044): it built every page at blog-craft 3b0c7d0 and ran scripts/check-writing-standards.sh .blog-craft (no FAIL), then the real-checker test; locally on main c0fdbce the script prints WRITING STANDARD OK for both groups (16 + 14 checked, 0 FAIL).
