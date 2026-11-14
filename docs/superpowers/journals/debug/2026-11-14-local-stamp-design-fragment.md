@@ -20,3 +20,8 @@ _local_stamp_plan reads <slug>.yaml and <slug>-design.yaml; _LocalStamps carries
 ### f-2 · finding [fixed] · the leftovers refusal names the pending record that sets a row
 
 apply_record passes the record's name and per-row statuses into resolve_in_process (_RECORD_ROWS); _deliver_leftovers_gate prefixes such a row's fix with 'the record <path> sets this row <status>, and the record wins over the fragment'. Pinned by tests/unit/test_deliver_leftovers.py::test_a_row_the_pending_record_sets_names_the_record and ::test_record_rows_reads_rows_and_amendments.
+
+<!-- fr:journal kind=review scope=debug id=rev-1 created=2026-11-14T19:52:00+00:00 -->
+### rev-1 · review · self-review of the diff: no findings
+
+Read the full diff. Both spellings are read only when they exist; a fragment with no local row still returns before the fold (review p2-r1 test still green). The record annotation only touches row leftovers whose id the record sets. Full suite: 16143 passed, 128 skipped. fr docs check clean after the two reviewed stamps.
