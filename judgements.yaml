@@ -7120,6 +7120,14 @@ batches:
     names secrets after the worktree folder.'
   wave: 17
   skill: debug
+- id: placement-truth
+  title: Quiet and stealth placement never fall back or record unlanded heads
+  ids:
+  - super-fr#1438
+  - super-fr#1433
+  rationale: 'Tier 2: silent fallback to the fr worktree; HEADS recorded before the push. parser.py, git_policy/product.py.'
+  wave: 17
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
