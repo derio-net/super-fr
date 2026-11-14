@@ -148,3 +148,48 @@ a scenario script and its one-line test wiring; no production code to clean
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 docs, rule, skill text and regenerated mirrors only; no code to refactor
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-14T13:17:20+00:00 phase=2 -->
+### review-p2 · review · phase 2 review: 4 findings (3 in, 1 out); the 3 in scope fixed in 4ef8ebf8c (phase 2)
+
+A code reviewer in a separate context, read-only, reviewed 92257fc..HEAD (code, scenario, acceptance moves, docs) adversarially against R4, R6, R8, R9 and §C/§D. It confirmed that the stamp write follows every deliver refusal, that a refused resolve and a --record restore leave the fragment byte-identical, that the witness rules hold, that quiet placement writes and commits at the artifact root, that only this feature's rows are stamped, that the R6 command is printed only under ci none, that the move() level-order fix is correct, and that the five ci moves cite tests CI runs. It ran 28 unit tests, the scenario, fr docs check and fr acceptance check. Fixes are in 4ef8ebf8c: test_deliver_local_stamp.py, test_deliver_leftovers.py and the scenario pass (30 tests); ruff, mypy and docs check are clean.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-14T13:17:20+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · _local_stamp_plan folds the matrix before checking the feature fragment sets any row local, so a deliver with no local row runs git and can refuse in the stamp's name (phase 2)
+
+Raised by the phase 2 reviewer (run_cmd.py _local_stamp_plan).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-14T13:17:20+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · the fr-acceptance explainer says a stale row clears when a run delivers it again; deliver re-stamps only a row the run sets local again (phase 2)
+
+Raised by the phase 2 reviewer (docs/explainers/fr-acceptance.md).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-14T13:17:20+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · the scenario's fr debt check is absence-only and never shown to fail (phase 2)
+
+Raised by the phase 2 reviewer (tests/scenarios/acceptance-local-status.sh).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-14T13:17:20+00:00 phase=2 state=open review_scope=out -->
+### p2-r4 · finding [open] (reviewer: out of scope) · a fresh deliver tests log is not tied to the tree it ran on, so a commit after the suite still stamps HEAD's tree (phase 2)
+
+Raised by the phase 2 reviewer; R4 sanctions HEAD's tree at stamp time, and _verify_tests_log has never bound a fresh log to a tree.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-14T13:17:20+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: _local_stamp_plan folds the matrix before checking the feature fragment sets any row local, so a deliver with no local row runs git and can refuse in the stamp's name (phase 2)
+
+4ef8ebf8c. The plan returns before the fold when the fragment sets no row local. test_a_fragment_with_no_local_row_never_folds fails without the fix and passes with it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-14T13:17:20+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: the fr-acceptance explainer says a stale row clears when a run delivers it again; deliver re-stamps only a row the run sets local again (phase 2)
+
+4ef8ebf8c. The explainer now says "until a run sets it local again and delivers", matching the rule and the reference page.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-14T13:17:20+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: the scenario's fr debt check is absence-only and never shown to fail (phase 2)
+
+4ef8ebf8c. The scenario expects fr debt to list the fresh row as `earned [local 2026-11-14]` and, after the test edit, `earned [local, stale: tests/test_x.py]`.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-14T13:17:20+00:00 phase=2 state=open resolves=p2-r4 out_of_scope=true -->
+### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: a fresh deliver tests log is not tied to the tree it ran on, so a commit after the suite still stamps HEAD's tree (phase 2)
+
+Not caused by this change. deliver's fresh-log witness (_verify_tests_log) checks the writer and the time, never the tree, for every run; R4 adopts it as it is. Binding a fresh log to its tree is a deliver-wide change; to be filed at deliver.
