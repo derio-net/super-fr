@@ -252,3 +252,9 @@ gate: developer
 - stale-vk-profile-refused: none — unit tests drive `_devcontainer_up` through `up` and `rebuild` over fixture profiles in CI
 - installer-removes-vk-residue: none — `tests/integration/test_install_sh.py` drives install over a fixture home in CI
 - dispatch-docs-name-no-vk: none — the R10 tripwire, `scripts/sync-readme.py --check` and `fr docs check` run in CI
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-14-retire-vibekanban | `derio-net/super-fr` | `2026-11-14-retire-vibekanban` | — |

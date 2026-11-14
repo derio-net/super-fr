@@ -1,0 +1,88 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Refuse a stale fr-vk profile and clean the installer (R4, R5)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - stale-vk-profile-refused
+  - installer-removes-vk-residue
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - scripts/install.sh
+  - tests/unit/test_isolation*.py
+  - tests/unit/test_vk_compat_removed.py
+  - tests/integration/test_install*.py
+  - tests/integration/test_runner_package_lists.py
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: The stale-profile refusal in _devcontainer_up (R4)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      [RED] In the isolation unit tests (alongside the existing devcontainer-mode up/rebuild tests with a fake runner, e.g. tests/unit/test_isolation.py), add: up with a profile whose postCreateCommand contains `--with 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr-vk'` raises IsolationError whose text names the devcontainer.json path, the segment, "VK support was removed" and the default branch; the workspace state is saved (`fr isolation status` / load_state finds it); no `devcontainer up` argv was run. Also: rebuild with the same profile refuses; a customised postCreateCommand still naming `subdirectory=packages/fr-vk` refuses; a clean profile proceeds; an absent config runs `devcontainer up` as before. RED.
+  - id: P2.T1.S2
+    text: |-
+      [GREEN] In LocalIsolation._devcontainer_up (local.py:1292), before `_ensure_mounted_env_file`, call a small `_refuse_vk_profile(config)`. If the config exists and its text contains `subdirectory=packages/fr-vk`, it raises IsolationError with the message the tests pin. Keep the check to that one helper and the one call site. GREEN, and the existing isolation tests stay green.
+  - id: P2.T1.S3
+    text: |-
+      [REFACTOR] Name the needle once, as a module constant beside the helper, so the R10 tripwire allowlists one line. Tests green.
+- number: 2
+  title: install.sh writes no VK pieces and removes what fr wrote (R5)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      [RED] In tests/integration/test_install_sh.py, over the fixture home those tests already build:
+      - install writes no `vibe_kanban` entry, and prints no VK MCP warning;
+      - with a pre-seeded `.mcp.json` holding `vibe_kanban` plus another server, install removes only `vibe_kanban` and prints one line;
+      - with no `vibe_kanban`, `.mcp.json` is byte-identical;
+      - a pre-seeded `~/.local/bin/vk-bridge` whose content execs `fr_vk.bridge` is removed, and so is one at VK_BRIDGE_WRAPPER_PATH;
+      - a foreign file at that path is kept;
+      - `--install-bridge` exits non-zero naming the removal;
+      - `--uninstall` still removes a `vibe_kanban` entry.
+      Rewrite the existing VK-asserting cases (test_install_sh.py:234-262, 385-404, the VK MCP stubs in test_install_atomic.py and test_install_worktree_settings_hooks.py, and any phase-1 xfails) to match. RED.
+  - id: P2.T2.S2
+    text: |-
+      [GREEN] In scripts/install.sh:
+      - delete VK_MCP_BINARY (:116), the missing-binary warning (:501-505), section 8's MCP entry (:809-825), the closing `jq '.mcpServers.vibe_kanban'` hint (:1115) and the `--install-bridge` writer (:186-219);
+      - make `--install-bridge` print "VibeKanban support was removed; there is no bridge to install" and exit 2;
+      - add one `cleanup_vk_residue` function, called during install, that removes the `vibe_kanban` key with jq only when present, and deletes "${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}" only when `grep -q 'fr_vk.bridge'` matches it, echoing one line per removal;
+      - keep the uninstall removal.
+      GREEN, and the rest of the install tests stay green.
+  - id: P2.T2.S3
+    text: |-
+      [REFACTOR] Keep the cleanup to the one function and keep its VK-named lines contiguous, for the R10 allowlist. Run the full suite last into a log outside the repo, and record it as the phase's tests evidence.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

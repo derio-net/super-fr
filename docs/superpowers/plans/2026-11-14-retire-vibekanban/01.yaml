@@ -1,0 +1,96 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Delete fr-vk with its tests, workspace entries, runner lists and the acceptance
+    rows that cite it
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - vk-runner-removed
+  - stale-vk-profile-refused
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr-vk/*
+  - pyproject.toml
+  - uv.lock
+  - .github/workflows/ci.yml
+  - .fr/candidate-install
+  - .devcontainer/*/devcontainer.json
+  - packages/fr/src/fr/isolation/scaffold.py
+  - AGENTS.md
+  - HERMES.md
+  - tests/*
+  - .test_durations
+  - docs/acceptance/features/*.yaml
+  - .changes/feat-batch-retire-vk.yaml
+  estimate_lines: 14000
+tasks:
+- number: 1
+  title: 'Smoke: change fragment plus a trivial test, suite green on the PR'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add .changes/feat-batch-retire-vk.yaml with `bump: major` and summary: "VibeKanban support removed: the fr-vk package, the `vk` runner, the fr-bridge daemon and install.sh --install-bridge are gone; a devcontainer scaffolded earlier must delete its `--with '…#subdirectory=packages/fr-vk'` segment from postCreateCommand (spec 2026-11-14-retire-vibekanban R11)". Add `test_no_vk_runner_entry_point` to tests/unit/test_vk_compat_removed.py, asserting that no `fr.runners` entry point (importlib.metadata.entry_points(group="fr.runners")) is named `vk`. Run `uv run pytest -q --no-cov tests/unit/test_vk_compat_removed.py`: the new test is RED while fr-vk is installed. Commit it marked xfail(strict=True) with reason "fr-vk still present (P1.T2)", then `uv run fr push` and confirm the PR's CI starts (`gh pr checks`).
+- number: 2
+  title: Remove the package and the workspace entries (R1, R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      [RED] In tests/unit/test_vk_compat_removed.py add: `test_scaffold_runner_packages_name_no_vk` (`"fr-vk" not in fr.isolation.scaffold.RUNNER_PACKAGES`, and `"packages/fr-vk"` not in POST_CREATE); `test_repo_profiles_install_no_vk` (neither .devcontainer/dev nor .devcontainer/admin devcontainer.json contains `packages/fr-vk`); `test_apply_to_vk_is_unknown_runner` (fr_dispatch.registry's lookup of "vk" raises its unknown-runner error, the same one apply_cmd.py:560 reports). Run them: RED.
+  - id: P1.T2.S2
+    text: |-
+      [GREEN] `git rm -r packages/fr-vk`. Remove fr-vk from the root pyproject.toml (description :7, dependencies :9, [tool.uv.sources] :18, coverage source :58), drop `packages/fr-vk/src` from the mypy command in .github/workflows/ci.yml:35, AGENTS.md's dev-commands block and HERMES.md:67, and drop fr-vk from HERMES.md:97's package list. Drop "fr-vk" from RUNNER_PACKAGES (scaffold.py:434) and from .fr/candidate-install:36's loop. Remove the `--with '…#subdirectory=packages/fr-vk'` segment from both .devcontainer/*/devcontainer.json. Run `uv lock`, `uv sync`, `uv run --no-project python scripts/bump-version.py --check` (must pass), remove the xfail from P1.T1's test, and run the P1 tests: GREEN.
+- number: 3
+  title: Remove and trim the tests by what they exercise (R2)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      List every test file that names fr_vk, fr-vk, vibe_kanban, vibe-kanban-mcp, VK_ or the bridge daemon (`git grep -lE 'fr_vk|fr-vk|vibe.?kanban|VK_|install-bridge' -- tests ':!tests/fixtures/github_rest' ':!tests/scenarios/fixtures' ':!tests/fixtures/transcripts'`). Classify each by WHAT IT EXERCISES, never by name or import. Delete a file that exercises only fr_vk, keeping tests/unit/test_bridge_prompt.py (kept fr_dispatch.prompt). In a mixed file, delete only the VK cases (test_import_direction.py, test_hostclient.py, test__hosts.py, test_tripwire_forge_writes.py, test_tripwire_forge_adapter.py, test_forge_error_kind.py, test_version_surfaces.py, test_tick_workitem.py, test_done_reconcile.py, tests/unit/fakes.py, tests/integration/test_cutover.py). Remove tests/conftest.py's `_default_vk_project_id` (:62-71) and `_fresh_vk_repo_cache` (:497) fixtures. Change test_runner_package_lists.py's VK assertions (:58 stub, :82 `fr-vk` expected, :94-107 install-bridge hint) to assert that fr-vk is absent. Leave the install tests' VK-MCP assertions to phase 2, which rewrites them with the installer. Captured data under tests/fixtures/github_rest/, tests/scenarios/fixtures/ and tests/fixtures/transcripts/ stays byte-identical (check with `git diff --stat` on those paths).
+  - id: P1.T3.S2
+    text: |-
+      Prune .test_durations: drop every key whose test file no longer exists or whose node id no longer collects, using `uv run pytest --collect-only -q --no-cov` to get the collected ids, and keep the JSON's key order and format. Run `uv run pytest -q --no-cov -n auto` into a log outside the repo. Green apart from the install tests phase 2 owns. If any of those fail now because install.sh still writes VK pieces that a P1 test denies, mark them xfail(strict=True) with reason "install.sh VK pieces removed in phase 2". Run `uv run ruff check packages/ tests/`, `uv run ruff format packages/ tests/` and the CI mypy command.
+- number: 4
+  title: Retire or trim the acceptance rows that cite VK (R9)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Run `uv run fr acceptance check --no-fetch`. It lists each row citing a deleted test. For every row in the Background's fragments (spec 2026-11-14-retire-vibekanban), decide by capability. A row whose capability is VK-only gets `uv run fr acceptance amend --feature 2026-11-14-retire-vibekanban --id <row> --op retire --notes "VK support removed (spec 2026-11-14-retire-vibekanban R9)" --why "…"`: bridge-checkout-self-heal, bridge-pr-autoclose, bridge-done-issue-close, multibackend-vk-dispatch, vk-legacy-fallbacks-removed, vk-mcp-*, vk-bridge-init-timeout-graceful and vk-dispatch-unchanged-after-cutover are expected here, but read each. A row that also covers a surviving capability gets `--op drop-level --level <level>=<ref>` once per VK ref (e.g. the gitlab-selfhosted, forge-calls-through-adapter, installed-fr-carries-every-runner, runner-capability-refusal and daemon-refuses-stale-artifacts rows, if they cite one). Never hand-edit a fragment. Rerun `fr acceptance check --no-fetch`: no missing refs.
+  - id: P1.T4.S2
+    text: |-
+      [REFACTOR] Re-read the diff for a wholly-VK test kept by mistake or a kept test deleted by mistake (`git diff --stat origin/main -- tests`). Commit with the template `refactor(dispatch): … (#1459)`, run the full suite last into a log outside the repo, and record it as the phase's tests evidence.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
