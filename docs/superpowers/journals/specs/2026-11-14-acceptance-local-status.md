@@ -241,3 +241,6 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-14-acceptance-local-status-p2 created=2026-11-14T09:26:06+00:00 -->
+### phase-split-2026-11-14-acceptance-local-status-p2 · decision · ask: deliver's stamping and its leftover offer (R4, R6) are their own reviewable ask
