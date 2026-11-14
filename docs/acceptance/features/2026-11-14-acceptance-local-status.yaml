@@ -53,9 +53,17 @@ rows:
       no stamp, counts as debt and `fr acceptance check` reports it
     origin:
     - spec:2026-11-14-acceptance-local-status#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_local.py#test_a_committed_edit_makes_it_stale
+      - super-fr:tests/unit/test_acceptance_local.py#test_a_deleted_file_makes_it_stale
+      - super-fr:tests/unit/test_acceptance_local.py#test_a_local_row_with_no_stamp_is_unstamped
+      - super-fr:tests/unit/test_acceptance_local_surfaces.py#test_status_and_check_list_an_unstamped_local_row_as_debt
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_local_status
+    status: ci
+    notes: Stale and unstamped debt unit-tested; the scenario shows check reporting
+      local, stale and local, unstamped; run in CI
     verify: candidate
     scenario: tests/scenarios/acceptance-local-status.sh
   - id: acceptance-local-deliver-stamp
