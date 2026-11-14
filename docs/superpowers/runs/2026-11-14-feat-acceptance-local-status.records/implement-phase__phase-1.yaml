@@ -1,0 +1,50 @@
+schema_version: 12
+run: 2026-11-14-feat-acceptance-local-status
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T6.S1, P1.T6.S2, P1.T7.S1, P1.T7.S2, P1.T7.S3]
+refactor:
+  P1.T4: "the refusal is two calls to local_error beside walked_error in fr.record.apply; nothing duplicated to fold together"
+  P1.T5: "stamp_local reuses _row_blocks/_amendment_starts/replace_row/render_amendment_block; nothing left to extract"
+  P1.T6: "the hop is a stamp-only guard plus one validator helper; nothing to clean"
+journal:
+  - kind: discovery
+    id: p1-local-helpers
+    phase: 1
+    title: "phase 1's local helpers, for deliver's stamp (phase 2)"
+    body: |
+      `fr.acceptance.local`:
+      - `level_ref_paths(row) -> tuple[str, ...]` — the sorted unique repo paths of a row's level refs; the ONE ref-path computation (a stamp's `files` keys must equal it, R5).
+      - `head_blobs(product_root, paths) -> dict[path, blob sha]` — one batched `git ls-tree -r -z HEAD -- <paths>`; build the stamp's `files` from it.
+      - `local_debt(rows, product_root, *, ci_active) -> dict[row_id, reason]` (`promote to ci` | `unstamped` | `stale: <path>`); `local_reasons(rows, product_root)` wraps it, asking `ci_active` only when a row is local — every surface calls that once per fold.
+      - `local_error(row, root, *, own=None) -> str | None` (own = repo name, from the fragments' `repo:`; resolved from the origin remote when omitted).
+      - `local_tag(row, reason)` — `local <date>` / `local, <reason>`; `fr.debt.render.status_tag(..., local=reason)`.
+      `fr.acceptance.edit.stamp_local(text, row_id, stamp: LocalStamp) -> str` rewrites the row block, else the latest set-status amendment of row_id; raises AcceptanceError when neither sets it local. `fr.acceptance.model.LocalStamp(at, tree, log, files)`; `Row.local`, `SetStatus.local`; fold rule in `fr.acceptance.fold._stamp_after`.
+  - kind: discovery
+    id: p1-writers-in-engine
+    phase: 1
+    title: "local_error is enforced in fr.record.apply only; the CLI writers reach it through the engine"
+    body: |
+      `add`, `set-status` and `amend` all write through `fr.record.apply.apply_record`, so local_error sits there (row path and the `_Amending.amend` set-status path), with the fragments' repo identity as `own`. A CLI-side copy would have had to resolve the identity from the origin remote, which a fixture or quiet checkout may not have. Every refusal is exit 2 with the fragments byte-identical (tests/unit/test_acceptance_local_writers.py).
+  - kind: finding
+    id: p1-local-reset-clears-stamp
+    phase: 1
+    review_scope: in
+    title: "any write that sets a row local again clears its stamp, including set-status --issue (link-only) on a local row"
+    body: |
+      Per §A a set-status amendment to `local` without a stamp clears the row's stamp, and a pending row rewritten in place is re-rendered without it. The link-only form passes the row's current status, so linking an issue to a stamped `local` row leaves it `unstamped` (debt) until the next deliver. Consistent with the spec's clear-on-reset rule; worth a decision in phase 2 (preserve the stamp when the status does not move?) or a doc line.
+  - kind: discovery
+    id: p1-docs-owed
+    phase: 1
+    title: "fr docs check is stale for docs/reference/cli.md (acceptance_cmd.py, status_cmd.py) — phase 2's docs task"
+    body: |
+      Phase 1 changed `fr acceptance status/check/summary/digest` output and `fr status`'s open count; no page was edited (docs are phase 2). `fr docs check` currently reports docs/reference/cli.md stale; phase 2 must edit or re-stamp it with the other pages R8 names.
+  - kind: discovery
+    id: p1-figures-key
+    phase: 1
+    title: "debt figures carry acceptance_local_debt; the board shows it as `local debt N`"
+    body: |
+      `fr.debt.render.figures` adds `acceptance_local_debt` (AcceptanceDebt.local_debt: local rows with a reason, not already contested); `fr.triage.debt.clean_figures` keeps it as `local_debt` (0 for an older digest), and the board appends `local debt N` to the acceptance debt line. `local` itself is in LISTED_STATUSES, so the board's "Listed, not debt" line shows `local N`.
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p1-suite.log
