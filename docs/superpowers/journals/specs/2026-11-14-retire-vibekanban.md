@@ -166,3 +166,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-14-retire-vibekanban-p2 created=2026-11-14T21:31:34+00:00 -->
+### phase-split-2026-11-14-retire-vibekanban-p2 · decision · ask: R4 and R5 are new behaviour (a refusal and an installer cleanup), reviewable apart from the bulk deletion
