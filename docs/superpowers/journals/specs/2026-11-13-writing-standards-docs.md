@@ -163,3 +163,10 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1440.
 Step: `site-build` builds every page with the new pin and runs `scripts/check-writing-standards.sh .blog-craft`: no FAIL.
 
 Evidence: CI site-build green on the merged PR head 7082ff0dd (run 43545039044): it built every page at blog-craft 3b0c7d0 and ran scripts/check-writing-standards.sh .blog-craft (no FAIL), then the real-checker test; locally on main c0fdbce the script prints WRITING STANDARD OK for both groups (16 + 14 checked, 0 FAIL).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-14T02:21:21+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: The unit test of §5 passes.
+
+Evidence: tests/unit/test_writing_standards_docs.py passes on main c0fdbce with BLOG_CRAFT_DIR set (13 tests incl. the real-checker test); in CI the unit tests pass in the test shards and site-build runs the real-checker test.
