@@ -1100,3 +1100,78 @@ Raised by the phase 6 reviewer.
 ### p6-r3-resolved · finding [fixed] · resolves p6-r3: 01-fr-goal.md: the OWNER-collision refusal sentences were muddled (phase 6)
 
 43956e3e7
+
+<!-- fr:journal kind=review scope=plan id=review-lenses created=2026-11-14T01:53:21+00:00 -->
+### review-lenses · review · lens review: docs-accuracy 3 findings, tests 4 findings, all fixed
+
+One reviewer per lens, each in its own context, given only its lens (docs-accuracy: required by the .fr/lenses.yaml path rule for every published page; tests: added at spec review). docs-accuracy sampled claims across all 31 rewritten pages and the rule, script and CI step against the code: three false or imprecise claims, fixed in 079e36ada and cdd83daeb (workflow-shapes adopt, fr-dispatch bridge writes, docs-currency H1). tests mutated scripts/check-writing-standards.sh in a scratch clone: the fake-uv tests did not pin which pages reach the checker and nothing exercised the real checker or .writing-standard-terms; both fixed in 52a8fae41 (page-set assertion; a real-checker test run by site-build at the pinned blog-craft). Acceptance rows moved to ci with their test refs; the gh#1369 fixture change was dropped for main's own fix (#1437).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-14T01:53:21+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · workflow-shapes.md: plain fr run adopt said to preview unless --yes; it writes at once
+
+run/adopt.py:845-846, 950-952; run_cmd.py --yes help. Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-14T01:53:21+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · fr-dispatch.md: the bridge skips issue writes too, not only label writes
+
+fr_dispatch/__init__.py:356-362. Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-14T01:53:21+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · docs-currency.md: the build drops an H1 only when it opens the body
+
+scripts/build-site.py:290-299. Raised by the docs-accuracy lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-14T01:53:21+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · fake-uv tests never asserted which pages reach the checker
+
+A script checking only the first page of each group passed every test. Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-14T01:53:21+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · nothing exercised the real checker or .writing-standard-terms (R4)
+
+Deleting the terms file moved 32 to 98 warnings with exit 0, unnoticed. Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-14T01:53:21+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · acceptance rows kept levels {} / not-implemented although their tests ship
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-14T01:53:21+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · after the main merge, the gh#1369 test carried a false comment and a redundant workaround
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-14T01:53:21+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: workflow-shapes.md: plain fr run adopt said to preview unless --yes; it writes at once
+
+079e36ada
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-14T01:53:21+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-dispatch.md: the bridge skips issue writes too, not only label writes
+
+cdd83daeb
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-14T01:53:21+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: docs-currency.md: the build drops an H1 only when it opens the body
+
+cdd83daeb
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-14T01:53:21+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: fake-uv tests never asserted which pages reach the checker
+
+52a8fae41: _assert_both_groups_ran_at_the_toplevel compares every page each group sends with its globs.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-14T01:53:21+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: nothing exercised the real checker or .writing-standard-terms (R4)
+
+52a8fae41: test_real_checker_fails_a_page_and_reads_the_terms_file runs blog-craft's checker; site-build runs it with BLOG_CRAFT_DIR=.blog-craft, and test_site_build_checks_the_writing_standards_after_the_build pins that step.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-14T01:53:21+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: acceptance rows kept levels {} / not-implemented although their tests ship
+
+a010ef9, 786b523, bb39620, d5ac113: groups, ci-gate, authoring-rule and accuracy-lens rows to ci with test refs.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-14T01:53:21+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: after the main merge, the gh#1369 test carried a false comment and a redundant workaround
+
+52a8fae41: the test file is main's again; main's --stale-days fix stands and this branch's duplicate fixture change is gone.
