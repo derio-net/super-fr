@@ -876,3 +876,98 @@ language-only rewrite; the refactor step is the wording tripwires and fr docs ch
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 language-only rewrite; the refactor step is the wording tripwires and fr docs check, which passed with nothing to fix
+
+<!-- fr:journal kind=review scope=plan id=review-p5 created=2026-11-14T00:47:42+00:00 phase=5 -->
+### review-p5 · review · phase 5 review: 6 findings (5 in, 1 out), all fixed; fact-keepers: 0 lost, 0 changed facts (phase 5)
+
+Code reviewer (separate context, read-only) checked the accuracy commits 20b266de1, 3e48a4c5f, 16ce3f6e4, 9c5471bb5 and da33c2035 against the cited code (all true), the plain-language rewrite with per-page --preserve-from, meaning drift, inbound links, and built the site at HEAD and the merge base (no new raw list markers; tables and figures unchanged). Six blind fact-keepers, one per explainer. Fixes in d5cbd8c90, c2a0f6884, 694431383, c98992699, c2c26d6e3; ci-ok green on c2c26d6. The one kept warning (fr-progress passive) went away with the p5-r6 content correction.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-fact-keeper created=2026-11-14T00:47:42+00:00 phase=5 -->
+### p5-fact-keeper · discovery · Fact-keeper results per page (R8): page | counts | resolution (phase 5)
+
+docs/explainers/fr-progress.md | kept 44, changed 0, lost 0, added 0
+docs/explainers/fr-init.md | kept 51, changed 1, lost 0, added 0 | 'how work is isolated' -> 'how fr isolates work': accepted, wording only and true (fr isolation)
+docs/explainers/fr-exit-gates.md | kept 48, changed 0, lost 0, added 0
+docs/explainers/fr-triage.md | kept 64, changed 0, lost 0, added 0
+docs/explainers/fr-isolation.md | kept 74, changed 0, lost 0, added 0
+docs/explainers/fr-wave-driver.md | kept 81, changed 0, lost 0, added 2 | 'the label is removed' -> 'fr removes the label': verified true, fr/triage/approval.py settle_approvals voids a moved head's approval by removing approved-fr then recording the void; 'We built the driver around...' adds the authors' voice only, no claim
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-11-14T00:47:42+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · fr-triage.md: "Nobody commits the state" widened the subject and is false (phase 5)
+
+Raised by the phase 5 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-11-14T00:47:42+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · fr-isolation.md: "stops there" pointed across a new paragraph break (phase 5)
+
+Raised by the phase 5 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-11-14T00:47:42+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · fr-init.md: the --host confirmation moved from the skill to the operator (phase 5)
+
+Raised by the phase 5 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-11-14T00:47:42+00:00 phase=5 state=open review_scope=in -->
+### p5-r4 · finding [open] (reviewer: in scope) · fr-wave-driver.md: red recovery omitted the gone-session path to Needs you now (phase 5)
+
+Raised by the phase 5 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5 created=2026-11-14T00:47:42+00:00 phase=5 state=open review_scope=in -->
+### p5-r5 · finding [open] (reviewer: in scope) · fr-triage.md: "fr-goal is the run a batch becomes" contradicted the debug-batch line (phase 5)
+
+Raised by the phase 5 reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6 created=2026-11-14T00:47:42+00:00 phase=5 state=open review_scope=out -->
+### p5-r6 · finding [open] (reviewer: out of scope) · fr-progress.md: "its rows are implemented" read as acceptance rows (phase 5)
+
+Raised by the phase 5 reviewer; present at the merge base.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: fr-triage.md: "Nobody commits the state" widened the subject and is false (phase 5)
+
+d5cbd8c90
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: fr-isolation.md: "stops there" pointed across a new paragraph break (phase 5)
+
+c2a0f6884
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: fr-init.md: the --host confirmation moved from the skill to the operator (phase 5)
+
+694431383
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=fixed resolves=p5-r4 -->
+### p5-r4-resolved · finding [fixed] · resolves p5-r4: fr-wave-driver.md: red recovery omitted the gone-session path to Needs you now (phase 5)
+
+c98992699
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=fixed resolves=p5-r5 -->
+### p5-r5-resolved · finding [fixed] · resolves p5-r5: fr-triage.md: "fr-goal is the run a batch becomes" contradicted the debug-batch line (phase 5)
+
+d5cbd8c90
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=fixed resolves=p5-r6 -->
+### p5-r6-resolved · finding [fixed] · resolves p5-r6: fr-progress.md: "its rows are implemented" read as acceptance rows (phase 5)
+
+c2c26d6e3: content correction, every plan in the spec's Implementation Plans table archived (migrate.py:884-905).
+
+<!-- fr:journal kind=finding scope=plan id=p5-init-tool-help-markup-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=open resolves=p5-init-tool-help-markup out_of_scope=true -->
+### p5-init-tool-help-markup-resolved · finding [out-of-scope] · resolves p5-init-tool-help-markup: fr init scaffold --help prints `<tool>;` - Rich markup eats `[@<version>]` (phase 5)
+
+fr init scaffold --help Rich markup defect, not caused by this change; to be filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p5-progress-skill-status-yes-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=open resolves=p5-progress-skill-status-yes out_of_scope=true -->
+### p5-progress-skill-status-yes-resolved · finding [out-of-scope] · resolves p5-progress-skill-status-yes: fr-progress SKILL.md lists fr status among the commands that preview until --yes (phase 5)
+
+Stale claim in plugins/super-fr/skills/fr-progress/SKILL.md, not caused by this change; to be filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p5-triage-skill-schema-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=open resolves=p5-triage-skill-schema out_of_scope=true -->
+### p5-triage-skill-schema-resolved · finding [out-of-scope] · resolves p5-triage-skill-schema: fr-triage SKILL.md says a first run creates judgements with schema: 11; the engine writes 12 (phase 5)
+
+Stale schema number in plugins/super-fr/skills/fr-triage/SKILL.md, not caused by this change; to be filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p5-exit-gates-code-render-resolved created=2026-11-14T00:47:42+00:00 phase=5 state=open resolves=p5-exit-gates-code-render out_of_scope=true -->
+### p5-exit-gates-code-render-resolved · finding [out-of-scope] · resolves p5-exit-gates-code-render: fr-exit-gates.md tester bullet's fenced example renders as inline code, at the merge base too (phase 5)
+
+Pre-existing at the merge base; re-indenting changes fenced bytes the preserve check compares; to be filed at deliver.
