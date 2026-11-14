@@ -103,7 +103,7 @@ def _stamped(root: Path) -> None:
     assert _fr("set-status", "--id", "target", "--status", "local", "--notes", "n").exit_code == 0
     blobs = head_blobs(root, level_ref_paths(_target(root)))
     assert blobs
-    stamp = LocalStamp(at="2026-11-14", tree="t", log="l", files=blobs)
+    stamp = LocalStamp(at="2026-11-14", tree="a" * 40, log="suite.log@0123456789ab", files=blobs)
     for p in (root / "docs" / "acceptance" / "features").glob("*.yaml"):
         try:
             p.write_text(stamp_local(p.read_text(), "target", stamp))
@@ -164,7 +164,7 @@ def test_a_link_only_write_on_a_merged_local_row_keeps_its_stamp(
     frag = root / FRAGMENTS_REL / f"{SLUG_B}.yaml"
     row = next(r for r in _rows(root) if r.id == "r")
     stamp = LocalStamp(
-        at="2026-11-14", tree="t", log="l", files=head_blobs(root, level_ref_paths(row))
+        at="2026-11-14", tree="a" * 40, log="suite.log@0123456789ab", files=head_blobs(root, level_ref_paths(row))
     )
     frag.write_text(stamp_local(frag.read_text(), "r", stamp))
     commit_all(root, "stamp")

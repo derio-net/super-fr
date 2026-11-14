@@ -234,6 +234,10 @@ def check_status(value: object) -> None:
         )
 
 
+_GIT_SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}(?:$|T)")
+
+
 class LocalStamp(BaseModel):
     """What earned a `local` row (spec 2026-11-14-acceptance-local-status R4): the date,
     the code tree the suite log covered, the log, and the HEAD blob of every path the
@@ -250,6 +254,32 @@ class LocalStamp(BaseModel):
     def _names_a_file(cls, v: dict[str, str]) -> dict[str, str]:
         if not v:
             raise ValueError("local.files: a stamp names at least one file")
+        for path, blob in v.items():
+            if not _GIT_SHA.fullmatch(blob):
+                raise ValueError(f"local.files[{path}]: {blob!r} is not a git blob sha")
+        return v
+
+    # Lens errors r2: a stamp holds only what `deliver` writes, so a hand-made one with
+    # an empty tree or log, or no date, is refused where it is read, never taken as fresh.
+    @field_validator("at")
+    @classmethod
+    def _iso_date(cls, v: str) -> str:
+        if not _ISO_DATE.match(v):
+            raise ValueError(f"local.at: {v!r} is not an ISO date (YYYY-MM-DD)")
+        return v
+
+    @field_validator("tree")
+    @classmethod
+    def _tree_sha(cls, v: str) -> str:
+        if not _GIT_SHA.fullmatch(v):
+            raise ValueError(f"local.tree: {v!r} is not a git tree sha")
+        return v
+
+    @field_validator("log")
+    @classmethod
+    def _names_a_log(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("local.log: a stamp names the suite log that earned it")
         return v
 
     def __hash__(self) -> int:

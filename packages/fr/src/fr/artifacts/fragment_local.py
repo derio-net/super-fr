@@ -47,8 +47,11 @@ def _stamp_only(path: Path) -> None:
     if found := local_entries(data):
         raise ValueError(
             f"{path.name}: stamped acceptance-fragment version 1 but carries `local` "
-            f"({', '.join(found)}) — an fr at version 1 could not have written it; left as "
-            "it is (fix the fragment by hand)"
+            f"({', '.join(found)}) — an fr at version 1 could not have written it, so it was "
+            "left as it is. If a merge kept the old stamp beside a newer body, set its "
+            "`schema_version: 2`; otherwise move each listed row off `local` with "
+            "`fr acceptance set-status` (or drop the stray `local:` stamp), then run "
+            "`fr migrate artifacts --yes` again"
         )
 
 

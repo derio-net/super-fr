@@ -15,7 +15,7 @@ from tests.unit.test_acceptance_local_writers import no_ci as no_ci  # noqa: F40
 from tests.unit.test_acceptance_local_writers import repo as repo  # noqa: F401  (fixture)
 from tests.unit.test_record_apply import commit_all, git
 
-STAMP = LocalStamp(at="2026-11-14", tree="t", log="l", files={"tests/test_a.py": "x"})
+STAMP = LocalStamp(at="2026-11-14", tree="a" * 40, log="suite.log@0123456789ab", files={"tests/test_a.py": "b" * 40})
 
 
 def _matrix() -> Matrix:
@@ -132,7 +132,7 @@ def _stamp(root: Path) -> None:
         p: git(root, "rev-parse", f"HEAD:{p}").strip()
         for p in ("tests/test_a.py", "tests/test_b.py")
     }
-    stamp = LocalStamp(at="2026-11-14", tree="t", log="l", files=files)
+    stamp = LocalStamp(at="2026-11-14", tree="a" * 40, log="suite.log@0123456789ab", files=files)
     for path in sorted((root / "docs" / "acceptance" / "features").glob("*.yaml")):
         text = path.read_text()
         if "status: local" in text:

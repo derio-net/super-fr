@@ -76,6 +76,26 @@ def test_local_stamp_is_closed_and_needs_files() -> None:
             LocalStamp.model_validate({k: v for k, v in STAMP.items() if k != key})
 
 
+@pytest.mark.parametrize(
+    ("field", "bad"),
+    [
+        ("at", "not-a-date"),
+        ("tree", ""),
+        ("tree", "t"),
+        ("log", ""),
+        ("files", {"tests/test_x.py": "not-a-sha"}),
+    ],
+)
+def test_a_malformed_stamp_is_refused(field: str, bad: object) -> None:
+    """Lens errors r2: a stamp holds what `deliver` writes (an ISO date, a git tree, a
+    log witness, git blobs), so a hand-made one cannot pass as fresh."""
+    from fr.acceptance.model import LocalStamp
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        LocalStamp.model_validate({**STAMP, field: bad})
+
+
 def test_row_and_set_status_carry_a_stamp() -> None:
     assert _row(local=STAMP).local is not None
     assert _row().local is None
@@ -176,7 +196,7 @@ def _local_row(root: Path, row_id: str = "r1", *, stamp: bool = True, **over: ob
     levels = over.pop("levels", {"unit": ["demo:tests/test_x.py#test_y"]})
     paths = sorted({ref.split(":", 1)[1].split("#")[0] for refs in levels.values() for ref in refs})  # type: ignore[union-attr]
     local = (
-        {"at": "2026-11-14", "tree": "t", "log": "l", "files": {p: _blob(root, p) for p in paths}}
+        {"at": "2026-11-14", "tree": "a" * 40, "log": "suite.log@0123456789ab", "files": {p: _blob(root, p) for p in paths}}
         if stamp
         else None
     )
