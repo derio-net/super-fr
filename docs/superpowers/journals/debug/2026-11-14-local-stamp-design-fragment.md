@@ -10,3 +10,8 @@ Stealth walk on 7.0.0-rc.8: fr run resolve --step deliver passed; fr acceptance 
 ### rc-1 · root-cause · _local_stamp_plan opens only <fragment_slug_for_spec(spec)>.yaml and returns None when absent
 
 run_cmd._local_stamp_plan built one path from the -design-stripped slug; a -design-named fragment (which the fold still reads) was never found, so deliver planned no stamp and said nothing. Secondly, the leftovers refusal printed set-status --status local while the pending deliver record's acceptance entry set the row unwired; apply_record writes the record before the gates read the fold, so the record wins and the refusal repeats without naming it.
+
+<!-- fr:journal kind=finding scope=debug id=f-1 created=2026-11-14T19:51:56+00:00 state=fixed -->
+### f-1 · finding [fixed] · deliver reads both spellings of the feature fragment and stamps or refuses each
+
+_local_stamp_plan reads <slug>.yaml and <slug>-design.yaml; _LocalStamps carries one (path, text) per fragment. Pinned by tests/unit/test_deliver_local_stamp.py::test_a_local_row_in_a_design_named_fragment_is_stamped (red before: row stayed unstamped) and ::test_a_design_named_fragment_that_cannot_be_stamped_refuses.
