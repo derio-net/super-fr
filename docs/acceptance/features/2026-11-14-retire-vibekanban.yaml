@@ -159,3 +159,10 @@ amendments:
     ref: super-fr:tests/integration/test_install_bridge.py
     why: --install-bridge wrote the fr-vk bridge wrapper, which is removed; test_runner_package_lists.py
       still pins the runner set
+  - row: installed-fr-carries-every-runner
+    op: reword
+    base: 1
+    acceptance: An installed fr loads every runner the workspace declares (fr.runners
+      entry points), so dispatch --to herdr/cncd works outside uv run
+    why: The vk runner and install.sh --install-bridge are removed (spec 2026-11-14-retire-vibekanban
+      R1)
