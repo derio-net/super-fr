@@ -242,7 +242,14 @@ steps:
       \ p5-init-tool-help-markup, \np5-progress-skill-status-yes, p5-triage-skill-schema,\
       \ p5-exit-gates-code-render\n"
   lens-review:
-    state: pending
+    state: running
+    at: '2026-11-14T01:45:26+00:00'
+    units:
+      step/lens-review:
+        attempts:
+        - dispatched: '2026-11-14T01:45:26+00:00'
+          harness: claude-code
+          session: 2ae187b3-8892-590d-8ab7-d7c2dc9e646f
   deliver:
     state: pending
 driver: standalone
