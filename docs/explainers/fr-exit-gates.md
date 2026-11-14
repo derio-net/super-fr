@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-14 still true, the gate-backfill guide now says a local row that is debt is no delivery evidence (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## What work cannot finish in the pull request?
