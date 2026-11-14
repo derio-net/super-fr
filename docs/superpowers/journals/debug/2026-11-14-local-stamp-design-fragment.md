@@ -15,3 +15,8 @@ run_cmd._local_stamp_plan built one path from the -design-stripped slug; a -desi
 ### f-1 · finding [fixed] · deliver reads both spellings of the feature fragment and stamps or refuses each
 
 _local_stamp_plan reads <slug>.yaml and <slug>-design.yaml; _LocalStamps carries one (path, text) per fragment. Pinned by tests/unit/test_deliver_local_stamp.py::test_a_local_row_in_a_design_named_fragment_is_stamped (red before: row stayed unstamped) and ::test_a_design_named_fragment_that_cannot_be_stamped_refuses.
+
+<!-- fr:journal kind=finding scope=debug id=f-2 created=2026-11-14T19:51:58+00:00 state=fixed -->
+### f-2 · finding [fixed] · the leftovers refusal names the pending record that sets a row
+
+apply_record passes the record's name and per-row statuses into resolve_in_process (_RECORD_ROWS); _deliver_leftovers_gate prefixes such a row's fix with 'the record <path> sets this row <status>, and the record wins over the fragment'. Pinned by tests/unit/test_deliver_leftovers.py::test_a_row_the_pending_record_sets_names_the_record and ::test_record_rows_reads_rows_and_amendments.
