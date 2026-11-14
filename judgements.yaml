@@ -7248,7 +7248,7 @@ batches:
   - super-fr#1448
   rationale: Regenerates all three mirror sets (sync-opencode, sync-hermes, sync-readme), so it runs alone
     and last.
-  wave: 20
+  wave: 21
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
