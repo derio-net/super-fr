@@ -3,7 +3,7 @@ run: 2026-11-13-feat-writing-standards-docs
 workflow: fr-goal@1
 branch: feat/writing-standards-docs
 started: '2026-11-13T21:36:25+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -234,7 +234,13 @@ steps:
           findings: p6-r1,p6-r2,p6-r3
           unobserved: reviewer,reviewer-return
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-14T01:45:26+00:00'
+    exit: 0
+    stdout: "10 out-of-scope finding(s): p3-ops-seal-encrypt-help, p3-r8, \np3-build-site-marker,\
+      \ p4-skill-acceptance-verify, p4-plan-rework-help, \np4-acceptance-backfill-render,\
+      \ p5-init-tool-help-markup, \np5-progress-skill-status-yes, p5-triage-skill-schema,\
+      \ p5-exit-gates-code-render\n"
   lens-review:
     state: pending
   deliver:
