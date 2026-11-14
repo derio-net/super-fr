@@ -140,7 +140,7 @@ stop the classic after-the-fact mistakes.
 
 - A merged-PR guard refuses pushes onto a branch whose PR has already closed, so a late
   commit cannot orphan itself off the main line.
-- Close-out reconciles workspaces and tears them down, so an unattended run does not leave a
+- fr reconciles workspaces and tears them down, so an unattended run does not leave a
   graveyard of containers behind it.
 
 ### 5. Maintainable: the next person can follow what happened
@@ -152,7 +152,7 @@ promises its users.
 
 - New acceptance rows added mid-flight are diffable and defended in the PR: scope growth
   is visible, never silent.
-- Plans are phase-by-phase artifacts, so picking the work back up later reads like a
+- Plans are phase-by-phase artifacts with a fixed structure, so picking the work back up later reads like a
   table of contents, not archaeology.
 
 ## Autonomy with seams

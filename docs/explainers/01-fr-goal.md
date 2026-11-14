@@ -10,9 +10,9 @@ tldr: |
   Tell fr-goal the outcome you want. Answer one question round sized to it
   (rarely two), and it carries the work to a pull request. The steps it follows
   are not buried in the tool: they are a workflow shape, a short YAML file that
-  your own repository can extend or replace. Before the first step runs,
+  lists the steps, and your own repository can extend or replace it. Before the first step runs,
   `fr run start` creates a separate Git worktree and development container, so
-  the run cannot wander through your original checkout. It also keeps a durable
+  the autonomous run cannot wander through your original checkout. It also keeps a durable
   record of the run's progress on the feature branch, so you can review the run
   or pick it back up after the chat ends. Inside that boundary the agent writes
   down the design, breaks the work into checkable pieces, builds each piece,
@@ -533,7 +533,7 @@ starts from the last commit, because uncommitted work did not travel either.
 
 Phases are only part of the bill. The orchestrator (the session you started,
 which brainstorms, reviews and delivers) spends tokens of its own at every
-step. Only the transcripts write any of it down, and they do not survive.
+step. Only the transcripts record any of it, and they do not survive.
 Someone tears down a pod, the harness prunes a session, or you pick a run up
 on another machine.
 
@@ -855,9 +855,9 @@ a reviewer of its own has nobody to carry it out. An obedient agent then makes
 it worse than a plain error. It does the nearest thing it can reach, and it
 ticks the step anyway, which records a finished phase for work nobody did.
 
-Self-review therefore errors on such a step when you write the plan, for the
-same reason it errors on manual work in an agentic phase: both give work to an
-actor that cannot do it. The executor is told to refuse as well and to leave
+Self-review therefore errors on such a step when it checks the plan, before
+any phase runs. The reason is the same as for manual work in an agentic phase:
+both give work to an actor that cannot do it. The executor is told to refuse as well and to leave
 the step unticked, because a tick is a claim of performance. Self-review also
 warns about unresolved local spec references
 (`self_review` in `packages/fr/src/fr/plan_ops.py`). The agent
@@ -1396,9 +1396,9 @@ there. `fr acceptance init` creates only that directory, with no CI workflow,
 rule file or `.gitignore` lines on the product branch.
 
 Each fr commit on `fr` touches only its own feature's path. The feature's first
-commit writes `features/<feature-id>/OWNER`, naming its branch. Another branch
-may already hold a branch's id. It may hold it here, or in that `OWNER` file
-from another clone. Then fr refuses the branch and names both; it does not let them share a
+commit writes `features/<feature-id>/OWNER`, naming its branch. If another branch
+already holds a branch's id, here or in that `OWNER` file from another clone,
+fr refuses the branch and names both. It never lets two branches share a
 path (`feat/a__b` and `feat__a/b` collapse to the same id).
 
 Every workspace of
