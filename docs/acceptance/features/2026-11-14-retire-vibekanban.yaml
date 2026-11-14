@@ -152,3 +152,10 @@ amendments:
     ref: super-fr:tests/unit/test_forge_error_kind.py#test_the_bridge_guard_backs_off_on_any_forges_rate_limit
     why: That case drove the deleted fr-vk bridge's rate-limit guard; the adapter tripwire
       tests remain
+  - row: installed-fr-carries-every-runner
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_install_bridge.py
+    why: --install-bridge wrote the fr-vk bridge wrapper, which is removed; test_runner_package_lists.py
+      still pins the runner set
