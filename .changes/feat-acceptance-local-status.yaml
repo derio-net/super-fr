@@ -1,0 +1,2 @@
+bump: minor
+summary: "acceptance: a `local` status for rows verified by automated tests in a repo with no CI"
