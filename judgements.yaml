@@ -7159,7 +7159,7 @@ batches:
   - super-fr#1243
   rationale: 'Tier 2: branch_slug not injective; resume backend from env not the recorded mode; scaffold
     names secrets after the worktree folder.'
-  wave: 17
+  wave: 18
   skill: debug
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
