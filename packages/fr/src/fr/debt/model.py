@@ -43,7 +43,8 @@ class DebtRow(_Frozen):
     local_at: str | None = None
     """The stamp date of a `local` row (spec 2026-11-14-acceptance-local-status R1)."""
     local_debt: str | None = None
-    """Why a `local` row is debt: `promote to ci`, `unstamped` or `stale: <path>`."""
+    """Why a `local` row is debt (`fr.acceptance.local`): `promote to ci`, `unstamped`,
+    `stale: <path>`, `stale: HEAD unreadable` or `ci unknown: …`."""
 
     @property
     def is_debt(self) -> bool:

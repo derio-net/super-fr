@@ -62,7 +62,8 @@ is that you must not inflate coverage, because the operator audits the statuses 
 
 `local` exists because a repo with no CI could not honestly hold a tested row: fr
 refused `ci` and `unwired` counted it as debt forever. A `local` row must name a real test in
-the repo, and fr refuses it once the repo has CI. When the run delivers, fr stamps the row
+the repo, and fr refuses to move a row to `local` once the repo has CI. Adding a note or
+an issue link to a row that is already `local` still works, and the row keeps its stamp. When the run delivers, fr stamps the row
 with the suite log it ran and the version of each test file at that commit. If a test file
 changes later, the row turns back into debt (`local, stale`) until a run sets it `local`
 again and delivers.
@@ -94,7 +95,8 @@ fr acceptance status
 ```
 
 `check` verifies that references resolve, finds stale rows, and exits 2 on any `failing`
-row. `status` is the terminal nag: counts by status plus the open debt, oldest first. A
+row. `status` is the terminal nag: counts by status plus the open debt, oldest first, and the
+rows that a walk proved or that hold a fresh `local` stamp, with their dates. A
 `--brief` form exists for session start.
 
 ## How do you change a row another feature merged?
@@ -189,7 +191,7 @@ Some claims need a real run to prove them: a real binary, a real model, a real f
 Mark such a row `--verify live`, or any strategy `fr verification list` shows. The pull
 request body lists a row whose strategy runs after the merge (`live`) under "Post-merge
 verification owed". It lists one whose strategy runs before the merge under "Pre-merge
-verification owed". `fr acceptance status` lists the row only while its status is debt or
+verification owed". `fr acceptance status` lists the row as open only while its status is debt or
 the fold marks the row contested. See [verification strategies](../verification-strategies.md).
 
 To record the proof, use a walk:
