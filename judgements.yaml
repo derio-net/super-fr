@@ -7061,8 +7061,11 @@ batches:
   - super-fr#1225
   - super-fr#1289
   - super-fr#1288
+  - super-fr#1428
   rationale: 'Wave 15 alone: every later batch runs TDD on this suite; #1280 leaves 13 tests red locally,
-    #1225 is the host overload parallel sessions cause.'
+    #1225 is the host overload parallel sessions cause; #1428: ci.yml is 335-674s against a 240s budget
+    even with the cached-durations rebalancing (6 shards sum ~1,695s), so it needs more shards, cheaper
+    heavy files or a re-argued budget.'
   wave: 15
   skill: debug
 - id: guard-trust
