@@ -169,3 +169,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-14-retire-vibekanban-p2 created=2026-11-14T21:31:34+00:00 -->
 ### phase-split-2026-11-14-retire-vibekanban-p2 · decision · ask: R4 and R5 are new behaviour (a refusal and an installer cleanup), reviewable apart from the bulk deletion
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-14-retire-vibekanban-p3 created=2026-11-14T21:31:35+00:00 -->
+### phase-split-2026-11-14-retire-vibekanban-p3 · decision · ask: R6-R8 and R10 are the wording and the residue guard, which can only go green once phases 1-2 have removed the code it guards
