@@ -1169,6 +1169,28 @@ def classify_branch(
     return BranchDecision("cold", None, ())
 
 
+# A profile scaffolded before VK support was removed installs this package; its
+# postCreateCommand would fail on every container start (spec
+# 2026-11-14-retire-vibekanban R4).
+_VK_PROFILE_NEEDLE = "subdirectory=packages/fr-vk"
+
+
+def _refuse_vk_profile(config: Path) -> None:
+    """Refuse a devcontainer config that still installs fr-vk, before any
+    container starts. An absent config is `devcontainer up`'s to report."""
+    try:
+        text = config.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return
+    if _VK_PROFILE_NEEDLE in text:
+        raise IsolationError(
+            f"{config} installs fr-vk, but VK support was removed: delete the "
+            f"`--with '…#{_VK_PROFILE_NEEDLE}'` segment from its postCreateCommand. "
+            "Fix the profile on the default branch too, because every new branch "
+            "is cut from it."
+        )
+
+
 class LocalWorktreeDevcontainerTarget:
     # The mode this class implements — pinned on the background gc it spawns
     # (gh#569). HostWorktreeTarget overrides it.
@@ -1299,6 +1321,7 @@ class LocalWorktreeDevcontainerTarget:
     ) -> None:
         """The one `devcontainer up` — shared by `up`, `rebuild` and exec's
         resume, so the mount and config rules cannot drift between them."""
+        _refuse_vk_profile(self._config_path(worktree, profile))
         self._ensure_mounted_env_file(self._config_path(worktree, profile))
         # Resolve the shared common dir, not <repo_root>/.git: correct even if
         # repo_root is a worktree (a gitfile), independent of normalization (#292).
