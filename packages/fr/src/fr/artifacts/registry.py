@@ -518,8 +518,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             name="acceptance-fragment",
             # One feature's acceptance rows and amendments (spec
             # `2026-11-04-repo-feature-settings-design` R16, R19, §3.D), folded into
-            # the effective matrix by `fr.acceptance.fold`. Born at 1.
-            current_version=1,
+            # the effective matrix by `fr.acceptance.fold`. Born at 1; 1 -> 2 adds the
+            # `local` status and its stamp (spec
+            # `2026-11-14-acceptance-local-status-design` R7), migration
+            # `fr.artifacts.fragment_local`, stamp only.
+            current_version=2,
             locator=repo_glob("acceptance-fragment", "*.yaml"),
             stamp="`schema_version` in the fragment yaml",
             read_stamp=_read_yaml_stamp,
