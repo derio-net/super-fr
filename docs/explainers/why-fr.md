@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 placement-resolver phase 4, fr-goal learned mode=stealth (records in a separate tracking repo); the essay's claims are unchanged
+reviewed: 2026-11-15 still true; fr-goal learned that a discharged owed issue closes at merge
 writing_standard: elements-of-style
 ---
 

@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 placement-resolver PR review, stealth never commits on or pushes the target's branch (migrate-branch copies and names the rewrite), a lost marker refuses, squash and PR text name no fr
+reviewed: 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body
 ---
 
 ## What does fr-goal do?
@@ -1177,6 +1177,14 @@ narrowed, unless you answered that decision yourself: the agent cannot close
 the rest of your issue by deciding it does not matter. You close the issue
 later, when you record a passing walk (`fr acceptance set-status --walk`). That
 command prints the close command; it does not run it.
+
+An owed action works the other way round. When you discharge one with `fr
+journal resolve --state fixed` on a branch, its issue does not close yet: the
+branch could still be abandoned, and the issue would then be closed for work
+that never shipped. Resolve prints a `Closes owner/repo#n` line instead. The PR
+body lists that line under **Owed actions discharged**, so the issue closes
+when the pull request merges, and `deliver` refuses a description that leaves
+it out. On the default branch itself, resolve closes the issue at once.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`. It lists:

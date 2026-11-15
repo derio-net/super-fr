@@ -38,7 +38,7 @@ covers:
   - packages/fr/src/fr/commands/gate_cmd.py
   - packages/fr/src/fr/triage/batch_drive.py
   - scripts/release.py
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-15 still true; fr-goal learned that a discharged owed issue closes at merge
 writing_standard: none
 ---
 
