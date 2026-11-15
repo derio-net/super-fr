@@ -27,7 +27,7 @@ labels mean.
 ## The label lifecycle
 
 A runner is the program that picks up queued phases and works them (the `cncd`
-adapter, for one). super-fr does not ship a process that calls `fr_dispatch.tick`. The
+adapter, for one). This repo ships no process that calls `fr_dispatch.tick`. The
 deployment that runs a runner supplies that scheduled process, and each call is a tick. A
 queued phase carries exactly one lifecycle label. On every tick, the label is derived from the issue and its PRs:
 
