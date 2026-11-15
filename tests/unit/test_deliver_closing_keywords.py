@@ -236,3 +236,96 @@ def test_frs_own_render_never_trips_the_gate(
     assert "#123" in body and "#45" in body
     assert pr_body.shared_closing_keywords(body) == []
     assert pr_body.shared_closing_keywords(f"Closes #1 and #2\n\n{body}") != []
+
+
+# --- owed-archive-side-effects R4, R5: a discharged owed issue closes at merge ------
+
+OWED_REF = "derio-net/super-fr#7"
+
+
+@pytest.fixture
+def discharged(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """The branch discharged one owed entry filed as OWED_REF; the returned map is
+    `run_held_issues`'s answer (empty: nothing holds it)."""
+    import fr.record.pr_body as pr_body
+
+    held: dict[str, str] = {}
+    item = pr_body.DischargedOwed(ref=OWED_REF, entry="owed-1")
+    monkeypatch.setattr(pr_body, "discharged_owed", lambda _root: [item])
+    monkeypatch.setattr(pr_body, "run_held_issues", lambda _root, _state: dict(held))
+    return held
+
+
+def _rendered(root: Path, live: dict[str, str]) -> str:
+    live["body"] = "not yet"
+    _deliver(root)  # refused: renders pr-body.md
+    return _body(root).read_text()
+
+
+def test_the_render_closes_the_discharged_owed_issue_and_delivers(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    root = _at_deliver(tmp_path)
+    body = _rendered(root, live)
+    assert f"## Owed actions discharged\n\nCloses {OWED_REF}\n" in body
+    live["body"] = body
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+@pytest.mark.parametrize("closing", [None, f"Fixes {OWED_REF}", "Resolves #7"])
+def test_a_live_body_must_close_every_listed_owed_issue(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str], closing: str | None
+) -> None:
+    root = _at_deliver(tmp_path)
+    body = _rendered(root, live).replace(f"Closes {OWED_REF}", closing or "None.")
+    live["body"] = body
+    _rec, out = _deliver(root)
+    if closing is None:
+        assert out.exit_code == 2, out.output
+        assert OWED_REF in out.output and "Closes" in out.output
+        assert load_run_state(root, RUN).steps["deliver"].state == "running"
+    else:
+        assert out.exit_code == 0, out.output
+
+
+def test_a_held_owed_issue_is_rendered_refs_and_not_required(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    discharged[OWED_REF] = "row r1 still holds it open"
+    root = _at_deliver(tmp_path)
+    body = _rendered(root, live)
+    assert f"Refs {OWED_REF} — held: row r1 still holds it open" in body
+    assert f"Closes {OWED_REF}" not in body
+    live["body"] = body
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+def test_minimal_still_requires_the_closing_reference(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    from tests.unit.test_forge_quiet_pr_body import PLAIN, _land_policy
+
+    root = _at_deliver(tmp_path)
+    _land_policy(root, "forge:\n  pr_body: minimal\n")
+    live["body"] = PLAIN
+    _rec, out = _deliver(root)
+    assert out.exit_code == 2, out.output
+    assert OWED_REF in out.output
+    live["body"] = f"{PLAIN}\nCloses {OWED_REF}\n"
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+def test_minimal_a_held_owed_issue_is_not_required(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    from tests.unit.test_forge_quiet_pr_body import PLAIN, _land_policy
+
+    discharged[OWED_REF] = "row r1 still holds it open"
+    root = _at_deliver(tmp_path)
+    _land_policy(root, "forge:\n  pr_body: minimal\n")
+    live["body"] = PLAIN
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output

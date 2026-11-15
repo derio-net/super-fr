@@ -7066,6 +7066,7 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
+    _refuse_unclosed_owed(repo_root, state, live, ref, rel)
     if minimal:
         markers = fr_markers(live)
         if markers:
@@ -7134,6 +7135,44 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     body_path.unlink()
     if tracked:
         _note_record_write(repo_root, body_path)
+
+
+def _refuse_unclosed_owed(repo_root: Path, state: RunState, live: str, ref: str, rel: str) -> None:
+    """Owed-archive R4: every issue `## Owed actions discharged` lists as `Closes`
+    must be closed by the live body — any closing keyword, read as a merge reads
+    it (`closing_refs(as_github=True)`) — under `forge.pr_body: full` and `minimal`
+    alike. A held one (rendered `Refs`, R5) is not asked for. When the holds
+    cannot be read, this check stands aside: the premature-close gate refuses
+    that same unreadable state with its own reason."""
+    from fr.hostclient import pr_command
+    from fr.record import pr_body
+
+    items = pr_body.discharged_owed(repo_root)
+    if not items:
+        return
+    try:
+        held = pr_body.run_held_issues(repo_root, state)
+    except Exception:  # noqa: BLE001 — _refuse_premature_closes refuses it, by name
+        return
+    owner, _, rest = items[0].ref.partition("/")
+    identity = (owner, rest.partition("#")[0])
+    closed = {
+        pr_body.normalize_issue_ref(written, identity)
+        for _line, _keyword, written in pr_body.closing_refs(live, as_github=True)
+    }
+    missing = [i.ref for i in items if i.ref.lower() not in held and i.ref.lower() not in closed]
+    if not missing:
+        return
+    edit = pr_command(repo_root, "edit", ref=ref, body=rel)
+    lines = "\n".join(f"  Closes {m}" for m in missing)
+    err_console.print(
+        "refused: this branch discharges owed action(s) whose issue the PR body does not "
+        f"close on merge. Add each line to the body (`{edit}`, or by hand under "
+        f"`forge.pr_body: minimal`), then resolve again:\n{lines}",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
 
 
 def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> None:
