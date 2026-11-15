@@ -209,7 +209,7 @@ def _phase_complete(phase: PhaseDoc, obs: PhaseObservation | None) -> bool:
     Pre-2026-05-18 behavior was `completion.at OR (all_steps_ticked + merged PR)`
     — the OR shortcut closed Issues prematurely when an agent set
     `completion.at` before opening its PR. See 2026-05-18 incident
-    (multiple VK-spawned agents skipped `fr apply --yes` to avoid the
+    (multiple runner-spawned agents skipped `fr apply --yes` to avoid the
     premature close).
     """
     completion = phase.state.completion
@@ -382,7 +382,7 @@ def _phase_section(raw: str, fname: str) -> str:
 
 
 def enrichment_block(plan: Plan, phase: PhaseDoc) -> str:
-    """Spec/prose/phase-yaml context block shared by Issue bodies + VK cards.
+    """Spec/prose/phase-yaml context block embedded in Issue bodies.
 
     Embeds the plan's `_prose.md` and the phase's raw `NN.yaml` (both
     carried on `Plan` by `parse()`) in collapsed `<details>` blocks.

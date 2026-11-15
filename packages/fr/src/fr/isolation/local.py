@@ -1637,7 +1637,7 @@ class LocalWorktreeDevcontainerTarget:
     # Backend CLI name + PR/MR label for push_check's guidance line —
     # shares the gh/glab/tea vocabulary `fr._hosts.TAG_FOR_BACKEND` already
     # uses elsewhere, kept local (not imported) since that map's values are
-    # the short vk-card tags ("gh"/"gl"/"gt"), not the CLI binary names.
+    # the short issue-reference tags ("gh"/"gl"/"gt"), not the CLI binary names.
     _CLI_FOR_BACKEND: ClassVar[dict[str, str]] = {
         "github": "gh",
         "gitlab": "glab",
@@ -2192,8 +2192,8 @@ class LocalWorktreeDevcontainerTarget:
 
     def _acquire_gc_lock(self) -> IO[str]:
         """flock(LOCK_EX | LOCK_NB) on the host-wide gc lock; BlockingIOError if
-        another sweep holds it. Idiom mirrored from fr_vk.bridge_cli (reimplemented
-        locally — `fr` must not depend on `fr_vk`, which is being dropped)."""
+        another sweep holds it. The same non-blocking flock idiom as
+        `fr.artifacts.atomic`'s migration lock."""
         lock_path = _home() / ".cache" / "fr" / "isolation-gc.lock"
         try:
             lock_path.parent.mkdir(parents=True, exist_ok=True)

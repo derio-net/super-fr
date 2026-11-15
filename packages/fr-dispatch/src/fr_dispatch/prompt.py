@@ -28,9 +28,8 @@ design (see docs/superpowers/specs/
 ("GitHub Issue"/"GitLab Issue"/"Gitea Issue"), the tag (`gh#`/`gl#`/
 `gt#`), and the dependency-check verify command are all resolved from
 the phase's `tracking_issue` URL via `fr._hosts.backend_for_url`, not
-hardcoded to GitHub. `fr._hosts.TAG_FOR_BACKEND` is shared with
-`fr_vk._cardref` — not duplicated here — since `fr_dispatch` depends
-only on `fr`, never on the fr_vk runner adapter.
+hardcoded to GitHub. `fr._hosts.TAG_FOR_BACKEND` lives in `fr`, not
+here, since `fr_dispatch` depends only on `fr`, never on a runner adapter.
 """
 
 from __future__ import annotations

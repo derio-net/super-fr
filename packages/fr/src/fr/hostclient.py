@@ -1,9 +1,9 @@
 """The single factory that turns "which backend" into "which client."
 
 Every call site that used to hardcode `RealGhClient()` calls `client_for()`
-instead — this is the seam that makes `fr apply`, the isolation lifecycle,
-and the fr-vk dispatch bridge all work against GitLab/Gitea repos without
-each one re-deriving backend detection itself. See docs/superpowers/specs/
+instead — this is the seam that makes `fr apply`, the isolation lifecycle and
+the triage verbs all work against GitLab/Gitea repos without each one
+re-deriving backend detection itself. See docs/superpowers/specs/
 2026-07-09-multi-backend-git-host-adapters-design.md §3.
 """
 
@@ -272,9 +272,9 @@ _WARNED_DECLARED_HOSTS: set[tuple[str, str]] = set()
 def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) -> GhClient:
     """Return the `GhClient`-shaped adapter for an already-resolved
     backend. The shared dispatch table `client_for()` and any caller with
-    its own backend-resolution path (e.g. `fr_vk.pr_observe`, which
-    resolves from a bare PR URL via `fr._hosts.backend_for_url` rather
-    than a local checkout) both go through this.
+    its own backend-resolution path (e.g. the stealth placement, which
+    resolves from a bare URL via `fr._hosts.backend_for_url` rather than a
+    local checkout) both go through this.
 
     `host` names a self-hosted instance. This function is deliberately
     PROVENANCE-BLIND: it never reads repo config (its one input beyond its
@@ -310,7 +310,8 @@ def client_for_url(url: str) -> GhClient:
     """The client for the forge AND instance *url* lives on — the backend from
     the URL's path shape (else its hostname), and a host only when it is not a
     recognized SaaS domain (spec 2026-10-06-forge-remainder §4.D). For callers
-    holding a URL and no checkout: `fr_vk.pr_state` and the triage batch verbs.
+    holding a URL and no checkout: the triage batch verbs, `gate_cmd`,
+    `release_cmd`, `ops_gate_cmd` and `fr.cloud`.
 
     A self-hosted GitLab URL with no MR path shape still reads as github
     here; triage facts are GitHub-only, so it cannot arise from them."""

@@ -1,16 +1,16 @@
 """Runner registry — the `fr.runners` entry-point group.
 
 Adapters register their Runner factory under a short name; `fr apply
---to <name>` resolves through here. The VK adapter registers `vk`; a
+--to <name>` resolves through here. The cncd adapter registers `cncd`; a
 future GitHub-Actions runner registers `gha`. Names feed the
 `runner:<name>` label template, so they pass through the same bounded
 machinery as plan/spec slugs.
 
 `load_runner` is the one place a runner is BUILT outside its own bridge
 (spec 2026-09-25-triage-batches §3.C): it loads the entry point and calls
-the class's `from_env()`, because constructors differ (`VkRunner` takes an
-MCP client) and only `from_env` promises to need nothing but the
-environment. A runner without it is refused, never guessed at.
+the class's `from_env()`, because constructors differ (`CncdRunner` takes a
+base URL, `HerdrRunner` a workspace id) and only `from_env` promises to need
+nothing but the environment. A runner without it is refused, never guessed at.
 """
 
 from __future__ import annotations
@@ -40,8 +40,8 @@ class RunnerLoadError(Exception):
 def runner_units(name: str) -> frozenset[str] | None:
     """The units the runner registered as *name* declares, read off its class.
 
-    Loads the entry point but never builds the runner, so it works for vk and
-    cncd, which have no `from_env`. `None` means the class declares no
+    Loads the entry point but never builds the runner, so it works for
+    cncd, which has no `from_env`. `None` means the class declares no
     `units` (a runner written before the attribute existed) — the caller
     decides what that means; `fr apply --to` refuses it. Raises
     `RunnerLoadError` for a name nobody registers or a class that won't load.
@@ -61,8 +61,8 @@ def load_runner(name: str) -> Runner:
     """Build the runner registered as *name* through its `from_env()` classmethod.
 
     Refuses a name no installed package registers, and a runner class without
-    `from_env` ("cannot be constructed outside its own bridge" — `vk` and
-    `cncd` today).
+    `from_env` ("cannot be constructed outside its own bridge" — `cncd`
+    today).
     """
     runners = available_runners()
     if name not in runners:

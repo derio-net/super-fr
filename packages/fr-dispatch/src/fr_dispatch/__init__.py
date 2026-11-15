@@ -2,9 +2,9 @@
 
 Runner-agnostic since the super-fr split (2026-06-05 design): `tick`
 orchestrates observe → render → diff → apply → dispatch against the
-`fr_dispatch.protocols.Runner` contract; the VibeKanban adapter
-(`fr_vk`) is the first implementation. These functions are intentionally
-NOT wired into the CLI — the bridge daemon (`python -m fr_vk.bridge`)
+`fr_dispatch.protocols.Runner` contract, which each runner adapter
+(`fr_cncd`, `fr_herdr`, `fr_claude_cloud`) implements. These functions are
+intentionally NOT wired into the CLI — a bridge daemon that ticks a runner
 consumes them as a library.
 
 `tick` iterates `WorkItem`s (2026-08-14 workflow-shapes spec §4.D), not
@@ -12,8 +12,7 @@ phases: the granularity is the shape's declared `unit`, and every item
 comes from the one builder, `fr_dispatch.item_graph.build_items` —
 `_eligible_items` below is a tracker-state filter over it, not a second
 construction path. The backend dispatch is the runner's
-`dispatch(item)`; test B2 enforces single-source on the VK adapter's MCP
-chain. Issue creation is operator-only (`apply(skip_issue_create=True)`)
+`dispatch(item)`. Issue creation is operator-only (`apply(skip_issue_create=True)`)
 — see the 2026-05-18 incident.
 """
 

@@ -506,7 +506,7 @@ def apply_command(
         None,
         "--to",
         help=(
-            "Queue phases to a registered runner (e.g. --to vk): adds the "
+            "Queue phases to a registered runner (e.g. --to cncd): adds the "
             "fr:* queue lifecycle + runner:<name> labels and enforces the "
             "reachability gate. Without --to, apply is tracking-only."
         ),

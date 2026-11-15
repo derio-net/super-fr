@@ -3,9 +3,9 @@
 For "these Issues were created in error": close each phase's tracking
 Issue with a comment + reason `not planned`, then null the
 `tracking_issue` field via `plan_ops.clear_tracking_issue`. Makes new
-state, never history surgery (the dispatch commit stays). VK cards and
-workspaces are deliberately untouched — the bridge's `reap_orphans`
-archives workspaces once cards lack live Issues.
+state, never history surgery (the dispatch commit stays). A runner's own
+records (cards, workspaces, sessions) are deliberately untouched: reaping
+them is the runner's job.
 
 Idempotent: re-running skips already-closed Issues and already-null
 fields. Per-phase failures accumulate (apply's doctrine) — the field is
