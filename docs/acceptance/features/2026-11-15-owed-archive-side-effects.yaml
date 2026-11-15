@@ -83,3 +83,9 @@ amendments:
       says; a refused archive and a hold on the default branch leave none.
     why: 'spec 2026-11-15-owed-archive-side-effects R9 amends debt-engine R22: a refused
       archive, and a hold on the default branch, leave no owed entry and file no issue'
+  - row: owed-durable-at-archive
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_archive_owed.py#test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently
+    why: 'R7-R9: the test was split; a single-plan refusal no longer records owed'
