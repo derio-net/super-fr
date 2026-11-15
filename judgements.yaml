@@ -7113,6 +7113,16 @@ batches:
     runner: herdr
     handle: w3E:p1
     branch: fix/batch-suite-health
+  - kind: approval
+    at: '2026-11-15T10:51:37.292144Z'
+    pr: 1470
+    head: abefcfcbe7a7042f92f9aefb7206282f9fbe6502
+  - kind: update
+    at: '2026-11-15T10:51:54.176986Z'
+    pr: 1470
+    head_before: abefcfcbe7a7042f92f9aefb7206282f9fbe6502
+    head_after: 9d3e1aac8fd083cfe3bf4d009527a8d113bc8e7e
+    base: be121114b879145f901857c523b4f9bd3f43e680
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
