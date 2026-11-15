@@ -25,3 +25,8 @@ Investigation found four separate causes in four code sites, sharing only a them
 ### rc-1462 · root-cause · #1462: deliver stamps a merged local row in place
 
 `_local_stamp_plan` → `stamp_local` rewrites the row block for every local row of the feature's fragment, merged on the default ref or not. The fold keeps the merged definition (row still unstamped) and `fr acceptance check` fails 'edited in place', while deliver exits 0. A merged row changes only by an amendment (R16).
+
+<!-- fr:journal kind=finding scope=debug id=fix-1303 created=2026-11-15T17:02:34+00:00 state=fixed -->
+### fix-1303 · finding [fixed] · #1303 fixed: process wrappers are stepped over; the refusal names the hiding word
+
+telemetry._unwrap steps over timeout/nice/nohup/env/time/stdbuf/caffeinate (per-wrapper option grammar, no recursion depth spent); near_miss_program feeds visual's refusal ('fr read its program as `xargs`'). Pinned by test_run_telemetry_visual.py::test_a_process_wrapper_before_the_program_is_stepped_over (22 forms), ::test_the_near_miss_names_the_command_word_that_hid_the_script, and test_run_evidence_visual.py::test_the_refusal_names_the_word_that_hid_the_script / ::test_a_capture_script_behind_timeout_is_witnessed.
