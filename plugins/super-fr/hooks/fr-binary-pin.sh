@@ -34,9 +34,14 @@ line=$(printf "export FR_HARNESS_FR='%s'" "$quoted")
 # resumed session keeps the earlier hooks' files, so an old pin there would be sourced
 # and the new one lose or conflict. So append the new pin to every sibling that already
 # holds a pin (a plain file, never a symlink, never one that has none), then to ours.
-# Append only, never rewrite or create; a failure on any one file is ignored.
+# Append only, never rewrite or create; a failure on any one file is ignored. Our own
+# file is skipped here and appended once below. The `-L` test and the `>>` are not
+# atomic (bash has no O_NOFOLLOW): a process running as this same user could swap a
+# sibling for a symlink in between and receive one export line. It could already edit
+# these files directly, so that grants nothing new (review p3-r2).
 envdir=$(dirname "$CLAUDE_ENV_FILE")
 for sibling in "$envdir"/sessionstart-hook-*.sh; do
+  [ "$sibling" = "$CLAUDE_ENV_FILE" ] && continue
   [ -f "$sibling" ] && [ ! -L "$sibling" ] || continue
   grep -q '^export FR_HARNESS_FR=' "$sibling" 2>/dev/null || continue
   printf '%s\n' "$line" >>"$sibling" 2>/dev/null || true
