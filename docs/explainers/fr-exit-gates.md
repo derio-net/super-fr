@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-15 still true: fr gate pass --yes now exits 1 on a failed tracker close, and the ledger also reads archived runs (batch gate-truth)
+reviewed: 2026-11-15 still true, fr gate pass --yes now exits 1 on a failed tracker close, and the ledger also reads archived runs (batch gate-truth)
 ---
 
 ## What work cannot finish in the pull request?
