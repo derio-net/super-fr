@@ -404,6 +404,56 @@ def test_a_hold_on_the_default_branch_says_what_it_would_record_and_writes_nothi
     assert _writes(gh) == []
 
 
+def _branch_with_manual_phase(tmp_path: Path) -> Path:
+    """A merged branch whose plan holds an unticked `[manual]` phase; HEAD is left on
+    the housekeeping branch `tb._squash_merge` stands in."""
+    repo = tb._base(tmp_path)
+
+    def build(r: Path) -> None:
+        plan = tb._plan(r, PLAN, ticked=True)
+        (plan / "02.yaml").write_text(MANUAL_PHASE)
+
+    tb._merged(repo, build)
+    return repo
+
+
+def test_branch_hold_on_the_default_branch_says_what_it_would_record_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    repo = _branch_with_manual_phase(tmp_path)
+    # a merged `--branch` close-out may run on the default branch itself
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "main"], check=True)
+    subprocess.run(["git", "-C", str(repo), "reset", "-q", "--hard", "origin/main"], check=True)
+
+    def state() -> tuple[str, str]:
+        def out(*a: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+            ).stdout
+
+        return out("status", "--porcelain"), out("diff", "--cached")
+
+    before = state()
+    result = tb._invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH])
+    assert result.exit_code == 0, result.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in result.output
+    assert state() == before
+    assert not journal_path(repo, "plan", PLAN).exists()
+
+
+def test_branch_hold_off_the_default_branch_records_the_owed_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _branch_with_manual_phase(tmp_path)
+    result = tb._invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH])
+    assert result.exit_code == 0, result.output
+    assert "would record owed" not in result.output
+    entries = parse_journal(journal_path(repo, "plan", PLAN).read_text())
+    assert [e.id for e in entries if e.kind == "owed"] == ["manual-phase-2"]
+
+
 # --- R19: the close-out brief lists the steps -----------------------------
 
 
