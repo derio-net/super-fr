@@ -10,3 +10,8 @@ Investigation found four separate causes in four code sites, sharing only a them
 ### rc-1454 · root-cause · #1454: a fresh deliver tests log names no code tree
 
 `_verify_tests_log` (run_cmd.py) checks the log's writer and time window only; `_local_stamp_witness` then stamps HEAD's code tree. A commit after the suite and before deliver leaves the tree clean, so the log is accepted as covering HEAD and a local row is stamped with a tree the suite never ran. Phase logs already guard this with `newest_code_mtime` (freshness against every code path since the merge-base).
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1395 created=2026-11-15T16:52:34+00:00 -->
+### rc-1395 · root-cause · #1395: verify_ci forge reads raise GhError past _ci_tests_witness
+
+`verify_ci` calls `open_pr_for_head`, `pr_view`, `required_check_names` and `commit_checks` with no GhError handling; `_ci_tests_witness` catches only CiPending and CiEvidenceRefused, so a network failure escapes as a traceback with exit 1 (fr-goal reads 1 as 'record applied, a chained step failed').
