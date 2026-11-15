@@ -7334,6 +7334,13 @@ batches:
     handle: w3D:p2
     run: 2026-11-14-feat-batch-retire-vk
     archive: chore/closeout-2026-11-15-1
+  - kind: closeout
+    at: '2026-11-15T07:28:27.476348Z'
+    runner: herdr
+    handle: w3D:p2
+    run: 2026-11-14-feat-batch-retire-vk
+    archive: chore/closeout-2026-11-15-1
+    archived: 1469
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -7611,6 +7618,7 @@ closeouts:
   planned:
   - retire-vk
   pr: 1469
+  merged: true
   head: 0a79895b25e3175ba197be370c150e3b1256cb57
   members:
   - retire-vk
