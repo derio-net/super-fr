@@ -249,3 +249,10 @@ amendments:
     notes: R1 registry tests and the R10 source tripwire (with its allowlist and planted-line
       cases) run in CI
     why: every half of the row now has a test that runs in CI
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_fr_skills_lists_no_fr_runner
+    why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
+      pages
