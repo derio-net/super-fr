@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -42,6 +42,8 @@ if TYPE_CHECKING:
 __all__ = [
     "OWED_ROW_STATUSES",
     "DURABLE_PR_BODY_SUFFIX",
+    "HEADING_OWED_DISCHARGED",
+    "DischargedOwed",
     "FR_MARKER_PREFIXES",
     "PR_BODY_NAME",
     "REQUIRED_SECTIONS",
@@ -49,8 +51,10 @@ __all__ = [
     "PrematureClose",
     "UnreadableJournalError",
     "closing_refs",
+    "discharged_owed",
     "durable_pr_body_path",
     "fr_markers",
+    "held_issues",
     "holds_open_for_run",
     "issue_refs",
     "missing_sections",
@@ -60,7 +64,9 @@ __all__ = [
     "prerelease_route",
     "referenced_refs",
     "render_out_of_scope",
+    "render_owed_discharged",
     "render_pr_body",
+    "run_held_issues",
     "run_narrowings",
     "shared_closing_keywords",
     "unaccounted",
@@ -363,6 +369,36 @@ def premature_closes(
 
     Merging such a PR would close an issue its promise has not been verified
     for; `Refs <ref>` mentions it without closing."""
+    holding, narrowed, tracking = _held_sets(
+        matrix, identity, holds_open, exit=exit, narrowings=narrowings
+    )
+    out: list[PrematureClose] = []
+    for line, _keyword, written in closing_refs(live_body, as_github=True):
+        ref = normalize_issue_ref(written, identity)
+        if ref is not None and (ref in holding or ref in narrowed or ref in tracking):
+            out.append(
+                PrematureClose(
+                    line,
+                    ref,
+                    tuple(holding.get(ref, ())),
+                    tuple(narrowed.get(ref, ())),
+                    tuple(tracking.get(ref, ())),
+                )
+            )
+    return out
+
+
+def _held_sets(
+    matrix: Matrix,
+    identity: tuple[str, str],
+    holds_open: Callable[[Row], bool],
+    *,
+    exit: Exit | None,
+    narrowings: Sequence[JournalEntry],
+) -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, list[str]]]:
+    """`(holding, narrowed, tracking)`: issue ref (`normalize_issue_ref`'s
+    spelling) -> the rows, decisions and owed rows that hold it open — the one
+    reading `premature_closes` and `held_issues` share."""
     from fr.acceptance.walks import walk_verified
     from fr.gates import POST_MERGE_GATES
 
@@ -390,20 +426,204 @@ def premature_closes(
             continue
         for issue in decision.narrows:
             narrowed.setdefault(key(issue), []).append(decision.id)
-    out: list[PrematureClose] = []
-    for line, _keyword, written in closing_refs(live_body, as_github=True):
-        ref = normalize_issue_ref(written, identity)
-        if ref is not None and (ref in holding or ref in narrowed or ref in tracking):
-            out.append(
-                PrematureClose(
-                    line,
-                    ref,
-                    tuple(holding.get(ref, ())),
-                    tuple(narrowed.get(ref, ())),
-                    tuple(tracking.get(ref, ())),
-                )
-            )
+    return holding, narrowed, tracking
+
+
+def held_issues(
+    matrix: Matrix,
+    identity: tuple[str, str],
+    holds_open: Callable[[Row], bool],
+    *,
+    exit: Exit | None = None,
+    narrowings: Sequence[JournalEntry] = (),
+) -> dict[str, str]:
+    """Issue ref -> why `premature_closes` would refuse a closing line for it
+    (owed-archive R5): a discharged owed issue held here is rendered `Refs`."""
+    holding, narrowed, tracking = _held_sets(
+        matrix, identity, holds_open, exit=exit, narrowings=narrowings
+    )
+    out: dict[str, str] = {}
+    for ref in sorted({*holding, *narrowed, *tracking}):
+        why: list[str] = []
+        if ref in holding:
+            why.append(f"row {', '.join(holding[ref])} still holds it open")
+        if ref in narrowed:
+            why.append(f"decision {', '.join(narrowed[ref])} narrows it, unanswered")
+        if ref in tracking:
+            why.append(f"owed row {', '.join(tracking[ref])} tracks its rest")
+        out[ref] = " and ".join(why)
     return out
+
+
+# --- owed actions discharged (owed-archive-side-effects R4-R6) --------------------
+
+HEADING_OWED_DISCHARGED = "## Owed actions discharged"
+
+
+@dataclass(frozen=True)
+class DischargedOwed:
+    """An owed entry the branch discharged whose filed issue is in this repo:
+    merging the branch closes `ref` (`owner/repo#n`)."""
+
+    ref: str
+    entry: str
+
+
+def _journal_at(repo_root: Path, rev: str, rel: str) -> list[JournalEntry] | None:
+    """The journal at `rev:rel`, parsed, or None when it is not there or does not
+    parse."""
+    from fr.git import git_answer
+
+    shown = git_answer(repo_root, "show", f"{rev}:{rel}")
+    if shown.returncode != 0:
+        return None
+    try:
+        return parse_journal(shown.stdout)
+    except JournalParseError:
+        return None
+
+
+def _fixed_owed(entries: list[JournalEntry]) -> set[str]:
+    states = effective_finding_states(entries)
+    return {
+        e.id
+        for e in entries
+        if e.kind == "owed" and e.resolves is None and states.get(e.id) == "fixed"
+    }
+
+
+def discharged_owed(repo_root: Path) -> list[DischargedOwed]:
+    """Every owed entry the branch discharged (R4): in a spec, plan or debug
+    journal, live or archived, that `merge-base(HEAD, <default ref>)..HEAD`
+    changed, whose effective state is `fixed` at HEAD and not in that journal at
+    the default ref (read at either its live or its archived path, so a journal
+    archived on the branch compares with its live copy) — and whose `filed_as`
+    names an issue in THIS repo (`fr.owed_refs.own_issue`, the reading resolve
+    closes by). Empty when the default ref, the merge-base or the repo's identity
+    cannot be read, or when the journals live outside the checkout (quiet and
+    stealth placements): resolve's printed closing line is the route then (R2)."""
+    from fr.archive_followups import owed_identity
+    from fr.artifacts.paths import artifact_root
+    from fr.git import GitUnavailableError, git_answer, remote_default_ref
+    from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL, owed_filed_as
+    from fr.owed_refs import own_issue
+    from fr.proportionality import feature_merge_base
+
+    try:
+        if artifact_root(repo_root).resolve() != repo_root.resolve():
+            return []
+        default = remote_default_ref(repo_root)
+        if not isinstance(default, str):
+            return []
+        base = feature_merge_base(repo_root, default)
+        if base is None:
+            return []
+        diff = git_answer(
+            repo_root,
+            "diff",
+            "-z",
+            "--no-renames",
+            "--name-only",
+            "--diff-filter=AM",
+            base,
+            "HEAD",
+            "--",
+            JOURNALS_REL.as_posix(),
+            IMPLEMENTED_JOURNALS_REL.as_posix(),
+        )
+        if diff.returncode != 0:
+            return []
+        own, _why = owed_identity(repo_root)
+        if own is None:
+            return []
+        out: list[DischargedOwed] = []
+        seen: set[str] = set()
+        for rel in (p for p in diff.stdout.split("\0") if p.endswith(".md")):
+            entries = _journal_at(repo_root, "HEAD", rel)
+            if entries is None:
+                continue
+            fixed = _fixed_owed(entries)
+            if not fixed:
+                continue
+            tail = Path(rel).relative_to(
+                IMPLEMENTED_JOURNALS_REL
+                if Path(rel).is_relative_to(IMPLEMENTED_JOURNALS_REL)
+                else JOURNALS_REL
+            )
+            before: set[str] = set()
+            for root_rel in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
+                then = _journal_at(repo_root, default, (root_rel / tail).as_posix())
+                if then is not None:
+                    before |= _fixed_owed(then)
+            filed = owed_filed_as(entries)
+            for entry in entries:
+                if entry.id not in fixed or entry.id in before or entry.id not in filed:
+                    continue
+                target = own_issue(repo_root, filed[entry.id], own)
+                if isinstance(target, str):
+                    continue
+                ref = f"{target[0]}#{target[1]}"
+                if ref.lower() not in seen:
+                    seen.add(ref.lower())
+                    out.append(DischargedOwed(ref=ref, entry=entry.id))
+        return out
+    except GitUnavailableError:
+        return []
+
+
+def render_owed_discharged(items: Sequence[DischargedOwed], held: Mapping[str, str]) -> str:
+    """The `## Owed actions discharged` body: `Closes <ref>` per item, `Refs <ref>
+    — held: <reason>` for one `held` names (R5, keyed by `normalize_issue_ref`'s
+    lowercase spelling), or "None."."""
+    lines = []
+    for item in items:
+        why = held.get(item.ref.lower())
+        lines.append(f"Refs {item.ref} — held: {why}" if why else f"Closes {item.ref}")
+    return "\n".join(lines) if lines else "None."
+
+
+def run_held_issues(repo_root: Path, state: RunState) -> dict[str, str]:
+    """`held_issues` over the run's effective matrix, exit and narrowing decisions
+    — the inputs `deliver`'s premature-close gate reads. Raises what they raise
+    (`AcceptanceError`, `UnreadableJournalError`)."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.requirements import load_spec_matrix, run_spec
+    from fr.verification.exit import run_exit
+
+    narrowings = run_narrowings(repo_root, state)
+    matrix = load_effective(repo_root)
+    if not any(row.issues for row in matrix.rows) and not narrowings:
+        return {}
+    identity = resolve_identity(matrix, repo_root)
+    spec_rel = run_spec(state)
+    spec_ref = (
+        load_spec_matrix(repo_root, spec_rel)[1]
+        if spec_rel is not None and has_fragments(repo_root)
+        else None
+    )
+    try:
+        exit_ = run_exit(repo_root, state)
+    except Exception:  # noqa: BLE001 — as the premature-close gate reads it
+        exit_ = None
+    return held_issues(
+        matrix,
+        identity,
+        holds_open_for_run(repo_root, state, matrix, spec_ref),
+        exit=exit_,
+        narrowings=narrowings,
+    )
+
+
+def _owed_discharged(repo_root: Path, state: RunState) -> str:
+    items = discharged_owed(repo_root)
+    if not items:
+        return "None."
+    try:
+        held = run_held_issues(repo_root, state)
+    except Exception:  # noqa: BLE001 — deliver's own gate refuses what cannot be read
+        held = {}
+    return render_owed_discharged(items, held)
 
 
 # --- leftovers (exit-gates R9) ---------------------------------------------------
@@ -1164,6 +1384,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         _post_merge_owed(repo_root, state),
         "## Manual operations",
         _manual_operations(repo_root, state),
+        HEADING_OWED_DISCHARGED,
+        _owed_discharged(repo_root, state),
     ]
     tests = _tests(repo_root, state)
     if tests is not None:
