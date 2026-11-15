@@ -15,3 +15,8 @@ Investigation found four separate causes in four code sites, sharing only a them
 ### rc-1395 · root-cause · #1395: verify_ci forge reads raise GhError past _ci_tests_witness
 
 `verify_ci` calls `open_pr_for_head`, `pr_view`, `required_check_names` and `commit_checks` with no GhError handling; `_ci_tests_witness` catches only CiPending and CiEvidenceRefused, so a network failure escapes as a traceback with exit 1 (fr-goal reads 1 as 'record applied, a chained step failed').
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1303 created=2026-11-15T16:52:36+00:00 -->
+### rc-1303 · root-cause · #1303: _program takes a process wrapper as the program
+
+`fr.run.telemetry._program` steps over assignments, `uv run fr`, `fr isolation exec --` and `bash/sh -c` only; `timeout`, `nice`, `nohup`, `env`, `time`, `stdbuf` and `caffeinate` become the command word, so a capture script run behind one is never witnessed and the refusal names no cause.
