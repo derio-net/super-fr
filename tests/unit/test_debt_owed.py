@@ -64,23 +64,27 @@ def _journal(root: Path, entries: list[JournalEntry], *, archived: bool = False)
 
 
 class OwnedGh(FakeGhClient):
-    """A forge double that lists its open issues, authored by `me`."""
+    """A forge double that serves one issue by number, authored by `me`. A listing
+    of open issues raises: closing reads the one issue it was filed as (R14)."""
+
+    author = "me"
 
     def viewer_login(self) -> str:
         return "me"
 
-    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
-        self.calls.append(("list_issues", {"repo": repo}))
-        return [
-            {
-                "number": n,
-                "body": i.body,
-                "labels": [{"name": x} for x in sorted(i.labels)],
-                "author": {"login": "me"},
-            }
-            for (r, n), i in self.issues.items()
-            if r == repo and i.state == "OPEN"
-        ]
+    def list_issues(self, repo, state, limit, fields=None, labels=None):  # noqa: ANN001, ANN201
+        raise AssertionError("closing an owed issue must not list issues")
+
+    def view_issue_record(self, repo: str, number: int) -> dict:
+        self.calls.append(("view_issue_record", {"repo": repo, "number": number}))
+        i = self.issues[(repo, number)]
+        return {
+            "number": number,
+            "body": i.body,
+            "labels": [{"name": x} for x in sorted(i.labels)],
+            "author": {"login": self.author},
+            "state": i.state,
+        }
 
 
 def _repo(tmp_path: Path) -> Path:
@@ -424,3 +428,58 @@ def test_a_step_record_resolves_cannot_discharge_an_owed_entry(tmp_path: Path) -
             StepRecord(resolves=(Resolution(id="test-plan-step-4", state="fixed", body="x"),)),
             target=engine.RecordTarget(journal_scope="spec", journal_slug=SLUG, journal_file=path),
         )
+
+
+# --- R14: closing reads the one issue -----------------------------------------
+
+
+def _resolve_with(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, gh: OwnedGh):  # noqa: ANN202
+    root = _repo(tmp_path)
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    return _resolve(monkeypatch, root, gh)
+
+
+def test_closing_reads_the_one_issue_never_a_listing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh = OwnedGh()
+    _owned_issue(gh)
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert [kw for n, kw in gh.calls if n == "view_issue_record"] == [
+        {"repo": OWN, "number": 12}
+    ]
+    (close,) = _calls(gh, "edit_issue_state")
+    assert close["state"] == "CLOSED"
+
+
+def test_an_issue_that_is_closed_is_not_closed_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh = OwnedGh()
+    _owned_issue(gh)
+    gh.issues[(OWN, 12)].state = "CLOSED"
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "edit_issue_state") == [] and _calls(gh, "comment_issue") == []
+    assert "close it yourself" in res.output
+
+
+def test_another_authors_issue_is_not_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh = OwnedGh()
+    gh.author = "mallory"
+    _owned_issue(gh)
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "edit_issue_state") == [] and "close it yourself" in res.output
+
+
+def test_a_wrong_marker_is_not_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    gh = OwnedGh()
+    _owned_issue(gh, body="Owed: x\n\n<!-- fr-owed:spec:other#step9 -->")
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "edit_issue_state") == [] and "close it yourself" in res.output

@@ -749,7 +749,7 @@ def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
     entry's key (review p3-r4). Otherwise, or when the forge cannot be reached
     or the repo declares `tracking: none`, print the command for the operator.
     The discharge is already recorded; this never changes the exit code."""
-    from fr.archive_followups import OWED_ISSUE_FIELDS, owed_identity, owned_owed_key
+    from fr.archive_followups import owed_identity, owned_owed_key
     from fr.hostclient import issue_command
     from fr.services import ServicesError
     from fr.settings import require_forge
@@ -778,14 +778,14 @@ def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
     try:
         gh = _make_gh_client()
         me = gh.viewer_login()
-        issues = gh.list_issues(repo, "open", 200, fields=OWED_ISSUE_FIELDS)
+        issue = gh.view_issue_record(repo, number)  # R14: the one issue, never a listing
     except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
         typer.echo(
             f"could not read {shown} ({type(e).__name__}: {e}) — close it yourself: {command}"
         )
         return
-    issue = next((i for i in issues if i.get("number") == number), None)
-    found = owned_owed_key(issue, me) if issue is not None else None
+    is_open = str(issue.get("state") or "").upper() == "OPEN"
+    found = owned_owed_key(issue, me) if is_open else None
     if key is None or found != key:
         typer.echo(
             f"warning: not closing {shown} — it is not an open fr:owed issue this account "
