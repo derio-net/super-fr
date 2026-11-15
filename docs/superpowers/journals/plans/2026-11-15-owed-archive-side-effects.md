@@ -267,3 +267,8 @@ new module written once; nothing to fold
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 a scenario script and a registration; nothing to clean
+
+<!-- fr:journal kind=decision scope=plan id=p3-dry-run-stale-refuses created=2026-11-15T23:50:22+00:00 phase=3 -->
+### p3-dry-run-stale-refuses · decision · fr archive --dry-run over stale artifacts refuses with the gate's message, exit 2, in every context; it never migrates or commits (phase 3)
+
+Review p3-r3. The migration gate treats `archive … --dry-run` as a context that may not write (`trigger.asks_for_dry_run`, not READ_ONLY_COMMANDS): nothing stale, the dry run proceeds; something stale, it refuses as the opt-out row does, CI included. A dry run cannot honestly preview a run that would migrate first.
