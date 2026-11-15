@@ -80,3 +80,8 @@ Full local suite: 4 archive tests failed with 'rejected (fetch first)'. Deleting
 ### 9fd3bba64fab · decision · #1428: 7 shards per ci.yml leg
 
 Operator chose, in the session's question round after fix 1 failed: a 7th shard per leg in ci.yml (release.yml stays at 6), amending ci-speed R6's acceptance row.
+
+<!-- fr:journal kind=finding scope=debug id=ci-seven-shards created=2026-11-15T10:39:09+00:00 state=fixed -->
+### ci-seven-shards · finding [fixed] · #1428: ci.yml at 7 shards, 323 s on its first run
+
+CI run on 91007c7: green, wall clock 323 s (budget 360), slowest shard job 288 s (py3.14/2) against 344-369 s on the last ten main runs. One run; runner speed varies x0.72-x1.40, so the budget watcher on main is the real check. ci-shards-complete reworded by amendment (feature legacy). Full local suite on 91007c7: 16013 passed, 120 skipped.
