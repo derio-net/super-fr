@@ -1,0 +1,87 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-owed-archive
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: "Operator brief: batch owed-archive (#1400, #1183, #1301, #1184), verbatim"
+    body: |
+      /fr-goal Owed trackers and archive side effects
+
+      Batch `owed-archive` of derio-net/super-fr: 4 issues, delivered as ONE pull request.
+
+      ## super-fr#1400: fr journal resolve closes the owed issue before the resolution reaches main
+      Still live. `packages/fr/src/fr/commands/journal_cmd.py:582-585` calls `_close_owed_issue` right after the local record commit, on any branch. The docstring at :746 says `The discharge is already recorded`. So the tracker closes before the resolution reaches main, and it stays closed if the PR is abandoned.
+      Note: The fix amends spec `2026-10-11-debt-engine` R24 (close at merge via a closing ref, or only on the default branch).
+
+      ## super-fr#1183: a refused archive still writes/stages manual-phase owed entries and files issues, even on the default branch
+      When there are blockers and no `--force`, `fr archive` calls `_write_manual_owed` (`packages/fr/src/fr/commands/archive_cmd.py:1006-1007`) before printing "refusing to archive" and exiting 2. The owed journal entry is written and `git add`-ed (`:729-734`) with no default-branch check. Still live.
+      Note: Batch with #1301 (archive side effects with no preview).
+
+      ## super-fr#1301: fr archive files forge issues but has no dry run
+      `fr archive` (`packages/fr/src/fr/commands/archive_cmd.py:851-890`) has no `--dry-run` or preview option. Even so, `_owed_step` (`:746`) and `file_open_ends` (`:695`) file forge issues. Still live.
+      Note: Batch with #1183. Both are about archive side effects with no preview and on refusal.
+
+      ## super-fr#1184: _existing_owed's 200-issue listing cap can miss an existing marker and file a duplicate
+      Still live. `_existing_owed` (`packages/fr/src/fr/archive_followups.py:467-473`) lists at most 200 open issues (`gh.list_issues(repo, 'open', 200, ...)`). Past that it can miss an existing owed marker and file a duplicate tracker.
+      Note: Could use a marker search instead of a capped listing.
+
+      ## Why these belong together
+      Tier 2: journal resolve closes the owed issue before the fix reaches main; a refused archive still files issues; archive gets a dry run. journal_cmd.py, archive_cmd.py.
+
+      ## Delivery rules
+      - Work on branch `feat/batch-owed-archive`.
+      - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+        Closes derio-net/super-fr#1400
+        Closes derio-net/super-fr#1183
+        Closes derio-net/super-fr#1301
+        Closes derio-net/super-fr#1184
+      - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+
+      Never add the `approved-fr` label: it is the operator's approval to merge, and fr voids it on your next push.
+  - {kind: decision, id: d1-close-at-merge, title: "#1400: owed issue closes at merge", body: "Operator chose: off the default branch resolve closes nothing and deliver's PR body carries a Closes line; on the default branch it closes at once. Amends debt-engine R24."}
+  - {kind: decision, id: d2-refusal-writes-nothing, title: "#1183: a refused archive writes nothing", body: "Operator chose: exit-2 refusal writes, stages and files nothing; held (--branch) / skipped (--all) plans still record R22 owed entries, except on the default branch, where they print what they would record."}
+  - {kind: decision, id: d3-dry-run-forge-reads, title: "#1301: --dry-run makes forge reads only", body: "Operator chose: same gates incl. forge reads; reports moves, owed entries, issues filed/reused; no file write, no git change, no forge write; exit code equals the real run's."}
+  - {kind: decision, id: d4-label-filter-fail-closed, title: "#1184: find owed issues by label, fail closed at the limit", body: "Operator chose: list only open fr:owed issues (forge-side filter); when the list reaches its limit or cannot be read, file nothing and warn. Closing reads the one issue by number."}
+  - {kind: decision, id: d5-verification, title: "Verification: candidate, gate developer", body: "Operator chose strategy candidate with gate developer; no post-merge Test Plan rows."}
+  - {kind: lens, lens: tests, title: "Every fix is a side effect that must NOT happen; each needs a negative test proving no forge write / no file change"}
+resolves: []
+acceptance:
+  - id: owed-close-at-merge
+    capability: debt
+    acceptance: "Discharging an owed entry off the default branch closes no issue and prints the Closes line for the PR; on the default branch it closes the issue; deliver's PR body carries a Closes line for every owed entry the run discharged."
+    origin: ["spec:2026-11-15-owed-archive-side-effects#R1", "spec:2026-11-15-owed-archive-side-effects#R2", "spec:2026-11-15-owed-archive-side-effects#R3", "spec:2026-11-15-owed-archive-side-effects#R4", "spec:2026-11-15-owed-archive-side-effects#R5"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/owed-close-at-merge.sh
+  - id: archive-refusal-writes-nothing
+    capability: archive
+    acceptance: "A refused fr archive leaves the working tree, the index and the forge as they were, and on the default branch a held plan records no owed entry."
+    origin: ["spec:2026-11-15-owed-archive-side-effects#R6", "spec:2026-11-15-owed-archive-side-effects#R7"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/archive-refusal-writes-nothing.sh
+  - id: archive-dry-run
+    capability: archive
+    acceptance: "fr archive --dry-run reports the moves, owed entries and issues a run would make, changes no file, index or forge state, and exits with the real run's code."
+    origin: ["spec:2026-11-15-owed-archive-side-effects#R8", "spec:2026-11-15-owed-archive-side-effects#R9"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/archive-dry-run.sh
+  - id: owed-reuse-uncapped
+    capability: archive
+    acceptance: "fr never files a duplicate fr:owed issue however many open issues the repo has: it finds existing ones by label, and files nothing when its listing cannot be complete."
+    origin: ["spec:2026-11-15-owed-archive-side-effects#R10", "spec:2026-11-15-owed-archive-side-effects#R11"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/owed-reuse-uncapped.sh
+  - row: debt-owed-discharge
+    op: reword
+    why: "spec 2026-11-15-owed-archive-side-effects R5 amends debt-engine R24: the issue closes when the discharge reaches the default branch"
+    acceptance: "`fr debt` lists owed actions from owed/awaiting-live issues, held manual phases, walk-owed rows and unresolved owed entries (archived included), and resolving an owed entry with evidence removes it and closes its issue once the discharge reaches the default branch."
+emitted:
+  spec: docs/superpowers/specs/2026-11-15-owed-archive-side-effects-design.md
+evidence: {}
