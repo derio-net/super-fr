@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-14 VK support removed; a profile that still installs fr-vk is refused before a container starts
+reviewed: 2026-11-15 the VK-profile paragraph now follows the restore paragraph
 ---
 
 ## What are the two boundaries and the bridge?
@@ -215,15 +215,15 @@ own records under `docs/superpowers/` (unless you pass `--no-preserve`). It pres
 inside the repository's git directory, and the `up --branch` that re-creates the worktree
 puts them back.
 
+The restore only ever adds. When a file changed since the teardown, fr reports it as a
+conflict and keeps the preserved copy. The restore reports a recorded deletion but never
+re-applies it, and a different branch re-created under the same name gets nothing.
+
 fr no longer supports VibeKanban. A profile that an older fr scaffolded still installs
 the removed `fr-vk` package, so its container would fail on every start. `up`, `rebuild` and
 the resume inside `exec` stop on such a profile before any container starts, and the
 message names the `--with` part to delete from its `postCreateCommand`. Fix the profile
 on the default branch too, because every new branch is cut from it.
-
-The restore only ever adds. When a file changed since the teardown, fr reports it as a
-conflict and keeps the preserved copy. The restore reports a recorded deletion but never
-re-applies it, and a different branch re-created under the same name gets nothing.
 
 Or watch the boundary bite with no container at all: in any isolation-enabled repo, have an
 agent edit a tracked file from the base clone with no active workspace. The hook refuses it
