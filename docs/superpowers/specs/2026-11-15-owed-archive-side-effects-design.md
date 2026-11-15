@@ -222,3 +222,9 @@ side effect that must NOT happen:
   limit never gets a duplicate `fr:owed` issue; a listing that cannot be complete files
   nothing.
 - Amendments: `debt-owed-discharge` (R6) and `owed-durable-at-archive` (R9).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-15-owed-archive-side-effects | `derio-net/super-fr` | `2026-11-15-owed-archive-side-effects` | — |

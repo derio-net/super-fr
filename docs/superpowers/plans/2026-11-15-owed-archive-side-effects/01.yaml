@@ -1,0 +1,155 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Owed issues found by label, fail closed; a refused archive writes nothing
+    (R7-R9, R12-R14)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - owed-reuse-uncapped
+  - archive-refusal-writes-nothing
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/git.py
+  - packages/fr/src/fr/docs/load.py
+  - packages/fr/src/fr/archive_followups.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_archive_owed.py
+  - tests/unit/test_archive_cmd.py
+  - tests/unit/test_debt_owed.py
+  - tests/unit/test_git.py
+  - tests/unit/test_deliver_leftovers.py
+  - tests/scenarios/owed-reuse-uncapped.sh
+  - tests/scenarios/archive-refusal-writes-nothing.sh
+  - tests/scenarios/fixtures/**
+  - tests/integration/test_scenarios.py
+  - .changes/feat-batch-owed-archive.yaml
+  - docs/**/*.md
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: 'Smoke: CI green on a trivial test; shared default-branch helper'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_git.py::test_on_default_branch_strips_the_remote_and_treats_detached_head_as_off (HEAD on main with default ref origin/main -> True; feature branch -> False; detached -> False). Run `uv run pytest tests/unit/test_git.py -q --no-cov` and see it fail on the missing fr.git.on_default_branch.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: move `on_default_branch(root, default_ref)` from packages/fr/src/fr/docs/load.py:90 into packages/fr/src/fr/git.py (raising GitUnavailableError as fr.git does); keep docs/load.py importing it and wrapping GitUnavailableError into DocsEnvError where it did. Add `fr.git.head_on_default_branch(root) -> bool` that calls `remote_default_ref(root)` and answers False on None, GitRefusal or detached HEAD. Run tests/unit/test_git.py and the docs tests green.
+  - id: P1.T1.S3
+    text: |-
+      Add the change fragment .changes/feat-batch-owed-archive.yaml (`bump: minor`, one summary line covering close-at-merge, archive refusal writes nothing, archive --dry-run, owed dedupe by label). Commit, push with `uv run fr push`, and confirm CI goes green on the PR for this trivial change (the walking-skeleton smoke).
+- number: 2
+  title: Owed reuse by label, fail closed (R12, R13)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED in tests/unit/test_archive_owed.py: (a) a GhClient double whose list_issues honours labels=['fr:owed'] holds 250 unrelated open issues plus an owed issue with the marker -> file_owed_ends reuses it and creates nothing; (b) the listing returns exactly OWED_LIST_LIMIT issues -> no create_issue, no ensure_labels, every FiledOwed error names the limit; (c) the listing raises -> same, the error names the exception; (d) the listing raises UnsupportedForgeOperation -> errors say the forge cannot list issues. Assert the double's write log is empty in b-d.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/archive_followups.py replace `_existing_owed`'s dict with a small result (found keys, or a reason: limit, error text, or unsupported), call `gh.list_issues(repo, 'open', OWED_LIST_LIMIT, fields=OWED_ISSUE_FIELDS, labels=[FR_OWED.name])`, and make file_owed_ends return per-end errors without ensure_labels or create_issue when a reason is present.
+  - id: P1.T2.S3
+    text: |-
+      RED then GREEN for R13: `_owed_step` (archive_cmd.py:746) prints 'this forge cannot list issues by label: owed actions stay in the journal' for unsupported, like its ForgeQuietError branch; `fr journal file --id <owed>` reports it and exits 0 without recording filed_as; deliver's leftover check (see tests/unit/test_deliver_leftovers.py) accepts an open owed entry as recorded when the repo's forge adapter cannot list issues, as under forge.issues off. Tests in test_archive_owed.py, test_debt_owed.py and test_deliver_leftovers.py.
+- number: 3
+  title: Close an owed issue by reading that one issue (R14)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED in tests/unit/test_debt_owed.py: `_close_owed_issue` with a double whose list_issues raises if called and whose view_issue_record returns the owed issue (author, labels, body, state OPEN) closes it; a CLOSED one, another author's, or a wrong marker is not closed and prints the close-it-yourself line.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `author` and `state` to ISSUE_VIEW_FIELDS (packages/fr/src/fr/gh.py:288), confirm the other ISSUE_VIEW_FIELDS callers still pass, and make `_close_owed_issue` (journal_cmd.py:740) read `gh.view_issue_record(repo, number)` and apply owned_owed_key plus an OPEN check; keep the existing test_debt_owed tests green (update doubles that only implemented list_issues).
+- number: 4
+  title: A refused archive writes nothing (R7-R9)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED in tests/unit/test_archive_cmd.py: a single-plan archive refused by blockers (an unticked [manual] phase) with `--issues all` leaves `git status --porcelain` and `git diff --cached` byte-identical, writes no journal file, and the forge double records no write; the same for the placement SettingsError refusal; an ArchiveError raised after the plan's `git mv` (monkeypatch the journal move) leaves the index as it was.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: drop the `_write_manual_owed` call from archive_command's single-plan refusal (archive_cmd.py:1005-1015; keep it for the --all skip); make `_with_followups` skip `_after_moves` when fn raised anything (non-zero typer.Exit, SettingsError, any exception) and run it on a normal return or Exit(0); make archive_plan_dir (packages/fr/src/fr/archive.py:442-488) reverse the git mv's it staged, newest first, before re-raising ArchiveError, and name each staged path when the reversal fails.
+  - id: P1.T4.S3
+    text: |-
+      RED then GREEN: with HEAD on the default branch, the --all skip and the --branch hold print `would record owed: <key> — <title>` and write or stage nothing (`_write_manual_owed` takes head_on_default_branch); off the default branch they record and file as today (existing test_archive_owed tests stay green).
+  - id: P1.T4.S4
+    text: |-
+      REFACTOR: tidy the result type and helper names introduced in T2-T4; `uv run ruff check packages/ tests/` and `uv run mypy packages/fr/src` clean.
+- number: 5
+  title: Candidate scenarios and docs
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write tests/scenarios/owed-reuse-uncapped.sh and tests/scenarios/archive-refusal-writes-nothing.sh on the closeout-owed pattern (tests/scenarios/closeout-owed.sh, a recording gh under tests/scenarios/fixtures/<name>/bin): the first lists more issues than the limit and proves reuse plus fail-closed at the limit; the second proves a refused archive leaves tree, index and gh log unchanged. Register both in tests/integration/test_scenarios.py and run them.
+  - id: P1.T5.S2
+    text: |-
+      Run `uv run fr docs check` and update every page it names (edit the text when behaviour changed, else bump `reviewed`). Then run the full suite after the last code commit into a host-visible log outside the repo and return it as tests_log.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

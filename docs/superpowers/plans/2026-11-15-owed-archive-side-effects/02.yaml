@@ -1,0 +1,118 @@
+schema_version: 2
+phase:
+  number: 2
+  title: An owed issue closes at merge (R1-R6)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - owed-close-at-merge
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/owed_refs.py
+  - packages/fr/src/fr/journal/*.py
+  - tests/unit/test_debt_owed.py
+  - tests/unit/test_deliver_pr_body.py
+  - tests/unit/test_deliver_closing_keywords.py
+  - tests/unit/test_owed_close_at_merge.py
+  - tests/scenarios/owed-close-at-merge.sh
+  - tests/scenarios/fixtures/**
+  - tests/integration/test_scenarios.py
+  - docs/**/*.md
+  - plugins/super-fr/skills/**
+  - .opencode/**
+  - .hermes/**
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: Resolve closes nothing off the default branch (R1-R3)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED in tests/unit/test_debt_owed.py: on a feature branch, resolving an owed entry with filed_as makes no forge call (the double raises on any method) and prints that the issue closes when this branch merges plus `Closes owner/repo#n`; with an unreadable default ref or a detached HEAD the same; on the default branch the existing close test still closes.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: move `_own_issue` and its regexes from journal_cmd.py:700-736 into a new packages/fr/src/fr/owed_refs.py imported by journal_cmd; gate the `_close_owed_issue` call in resolve_cmd (journal_cmd.py:582-585) on fr.git.head_on_default_branch, printing the closing line otherwise.
+- number: 2
+  title: PR body section `## Owed actions discharged` (R4, R5)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED in tests/unit/test_owed_close_at_merge.py: in a git fixture with a default ref, an owed entry in an ARCHIVED plan journal discharged on the branch renders `Closes owner/repo#n` in the section; one already fixed at the default ref is not listed; a filed_as in another repo is not listed; none renders 'None.'.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/record/pr_body.py compute the discharged set from journals changed against the merge-base with the default ref (the base fr.proportionality.feature_diff uses), comparing each journal's effective owed state with its version at that ref (git show), and render the section in the body.
+  - id: P2.T2.S3
+    text: |-
+      RED then GREEN for R5: a discharged ref also in premature_closes' holding, narrowed or tracking sets renders `Refs <ref> — held: <reason>` and is not required; otherwise premature_closes (pr_body.py:344) drops discharged refs from its candidates so a `Closes` for it is not refused.
+- number: 3
+  title: deliver checks the live body's closing references (R4), under full and minimal
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED in tests/unit/test_deliver_closing_keywords.py: a live body missing a closing reference to a listed issue is refused naming it, under forge.pr_body full and minimal; `Fixes owner/repo#n` satisfies it; a held (Refs) one is not required.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: in `_deliver_pr_gate` (run_cmd.py:7015) add the check using closing_refs, before the forge.pr_body branch so it applies under minimal.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: simplify the discharged-set code path and keep pr_body.py's public names stable; ruff and mypy clean.
+- number: 4
+  title: Scenario, skill text and docs
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Write tests/scenarios/owed-close-at-merge.sh (recording gh): resolve off main -> gh log empty and the Closes line printed; resolve on main -> exactly one close. Register it in tests/integration/test_scenarios.py and run it.
+  - id: P2.T4.S2
+    text: |-
+      Update any skill or doc text that says resolve closes the owed issue at once (grep plugins/super-fr/skills and docs for `journal resolve` with owed); run scripts/sync-opencode.py and scripts/sync-hermes.py if a skill changed; then `uv run fr docs check`. Run the full suite after the last code commit into a host-visible log and return it.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
