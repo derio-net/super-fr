@@ -7133,6 +7133,11 @@ batches:
     - super-fr#1428
   - kind: post_merge
     at: '2026-11-15T11:14:28.366693Z'
+  - kind: closeout
+    at: '2026-11-15T11:15:06.251567Z'
+    runner: herdr
+    handle: w3E:p2
+    archive: chore/closeout-2026-11-15-2
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
@@ -7705,3 +7710,10 @@ closeouts:
   handle: w3E:p2
   planned:
   - suite-health
+  pr: 1474
+  head: 5b8bbb4f8c3526b699f58692b949ab9cc1a28817
+  members:
+  - suite-health
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-suite-health.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-suite-health.md"
