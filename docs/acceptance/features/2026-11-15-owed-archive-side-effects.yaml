@@ -18,6 +18,7 @@ rows:
     - spec:2026-11-15-owed-archive-side-effects#R3
     - spec:2026-11-15-owed-archive-side-effects#R4
     - spec:2026-11-15-owed-archive-side-effects#R5
+    - spec:2026-11-15-owed-archive-side-effects#R6
     levels: {}
     status: not-implemented
     notes: ''
