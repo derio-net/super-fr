@@ -89,7 +89,7 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-15T20:21:12+00:00'
           agent: aa5fc6ee916b9b312
@@ -99,6 +99,10 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: 3f4e915b-6497-4999-a906-ee570ad69449
+          returned: '2026-11-15T21:46:48+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   lens-review:

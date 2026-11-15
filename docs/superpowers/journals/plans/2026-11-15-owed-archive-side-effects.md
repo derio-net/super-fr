@@ -98,3 +98,65 @@ Spec R3 deliberately counts an unreadable default ref as off the default branch;
 ### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: _forge_lists_issues keys on detect_backend()=='github' rather than the adapter's own capability (phase 1)
 
 _forge_lists_issues predates this change; R13 states GitHub-only listing today, and the backend-vs-adapter duplication is not introduced here.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-r5-exemption-is-vacuous created=2026-11-15T21:46:47+00:00 phase=2 -->
+### p2-r5-exemption-is-vacuous · discovery · R5's premature_closes exemption needs no code — its candidates are only held refs (phase 2)
+
+premature_closes only ever flags a closing line whose ref is in its holding, narrowed
+or tracking sets, so "drop a discharged ref unless it is held" changes nothing: an
+unheld discharged Closes was never refused, and a held one still is (the hold wins,
+R5). The R5 behaviour lives in the render (held -> `Refs <ref> — held: <reason>`, via
+the new held_issues over the shared _held_sets) and in deliver's R4 check (a held ref
+is not required). tests/unit/test_owed_close_at_merge.py pins both directions.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-journal-diff-not-feature-diff created=2026-11-15T21:46:47+00:00 phase=2 -->
+### p2-journal-diff-not-feature-diff · discovery · the discharged set cannot use feature_diff itself — it exempts docs/superpowers/ (phase 2)
+
+fr.proportionality.feature_diff drops fr's own artifacts (EXEMPT_PREFIXES), journals
+included, so discharged_owed takes feature_merge_base (the same base) and runs its
+own `git diff --name-only --diff-filter=AM` over the live and archived journal dirs.
+A journal archived on the branch is compared with its copy at the default ref under
+either path, so the move alone discharges nothing.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-placement-journals-not-listed created=2026-11-15T21:46:47+00:00 phase=2 -->
+### p2-placement-journals-not-listed · discovery · under quiet/stealth placement the section lists nothing; resolve's printed Closes line is the route (phase 2)
+
+Journals then live outside the product checkout (artifact_root != repo root), so the
+branch's diff cannot show a discharge. discharged_owed returns [] there, as it does
+with no default ref or merge-base; R2's printed line remains the operator's route.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-closeout-owed-scenario-moved created=2026-11-15T21:46:47+00:00 phase=2 -->
+### p2-closeout-owed-scenario-moved · discovery · tests/scenarios/closeout-owed.sh discharged on its housekeeping branch and expected a close (phase 2)
+
+R1 makes that resolve close nothing, so step 5 now asserts the deferred close (the
+printed Closes line, no issue comment/close in the gh log). The on-main close is
+covered by the new owed-close-at-merge scenario.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fr-goal-keeps-no-resolve-example created=2026-11-15T21:46:47+00:00 phase=2 -->
+### p2-fr-goal-keeps-no-resolve-example · discovery · the fr-goal skill may not carry a `fr journal resolve` example (phase 2)
+
+tests/unit/test_skill_journal_resolve_examples.py (spec 2026-10-06 R13) refused the
+first wording of the owed-close-at-merge note; it now says "discharging an owed entry
+(resolving it `fixed`)" with no command example.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-debt-owed-fixture-on-main created=2026-11-15T21:46:47+00:00 phase=2 -->
+### p2-debt-owed-fixture-on-main · discovery · test_debt_owed's fixture repo now has HEAD on main with an origin/main ref (phase 2)
+
+The existing close tests ran in a repo with no default ref, which R3 now reads as off
+the default branch; _repo commits once, writes refs/remotes/origin/main and keeps HEAD
+on main unless a test asks for a feature branch.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-15T21:46:47+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+own_issue moved verbatim into fr.owed_refs (dropping journal_cmd's unused _SAFE_REPO); the new _close_at_merge is one branch, nothing to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-15T21:46:47+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+premature_closes' hold computation was extracted into _held_sets in the GREEN step so held_issues shares it; the T3.S3 refactor then split discharged_owed
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-15T21:46:47+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+a shell scenario sourcing the shared _owed_world.sh builder and a skill/explainer paragraph; nothing to clean
