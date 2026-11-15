@@ -207,3 +207,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-15-guard-trust-p2 created=2026-11-15T17:06:51+00:00 -->
+### phase-split-2026-11-15-guard-trust-p2 · decision · ask: phase 2 serves its own ask (#1429, R3-R4)
