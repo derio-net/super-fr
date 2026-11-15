@@ -19,6 +19,7 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
@@ -28,6 +29,7 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
@@ -215,6 +217,7 @@ jobs:
   coverage:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
@@ -228,6 +231,7 @@ jobs:
 
   validate-artifacts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -256,6 +260,7 @@ jobs:
 
   opencode-plugin-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -290,6 +295,7 @@ jobs:
 
   version-sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
@@ -298,6 +304,7 @@ jobs:
 
   change-fragment:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -305,7 +312,10 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: User-visible changes add a change fragment; no PR edits a version
-        run: uv run --no-project python scripts/check-change-fragment.py "origin/${{ github.base_ref }}"
+        # Through env, never interpolated into the script (gh#1289).
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run --no-project python scripts/check-change-fragment.py "origin/$BASE_REF"
 
   # Docs currency (spec 2026-11-11-docs-currency R11): every flow ends in a PR,
   # so this is the gate none can skip. A pull request diffs against its base; a
@@ -313,6 +323,7 @@ jobs:
   # against the default branch (R6). No `.fr/docs.yaml`: nothing to check.
   docs-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -320,7 +331,9 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Pages covering a changed path changed too (pull request)
         if: github.event_name == 'pull_request'
-        run: uv run fr docs check --base "origin/${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run fr docs check --base "origin/$BASE_REF"
       - name: Pages are well formed and cover what they claim
         if: github.event_name != 'pull_request'
         run: uv run fr docs check
@@ -329,6 +342,7 @@ jobs:
   # here, before merge, not on the deploy after it (docs-currency R15).
   site-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Read the renderer pin
@@ -356,6 +370,7 @@ jobs:
             validate-artifacts, opencode-plugin-test, version-sync,
             change-fragment, docs-check, site-build]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Every CI job succeeded or was skipped by its own condition
         env:
