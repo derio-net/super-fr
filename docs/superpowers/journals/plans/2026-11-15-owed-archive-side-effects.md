@@ -237,3 +237,33 @@ closeout-owed step 5 as a valid negative.
 ### p2-r8-resolved · finding [out-of-scope] · resolves p2-r8: normalize_issue_ref's _URL_REF accepts any host, so a foreign-host URL with the same path satisfies the owed closing check (phase 2)
 
 normalize_issue_ref's host-agnostic URL reading predates this change (premature_closes has used it since it shipped); this change only reuses it.
+
+<!-- fr:journal kind=decision scope=plan id=p3-dry-run-in-place-under-placement created=2026-11-15T23:24:33+00:00 phase=3 -->
+### p3-dry-run-in-place-under-placement · decision · Under quiet/stealth the dry run runs in place and previews; elsewhere it runs in a scratch checkout (phase 3)
+
+The scratch copy cannot carry a stealth marker or the placement worktree, and `_record_merged(preview=True)` is read-only by construction (`space_for(create=False)`), so those modes skip the copy. Any refused (unknown) forge call makes the exit code 1 even when the real run's code was 0.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-dry-run-prints-scratch-path-for-absolute-plan created=2026-11-15T23:24:33+00:00 phase=3 -->
+### p3-dry-run-prints-scratch-path-for-absolute-plan · discovery · A plan given as an absolute path echoes the scratch path in "archived:" lines (phase 3)
+
+The plan argument is translated into the scratch tree, so an absolute path prints as the scratch location; a relative path prints as typed. Cosmetic only.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-sync-readme-no-change created=2026-11-15T23:24:33+00:00 phase=3 -->
+### p3-sync-readme-no-change · discovery · --dry-run changes no generated table (phase 3)
+
+The README and cli.md tables list commands, not options, so sync-readme.py wrote nothing, and `fr docs check` is clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-15T23:24:33+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+new module written once; nothing to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-15T23:24:33+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+new module written once; nothing to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-11-15T23:24:33+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+a scenario script and a registration; nothing to clean
