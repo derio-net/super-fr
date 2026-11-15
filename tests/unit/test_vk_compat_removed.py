@@ -275,6 +275,7 @@ ALLOWED: tuple[tuple[str, str], ...] = (
 def _vk_scanned(rel: str) -> bool:
     parts = rel.split("/")
     if rel in _VK_TOP_FILES or parts[0] in _VK_TOP_DIRS:
+    ("scripts/install.sh", r'^  local warn="WARNING: could not remove vibe_kanban from \$MCP_CONFIG;'),
         return True
     return len(parts) > 3 and parts[0] == "packages" and parts[2] == "src"
 

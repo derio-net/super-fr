@@ -128,8 +128,14 @@ check or warning, no bridge wrapper, and no `vibe_kanban` verification hint. On 
 removes a `vibe_kanban` entry from `~/.claude/.mcp.json` when present, and a `vk-bridge`
 wrapper when its content execs `fr_vk.bridge` (at the default path or at
 `VK_BRIDGE_WRAPPER_PATH`). It prints one line for each removal, and a file at the wrapper
-path that fr did not write is never deleted. `--install-bridge` exits non-zero with a
-message that VK support was removed. `--uninstall` keeps removing the MCP entry.
+path that fr did not write is never deleted. A removal that fails prints a `WARNING`
+line to stderr naming what to delete by hand, and the install continues; the edited
+`.mcp.json` copy is created 0600, is written back only when it parses, and is kept as a
+recoverable copy when the write-back fails. When a wrapper was at the path and the
+crontab names it or `vk-bridge`, install prints a line telling the operator to remove that
+entry (`crontab -e`); it never edits the crontab. `--install-bridge` exits non-zero with a
+message that VK support was removed, and a line naming the crontab entry and the cleanup
+a normal install runs. `--uninstall` keeps removing the MCP entry.
 
 R6. The `fr-runner` skill is deleted, and nothing advertises it: not the `fr skills`
 overview (`skills_cmd.py`), the README skills table (from
@@ -232,7 +238,11 @@ Named cases the plan turns into failing-first tests:
   - An fr-written wrapper at the default path is removed, and so is one at
     `VK_BRIDGE_WRAPPER_PATH`.
   - A foreign file at the wrapper path is kept.
-  - `--install-bridge` exits non-zero naming the removal.
+  - `--install-bridge` exits non-zero naming the removal and the crontab entry.
+  - A read-only `.mcp.json` gives the `WARNING`, a zero exit and a 0600 sidecar; a wrapper
+    that cannot be removed warns and the install continues.
+  - A crontab naming the wrapper gets the `crontab -e` line, whether the wrapper is
+    removed or kept.
   - `--uninstall` still removes the entry.
   - Install writes no `vibe_kanban` entry.
 - **R6:** `fr skills` lists no `fr-runner`, `scripts/sync-readme.py --check` passes, and

@@ -186,24 +186,48 @@ RETIRED_OPENCODE_AGENTS=(
 # 2026-11-14 R5, retiring the VK runner). Remove the MCP entry, and the bridge wrapper
 # only when its exec line is the one fr wrote. Install and --uninstall both call it.
 # The config is written back in place (cat into it, not mv over it), so its mode
-# and a symlink at its path survive; cleanup_tmps removes the sidecar on failure.
+# and a symlink at its path survive. The edited copy is made 0600 and checked to
+# parse before it is written back. A failure only warns: the install goes on. When
+# the write-back fails, the copy stays as the recoverable edit (cleanup_tmps still
+# removes it if the install later fails). The crontab is never edited, only named.
 cleanup_vk_residue() {
   local vk_wrapper="${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}"
+  local tmp="$MCP_CONFIG.tmp" had_wrapper=0 cron=""
+  local warn="WARNING: could not remove vibe_kanban from $MCP_CONFIG; delete mcpServers.vibe_kanban by hand"
   if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null \
      && jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
-    jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" \
-      && cat "${MCP_CONFIG}.tmp" > "$MCP_CONFIG" && rm -f "${MCP_CONFIG}.tmp"
-    echo "  Removed vibe_kanban (VibeKanban support was removed) from $MCP_CONFIG"
+    rm -f "$tmp" 2>/dev/null || true
+    if ! (umask 077; jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "$tmp") \
+       || [ ! -s "$tmp" ] || ! jq -e . "$tmp" >/dev/null 2>&1; then
+      rm -f "$tmp" 2>/dev/null || true
+      echo "$warn" >&2
+    elif cat "$tmp" > "$MCP_CONFIG"; then
+      rm -f "$tmp" 2>/dev/null || true
+      echo "  Removed vibe_kanban (VibeKanban support was removed) from $MCP_CONFIG"
+    else
+      echo "$warn (the edited copy is kept at $tmp)" >&2
+    fi
   fi
+  [ -e "$vk_wrapper" ] && had_wrapper=1
   # `install.sh --install-bridge` wrote: exec "<python>" -m fr_vk.bridge "$@"
   if [ -f "$vk_wrapper" ] && grep -qE '^exec .*-m fr_vk\.bridge( |$)' "$vk_wrapper"; then
-    rm -f "$vk_wrapper"
-    echo "  Removed $vk_wrapper (VibeKanban support was removed)"
+    if rm -f "$vk_wrapper"; then
+      echo "  Removed $vk_wrapper (VibeKanban support was removed)"
+    else
+      echo "WARNING: could not remove $vk_wrapper; delete it by hand" >&2
+    fi
+  fi
+  if [ "$had_wrapper" = 1 ]; then
+    cron="$(crontab -l 2>/dev/null || true)"
+    if grep -v '^[[:space:]]*#' <<<"$cron" | grep -qF -e "$vk_wrapper" -e vk-bridge; then
+      echo "  Your crontab still runs $vk_wrapper or vk-bridge: remove that entry (crontab -e)"
+    fi
   fi
 }
 
 if [[ "${1:-}" == "--install-bridge" ]]; then
   echo "VibeKanban support was removed; there is no bridge to install." >&2
+  echo "Remove any crontab entry that runs vk-bridge (crontab -e); a normal install.sh run removes the old wrapper and MCP entry." >&2
   exit 2
 fi
 

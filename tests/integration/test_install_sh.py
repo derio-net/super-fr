@@ -338,7 +338,102 @@ class TestVkResidue:
 
         assert result.returncode == 2
         assert "VibeKanban support was removed" in result.stdout + result.stderr
+        assert "crontab" in result.stderr
         assert not wrapper.exists()
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root writes a 0400 file")
+    def test_an_unwritable_config_warns_and_the_install_continues(self, fake_home: Path) -> None:
+        mcp = fake_home / ".claude" / ".mcp.json"
+        original = json.dumps({"mcpServers": {"vibe_kanban": {"command": "/old"}}})
+        mcp.write_text(original)
+        mcp.chmod(0o400)
+        # A stale world-readable sidecar must not keep its mode: the copy is made 0600.
+        sidecar = mcp.with_name(".mcp.json.tmp")
+        sidecar.write_text("stale")
+        sidecar.chmod(0o644)
+
+        result = _run_install(fake_home)
+
+        assert "WARNING: could not remove vibe_kanban from" in result.stderr
+        assert "delete mcpServers.vibe_kanban by hand" in result.stderr
+        assert str(sidecar) in result.stderr  # the recoverable copy is named
+        assert mcp.read_text() == original
+        assert stat.S_IMODE(sidecar.stat().st_mode) & 0o077 == 0
+        assert "vibe_kanban" not in json.loads(sidecar.read_text())["mcpServers"]
+
+    def test_the_sidecar_is_gone_after_a_removal(self, fake_home: Path) -> None:
+        mcp = fake_home / ".claude" / ".mcp.json"
+        mcp.write_text(json.dumps({"mcpServers": {"vibe_kanban": {"command": "/old"}}}))
+        sidecar = mcp.with_name(".mcp.json.tmp")
+        sidecar.write_text("stale")
+        sidecar.chmod(0o644)
+
+        _run_install(fake_home)
+
+        assert "vibe_kanban" not in json.loads(mcp.read_text())["mcpServers"]
+        assert not sidecar.exists()
+
+    def test_a_config_jq_cannot_parse_is_left_alone(self, fake_home: Path) -> None:
+        mcp = fake_home / ".claude" / ".mcp.json"
+        mcp.write_text('{"mcpServers": {"vibe_kanban": {}}}\n')
+        jq = shutil.which("jq")
+        assert jq
+        # A jq whose `del` fails: the sidecar is removed and the config untouched.
+        stub = fake_home / "bin" / "jq"
+        stub.write_text(f'#!/bin/sh\ncase "$1" in del*) exit 5;; esac\nexec {jq} "$@"\n')
+        stub.chmod(0o755)
+
+        result = _run_install(fake_home)
+
+        assert mcp.read_text() == '{"mcpServers": {"vibe_kanban": {}}}\n'
+        assert "WARNING: could not remove vibe_kanban from" in result.stderr
+        assert not mcp.with_name(".mcp.json.tmp").exists()
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root removes from a 0555 directory")
+    def test_a_wrapper_that_cannot_be_removed_warns_and_the_install_continues(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        wrapper = locked / "vk-bridge"
+        wrapper.write_text(_FR_WRAPPER)
+        locked.chmod(0o555)
+        try:
+            result = _run_install(fake_home, extra_env={"VK_BRIDGE_WRAPPER_PATH": str(wrapper)})
+        finally:
+            locked.chmod(0o755)
+
+        assert wrapper.exists()
+        assert f"WARNING: could not remove {wrapper}" in result.stderr
+        assert f"Removed {wrapper}" not in result.stdout
+        assert (fake_home / ".claude" / "rules" / "fr-plan-override.md").exists()
+
+    @staticmethod
+    def _crontab_stub(home: Path, line: str) -> None:
+        stub = home / "bin" / "crontab"
+        stub.write_text(f"#!/bin/sh\n[ \"$1\" = -l ] && echo '{line}'\nexit 0\n")
+        stub.chmod(0o755)
+
+    @pytest.mark.parametrize("fr_written", [True, False])
+    def test_a_crontab_entry_naming_the_wrapper_gets_a_hint(
+        self, fake_home: Path, fr_written: bool
+    ) -> None:
+        wrapper = fake_home / ".local" / "bin" / "vk-bridge"
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        wrapper.write_text(_FR_WRAPPER if fr_written else "#!/bin/sh\necho mine\n")
+        self._crontab_stub(fake_home, f"*/5 * * * * {wrapper} --tick")
+
+        result = _run_install(fake_home)
+
+        assert wrapper.exists() is not fr_written
+        assert "crontab -e" in result.stdout, result.stdout
+
+    def test_no_crontab_hint_without_a_wrapper(self, fake_home: Path) -> None:
+        self._crontab_stub(fake_home, "*/5 * * * * /usr/local/bin/vk-bridge --tick")
+
+        result = _run_install(fake_home)
+
+        assert "crontab -e" not in result.stdout
 
 
 # ── Stale skill cleanup ─────────────────────────────────────────────
