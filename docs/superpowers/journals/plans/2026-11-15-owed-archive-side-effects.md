@@ -272,3 +272,8 @@ a scenario script and a registration; nothing to clean
 ### p3-dry-run-stale-refuses · decision · fr archive --dry-run over stale artifacts refuses with the gate's message, exit 2, in every context; it never migrates or commits (phase 3)
 
 Review p3-r3. The migration gate treats `archive … --dry-run` as a context that may not write (`trigger.asks_for_dry_run`, not READ_ONLY_COMMANDS): nothing stale, the dry run proceeds; something stale, it refuses as the opt-out row does, CI included. A dry run cannot honestly preview a run that would migrate first.
+
+<!-- fr:journal kind=decision scope=plan id=p3-dry-run-cannot-tell-refuses created=2026-11-15T23:50:23+00:00 phase=3 -->
+### p3-dry-run-cannot-tell-refuses · decision · Under quiet or stealth, a dry run that cannot see what the real run would read refuses by name, exit 2, never 'nothing to archive' (phase 3)
+
+Review p3-r5. Cases: no fr worktree yet under quiet; a stealth tracking clone that is gone, unreachable or not synced with its tracking ref. Checked by fr.placement.preview.cannot_tell before anything resolves the placement's space, in the gate and in the command. R10 amended: exit-code parity holds except where the preview refuses because it cannot tell.
