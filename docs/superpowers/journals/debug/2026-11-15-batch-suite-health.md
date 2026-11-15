@@ -40,3 +40,8 @@ Per shard the pytest step is ~35 s of collection, then serial work / 4 workers, 
 ### auto-workers · finding [fixed] · #1225: -n auto is load-aware outside CI; FR_PYTEST_WORKERS overrides
 
 tests/_workers.py answers xdist's pytest_xdist_auto_num_workers: FR_PYTEST_WORKERS when set (a bad value is a UsageError), every CPU under CI, else CPUs minus round(load1), floor 2. Live: 6 of 12 at load ~6; 3 with FR_PYTEST_WORKERS=3. tmp_path_retention_policy = failed. Pinned by tests/unit/test_auto_workers.py. Not done: the host-wide suite lock (proposal 1). The macOS git shim (proposal 3) did not reproduce here: 50 calls through /usr/bin/git took 0.65 s against 0.59 s for the resolved binary.
+
+<!-- fr:journal kind=root-cause scope=debug id=visual-real-clock created=2026-11-15T07:54:28+00:00 -->
+### visual-real-clock · root-cause · #1280: test_run_evidence_visual mixes a synthetic transcript clock with the real mtime
+
+The tests stamp transcript reads at the unit's open time + 1-2 s, but _fresh_shot leaves the screenshot's mtime at real now. fr.run.visual counts a read only from mtime - SLACK (1 s) on, so when more than ~3 s pass between _advance opening the unit and _fresh_shot writing the file, every read predates the write and the check refuses. Repro: a 4 s sleep at the top of _fresh_shot fails 6 tests (inline_implement_phase, named_script_that_was_run, dispatched_implement_phase, unclaimed_unit_owing_visual, review_reads, deliver_orchestrator_reads), the set #1280/#1296 saw under load.
