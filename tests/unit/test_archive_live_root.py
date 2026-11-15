@@ -72,3 +72,13 @@ def test_a_gitkeep_symlink_is_neither_followed_nor_replaced(tmp_path: Path) -> N
         assert keep.is_symlink() and os.readlink(keep) == str(target)
     assert outside.read_text() == "keep me"
     assert not (tmp_path / "dangling").exists()
+
+
+def test_an_existing_untracked_gitkeep_is_staged(tmp_path: Path) -> None:
+    # review p1-r1: a regular `.gitkeep` already on disk but not in the index (never
+    # added, or `git rm --cached`) must still be staged by the archive that needs it.
+    repo = _repo(tmp_path, "a")
+    keep = repo / "docs" / "superpowers" / "plans" / ".gitkeep"
+    keep.write_text("")
+    archive_plan_dir(repo, _plan(repo, "a"))
+    assert "docs/superpowers/plans/.gitkeep" in _git(repo, "diff", "--cached", "--name-only")

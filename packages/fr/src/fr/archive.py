@@ -13,6 +13,7 @@ nudge so the three surfaces can't disagree. The spec decision is
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
 import tempfile
 from collections.abc import Iterator, Mapping
@@ -462,8 +463,10 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
 
     Git tracks no empty directory, so without it a fresh clone has no
     `docs/superpowers/plans` and the edit gate reads the repo as not fr-enabled. Acts only
-    on the root `fr archive` itself reads; a `.gitkeep` that exists as ANY entry (a
-    symlink included, dangling or not) is left alone, and the create refuses to follow one.
+    on the root `fr archive` itself reads. A `.gitkeep` that exists as anything but a
+    regular file (a symlink included, dangling or not) is left alone and unstaged, and the
+    create refuses to follow one; an existing regular one is staged, so an untracked copy
+    still reaches the archive's commit (review p1-r1).
     """
     live_root = plan_dir.parent
     if live_root != kind_dir("plan", space_for(repo_root)):
@@ -473,15 +476,14 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
         return
     keep = live_root / ".gitkeep"
     try:
-        os.lstat(keep)
-        return
+        if not stat.S_ISREG(os.lstat(keep).st_mode):
+            return
     except FileNotFoundError:
-        pass
-    flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
-    try:
-        os.close(os.open(keep, flags, 0o644))
-    except OSError:
-        return
+        flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
+        try:
+            os.close(os.open(keep, flags, 0o644))
+        except OSError:
+            return
     subprocess.run(
         ["git", "-C", str(repo_root), "add", "--", str(keep.relative_to(repo_root))],
         check=False,

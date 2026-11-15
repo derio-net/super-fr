@@ -224,4 +224,7 @@ def test_a_repo_with_only_archived_plans_blocks_a_base_edit(tmp_path: Path) -> N
     d = repo / "docs" / "superpowers" / "implemented" / "plans" / "x"
     d.mkdir(parents=True)
     (d / "_meta.yaml").write_text("plan: x\n")
+    # R2 alone must carry it (review p1-r2): no live plans root, no profile.
+    assert not (repo / "docs" / "superpowers" / "plans").exists()
+    assert not (repo / ".devcontainer").exists()
     assert blocked(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"}))
