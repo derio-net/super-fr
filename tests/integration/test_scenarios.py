@@ -266,6 +266,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "acceptance-fragments-amendments",
         "acceptance-local-status",
         "owed-reuse-uncapped",
+        "owed-close-at-merge",
         "archive-refusal-writes-nothing",
     }
     assert on_disk == here
@@ -373,6 +374,10 @@ def test_closeout_owed(installed: Path, tmp_path: Path) -> None:
 
 def test_owed_reuse_uncapped(installed: Path, tmp_path: Path) -> None:
     _scenario("owed-reuse-uncapped", installed, tmp_path)
+
+
+def test_owed_close_at_merge(installed: Path, tmp_path: Path) -> None:
+    _scenario("owed-close-at-merge", installed, tmp_path)
 
 
 def test_archive_refusal_writes_nothing(installed: Path, tmp_path: Path) -> None:
