@@ -69,3 +69,58 @@ node_modules is absent in a fresh worktree; `bun install --frozen-lockfile && bu
 ### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 two small resolver edits (a PATH walk and a stat check); nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-15T18:29:22+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · Hook tests never planted fr behind an empty or '.' PATH entry (phase 2)
+
+tests/unit/test_hooks_planted_fr.py parametrized only 'bin' and './bin'; the spec names empty entries as a vector.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-15T18:29:22+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Negative hook tests did not assert the missing-fr fallbacks (phase 2)
+
+Only rc==0 and no marker; no check that worktree-create fell back to mimic_default or that the pin hook wrote no pin.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-15T18:29:22+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · No module-level OpenCode test of a gate using a planted git (phase 2)
+
+git.test.ts covers resolveGit only.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-15T18:29:22+00:00 phase=2 state=open review_scope=out -->
+### p2-r4 · finding [open] (reviewer: out of scope) · Pin hook resolving an inherited absolute FR_HARNESS_FR path re-pins that binary (phase 2)
+
+fr_fr_resolve prefers an absolute executable FR_HARNESS_FR.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-15T18:29:22+00:00 phase=2 state=open review_scope=out -->
+### p2-r5 · finding [open] (reviewer: out of scope) · Other hooks keep bare git calls (phase 2)
+
+fr-worktree-remove.sh and others; explicit spec non-goal.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-15T18:29:22+00:00 phase=2 -->
+### review-p2 · review · phase 2 independent adversarial review: 5 findings (p2-r1..r3 in; p2-r4, p2-r5 out) (phase 2)
+
+Reviewer found no remaining route to a relative/empty-PATH git or fr at any inventoried site; checked resolver variable isolation, sourcing order, exec/detached paths, missing-fr exits, OpenCode runFr answers and the nag.ts dedupe; ran 26 targeted Python and 35 bun tests green.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-15T18:29:22+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: Hook tests never planted fr behind an empty or '.' PATH entry (phase 2)
+
+Parametrized '.' and '' (leading colon) with a repo/fr plant reachable only through them; 35 passed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-15T18:29:22+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Negative hook tests did not assert the missing-fr fallbacks (phase 2)
+
+Negative test now asserts the pin env file stays empty and worktree-create prints the mimic_default path.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-15T18:29:22+00:00 phase=2 state=refuted resolves=p2-r3 -->
+### p2-r3-resolved · finding [refuted] · resolves p2-r3: No module-level OpenCode test of a gate using a planted git (phase 2)
+
+git() in git.ts spawns exactly the path resolveGit() returns and nothing else (runSync(bin, ...)), so the resolveGit planted-binary tests cover every gate that calls git(); a gate-level test would re-test the same line.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-15T18:29:22+00:00 phase=2 state=open resolves=p2-r4 out_of_scope=true -->
+### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: Pin hook resolving an inherited absolute FR_HARNESS_FR path re-pins that binary (phase 2)
+
+Spec Design B mandates the pin hook resolve exactly as the hooks do, so the pinned identity is the fr the hooks run; an absolute-path FR_HARNESS_FR is an operator's explicit choice (the hooks' own pin is an identity string, not a path, and falls through).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-15T18:29:22+00:00 phase=2 state=open resolves=p2-r5 out_of_scope=true -->
+### p2-r5-resolved · finding [out-of-scope] · resolves p2-r5: Other hooks keep bare git calls (phase 2)
+
+Bare git calls inside hook scripts are an explicit non-goal (operator decision d2); filed as a follow-up at deliver.
