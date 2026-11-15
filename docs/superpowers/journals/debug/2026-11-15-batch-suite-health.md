@@ -50,3 +50,8 @@ The tests stamp transcript reads at the unit's open time + 1-2 s, but _fresh_sho
 ### visual-clock · finding [fixed] · test_run_evidence_visual: fresh shots stamped at the unit's open time
 
 _advance records the opened stamp; _fresh_shot sets the file's mtime to it, so the file and the synthetic transcript share one clock. With the 4 s repro sleep still in _fresh_shot: 60 passed (6 failed before). Without it: 60 passed.
+
+<!-- fr:journal kind=finding scope=debug id=stuck-lock-clock created=2026-11-15T07:57:26+00:00 state=fixed -->
+### stuck-lock-clock · finding [fixed] · stuck index-lock test: the wait runs on a fake clock
+
+Root cause: the test timed the whole commit_records call on the real clock, so the git calls before the wait counted against the 5 s bound. Repro: a 4 s delay before the first index_lock_held call fails it (6.27 s vs 5.0). Now fr.artifacts.commit.time is a fake clock (its only use is the wait loop): the test asserts the commit is refused, HEAD unchanged, and the time slept is in [_LOCK_WAIT_SECONDS, +2 polls). It passes with the 4 s repro delay.
