@@ -57,12 +57,14 @@ class FakeRunner:
         unroutable: set[str] = frozenset(),  # type: ignore[assignment]
         dispatch_fails: set[str] = frozenset(),  # type: ignore[assignment]
         raise_in: set[str] = frozenset(),  # type: ignore[assignment]
+        dispatch_error: type[BaseException] = RuntimeError,
     ) -> None:
         self._preflight_error = preflight_error
         self._budget = budget
         self._existing = set(existing or set())
         self._unroutable = set(unroutable)
         self._dispatch_fails = set(dispatch_fails)
+        self._dispatch_error = dispatch_error
         self._raise_in = set(raise_in)
         self.refreshed = 0
         self.preflight_items: Any = None
@@ -99,7 +101,7 @@ class FakeRunner:
 
     def dispatch(self, item: Any) -> None:
         if item.id in self._dispatch_fails:
-            raise RuntimeError("injected backend failure")
+            raise self._dispatch_error("injected backend failure")
         self.dispatched.append(item)
 
 
@@ -383,6 +385,56 @@ def test_one_failing_item_does_not_abort_the_loop():
     assert m.syncs == 1
     assert m.reasons == ["backend_error"]
     # Only the good item got stamped.
+    assert [c["number"] for c in _synced_adds(gh)] == [102]
+
+
+def test_tick_stamps_a_gitlab_tracked_issue_on_its_repo_and_number():
+    """`tick` parses a GitLab `/-/issues/N` tracking URL and stamps `fr:synced`
+    through whatever GhClient-shaped object it is given (spec
+    2026-07-09-multi-backend-git-host-adapters §7)."""
+    from fr import parse
+    from fr_dispatch import tick
+
+    repo, n = "group/proj", 7
+    plan = parse(MINIMAL)
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://gitlab.example.com/{repo}/-/issues/{n}"}
+            )
+        }
+    )
+    plan = dc_replace(
+        plan, phases=(phase,), meta=plan.meta.model_copy(update={"target_repo": repo})
+    )
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (n,))
+
+    result = tick(plan, gh, FakeRunner())
+
+    assert result.synced == 1
+    assert result.errors == 0
+    assert [(c["repo"], c["number"]) for c in _synced_adds(gh)] == [(repo, n)]
+
+
+def test_a_dispatch_raising_a_non_runtime_error_fails_only_that_item():
+    """A backend timeout is not a RuntimeError: the guard must catch any Exception,
+    or one slow backend call kills the tick for every sibling."""
+    from fr_dispatch import tick
+
+    plan = _two_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, REPO, (101, 102))
+    bad = f"{REPO}/_no-spec/2026-05-09-fixture-multi-phase/phase/1"
+    good = f"{REPO}/_no-spec/2026-05-09-fixture-multi-phase/phase/2"
+    runner = FakeRunner(dispatch_fails={bad}, dispatch_error=TimeoutError)
+
+    result = tick(plan, gh, runner)
+
+    assert [i.id for i in runner.dispatched] == [good]
+    assert result.synced == 1
+    assert result.errors == 1
+    assert list(result.failures) == [f"{bad}: injected backend failure"]
     assert [c["number"] for c in _synced_adds(gh)] == [102]
 
 
@@ -1104,8 +1156,7 @@ def test_a_raising_tracker_check_is_a_blocker_not_a_crash() -> None:
 
 
 class _UnitLimitedRunner(FakeRunner):
-    """A runner that takes phases only — the shape both shipped adapters have
-    after review r5-a2, and the shape `protocols.Runner.can_dispatch`
+    """A runner that takes phases only — the shape `protocols.Runner.can_dispatch`
     documents ("a runner that only handles some units can say so")."""
 
     def __init__(self, **kw: Any) -> None:
@@ -1117,12 +1168,9 @@ class _UnitLimitedRunner(FakeRunner):
         return item.unit == "phase"
 
     def existing_dispatches(self, items: Any) -> set[str]:
+        # Records what `tick` asked about, so a test can see which units reached it.
         self.existing_dispatches_seen = list(items)
-        # An adapter inverts board state via `item.payload.get("issue_number")`,
-        # so a mixed list is exactly where a `KeyError` would live.
-        return {i.id for i in items if i.payload.get("issue_number") in self._board}
-
-    _board: frozenset[int] = frozenset()
+        return set()
 
 
 def _mixed_items(plan, repo: str, issue_number: int):
