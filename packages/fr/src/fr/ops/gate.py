@@ -503,6 +503,17 @@ def _closed(
     return label
 
 
+def _recorded_here(lo: LoadedOp, tree: OpsTree, slug: str, at_head: set[str]) -> bool:
+    """Whether the op's closure is already recorded on the ops branch. A closure the live
+    status observed but nobody recorded (a check that passes on its own) still goes through
+    `fr ops apply --yes`, which records it once (R7) and runs nothing: otherwise the gate
+    pass reads the op as 'never checked' and refuses (gh#1293)."""
+    from fr.ops.evidence import JournalEvidence, recorded_close
+
+    ev = JournalEvidence(tree.path, slug).latest(lo.op.id, runbook=False)
+    return ev is not None and ev.entry_id not in at_head and recorded_close(lo, ev) is not None
+
+
 def _unclosed(
     gate: Gate, tree: OpsTree, ops: Sequence[LoadedOp], rows: Mapping[str, Mapping[str, Any]]
 ) -> list[str]:
@@ -547,7 +558,8 @@ def apply_phase(gate: Gate, phase: str) -> None:
     at_head = head_entry_ids(tree, gate.pinned_head(), "plan", t.slug)
     for lo in ops:
         op = lo.op
-        if _closed(lo, rows.get(op.id), tree, t.slug, at_head) is not None:
+        closed = _closed(lo, rows.get(op.id), tree, t.slug, at_head) is not None
+        if closed and _recorded_here(lo, tree, t.slug, at_head):
             continue
         state = str(rows.get(op.id, {}).get("state") or "")
         flags = ["--yes"]

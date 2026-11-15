@@ -1005,3 +1005,22 @@ def test_a_stage_that_meets_a_near_miss_heading_fails_cleanly(
     result = gate_mod.run(gate)
     assert not result.ok and result.code == 2
     assert 'rename it to "## Test Plan"' in result.why
+
+
+def test_gh1293_an_op_already_done_live_is_recorded_not_skipped(ops_root: Path) -> None:
+    """gh#1293: an op whose live check already reads DONE at stage 4 still goes through
+    `fr ops apply --yes`, which records the closure it observed (R7). Skipped instead, it
+    leaves no `op` evidence, so `fr gate pass` reads it as 'never checked' and refuses."""
+    from fr.ops.holds import devops_blockers
+
+    gate, host, tree, _, prompt, _ = _gate(ops_root, up=True)
+    host.live["post"] = "DONE"  # checked live, nothing recorded yet
+
+    gate_mod.apply_phase(gate, "post-merge")
+
+    applies = [a for a, _ in host.calls if a[:2] == ["isolation", "exec"] and "apply" in a]
+    assert [a[a.index("--") + 1 :] for a in applies] == [
+        ["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]
+    ]
+    assert prompt.asked == []  # a closed op runs nothing: nothing to confirm
+    assert not [b for b in devops_blockers(ops_root, _state()) if b.startswith("op post")]
