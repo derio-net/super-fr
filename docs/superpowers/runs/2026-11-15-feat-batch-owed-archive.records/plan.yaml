@@ -1,8 +1,0 @@
-schema_version: 12
-run: 2026-11-15-feat-batch-owed-archive
-step: plan
-outcome: done
-journal: []
-emitted:
-  plan: docs/superpowers/plans/2026-11-15-owed-archive-side-effects
-evidence: {}
