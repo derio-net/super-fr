@@ -242,3 +242,10 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_vk_compat_removed.py#test_vk_residue_fails_on_a_planted_vibekanban_line_in_plugins
     why: phase 3 landed the R10 source tripwire
+  - row: vk-runner-removed
+    op: set-status
+    base: 6
+    status: ci
+    notes: R1 registry tests and the R10 source tripwire (with its allowlist and planted-line
+      cases) run in CI
+    why: every half of the row now has a test that runs in CI
