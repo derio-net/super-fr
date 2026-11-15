@@ -47,6 +47,7 @@ from fr.archive import (
     paths_dirty,
     recording_moves,
     spec_archive_sweep,
+    undoing_staged_moves,
     unticked_manual_phases,
 )
 from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
@@ -798,7 +799,8 @@ def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         if filed.ref is None:
             err_console.print(
                 f"[yellow]warning:[/yellow] could not file owed {filed.end.key} — "
-                f"{escape(filed.error or '')}"
+                f"{escape(filed.error or '')}",
+                soft_wrap=True,
             )
             continue
         try:
@@ -839,8 +841,24 @@ def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
             # R7: a refusal — a non-zero exit, a `SettingsError`, any exception —
             # runs no follow-up: nothing it staged is left to file anything for.
             done: typer.Exit | None = None
+            # R7: a single-plan archive that fails anywhere writes nothing.
+            single = (
+                kwargs.get("plan_dir") is not None
+                and not kwargs.get("all_plans")
+                and not kwargs.get("sweep_only")
+                and kwargs.get("branch") is None
+            )
             try:
-                fn(*args, **kwargs)
+                if single:
+                    try:
+                        root0 = resolve_repo_root()
+                    except Exception:  # noqa: BLE001 — outside a repo fn refuses by itself
+                        fn(*args, **kwargs)
+                    else:
+                        with undoing_staged_moves(root0):
+                            fn(*args, **kwargs)
+                else:
+                    fn(*args, **kwargs)
             except typer.Exit as e:
                 if e.exit_code:
                     raise

@@ -912,15 +912,13 @@ def test_a_refused_archive_writes_nothing_even_with_issues_all(tmp_path, monkeyp
 
 
 def test_a_placement_refusal_writes_nothing(tmp_path, monkeypatch):
-    from fr.settings import SettingsError
-
     repo, plan = _blocked_repo(tmp_path)
     before = _tree_state(repo)
     gh = _RecordingGh()
     monkeypatch.setattr("fr.artifacts.paths.outside_repo", lambda _root: "quiet")
     result = _invoke(monkeypatch, repo, gh, ["archive", str(plan.relative_to(repo))])
-    assert result.exit_code != 0
-    assert isinstance(result.exception, SettingsError) or result.exit_code == 2
+    assert result.exit_code == 2, result.output
+    assert "Nothing was written" in result.output
     assert _tree_state(repo) == before
     assert _forge_writes(gh) == []
 

@@ -186,6 +186,70 @@ def test_after_moves_does_not_run_when_a_follower_move_exits_2(tmp_path, monkeyp
     assert (plan_dir / "_meta.yaml").exists(), "the staged plan move was undone"
 
 
+def _raise_runtime(*_a, **_k):  # noqa: ANN002, ANN003, ANN202
+    raise RuntimeError("boom")
+
+
+def _raise_settings(*_a, **_k):  # noqa: ANN002, ANN003, ANN202
+    from fr.settings import SettingsError
+
+    raise SettingsError("refused")
+
+
+@pytest.mark.parametrize("raiser", [_raise_runtime, _raise_settings])
+def test_after_moves_does_not_run_when_the_command_raises(
+    tmp_path, monkeypatch, spy, raiser
+) -> None:
+    """R7: a non-Exit exception runs no follow-up, and leaves the index as it was."""
+    repo, plan_dir = _plan_repo(tmp_path)
+    monkeypatch.setattr(archive_cmd, "_report_sweep", raiser)
+    before = _state(repo)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code != 0
+    assert spy == []
+    assert _state(repo) == before
+
+
+def _state(repo: Path) -> tuple[str, str]:
+    def out(*a: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+        ).stdout
+
+    return out("status", "--porcelain"), out("diff", "--cached")
+
+
+@pytest.mark.parametrize("target", ["spec_archive_sweep", "_repair_in_passing"])
+def test_a_later_failure_in_the_single_plan_flow_undoes_the_staged_moves(
+    tmp_path, monkeypatch, target
+) -> None:
+    """R7: an exception after the plan move staged restores index and worktree."""
+    repo, plan_dir = _plan_repo(tmp_path)
+    before = _state(repo)
+    monkeypatch.setattr(archive_cmd, target, _raise_runtime)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert isinstance(result.exception, RuntimeError)
+    assert _state(repo) == before
+    assert (plan_dir / "_meta.yaml").exists()
+
+
+def test_a_non_archive_error_inside_the_move_undoes_the_staged_moves(tmp_path, monkeypatch) -> None:
+    import fr.archive as arch
+
+    repo, plan_dir = _plan_repo(tmp_path)
+    before = _state(repo)
+    monkeypatch.setattr(arch, "_archive_run", lambda *a, **k: (_ for _ in ()).throw(OSError("io")))
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert isinstance(result.exception, OSError)
+    assert _state(repo) == before
+
+
 # --- T4: the usage refresh step of _after_moves ---
 
 

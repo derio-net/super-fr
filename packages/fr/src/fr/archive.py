@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import click
+
 from fr.artifacts.paths import KIND_DIRS, artifact_root, below, kind_dir, space_for
 from fr.git import (
     GIT_TIMEOUT_SECONDS,
@@ -69,6 +71,7 @@ __all__ = [
     "GitStatusError",
     "paths_dirty",
     "recording_moves",
+    "undoing_staged_moves",
     "spec_archive_sweep",
     "missing_outcomes",
     "outcome_hold",
@@ -488,10 +491,26 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             _git_mv(repo_root, src_rel, dst_rel)
             _archive_journal(repo_root, "plan", plan_dir.name)
             _archive_run(repo_root, src_rel)
-        except ArchiveError as e:
+        except BaseException as e:
+            # R7: any failure — not only an `ArchiveError` — leaves the index as it was.
             _undo_staged(repo_root, log, start, e)
             raise
     return repo_root / dst_rel
+
+
+@contextmanager
+def undoing_staged_moves(repo_root: Path) -> Iterator[None]:
+    """R7 for a whole single-plan archive: on any exception or non-zero
+    `typer.Exit`, every move staged inside the block is reversed (newest
+    first) before the failure propagates."""
+    with _own_log() as log:
+        start = len(log.moves)
+        try:
+            yield
+        except BaseException as e:
+            if not (isinstance(e, click.exceptions.Exit) and not e.exit_code):
+                _undo_staged(repo_root, log, start, e)
+            raise
 
 
 @contextmanager
@@ -517,7 +536,7 @@ def _reverse_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> str | None:
     return None if done.returncode == 0 else (done.stderr or "").strip() or "git mv failed"
 
 
-def _undo_staged(repo_root: Path, log: MoveLog, start: int, error: ArchiveError) -> None:
+def _undo_staged(repo_root: Path, log: MoveLog, start: int, error: BaseException) -> None:
     """R7: a plan archive that fails after staging part of its moves leaves the
     index as it was. Reverses `log.moves[start:]`, newest first, and extends
     `error` with each staged path it could not put back."""
