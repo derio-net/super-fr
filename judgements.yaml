@@ -7131,6 +7131,8 @@ batches:
     - super-fr#1288
     - super-fr#1289
     - super-fr#1428
+  - kind: post_merge
+    at: '2026-11-15T11:14:28.366693Z'
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
@@ -7695,3 +7697,11 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-14-feat-batch-retire-vk.yaml"
   - "D\tdocs/superpowers/specs/2026-11-14-retire-vibekanban-design.md"
   - "D\tdocs/superpowers/usage/2026-11-14-feat-batch-retire-vk.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-15-2
+  branch: chore/closeout-2026-11-15-2
+  at: '2026-11-15T11:14:30.807401Z'
+  runner: herdr
+  handle: w3E:p2
+  planned:
+  - suite-health
