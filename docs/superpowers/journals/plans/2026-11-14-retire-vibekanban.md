@@ -215,3 +215,74 @@ The needle was named once as the module constant _VK_PROFILE_NEEDLE beside _refu
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 cleanup_vk_residue is one contiguous function directly followed by the --install-bridge refusal (install.sh:185-204), called once at section 8; the only other VK lines are uninstall's kept removal, which the spec keeps as is
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-15T00:50:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · The install test's `if mcp.exists()` guard never runs, so it cannot catch install creating .mcp.json again (phase 2)
+
+tests/integration/test_install_sh.py:226-227. seed_claude_files never creates .mcp.json.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-15T00:50:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · cleanup_vk_residue rewrote .mcp.json with mv, which reset a 0600 mode to the umask and replaced a symlink (phase 2)
+
+scripts/install.sh:192. .mcp.json often holds tokens in env.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-15T00:50:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · The wrapper match found fr_vk.bridge anywhere in the file, so a foreign file that only mentions it would be deleted (phase 2)
+
+scripts/install.sh:195. R5: a file fr did not write is never deleted.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-15T00:50:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · The exec-resume and rebuild wrappers gave the VK-profile refusal a misleading hint, and no test covered resume (phase 2)
+
+local.py:1400-1408 says "rebuild recreates it", which hits the same refusal. local.py:1451 says "the old container may already have been removed".
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-15T00:50:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · _refuse_vk_profile caught only FileNotFoundError, so an unreadable or non-UTF-8 config escaped as a traceback (phase 2)
+
+local.py:1181-1184.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-15T00:50:47+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · --uninstall repeated the jq removal instead of calling cleanup_vk_residue, and left the fr-written wrapper behind (phase 2)
+
+scripts/install.sh:213-222.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-15T00:50:47+00:00 phase=2 -->
+### review-phase-2 · review · independent phase 2 review: 6 findings, all in scope, all fixed (phase 2)
+
+The reviewer confirmed that R4 is reached on all three paths (up after save_state, so gh#578 holds; rebuild; exec resume) and that its message has every element the spec names. It confirmed that R5's removals are complete, that the cleanup is idempotent and never creates the file, and that the --install-bridge refusal and the uninstall removal work. Deleting test_install_bridge.py is justified, the fake_home fix is correct, and p1-r7 is closed. Both acceptance moves to ci are honest. The fixes are in 38e9a99a5 (installer) and c94629434 (isolation), and each new test was red first except the two p2-r1 tests, which add coverage rather than fix a bug. Suggested lenses: errors and security.
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-1 created=2026-11-15T00:50:47+00:00 phase=2 lens=errors step=review-phase -->
+### lens-errors-1 · lens · new refusal and cleanup paths (StaleProfileError, cleanup_vk_residue) must fail loud and clear, never as tracebacks (phase 2)
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-15T00:50:47+00:00 phase=2 lens=security step=review-phase -->
+### lens-security-1 · lens · the installer edits ~/.claude/.mcp.json, which holds credentials, and deletes files under ~/.local/bin (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-15T00:50:47+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: The install test's `if mcp.exists()` guard never runs, so it cannot catch install creating .mcp.json again (phase 2)
+
+The test asserts that .mcp.json is not created. A new case seeds a config with no VK entry and asserts it is unchanged. Commit 38e9a99a5.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-15T00:50:47+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: cleanup_vk_residue rewrote .mcp.json with mv, which reset a 0600 mode to the umask and replaced a symlink (phase 2)
+
+The cleanup writes back in place (jq into .tmp, cat over the original, rm), so the mode and a symlink target survive. Tests pin 0600 and the symlink. Commit 38e9a99a5.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-15T00:50:47+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: The wrapper match found fr_vk.bridge anywhere in the file, so a foreign file that only mentions it would be deleted (phase 2)
+
+The match is anchored on the exec line the old installer wrote: '^exec .*-m fr_vk\.bridge( |$)'. A foreign file that mentions it only in a comment is kept, and a test pins this. Commit 38e9a99a5.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-15T00:50:47+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: The exec-resume and rebuild wrappers gave the VK-profile refusal a misleading hint, and no test covered resume (phase 2)
+
+_refuse_vk_profile raises StaleProfileError, an IsolationError (exit 2), which the resume and rebuild wrappers re-raise unchanged. up keeps its wrapper. Tests cover resume (no rebuild hint, no devcontainer up) and rebuild (no 'may already have been removed'). Commit c94629434.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-15T00:50:47+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: _refuse_vk_profile caught only FileNotFoundError, so an unreadable or non-UTF-8 config escaped as a traceback (phase 2)
+
+_refuse_vk_profile catches (OSError, UnicodeDecodeError) and falls through. So does _ensure_mounted_env_file, which reads the same file next. A test uses a non-UTF-8 config. Commit c94629434.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-15T00:50:47+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: --uninstall repeated the jq removal instead of calling cleanup_vk_residue, and left the fr-written wrapper behind (phase 2)
+
+--uninstall calls cleanup_vk_residue. The existing uninstall test passes, and a new test asserts the fr-written wrapper is removed. Commit 38e9a99a5.
