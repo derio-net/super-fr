@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -353,6 +354,7 @@ def _advance(repo: Path, shipped: Path, key: str) -> str:
     assert out.exit_code == 0, out.output
     attempt = units.last_attempt(load_run_state(repo, "r1"), key)
     assert attempt is not None
+    _OPENED[:] = [attempt.dispatched]
     return attempt.dispatched
 
 
@@ -456,10 +458,32 @@ def _resolve(repo: Path, shipped: Path, step: str, item: str | None, record: Pat
     return _run(repo, shipped, [*argv, "--record", str(record), "--no-advance"], root)
 
 
+# When the last unit `_advance` opened (gh#1280). The transcripts these tests write
+# are stamped on that clock (`_stamp(opened, n)`), so a fresh screenshot is stamped
+# on it too: left at the real time of writing, it fell more than SLACK after the
+# transcript's reads whenever the host was slow between the open and the write, and
+# every read looked older than the file.
+_OPENED: list[str] = []
+
+
+@pytest.fixture(autouse=True)
+def _no_unit_opened_yet() -> Iterator[None]:
+    _OPENED.clear()
+    yield
+    _OPENED.clear()
+
+
 def _fresh_shot(tmp_path: Path, name: str = "all.png", data: bytes = b"\x89PNG one") -> Path:
+    """A screenshot written when the last opened unit opened (now, before any)."""
+    from fr.run.telemetry import parse_timestamp
+
     path = tmp_path / "scratch" / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
+    if _OPENED:
+        opened = parse_timestamp(_OPENED[-1])
+        assert opened is not None
+        os.utime(path, (opened.timestamp(), opened.timestamp()))
     return path
 
 
