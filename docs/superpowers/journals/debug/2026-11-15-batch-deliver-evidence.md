@@ -35,3 +35,8 @@ telemetry._unwrap steps over timeout/nice/nohup/env/time/stdbuf/caffeinate (per-
 ### fix-1395 · finding [fixed] · #1395 fixed: a forge read failure in tests: ci exits 75 in one line
 
 _ci_tests_witness catches the forge CLI errors (GhError, GlabError, TeaError) and exits CI_PENDING_EXIT ('could not read CI from the forge (...). Nothing was recorded: resolve again.'); HostRefusedError exits 2. Pinned by test_run_resolve_tests_ci.py::test_a_failed_forge_read_exits_75_naming_it_and_applies_nothing (3 errors) and ::test_a_host_trust_refusal_is_no_retry_and_exits_2.
+
+<!-- fr:journal kind=hypothesis scope=debug id=h-1454-mtime created=2026-11-15T17:10:33+00:00 -->
+### h-1454-mtime · hypothesis · #1454: bind the fresh log by mtime freshness, not by recording a tree in the witness
+
+Recording code_tree in the fresh deliver witness (the issue's suggestion) changes the cursor's evidence shape (a run-kind stamp bump + migration) and still needs the tree at the moment the suite STARTED, which fr cannot see. The phase path's newest_code_mtime rule answers the same question with no shape change: the edit behind a post-suite commit is newer than the log. Chosen.
