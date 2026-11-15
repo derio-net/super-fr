@@ -43,15 +43,15 @@ def test_plan_job_restores_the_cache_falls_back_and_uploads_one_artifact() -> No
     assert upload["with"]["name"] == "durations-plan"
 
 
-def test_test_job_splits_six_ways_by_the_plans_file() -> None:
+def test_test_job_splits_seven_ways_by_the_plans_file() -> None:
     test = JOBS["test"]
     assert "plan" in _needs("test")
     assert test["timeout-minutes"] == 20
-    assert test["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert test["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6, 7]
     assert test["strategy"]["matrix"]["python"] == ["3.11", "3.14"]
     run = _pytest_step("test")["run"]
     for flag in (
-        "--splits 6",
+        "--splits 7",
         "--splitting-algorithm least_duration",
         "--store-durations",
         "--clean-durations",

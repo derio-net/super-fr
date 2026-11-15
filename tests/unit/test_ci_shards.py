@@ -48,7 +48,7 @@ def test_test_job_matrix_shape() -> None:
     test_job = workflow["jobs"]["test"]
 
     strategy = test_job["strategy"]
-    assert strategy["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
+    assert strategy["matrix"]["shard"] == [1, 2, 3, 4, 5, 6, 7]
     assert strategy["fail-fast"] is False
 
 
@@ -61,7 +61,7 @@ def test_test_job_pytest_step_pins_addopts_and_splitting() -> None:
     run = pytest_steps[0]["run"]
 
     assert '-o addopts="--strict-markers"' in run
-    assert "--splits 6" in run
+    assert "--splits 7" in run
     assert "--group $SHARD" in run
     assert pytest_steps[0]["env"]["SHARD"] == "${{ matrix.shard }}"
     assert "--splitting-algorithm least_duration" in run
