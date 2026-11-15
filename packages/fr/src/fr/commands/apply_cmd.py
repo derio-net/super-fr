@@ -57,6 +57,12 @@ if TYPE_CHECKING:
 console = Console()
 err_console = Console(stderr=True)
 
+# Runner names `--to` once accepted, and why each is gone: the unknown-runner
+# refusal appends the reason, so a queued habit gets an answer, not only a list.
+_RETIRED_RUNNERS: dict[str, str] = {
+    "vk": "the VK runner was removed (super-fr#1459)",
+}
+
 
 def _make_gh_client() -> GhClient:
     """Factory hook for the GhClient. Tests monkeypatch this to inject FakeGhClient.
@@ -556,9 +562,13 @@ def apply_command(
 
         names = runner_names()
         if to not in names:
+            retired = _RETIRED_RUNNERS.get(to)
             err_console.print(
-                f"unknown runner {to!r} — registered runners: "
-                + (", ".join(names) if names else "(none)")
+                f"unknown runner {to!r} — "
+                + (f"{retired}; " if retired else "")
+                + "registered runners: "
+                + (", ".join(names) if names else "(none)"),
+                markup=False,
             )
             raise typer.Exit(2)
         # `--to` queues PHASE Issues, so a runner that takes no phases would

@@ -229,6 +229,21 @@ def test_apply_to_vk_is_unknown_runner() -> None:
         runner_units("vk")
 
 
+def test_apply_to_vk_through_the_cli_names_the_removal(tmp_path: Path, monkeypatch) -> None:
+    from fr.cli import app
+
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["apply", "--all", "--to", "vk"])
+
+    assert result.exit_code == 2
+    combined = " ".join((result.output + (result.stderr or "")).split())
+    assert "unknown runner 'vk'" in combined
+    assert "the VK runner was removed (super-fr#1459)" in combined
+    assert "cncd" in combined  # the registered runners are still named
+
+
 # --- spec 2026-11-14-retire-vibekanban R10: no VK residue in shipped sources --------
 
 _VK_NEEDLE = re.compile(r"fr_vk|fr-vk|vibe_kanban|vibe.?kanban", re.IGNORECASE)
@@ -260,6 +275,7 @@ ALLOWED: tuple[tuple[str, str], ...] = (
     ("scripts/install.sh", r"^# Earlier installs wrote these for the VibeKanban runner,"),
     ("scripts/install.sh", r"jq -e '\.mcpServers\.vibe_kanban'"),
     ("scripts/install.sh", r"jq 'del\(\.mcpServers\.vibe_kanban\)'"),
+    ("scripts/install.sh", r'^  local warn="WARNING: could not remove vibe_kanban from \$MCP_CONFIG;'),
     ("scripts/install.sh", r'echo "  Removed vibe_kanban \(VibeKanban support was removed\)'),
     ("scripts/install.sh", r"^  # `install\.sh --install-bridge` wrote: exec .* -m fr_vk\.bridge"),
     ("scripts/install.sh", r"grep -qE '\^exec \.\*-m fr_vk\\\.bridge"),
@@ -275,7 +291,6 @@ ALLOWED: tuple[tuple[str, str], ...] = (
 def _vk_scanned(rel: str) -> bool:
     parts = rel.split("/")
     if rel in _VK_TOP_FILES or parts[0] in _VK_TOP_DIRS:
-    ("scripts/install.sh", r'^  local warn="WARNING: could not remove vibe_kanban from \$MCP_CONFIG;'),
         return True
     return len(parts) > 3 and parts[0] == "packages" and parts[2] == "src"
 
