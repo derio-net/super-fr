@@ -57,6 +57,7 @@ __all__ = [
     "owed_marker",
     "is_owned_issue",
     "owned_owed_key",
+    "manual_owed_preview",
     "write_manual_owed",
     "write_owed_back",
 ]
@@ -599,6 +600,24 @@ def write_owed_back(filed: FiledOwed) -> Path:
     return path
 
 
+def _manual_title(plan_name: str, n: int) -> str:
+    return f"{plan_name}: manual phase {n} is not ticked"
+
+
+def manual_owed_preview(repo_root: Path, plan_name: str, phases: list[int]) -> list[str]:
+    """`<key> — <title>` for each manual phase `write_manual_owed` would record,
+    writing nothing (R8: a hold on the default branch only says what it would)."""
+    from fr.journal.model import OWED_KEY_RE, journal_path
+
+    path = journal_path(repo_root, "plan", plan_name)
+    taken = {e.id for e in parse_journal(path.read_text())} if path.exists() else set()
+    return [
+        f"{key} — {_manual_title(plan_name, n)}"
+        for n in phases
+        if f"manual-phase-{n}" not in taken and OWED_KEY_RE.match(key := f"plan:{plan_name}#p{n}")
+    ]
+
+
 def write_manual_owed(repo_root: Path, plan_name: str, phases: list[int]) -> Path | None:
     """One `owed` entry `manual-phase-<n>` (key `plan:<name>#p<n>`) per unticked
     manual phase holding the plan, into its plan journal (R22). Idempotent: a
@@ -624,7 +643,7 @@ def write_manual_owed(repo_root: Path, plan_name: str, phases: list[int]) -> Pat
             id=eid,
             created=journal_now(),
             phase=n,
-            title=f"{plan_name}: manual phase {n} is not ticked",
+            title=_manual_title(plan_name, n),
             body=owed_body(
                 what=f"do manual phase {n} of {plan_name} and tick its steps",
                 why="fr archive holds the plan until its manual phases are ticked",

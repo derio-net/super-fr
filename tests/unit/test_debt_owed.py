@@ -447,9 +447,7 @@ def test_closing_reads_the_one_issue_never_a_listing(
     _owned_issue(gh)
     res = _resolve_with(monkeypatch, tmp_path, gh)
     assert res.exit_code == 0, res.output
-    assert [kw for n, kw in gh.calls if n == "view_issue_record"] == [
-        {"repo": OWN, "number": 12}
-    ]
+    assert [kw for n, kw in gh.calls if n == "view_issue_record"] == [{"repo": OWN, "number": 12}]
     (close,) = _calls(gh, "edit_issue_state")
     assert close["state"] == "CLOSED"
 

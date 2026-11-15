@@ -482,10 +482,57 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"archived. Remove the stale plans/ copy ({src_rel}) instead "
             f"(e.g. `git rm -r {src_rel}`)."
         )
-    _git_mv(repo_root, src_rel, dst_rel)
-    _archive_journal(repo_root, "plan", plan_dir.name)
-    _archive_run(repo_root, src_rel)
+    with _own_log() as log:
+        start = len(log.moves)
+        try:
+            _git_mv(repo_root, src_rel, dst_rel)
+            _archive_journal(repo_root, "plan", plan_dir.name)
+            _archive_run(repo_root, src_rel)
+        except ArchiveError as e:
+            _undo_staged(repo_root, log, start, e)
+            raise
     return repo_root / dst_rel
+
+
+@contextmanager
+def _own_log() -> Iterator[MoveLog]:
+    """The current move log, or a private one when nothing is recording, so the
+    moves a plan archive staged are always known to it."""
+    log = _MOVE_LOG.get()
+    if log is not None:
+        yield log
+        return
+    with recording_moves() as own:
+        yield own
+
+
+def _reverse_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> str | None:
+    """`git mv dst src`, undoing one staged move. The error text, or `None`."""
+    done = subprocess.run(
+        ["git", "-C", str(repo_root), "mv", str(dst_rel), str(src_rel)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return None if done.returncode == 0 else (done.stderr or "").strip() or "git mv failed"
+
+
+def _undo_staged(repo_root: Path, log: MoveLog, start: int, error: ArchiveError) -> None:
+    """R7: a plan archive that fails after staging part of its moves leaves the
+    index as it was. Reverses `log.moves[start:]`, newest first, and extends
+    `error` with each staged path it could not put back."""
+    stuck: list[str] = []
+    for src, dst in reversed(log.moves[start:]):
+        why = _reverse_mv(repo_root, src, dst)
+        if why is None:
+            log.moves.remove((src, dst))
+        else:
+            stuck.append(f"{dst} (staged from {src}: {why})")
+    if stuck:
+        error.args = (
+            f"{error}; these staged moves could not be undone, run `git mv` back by hand: "
+            + "; ".join(stuck),
+        )
 
 
 def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:

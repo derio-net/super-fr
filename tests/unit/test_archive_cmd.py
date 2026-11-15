@@ -848,3 +848,115 @@ def test_single_plan_archive_repairs_refs_to_specs_its_own_sweep_moved(tmp_path,
     assert "`2026-09-03-b`" in moved.read_text()
     assert "docs/superpowers/plans/2026-09-03-b/" not in moved.read_text()
     assert (other / "_meta.yaml").read_bytes() == before
+
+
+# --- R7-R9: a refused archive writes nothing -------------------------------------------
+
+
+def _tree_state(repo: Path) -> tuple[str, str, list[str]]:
+    """What a refusal must leave byte-identical: status, the staged diff, every file."""
+
+    def out(*a: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+        ).stdout
+
+    files = sorted(
+        f"{p.relative_to(repo)}:{p.read_bytes().hex()}"
+        for p in repo.rglob("*")
+        if p.is_file() and ".git" not in p.relative_to(repo).parts
+    )
+    return out("status", "--porcelain"), out("diff", "--cached"), files
+
+
+class _RecordingGh(FakeGhClient):
+    """A forge double: every write lands in `calls`; the suite asserts it holds none."""
+
+    def viewer_login(self) -> str:
+        return "me"
+
+    def list_issues(self, repo, state, limit, fields=None, labels=None):  # noqa: ANN001, ANN201
+        return []
+
+
+_WRITES = ("create_issue", "ensure_labels", "comment_issue", "edit_issue_state")
+
+
+def _forge_writes(gh: FakeGhClient) -> list[str]:
+    return [n for n, _ in gh.calls if n in _WRITES]
+
+
+def _blocked_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """An unticked plan on the default branch with an unticked `[manual]` phase."""
+    from tests.unit.test_archive_owed import MANUAL_PHASE, _as_github
+
+    repo = _repo(tmp_path)
+    plan = _add_plan(repo, "2026-10-11-widget", ticked=True)
+    (plan / "02.yaml").write_text(MANUAL_PHASE)
+    _seed(repo)
+    _as_github(repo)
+    return repo, plan
+
+
+def test_a_refused_archive_writes_nothing_even_with_issues_all(tmp_path, monkeypatch):
+    repo, plan = _blocked_repo(tmp_path)
+    before = _tree_state(repo)
+    gh = _RecordingGh()
+    result = _invoke(
+        monkeypatch, repo, gh, ["archive", str(plan.relative_to(repo)), "--issues", "all"]
+    )
+    assert result.exit_code == 2, result.output
+    assert _tree_state(repo) == before
+    assert _forge_writes(gh) == []
+    assert not (repo / "docs/superpowers/journals").exists()
+
+
+def test_a_placement_refusal_writes_nothing(tmp_path, monkeypatch):
+    from fr.settings import SettingsError
+
+    repo, plan = _blocked_repo(tmp_path)
+    before = _tree_state(repo)
+    gh = _RecordingGh()
+    monkeypatch.setattr("fr.artifacts.paths.outside_repo", lambda _root: "quiet")
+    result = _invoke(monkeypatch, repo, gh, ["archive", str(plan.relative_to(repo))])
+    assert result.exit_code != 0
+    assert isinstance(result.exception, SettingsError) or result.exit_code == 2
+    assert _tree_state(repo) == before
+    assert _forge_writes(gh) == []
+
+
+def test_a_move_that_fails_halfway_leaves_the_index_as_it_was(tmp_path, monkeypatch):
+    from fr import archive as archive_mod
+
+    repo = _repo(tmp_path)
+    plan = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
+    _seed(repo)
+    before = _tree_state(repo)
+
+    def boom(*_a, **_k):  # noqa: ANN002, ANN003, ANN202
+        raise archive_mod.ArchiveError("journal move failed")
+
+    monkeypatch.setattr(archive_mod, "_archive_journal", boom)
+    gh = _RecordingGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", str(plan.relative_to(repo))])
+    assert result.exit_code == 2, result.output
+    assert "journal move failed" in result.output
+    assert _tree_state(repo) == before
+    assert _forge_writes(gh) == []
+
+
+def test_a_failed_reversal_names_every_staged_path(tmp_path, monkeypatch):
+    from fr import archive as archive_mod
+
+    repo = _repo(tmp_path)
+    plan = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
+    _seed(repo)
+
+    def boom(*_a, **_k):  # noqa: ANN002, ANN003, ANN202
+        raise archive_mod.ArchiveError("journal move failed")
+
+    monkeypatch.setattr(archive_mod, "_archive_journal", boom)
+    monkeypatch.setattr(archive_mod, "_reverse_mv", lambda *_a: "refused")
+    result = _invoke(monkeypatch, repo, _RecordingGh(), ["archive", str(plan.relative_to(repo))])
+    assert result.exit_code == 2, result.output
+    assert "2026-05-25-bookmarks" in result.output and "could not be undone" in result.output

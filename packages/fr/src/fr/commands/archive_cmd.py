@@ -726,6 +726,12 @@ def _write_manual_owed(repo_root: Path, plan: Any, blockers: tuple[str, ...]) ->
     if not phases:
         return
     name = plan.dir.name
+    from fr.git import head_on_default_branch
+
+    if head_on_default_branch(repo_root):  # R8: no commit lands here, so nothing is written
+        for line in af.manual_owed_preview(repo_root, name, phases):
+            typer.echo(f"  would record owed: {line}")
+        return
     try:
         path = af.write_manual_owed(repo_root, name, phases)
         if path is not None:
@@ -830,23 +836,31 @@ def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
             err_console.print("--issues and --no-issues are mutually exclusive")
             raise typer.Exit(2)
         with recording_moves() as log:
+            # R7: a refusal — a non-zero exit, a `SettingsError`, any exception —
+            # runs no follow-up: nothing it staged is left to file anything for.
+            done: typer.Exit | None = None
             try:
                 fn(*args, **kwargs)
-            finally:
-                try:
-                    root = resolve_repo_root()
-                except Exception:  # noqa: BLE001 — outside a repo there is nothing to follow up
-                    pass
-                else:
-                    _after_moves(
-                        root,
-                        log,
-                        _ArchiveOpts(
-                            branch=kwargs.get("branch"),
-                            issues=kwargs.get("issues"),
-                            no_issues=bool(kwargs.get("no_issues")),
-                        ),
-                    )
+            except typer.Exit as e:
+                if e.exit_code:
+                    raise
+                done = e  # an Exit(0) is a normal return that left early
+            try:
+                root = resolve_repo_root()
+            except Exception:  # noqa: BLE001 — outside a repo there is nothing to follow up
+                root = None
+            if root is not None:
+                _after_moves(
+                    root,
+                    log,
+                    _ArchiveOpts(
+                        branch=kwargs.get("branch"),
+                        issues=kwargs.get("issues"),
+                        no_issues=bool(kwargs.get("no_issues")),
+                    ),
+                )
+            if done is not None:
+                raise done
 
     return wrapper
 
@@ -1010,13 +1024,14 @@ def archive_command(
 
         blockers = archive_blockers(report.plan, report.observed, evidence)
         if blockers and not force:
-            _write_manual_owed(repo_root, report.plan, blockers)
             if not all_plans:
+                # R7: a refusal writes nothing, so it records no owed entry either.
                 err_console.print("refusing to archive — plan is not complete or not merged:")
                 for b in blockers:
                     err_console.print(f"  {b}", soft_wrap=True)
                 err_console.print("(override with --force if you know the work is done)")
                 raise typer.Exit(2)
+            _write_manual_owed(repo_root, report.plan, blockers)
             skipped.append(f"{target.name}: skipped — {'; '.join(blockers)}")
             continue
 

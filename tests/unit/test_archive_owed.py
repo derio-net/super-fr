@@ -337,13 +337,20 @@ def _manual_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently(
+def _off_default(repo: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "-c", "feat/x"], check=True)
+
+
+def test_a_manual_phase_skipped_under_all_writes_and_files_its_owed_entry_idempotently(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _manual_repo(tmp_path)
+    _off_default(repo)
     gh = ListingGh()
-    result = _archive(monkeypatch, repo, gh)
-    assert result.exit_code == 2, result.output
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert result.exit_code == 0, result.output
     assert (repo / "docs/superpowers/plans" / PLAN).is_dir()
     entries = parse_journal(journal_path(repo, "plan", PLAN).read_text())
     owed = [e for e in entries if e.kind == "owed"]
@@ -354,11 +361,47 @@ def test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently(
     assert made["body"].rstrip().endswith(f"<!-- fr-owed:plan:{PLAN}#p2 -->")
     assert owed_filed_as(entries) == {"manual-phase-2": f"{OWN}#1"}
 
-    again = _archive(monkeypatch, repo, gh)
-    assert again.exit_code == 2, again.output
+    again = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert again.exit_code == 0, again.output
     entries = parse_journal(journal_path(repo, "plan", PLAN).read_text())
     assert [e.id for e in entries if e.kind == "owed"] == ["manual-phase-2"]
     assert len(_created(gh)) == 1, "a re-run files nothing new"
+
+
+def test_a_single_plan_refusal_records_no_owed_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _manual_repo(tmp_path)
+    _off_default(repo)
+    gh = ListingGh()
+    result = _archive(monkeypatch, repo, gh)
+    assert result.exit_code == 2, result.output
+    assert not journal_path(repo, "plan", PLAN).exists()
+    assert _writes(gh) == []
+
+
+def test_a_hold_on_the_default_branch_says_what_it_would_record_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    def porcelain() -> tuple[str, str]:
+        def out(*a: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+            ).stdout
+
+        return out("status", "--porcelain"), out("diff", "--cached")
+
+    repo = _manual_repo(tmp_path)  # HEAD is main, which origin/main names
+    before = porcelain()
+    gh = ListingGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in result.output
+    assert porcelain() == before
+    assert not journal_path(repo, "plan", PLAN).exists()
+    assert _writes(gh) == []
 
 
 # --- R19: the close-out brief lists the steps -----------------------------
@@ -512,8 +555,7 @@ def test_owed_reuse_finds_the_marker_past_the_unlabelled_backlog(tmp_path: Path)
     from fr.archive_followups import file_owed_ends
 
     crowd = [
-        {"number": n, "body": "b", "author": {"login": "me"}, "labels": []}
-        for n in range(100, 350)
+        {"number": n, "body": "b", "author": {"login": "me"}, "labels": []} for n in range(100, 350)
     ]
     gh = ListingGh([*crowd, _owed_issue(7, "plan:p#e1")])
     out = file_owed_ends(tmp_path, _ends(tmp_path)[:1], gh, OWN)
