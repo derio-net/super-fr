@@ -629,3 +629,28 @@ def test_a_repo_with_only_archived_plans_is_fr_enabled(tmp_path: Path) -> None:
     assert not (repo / "docs" / "superpowers" / "plans").exists()
     assert enabled(repo, NO_FR) == 0
     assert decide(repo / "src.py", env=NO_FR) == 1
+
+
+# --- guard-trust R3: git is resolved from absolute PATH entries only ----------------
+
+
+@pytest.mark.parametrize("relative", ["bin", "./bin", "", "."])
+def test_a_relative_path_entry_holding_a_git_is_never_run(tmp_path: Path, relative: str) -> None:
+    real = shutil.which("git")
+    assert real is not None
+    repo = tmp_path / "repo"
+    (repo / "bin").mkdir(parents=True)
+    ran = tmp_path / "planted-git-ran"
+    planted = repo / "bin" / "git"
+    planted.write_text(f'#!/bin/bash\ntouch "{ran}"\nexit 0\n')
+    planted.chmod(0o755)
+    cwd = repo / "bin" if relative == "." else repo
+    entry = f"{relative}:{Path(real).parent}"
+    script = f'cd "{cwd}"; . "{LIB}"; fr_git_resolve && printf %s "$FR_GIT_BIN"'
+    env = {k: v for k, v in os.environ.items() if k != "FR_GIT_CANDIDATES"}
+    env["PATH"] = entry
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("/"), result.stdout
+    assert Path(result.stdout).name == "git"
+    assert not ran.exists()

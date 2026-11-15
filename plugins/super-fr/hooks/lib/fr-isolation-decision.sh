@@ -160,9 +160,20 @@ fr_git_resolve() {
         FR_GIT_BIN="$_fr_cand"
         ;;
       *)
-        _fr_res=$(command -v "$_fr_cand" 2>/dev/null) || continue
-        [ -n "$_fr_res" ] || continue
-        FR_GIT_BIN="$_fr_res"
+        # Walk PATH like fr_fr_resolve: `command -v` honours a RELATIVE entry (`.`,
+        # `bin`, an empty one), i.e. a file in whatever directory the hook runs from.
+        # Only an absolute entry's executable regular file is ever git.
+        _fr_grest="${PATH:-}:"
+        while [ -n "$_fr_grest" ]; do
+          _fr_gdir=${_fr_grest%%:*}
+          _fr_grest=${_fr_grest#*:}
+          case "$_fr_gdir" in /*) ;; *) continue ;; esac
+          if [ -f "$_fr_gdir/$_fr_cand" ] && [ -x "$_fr_gdir/$_fr_cand" ]; then
+            FR_GIT_BIN="$_fr_gdir/$_fr_cand"
+            return 0
+          fi
+        done
+        continue
         ;;
     esac
     return 0
