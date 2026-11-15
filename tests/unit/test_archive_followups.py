@@ -168,7 +168,9 @@ def test_after_moves_sees_an_empty_log_when_nothing_moved(tmp_path, monkeypatch,
     assert spy == [False]
 
 
-def test_after_moves_runs_when_a_follower_move_exits_2(tmp_path, monkeypatch, spy):
+def test_after_moves_does_not_run_when_a_follower_move_exits_2(tmp_path, monkeypatch, spy):
+    """R7: a refusal, even one after the plan move staged, runs no follow-up; the plan
+    move it staged is undone, so there is nothing left to follow up."""
     repo, plan_dir = _plan_repo(tmp_path)
     import fr.archive as arch
 
@@ -180,7 +182,8 @@ def test_after_moves_runs_when_a_follower_move_exits_2(tmp_path, monkeypatch, sp
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
     assert result.exit_code == 2, result.output
-    assert spy == [True]
+    assert spy == []
+    assert (plan_dir / "_meta.yaml").exists(), "the staged plan move was undone"
 
 
 # --- T4: the usage refresh step of _after_moves ---
