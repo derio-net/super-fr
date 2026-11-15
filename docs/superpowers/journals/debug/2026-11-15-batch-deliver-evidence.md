@@ -45,3 +45,8 @@ Recording code_tree in the fresh deliver witness (the issue's suggestion) change
 ### fix-1454 · finding [fixed] · #1454 fixed: deliver refuses a fresh log older than any code path
 
 _verify_tests_log → _refuse_stale_suite_log (newest_code_mtime since default_merge_base, the log itself ignored). Pinned by test_deliver_local_stamp.py::test_a_fresh_log_older_than_a_committed_code_change_is_refused and ::test_a_fresh_log_written_after_the_last_code_change_is_accepted; three existing tests that changed the tree after writing their log now mark the suite as run last (_suite_ran_last).
+
+<!-- fr:journal kind=finding scope=debug id=fix-1462 created=2026-11-15T17:19:18+00:00 state=fixed -->
+### fix-1462 · finding [fixed] · #1462 fixed: a merged local row is stamped by a new set-status amendment
+
+_local_stamp_plan → local_stamp_target picks the block; frozen() (merged_row_ids for a row block, membership in the fold's pending for an amendment) routes a merged one to append_amendment(SetStatus(..., status=local, local=stamp)). _feature_local_ids now counts the feature's own merged rows re-set by its amendments. Pinned by test_deliver_local_stamp.py::test_a_merged_local_row_is_stamped_by_an_amendment[slug|slug-design] (the issue's reproduction) and ::test_a_merged_set_status_amendment_is_not_rewritten; ::test_a_pending_set_status_amendment_is_stamped_in_place still holds.
