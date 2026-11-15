@@ -75,11 +75,6 @@ SKILLS: list[tuple[str, str, str]] = [
         "fr isolation {up,exec,status,attach,detach,down,gc}",
     ),
     (
-        "fr-runner",
-        "Operate/debug an autonomous runner (dispatch plugin skill).",
-        "heartbeat + failure metrics  ·  fr status  ·  fr undispatch",
-    ),
-    (
         "fr-init",
         "Scaffold devcontainer profiles via interview (skill).",
         "fr init scaffold --profile NAME --purpose TEXT [--tool ...] [--secret ...]",

@@ -24,7 +24,7 @@ def test_every_shipped_skill_has_a_page() -> None:
     outcome = evaluate(ROOT, config, None)
     assert [f.message for f in outcome.findings if f.kind == "uncovered"] == []
     skills = sorted(p.parent.name for p in ROOT.glob("plugins/*/skills/*/SKILL.md"))
-    assert len(skills) >= 15
+    assert len(skills) >= 14
 
 
 def test_a_skill_with_no_page_fails_the_check() -> None:

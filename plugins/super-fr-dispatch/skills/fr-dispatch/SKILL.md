@@ -2,25 +2,25 @@
 name: fr-dispatch
 description: >
   Queue a plan's phases to a runner (`fr apply --to <runner>`) and reconcile its GitHub Issues. Use when:
-  "dispatch this plan", "send to VK", "create issues from plan", "sync plan to GitHub".
+  "dispatch this plan", "send to a runner", "create issues from plan", "sync plan to GitHub".
 ---
 
 # fr-dispatch
 
-Wraps the `fr apply` CLI. The single command renders the plan, observes
-GitHub state, diffs, and emits the mutations needed to bring GitHub in line
-with the plan. Works for first-time creation, incremental updates, and
-ongoing reconciliation — there's no separate "first dispatch" verb in v2.
+Wraps the `fr apply` CLI. The single command renders the plan, observes GitHub state,
+diffs, and emits the mutations needed to bring GitHub in line with the plan. Works for
+first-time creation, incremental updates, and ongoing reconciliation — there's no
+separate "first dispatch" verb in v2.
 
 ## v3: tracking vs queue
 
-Plain `fr apply` is TRACKING-ONLY (attribute labels, no queue
-lifecycle). Queueing is explicit: `fr apply <dir> --to vk --yes`
-adds `fr:ready` + `runner:vk`, validates the runner against the
-`fr.runners` registry, and enforces the reachability gate (remote
-runners pull the repo; tracking-only applies never pay it). The runner
-choice lives ON THE ISSUE as labels — never in plan files.
-`fr undispatch` dequeues; per-phase mixing is legal.
+Plain `fr apply` is TRACKING-ONLY (attribute labels, no queue lifecycle). Queueing is
+explicit: `fr apply <dir> --to cncd --yes` adds `fr:ready` + `runner:cncd`, validates
+the runner against the `fr.runners` registry, refuses up front a runner that takes no
+`phase` unit (a hand-labelled Issue fails the tick as `unit_mismatch`), and enforces the
+reachability gate (remote runners pull the repo; tracking-only applies never pay it).
+The runner choice lives ON THE ISSUE as labels, never in plan files. `fr undispatch`
+dequeues; mixing runners per phase is legal.
 
 ## Pre-flight (mandatory)
 
