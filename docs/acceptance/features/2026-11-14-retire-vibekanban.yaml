@@ -277,3 +277,9 @@ amendments:
     ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_vk_residue_in_shipped_sources
     why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
       pages
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_readme_sync.py
+    why: sync-readme --check is the README half of R6
