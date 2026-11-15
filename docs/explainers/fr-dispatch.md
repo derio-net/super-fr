@@ -16,7 +16,7 @@ covers:
   - packages/fr-cncd/src/**
   - packages/fr-herdr/src/fr_herdr/runner.py
   - packages/fr-claude-cloud/src/**
-reviewed: 2026-11-15 no shipped tick caller; preflight reasons; stranded runner:vk issues
+reviewed: 2026-11-15 no shipped tick caller; preflight reasons; issues stranded on the removed VK runner
 ---
 
 ## Why does the plan stay the source of truth?
@@ -149,8 +149,8 @@ When a queued phase sits still, work through these, in order:
    are on the default branch.
 3. **Dispatched in error?** `fr undispatch <plan-dir> --yes` closes the issues. It leaves
    the runner's own records alone: reaping them is the runner's job.
-4. **Is the issue labelled `runner:vk`?** The VK runner was removed, so nothing picks
-   those issues up. Queue them to a runner that remains with
+4. **Was the issue queued to the VK runner?** That runner was removed, so nothing picks up
+   an issue that still carries its runner label. Queue them to a runner that remains with
    `fr apply <plan-dir> --to <runner> --yes`, which swaps the label, or close them with
    `fr undispatch <plan-dir> --yes`. If an issue also carries `fr:synced`, remove that
    label too, or the new runner skips it as already handed over.
