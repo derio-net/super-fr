@@ -286,3 +286,46 @@ _refuse_vk_profile catches (OSError, UnicodeDecodeError) and falls through. So d
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: --uninstall repeated the jq removal instead of calling cleanup_vk_residue, and left the fr-written wrapper behind (phase 2)
 
 --uninstall calls cleanup_vk_residue. The existing uninstall test passes, and a new test asserts the fr-written wrapper is removed. Commit 38e9a99a5.
+
+<!-- fr:journal kind=decision scope=plan id=p3-dispatch-example-is-cncd created=2026-11-15T01:42:15+00:00 phase=3 -->
+### p3-dispatch-example-is-cncd · decision · The dispatch examples use --to cncd, not --to herdr as the plan step said (phase 3)
+
+herdr declares `units = {"run"}` (fr_herdr/runner.py:146) and claude-cloud does too, so
+`fr apply --to herdr` refuses (apply_cmd.py:579-584: "takes run-unit work only").
+cncd is the only shipped runner that takes phases, so the fr-dispatch skill, the
+dispatch explainer, dispatch-lifecycle.md and the `--to` help text name `cncd`.
+
+<!-- fr:journal kind=decision scope=plan id=p3-spec-slug-allowlisted created=2026-11-15T01:42:15+00:00 phase=3 -->
+### p3-spec-slug-allowlisted · decision · Three comments that cite this spec by slug (retire-vibekanban) are allowlisted per file (phase 3)
+
+The R10 needle vibe.?kanban matches the spec slug itself. The three citations
+(local.py R4 comment, install.sh R5 comment, acceptance/check.py R9 docstring) are
+allowlisted as (file, line regex) pairs, never by a slug-wide rule, as R10 requires.
+plan_vk_version.py, plan_config.py and the vk- notes in labels.py/diff.py contain no
+R10 needle, so they need no entry (a dead entry fails the allowlist test).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-r6-tests-green-on-arrival created=2026-11-15T01:42:15+00:00 phase=3 -->
+### p3-r6-tests-green-on-arrival · discovery · The R6/R8 tests were written after the deletions, so they were green when added (phase 3)
+
+test_fr_skills_lists_no_fr_runner, test_no_shipped_skill_is_fr_runner and
+test_published_pages_name_no_vk_runner pin R6/R8 for the acceptance row. Only the
+R10 tripwire was red first (34 hits). The page test would have been red before T4:
+fr-dispatch.md named fr-runner in its title and covers.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-tick-has-no-in-repo-caller created=2026-11-15T01:42:15+00:00 phase=3 -->
+### p3-tick-has-no-in-repo-caller · discovery · No shipped package calls fr_dispatch.tick any more (phase 3)
+
+With the VK bridge gone, tick and MetricsPusher are library entry points with no
+caller in packages/*/src. The explainer now says a runner's own bridge calls tick;
+fr apply --to and fr triage batch dispatch use the registry, item graph and
+reachability gate only.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-15T01:42:15+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+A deletion, two list-row removals and a regenerated README; the fr-dispatch skill paragraph was rewrapped once to stay within the 120-line limit, nothing else to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-15T01:42:15+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+Docstring, comment and help-string rewording only, with no behaviour change; each edit is self-contained, so there is no shared structure to clean
