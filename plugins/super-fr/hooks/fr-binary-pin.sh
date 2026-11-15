@@ -16,9 +16,11 @@
 set -u
 
 [ -n "${CLAUDE_ENV_FILE:-}" ] || exit 0
-command -v fr >/dev/null 2>&1 || exit 0
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
+fr_fr_resolve || exit 0
 
-identity=$(fr --identity 2>/dev/null) || exit 0
+identity=$("$FR_FR_BIN" --identity 2>/dev/null) || exit 0
 identity=${identity%%$'\n'*}
 [ -n "$identity" ] || exit 0
 

@@ -48,10 +48,13 @@
 trap 'exit 0' EXIT
 exec 2>/dev/null
 
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
+
 input=$(cat)
 
 command -v jq >/dev/null 2>&1 || exit 0
-command -v fr >/dev/null 2>&1 || exit 0
+fr_fr_resolve || exit 0
 
 # One expression, one answer: the session id, or nothing. Anything unexpected
 # in the payload — wrong event, a subagent, a missing or non-boolean
@@ -80,7 +83,7 @@ worktree=$(jq -r 'if type == "object" then (.worktree | strings) else empty end'
 budget="${FR_IDLE_GUARD_TIMEOUT:-20}"
 case "$budget" in ''|*[!0-9]*) budget=20 ;; esac
 out=$(mktemp "${TMPDIR:-/tmp}/fr-run-idle-guard.XXXXXX") || exit 0
-( cd "$worktree" && exec fr run check --idle --format json ) >"$out" </dev/null &
+( cd "$worktree" && exec "$FR_FR_BIN" run check --idle --format json ) >"$out" </dev/null &
 fr_pid=$!
 ( sleep "$budget"; kill -9 "$fr_pid" ) >/dev/null </dev/null &
 watchdog=$!

@@ -56,8 +56,8 @@ agent_worktree() {
   # Claude never fires WorktreeRemove for a subagent, and a non-fr repo never
   # runs `fr isolation up/down`, so each dispatch starts the reaper: detached,
   # every fd closed so Claude does not wait on it, a no-op when one already runs.
-  if command -v fr >/dev/null 2>&1; then
-    (fr isolation gc --agent-worktrees --repo "$root" </dev/null >/dev/null 2>&1 &)
+  if fr_fr_resolve; then
+    ("$FR_FR_BIN" isolation gc --agent-worktrees --repo "$root" </dev/null >/dev/null 2>&1 &)
   fi
   copy_worktreeinclude "$dir"
   printf '%s\n' "$dir"
@@ -126,7 +126,7 @@ trap 'rm -rf "$lock"' EXIT
 echo $$ > "$lock/pid"
 
 case "$name" in agent-*) agent_worktree ;; esac
-if ! _fr_is_enabled "$root" || ! command -v fr >/dev/null 2>&1; then mimic_default; fi
+if ! _fr_is_enabled "$root" || ! fr_fr_resolve; then mimic_default; fi
 
 branch="$name"; case "$name" in */*) ;; *) branch="wt/$name" ;; esac
 if [ -z "${FR_ISOLATION_TARGET:-}" ] && ! has_profile; then
@@ -136,7 +136,7 @@ fi
 args=(isolation up --repo "$root" --branch "$branch")
 [ -n "$session_id" ] && args+=(--session "$session_id" --harness claude)
 args+=(--print-path)
-out=$(fr "${args[@]}") || { echo "fr-worktree-create: fr isolation up failed" >&2; exit 1; }
+out=$("$FR_FR_BIN" "${args[@]}") || { echo "fr-worktree-create: fr isolation up failed" >&2; exit 1; }
 path=$(printf '%s\n' "$out" | sed -e 's/\x1b\[[0-9;]*m//g' | awk 'NF{l=$0} END{print l}')
 [ -n "$path" ] && [ -d "$path" ] || {
   echo "fr-worktree-create: no worktree path from fr isolation up" >&2; exit 1; }

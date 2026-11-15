@@ -22,16 +22,19 @@
 
 set -eu
 
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
+
 input=$(cat)
 
 command -v jq >/dev/null 2>&1 || exit 0
-command -v fr >/dev/null 2>&1 || exit 0
+fr_fr_resolve || exit 0
 
 [ "$(printf '%s' "$input" | jq -r '.reason // empty')" != "resume" ] || exit 0
 
 session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
 [ -n "$session_id" ] || exit 0
 
-nohup fr isolation detach --session "$session_id" >/dev/null 2>&1 </dev/null &
+nohup "$FR_FR_BIN" isolation detach --session "$session_id" >/dev/null 2>&1 </dev/null &
 
 exit 0

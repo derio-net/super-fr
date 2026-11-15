@@ -7,6 +7,8 @@
 # Everything else: `fr isolation down --worktree`, which keeps a workspace with an
 # open PR — the reason goes to stderr and `fr isolation status` still shows it.
 set -eu
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 input=$(cat)
 path=$(printf '%s' "$input" | jq -r '.worktree_path // empty')
 [ -n "$path" ] || exit 0
@@ -20,7 +22,7 @@ case "$path" in
     git --git-dir="$common" worktree remove --force "$path" >&2 || rm -rf "$path"
     exit 0 ;;
 esac
-command -v fr >/dev/null 2>&1 || exit 0
+fr_fr_resolve || exit 0
 # Serialized per worktree path, for the same reason as fr-worktree-create.sh:
 # install.sh also registers this script in settings.json, so wherever Claude
 # Code honours both registrations two teardowns of one workspace would run at
@@ -36,6 +38,6 @@ until mkdir "$lock" 2>/dev/null; do
 done
 trap 'rm -rf "$lock"' EXIT
 echo $$ > "$lock/pid"
-fr isolation down --worktree "$path" >&2 ||
+"$FR_FR_BIN" isolation down --worktree "$path" >&2 ||
   echo "fr-worktree-remove: fr isolation down refused for $path; workspace kept (see fr isolation status)" >&2
 exit 0
