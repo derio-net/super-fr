@@ -1,0 +1,37 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-guard-trust
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: f1, review_scope: in, title: "R2's new literal path fails the fr-paths-fallback tripwire unless it is pinned", body: "tests/unit/test_tripwire_artifact_paths.py:426-451 FALLBACK_LINES; fr-isolation-decision.sh:332; marker.ts:273. Spec must mark both new lines and add them to FALLBACK_LINES."}
+  - {kind: finding, id: f2, review_scope: in, title: "Docs pages that cover the changed paths are not named; one states the old fr-enabled test", body: "docs/explainers/fr-isolation.md:129-130, docs/cloud-setup.md:118, docs/herdr-control-sessions.md, docs/reference/install.md, packages/fr/src/fr/harness/parity.yaml:114."}
+  - {kind: finding, id: f3, review_scope: in, title: "Hook inventory misses fr-worktree-create.sh:129/:139 and misdescribes the existing command -v fr guards", body: "fr-worktree-create.sh:129,139; fr-session-bind.sh:23; fr-session-unbind.sh:28; fr-worktree-remove.sh:23."}
+  - {kind: finding, id: f4, review_scope: in, title: "Row hooks-trust-absolute-path-only claims more than the non-goals allow", body: "Bare git in hook scripts stays (d2); the row must be narrowed to the resolvers and the fr-starting sites."}
+  - {kind: finding, id: f5, review_scope: in, title: "Archive design names a non-existent staged-paths record and the wrong live root", body: "archive.py:408-418 MoveLog holds moves only; use kind_dir('plan', space_for(repo_root)); state quiet/stealth behaviour."}
+  - {kind: finding, id: f6, review_scope: in, title: "The .gitkeep write would follow a repo-planted symlink", body: "Use lstat + O_CREAT|O_EXCL|O_NOFOLLOW; test the symlink case."}
+  - {kind: finding, id: f7, review_scope: in, title: "The sibling-pin rewrite can race other SessionStart hooks; temp file unspecified", body: "Read-then-mv drops a concurrent append by another plugin's hook now at that position; record the Claude Code layout as an assumption."}
+  - {kind: finding, id: f8, review_scope: in, title: "Row gate-survives-last-plan-archive does not isolate R2 from R1", body: "Fixture must have implemented/plans/<x>, no plans dir, no profile."}
+  - {kind: finding, id: f9, review_scope: out, title: "Other bare-name spawns remain (bash, gh in the plugin; jq in hooks)", body: "tui/segment.ts:47, push.ts:35, command -v jq in hooks. Same class as #1429 but outside d2's scope."}
+  - {kind: finding, id: f10, review_scope: out, title: "The legacy archive dir is not an fr-enabled signal", body: "paths.py:71 plan-legacy-archived; fr migrate moves that layout."}
+  - {kind: review, id: spec-review-1, title: "independent spec review: 10 findings (8 in scope f1-f8; 2 out f9, f10)", body: "Decisions d1-d6 honoured; Verification grammar parses (spec_section.py:39-46); every cited file:line verified; -P valid (requires-python >=3.11)."}
+  - {kind: lens, lens: tests, title: "R2 must be proven without R1's .gitkeep, and relative-PATH tests must cover every listed hook and module"}
+  - {kind: lens, lens: errors, title: "Every new resolve or append path must stay fail-open and never turn a failed resolve into a non-zero hook exit"}
+resolves:
+  - {id: f1, state: fixed, body: "Design A: both new lines carry # fr-paths-fallback and are added to FALLBACK_LINES."}
+  - {id: f2, state: fixed, body: "Design A Text names the explainer, parity.yaml and the fr docs check pages; Design E updates docs/cloud-setup.md."}
+  - {id: f3, state: fixed, body: "Background lists every site incl. worktree-create :129/:139 and which hooks source the lib; Design B states each hook's fail-open fallback."}
+  - {id: f4, state: fixed, body: "Row narrowed (amendment below) to the resolvers and fr-starting hooks/modules."}
+  - {id: f5, state: fixed, body: "Design A: live root is kind_dir('plan', space_for(repo_root)); only git add, MoveLog unchanged; quiet/stealth stated."}
+  - {id: f6, state: fixed, body: "Design A: lstat check plus O_CREAT|O_EXCL|O_NOFOLLOW; Verification row tests the symlink case."}
+  - {id: f7, state: fixed, body: "Design E rewritten append-only (no rewrite, no delete, no temp file), so a concurrent append cannot be lost; Claude Code layout recorded as an observed assumption; R7 reworded."}
+  - {id: f8, state: fixed, body: "Verification row pins the fixture: implemented/plans/<x>, no plans dir, no profile."}
+  - {id: f9, state: out-of-scope, body: "Pre-existing bare spawns of bash/gh/jq; not touched by this change; listed in Non-goals, filed at deliver."}
+  - {id: f10, state: out-of-scope, body: "Pre-existing legacy layout; this change does not create it; listed in Non-goals."}
+acceptance:
+  - row: hooks-trust-absolute-path-only
+    op: reword
+    why: "spec-review f4: bare git calls in hook scripts are a non-goal (d2), so the claim is narrowed to what R3/R4 build"
+    acceptance: Neither git resolver, and no super-fr hook or OpenCode plugin module that starts fr, runs a binary reached only through a relative PATH entry
+evidence:
+  review: spec-review-1
+  reviewer: a4a9292618de4739c
