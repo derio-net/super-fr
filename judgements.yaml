@@ -7328,6 +7328,12 @@ batches:
     - super-fr#1459
   - kind: post_merge
     at: '2026-11-15T07:17:55.358743Z'
+  - kind: closeout
+    at: '2026-11-15T07:18:41.220739Z'
+    runner: herdr
+    handle: w3D:p2
+    run: 2026-11-14-feat-batch-retire-vk
+    archive: chore/closeout-2026-11-15-1
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -7604,3 +7610,28 @@ closeouts:
   handle: w3D:p2
   planned:
   - retire-vk
+  pr: 1469
+  head: 0a79895b25e3175ba197be370c150e3b1256cb57
+  members:
+  - retire-vk
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-14-retire-vibekanban.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-14-retire-vibekanban.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-14-retire-vibekanban/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-14-retire-vibekanban/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-14-retire-vibekanban/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-14-retire-vibekanban/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-14-retire-vibekanban/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-14-feat-batch-retire-vk.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-14-retire-vibekanban-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-14-feat-batch-retire-vk.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-14-retire-vibekanban.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-14-retire-vibekanban.md"
+  - "D\tdocs/superpowers/plans/2026-11-14-retire-vibekanban/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-14-retire-vibekanban/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-14-retire-vibekanban/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-14-retire-vibekanban/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-14-retire-vibekanban/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-14-feat-batch-retire-vk.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-14-retire-vibekanban-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-14-feat-batch-retire-vk.yaml"
