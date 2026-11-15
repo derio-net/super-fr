@@ -5,13 +5,16 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr-dispatch/src/**
+  - packages/fr-cncd/src/**
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - packages/fr-claude-cloud/src/**
   - packages/fr/src/fr/commands/repos_cmd.py
   - packages/fr/src/fr/repos.py
   - packages/fr/src/fr/labels.py
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-14 VK support removed; the example runner is cncd
+reviewed: 2026-11-15 covers the runner adapters whose units the page states
 ---
 
 # Dispatch labels and the per-repo plan profile

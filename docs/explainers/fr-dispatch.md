@@ -13,7 +13,10 @@ covers:
   - packages/fr/src/fr/commands/apply_cmd.py
   - packages/fr/src/fr/commands/undispatch_cmd.py
   - packages/fr-dispatch/src/**
-reviewed: 2026-11-14 VK support removed; the runner-operations skill is gone, the examples use the cncd runner
+  - packages/fr-cncd/src/**
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - packages/fr-claude-cloud/src/**
+reviewed: 2026-11-15 covers the runner adapters whose units the page states
 ---
 
 ## Why does the plan stay the source of truth?
