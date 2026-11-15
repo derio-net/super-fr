@@ -20,3 +20,8 @@ Hypothesis: the dead-holder reclaim (cat pid; kill -0 fails; rm -rf lock) can de
 ### 1313d85ab59b · decision · One PR, one fix per root cause
 
 Operator chose: keep the single batch PR but fix each cause on its own with its own test. #1463's lock is tightened only if it can be reproduced first; otherwise split it out.
+
+<!-- fr:journal kind=finding scope=debug id=ci-hygiene created=2026-11-15T07:24:46+00:00 state=fixed -->
+### ci-hygiene · finding [fixed] · ci.yml: base_ref routed through env; every job bounded
+
+change-fragment and docs-check read BASE_REF from env: instead of interpolating github.base_ref into run: (#1289). Ten jobs gained timeout-minutes, each 5x+ over its measured duration on run 43639946152 (#1288). Pinned by tests/unit/test_ci_workflow_hygiene.py (red before, green after).
