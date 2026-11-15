@@ -1,0 +1,18 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-guard-trust
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - {kind: finding, id: p3-r1, phase: 3, review_scope: in, title: "Pin hook double-appended to $CLAUDE_ENV_FILE when it already held a pin", body: "fr-binary-pin.sh loop matched our own file as a sibling, then the final printf appended again."}
+  - {kind: finding, id: p3-r2, phase: 3, review_scope: in, title: "-f/-L check and >> are not atomic; a same-user symlink swap receives one export line", body: "No privilege gain (same user could edit the files directly) but slightly wider than writing only CLAUDE_ENV_FILE; document or accept."}
+  - {kind: finding, id: p3-r3, phase: 3, review_scope: in, title: "Tests missed lookalike/indented pin lines, the own-file-already-pinned case, and the unwritable test is vacuous as root", body: "tests/unit/test_hooks_binary_pin.py."}
+  - {kind: review, id: review-p3, phase: 3, title: "phase 3 independent review: 3 findings, all in scope", body: "Reviewer verified append-only writes, symlink skip, anchored grep, fail-open on every failure, quoting, -P placement and validity, R8 text, R6 accuracy, stamp bumps; ran 80 targeted tests green."}
+resolves:
+  - {id: p3-r1, state: fixed, body: "The loop skips $CLAUDE_ENV_FILE; test_our_own_already_pinned_file_gets_the_pin_once (red, then green)."}
+  - {id: p3-r2, state: fixed, body: "Documented in the hook: bash has no O_NOFOLLOW, the window grants a same-user process nothing it could not already do; accepted per the reviewer's own recommendation."}
+  - {id: p3-r3, state: fixed, body: "Added the lookalike/indented-line test and the own-file test; the unwritable-sibling test now skips under euid 0."}
+evidence:
+  review: review-p3
+  reviewer: a83c66dbb8a63d7b4
+  model: claude-opus-5-5
