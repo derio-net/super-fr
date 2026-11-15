@@ -35,3 +35,8 @@ Plan durations balance every py3.14 shard at 824s, yet actual sums ran 597-1104s
 ### ci-shard-tail · root-cause · #1428: shard wall clock = runner speed x work, plus a late long-test tail
 
 Per shard the pytest step is ~35 s of collection, then serial work / 4 workers, plus a tail where xdist's load scheduler hands a long scenario test out late and it runs alone (shard py3.14/2: last 8% of progress took 77 s; work/4 = 242 s, tests ran 293 s). Runner speed varies x0.72-x1.40 between runs and scales every test equally. LPT simulated on that run's durations reaches work/4 on every shard (saves 16-52 s). Fix: tests/_shard_order.py + conftest hooks order a --splits run longest-first with --maxschedchunk 1. Whether a 7th shard is still needed is decided from this PR's CI timings.
+
+<!-- fr:journal kind=finding scope=debug id=auto-workers created=2026-11-15T07:49:18+00:00 state=fixed -->
+### auto-workers · finding [fixed] · #1225: -n auto is load-aware outside CI; FR_PYTEST_WORKERS overrides
+
+tests/_workers.py answers xdist's pytest_xdist_auto_num_workers: FR_PYTEST_WORKERS when set (a bad value is a UsageError), every CPU under CI, else CPUs minus round(load1), floor 2. Live: 6 of 12 at load ~6; 3 with FR_PYTEST_WORKERS=3. tmp_path_retention_policy = failed. Pinned by tests/unit/test_auto_workers.py. Not done: the host-wide suite lock (proposal 1). The macOS git shim (proposal 3) did not reproduce here: 50 calls through /usr/bin/git took 0.65 s against 0.59 s for the resolved binary.
