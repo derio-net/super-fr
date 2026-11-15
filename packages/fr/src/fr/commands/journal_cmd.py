@@ -44,6 +44,7 @@ from fr.journal.model import (
     spec_journal_slug,
     unauthorized_fixes,
 )
+from fr.owed_refs import discharge_travels as _discharge_travels
 from fr.owed_refs import own_issue as _own_issue
 from fr.owed_refs import shown as _shown
 from fr.run.model import AnsweredBy
@@ -585,7 +586,8 @@ def resolve(
         filed = owed_filed_as(entries).get(entry_id)
         if filed is None:
             pass
-        elif head_on_default_branch(root):
+        elif head_on_default_branch(root) or not _discharge_travels(root):
+            # R15: under quiet and stealth the discharge never travels with a PR.
             _close_owed_issue(root, filed, note, owed_key(target))
         else:
             _close_at_merge(root, filed)
@@ -704,9 +706,10 @@ def _make_gh_client() -> GhClient:
 
 def _close_at_merge(root: Path, ref: str) -> None:
     """R1, R2: off the default branch (or with no readable default ref, or a
-    detached HEAD, R3) the discharge reaches the forge only when the branch
-    merges. No forge call: print the closing line the branch's PR body carries,
-    or, for a ref this repo does not own, the same warning closing would give."""
+    detached HEAD, R3), under `placement: repo` (R15), the discharge reaches the
+    forge only when the branch merges. No forge call: print the closing line the
+    branch's PR body carries, or, for a ref this repo does not own, the same
+    warning closing would give."""
     from fr.archive_followups import owed_identity
 
     own, why = owed_identity(root)

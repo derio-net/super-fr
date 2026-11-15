@@ -549,3 +549,78 @@ def test_off_the_default_branch_a_foreign_ref_gets_no_closes_line(
     assert res.exit_code == 0, res.output
     assert "Closes" not in res.output
     assert "not closing" in res.output and "not this repo" in res.output
+
+
+# --- R15: under quiet the discharge never travels with a PR, so it closes at once -----
+
+
+@pytest.fixture
+def quiet_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A product clone under `placement: quiet` (origin's `fr` branch), on a feature
+    branch, its origin configured as github.com/acme/widgets and served from the local
+    bare repo through `insteadOf` (owed identity reads the configured url)."""
+    from fr.placement import stealth
+
+    from tests.unit.settings_repo import git, make_repo
+    from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    stealth.reset_caches()
+    root = make_repo(tmp_path)
+    push_fr_branch(root, QUIET.replace("  labels: off\n", "  labels: on\n"))
+    bare = tmp_path / "origin.git"
+    url = f"https://github.com/{OWN}.git"
+    git(root, "config", "remote.origin.url", url)
+    git(root, "config", f"url.{bare}.insteadOf", url)
+    git(root, "fetch", "-q", "origin")
+    git(root, "checkout", "-q", "-b", "feat/x")
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
+    return root
+
+
+def test_under_quiet_resolve_off_the_default_branch_closes_the_issue_at_once(
+    quiet_branch: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.artifacts.paths import artifact_root, space_for
+    from fr.owed_refs import discharge_travels
+
+    root = quiet_branch
+    assert space_for(root).placement == "quiet"
+    assert not discharge_travels(root)
+    owed = _owed()
+    path = _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    assert path.is_relative_to(artifact_root(root)), "the journal lives in the fr worktree"
+    gh = OwnedGh()
+    _owned_issue(gh)
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert open_owed_ids(parse_journal(path.read_text())) == []
+    (close,) = _calls(gh, "edit_issue_state")
+    assert close["number"] == 12 and close["state"] == "CLOSED"
+    (comment,) = _calls(gh, "comment_issue")
+    assert comment["body"].startswith("Discharged: ")
+    assert "closes when this branch merges" not in res.output
+    assert "Closes" not in res.output
+
+
+def test_under_quiet_the_pr_body_section_does_not_apply_and_deliver_asks_nothing(
+    quiet_branch: Path,
+) -> None:
+    from fr.commands.run_cmd import _refuse_unclosed_owed
+    from fr.record import pr_body
+    from fr.run.model import RunState
+
+    state = RunState(
+        run="run-1",
+        workflow="fr-goal@1",
+        branch="feat/x",
+        started="2026-11-15T00:00:00+00:00",
+        cursor="deliver",
+        steps={},
+    )
+    section = pr_body._owed_discharged(quiet_branch, state)
+    assert section == pr_body.OWED_NOT_APPLICABLE and section != "None."
+    assert pr_body.discharged_owed(quiet_branch) == []
+    _refuse_unclosed_owed(quiet_branch, state, "a body that closes nothing", "1", "body.md")

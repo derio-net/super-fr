@@ -52,10 +52,11 @@ R11. A dry run writes no file in the checkout or in the placement's `fr` worktre
 R12. Owed-issue reuse lists only open issues carrying the `fr:owed` label, filtered by the forge. When that listing reaches its limit or fails, fr files no owed issue (and ensures no label), prints a warning naming the reason, and leaves every owed entry in its journal.
 R13. On a forge whose adapter cannot list issues (`UnsupportedForgeOperation`: GitLab and Gitea today), owed actions stay in the journal, as under `forge.issues: off`: `fr archive` says so, `fr journal file --id <owed>` reports it without failing, and `deliver` accepts such an owed entry as recorded.
 R14. Closing an owed issue (R3) reads that one issue by number, never a listing of open issues, and keeps today's ownership checks (`owned_owed_key`: this account, `fr:owed`, the entry's marker as the last line), plus a check that the issue is open.
+R15. Under a placement whose journals live outside the product checkout (quiet, stealth), a discharge commit never travels with the PR, so R1–R5 do not apply there: `fr journal resolve` closes the filed issue at once, as R3 does on the default branch (same forge settings, ownership and open checks, R14), and never prints a closing line. The PR body's `## Owed actions discharged` section says it does not apply (never "None."), and `deliver` does not run R4's check. Under `placement: repo`, when `deliver` cannot tell what the branch discharged (the default ref, the merge-base, the diff, a changed journal or the repo's owed identity cannot be read) while HEAD's journals hold a fixed owed entry with a filed issue, it refuses, naming what it could not read.
 
 ## Design
 
-### A. Resolve closes at merge (R1–R6)
+### A. Resolve closes at merge (R1–R6, R15)
 
 `resolve_cmd`'s owed branch (`journal_cmd.py:582-585`) asks one question first:
 *is HEAD on the default branch?* `fr.docs.load.on_default_branch` (`docs/load.py:90`)
@@ -89,6 +90,16 @@ set is dropped from its candidates unless it is also in its `holding`, `narrowed
 check in `_deliver_pr_gate` (`run_cmd.py:7015`) gains the R4 check, using `closing_refs`
 so `Fixes owner/repo#n` counts. It runs before the `forge.pr_body` branch, so it applies
 under `minimal` too (the closing-keyword checks already do, `run_cmd.py:7025`).
+
+**Placement (R15).** `fr.owed_refs.discharge_travels` answers whether the artifact
+root is the product checkout. When it is not (quiet, stealth), resolve takes the
+default-branch path, the section renders "Not applicable", and `deliver` skips the R4
+check. Under `repo`, `discharged_owed` raises `UnreadableDischargeError` rather than
+return an empty list when it cannot read an input, as `fr.lenses.accumulate` raises
+`LensError` on an unreadable merge-base; a branch whose HEAD journals hold no fixed,
+filed owed entry is a legitimate empty answer without those reads. The `Refs` line's
+reason quotes every row and decision id in a code span, so an id such as
+`owed-close-at-merge` never reads as a closing keyword.
 
 The archived spec `2026-10-11-debt-engine-design.md` is frozen and is not edited. R6 is
 recorded as an amendment of row `debt-owed-discharge`, and R9 as an amendment of row
@@ -210,7 +221,7 @@ side effect that must NOT happen:
 
 ## Acceptance rows
 
-- `owed-close-at-merge` (R1–R6) — resolve off the default branch closes nothing and
+- `owed-close-at-merge` (R1–R6, R15) — resolve off the default branch closes nothing and
   prints the closing line; on the default branch it closes; `deliver`'s body carries the
   line for every owed entry discharged on the branch. Business claim: owed work stays
   visible on the forge until its fix lands.
