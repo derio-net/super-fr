@@ -74,3 +74,12 @@ amendments:
       reaches the default branch.'
     why: 'spec 2026-11-15-owed-archive-side-effects R5 amends debt-engine R24: the issue
       closes when the discharge reaches the default branch'
+  - row: owed-durable-at-archive
+    op: reword
+    base: 0
+    acceptance: Every owed step and every unticked manual phase of a plan that archives,
+      or is held under --branch or skipped under --all off the default branch, leaves
+      an `owed` journal entry plus one fr:owed issue, idempotently, whatever --issues
+      says; a refused archive and a hold on the default branch leave none.
+    why: 'spec 2026-11-15-owed-archive-side-effects R9 amends debt-engine R22: a refused
+      archive, and a hold on the default branch, leave no owed entry and file no issue'
