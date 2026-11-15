@@ -10,3 +10,8 @@
 ### a947635ae581 · hypothesis · #1463 is a race in the mkdir lock's stale-holder reclaim
 
 Hypothesis: the dead-holder reclaim (cat pid; kill -0 fails; rm -rf lock) can delete a live lock. Code read of fr-worktree-create.sh:116-126 and fr-worktree-remove.sh:28-38: with only two contenders every interleaving examined leaves one holder (the reclaim needs a third actor to delete a fresh lock). Not confirmed, and not reproduced locally or on Linux. Open.
+
+<!-- fr:journal kind=finding scope=debug id=multi-root-cause created=2026-11-15T07:19:39+00:00 state=open -->
+### multi-root-cause · finding [open] · The batch spans several independent root causes
+
+#1289 (base_ref interpolated into run:) and #1288 (jobs with no timeout-minutes) are CI-workflow hygiene. #1428 is shard wall clock against the ci.yml budget. #1225 is cross-session host saturation (-n auto x N sessions, macOS git shim). #1280 is wall-clock-tight assertions failing under that load. #1463 is a double-hold of the worktree hook lock seen on CI. These do not share one cause; per the batch's rules, stop and ask before fixing any.
