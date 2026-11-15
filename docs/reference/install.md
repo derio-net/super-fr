@@ -95,8 +95,8 @@ the acceptance matrix, but not to run `/fr-goal`.
 ## Uninstall
 
 `scripts/install.sh --uninstall` removes the Claude Code rules, fr's worktree hooks, the
-`vibe_kanban` MCP entry and an fr-written bridge wrapper. It also removes the OpenCode skills, commands, agents and plugin, and
-the Hermes hooks, rules and skills.
+`vibe_kanban` MCP entry and an fr-written bridge wrapper. It also removes the OpenCode
+skills, commands, agents and plugin, and the Hermes hooks, rules and skills.
 
 It leaves the Claude Code plugin registration in `~/.claude/settings.json` in place. It also
 leaves the marketplace entry in `~/.claude/plugins/known_marketplaces.json` and the

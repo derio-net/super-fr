@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/commands/apply_cmd.py
   - packages/fr/src/fr/commands/undispatch_cmd.py
   - packages/fr-dispatch/src/**
-reviewed: 2026-11-14 VK support removed; the fr-runner skill is gone, the examples use the cncd runner
+reviewed: 2026-11-14 VK support removed; the runner-operations skill is gone, the examples use the cncd runner
 ---
 
 ## Why does the plan stay the source of truth?

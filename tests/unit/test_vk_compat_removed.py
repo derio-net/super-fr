@@ -327,7 +327,11 @@ def test_vk_residue_allowlist_has_no_dead_entries() -> None:
     for rel, pat in ALLOWED:
         path = REPO / rel
         text = path.read_text(encoding="utf-8") if path.is_file() else ""
-        if not any(re.search(pat, line) for line in text.splitlines()):
+        # Dead = it excuses nothing: no line both matches it and names VK.
+        named = [
+            ln for ln in text.splitlines() if _VK_NEEDLE.search(ln) or _RUNNER_NEEDLE.search(ln)
+        ]
+        if not any(re.search(pat, line) for line in named):
             dead.append((rel, pat))
     assert dead == []
 
@@ -364,3 +368,39 @@ def test_vk_residue_passes_an_allowlisted_line_only(tmp_path: Path) -> None:
     rels = _plant(tmp_path, "scripts/a.sh", "keep fr_vk here\ndrop fr_vk here\n")
     allowed = (("scripts/a.sh", r"^keep fr_vk"),)
     assert _vk_residue(tmp_path, rels, allowed) == ["scripts/a.sh:2: drop fr_vk here"]
+
+
+# --- spec 2026-11-14-retire-vibekanban R6/R8: nothing advertises fr-runner or VK ---
+
+
+def test_fr_skills_lists_no_fr_runner(capsys: pytest.CaptureFixture[str]) -> None:
+    from fr.commands import skills_cmd
+
+    skills_cmd.skills()
+    out = capsys.readouterr().out
+    assert "fr-dispatch" in out
+    assert "fr-runner" not in out
+
+
+def test_no_shipped_skill_is_fr_runner() -> None:
+    assert sorted(REPO.glob("plugins/*/skills/fr-runner")) == []
+    assert "fr-runner" not in (REPO / "README.md").read_text()
+
+
+def test_published_pages_name_no_vk_runner() -> None:
+    from fr.docs.load import load_config, load_pages
+
+    config = load_config(REPO)
+    assert config is not None
+    pages, errors = load_pages(REPO, config, _tracked())
+    assert errors == []
+    assert pages
+    # install.md names the vibe_kanban MCP entry the installer removes: that is not a runner.
+    banned = re.compile(r"fr-runner|fr_vk|--to vk\b|runner:vk\b", re.IGNORECASE)
+    hits = [
+        f"{p.path}:{n}"
+        for p in pages
+        for n, line in enumerate((REPO / p.path).read_text().splitlines(), 1)
+        if banned.search(line)
+    ]
+    assert hits == []
