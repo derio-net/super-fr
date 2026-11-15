@@ -7165,6 +7165,12 @@ batches:
     runner: herdr
     handle: w3E:p2
     archive: chore/closeout-2026-11-15-2
+  - kind: closeout
+    at: '2026-11-15T11:24:11.723562Z'
+    runner: herdr
+    handle: w3E:p2
+    archive: chore/closeout-2026-11-15-2
+    archived: 1474
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
@@ -7745,6 +7751,7 @@ closeouts:
   planned:
   - suite-health
   pr: 1474
+  merged: true
   head: 5b8bbb4f8c3526b699f58692b949ab9cc1a28817
   members:
   - suite-health
