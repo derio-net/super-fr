@@ -3237,7 +3237,37 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
             "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )
+    _refuse_stale_suite_log(key, log, path, repo_root)
     return _log_witness(path, data, repo_root)
+
+
+def _refuse_stale_suite_log(key: str, log: str, path: Path, repo_root: Path) -> None:
+    """Exit 2 when a code path changed after the suite log was written
+    (`fr.run.code_tree.newest_code_mtime`, the phase log's freshness rule).
+
+    gh#1454: `deliver` checked who wrote its fresh log and when, never the code it
+    ran on, so code edited and committed after the suite read as covered by it
+    (and a `local` stamp recorded HEAD's tree for a run that never saw it). A
+    commit moves no mtime, but the edit before it does, and so does a checkout."""
+    from fr.run.code_tree import default_merge_base, newest_code_mtime
+
+    try:
+        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
+    except GitUnavailableError as e:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: cannot tell which code it covers — "
+            f"{escape(str(e))}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    if newest is not None and newest[0] > path.stat().st_mtime:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
+            "the log was written, so the suite did not run the code being delivered. "
+            "Run the full suite again and name the new log.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
 
 
 def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
