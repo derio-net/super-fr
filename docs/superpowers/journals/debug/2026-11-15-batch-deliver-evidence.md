@@ -30,3 +30,8 @@ Investigation found four separate causes in four code sites, sharing only a them
 ### fix-1303 · finding [fixed] · #1303 fixed: process wrappers are stepped over; the refusal names the hiding word
 
 telemetry._unwrap steps over timeout/nice/nohup/env/time/stdbuf/caffeinate (per-wrapper option grammar, no recursion depth spent); near_miss_program feeds visual's refusal ('fr read its program as `xargs`'). Pinned by test_run_telemetry_visual.py::test_a_process_wrapper_before_the_program_is_stepped_over (22 forms), ::test_the_near_miss_names_the_command_word_that_hid_the_script, and test_run_evidence_visual.py::test_the_refusal_names_the_word_that_hid_the_script / ::test_a_capture_script_behind_timeout_is_witnessed.
+
+<!-- fr:journal kind=finding scope=debug id=fix-1395 created=2026-11-15T17:03:48+00:00 state=fixed -->
+### fix-1395 · finding [fixed] · #1395 fixed: a forge read failure in tests: ci exits 75 in one line
+
+_ci_tests_witness catches the forge CLI errors (GhError, GlabError, TeaError) and exits CI_PENDING_EXIT ('could not read CI from the forge (...). Nothing was recorded: resolve again.'); HostRefusedError exits 2. Pinned by test_run_resolve_tests_ci.py::test_a_failed_forge_read_exits_75_naming_it_and_applies_nothing (3 errors) and ::test_a_host_trust_refusal_is_no_retry_and_exits_2.
