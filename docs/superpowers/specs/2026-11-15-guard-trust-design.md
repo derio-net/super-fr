@@ -205,3 +205,9 @@ R6 is a comment correction with no product behaviour, so it has no row.
   (`push.ts:35`) in the plugin, `jq` in the hooks. Filed as a follow-up with the bare-git one.
 - The legacy archive dir `docs/superpowers/archived-plans/` as an fr-enabled signal: `fr migrate`
   moves that layout.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-15-guard-trust | `derio-net/super-fr` | `2026-11-15-guard-trust` | — |

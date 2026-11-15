@@ -1,0 +1,93 @@
+schema_version: 2
+phase:
+  number: 3
+  title: One pin per session, cwd-proof lock probes, nag comment (#1259,
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - resume-repins-fr-binary
+  - lock-probe-ignores-cwd
+  tier: standard
+  files:
+  - plugins/super-fr/hooks/fr-binary-pin.sh
+  - plugins/super-fr/hooks/fr-acceptance-nag.sh
+  - packages/fr/src/fr/binary_identity.py
+  - packages/fr/src/fr/file_lock.py
+  - packages/fr-herdr/src/fr_herdr/managed.py
+  - tests/unit/test_hooks_binary_pin.py
+  - tests/unit/test_fr_binary_identity.py
+  - tests/unit/test_file_lock.py
+  - tests/unit/test_herdr_managed.py
+  - docs/cloud-setup.md
+  - docs/**/*.md
+  estimate_lines: 200
+tasks:
+- number: 1
+  title: The pin hook appends the newest pin to every pinned sibling (R7)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in tests/unit/test_hooks_binary_pin.py, a session-env tmp dir with sessionstart-hook-8.sh holding `export FR_HARNESS_FR='old …'` alone, sessionstart-hook-3.sh holding another hook's lines plus an old pin line, sessionstart-hook-4.sh with no pin, and sessionstart-hook-9.sh a symlink to a file outside the dir holding a pin; run the hook with CLAUDE_ENV_FILE=<dir>/sessionstart-hook-5.sh and a fake absolute fr whose --identity prints `new …`. Assert: the last FR_HARNESS_FR line of -8, -3 and -5 is the new pin; -3's other lines are unchanged and in order; -4 and the symlink target are byte-identical; no other file appears in the dir; exit 0. Also: an unwritable sibling is skipped and the hook still exits 0. Run; fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: in fr-binary-pin.sh, after computing the quoted pin line, loop over "$(dirname "$CLAUDE_ENV_FILE")"/sessionstart-hook-*.sh; for each entry that is `-f` and not `-L` and `grep -q '^export FR_HARNESS_FR='`, append the line with `>>` (failure ignored); then append to $CLAUDE_ENV_FILE as today. A comment cites the observed Claude Code layout (super-fr#1259) as an assumption. Tests pass.
+- number: 2
+  title: The upgrade warning says resume or restart (R8)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: in tests/unit/test_fr_binary_identity.py assert the same-package-dir verdict message ends "resume or restart the session to re-pin it." Run; fail.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: change the message in binary_identity.judge; update docs/cloud-setup.md where it quotes the old text. Tests pass.
+- number: 3
+  title: Lock probes run Python with -P (R5)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: in tests/unit/test_file_lock.py and tests/unit/test_herdr_managed.py, chdir (monkeypatch.chdir) into a tmp dir holding `fcntl.py` that writes a marker file on import, take the lock; assert the marker is never written. Run; fail.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: insert "-P" after sys.executable in both probes (file_lock.py, fr_herdr/managed.py). Tests pass.
+- number: 4
+  title: Correct the nag comment (R6) and finish
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Rewrite the comment above the stderr capture in fr-acceptance-nag.sh: `fr acceptance status` runs behind the artifact-migration gate, which may migrate and commit or refuse on the way in; stderr is captured so both outcomes are relayed rather than swallowed (super-fr#1279). Then run `uv run fr docs check --base origin/main` and fix each page it names; then the full suite `uv run pytest -q --no-cov -n auto`, ruff check/format and mypy.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
