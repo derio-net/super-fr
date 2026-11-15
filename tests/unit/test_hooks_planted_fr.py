@@ -47,6 +47,7 @@ def world(tmp_path: Path) -> dict:
         check=True,
     )
     _plant(repo / "bin")  # reached only through the relative PATH entry `bin`
+    _plant(repo)  # reached only through `.` or an empty PATH entry (the hook's cwd)
     tools = tmp_path / "tools"
     tools.mkdir()
     (tools / "jq").symlink_to(shutil.which("jq") or "jq")
@@ -146,7 +147,7 @@ def _wait(mark: Path, seconds: float = 5.0) -> bool:
 
 
 @pytest.mark.parametrize("hook", HOOK_IDS)
-@pytest.mark.parametrize("relative", ["bin", "./bin"])
+@pytest.mark.parametrize("relative", ["bin", "./bin", ".", ""])  # "" is a leading `:`
 def test_a_planted_fr_on_a_relative_path_entry_is_never_run(
     world: dict, hook: str, relative: str
 ) -> None:
@@ -154,6 +155,12 @@ def test_a_planted_fr_on_a_relative_path_entry_is_never_run(
     assert done.returncode == 0, done.stderr
     time.sleep(0.7)  # the gc reaper, the unbind and the idle guard run detached
     assert not mark.exists()
+    # ...and the hook ended the way it does when fr is missing (review p2-r2).
+    if hook == "binary-pin":
+        env_file = world["tmp"] / f"env-{hook}.sh"
+        assert not env_file.exists() or env_file.read_text() == ""
+    if hook == "worktree-create-up":
+        assert done.stdout.strip() == str(world["repo"] / ".claude" / "worktrees" / "feat")
 
 
 @pytest.mark.parametrize("hook", HOOK_IDS)
