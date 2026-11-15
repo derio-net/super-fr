@@ -263,3 +263,10 @@ amendments:
     ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_shipped_skill_is_fr_runner
     why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
       pages
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_published_pages_name_no_vk_runner
+    why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
+      pages
