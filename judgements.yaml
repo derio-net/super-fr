@@ -7123,6 +7123,14 @@ batches:
     head_before: abefcfcbe7a7042f92f9aefb7206282f9fbe6502
     head_after: 9d3e1aac8fd083cfe3bf4d009527a8d113bc8e7e
     base: be121114b879145f901857c523b4f9bd3f43e680
+  - kind: claims_released
+    at: '2026-11-15T11:08:21.859240Z'
+    keys:
+    - super-fr#1225
+    - super-fr#1280
+    - super-fr#1288
+    - super-fr#1289
+    - super-fr#1428
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
