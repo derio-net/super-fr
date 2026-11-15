@@ -294,3 +294,8 @@ Same class as spec finding f9 (other bare-name spawns in hooks): tracked there.
 ### l-security-r3-resolved-2 · finding [deferred → derio-net/super-fr#1481] · resolves l-security-r3: Other bare-name binaries (gh in push.ts; jq/dirname/mktemp/sed/gh/git in bash hooks) still honour relative PATH entries
 
 Same class as spec finding f9: gh in push.ts and jq/dirname/mktemp/sed/gh/git in hooks; tracked there.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-11-15T19:05:17+00:00 state=refuted resolves=p2-r4 -->
+### p2-r4-resolved-2 · finding [refuted] · resolves p2-r4: Pin hook resolving an inherited absolute FR_HARNESS_FR path re-pins that binary
+
+Not a defect: spec Design B requires the pin hook to resolve exactly as the hooks do, so the pinned identity is the fr the hooks run. The hooks' own pin is an identity string, not a path, and falls through to the PATH walk; only an operator who deliberately exports an absolute FR_HARNESS_FR path gets that binary, the intended override.
