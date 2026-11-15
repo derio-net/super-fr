@@ -69,7 +69,7 @@
 // The server hands one terminal event to every subscribed listener (three, in
 // that walk), so the once-per-position memory is also what keeps the nudge
 // single when the same turn end arrives several times.
-import { run } from "./spawn";
+import { runFr } from "./fr";
 
 export type FrAnswer = { code: number | null; stdout: string };
 
@@ -107,7 +107,7 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 
 function defaultRunFr(timeoutMs: number): (cwd: string) => Promise<FrAnswer> {
   return async (cwd) => {
-    const { code, stdout } = await run("fr", ["run", "check", "--idle", "--format", "json"], { cwd, timeoutMs });
+    const { code, stdout } = await runFr(["run", "check", "--idle", "--format", "json"], { cwd, timeoutMs });
     return { code, stdout };
   };
 }

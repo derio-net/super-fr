@@ -14,7 +14,7 @@
 // Transport only, and NEVER THROWS. `fr` is asked ONCE per plugin load, lazily
 // on the first `bash` call; a missing `fr`, one too old to know `--identity`,
 // or a hang pins nothing, which is exactly the behaviour before the pin.
-import { run } from "./spawn";
+import { runFr } from "./fr";
 
 /** The `shell` hook's `create.before` event (OpenCode 2) — `env` is merged
  * into the spawned command. */
@@ -36,7 +36,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 function defaultIdentify(timeoutMs: number): () => Promise<string | undefined> {
   return async () => {
-    const answer = await run("fr", ["--identity"], { timeoutMs });
+    const answer = await runFr(["--identity"], { timeoutMs });
     return answer.code === 0 ? answer.stdout : undefined;
   };
 }
