@@ -3,11 +3,14 @@ run: 2026-11-15-feat-batch-owed-archive
 workflow: fr-goal@1
 branch: feat/batch-owed-archive
 started: '2026-11-15T11:05:16+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-15T11:05:29+00:00'
+    state: done
+    at: '2026-11-15T17:05:44+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-15-owed-archive-side-effects-design.md
   spec-review:
     state: pending
   plan:
