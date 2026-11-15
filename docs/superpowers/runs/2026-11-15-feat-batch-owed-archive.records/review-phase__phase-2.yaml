@@ -1,0 +1,36 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-owed-archive
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: review
+    id: review-p2
+    phase: 2
+    title: "Phase 2 code review (R1-R6 close at merge): 7 in scope, 1 out"
+    body: |
+      Independent reviewer ran git diff a42d9dc7d..1c3c167f2 against spec R1-R6 and the touched unit tests (94 passed).
+      Found sound: the resolve gate off the default branch (no forge client built), archived-journal discharge detection with
+      subtraction of resolutions already on the default ref, cross-repo filed_as dropped, the R5 premature_closes claim, and
+      closeout-owed step 5 as a valid negative.
+  - {kind: finding, id: p2-r1, phase: 2, review_scope: in, title: "The render's Refs-held line reads as a closing ref when a row or decision id contains close/fix/resolve, so deliver refuses fr's own body"}
+  - {kind: finding, id: p2-r2, phase: 2, review_scope: in, title: "R4 deliver check fails open: discharged_owed returns [] on an unreadable default ref, merge-base, diff or identity"}
+  - {kind: finding, id: p2-r3, phase: 2, review_scope: in, title: "Under quiet/stealth the section is always None and unenforced while resolve claims the PR body closes it; the issue never closes"}
+  - {kind: finding, id: p2-r4, phase: 2, review_scope: in, title: "Held-issue deliver tests monkeypatch run_held_issues; the real hold -> Refs render -> both gates chain is untested"}
+  - {kind: finding, id: p2-r5, phase: 2, review_scope: in, title: "_refuse_unclosed_owed swallows every exception from run_held_issues"}
+  - {kind: finding, id: p2-r6, phase: 2, review_scope: in, title: "owed-close-at-merge.sh header claims more than it proves and drops the discharge-comment assertion"}
+  - {kind: finding, id: p2-r7, phase: 2, review_scope: in, title: "01-fr-goal.md and the fr-goal skill state the listing and refusal unconditionally"}
+  - {kind: finding, id: p2-r8, phase: 2, review_scope: out, title: "normalize_issue_ref's _URL_REF accepts any host, so a foreign-host URL with the same path satisfies the owed closing check"}
+resolves:
+  - {id: p2-r1, state: fixed, body: "346afa141: held ids rendered as code spans and closing_refs strips code spans before keyword matching; render -> premature_closes tests with keyword-bearing ids fail without the change."}
+  - {id: p2-r2, state: fixed, body: "346afa141: discharged_owed raises UnreadableDischargeError naming the input; _refuse_unclosed_owed refuses by name (exit 2); the section reads Unknown. Per-input tests plus a deliver-level refusal."}
+  - {id: p2-r3, state: fixed, body: "05fac35a1 + 346afa141 + e18f76dc7 + f4f13de55: spec R15 — under quiet/stealth resolve closes at once (discharge_travels); the section reads Not applicable and deliver's check stands aside. Decision p2-quiet-stealth-close-now; row owed-close-at-merge cites R15. Real quiet-repo tests."}
+  - {id: p2-r4, state: fixed, body: "346afa141: two deliver tests on a real acceptance fragment (walk-owed row whose issues: names the owed issue) — render then deliver passes both gates; a hand-written Closes for it is still refused."}
+  - {id: p2-r5, state: fixed, body: "346afa141: catches only AcceptanceError and UnreadableJournalError and refuses by name; other exceptions propagate (tested)."}
+  - {id: p2-r6, state: fixed, body: "8b12ea489: header narrowed to R1-R3; the default-branch close asserts the Discharged evidence comment."}
+  - {id: p2-r7, state: fixed, body: "277b78577: explainer and fr-goal skill state the this-repo filter, repo-placement-only listing, and the unreadable-input refusal; mirrors regenerated."}
+  - {id: p2-r8, state: out-of-scope, body: "normalize_issue_ref's host-agnostic URL reading predates this change (premature_closes has used it since it shipped); this change only reuses it."}
+evidence:
+  review: review-p2
+  reviewer: aa707e951c6b01de9
+  model: claude-opus-5-5
