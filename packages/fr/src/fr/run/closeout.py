@@ -633,6 +633,16 @@ def devops_gated(repo_root: Path, state: RunState) -> bool:
         return plan_dir is not None and plan_has_ops(repo_root, plan_dir)
 
 
+def _devops_stage_finished(repo_root: Path, run_id: str) -> bool:
+    """Whether the DevOps stage's own host-side record (`fr ops gate`'s, outside every
+    checkout) holds its last stage. The record is the operator's: an unreadable one is not
+    finished, so the brief is printed as before."""
+    from fr.ops.gate import STAGES, HostGateState, gate_state_path
+
+    last = max(s.number for s in STAGES)
+    return last in HostGateState(gate_state_path(repo_root, run_id)).stages()
+
+
 def devops_brief(repo_root: Path, state: RunState) -> str:
     """The DevOps brief `fr pickup --run` prints instead of the close-out brief for a run
     whose effective gates include `devops` (R16). The stage owns the merge check and the
@@ -644,6 +654,22 @@ def devops_brief(repo_root: Path, state: RunState) -> str:
             f"{state.cursor!r}, not a done `deliver`"
         )
     pr = _emitted(state, "pr") or "(no PR recorded)"
+    if _devops_stage_finished(repo_root, state.run):  # gh#1275
+        return "\n".join([
+            f"# DevOps stage complete — run {state.run}",
+            "",
+            f"branch: {state.branch}",
+            f"PR: {pr}",
+            "",
+            "The operator's DevOps stage record holds every stage (1-8): the ops ran, the",
+            "PR merged, the gates were passed or handed off, and stage 8 opened the",
+            "housekeeping PR that archives the run. A gate label still on the PR belongs to",
+            "the Tester gate, whose walks are not this stage's. Nothing is left to run here.",
+            "",
+            "Reap the feature workspace:",
+            "",
+            f"    fr isolation down --branch {state.branch}",
+        ])  # fmt: skip
     lines = [
         f"# DevOps stage — run {state.run}",
         "",

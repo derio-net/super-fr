@@ -1013,15 +1013,62 @@ def _recovery(gate: Gate, tree: OpsTree) -> str:
     )
 
 
+def _tester_owns(tree: OpsTree, state: RunState) -> tuple[list[str], bool]:
+    """What else the Tester gate owns besides Test Plan steps: its unwalked rows (the rows
+    the driver's rows-walked pass waits on), and whether the spec declares `gate: tester`
+    for the run (a run gate passes only explicitly). An exit that cannot be read fails the
+    stage: unknown is never "nothing owed"."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.verification.exit import run_exit
+    from fr.verification.spec_section import SectionError
+
+    try:
+        exit_ = run_exit(tree.path, state)
+    except (AcceptanceError, SectionError, OSError) as exc:
+        raise StageFailed(f"the run's exit cannot be read, so gate:tester stays: {exc}") from exc
+    rows = [
+        r.id for r in exit_.gated_rows if exit_.row_gates[r.id] == "tester" and r.status != "walked"
+    ]
+    return rows, exit_.run_gate == "tester"
+
+
 def stage_7(gate: Gate) -> None:
-    """The tester hand-off: gate:tester is kept while tester steps remain."""
+    """The tester hand-off: gate:tester is kept while the Tester gate owns something (a
+    tester step with no outcome, an unwalked tester row, a declared run gate). A
+    gate:tester that owns nothing is passed with a generated note (gh#1275), as stage 6
+    passes devops, so the PR does not wait on a gate nobody owes."""
+    from fr.labels import held_gates
+
+    t = gate.target
     tree = gate.tree()
     owed = tester_steps(gate, tree)
-    if owed:
-        gate.say(f"gate:tester stays on PR #{gate.target.pr}; the Tester gate owns:")
+    rows, declared = _tester_owns(tree, t.run)
+    if owed or rows or declared:
+        gate.say(f"gate:tester stays on PR #{t.pr}; the Tester gate owns:")
         for s in owed:
             gate.say(f"  step {s.n}: {s.text}")
-        body = "tester steps handed off: " + ", ".join(str(s.n) for s in owed)
+        for r in rows:
+            gate.say(f"  row {r}: not walked yet")
+        if declared:
+            gate.say("  the run itself: its spec declares `gate: tester`")
+        body = "tester work handed off: " + ", ".join(
+            [*(f"step {s.n}" for s in owed), *(f"row {r}" for r in rows),
+             *(["the run"] if declared else [])]
+        )  # fmt: skip
+    elif "tester" in held_gates(
+        str(n) for n in gate.forge.pr_view(t.repo, t.pr).get("labels") or []
+    ):
+        notes = (
+            f"DevOps stage of run {t.run.run}: no Test Plan step or unwalked row belongs to "
+            "the Tester gate"
+        )
+        code, out = tree.fr(["gate", "pass", "--repo", t.repo, "--pr", str(t.pr), "--gate",
+                             "tester", "--notes", notes, "--yes"])  # fmt: skip
+        if out.strip():
+            gate.say(out.rstrip())
+        if code != 0:
+            raise StageFailed(f"`fr gate pass --gate tester` exited {code}")
+        body = "gate:tester passed: the Tester gate owns nothing"
     else:
         body = "no tester step remains"
     gate.finish(tree, 7, body)

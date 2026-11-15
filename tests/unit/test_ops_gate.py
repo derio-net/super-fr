@@ -1024,3 +1024,53 @@ def test_gh1293_an_op_already_done_live_is_recorded_not_skipped(ops_root: Path) 
     ]
     assert prompt.asked == []  # a closed op runs nothing: nothing to confirm
     assert not [b for b in devops_blockers(ops_root, _state()) if b.startswith("op post")]
+
+
+def _devops_only_spec(ops_root: Path, rows: str = "") -> None:
+    """A spec whose every Test Plan step is devops-gated (gh#1275's run)."""
+    (ops_root / SPEC).write_text(
+        f"# S\n\n## Verification\n\nstrategy: none\ngate: devops\n{rows}\n## Test Plan\n\n"
+        "- [devops] walk the stage\n"
+    )
+
+
+def _gate_passes(tree: FakeTree) -> list[list[str]]:
+    calls = [v[0] for k, v in tree.calls if k == "fr"]
+    return [a for a in calls if a[:2] == ["gate", "pass"]]
+
+
+def test_gh1275_stage_7_passes_a_gate_tester_nothing_owns(ops_root: Path) -> None:
+    _devops_only_spec(ops_root)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])  # stage 5's
+
+    gate_mod.stage_7(gate)
+
+    (gp,) = _gate_passes(tree)
+    assert gp[gp.index("--gate") + 1] == "tester" and gp[-1] == "--yes"
+    assert "no Test Plan step or unwalked row" in gp[gp.index("--notes") + 1]
+    assert 7 in _host(ops_root).stages()
+
+
+def test_gh1275_stage_7_keeps_gate_tester_for_an_unwalked_tester_row(ops_root: Path) -> None:
+    _devops_only_spec(ops_root, "- r1: live — needs the merged build\n")
+    write_matrix(ops_root, [row(SPEC, rid="r1", status="walk-owed")])
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    gate_mod.stage_7(gate)
+
+    assert _gate_passes(tree) == []
+    assert any("gate:tester stays" in line for line in said)
+    assert any("row r1" in line for line in said)
+
+
+def test_gh1275_stage_7_passes_nothing_when_the_pr_has_no_gate_tester(ops_root: Path) -> None:
+    _devops_only_spec(ops_root)
+    forge = FakeForge(state="MERGED")
+    forge.pr["labels"] = ["gate:devops-passed"]
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=forge)
+
+    gate_mod.stage_7(gate)
+
+    assert _gate_passes(tree) == []
+    assert 7 in _host(ops_root).stages()
