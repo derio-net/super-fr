@@ -1,0 +1,21 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-guard-trust
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T3.S3]
+refactor:
+  P2.T1: "two small resolver edits (a PATH walk and a stat check); nothing to clean"
+journal:
+  - kind: discovery
+    id: p2-lib-var-clobber
+    phase: 2
+    title: fr_git_resolve must not reuse _fr_dir/_fr_rest
+    body: "fr_decide_edit and others keep their own _fr_dir across calls that resolve git; the first PATH walk reused fr_fr_resolve's names and broke the quiet-worktree tests. It uses _fr_gdir/_fr_grest."
+  - kind: discovery
+    id: p2-tsc-needs-install
+    phase: 2
+    title: package typecheck needs bun install first
+    body: "node_modules is absent in a fresh worktree; `bun install --frozen-lockfile && bunx tsc --noEmit` (as CI does) is clean."
+resolves: []
+evidence: {tests: ci}

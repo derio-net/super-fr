@@ -10,7 +10,6 @@ the hook still ends the way it does when fr is missing; an absolute fake fr is r
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import time
@@ -23,7 +22,10 @@ pytestmark = pytest.mark.skipif(
 )
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "hooks"
-FR_SCRIPT = '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FR_MARK"\n[ "$1" = --identity ] && echo "9.9.9 /x"\nexit 0\n'
+FR_SCRIPT = (
+    '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FR_MARK"\n'
+    '[ "$1" = --identity ] && echo "9.9.9 /x"\nexit 0\n'
+)
 
 
 def _plant(directory: Path) -> None:
@@ -86,7 +88,12 @@ def _payloads(world: dict) -> dict[str, tuple[str, dict]]:
         ),
         "worktree-create-gc": (
             "fr-worktree-create.sh",
-            {"session_id": "s1", "cwd": repo, "hook_event_name": "WorktreeCreate", "name": "agent-a"},
+            {
+                "session_id": "s1",
+                "cwd": repo,
+                "hook_event_name": "WorktreeCreate",
+                "name": "agent-a",
+            },
         ),
         "worktree-create-up": (
             "fr-worktree-create.sh",
