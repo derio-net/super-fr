@@ -1176,7 +1176,10 @@ def archive_command(
         "--dry-run",
         help="Show what the run would do and change nothing: the moves, holds, skips, owed "
         "entries and issues, and under quiet or stealth the record and the push. Reads git "
-        "and the forge only, never prompts, and exits with the code the real run would.",
+        "and the forge only, never prompts, and exits with the code the real run would. "
+        "Refuses (exit 2) over artifacts that need a migration, and under quiet or stealth "
+        "when it cannot see what the run would read (no fr worktree yet; a tracking clone "
+        "gone, unreachable or behind). A forge call it does not know exits 1, named.",
     ),
 ) -> None:
     """Move a finished plan to implemented/plans/ (and its spec when ready).

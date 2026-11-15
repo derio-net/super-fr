@@ -47,7 +47,7 @@ R6. This change amends debt-engine R24: the filed issue of a discharged owed ent
 R7. A refused `fr archive` — any non-zero exit or exception in a single-plan run, the placement refusal included — writes no file, leaves the index as it was, and makes no forge write. The archive follow-ups (owed filing, open-end filing) do not run after a refusal. When the single-plan move fails after staging part of the plan's moves, the moves it staged for that plan are undone before it refuses.
 R8. A plan held under `fr archive --branch` or skipped under `fr archive --all` records the owed entries of its unticked manual phases (debt-engine R22), as today, except when HEAD is the default branch. There it writes and stages nothing, and prints the owed entries it would record.
 R9. R7 and R8 amend debt-engine R22: a refused archive, and a hold on the default branch, leave no owed entry and file no issue.
-R10. `fr archive --dry-run` is accepted in every mode (a plan dir, `--all`, `--branch`, `--sweep-only`, and the quiet/stealth merged record). It prints what the run would do — moves, holds, skips, owed entries written, issues filed or reused, ref repairs, and under quiet/stealth the record it would append and the push it would make — and exits with the code the same run without `--dry-run` would return.
+R10. `fr archive --dry-run` is accepted in every mode (a plan dir, `--all`, `--branch`, `--sweep-only`, and the quiet/stealth merged record). It prints what the run would do — moves, holds, skips, owed entries written, issues filed or reused, ref repairs, and under quiet/stealth the record it would append and the push it would make — and exits with the code the same run without `--dry-run` would return, except where it refuses because it cannot tell what that run would do: over artifacts that need a migration (the real run would migrate first), and under quiet or stealth when the placement's checkout it would read does not exist yet or is not current (no `fr` worktree yet; a stealth tracking clone that is gone, unreachable or behind its tracking ref). There it refuses by name and exits 2, and never reports "nothing to archive".
 R11. A dry run writes no file in the checkout or in the placement's `fr` worktree or tracking clone, changes no index, HEAD, branch or remote branch, and makes no forge write. It may read: git (a fetch of remote-tracking refs included) and the forge. It never prompts: with no `--issues`, it lists the open ends it would offer. A forge call the dry run's forge does not know as a read is refused and recorded, and the dry run then exits 1 naming it.
 R12. Owed-issue reuse lists only open issues carrying the `fr:owed` label, filtered by the forge. When that listing reaches its limit or fails, fr files no owed issue (and ensures no label), prints a warning naming the reason, and leaves every owed entry in its journal.
 R13. On a forge whose adapter cannot list issues (`UnsupportedForgeOperation`: GitLab and Gitea today), owed actions stay in the journal, as under `forge.issues: off`: `fr archive` says so, `fr journal file --id <owed>` reports it without failing, and `deliver` accepts such an owed entry as recorded.
@@ -132,15 +132,23 @@ The archive's product-checkout writes are spread across many helpers
 write a chance to forget it. For every mode except the quiet/stealth record, the dry run
 therefore runs the **real** command against a **disposable copy**:
 
-1. Prune stale scratch worktrees first (`git worktree prune`, then remove any
-   registered worktree under the temp root named `fr-archive-dry-run-*` whose process is
-   gone), so a dry run killed before its `finally` leaves nothing that lasts.
-2. `git worktree add --detach <tmp>/fr-archive-dry-run-<pid> HEAD`. Replay the index
-   (`git diff --cached --binary HEAD | git apply --index`), then the worktree
-   (`git diff --binary | git apply`), then copy untracked, non-ignored files. The staged
+1. Remove stale scratch worktrees first: each registered worktree under the temp root
+   named `fr-archive-dry-run-<pid>` whose process is gone, one by one, by its own path
+   (`git worktree remove --force <path>`, then its registration cleared by path as
+   `fr.placement.quiet._forget_own_stale_entry` clears the `fr` worktree's). Never a
+   global `git worktree prune`: in a devcontainer the host's other worktrees are not
+   mounted, and a prune would deregister every one of them (review pr1431-n1, p3-r2).
+   A dry run killed before its `finally` leaves nothing that lasts.
+2. `git worktree add --detach <tmp>/fr-archive-dry-run-<pid> HEAD`, with no hook
+   (`-c core.hooksPath=/dev/null`) and no LFS smudge (`GIT_LFS_SKIP_SMUDGE=1`). Replay
+   the index (`git diff --cached --binary HEAD | git apply --index --whitespace=nowarn`),
+   then the worktree (`git diff --binary | git apply --whitespace=nowarn`), then mark the
+   intent-to-add entries again (`git add -N`), then copy untracked, non-ignored paths by
+   their bytes names (`ls-files -o -z`), a nested repository as a whole tree. The staged
    and unstaged split is preserved, so `paths_dirty` and `_edited_in_worktree` give the
-   same answers as in the real checkout. Ignored files are not copied. The plan checks
-   that `fr archive` reads none of them, and adds a test that pins this.
+   same answers as in the real checkout, and `head_on_default_branch` is pinned to the
+   real checkout's answer (the scratch's HEAD is detached). Ignored files are not copied.
+   The plan checks that `fr archive` reads none of them, and adds a test that pins this.
 3. Run the same arguments (minus `--dry-run`) in-process with the repo root pointed at
    the scratch tree and `_make_gh_client` returning a **preview forge**: a wrapper that
    delegates an explicit allowlist of read methods (`view_issue`, `view_issue_record`,
@@ -151,11 +159,19 @@ therefore runs the **real** command against a **disposable copy**:
    and `TRACKED_BY_RE` accept it and the output reads "filed" as the real run would. Any
    other write is recorded and answers `None`. A method outside both the allowlist and
    the known writes is recorded as **refused**.
-4. Print the real run's output, then a summary: `git status --porcelain` of the scratch
-   tree (what would be staged) and the recorded forge writes. Remove the worktree in a
-   `finally`. Exit with the real run's code, or 1 when anything was refused (R11). The
-   broad `except`s in the follow-ups cannot hide a refusal, because the record is read
-   after the run, not raised through it.
+4. Print the real run's output, with every scratch path written as the real checkout's
+   and without the "moves staged" line, then a summary: `git status --porcelain` of the
+   scratch tree (what would be staged) and the recorded forge writes. The summary and the
+   refused calls are reported however the run ends, an exception included. Remove the
+   worktree in a `finally`. Exit with the real run's code, or 1 when anything was refused
+   (R11). The broad `except`s in the follow-ups cannot hide a refusal, because the record
+   is read after the run, not raised through it.
+
+**Stale artifacts.** `archive` is not exempt from the CLI's migration gate, and the gate
+treats `archive … --dry-run` as a context that may not write (`trigger.asks_for_dry_run`):
+when nothing is stale the dry run proceeds; when something is, it refuses with the gate's
+own message and exit 2, in every context, CI included, as the opt-out row does. A preview
+cannot honestly show a run that would migrate first.
 
 **Quiet and stealth** (`_record_merged`, `archive_cmd.py:237`) write outside the
 checkout (the `fr` worktree, the stealth tracking clone) and push through git, not the
@@ -163,7 +179,13 @@ forge client, so no scratch copy contains them. This mode gets a read-only path
 instead: `_record_merged(…, preview=True)` resolves the merge sha (forge and git reads)
 and prints the record it would append and the branch it would push, and returns before
 `merged_status.append_record`, `_commit_merged_record`, `commit_paths`,
-`stealth.commit_and_push`, `atomic_push` and `_push_fr`.
+`stealth.commit_and_push`, `atomic_push` and `_push_fr`. Every forge call of this mode
+goes through the same preview forge, the merged-PR read included, and the follow-ups
+(`--issues`) report the issue they would file and the deferral they would write, and
+write no journal. Before anything resolves the placement's space (which would create
+the `fr` worktree or sync the tracking clone), `fr.placement.preview.cannot_tell`
+checks the preview can see what the run would read; the gate checks it too, before it
+reads any artifact. When it cannot, the dry run refuses by name with exit 2 (R10).
 
 `merge_evidence(…, fetch=True)` still fetches. That updates remote-tracking refs only,
 which R11 allows. `--dry-run` never prompts: `_open_ends_step`'s TTY prompt is skipped,
