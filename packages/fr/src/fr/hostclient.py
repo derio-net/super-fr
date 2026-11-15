@@ -1,9 +1,11 @@
 """The single factory that turns "which backend" into "which client."
 
 Every call site that used to hardcode `RealGhClient()` calls `client_for()`
-instead — this is the seam that makes `fr apply`, the isolation lifecycle and
-the triage verbs all work against GitLab/Gitea repos without each one
-re-deriving backend detection itself. See docs/superpowers/specs/
+(or `client_for_url()` when it has a URL but no checkout) instead — this is the
+seam that lets `fr apply`, `fr pr`, the isolation lifecycle, `fr gate` and
+`fr release status` work against GitLab/Gitea repos without each one
+re-deriving backend detection itself. Triage is not one of them: it builds a
+GitHub client, and its batch writes refuse glab/tea. See docs/superpowers/specs/
 2026-07-09-multi-backend-git-host-adapters-design.md §3.
 """
 
