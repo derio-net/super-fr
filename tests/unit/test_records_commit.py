@@ -364,25 +364,40 @@ def test_a_record_commit_waits_out_a_briefly_held_index_lock(tmp_path: Path) -> 
     assert _files_at_head(root) == ["docs/superpowers/runs/r.yaml"]
 
 
-def test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly(tmp_path: Path) -> None:
-    import time
+def test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wait runs on a fake clock (gh#1280): timed on the real one, the git calls
+    BEFORE the wait were counted too, and a loaded host pushed them past the bound
+    (7.15 s against 5 s). What this pins is the wait itself: it gives up at its own
+    deadline, which is short."""
+    from types import SimpleNamespace
 
-    from fr.records_commit import commit_records
+    import fr.artifacts.commit as commit_mod
+    from fr.records_commit import _LOCK_WAIT_SECONDS, commit_records
 
+    now = [0.0]
+
+    def sleep(seconds: float) -> None:
+        now[0] += seconds
+        assert now[0] < 60, "the wait ignored its deadline"  # fail, never hang
+
+    monkeypatch.setattr(commit_mod, "time", SimpleNamespace(monotonic=lambda: now[0], sleep=sleep))
     root = _repo(tmp_path)
     p = _record(root)
     lock = root / ".git" / "index.lock"
     lock.write_text("")
     before = _head(root)
-    started = time.monotonic()
     try:
-        commit_records(root, [p], "m")
+        outcome = commit_records(root, [p], "m")
     finally:
         lock.unlink()
-    elapsed = time.monotonic() - started
 
     assert _head(root) == before
-    assert 1.0 <= elapsed < 5.0, elapsed
+    assert outcome is not None and not outcome.committed
+    assert 1.0 <= _LOCK_WAIT_SECONDS < 5.0
+    poll = commit_mod._LOCK_POLL_SECONDS
+    assert _LOCK_WAIT_SECONDS <= now[0] < _LOCK_WAIT_SECONDS + 2 * poll, now[0]
 
 
 def test_a_failed_diff_probe_is_not_reported_as_unchanged(
