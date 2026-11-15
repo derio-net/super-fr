@@ -1170,8 +1170,8 @@ def classify_branch(
 
 
 # A profile scaffolded before VK support was removed installs this package; its
-# postCreateCommand would fail on every container start (spec
-# 2026-11-14-retire-vibekanban R4).
+# postCreateCommand would fail on every container start (spec 2026-11-14 R4,
+# retiring the VK runner).
 _VK_PROFILE_NEEDLE = "subdirectory=packages/fr-vk"
 
 

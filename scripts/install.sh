@@ -183,8 +183,8 @@ RETIRED_OPENCODE_AGENTS=(
 )
 
 # Earlier installs wrote these for the VibeKanban runner, which is removed (spec
-# 2026-11-14-retire-vibekanban R5). Remove the MCP entry, and the bridge wrapper only
-# when its exec line is the one fr wrote. Install and --uninstall both call it.
+# 2026-11-14 R5, retiring the VK runner). Remove the MCP entry, and the bridge wrapper
+# only when its exec line is the one fr wrote. Install and --uninstall both call it.
 # The config is written back in place (cat into it, not mv over it), so its mode
 # and a symlink at its path survive; cleanup_tmps removes the sidecar on failure.
 cleanup_vk_residue() {

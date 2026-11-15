@@ -242,8 +242,7 @@ _RUNNER_PREFIXES = ("plugins/", "scripts/", "packages/fr/src/fr/commands/")
 # test_vk_residue_allowlist_has_no_dead_entries, so none outlives what it excuses.
 ALLOWED: tuple[tuple[str, str], ...] = (
     # R4: the detection string for a profile scaffolded before the removal, and the
-    # refusal that names it; the comment above it cites this spec by slug.
-    ("packages/fr/src/fr/isolation/local.py", r"^# 2026-11-14-retire-vibekanban R4\)\.$"),
+    # refusal that names it.
     (
         "packages/fr/src/fr/isolation/local.py",
         r'^_VK_PROFILE_NEEDLE = "subdirectory=packages/fr-vk"$',
@@ -259,7 +258,6 @@ ALLOWED: tuple[tuple[str, str], ...] = (
     # R5: the installer removes what earlier installs wrote for the VK runner (the
     # vibe_kanban MCP entry, an fr-written bridge wrapper) and refuses --install-bridge.
     ("scripts/install.sh", r"^# Earlier installs wrote these for the VibeKanban runner,"),
-    ("scripts/install.sh", r"^# 2026-11-14-retire-vibekanban R5\)\."),
     ("scripts/install.sh", r"jq -e '\.mcpServers\.vibe_kanban'"),
     ("scripts/install.sh", r"jq 'del\(\.mcpServers\.vibe_kanban\)'"),
     ("scripts/install.sh", r'echo "  Removed vibe_kanban \(VibeKanban support was removed\)'),
@@ -271,11 +269,6 @@ ALLOWED: tuple[tuple[str, str], ...] = (
         r'echo "VibeKanban support was removed; there is no bridge to install\."',
     ),
     ("scripts/install.sh", r"^# 8\. Remove what earlier installs wrote for the VibeKanban runner"),
-    # R9: the staleness guard's docstring cites this spec by slug.
-    (
-        "packages/fr/src/fr/acceptance/check.py",
-        r"Plan's outcome \(spec 2026-11-14-retire-vibekanban R9\)",
-    ),
 )
 
 

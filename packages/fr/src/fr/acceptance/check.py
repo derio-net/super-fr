@@ -300,9 +300,9 @@ def cited_spec_paths(rows: Sequence[Row], own: str | None) -> set[str]:
 
     Pass the fold's retired rows with the live ones: a row retired by amendment still
     cites its origin, because the retirement, recorded with its reason, is that Test
-    Plan's outcome (spec 2026-11-14-retire-vibekanban R9). An origin that does not
-    parse is skipped here; `check` reports it. *own* None (identity unknown) keeps a
-    path origin of any repo.
+    Plan's outcome (spec 2026-11-14 R9, retiring the VK runner). An origin that does
+    not parse is skipped here; `check` reports it. *own* None (identity unknown) keeps
+    a path origin of any repo.
     """
     from fr.acceptance.logical import candidates, is_logical, parse_logical
 
