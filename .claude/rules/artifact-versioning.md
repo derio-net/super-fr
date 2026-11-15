@@ -193,8 +193,8 @@ worktree, `mode: external` has container evidence, and HEAD has not drifted to a
 branch other than the marker's. Its branch survives and reaches a PR, which is
 why a commit there is safe.
 
-The **refuse** row is the bridge's: it works from a checkout it `reset --hard`s
-every tick (#286), so a commit there is discarded *and* misleading. Its refusal
+The **refuse** row covers a bridge or daemon checkout that is `reset --hard` on every
+tick (#286): a commit there is discarded *and* misleading. Its refusal
 names `fr isolation up --branch <branch>`, where the next fr command migrates and
 commits it; `fr migrate artifacts --yes` (exempt, no TTY needed) still works
 anywhere you type it.

@@ -25,9 +25,9 @@ committed to because its branch survives and reaches a PR.
 CI checkout is discarded. It warns on stderr that the files must not be
 committed with other work.
 
-**Refuse** is the bridge's row. The bridge works from a checkout it `reset
---hard`s to `origin/main` every tick (#286), so a commit there is discarded on
-the next pass: auto-committing would be pointless *and* actively misleading.
+**Refuse** covers, among others, a bridge or daemon that works from a checkout it
+`reset --hard`s to `origin/main` on every tick (#286): a commit there is discarded
+on the next pass, so auto-committing would be pointless *and* actively misleading.
 Its refusal names the way to get the migration carried: `fr isolation up`.
 
 Three properties this module is built around:
@@ -341,7 +341,7 @@ def is_interactive(
       the command to run, while the cost of being wrongly interactive is an
       unexpected commit in someone else's checkout.
 
-    The bridge needs no special case — it has no TTY. Phase 5 calls this same
+    A bridge or daemon checkout needs no special case — it has no TTY. Phase 5 calls this same
     predicate rather than inventing a second answer to the same question.
     """
     environ = os.environ if env is None else env
