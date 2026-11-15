@@ -661,8 +661,13 @@ def file_cmd(
         else:
             filed[bucket].append(jf.Filing(by_id[done.end.id], done.url))
     owed = [jf.owed_end(scope, slug, path, e) for e in plan.owed]
+    unsupported = False
     for result in af.file_owed_ends(root, owed, gh, repo):
-        if result.ref is None:
+        if result.unsupported:  # R13: stays in the journal, as under `forge.issues: off`
+            if not unsupported:
+                typer.echo(af.UNSUPPORTED_LISTING)
+            unsupported = True
+        elif result.ref is None:
             errors.append(f"{result.end.id}: {result.error}")
         else:
             filed["owed"].append(jf.Filing(by_id[result.end.id], result.ref))

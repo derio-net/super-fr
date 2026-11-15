@@ -449,6 +449,14 @@ def _has_tracker(repo_root: Path) -> bool:
     return all(forge_allows(repo_root, k, lenient=True) for k in ("issues", "labels"))
 
 
+def _forge_lists_issues(repo_root: Path) -> bool:
+    """Whether the repo's forge adapter can list issues (GitHub today; glab and tea
+    raise `UnsupportedForgeOperation`), which owed reuse by label needs (R13)."""
+    from fr._hosts import detect_backend
+
+    return detect_backend(repo_root) == "github"
+
+
 def _feature_flag(repo_root: Path, row_id: str, state: RunState) -> str:
     """`--feature <the run's spec slug>`: a leftover's link may run after the merge, with
     no run on the branch, and R16 writes it to this feature's fragment."""
@@ -481,6 +489,7 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
     from fr.journal.model import open_owed_ids, owed_filed_as
 
     tracker = _has_tracker(repo_root)
+    owed_fileable = tracker and _forge_lists_issues(repo_root)  # R13: else it stays recorded
     no_ci: bool | None = None  # asked once, and only when a row is owed
     out: list[Leftover] = []
     if tracker:
@@ -498,7 +507,7 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
                 ):
                     out.append(Leftover("finding", e.id, f"out of scope: {e.title}", file(e.id)))
             filed = owed_filed_as(entries)
-            for oid in open_owed_ids(entries):
+            for oid in open_owed_ids(entries) if owed_fileable else ():
                 if oid not in filed:
                     title = next(e.title for e in entries if e.id == oid)
                     out.append(Leftover("owed", oid, f"owed, not filed: {title}", file(oid)))

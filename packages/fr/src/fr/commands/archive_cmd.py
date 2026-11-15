@@ -782,7 +782,13 @@ def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
             soft_wrap=True,
         )
         return
+    said_unsupported = False
     for filed in af.file_owed_ends(repo_root, ends, _make_gh_client(), repo):
+        if filed.unsupported:  # R13: like `ForgeQuietError` above, the entry stays put
+            if not said_unsupported:
+                typer.echo(f"  {af.UNSUPPORTED_LISTING}")
+            said_unsupported = True
+            continue
         if filed.ref is None:
             err_console.print(
                 f"[yellow]warning:[/yellow] could not file owed {filed.end.key} — "

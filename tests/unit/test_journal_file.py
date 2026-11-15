@@ -33,7 +33,7 @@ class ListingGh(FakeGhClient):
     def viewer_login(self) -> str:
         return "me"
 
-    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
+    def list_issues(self, repo, state, limit, fields=None, labels=None):  # noqa: ANN001, ANN201
         return []
 
 
@@ -133,6 +133,26 @@ def test_an_owed_entry_is_filed_with_fr_owed_and_records_filed_as(
     (created,) = _created(gh)
     assert created["labels"] == frozenset({"fr:owed"})
     assert owed_filed_as(_journal(root)) == {"o1": f"{OWN}#1"}
+
+
+def test_an_owed_entry_on_a_forge_that_cannot_list_issues_stays_in_the_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.ghclient import UnsupportedForgeOperation
+
+    class NoList(ListingGh):
+        def list_issues(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise UnsupportedForgeOperation("list_issues", "glab")
+
+    gh = NoList()
+    root = _repo(tmp_path, monkeypatch, gh)
+    before = journal_path(root, "spec", SLUG).read_text()
+    res = _file("o1")
+    assert res.exit_code == 0, res.output
+    assert "cannot list issues by label" in res.output
+    assert _created(gh) == [] and not [n for n, _ in gh.calls if n == "ensure_labels"]
+    assert journal_path(root, "spec", SLUG).read_text() == before
+    assert owed_filed_as(_journal(root)) == {}
 
 
 def test_a_narrowing_decision_is_filed_and_records_tracked_by(

@@ -50,6 +50,8 @@ __all__ = [
     "FiledOwed",
     "OwedEnd",
     "file_owed_ends",
+    "OWED_LIST_LIMIT",
+    "UNSUPPORTED_LISTING",
     "owed_ends",
     "owed_identity",
     "owed_marker",
@@ -361,6 +363,7 @@ class FiledOwed:
     ref: str | None = None
     reused: bool = False
     error: str | None = None
+    unsupported: bool = False  # the forge cannot list issues: the entry stays in the journal
 
 
 def _issue_ref(repo: str, number: object, url: object) -> str | None:
@@ -464,22 +467,52 @@ def owned_owed_key(issue: dict[str, object], me: str) -> str | None:
 OWED_ISSUE_FIELDS = "number,url,body,author,labels"
 
 
-def _existing_owed(gh: GhClient, repo: str) -> dict[str, str]:
-    """`owed key -> owner/repo#n` of the open issues in THIS repo (`repo`, from
-    `owed_identity`) that `owned_owed_key` accepts. A reused ref is later
-    CLOSED by `fr journal resolve`, so nothing anyone else wrote is reused."""
+OWED_LIST_LIMIT = 200  # the one cap on the `fr:owed` listing; reaching it fails closed
+UNSUPPORTED_LISTING = "this forge cannot list issues by label: owed actions stay in the journal"
+
+
+@dataclass(frozen=True)
+class OwedLookup:
+    """What `_existing_owed` learned: the found keys, or why it cannot be trusted."""
+
+    found: dict[str, str]
+    reason: str | None = None
+    unsupported: bool = False
+
+
+def _existing_owed(gh: GhClient, repo: str) -> OwedLookup:
+    """`owed key -> owner/repo#n` of the open `fr:owed` issues in THIS repo (`repo`,
+    from `owed_identity`) that `owned_owed_key` accepts. A reused ref is later
+    CLOSED by `fr journal resolve`, so nothing anyone else wrote is reused.
+
+    Fails closed (R12): a listing that reached `OWED_LIST_LIMIT` may have missed
+    the marker, and one that failed knows nothing; either way the caller files
+    nothing, because a guess is how a duplicate gets filed."""
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.labels import FR_OWED
+
     try:
         me = gh.viewer_login()
-        issues = gh.list_issues(repo, "open", 200, fields=OWED_ISSUE_FIELDS)
-    except Exception:  # noqa: BLE001 — dedup is best-effort, as for open ends
-        return {}
+        issues = gh.list_issues(
+            repo, "open", OWED_LIST_LIMIT, fields=OWED_ISSUE_FIELDS, labels=[FR_OWED.name]
+        )
+    except UnsupportedForgeOperation:
+        return OwedLookup({}, UNSUPPORTED_LISTING, unsupported=True)
+    except Exception as e:  # noqa: BLE001 — unknown state is not "no duplicate"
+        return OwedLookup({}, f"could not list the open fr:owed issues ({type(e).__name__}: {e})")
+    if len(issues) >= OWED_LIST_LIMIT:
+        return OwedLookup(
+            {},
+            f"the open fr:owed listing reached its limit of {OWED_LIST_LIMIT}, "
+            "so an existing issue could be missed",
+        )
     found: dict[str, str] = {}
     for issue in issues:
         key = owned_owed_key(issue, me)
         ref = f"{repo}#{issue.get('number')}"
         if key and TRACKED_BY_RE.match(ref):
             found.setdefault(key, ref)
-    return found
+    return OwedLookup(found)
 
 
 def _owed_body(end: OwedEnd, repo_root: Path) -> str:
@@ -511,7 +544,10 @@ def file_owed_ends(
         return []
     if not _SAFE_REPO.match(repo):
         return [FiledOwed(e, error=f"repo {repo!r} is not owner/repo") for e in ends]
-    known = _existing_owed(gh, repo)
+    lookup = _existing_owed(gh, repo)
+    if lookup.reason is not None:
+        return [FiledOwed(e, error=lookup.reason, unsupported=lookup.unsupported) for e in ends]
+    known = lookup.found
     labels = frozenset({FR_OWED.name})
     try:
         gh.ensure_labels(repo, [FR_OWED])

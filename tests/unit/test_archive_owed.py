@@ -58,8 +58,17 @@ class ListingGh(FakeGhClient):
     def viewer_login(self) -> str:
         return "me"
 
-    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
-        return list(self.listed)
+    def list_issues(self, repo, state, limit, fields=None, labels=None):  # noqa: ANN001, ANN201
+        self.calls.append(("list_issues", {"repo": repo, "labels": labels, "limit": limit}))
+        held = list(self.listed)
+        if labels:
+            want = set(labels)
+            held = [
+                i
+                for i in held
+                if want <= {x["name"] if isinstance(x, dict) else x for x in i.get("labels", [])}
+            ]
+        return held[:limit]
 
 
 def _created(gh: FakeGhClient) -> list[dict]:
@@ -460,3 +469,111 @@ def test_the_spec_sweep_reports_a_journal_it_cannot_move_as_a_note(tmp_path: Pat
     sweep = spec_archive_sweep(repo, None)
     assert [m.dst.name for m in sweep.moves] == [SPEC_NAME]
     assert any("journal stayed live" in n for n in sweep.notes), sweep.notes
+
+
+# --- R12/R13: owed reuse by label, fail closed --------------------------------
+
+_WRITES = ("create_issue", "ensure_labels", "comment_issue", "edit_issue_state")
+
+
+def _writes(gh: FakeGhClient) -> list[str]:
+    return [n for n, _ in gh.calls if n in _WRITES]
+
+
+def _owed_issue(number: int, marker_key: str) -> dict:
+    return {
+        "number": number,
+        "url": f"https://github.com/{OWN}/issues/{number}",
+        "body": f"x\n<!-- fr-owed:{marker_key} -->",
+        "author": {"login": "me"},
+        "labels": [{"name": "fr:owed"}],
+    }
+
+
+def _ends(tmp_path: Path):  # noqa: ANN202
+    from fr.archive_followups import OwedEnd
+
+    return [
+        OwedEnd(
+            scope="plan",
+            slug="p",
+            id=f"e{i}",
+            key=f"plan:p#e{i}",
+            title=f"t{i}",
+            what="w",
+            how="h",
+            path=tmp_path / "j.md",
+        )
+        for i in (1, 2)
+    ]
+
+
+def test_owed_reuse_finds_the_marker_past_the_unlabelled_backlog(tmp_path: Path) -> None:
+    from fr.archive_followups import file_owed_ends
+
+    crowd = [
+        {"number": n, "body": "b", "author": {"login": "me"}, "labels": []}
+        for n in range(100, 350)
+    ]
+    gh = ListingGh([*crowd, _owed_issue(7, "plan:p#e1")])
+    out = file_owed_ends(tmp_path, _ends(tmp_path)[:1], gh, OWN)
+    assert [(f.ref, f.reused) for f in out] == [(f"{OWN}#7", True)]
+    assert _writes(gh) == [] or "create_issue" not in _writes(gh)
+
+
+def test_a_listing_at_its_limit_files_nothing_and_names_the_limit(tmp_path: Path) -> None:
+    from fr.archive_followups import OWED_LIST_LIMIT, file_owed_ends
+
+    full = [_owed_issue(n, f"plan:other#e{n}") for n in range(1, OWED_LIST_LIMIT + 1)]
+    gh = ListingGh(full)
+    out = file_owed_ends(tmp_path, _ends(tmp_path), gh, OWN)
+    assert len(out) == 2 and all(f.ref is None for f in out)
+    assert all(str(OWED_LIST_LIMIT) in (f.error or "") and "limit" in (f.error or "") for f in out)
+    assert _writes(gh) == []
+
+
+def test_a_listing_that_raises_files_nothing_and_names_the_error(tmp_path: Path) -> None:
+    from fr.archive_followups import file_owed_ends
+
+    class Boom(ListingGh):
+        def list_issues(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise RuntimeError("rate limited")
+
+    gh = Boom()
+    out = file_owed_ends(tmp_path, _ends(tmp_path), gh, OWN)
+    assert all(f.ref is None and "RuntimeError: rate limited" in (f.error or "") for f in out)
+    assert _writes(gh) == []
+
+
+def test_a_forge_that_cannot_list_issues_files_nothing(tmp_path: Path) -> None:
+    from fr.archive_followups import file_owed_ends
+    from fr.ghclient import UnsupportedForgeOperation
+
+    class NoList(ListingGh):
+        def list_issues(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise UnsupportedForgeOperation("list_issues", "glab")
+
+    gh = NoList()
+    out = file_owed_ends(tmp_path, _ends(tmp_path), gh, OWN)
+    assert all(f.ref is None and f.unsupported for f in out)
+    assert all("cannot list issues" in (f.error or "") for f in out)
+    assert _writes(gh) == []
+
+
+def test_archive_says_a_forge_that_cannot_list_issues_keeps_owed_in_the_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.ghclient import UnsupportedForgeOperation
+
+    class NoList(ListingGh):
+        def list_issues(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise UnsupportedForgeOperation("list_issues", "glab")
+
+    repo = _plan_repo(tmp_path, outcomes=[_outcome(1), _outcome(2, "owed")])
+    gh = NoList()
+    result = _archive(monkeypatch, repo, gh, "--no-issues")
+    assert result.exit_code == 0, result.output
+    assert "cannot list issues by label: owed actions stay in the journal" in result.output
+    assert _writes(gh) == []
+    entries = parse_journal(archived_journal_path(repo, "spec", SPEC_SLUG).read_text())
+    assert owed_filed_as(entries) == {}

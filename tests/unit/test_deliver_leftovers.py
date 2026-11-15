@@ -112,6 +112,23 @@ def test_each_kind_of_leftover_is_listed_with_its_fix(tmp_path: Path) -> None:
     assert "fr acceptance set-status --id owed-row --status walk-owed --issue" in row_fix
 
 
+def test_an_open_owed_entry_counts_as_recorded_when_the_forge_cannot_list_issues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R13: an owed entry on a forge whose adapter cannot list issues stays in the
+    journal, as under `forge.issues: off`; `deliver` does not ask for it to be filed."""
+    from fr.record import pr_body
+
+    root = _repo(tmp_path, rows={})
+    _journal(root, *_out_of_scope(), _owed())
+    _commit(root)
+    assert ("owed", "o1") in {(left.kind, left.id) for left in _leftovers(root)}
+    monkeypatch.setattr(pr_body, "_forge_lists_issues", lambda _root: False)
+    kinds = {(left.kind, left.id) for left in _leftovers(root)}
+    assert ("owed", "o1") not in kinds
+    assert ("finding", "f1") in kinds  # only the owed entry is let off
+
+
 def test_accounted_leftovers_are_not_listed(tmp_path: Path) -> None:
     root = _repo(tmp_path, rows={"gated": None, "issued": None, "walked": None})
     _spec(root, "strategy: candidate\ngate: gated=tester\n")
