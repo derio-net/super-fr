@@ -62,9 +62,13 @@ rows:
       working directory
     origin:
     - spec:2026-11-15-guard-trust#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_file_lock.py#test_the_lock_probe_never_imports_from_the_cwd
+      - super-fr:tests/unit/test_herdr_managed.py#test_the_pane_lock_probe_never_imports_from_the_cwd
+    status: ci
+    notes: 'R5 proven in CI: a planted fcntl.py in the cwd is not imported by either
+      lock probe'
     verify: none
   - id: resume-repins-fr-binary
     capability: fr binary pin
