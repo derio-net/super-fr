@@ -213,3 +213,13 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-15-guard-trust-p3 created=2026-11-15T17:06:54+00:00 -->
 ### phase-split-2026-11-15-guard-trust-p3 · decision · ask: phase 3 serves its own asks (#1259/#1230/#1279, R5-R8)
+
+<!-- fr:journal kind=finding scope=spec id=f9-resolved-2 created=2026-11-15T19:04:19+00:00 state=open resolves=f9 tracked_by=https://github.com/derio-net/super-fr/issues/1481 -->
+### f9-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1481] · resolves f9: Other bare-name spawns remain (bash, gh in the plugin; jq in hooks)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1481.
+
+<!-- fr:journal kind=finding scope=spec id=f10-resolved-2 created=2026-11-15T19:04:19+00:00 state=open resolves=f10 tracked_by=https://github.com/derio-net/super-fr/issues/1482 -->
+### f10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1482] · resolves f10: The legacy archive dir is not an fr-enabled signal
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1482.
