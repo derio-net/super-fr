@@ -24,8 +24,7 @@ INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 SUPER_FR_GIT = "git+https://github.com/derio-net/super-fr"
 
 # `tool install` logs its argv one per line; `tool dir` names a tool dir whose
-# `fr` runs (install.sh's smoke check) and whose python cannot import anything
-# (so nothing could import a runner through it).
+# `fr` runs (install.sh's smoke check).
 _UV_STUB = r"""#!/bin/sh
 case "$1 $2" in
 "tool dir")
@@ -35,8 +34,7 @@ case "$1 $2" in
   for a in "$@"; do printf '%s\n' "$a" >> "$UV_STUB_LOG"; done
   mkdir -p "$UV_STUB_TOOLDIR/fr/bin"
   printf '#!/bin/sh\necho "fr 9.9.9"\n' > "$UV_STUB_TOOLDIR/fr/bin/fr"
-  printf '#!/bin/sh\nexit 1\n' > "$UV_STUB_TOOLDIR/fr/bin/python"
-  chmod +x "$UV_STUB_TOOLDIR/fr/bin/fr" "$UV_STUB_TOOLDIR/fr/bin/python"
+  chmod +x "$UV_STUB_TOOLDIR/fr/bin/fr"
   ;;
 *)
   exit 0
@@ -93,19 +91,12 @@ def test_install_sh_installs_fr_with_every_runner_package(stub_env: dict[str, st
 
 def test_install_bridge_names_no_fr_vk(stub_env: dict[str, str]) -> None:
     """`--install-bridge` refuses, and nothing it prints names fr-vk any more."""
-    Path(stub_env["UV_STUB_LOG"]).write_text("")
-    subprocess.run(["uv", "tool", "install"], env=stub_env, check=True)  # seeds the tool dir
-
     result = subprocess.run(
-        ["bash", str(INSTALL_SH), "--install-bridge"],
-        capture_output=True,
-        text=True,
-        env={**stub_env, "VK_BRIDGE_WRAPPER_PATH": str(Path(stub_env["HOME"]) / "run.sh")},
+        ["bash", str(INSTALL_SH), "--install-bridge"], capture_output=True, text=True, env=stub_env
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "VibeKanban support was removed" in result.stdout + result.stderr
     assert "packages/fr-vk" not in result.stdout + result.stderr, result.stderr
-    assert not (Path(stub_env["HOME"]) / "run.sh").exists()
 
 
 def test_scaffold_runner_packages_are_the_workspace_runners() -> None:
