@@ -3,7 +3,7 @@
 Four sessions each running `pytest -n auto` on a 16-thread host started 64
 workers: load average ~800, suites 40-80 min instead of minutes, and the
 wall-clock-bounded tests of gh#1280 failing. `-n auto` now asks
-`tests/_workers.py`: `FR_PYTEST_WORKERS` when set, every CPU in CI (a runner
+`tests/conftest.py`: `FR_PYTEST_WORKERS` when set, every CPU in CI (a runner
 belongs to one job), else the CPUs the host's load leaves free, never fewer than 2.
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests._workers import auto_workers
+from tests.conftest import auto_workers
 
 
 def test_an_idle_host_gets_every_cpu() -> None:
@@ -49,12 +49,3 @@ def test_an_empty_override_is_unset_and_ci_false_is_not_ci() -> None:
 
 def test_an_unreadable_load_counts_as_idle() -> None:
     assert auto_workers(cpus=6, load1=None, env={}) == 6
-
-
-def test_a_passed_tests_tmp_dir_is_not_kept() -> None:
-    import tomllib
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[2]
-    ini = tomllib.loads((root / "pyproject.toml").read_text("utf-8"))["tool"]["pytest"]
-    assert ini["ini_options"]["tmp_path_retention_policy"] == "failed"

@@ -521,60 +521,85 @@ def _init_reads_no_forge_for_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("fr.commands.acceptance_cmd._pages_decision", lambda root, ci_type: None)
 
 
-# --- Longest-first shards (gh#1428) -----------------------------------------
+# --- Git commit dates do not outlive the test that set them -------------------
 #
-# A shard's tail is the long test xdist hands out last. Under `--splits` (CI's
-# `test` job and release.py's shards) run the group longest-first, one test per
-# scheduling chunk, so a worker that frees up takes the next-longest test.
-# `tests/_shard_order.py` holds the rule; see its docstrings.
+# Some helpers move a committer clock by writing these straight into os.environ
+# (test_placement_merged.py's `tick()`), safe only where a monkeypatch of the same
+# keys restores them. One module that skipped it dated every later commit in its
+# worker 2026-11-05 (tests/unit/test_suite_isolation_git_dates.py). Restored to
+# what the session started with, so an operator's own setting survives.
+
+GIT_DATE_KEYS = ("GIT_COMMITTER_DATE", "GIT_AUTHOR_DATE")
+SESSION_GIT_DATES = {k: os.environ.get(k) for k in GIT_DATE_KEYS}
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    from tests._shard_order import scheduling_options
-
-    for name, value in scheduling_options(config.option).items():
-        setattr(config.option, name, value)
-
-
-@pytest.hookimpl(wrapper=True)
-def pytest_collection_modifyitems(
-    session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
-) -> Iterator[None]:
-    # A wrapper, so this runs after pytest-split's own (trylast) hook has kept
-    # only this shard's group.
-    result = yield
-    if getattr(config.option, "splits", None):
-        import json
-
-        from tests._shard_order import longest_first
-
-        try:
-            durations = json.loads(Path(config.option.durations_path).read_text("utf-8"))
-        except (OSError, ValueError):
-            durations = {}
-        order = {n: i for i, n in enumerate(longest_first([i.nodeid for i in items], durations))}
-        items.sort(key=lambda i: order[i.nodeid])
-    return result
+@pytest.fixture(autouse=True)
+def _no_git_date_carried_between_tests() -> Iterator[None]:
+    yield
+    for key, value in SESSION_GIT_DATES.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
 
 # --- `-n auto` shares the host (gh#1225) -------------------------------------
+#
+# Four sessions each running `-n auto` on a 16-thread host started 64 workers:
+# load ~800, suites 40-80 min, and gh#1280's wall-clock tests failing. Outside CI
+# `-n auto` now takes the CPUs the host's load leaves free.
+
+PYTEST_WORKERS_ENV = "FR_PYTEST_WORKERS"
+MIN_AUTO_WORKERS = 2
 
 
-def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
-    from xdist.plugin import pytest_xdist_auto_num_workers as xdist_default
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() not in {"", "0", "false", "no"}
 
-    from tests._workers import auto_workers, host_load1
 
-    n = auto_workers(cpus=xdist_default(config), load1=host_load1(), env=os.environ)
-    config.stash[_AUTO_WORKERS] = n
-    return n
+def auto_workers(*, cpus: int, load1: float | None, env: Mapping[str, str]) -> int:
+    """`FR_PYTEST_WORKERS` when set; every CPU in CI (a runner belongs to one job);
+    else the CPUs the one-minute load leaves free, never fewer than
+    `MIN_AUTO_WORKERS`. The load lags by a minute, so sessions starting together
+    still each see an idle host: the override bounds those exactly."""
+    raw = (env.get(PYTEST_WORKERS_ENV) or "").strip()
+    if raw:
+        try:
+            n = int(raw)
+        except ValueError:
+            n = 0
+        if n < 1:
+            raise pytest.UsageError(
+                f"{PYTEST_WORKERS_ENV}={raw!r}: expected a whole number of workers, 1 or more"
+            )
+        return n
+    if _truthy(env.get("CI")):
+        return cpus
+    free = cpus - round(load1 or 0.0)
+    return max(MIN_AUTO_WORKERS, min(cpus, free))
+
+
+def _host_load1() -> float | None:
+    try:
+        return os.getloadavg()[0]
+    except OSError:
+        return None
 
 
 _AUTO_WORKERS = pytest.StashKey[int]()
+
+
+@pytest.hookimpl(optionalhook=True)  # unknown when xdist is not loaded (`-p no:xdist`)
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    from xdist.plugin import pytest_xdist_auto_num_workers as xdist_default
+
+    n = auto_workers(cpus=xdist_default(config), load1=_host_load1(), env=os.environ)
+    config.stash[_AUTO_WORKERS] = n
+    return n
 
 
 def pytest_report_header(config: pytest.Config) -> str | None:
     n = config.stash.get(_AUTO_WORKERS, None)
     if n is None:
         return None
-    return f"-n auto: {n} workers (tests/_workers.py; FR_PYTEST_WORKERS overrides)"
+    return f"-n auto: {n} workers ({PYTEST_WORKERS_ENV} overrides; tests/conftest.py)"
