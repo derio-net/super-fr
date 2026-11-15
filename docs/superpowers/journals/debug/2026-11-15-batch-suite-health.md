@@ -65,3 +65,8 @@ Its subprocess bounds are 120-180 s (INSTALL_BOUND_S = 180) around a stubbed ins
 ### 33c8f6e7d66d · ruled-out · #1428 fix 1 (longest-first shards) gave no wall-clock gain
 
 Run 43691468025: overhead beyond work/4 fell from 50-87 s to 39-49 s, but scenario tests ran 1.36x their previous duration (other tests 1.03x): started together, they contend, and a module-scoped install repeats per worker. Max py3.14 shard pytest step 329 s before and after. Reverted.
+
+<!-- fr:journal kind=finding scope=debug id=git-date-leak created=2026-11-15T10:04:14+00:00 state=fixed -->
+### git-date-leak · finding [fixed] · GIT_COMMITTER_DATE leaked between tests
+
+test_placement_merged's tick() writes os.environ directly; test_acceptance_amend_origin imports Product without the _home fixture, so the dates stayed set for the worker and test_run_ci_evidence read a fresh head as 14400 minutes old. Repro: run those two in one process (fails). Fix: autouse _no_git_date_carried_between_tests restores the session's values. Pinned by tests/unit/test_suite_isolation_git_dates.py (red, then green); the pair passes.
