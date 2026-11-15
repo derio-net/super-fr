@@ -31,6 +31,8 @@ journal:
       by TestVkResidue; the VK binary stubs in the fake homes of test_install_sh,
       test_install_atomic and test_install_worktree_settings_hooks are gone; uninstall's
       vibe_kanban case now pre-seeds the entry instead of relying on install to write it.
+      fake_home still creates $HOME/bin explicitly: test_install_opencode_agents writes an fr
+      stub there and had relied on the VK stub's mkdir (caught by the first full suite run).
   - kind: discovery
     id: p2-docs-pages-for-phase-3
     phase: 2
@@ -58,4 +60,4 @@ resolves:
       test_runner_package_lists.py::test_install_bridge_names_no_fr_vk asserts exit 2, the text
       "VibeKanban support was removed", no packages/fr-vk in the output, and that no wrapper was
       written at VK_BRIDGE_WRAPPER_PATH.
-evidence: {}
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T//p2-suite.log}
