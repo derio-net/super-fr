@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-14 VK support removed; install removes the VK MCP entry and bridge wrapper, --install-bridge exits 2
+reviewed: 2026-11-15 still true after the OpenCode plugin gates on implemented/plans and resolves git and fr from absolute PATH entries only
 ---
 
 # Install super-fr
