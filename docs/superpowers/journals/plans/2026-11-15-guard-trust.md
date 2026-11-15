@@ -274,3 +274,13 @@ A newline is appended first when the sibling does not end in one; test_a_sibling
 ### l-security-r3-resolved · finding [out-of-scope] · resolves l-security-r3: Other bare-name binaries (gh in push.ts; jq/dirname/mktemp/sed/gh/git in bash hooks) still honour relative PATH entries
 
 Pre-existing bare-name spawns outside R3/R4 (spec non-goals); filed as a follow-up at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved-2 created=2026-11-15T19:04:31+00:00 phase=1 state=open resolves=p1-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1483 -->
+### p1-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1483] · resolves p1-r3: O_NOFOLLOW guards only the final component; a symlinked live plans root is not defended (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1483.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved-2 created=2026-11-15T19:04:31+00:00 state=open resolves=l-security-r1 tracked_by=https://github.com/derio-net/super-fr/issues/1484 -->
+### l-security-r1-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1484] · resolves l-security-r1: Edit-gate JSON parser runs python3 -c without -P and resolves python3/jq via command -v
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1484.
