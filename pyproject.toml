@@ -52,6 +52,9 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --cov --cov-report=term-missing --cov-fail-under=75"
+# A passed test's tmp dir is deleted at session end (gh#1225: parallel suites grew
+# pytest-of-$USER to 8.8 GB); a failed one's is kept for the post-mortem.
+tmp_path_retention_policy = "failed"
 
 [tool.coverage.run]
 source = ["fr", "fr_dispatch", "fr_cncd", "fr_herdr", "fr_claude_cloud"]

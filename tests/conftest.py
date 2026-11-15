@@ -555,3 +555,26 @@ def pytest_collection_modifyitems(
         order = {n: i for i, n in enumerate(longest_first([i.nodeid for i in items], durations))}
         items.sort(key=lambda i: order[i.nodeid])
     return result
+
+
+# --- `-n auto` shares the host (gh#1225) -------------------------------------
+
+
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int:
+    from xdist.plugin import pytest_xdist_auto_num_workers as xdist_default
+
+    from tests._workers import auto_workers, host_load1
+
+    n = auto_workers(cpus=xdist_default(config), load1=host_load1(), env=os.environ)
+    config.stash[_AUTO_WORKERS] = n
+    return n
+
+
+_AUTO_WORKERS = pytest.StashKey[int]()
+
+
+def pytest_report_header(config: pytest.Config) -> str | None:
+    n = config.stash.get(_AUTO_WORKERS, None)
+    if n is None:
+        return None
+    return f"-n auto: {n} workers (tests/_workers.py; FR_PYTEST_WORKERS overrides)"
