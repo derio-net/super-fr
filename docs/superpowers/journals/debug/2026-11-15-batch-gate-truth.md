@@ -30,3 +30,8 @@ _run_text lists RUNS_DIR and ARCHIVED_RUNS_DIR. Test first: test_triage_exit_gat
 ### e014176e2658 · finding [fixed] · 1389 fixed: gate pass --yes exits 1 on a failed close
 
 The pass stands; the command exits 1 after the retry line. test_gate_cmd.py::test_a_tracker_failure_never_reverses_the_pass_but_exits_1 (it previously pinned exit 0).
+
+<!-- fr:journal kind=finding scope=debug id=207a3e6f6aba created=2026-11-15T17:13:25+00:00 state=fixed -->
+### 207a3e6f6aba · finding [fixed] · 1293 fixed: apply_phase records a live-DONE op
+
+Skip only when the closure is already recorded on the ops branch (_recorded_here); otherwise fr ops apply --yes records it (R7) and runs nothing. test_ops_gate.py::test_gh1293_an_op_already_done_live_is_recorded_not_skipped.
