@@ -519,3 +519,39 @@ def _init_reads_no_forge_for_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     never the place to reach one: the answer is None (not asked), which scaffolds no Pages
     job. A test of the decision patches `pages_allowed` or `_pages_decision` itself."""
     monkeypatch.setattr("fr.commands.acceptance_cmd._pages_decision", lambda root, ci_type: None)
+
+
+# --- Longest-first shards (gh#1428) -----------------------------------------
+#
+# A shard's tail is the long test xdist hands out last. Under `--splits` (CI's
+# `test` job and release.py's shards) run the group longest-first, one test per
+# scheduling chunk, so a worker that frees up takes the next-longest test.
+# `tests/_shard_order.py` holds the rule; see its docstrings.
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    from tests._shard_order import scheduling_options
+
+    for name, value in scheduling_options(config.option).items():
+        setattr(config.option, name, value)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_collection_modifyitems(
+    session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
+) -> Iterator[None]:
+    # A wrapper, so this runs after pytest-split's own (trylast) hook has kept
+    # only this shard's group.
+    result = yield
+    if getattr(config.option, "splits", None):
+        import json
+
+        from tests._shard_order import longest_first
+
+        try:
+            durations = json.loads(Path(config.option.durations_path).read_text("utf-8"))
+        except (OSError, ValueError):
+            durations = {}
+        order = {n: i for i, n in enumerate(longest_first([i.nodeid for i in items], durations))}
+        items.sort(key=lambda i: order[i.nodeid])
+    return result
