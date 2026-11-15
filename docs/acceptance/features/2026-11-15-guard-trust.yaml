@@ -28,9 +28,15 @@ rows:
       Hermes and OpenCode in every fresh clone, so a base-clone edit is still denied
     origin:
     - spec:2026-11-15-guard-trust#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_repo_with_only_archived_plans_is_fr_enabled
+      - super-fr:tests/unit/test_hooks_isolation_required.py#test_a_repo_with_only_archived_plans_blocks_a_base_edit
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py#test_a_repo_with_only_archived_plans_blocks_a_base_edit
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+    status: ci
+    notes: 'R2 proven in CI on a fixture with only implemented/plans, no plans dir,
+      no profile: bash core, Claude Code hook, Hermes hook and OpenCode frEnabled'
     verify: none
   - id: hooks-trust-absolute-path-only
     capability: hook binary resolution
