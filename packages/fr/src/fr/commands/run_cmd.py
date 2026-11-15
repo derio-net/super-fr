@@ -3342,13 +3342,38 @@ log (spec 2026-10-07-cloud-triage R22, §I; `fr.run.ci_evidence`)."""
 def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
     """`tests: ci`: on a `done` resolve the `verify_ci` witness, else the bare
     claim (a failed unit vouches for no tree, and asks no forge). A pending gate
-    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write."""
+    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write.
+
+    gh#1395: a failed forge read (`GhError`: a timeout, an EOF, a 5xx) exits
+    `CI_PENDING_EXIT` too, in one line naming it — never a traceback and exit 1,
+    which fr-goal reads as "the record applied and a chained step failed". A host
+    trust refusal does not answer on a retry, so it exits 2."""
+    from fr.gh import GhError
+    from fr.ghclient import HostRefusedError
+    from fr.glab import GlabError
     from fr.run import ci_evidence
+    from fr.tea import TeaError
 
     if not done:
         return TESTS_CI
     try:
         return ci_evidence.verify_ci(repo_root)
+    except HostRefusedError as e:
+        err_console.print(
+            f"[red]{key}: tests: ci — the forge refused the host: {escape(str(e))}. "
+            "Nothing was recorded.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    except (GhError, GlabError, TeaError) as e:
+        stderr = str(getattr(e, "stderr", "") or "")
+        detail = " ".join(f"{e} {stderr if stderr not in str(e) else ''}".split())
+        err_console.print(
+            f"[yellow]{key}: tests: ci — could not read CI from the forge ({escape(detail)}). "
+            "Nothing was recorded: resolve again.[/yellow]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
     except ci_evidence.CiPending as e:
         err_console.print(
             f"[yellow]{key}: tests: ci — {escape(str(e))}. Nothing was recorded: "
