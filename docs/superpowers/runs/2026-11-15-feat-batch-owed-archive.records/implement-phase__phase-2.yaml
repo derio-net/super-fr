@@ -63,5 +63,4 @@ journal:
       the default branch; _repo commits once, writes refs/remotes/origin/main and keeps HEAD
       on main unless a test asks for a feature branch.
 resolves: []
-evidence:
-  tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/3f4e915b-6497-4999-a906-ee570ad69449/scratchpad/p2-full-suite.log
+evidence: {}
