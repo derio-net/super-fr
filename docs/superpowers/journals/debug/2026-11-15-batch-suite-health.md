@@ -75,3 +75,8 @@ test_placement_merged's tick() writes os.environ directly; test_acceptance_amend
 ### 6c00104cf8f3 · ruled-out · tmp_path_retention_policy=failed breaks archive tests
 
 Full local suite: 4 archive tests failed with 'rejected (fetch first)'. Deleting a passed test's tmp dir immediately lets the next same-prefix test reuse the path beside a leftover <tmp_path>.origin.git. test_archive_open_ends + test_archive_owed: 2 failed with the policy, 48 passed with -o tmp_path_retention_policy=all. Dropped; #1225's temp-size proposal is not done.
+
+<!-- fr:journal kind=decision scope=debug id=9fd3bba64fab created=2026-11-15T10:04:25+00:00 -->
+### 9fd3bba64fab · decision · #1428: 7 shards per ci.yml leg
+
+Operator chose, in the session's question round after fix 1 failed: a 7th shard per leg in ci.yml (release.yml stays at 6), amending ci-speed R6's acceptance row.
