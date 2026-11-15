@@ -283,3 +283,11 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_tripwire_readme_sync.py
     why: sync-readme --check is the README half of R6
+  - row: dispatch-docs-name-no-vk
+    op: set-status
+    base: 5
+    status: ci
+    notes: fr skills, the shipped skills, README and every published page are pinned
+      free of fr-runner and the VK runner; the R10 tripwire covers the plugin manifest;
+      fr docs check runs in CI
+    why: the skill, manifest and docs evidence runs in CI
