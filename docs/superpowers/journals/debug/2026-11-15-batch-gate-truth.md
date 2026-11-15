@@ -35,3 +35,8 @@ The pass stands; the command exits 1 after the retry line. test_gate_cmd.py::tes
 ### 207a3e6f6aba · finding [fixed] · 1293 fixed: apply_phase records a live-DONE op
 
 Skip only when the closure is already recorded on the ops branch (_recorded_here); otherwise fr ops apply --yes records it (R7) and runs nothing. test_ops_gate.py::test_gh1293_an_op_already_done_live_is_recorded_not_skipped.
+
+<!-- fr:journal kind=finding scope=debug id=e61144b49d4a created=2026-11-15T17:13:28+00:00 state=fixed -->
+### e61144b49d4a · finding [fixed] · 1275 fixed: stage 7 passes an unowned gate:tester; pickup reports a finished stage
+
+gate:tester came from a live-strategy row (row gates default by strategy), so it can be legitimate on a devops-only spec. Stage 7 keeps it while a tester step has no outcome, a tester row is unwalked, or the spec declares gate: tester; otherwise passes it with a generated note. devops_brief returns a completion brief once the host gate record holds stage 8. Tests: test_gh1275_* in test_ops_gate.py and test_ops_devops_brief.py.
