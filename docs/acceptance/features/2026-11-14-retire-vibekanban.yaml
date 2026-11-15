@@ -291,3 +291,13 @@ amendments:
       free of fr-runner and the VK runner; the R10 tripwire covers the plugin manifest;
       fr docs check runs in CI
     why: the skill, manifest and docs evidence runs in CI
+  - row: installer-removes-vk-residue
+    op: reword
+    base: 0
+    acceptance: install.sh writes no VK pieces, removes a vibe_kanban MCP entry and
+      an fr-written vk-bridge wrapper when present, warns and continues when a removal
+      fails (a 0600 sidecar, never world-readable), points at a crontab entry naming
+      the wrapper, and `--install-bridge` refuses naming the removal and the crontab
+      entry
+    why: spec R5 now states the failure warnings and the crontab hint (lens-review security/errors
+      findings)
