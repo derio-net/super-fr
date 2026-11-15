@@ -15,7 +15,6 @@ Verbs:
 from __future__ import annotations
 
 import hashlib
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, get_args
 
@@ -25,6 +24,7 @@ from rich.markup import escape
 
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import resolve_repo_root
+from fr.git import head_on_default_branch
 from fr.journal.model import (
     TRACKED_BY_RE,
     EffectiveFindingState,
@@ -44,6 +44,8 @@ from fr.journal.model import (
     spec_journal_slug,
     unauthorized_fixes,
 )
+from fr.owed_refs import own_issue as _own_issue
+from fr.owed_refs import shown as _shown
 from fr.run.model import AnsweredBy
 
 if TYPE_CHECKING:
@@ -581,8 +583,12 @@ def resolve(
     typer.echo(f"{entry_id} → {shown} (record {record_id})")
     if target.kind == "owed":
         filed = owed_filed_as(entries).get(entry_id)
-        if filed is not None:
+        if filed is None:
+            pass
+        elif head_on_default_branch(root):
             _close_owed_issue(root, filed, note, owed_key(target))
+        else:
+            _close_at_merge(root, filed)
 
 
 @journal_app.command("file")
@@ -696,50 +702,24 @@ def _make_gh_client() -> GhClient:
     return client_for(Path.cwd())
 
 
-_SAFE_REPO = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+$")
-_SHORT_REF = re.compile(r"^#([0-9]+)$")
-_LONG_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
-_URL_PATH = re.compile(
-    r"^/([A-Za-z0-9_.][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+)/(?:-/)?issues/([0-9]+)/?$"
-)
+def _close_at_merge(root: Path, ref: str) -> None:
+    """R1, R2: off the default branch (or with no readable default ref, or a
+    detached HEAD, R3) the discharge reaches the forge only when the branch
+    merges. No forge call: print the closing line the branch's PR body carries,
+    or, for a ref this repo does not own, the same warning closing would give."""
+    from fr.archive_followups import owed_identity
 
-
-def _shown(ref: str) -> str:
-    """`ref` safe to echo (review p3-r5): printable ASCII as is, else its repr."""
-    return ref if ref.isascii() and ref.isprintable() else repr(ref)
-
-
-def _own_issue(root: Path, ref: str, own: str) -> tuple[str, int] | str:
-    """`(owner/repo, number)` when `filed_as` names an issue in `own` — THIS
-    repo, from `owed_identity` (the origin remote) — else the reason it does
-    not. `filed_as` comes from a committed journal, so it is untrusted: a ref
-    naming another owner/repo, or a URL on another host or repo, is never acted
-    on. The number is ASCII digits."""
-    from urllib.parse import urlparse
-
-    from fr import _hosts
-
-    if (m := _SHORT_REF.match(ref)) is not None:
-        repo, number = own, int(m.group(1))
-    elif (m := _LONG_REF.match(ref)) is not None:
-        repo, number = m.group(1), int(m.group(2))
-    elif ref.startswith(("http://", "https://")):
-        url = urlparse(ref)
-        origin = _hosts.origin_hostname(root)
-        host = (url.hostname or "").lower()
-        if not origin or host != origin.lower():
-            return (
-                f"{_shown(ref)} is on {_shown(host) or 'no host'}, not this repo's forge "
-                f"({origin or 'unknown'})"
-            )
-        if (m := _URL_PATH.match(url.path)) is None:
-            return f"{_shown(ref)} is not an issue URL"
-        repo, number = m.group(1), int(m.group(2))
-    else:
-        return f"{_shown(ref)} is not an issue reference"
-    if repo.lower() != own.lower():
-        return f"{_shown(ref)} names {_shown(repo)}, not this repo ({own})"
-    return own, number
+    own, why = owed_identity(root)
+    target: tuple[str, int] | str = why if own is None else _own_issue(root, ref, own)
+    if isinstance(target, str):
+        typer.echo(
+            f"warning: not closing {_shown(ref)} — {target}; close it yourself if it is yours"
+        )
+        return
+    typer.echo(
+        f"{_shown(ref)} closes when this branch merges: its PR body carries\n"
+        f"  Closes {target[0]}#{target[1]}"
+    )
 
 
 def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:

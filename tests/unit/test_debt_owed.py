@@ -87,15 +87,22 @@ class OwnedGh(FakeGhClient):
         }
 
 
-def _repo(tmp_path: Path) -> Path:
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(
-        ["git", "remote", "add", "origin", f"https://github.com/{OWN}.git"],
-        cwd=tmp_path,
-        check=True,
-    )
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+
+def _repo(tmp_path: Path, *, branch: str | None = None) -> Path:
+    """A repo whose HEAD is `main`, the local branch of `origin/main` (the
+    default ref, R3), unless `branch` checks out a feature branch."""
+    _git(tmp_path, "init", "-q", "-b", "main")
+    _git(tmp_path, "remote", "add", "origin", f"https://github.com/{OWN}.git")
     (tmp_path / "docs/acceptance").mkdir(parents=True)
     write_matrix_fragments(tmp_path, "schema_version: 5\norg: acme\nrepo: widgets\nrows: []\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "init")
+    _git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
+    if branch is not None:
+        _git(tmp_path, "checkout", "-q", "-b", branch)
     return tmp_path
 
 
@@ -481,3 +488,64 @@ def test_a_wrong_marker_is_not_closed(tmp_path: Path, monkeypatch: pytest.Monkey
     res = _resolve_with(monkeypatch, tmp_path, gh)
     assert res.exit_code == 0, res.output
     assert _calls(gh, "edit_issue_state") == [] and "close it yourself" in res.output
+
+
+# --- R1-R3: off the default branch, resolve closes nothing -------------------
+
+
+class NoForge(FakeGhClient):
+    """A forge double that refuses every call: off the default branch, resolving
+    an owed entry must not reach the forge at all (R1)."""
+
+    def __getattribute__(self, name: str):  # noqa: ANN204
+        if name in {"calls", "issues", "__class__", "__dict__"} or name.startswith("_"):
+            return object.__getattribute__(self, name)
+        raise AssertionError(f"off the default branch resolve called the forge: {name}")
+
+
+def _off_default(tmp_path: Path, how: str) -> Path:
+    if how == "feature-branch":
+        return _repo(tmp_path, branch="feat/x")
+    root = _repo(tmp_path)
+    if how == "detached":
+        _git(root, "checkout", "-q", "--detach")
+    elif how == "no-default-ref":
+        _git(root, "update-ref", "-d", "refs/remotes/origin/main")
+    return root
+
+
+@pytest.mark.parametrize("how", ["feature-branch", "detached", "no-default-ref"])
+def test_off_the_default_branch_resolve_closes_nothing_and_prints_the_closes_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    root = _off_default(tmp_path, how)
+    owed = _owed()
+    path = _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    res = _resolve(monkeypatch, root, NoForge())
+    assert res.exit_code == 0, res.output
+    assert open_owed_ids(parse_journal(path.read_text())) == [], "the discharge is recorded"
+    assert "closes when this branch merges" in res.output
+    assert f"Closes {OWN}#12" in res.output
+
+
+def test_off_the_default_branch_a_short_ref_prints_the_full_closes_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path, branch="feat/x")
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, "#12")])
+    res = _resolve(monkeypatch, root, NoForge())
+    assert res.exit_code == 0, res.output
+    assert f"Closes {OWN}#12" in res.output
+
+
+def test_off_the_default_branch_a_foreign_ref_gets_no_closes_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path, branch="feat/x")
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, "mallory/elsewhere#12")])
+    res = _resolve(monkeypatch, root, NoForge())
+    assert res.exit_code == 0, res.output
+    assert "Closes" not in res.output
+    assert "not closing" in res.output and "not this repo" in res.output
