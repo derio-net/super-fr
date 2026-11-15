@@ -20,3 +20,8 @@ ops/gate.py apply_phase skips when _closed() is not None; for a check-closed op 
 ### cfd4ca72d002 · root-cause · 1275: stage_7 keeps gate:tester; devops_brief ignores the gate record
 
 ops/gate.py stage_7 records no tester step remains and leaves the label; run/closeout.py devops_brief checks only that deliver is done. Where deliver applies gate:tester for a devops-only spec is not yet traced.
+
+<!-- fr:journal kind=finding scope=debug id=9496e9c666dd created=2026-11-15T17:13:20+00:00 state=fixed -->
+### 9496e9c666dd · finding [fixed] · 1399 fixed: ledger reads archived runs
+
+_run_text lists RUNS_DIR and ARCHIVED_RUNS_DIR. Test first: test_triage_exit_gates_drive.py::test_gh1399_an_archived_run_keeps_its_gated_rows (failed: rows == ()).
