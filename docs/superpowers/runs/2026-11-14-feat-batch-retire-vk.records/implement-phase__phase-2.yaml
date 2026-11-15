@@ -8,6 +8,12 @@ refactor:
   P2.T1: "The needle was named once as the module constant _VK_PROFILE_NEEDLE beside _refuse_vk_profile in the GREEN commit itself, with one call site; nothing further to clean"
   P2.T2: "cleanup_vk_residue is one contiguous function directly followed by the --install-bridge refusal (install.sh:185-204), called once at section 8; the only other VK lines are uninstall's kept removal, which the spec keeps as is"
 journal:
+  - kind: discovery
+    id: p2-suite-log-unwitnessed
+    phase: 2
+    title: "The phase 2 suite log is not attested: fr's witness does not expand $TMPDIR in the writing command"
+    body: |
+      The full suite ran last on a clean committed tree: 15969 passed, 128 skipped, exit=0. It wrote the log through `> $TMPDIR/p2-suite.log`, a literal variable, as the orchestrator's brief said. resolve's tests witness matches the command text and does not expand variables, so it refused the path, and `tests` was dropped from this record (it is optional here). deliver runs the full suite again with a literal path.
   - kind: decision
     id: p2-install-bridge-test-deleted
     phase: 2
@@ -60,4 +66,4 @@ resolves:
       test_runner_package_lists.py::test_install_bridge_names_no_fr_vk asserts exit 2, the text
       "VibeKanban support was removed", no packages/fr-vk in the output, and that no wrapper was
       written at VK_BRIDGE_WRAPPER_PATH.
-evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p2-suite.log}
+evidence: {}
