@@ -329,3 +329,88 @@ A deletion, two list-row removals and a regenerated README; the fr-dispatch skil
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 Docstring, comment and help-string rewording only, with no behaviour change; each edit is self-contained, so there is no shared structure to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · AGENTS.md's Bridge audit rule said "the remaining runner adapters" but left out fr_claude_cloud (phase 3)
+
+AGENTS.md:751-756. R8. The adapter is still shipped (fr_claude_cloud/runner.py:33).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Sixteen [fr-runner] test ids for tests deleted with the skill were still in .test_durations (phase 3)
+
+R2: .test_durations names no deleted test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · The dead-allowlist check had no planted negative test, and it ignored scan scoping (phase 3)
+
+tests/unit/test_vk_compat_removed.py. An entry for an unscanned path, or one that matched only an fr-runner line outside the runner prefixes, counted as live.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · The hostclient.py module docstring falsely said the triage verbs work against GitLab and Gitea (phase 3)
+
+hostclient.py:3-6. Triage builds client_for_backend('github') (triage_cmd.py:363,369).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · The VK paragraph in fr-isolation.md split the preserve/restore passage, so "The restore" referred to nothing (phase 3)
+
+docs/explainers/fr-isolation.md:218-226.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · Slug citations were allowlisted although they are not among R10's listed exceptions (phase 3)
+
+The citations in check.py, local.py and install.sh name the spec slug, which contains the VibeKanban needle.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · The dispatch explainer and the lifecycle page state each runner's units but cover no runner adapter source (phase 3)
+
+Their covers: lacked the fr-cncd, fr-herdr runner and fr-claude-cloud sources.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-15T01:53:00+00:00 phase=3 state=open review_scope=out -->
+### p3-r8 · finding [open] (reviewer: out of scope) · Entries for the test_install_bridge.py file deleted in phase 2 were still in .test_durations (phase 3)
+
+Phase 2 caused this, not phase 3. It is still this PR's leftover, so it was fixed with p3-r2.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-15T01:53:00+00:00 phase=3 -->
+### review-phase-3 · review · independent phase 3 review: 8 findings, 7 in scope and 1 out of scope, all fixed (phase 3)
+
+The reviewer confirmed that the R10 tripwire's roots and needles match the spec, that a new hit fails it, and that every allowlist entry is narrow. R6 is complete and its mirrors are in sync. Every R7 hunk is wording only, with each claim checked against the code. The R8 claims hold, including that cncd takes phase units while herdr and claude-cloud take run units only. No historical doc is touched, and both acceptance moves to ci are honest. The fixes are in 4f9cf3064, b9d4f41a3, 6f91392d7, c7c7b1b79, 01819a4ab, c4f5d67c2 and 6c96fa92c.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: AGENTS.md's Bridge audit rule said "the remaining runner adapters" but left out fr_claude_cloud (phase 3)
+
+AGENTS.md now names fr_claude_cloud.* (packages/fr-claude-cloud/src/). Commit 4f9cf3064.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Sixteen [fr-runner] test ids for tests deleted with the skill were still in .test_durations (phase 3)
+
+The 16 [fr-runner] ids are dropped. The keys for both files match the ids collect-only lists. Commit b9d4f41a3.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: The dead-allowlist check had no planted negative test, and it ignored scan scoping (phase 3)
+
+_flagged is now shared by _vk_residue and _dead_entries. A planted test covers an unscanned path, an fr-runner line outside the prefixes and a missing path, and it was red against the old logic. Commit 6f91392d7.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: The hostclient.py module docstring falsely said the triage verbs work against GitLab and Gitea (phase 3)
+
+The docstring now names the real multi-forge callers and says triage is GitHub-only. Commit c7c7b1b79.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: The VK paragraph in fr-isolation.md split the preserve/restore passage, so "The restore" referred to nothing (phase 3)
+
+The VK paragraph now comes after the restore paragraph, and the stamp is bumped. Commit 01819a4ab.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: Slug citations were allowlisted although they are not among R10's listed exceptions (phase 3)
+
+The three citations are reworded to 'spec 2026-11-14 R<n>, retiring the VK runner' and their ALLOWED entries are dropped, so R10 is unchanged. Commit c4f5d67c2.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: The dispatch explainer and the lifecycle page state each runner's units but cover no runner adapter source (phase 3)
+
+Both pages now cover packages/fr-cncd/src/**, packages/fr-herdr/src/fr_herdr/runner.py and packages/fr-claude-cloud/src/**, and both stamps are bumped. Commit 6c96fa92c.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-15T01:53:00+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: Entries for the test_install_bridge.py file deleted in phase 2 were still in .test_durations (phase 3)
+
+The test_install_bridge.py entry is dropped with p3-r2. Commit b9d4f41a3.
