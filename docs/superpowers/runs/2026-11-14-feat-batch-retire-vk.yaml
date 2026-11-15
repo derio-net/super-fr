@@ -3,7 +3,7 @@ run: 2026-11-14-feat-batch-retire-vk
 workflow: fr-goal@1
 branch: feat/batch-retire-vk
 started: '2026-11-14T21:14:23+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -156,8 +156,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-15T01:53:40+00:00'
+    state: done
+    at: '2026-11-15T02:23:20+00:00'
     units:
       step/lens-review:
         attempts:
@@ -171,6 +171,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 82a2f34f-741e-478c-935c-3730af67eecb
+          returned: '2026-11-15T02:23:20+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=a72d9fe4bdbb8e974,errors=a3df819b2c113810c,security=a0c6fe9521d74a64b,simplicity=a9b75de6dd734b11c,tests=a3fbbb9d4db79cee4
+          findings: l-security-r1,l-security-r2,l-security-r3,l-security-r4,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-simplicity-r1,l-simplicity-r2,l-simplicity-r3,l-simplicity-r4,l-simplicity-r5,l-simplicity-r6,l-simplicity-r7,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5,l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-docs-accuracy-r4,l-tests-r6
+          lenses: docs-accuracy=26:l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-docs-accuracy-r4;errors=22:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5;security=16:l-security-r1,l-security-r2,l-security-r3,l-security-r4;simplicity=37:l-simplicity-r1,l-simplicity-r2,l-simplicity-r3,l-simplicity-r4,l-simplicity-r5,l-simplicity-r6,l-simplicity-r7;tests=27:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
   deliver:
     state: pending
 fr_version: 7.0.0

@@ -414,3 +414,268 @@ Both pages now cover packages/fr-cncd/src/**, packages/fr-herdr/src/fr_herdr/run
 ### p3-r8-resolved · finding [fixed] · resolves p3-r8: Entries for the test_install_bridge.py file deleted in phase 2 were still in .test_durations (phase 3)
 
 The test_install_bridge.py entry is dropped with p3-r2. Commit b9d4f41a3.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · cleanup_vk_residue reported success and exited 0 when the in-place write failed, leaving a token-bearing .mcp.json.tmp
+
+scripts/install.sh:194-196. Under set -e, a failure in a non-final command of an && list does not abort.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · The .mcp.json.tmp sidecar was created at the umask mode, so it was world-readable while it held tokens
+
+scripts/install.sh:194.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · The cat write-back truncated .mcp.json before writing, so an interrupted write could lose every MCP server's config
+
+scripts/install.sh:195.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-security-r4 · finding [open] (reviewer: in scope) · The vk-bridge wrapper was deleted with no word about the crontab entry --install-bridge had operators add
+
+scripts/install.sh:199-202.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · The crontab line outlived the wrapper; a kept or legacy-path wrapper failed silently; the --install-bridge refusal gave no next step
+
+scripts/install.sh:198-206.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · The cleanup printed Removed after jq or cat failed, while a failed wrapper rm stopped the whole install
+
+scripts/install.sh:192-200.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · With jq absent, a leftover vibe_kanban entry was skipped with no warning
+
+scripts/install.sh:192-193.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · Issues already queued to the VK runner were stranded, and nothing reported them
+
+render.py:647-654, labels.py:296.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · fr apply --to vk read like a broken install rather than a removed runner
+
+apply_cmd.py:557-562.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r1 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-simplicity-r1 · finding [open] (reviewer: in scope) · _UnitLimitedRunner kept dead _board state and a false KeyError comment, and its docstring still said 'both shipped adapters'
+
+tests/unit/test_tick_workitem.py:1107-1125.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r2 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-simplicity-r2 · finding [open] (reviewer: in scope) · _UV_STUB still wrote a failing fr/bin/python that only the removed --install-bridge probe needed
+
+tests/integration/test_runner_package_lists.py:26-40.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r3 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-simplicity-r3 · finding [open] (reviewer: in scope) · test_install_bridge_names_no_fr_vk duplicated the TestVkResidue refusal test and carried dead setup
+
+tests/integration/test_runner_package_lists.py:94-108.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r4 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-simplicity-r4 · finding [open] (reviewer: in scope) · acceptance check and backfill folded twice
+
+acceptance_cmd.py:162-166, :1477-1484.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r5 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-simplicity-r5 · finding [open] (reviewer: in scope) · cleanup_vk_residue's && chain printed Removed and left the sidecar when jq or cat failed
+
+scripts/install.sh:192-196. The same defect as l-security-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r6 created=2026-11-15T02:23:19+00:00 state=open review_scope=out -->
+### l-simplicity-r6 · finding [open] (reviewer: out of scope) · Three per-adapter fr_dispatch-never-imports tests could be one loop over _ADAPTERS
+
+tests/unit/test_import_direction.py:92-181. These tests predate this change.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r7 created=2026-11-15T02:23:19+00:00 state=open review_scope=out -->
+### l-simplicity-r7 · finding [open] (reviewer: out of scope) · test_vk_bridge_discover.py tests fr_dispatch.discover_plans but keeps a vk name
+
+Renaming it needs acceptance amendments on two rows that cite it. The name predates this change.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · No test made dispatch raise a non-RuntimeError, so narrowing tick's except Exception stayed green
+
+fr_dispatch/__init__.py:564. The only such test was deleted with test_bridge_resilience's VK case.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · No surviving tick test used a GitLab /-/issues/N tracking URL
+
+The only one was deleted with test_vk_bridge_tick.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · test_apply_to_vk_is_unknown_runner tested the registry, not the fr apply --to vk command
+
+tests/unit/test_vk_compat_removed.py:229-236.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · The retired-row staleness test never asserted check's exit code
+
+tests/unit/test_acceptance_effective_readers.py:252.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · backfill's own=None fallback had no test
+
+acceptance_cmd.py:1480-1483.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · dispatch-lifecycle.md still named a close-on-merge backstop that went with fr-vk
+
+docs/reference/dispatch-lifecycle.md:50-51.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · The dispatch pages implied that a shipped scheduled bridge calls tick
+
+fr-dispatch.md:128-134, dispatch-lifecycle.md:29-30. Nothing shipped calls tick.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-15T02:23:19+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · fr-dispatch.md defined preflight too narrowly
+
+fr-dispatch.md:140. The capability and tracker blockers report the same reason (fr_dispatch/__init__.py:475-492).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-15T02:23:19+00:00 state=open review_scope=out -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: out of scope) · artifact-versioning.md and trigger.py described the refuse row as the removed VK bridge's
+
+Neither file was touched by this change, but it removed the bridge they describe.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-15T02:23:19+00:00 state=open review_scope=out -->
+### l-tests-r6 · finding [open] (reviewer: out of scope) · A scenario script's fixture commits leaked into the run worktree during a targeted pytest run
+
+During the lens fixes the worktree was found on a new branch feat/fixture, holding 5 empty 'fixture' commits by scenario@example.invalid (the author tests/scenarios/_common.sh sets). One of them was also on feat/batch-retire-vk. The fix agent switched back, soft-reset to 2875a66a5 (the commits were empty, so nothing was lost; verified in the reflog), and deleted feat/fixture. origin/feat/batch-retire-vk was never affected. The leaking test is not identified or fixed in this PR.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-15T02:23:19+00:00 -->
+### lens-review-1 · review · lens review under docs-accuracy, errors, security, simplicity and tests: 26 findings, 22 in scope
+
+One read-only reviewer per lens covered the whole diff 1a5aa6d96..HEAD. l-tests-r6 was found while applying the fixes and is recorded here as an out-of-scope finding. Every in-scope finding is fixed except l-errors-r3, which is refuted: jq is a hard prerequisite (install.sh:357), so the cleanup never runs without it. The out-of-scope findings are recorded, and l-docs-accuracy-r4 was fixed because it was cheap. After the fixes: affected tests 263 passed; the -k tick/acceptance/apply/vk/install run 1430 passed and 20 skipped; ruff, mypy, fr docs check, fr acceptance check and the three sync checks are clean.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: cleanup_vk_residue reported success and exited 0 when the in-place write failed, leaving a token-bearing .mcp.json.tmp
+
+d2c807a90: the edit is one guarded unit. A failure warns on stderr, and the install continues.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: The .mcp.json.tmp sidecar was created at the umask mode, so it was world-readable while it held tokens
+
+d2c807a90: the sidecar is created under umask 077 after any stale one is removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: The cat write-back truncated .mcp.json before writing, so an interrupted write could lose every MCP server's config
+
+d2c807a90: the sidecar must parse before the write-back. When the write-back fails, the 0600 copy is kept and named in the warning.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-security-r4 -->
+### l-security-r4-resolved · finding [fixed] · resolves l-security-r4: The vk-bridge wrapper was deleted with no word about the crontab entry --install-bridge had operators add
+
+d2c807a90: when crontab -l names the wrapper or vk-bridge, a hint prints. The crontab is never edited.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: The crontab line outlived the wrapper; a kept or legacy-path wrapper failed silently; the --install-bridge refusal gave no next step
+
+d2c807a90: the crontab hint prints whether the wrapper was removed or kept, and the --install-bridge refusal names the crontab entry and the cleanup.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: The cleanup printed Removed after jq or cat failed, while a failed wrapper rm stopped the whole install
+
+d2c807a90: both failures warn, and the install continues. Tests cover a read-only .mcp.json and an undeletable wrapper.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-15T02:23:19+00:00 state=refuted resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [refuted] · resolves l-errors-r3: With jq absent, a leftover vibe_kanban entry was skipped with no warning
+
+jq is a hard prerequisite: require_prereqs jq uv rsync git (scripts/install.sh:357) aborts the install before cleanup_vk_residue runs.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: Issues already queued to the VK runner were stranded, and nothing reported them
+
+893b8d9bc, 733a91d13: the dispatch docs and the change fragment say that such issues are never picked up. Re-queue them with fr apply <plan-dir> --to <runner> --yes, or clear them with fr undispatch <plan-dir> --yes.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: fr apply --to vk read like a broken install rather than a removed runner
+
+c9f751675: _RETIRED_RUNNERS appends 'the VK runner was removed (super-fr#1459)'. The exit code stays 2.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r1-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-simplicity-r1 -->
+### l-simplicity-r1-resolved · finding [fixed] · resolves l-simplicity-r1: _UnitLimitedRunner kept dead _board state and a false KeyError comment, and its docstring still said 'both shipped adapters'
+
+6d033fabd: it returns set(), and the comment and docstring are fixed.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r2-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-simplicity-r2 -->
+### l-simplicity-r2-resolved · finding [fixed] · resolves l-simplicity-r2: _UV_STUB still wrote a failing fr/bin/python that only the removed --install-bridge probe needed
+
+0fe0cde44: the stub and its comment are removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r3-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-simplicity-r3 -->
+### l-simplicity-r3-resolved · finding [fixed] · resolves l-simplicity-r3: test_install_bridge_names_no_fr_vk duplicated the TestVkResidue refusal test and carried dead setup
+
+0fe0cde44: it is reduced to the bare refusal. It is kept because installer-removes-vk-residue cites it.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r4-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-simplicity-r4 -->
+### l-simplicity-r4-resolved · finding [fixed] · resolves l-simplicity-r4: acceptance check and backfill folded twice
+
+6d1c0f823: _load_effective keeps _load's refusals, and each command folds once.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r5-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-simplicity-r5 -->
+### l-simplicity-r5-resolved · finding [fixed] · resolves l-simplicity-r5: cleanup_vk_residue's && chain printed Removed and left the sidecar when jq or cat failed
+
+d2c807a90: the edit is rewritten as one guarded unit.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r6-resolved created=2026-11-15T02:23:19+00:00 state=open resolves=l-simplicity-r6 out_of_scope=true -->
+### l-simplicity-r6-resolved · finding [out-of-scope] · resolves l-simplicity-r6: Three per-adapter fr_dispatch-never-imports tests could be one loop over _ADAPTERS
+
+Predates this change or lies outside it; recorded for a later sweep.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r7-resolved created=2026-11-15T02:23:19+00:00 state=open resolves=l-simplicity-r7 out_of_scope=true -->
+### l-simplicity-r7-resolved · finding [out-of-scope] · resolves l-simplicity-r7: test_vk_bridge_discover.py tests fr_dispatch.discover_plans but keeps a vk name
+
+Predates this change or lies outside it; recorded for a later sweep.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: No test made dispatch raise a non-RuntimeError, so narrowing tick's except Exception stayed green
+
+6d033fabd: FakeRunner takes dispatch_error. A TimeoutError test goes red under except RuntimeError, which was checked with a reverted edit.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: No surviving tick test used a GitLab /-/issues/N tracking URL
+
+6d033fabd: a FakeRunner tick test uses a gitlab.example.com URL and asserts synced == 1 and the (repo, number).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: test_apply_to_vk_is_unknown_runner tested the registry, not the fr apply --to vk command
+
+c9f751675: a CliRunner test asserts exit 2, the unknown-runner line, the removal note and the runner list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: The retired-row staleness test never asserted check's exit code
+
+4626124e2: it asserts exit 0.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: backfill's own=None fallback had no test
+
+4626124e2: backfill is tested with no fragment and no github origin, and cited_spec_paths(rows, None) has a unit test.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: dispatch-lifecycle.md still named a close-on-merge backstop that went with fr-vk
+
+893b8d9bc: the clause is dropped. undispatch's refusal under forge.issues: off is verified at undispatch_cmd.py:70.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: The dispatch pages implied that a shipped scheduled bridge calls tick
+
+893b8d9bc: the pages now say that the deployment running a runner supplies the scheduled caller.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: fr-dispatch.md defined preflight too narrowly
+
+893b8d9bc: the definition is widened.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-15T02:23:19+00:00 state=fixed resolves=l-docs-accuracy-r4 -->
+### l-docs-accuracy-r4-resolved · finding [fixed] · resolves l-docs-accuracy-r4: artifact-versioning.md and trigger.py described the refuse row as the removed VK bridge's
+
+ecc68d6d2: both are reworded to describe a bridge or daemon checkout, and the OpenCode mirror is regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-15T02:23:19+00:00 state=open resolves=l-tests-r6 out_of_scope=true -->
+### l-tests-r6-resolved · finding [out-of-scope] · resolves l-tests-r6: A scenario script's fixture commits leaked into the run worktree during a targeted pytest run
+
+Predates this change or lies outside it; recorded for a later sweep.
