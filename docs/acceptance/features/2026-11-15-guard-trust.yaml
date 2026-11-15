@@ -59,3 +59,11 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: hooks-trust-absolute-path-only
+    op: reword
+    base: 0
+    acceptance: Neither git resolver, and no super-fr hook or OpenCode plugin module
+      that starts fr, runs a binary reached only through a relative PATH entry
+    why: 'spec-review f4: bare git calls in hook scripts are a non-goal (d2), so the
+      claim is narrowed to what R3/R4 build'
