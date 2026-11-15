@@ -250,6 +250,7 @@ def test_the_staleness_guard_counts_a_retired_rows_origin(
     check = _cli(root, monkeypatch, "check")
     backfill = _cli(root, monkeypatch, "backfill")
 
+    assert check.exit_code == 0, check.output
     assert "staleness" not in check.output, check.output
     # backfill reads the same citation set, so it offers no rows for removed behaviour
     assert backfill.exit_code == 0, backfill.output
@@ -266,3 +267,41 @@ def test_backfill_counts_a_logical_citation(
         backfill = _cli(root, monkeypatch, "backfill")
         assert backfill.exit_code == 0, backfill.output
         assert "(none — every Test Plan spec is cited)" in backfill.output, backfill.output
+
+
+def test_backfill_without_a_resolvable_identity_still_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fragment always carries `repo:` (the model requires it), so the identity is
+    unresolvable only with no fragment and no github origin: backfill must not fail
+    on it, and lists the Test-Plan spec as uncited."""
+    root = tmp_path / "anon"
+    spec = root / LIVE
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# Widget\n\n## Test Plan\n\n1. x\n")
+    (root / FRAGMENTS_REL).mkdir(parents=True)
+    _git(root, "init", "-q", "-b", "main")
+    clear_fold_cache()
+
+    backfill = _cli(root, monkeypatch, "backfill")
+
+    assert backfill.exit_code == 0, backfill.output
+    assert LIVE in backfill.output, backfill.output
+
+
+def test_with_no_identity_a_path_origin_of_any_repo_counts_as_cited() -> None:
+    """The other half of the no-identity case, which no fragment can express: with
+    `own` None, `cited_spec_paths` keeps a path origin whatever repo it names."""
+    from fr.acceptance.check import cited_spec_paths
+    from fr.acceptance.model import Row
+
+    row = Row(
+        id="r",
+        capability="c",
+        acceptance="a",
+        origin=(f"elsewhere:{LIVE}#R1",),
+        status="not-implemented",
+    )
+
+    assert LIVE in cited_spec_paths([row], None)
+    assert LIVE not in cited_spec_paths([row], "widget")
