@@ -227,3 +227,140 @@ def test_apply_to_vk_is_unknown_runner() -> None:
     assert "vk" not in runner_names()
     with pytest.raises(RunnerLoadError, match="not installed"):
         runner_units("vk")
+
+
+# --- spec 2026-11-14-retire-vibekanban R10: no VK residue in shipped sources --------
+
+_VK_NEEDLE = re.compile(r"fr_vk|fr-vk|vibe_kanban|vibe.?kanban", re.IGNORECASE)
+_RUNNER_NEEDLE = re.compile(r"fr-runner", re.IGNORECASE)
+_VK_TOP_FILES = ("pyproject.toml", "HERMES.md")
+_VK_TOP_DIRS = ("plugins", "scripts", ".devcontainer", ".github", ".fr")
+_RUNNER_PREFIXES = ("plugins/", "scripts/", "packages/fr/src/fr/commands/")
+
+# (path, line regex): the only lines that may still name VK. Each one is kept on
+# purpose; an entry that matches no line fails
+# test_vk_residue_allowlist_has_no_dead_entries, so none outlives what it excuses.
+ALLOWED: tuple[tuple[str, str], ...] = (
+    # R4: the detection string for a profile scaffolded before the removal, and the
+    # refusal that names it; the comment above it cites this spec by slug.
+    ("packages/fr/src/fr/isolation/local.py", r"^# 2026-11-14-retire-vibekanban R4\)\.$"),
+    (
+        "packages/fr/src/fr/isolation/local.py",
+        r'^_VK_PROFILE_NEEDLE = "subdirectory=packages/fr-vk"$',
+    ),
+    (
+        "packages/fr/src/fr/isolation/local.py",
+        r"Refuse a devcontainer config that still installs fr-vk,",
+    ),
+    (
+        "packages/fr/src/fr/isolation/local.py",
+        r'f"\{config\} installs fr-vk, but VK support was removed',
+    ),
+    # R5: the installer removes what earlier installs wrote for the VK runner (the
+    # vibe_kanban MCP entry, an fr-written bridge wrapper) and refuses --install-bridge.
+    ("scripts/install.sh", r"^# Earlier installs wrote these for the VibeKanban runner,"),
+    ("scripts/install.sh", r"^# 2026-11-14-retire-vibekanban R5\)\."),
+    ("scripts/install.sh", r"jq -e '\.mcpServers\.vibe_kanban'"),
+    ("scripts/install.sh", r"jq 'del\(\.mcpServers\.vibe_kanban\)'"),
+    ("scripts/install.sh", r'echo "  Removed vibe_kanban \(VibeKanban support was removed\)'),
+    ("scripts/install.sh", r"^  # `install\.sh --install-bridge` wrote: exec .* -m fr_vk\.bridge"),
+    ("scripts/install.sh", r"grep -qE '\^exec \.\*-m fr_vk\\\.bridge"),
+    ("scripts/install.sh", r'echo "  Removed \$vk_wrapper \(VibeKanban support was removed\)"'),
+    (
+        "scripts/install.sh",
+        r'echo "VibeKanban support was removed; there is no bridge to install\."',
+    ),
+    ("scripts/install.sh", r"^# 8\. Remove what earlier installs wrote for the VibeKanban runner"),
+    # R9: the staleness guard's docstring cites this spec by slug.
+    (
+        "packages/fr/src/fr/acceptance/check.py",
+        r"Plan's outcome \(spec 2026-11-14-retire-vibekanban R9\)",
+    ),
+)
+
+
+def _vk_scanned(rel: str) -> bool:
+    parts = rel.split("/")
+    if rel in _VK_TOP_FILES or parts[0] in _VK_TOP_DIRS:
+        return True
+    return len(parts) > 3 and parts[0] == "packages" and parts[2] == "src"
+
+
+def _vk_residue(
+    root: Path, rels: list[str], allowed: tuple[tuple[str, str], ...] = ALLOWED
+) -> list[str]:
+    """Every scanned line naming VK (or fr-runner where it is banned) that no
+    (path, regex) pair in *allowed* excuses, as `path:line: text`."""
+    hits: list[str] = []
+    for rel in sorted(rels):
+        vk = _vk_scanned(rel)
+        runner = rel.startswith(_RUNNER_PREFIXES)
+        if not (vk or runner):
+            continue
+        try:
+            lines = (root / rel).read_text(encoding="utf-8").splitlines()
+        except (UnicodeDecodeError, OSError):
+            continue
+        pats = [re.compile(p) for path, p in allowed if path == rel]
+        for n, line in enumerate(lines, 1):
+            named = (vk and _VK_NEEDLE.search(line)) or (runner and _RUNNER_NEEDLE.search(line))
+            if named and not any(p.search(line) for p in pats):
+                hits.append(f"{rel}:{n}: {line.strip()[:120]}")
+    return hits
+
+
+def _tracked() -> list[str]:
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "-z"], capture_output=True, check=True
+    ).stdout.decode()
+    return [p for p in out.split("\0") if p]
+
+
+def test_no_vk_residue_in_shipped_sources() -> None:
+    assert _vk_residue(REPO, _tracked()) == []
+
+
+def test_vk_residue_allowlist_has_no_dead_entries() -> None:
+    dead = []
+    for rel, pat in ALLOWED:
+        path = REPO / rel
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if not any(re.search(pat, line) for line in text.splitlines()):
+            dead.append((rel, pat))
+    assert dead == []
+
+
+def _plant(tmp_path: Path, rel: str, text: str) -> list[str]:
+    target = tmp_path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text)
+    return [rel]
+
+
+def test_vk_residue_fails_on_a_planted_fr_vk_line(tmp_path: Path) -> None:
+    rels = _plant(tmp_path, "packages/fr/src/fr/x.py", "import fr_vk\n")
+    assert _vk_residue(tmp_path, rels) == ["packages/fr/src/fr/x.py:1: import fr_vk"]
+
+
+def test_vk_residue_fails_on_a_planted_vibekanban_line_in_plugins(tmp_path: Path) -> None:
+    rels = _plant(tmp_path, "plugins/p/SKILL.md", "ok\nthe VibeKanban adapter\n")
+    assert _vk_residue(tmp_path, rels) == ["plugins/p/SKILL.md:2: the VibeKanban adapter"]
+
+
+def test_vk_residue_fails_on_fr_runner_only_where_it_is_banned(tmp_path: Path) -> None:
+    rels = _plant(tmp_path, "scripts/x.yaml", "fr-runner: x\n")
+    rels += _plant(tmp_path, "packages/fr/src/fr/y.py", "# fr-runner\n")
+    assert _vk_residue(tmp_path, rels) == ["scripts/x.yaml:1: fr-runner: x"]
+
+
+def test_vk_residue_skips_unscanned_roots(tmp_path: Path) -> None:
+    rels = _plant(tmp_path, "docs/x.md", "fr_vk\n") + _plant(tmp_path, "tests/y.py", "fr_vk\n")
+    assert _vk_residue(tmp_path, rels) == []
+
+
+def test_vk_residue_passes_an_allowlisted_line_only(tmp_path: Path) -> None:
+    rels = _plant(tmp_path, "scripts/a.sh", "keep fr_vk here\ndrop fr_vk here\n")
+    allowed = (("scripts/a.sh", r"^keep fr_vk"),)
+    assert _vk_residue(tmp_path, rels, allowed) == ["scripts/a.sh:2: drop fr_vk here"]
