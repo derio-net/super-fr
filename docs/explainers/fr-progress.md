@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-14 still true, fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-15 owed-archive-side-effects phase 1, a refused archive writes nothing (page now says so); fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## Why is there nothing to sync?
@@ -116,7 +116,8 @@ fr archive docs/superpowers/plans/<name>
 The move is a gate-checked `git mv` into `docs/superpowers/implemented/plans/`. The gate
 wants every phase complete: a dispatched phase by evidence on GitHub, an agentic one
 fully ticked and on the default branch, a manual one ticked locally. `--force` overrides
-for one plan. The owning spec follows once every plan in its Implementation Plans table has reached the
+for one plan. A refused archive changes nothing: it stages no move and records no owed
+entry. The owning spec follows once every plan in its Implementation Plans table has reached the
 archive.
 
 fr stages the moves and does not commit them, so you commit them. `--branch <merged-branch>`
