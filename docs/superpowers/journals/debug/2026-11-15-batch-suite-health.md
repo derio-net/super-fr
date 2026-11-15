@@ -100,3 +100,8 @@ Both CI failures were real double-holds (OVERLAP logged; the create stub's rmdir
 ### lock-double-hold-resolved · finding [deferred → derio-net/super-fr#1463] · resolves lock-double-hold: #1463: worktree hook lock double-hold not reproduced
 
 Not reproduced (200 loaded trials, macOS and Linux); split out of batch suite-health. #1463 stays open.
+
+<!-- fr:journal kind=finding scope=debug id=multi-root-cause-resolved created=2026-11-15T10:40:11+00:00 state=fixed resolves=multi-root-cause -->
+### multi-root-cause-resolved · finding [fixed] · resolves multi-root-cause: The batch spans several independent root causes
+
+Each cause fixed on its own with its own test, per the operator's decision 1313d85ab59b: ci.yml hygiene (#1289, #1288), load-aware -n auto (#1225), visual clock and fake-clock lock wait (#1280), 7 shards (#1428); #1463 deferred.
