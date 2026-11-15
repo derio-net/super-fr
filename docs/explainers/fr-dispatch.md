@@ -16,7 +16,7 @@ covers:
   - packages/fr-cncd/src/**
   - packages/fr-herdr/src/fr_herdr/runner.py
   - packages/fr-claude-cloud/src/**
-reviewed: 2026-11-15 covers the runner adapters whose units the page states
+reviewed: 2026-11-15 no shipped tick caller; preflight reasons; stranded runner:vk issues
 ---
 
 ## Why does the plan stay the source of truth?
@@ -125,20 +125,22 @@ The runner is the autonomous consumer of queued phases. The framework half is th
 to a runner through the `Runner` protocol. Runners register through the `fr.runners`
 entry-point group, so adding one edits no existing package.
 
-`tick` is a library function, not an `fr` command: a runner's own bridge process calls it
-on a schedule. `fr apply --to` and `fr triage batch dispatch` call other parts of
+`tick` is a library function, not an `fr` command, and super-fr ships nothing that calls
+it. The deployment that runs a runner supplies the scheduled process that calls
+`fr_dispatch.tick`. `fr apply --to` and `fr triage batch dispatch` call other parts of
 `fr_dispatch` (its runner registry, item graph and reachability gate).
 
 When a queued phase sits still, work through these, in order:
 
-1. **Is the bridge ticking?** A bridge that passes `tick` a metrics pusher stamps a
-   heartbeat gauge, `<namespace>_heartbeat_last_success_timestamp`, at the end of each
+1. **Is anything calling `tick`?** If your scheduled process passes `tick` a metrics
+   pusher, `tick` stamps a heartbeat gauge, `<namespace>_heartbeat_last_success_timestamp`, at the end of each
    tick. Each failure increments `<namespace>_failure_total` with a `reason`: `preflight`,
    `repo_gate`, `unknown_repo`, `unit_mismatch`, `backend_error` or `gh_error`. Plan
    discovery adds `stale_artifact` for a plan whose files this `fr` cannot read.
 
-   `preflight` means the runner refused the whole tick, for example `cncd` with no
-   `CNCD_URL`. `unknown_repo` means the runner refused the item, usually because of its
+   `preflight` means the whole tick was refused before dispatch: a missing required
+   capability or tracker state, or the runner's own preflight (for example `cncd` with no
+   `CNCD_URL`). `unknown_repo` means the runner refused the item, usually because of its
    repo. `unit_mismatch` means an issue has the label of a runner that never takes that
    unit. `fr apply --to` refuses that up front, so look for labels set by hand or by an
    older `fr`.
@@ -147,6 +149,11 @@ When a queued phase sits still, work through these, in order:
    are on the default branch.
 3. **Dispatched in error?** `fr undispatch <plan-dir> --yes` closes the issues. It leaves
    the runner's own records alone: reaping them is the runner's job.
+4. **Is the issue labelled `runner:vk`?** The VK runner was removed, so nothing picks
+   those issues up. Queue them to a runner that remains with
+   `fr apply <plan-dir> --to <runner> --yes`, which swaps the label, or close them with
+   `fr undispatch <plan-dir> --yes`. If an issue also carries `fr:synced`, remove that
+   label too, or the new runner skips it as already handed over.
 
 ## Which runners are there?
 
