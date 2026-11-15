@@ -275,7 +275,10 @@ ALLOWED: tuple[tuple[str, str], ...] = (
     ("scripts/install.sh", r"^# Earlier installs wrote these for the VibeKanban runner,"),
     ("scripts/install.sh", r"jq -e '\.mcpServers\.vibe_kanban'"),
     ("scripts/install.sh", r"jq 'del\(\.mcpServers\.vibe_kanban\)'"),
-    ("scripts/install.sh", r'^  local warn="WARNING: could not remove vibe_kanban from \$MCP_CONFIG;'),
+    (
+        "scripts/install.sh",
+        r'^  local warn="WARNING: could not remove vibe_kanban from \$MCP_CONFIG;',
+    ),
     ("scripts/install.sh", r'echo "  Removed vibe_kanban \(VibeKanban support was removed\)'),
     ("scripts/install.sh", r"^  # `install\.sh --install-bridge` wrote: exec .* -m fr_vk\.bridge"),
     ("scripts/install.sh", r"grep -qE '\^exec \.\*-m fr_vk\\\.bridge"),
