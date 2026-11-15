@@ -26,5 +26,20 @@ identity=${identity%%$'\n'*}
 
 # Single-quote the value; an embedded ' becomes '\''.
 quoted=${identity//\'/\'\\\'\'}
-printf "export FR_HARNESS_FR='%s'\n" "$quoted" >>"$CLAUDE_ENV_FILE" 2>/dev/null || exit 0
+line=$(printf "export FR_HARNESS_FR='%s'" "$quoted")
+
+# One pin per session (super-fr#1259). ASSUMPTION, from the layout observed in Claude
+# Code: $CLAUDE_ENV_FILE is one of several `sessionstart-hook-*.sh` files in one
+# directory, and the harness sources ALL of them before each Bash command, in order. A
+# resumed session keeps the earlier hooks' files, so an old pin there would be sourced
+# and the new one lose or conflict. So append the new pin to every sibling that already
+# holds a pin (a plain file, never a symlink, never one that has none), then to ours.
+# Append only, never rewrite or create; a failure on any one file is ignored.
+envdir=$(dirname "$CLAUDE_ENV_FILE")
+for sibling in "$envdir"/sessionstart-hook-*.sh; do
+  [ -f "$sibling" ] && [ ! -L "$sibling" ] || continue
+  grep -q '^export FR_HARNESS_FR=' "$sibling" 2>/dev/null || continue
+  printf '%s\n' "$line" >>"$sibling" 2>/dev/null || true
+done
+printf '%s\n' "$line" >>"$CLAUDE_ENV_FILE" 2>/dev/null || exit 0
 exit 0

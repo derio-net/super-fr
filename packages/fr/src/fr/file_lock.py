@@ -30,6 +30,7 @@ def exclusive_file_lock(path: Path) -> Iterator[None]:
             probe = subprocess.run(
                 [
                     sys.executable,
+                    "-P",
                     "-c",
                     "import fcntl,sys\nwith open(sys.argv[1], 'a') as f:\n"
                     " try: fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"

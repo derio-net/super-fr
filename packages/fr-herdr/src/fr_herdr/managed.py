@@ -133,6 +133,7 @@ def pane_lock(pane: str) -> Iterator[None]:
             probe = subprocess.run(
                 [
                     sys.executable,
+                    "-P",
                     "-c",
                     "import fcntl,sys\n"
                     "with open(sys.argv[1], 'a') as f:\n"

@@ -91,3 +91,50 @@ def test_an_fr_too_old_to_know_identity_writes_nothing(tmp_path: Path) -> None:
     result = run_hook(f"{bin_dir}:/usr/bin:/bin", env_file)
     assert result.returncode == 0
     assert not env_file.exists() or env_file.read_text() == ""
+
+
+def test_the_pin_reaches_every_pinned_sibling_hook_file(tmp_path: Path) -> None:
+    """R7 (#1259): Claude Code sources every sessionstart-hook-*.sh in the session-env
+    dir; a later hook's old pin must not outlive the new one. Only plain files that
+    already hold a pin are touched, and nothing new is created."""
+    bin_dir = tmp_path / "bin"
+    _fake_fr(bin_dir, f"printf '%s\\n' \"{IDENTITY}\"")
+    session = tmp_path / "session-env"
+    session.mkdir()
+    old = "export FR_HARNESS_FR='old 1.0.0 /x'\n"
+    (session / "sessionstart-hook-8.sh").write_text(old)
+    other = "export A=1\n" + old + "export B=2\n"
+    (session / "sessionstart-hook-3.sh").write_text(other)
+    plain = "export C=3\n"
+    (session / "sessionstart-hook-4.sh").write_text(plain)
+    outside = tmp_path / "outside.sh"
+    outside.write_text(old)
+    (session / "sessionstart-hook-9.sh").symlink_to(outside)
+    env_file = session / "sessionstart-hook-5.sh"
+    before = sorted(p.name for p in session.iterdir())
+
+    result = run_hook(f"{bin_dir}:/usr/bin:/bin", env_file)
+    assert result.returncode == 0, result.stderr
+    for name in ("sessionstart-hook-8.sh", "sessionstart-hook-3.sh", "sessionstart-hook-5.sh"):
+        assert _sourced_pin(session / name) == IDENTITY
+    assert (session / "sessionstart-hook-3.sh").read_text().startswith(other)
+    assert (session / "sessionstart-hook-4.sh").read_text() == plain
+    assert outside.read_text() == old
+    assert sorted(p.name for p in session.iterdir()) == sorted([*before, env_file.name])
+
+
+def test_an_unwritable_sibling_is_skipped_and_the_hook_still_exits_zero(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    _fake_fr(bin_dir, f"printf '%s\\n' \"{IDENTITY}\"")
+    session = tmp_path / "session-env"
+    session.mkdir()
+    locked = session / "sessionstart-hook-1.sh"
+    locked.write_text("export FR_HARNESS_FR='old 1.0.0 /x'\n")
+    locked.chmod(0o444)
+    env_file = session / "sessionstart-hook-2.sh"
+    try:
+        result = run_hook(f"{bin_dir}:/usr/bin:/bin", env_file)
+    finally:
+        locked.chmod(0o644)
+    assert result.returncode == 0, result.stderr
+    assert _sourced_pin(env_file) == IDENTITY

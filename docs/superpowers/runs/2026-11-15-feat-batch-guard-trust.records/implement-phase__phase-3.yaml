@@ -1,0 +1,14 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-guard-trust
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2, P3.T4.S1]
+refactor:
+  P3.T1: "one small loop added to a short hook; nothing to clean"
+  P3.T2: "one message string changed; nothing to clean"
+  P3.T3: "one argv element added to each probe; nothing to clean"
+  P3.T4: "comment-only change; nothing to clean"
+journal: []
+resolves: []
+evidence: {tests: ci}

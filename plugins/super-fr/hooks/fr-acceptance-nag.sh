@@ -71,10 +71,11 @@ if settings=$(cd "$repo_root" && "$fr" settings show --json 2>/dev/null); then
   fi
 fi
 
-# Capture stderr separately: `fr acceptance status` is exempt from the
-# artifact-migration gate, but `fr` still refuses when it cannot establish the
-# repo's state — and swallowing that made the nag disappear with no explanation
-# at the exact moment the operator most needed to know why (review r5-c5).
+# Capture stderr separately: `fr acceptance status` is NOT exempt from the
+# artifact-migration gate (super-fr#1279), so on the way in the gate may migrate and
+# commit (one `fr: migrated and committed` notice) or refuse. Stderr is captured so
+# both outcomes are relayed to the session, rather than swallowed and the nag
+# vanishing with no explanation (review r5-c5).
 err_file=$(mktemp) || exit 0
 out=$(cd "$repo_root" && "$fr" acceptance status --brief 2>"$err_file") || {
   err=$(cat "$err_file" 2>/dev/null)
