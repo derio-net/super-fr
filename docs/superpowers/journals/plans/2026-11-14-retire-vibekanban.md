@@ -679,3 +679,18 @@ ecc68d6d2: both are reworded to describe a bridge or daemon checkout, and the Op
 ### l-tests-r6-resolved · finding [out-of-scope] · resolves l-tests-r6: A scenario script's fixture commits leaked into the run worktree during a targeted pytest run
 
 Predates this change or lies outside it; recorded for a later sweep.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r6-resolved-2 created=2026-11-15T03:36:41+00:00 state=open resolves=l-simplicity-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1466 -->
+### l-simplicity-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1466] · resolves l-simplicity-r6: Three per-adapter fr_dispatch-never-imports tests could be one loop over _ADAPTERS
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1466.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r7-resolved-2 created=2026-11-15T03:36:41+00:00 state=open resolves=l-simplicity-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1467 -->
+### l-simplicity-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1467] · resolves l-simplicity-r7: test_vk_bridge_discover.py tests fr_dispatch.discover_plans but keeps a vk name
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1467.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved-2 created=2026-11-15T03:36:41+00:00 state=open resolves=l-tests-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1468 -->
+### l-tests-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1468] · resolves l-tests-r6: A scenario script's fixture commits leaked into the run worktree during a targeted pytest run
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1468.
