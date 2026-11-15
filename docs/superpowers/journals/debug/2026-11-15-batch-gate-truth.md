@@ -15,3 +15,8 @@ commands/gate_cmd.py: the pass path prints the retry line when report.errors and
 ### b9082aeb2326 · root-cause · 1293: apply_phase skips a live-DONE op without recording it
 
 ops/gate.py apply_phase skips when _closed() is not None; for a check-closed op that reads only the live status row, so fr ops apply (which records done, R7) never runs. holds.devops_blockers then reports never checked and refuses fr gate pass at stage 6: it blocks, not only mislabels.
+
+<!-- fr:journal kind=root-cause scope=debug id=cfd4ca72d002 created=2026-11-15T11:06:17+00:00 -->
+### cfd4ca72d002 · root-cause · 1275: stage_7 keeps gate:tester; devops_brief ignores the gate record
+
+ops/gate.py stage_7 records no tester step remains and leaves the label; run/closeout.py devops_brief checks only that deliver is done. Where deliver applies gate:tester for a devops-only spec is not yet traced.
