@@ -1,0 +1,61 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-15-guard-trust
+repo: derio-net/super-fr
+rows:
+  - id: archive-keeps-live-plans-root
+    capability: fr archive
+    acceptance: Archiving the last live plan leaves a tracked docs/superpowers/plans/.gitkeep,
+      so the live plans root exists in every fresh clone
+    origin:
+    - spec:2026-11-15-guard-trust#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-survives-last-plan-archive
+    capability: fr-isolation edit gate
+    acceptance: A repo whose only plans are archived stays fr-enabled on Claude Code,
+      Hermes and OpenCode in every fresh clone, so a base-clone edit is still denied
+    origin:
+    - spec:2026-11-15-guard-trust#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: hooks-trust-absolute-path-only
+    capability: hook binary resolution
+    acceptance: A git or fr reachable only through a relative PATH entry is never run
+      by a super-fr hook or the OpenCode plugin
+    origin:
+    - spec:2026-11-15-guard-trust#R3
+    - spec:2026-11-15-guard-trust#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: lock-probe-ignores-cwd
+    capability: file lock probes
+    acceptance: The fr and fr-herdr lock probes never import a Python module from their
+      working directory
+    origin:
+    - spec:2026-11-15-guard-trust#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: resume-repins-fr-binary
+    capability: fr binary pin
+    acceptance: A resumed Claude Code session is pinned to the fr installed at resume,
+      and the upgrade warning gives advice that works
+    origin:
+    - spec:2026-11-15-guard-trust#R7
+    - spec:2026-11-15-guard-trust#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none

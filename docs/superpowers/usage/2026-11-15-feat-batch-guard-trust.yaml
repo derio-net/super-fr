@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-15-feat-batch-guard-trust
+captures:
+- host: h-0a0f85d7
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-15T16:55:39+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: b83407b1-d50a-45a9-8b70-4834a24ffcfa
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 44
+        cache_write: 282719
+        cache_read: 2700625
+        output: 20450
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 7
+      other:
+        usd: null
+        turns: 6
+      paperwork:
+        usd: null
+        turns: 7
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 95292
+        cache_read: 135759
+        output: 543
+      brainstorm:
+        usd: null
+        turns: 18
+        input: 38
+        cache_write: 187427
+        cache_read: 2564866
+        output: 19907
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 95292
+          cache_read: 135759
+          output: 543
+        brainstorm:
+          usd: null
+          turns: 18
+          input: 38
+          cache_write: 187427
+          cache_read: 2564866
+          output: 19907
