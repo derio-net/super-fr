@@ -30,3 +30,8 @@ change-fragment and docs-check read BASE_REF from env: instead of interpolating 
 ### a5654773c2d5 · ruled-out · #1428 is not scenario-test CPU contention skewing the split
 
 Plan durations balance every py3.14 shard at 824s, yet actual sums ran 597-1104s (run 43639946152). Across three main runs the shard slowdown does not follow how many scenario seconds the shard held (shard 6, 167s planned scenarios: x1.34 in one run, x0.74 in another), and the non-scenario tests in a shard slow by exactly the shard's own factor. Shard time therefore tracks the runner's speed (x0.72 to x1.40), not the mix. The split is sound.
+
+<!-- fr:journal kind=root-cause scope=debug id=ci-shard-tail created=2026-11-15T07:46:48+00:00 -->
+### ci-shard-tail · root-cause · #1428: shard wall clock = runner speed x work, plus a late long-test tail
+
+Per shard the pytest step is ~35 s of collection, then serial work / 4 workers, plus a tail where xdist's load scheduler hands a long scenario test out late and it runs alone (shard py3.14/2: last 8% of progress took 77 s; work/4 = 242 s, tests ran 293 s). Runner speed varies x0.72-x1.40 between runs and scales every test equally. LPT simulated on that run's durations reaches work/4 on every shard (saves 16-52 s). Fix: tests/_shard_order.py + conftest hooks order a --splits run longest-first with --maxschedchunk 1. Whether a 7th shard is still needed is decided from this PR's CI timings.
