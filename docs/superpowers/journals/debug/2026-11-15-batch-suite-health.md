@@ -55,3 +55,8 @@ _advance records the opened stamp; _fresh_shot sets the file's mtime to it, so t
 ### stuck-lock-clock · finding [fixed] · stuck index-lock test: the wait runs on a fake clock
 
 Root cause: the test timed the whole commit_records call on the real clock, so the git calls before the wait counted against the 5 s bound. Repro: a 4 s delay before the first index_lock_held call fails it (6.27 s vs 5.0). Now fr.artifacts.commit.time is a fake clock (its only use is the wait loop): the test asserts the commit is refused, HEAD unchanged, and the time slept is in [_LOCK_WAIT_SECONDS, +2 polls). It passes with the 4 s repro delay.
+
+<!-- fr:journal kind=ruled-out scope=debug id=824263d00513 created=2026-11-15T07:57:46+00:00 -->
+### 824263d00513 · ruled-out · #1280: test_install_atomic's bounds are not too tight
+
+Its subprocess bounds are 120-180 s (INSTALL_BOUND_S = 180) around a stubbed install that takes seconds. Failing them needs a 20-50x slowdown: the load 100-300 of #1280's run (another session's suite in the other slot), which the load-aware -n auto now avoids. Left unchanged.
