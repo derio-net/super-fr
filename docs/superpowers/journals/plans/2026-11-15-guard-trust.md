@@ -179,3 +179,98 @@ Documented in the hook: bash has no O_NOFOLLOW, the window grants a same-user pr
 ### p3-r3-resolved · finding [fixed] · resolves p3-r3: Tests missed lookalike/indented pin lines, the own-file-already-pinned case, and the unwritable test is vacuous as root (phase 3)
 
 Added the lookalike/indented-line test and the own-file test; the unwritable-sibling test now skips under euid 0.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-15T18:59:20+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · fr-acceptance-nag.sh had no planted-fr test
+
+tests/unit/test_hooks_planted_fr.py HOOK_IDS lacked the nag hook.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-15T18:59:20+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · OpenCode nag's real runFr default never tested against a planted relative fr
+
+nag.test.ts always injects a stub runFr.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-15T18:59:20+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · _keep_live_root swallowed .gitkeep create and git add failures; mkdir/iterdir could abort the archive
+
+packages/fr/src/fr/archive.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-15T18:59:20+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · Hooks skipping because only a relative-PATH fr exists give no signal
+
+nag, idle guard, bind/unbind, worktree-remove, pin.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-15T18:59:20+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · fr-worktree-create.sh silently makes an unmarked worktree when no trusted fr resolves
+
+Later edits are denied with no pointer to the cause.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-15T18:59:20+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · OpenCode: no load-time signal that bind/claim/idle/pin stop when fr is missing or untrusted
+
+runFr returns NO_FR silently.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-15T18:59:20+00:00 state=open review_scope=out -->
+### l-security-r1 · finding [open] (reviewer: out of scope) · Edit-gate JSON parser runs python3 -c without -P and resolves python3/jq via command -v
+
+plugins/super-fr/hooks/lib/fr-isolation-decision.sh:103 and _fr_try_parser :52-66; a committed json.py at a repo root runs on every gated edit.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-15T18:59:20+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · Pin appended to another hook's sibling file can glue onto an unterminated last line
+
+plugins/super-fr/hooks/fr-binary-pin.sh loop.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-15T18:59:20+00:00 state=open review_scope=out -->
+### l-security-r3 · finding [open] (reviewer: out of scope) · Other bare-name binaries (gh in push.ts; jq/dirname/mktemp/sed/gh/git in bash hooks) still honour relative PATH entries
+
+Same class as #1429, beyond R3/R4.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-15T18:59:20+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy none; tests 2 in; errors 4 in; security 1 in, 2 out
+
+One reviewer per lens over the whole diff from merge base 15aae97ad; security found no bypass of the batch's fixes.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-15T18:59:20+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: fr-acceptance-nag.sh had no planted-fr test
+
+acceptance-nag added to HOOK_IDS with a fragment fixture; planted relative fr never runs, absolute one does.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-15T18:59:20+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: OpenCode nag's real runFr default never tested against a planted relative fr
+
+describe('nag') in resolved-fr.test.ts builds createNagHandler with no runFr: planted relative fr never spawned, absolute one asked.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-15T18:59:20+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: _keep_live_root swallowed .gitkeep create and git add failures; mkdir/iterdir could abort the archive
+
+Create, mkdir, iterdir and git add failures now warn on stderr naming the path and cause, never failing the archive; test_a_gitkeep_that_cannot_be_staged_is_reported_not_swallowed.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-15T18:59:20+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: Hooks skipping because only a relative-PATH fr exists give no signal
+
+fr-acceptance-nag.sh (the session-visible hook) says on stderr when the only fr is reached through a relative or empty entry; asserted in the planted-fr test. The other hooks keep their designed silent skip; the nag line is the operator's signal.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-15T18:59:20+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: fr-worktree-create.sh silently makes an unmarked worktree when no trusted fr resolves
+
+fr-worktree-create.sh now says 'no trusted fr ... edits in it will be gated' before mimic_default; asserted.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-15T18:59:20+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: OpenCode: no load-time signal that bind/claim/idle/pin stop when fr is missing or untrusted
+
+The existing load-time warnIfFrUnresolved message now names the relative-entry cause and that binding, claims, idle, pin and nag are off; marker.test.ts asserts it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-15T18:59:20+00:00 state=open resolves=l-security-r1 out_of_scope=true -->
+### l-security-r1-resolved · finding [out-of-scope] · resolves l-security-r1: Edit-gate JSON parser runs python3 -c without -P and resolves python3/jq via command -v
+
+Pre-existing in the JSON-parser resolution, which this change did not touch; same class as #1230 but a separate site. Filed as a follow-up at deliver and raised to the operator.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-15T18:59:20+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: Pin appended to another hook's sibling file can glue onto an unterminated last line
+
+A newline is appended first when the sibling does not end in one; test_a_sibling_without_a_final_newline_gets_the_pin_on_its_own_line.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-15T18:59:20+00:00 state=open resolves=l-security-r3 out_of_scope=true -->
+### l-security-r3-resolved · finding [out-of-scope] · resolves l-security-r3: Other bare-name binaries (gh in push.ts; jq/dirname/mktemp/sed/gh/git in bash hooks) still honour relative PATH entries
+
+Pre-existing bare-name spawns outside R3/R4 (spec non-goals); filed as a follow-up at deliver.
