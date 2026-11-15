@@ -144,3 +144,38 @@ one argv element added to each probe; nothing to clean
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 comment-only change; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-15T18:50:33+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Pin hook double-appended to $CLAUDE_ENV_FILE when it already held a pin (phase 3)
+
+fr-binary-pin.sh loop matched our own file as a sibling, then the final printf appended again.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-15T18:50:33+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · -f/-L check and >> are not atomic; a same-user symlink swap receives one export line (phase 3)
+
+No privilege gain (same user could edit the files directly) but slightly wider than writing only CLAUDE_ENV_FILE; document or accept.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-15T18:50:33+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · Tests missed lookalike/indented pin lines, the own-file-already-pinned case, and the unwritable test is vacuous as root (phase 3)
+
+tests/unit/test_hooks_binary_pin.py.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-11-15T18:50:33+00:00 phase=3 -->
+### review-p3 · review · phase 3 independent review: 3 findings, all in scope (phase 3)
+
+Reviewer verified append-only writes, symlink skip, anchored grep, fail-open on every failure, quoting, -P placement and validity, R8 text, R6 accuracy, stamp bumps; ran 80 targeted tests green.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-15T18:50:33+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Pin hook double-appended to $CLAUDE_ENV_FILE when it already held a pin (phase 3)
+
+The loop skips $CLAUDE_ENV_FILE; test_our_own_already_pinned_file_gets_the_pin_once (red, then green).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-15T18:50:33+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: -f/-L check and >> are not atomic; a same-user symlink swap receives one export line (phase 3)
+
+Documented in the hook: bash has no O_NOFOLLOW, the window grants a same-user process nothing it could not already do; accepted per the reviewer's own recommendation.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-15T18:50:33+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: Tests missed lookalike/indented pin lines, the own-file-already-pinned case, and the unwritable test is vacuous as root (phase 3)
+
+Added the lookalike/indented-line test and the own-file test; the unwritable-sibling test now skips under euid 0.
