@@ -34,7 +34,7 @@ import yaml
 from fr.acceptance.model import LEVELS, AcceptanceError, LocalStamp, Row
 
 if TYPE_CHECKING:
-    from fr.acceptance.fragment import Amendment
+    from fr.acceptance.fragment import Amendment, SetStatus
 
 _ROWS_KEY_RE = re.compile(r"^rows:\s*(#.*)?$")
 _ITEM_RE = re.compile(r"^(\s*)-\s")
@@ -453,27 +453,14 @@ def _keep_tail(lines: list[str], start: int, end: int, indent: int) -> int:
     return end
 
 
-def stamp_local(text: str, row_id: str, stamp: LocalStamp) -> str:
-    """*text* with *stamp* written onto *row_id* (spec 2026-11-14-acceptance-local-status
-    §C): the row block when this fragment holds the row, else its latest `set-status`
-    amendment. Only that block is re-rendered; every other byte is kept. Raises
-    `AcceptanceError` when the fragment neither holds nor amends the row to `local`."""
+def _latest_set_status(text: str, row_id: str) -> tuple[int, int, SetStatus] | None:
+    """`(start, end, SetStatus)` of *row_id*'s latest `set-status` amendment in *text*,
+    its line span, or None when the fragment has none for the row."""
     from pydantic import ValidationError
 
-    from fr.acceptance.fragment import SetStatus
+    from fr.acceptance.fragment import SetStatus as _SetStatus
 
     lines = text.splitlines(keepends=True)
-    has_rows = any(_ROWS_KEY_RE.match(ln) for ln in lines)
-    for start, end, parsed in _row_blocks(text) if has_rows else ():
-        if parsed.get("id") != row_id:
-            continue
-        try:
-            row = Row.model_validate(parsed)
-        except ValidationError as e:
-            raise AcceptanceError(f"row {row_id}: {e}") from e
-        if row.status != "local":
-            raise AcceptanceError(f"row {row_id} is {row.status}, not local: nothing to stamp")
-        return replace_row(text, row_id, row.model_copy(update={"local": stamp}))
     _, starts, stop = _amendment_starts(lines)
     for k in reversed(range(len(starts))):
         start = starts[k]
@@ -485,16 +472,59 @@ def stamp_local(text: str, row_id: str, stamp: LocalStamp) -> str:
         if item.get("op") != "set-status":
             continue
         try:
-            amendment = SetStatus.model_validate(item)
+            return start, end, _SetStatus.model_validate(item)
         except ValidationError as e:
             raise AcceptanceError(f"row {row_id}: amendment {k}: {e}") from e
+    return None
+
+
+def local_stamp_target(text: str, row_id: str) -> Row | SetStatus:
+    """The block `stamp_local` writes *row_id*'s stamp into: its latest `set-status`
+    amendment in this fragment (a `SetStatus`), which decides the row's status, else
+    the row block this fragment holds (a `Row`). Raises `AcceptanceError` when that
+    block does not set the row `local`, or the fragment neither holds nor amends it.
+
+    The caller decides whether that block is merged: a merged one is history and is
+    never rewritten (gh#1462), so the stamp goes in a new amendment instead."""
+    from pydantic import ValidationError
+
+    latest = _latest_set_status(text, row_id)
+    if latest is not None:
+        amendment = latest[2]
         if amendment.status != "local":
             raise AcceptanceError(
                 f"row {row_id}: its latest set-status is {amendment.status}, not local"
             )
-        first = lines[start]
-        indent = first[: len(first) - len(first.lstrip())]
-        end = _keep_tail(lines, start, end, len(indent))
-        block = render_amendment_block(amendment.model_copy(update={"local": stamp}), indent)
-        return "".join(lines[:start]) + block + "".join(lines[end:])
+        return amendment
+    lines = text.splitlines(keepends=True)
+    has_rows = any(_ROWS_KEY_RE.match(ln) for ln in lines)
+    for _start, _end, parsed in _row_blocks(text) if has_rows else ():
+        if parsed.get("id") != row_id:
+            continue
+        try:
+            row = Row.model_validate(parsed)
+        except ValidationError as e:
+            raise AcceptanceError(f"row {row_id}: {e}") from e
+        if row.status != "local":
+            raise AcceptanceError(f"row {row_id} is {row.status}, not local: nothing to stamp")
+        return row
     raise AcceptanceError(f"this fragment neither holds nor amends row {row_id} to local")
+
+
+def stamp_local(text: str, row_id: str, stamp: LocalStamp) -> str:
+    """*text* with *stamp* written onto *row_id* (spec 2026-11-14-acceptance-local-status
+    §C) in place, in the block `local_stamp_target` names. Only that block is
+    re-rendered; every other byte is kept. Raises `AcceptanceError` as
+    `local_stamp_target` does. Never call it for a merged block (gh#1462)."""
+    target = local_stamp_target(text, row_id)
+    if isinstance(target, Row):
+        return replace_row(text, row_id, target.model_copy(update={"local": stamp}))
+    lines = text.splitlines(keepends=True)
+    latest = _latest_set_status(text, row_id)
+    assert latest is not None
+    start, end, amendment = latest
+    first = lines[start]
+    indent = first[: len(first) - len(first.lstrip())]
+    end = _keep_tail(lines, start, end, len(indent))
+    block = render_amendment_block(amendment.model_copy(update={"local": stamp}), indent)
+    return "".join(lines[:start]) + block + "".join(lines[end:])

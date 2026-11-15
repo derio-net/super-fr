@@ -1204,7 +1204,9 @@ _WRAPPERS: dict[str, _Wrapper] = {
         frozenset({"-u", "-C", "-S"}), frozenset({"--unset", "--chdir"}), assignments=True
     ),
     "time": _Wrapper(frozenset({"-f", "-o"}), frozenset({"--format", "--output"})),
-    "stdbuf": _Wrapper(frozenset({"-i", "-o", "-e"}), frozenset({"--input", "--output", "--error"})),
+    "stdbuf": _Wrapper(
+        frozenset({"-i", "-o", "-e"}), frozenset({"--input", "--output", "--error"})
+    ),
     "caffeinate": _Wrapper(frozenset({"-t", "-w"})),
 }
 """Words that run the command after their own options (gh#1303): `timeout 500

@@ -949,21 +949,16 @@ class _Amending:
         not define are merged (the fold includes no unmerged feature but this one), and
         so is every row this branch's own feature defined when it merged: its fragments
         frozen at the merge (PR #1437 review F2: a merged row of the branch's own feature
-        was read as pending, so `set-status` and `amend --origin` rewrote it in place)."""
-        from fr.acceptance.fold import own_merged_fragments
-        from fr.acceptance.fragment import parse_fragment
+        was read as pending, so `set-status` and `amend --origin` rewrote it in place).
+        `fr.acceptance.fold.merged_row_ids` is the definition, shared with `deliver`."""
+        from fr.acceptance.fold import merged_row_ids
         from fr.acceptance.model import AcceptanceError
 
-        merged = frozenset(self._fold().owners) - own_rows
+        current = self._fold()
         try:
-            frozen = own_merged_fragments(self.repo_root)
-            if frozen is not None:
-                merged |= {
-                    r.id for rel, t in frozen[0].items() for r in parse_fragment(t, source=rel).rows
-                }
+            self._merged = merged_row_ids(self.repo_root, own_rows, current=current)
         except AcceptanceError as e:
             raise RecordRefusedError(f"the merged fragments do not fold: {e}") from e
-        self._merged = merged
 
     def feature(self) -> str:
         if self._feature is None:

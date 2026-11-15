@@ -7405,16 +7405,20 @@ def _deliver_local_stamp_plan(
 
 
 def _feature_local_ids(fragment: Any) -> list[str]:
-    """The rows *fragment* (one feature's) sets `local`: its own rows at `local`, and the
-    rows whose latest `set-status` amendment in it is to `local`."""
-    own = {r.id for r in fragment.rows}
+    """The rows *fragment* (one feature's) sets `local`: the rows whose latest `set-status`
+    amendment in it is to `local` — its own merged rows included, which change only by
+    amendment (gh#1462) — and its own rows at `local` that no amendment in it re-sets."""
     latest: dict[str, str] = {}
     for a in fragment.amendments:
-        if a.op == "set-status" and a.row not in own:
+        if a.op == "set-status":
             latest[a.row] = a.status
-    return [r.id for r in fragment.rows if r.status == "local"] + [
+    return [r.id for r in fragment.rows if r.status == "local" and r.id not in latest] + [
         rid for rid, status in latest.items() if status == "local"
     ]
+
+
+_LOCAL_STAMP_WHY = "deliver stamps the local suite run that covers this row (R4)"
+"""The `why` of the amendment `deliver` writes to stamp a merged `local` row."""
 
 
 def _local_stamp_plan(
@@ -7422,11 +7426,11 @@ def _local_stamp_plan(
 ) -> _LocalStamps | None:
     """`_deliver_local_stamp_plan` for *feature*'s fragment, read where the placement
     keeps it (the artifact root); the blobs come from the product checkout's HEAD."""
-    from fr.acceptance.edit import stamp_local
-    from fr.acceptance.fold import effective
-    from fr.acceptance.fragment import FRAGMENTS_DIR, parse_fragment
+    from fr.acceptance.edit import append_amendment, local_stamp_target, stamp_local
+    from fr.acceptance.fold import effective, merged_row_ids
+    from fr.acceptance.fragment import FRAGMENTS_DIR, SetStatus, parse_fragment
     from fr.acceptance.local import head_blobs, level_ref_paths
-    from fr.acceptance.model import AcceptanceError, LocalStamp
+    from fr.acceptance.model import AcceptanceError, LocalStamp, Row
     from fr.settings import SettingsError, disabled
 
     try:
@@ -7451,22 +7455,42 @@ def _local_stamp_plan(
     folder = artifact_root(repo_root) / FRAGMENTS_DIR
     texts: dict[Path, str] = {}
     wanted: dict[Path, list[str]] = {}
+    own_rows: set[str] = set()
     for path in (folder / f"{feature}.yaml", folder / f"{feature}-design.yaml"):
         if not path.is_file():
             continue
         texts[path] = path.read_text(encoding="utf-8")
         try:
-            ids = _feature_local_ids(parse_fragment(texts[path], source=path.name))
+            fragment = parse_fragment(texts[path], source=path.name)
         except AcceptanceError as e:
             refuse([f"{path.name}: {e}"])
+        own_rows |= {r.id for r in fragment.rows}
+        ids = _feature_local_ids(fragment)
         if ids:
             wanted[path] = ids
     if not wanted:
         return None  # review p2-r1: no `local` row, no fold, deliver as before
     try:
-        rows = {r.id: r for r in effective(repo_root).matrix.rows}
+        current = effective(repo_root)
     except AcceptanceError as e:
         refuse([f"the acceptance matrix: {e}"])
+    rows = {r.id: r for r in current.matrix.rows}
+    merged: frozenset[str] | None = None
+
+    def frozen(target: Row | SetStatus) -> bool:
+        """gh#1462: is the block a stamp would land in history — a row merged on the
+        default ref, or a set-status amendment that is not this branch's own? Such a
+        block is never rewritten: the stamp goes in a new amendment."""
+        nonlocal merged
+        if isinstance(target, SetStatus):
+            return target not in current.pending
+        if merged is None:
+            try:
+                merged = merged_row_ids(repo_root, frozenset(own_rows), current=current)
+            except AcceptanceError as e:
+                refuse([f"the merged acceptance rows: {e}"])
+        return target.id in merged
+
     by_path = {
         path: [
             r
@@ -7500,7 +7524,19 @@ def _local_stamp_plan(
                 continue
             stamp = LocalStamp(at=today, tree=tree, log=log, files={p: blobs[p] for p in paths})
             try:
-                text = stamp_local(text, r.id, stamp)
+                if frozen(local_stamp_target(text, r.id)):
+                    amendment = SetStatus(
+                        row=r.id,
+                        op="set-status",
+                        base=current.revisions.get(r.id, 0),
+                        status="local",
+                        notes=r.notes,
+                        local=stamp,
+                        why=_LOCAL_STAMP_WHY,
+                    )
+                    text = append_amendment(text, amendment)
+                else:
+                    text = stamp_local(text, r.id, stamp)
             except AcceptanceError as e:
                 problems.append(f"row {r.id}: {e}")
         if path_rows:

@@ -654,7 +654,7 @@ def _merge_branch(root: Path) -> None:
 def _assert_stamped_by_amendment(root: Path, fragment: Path, row: str) -> None:
     data = yaml.safe_load((root / fragment).read_text())
     merged = git(root, "show", f"origin/main:{fragment.as_posix()}")
-    held = [r for r in data.get("rows", []) if r["id"] == row]
+    held = [r for r in data.get("rows") or [] if r["id"] == row]
     if held:
         merged_row = next(r for r in yaml.safe_load(merged)["rows"] if r["id"] == row)
         assert held[0] == merged_row, "the merged row's block is untouched"
@@ -663,8 +663,11 @@ def _assert_stamped_by_amendment(root: Path, fragment: Path, row: str) -> None:
     assert stamped["local"]["files"] == {TEST: _blob(root, TEST)}
     status = fr(root, ["acceptance", "status"])
     assert "unstamped" not in status.output, status.output
-    check = fr(root, ["acceptance", "check", "--no-fetch"])
-    assert check.exit_code == 0, check.output
+    # The fixture's rows cite a spec the test repo never wrote, so `check` reports
+    # that; what gh#1462 broke is the in-place-edit refusal and the stale base.
+    check = " ".join(fr(root, ["acceptance", "check", "--no-fetch"]).output.split())
+    assert "edited in place" not in check, check
+    assert "stale" not in check, check
 
 
 @pytest.mark.parametrize("design_named", [False, True], ids=["slug", "slug-design"])
