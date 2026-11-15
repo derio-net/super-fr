@@ -7137,6 +7137,12 @@ batches:
   wave: 17
   after:
   - suite-health
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:03:11.407994Z'
+    runner: herdr
+    handle: w3F:p3
+    branch: feat/batch-guard-trust
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7150,6 +7156,12 @@ batches:
   after:
   - suite-health
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:02:28.611009Z'
+    runner: herdr
+    handle: w3F:p2
+    branch: fix/batch-gate-truth
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7164,6 +7176,12 @@ batches:
   after:
   - suite-health
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:01:44.100348Z'
+    runner: herdr
+    handle: w3F:p1
+    branch: fix/batch-deliver-evidence
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
@@ -7177,6 +7195,12 @@ batches:
   after:
   - suite-health
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:04:03.090530Z'
+    runner: herdr
+    handle: w3F:p4
+    branch: feat/batch-owed-archive
 - id: workspace-identity
   title: Workspace identity
   ids:
