@@ -165,3 +165,75 @@ a shell scenario sourcing the shared _owed_world.sh builder and a skill/explaine
 ### p2-quiet-stealth-close-now · decision · Under quiet/stealth placement resolve closes the owed issue at once: the discharge never travels with the PR (phase 2)
 
 Orchestrator decision on review finding p2-r3. Under quiet and stealth the journals live in the placement's artifact root, outside the product checkout, so a discharge commit never reaches the product PR and its Closes line could never close the issue. Resolve keeps its pre-change behaviour there (close at once, same forge settings, ownership and OPEN checks); the PR body's Owed actions discharged section says Not applicable and deliver skips the R4 check. Spec R15.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-15T22:42:49+00:00 phase=2 -->
+### review-p2 · review · Phase 2 code review (R1-R6 close at merge): 7 in scope, 1 out (phase 2)
+
+Independent reviewer ran git diff a42d9dc7d..1c3c167f2 against spec R1-R6 and the touched unit tests (94 passed).
+Found sound: the resolve gate off the default branch (no forge client built), archived-journal discharge detection with
+subtraction of resolutions already on the default ref, cross-repo filed_as dropped, the R5 premature_closes claim, and
+closeout-owed step 5 as a valid negative.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · The render's Refs-held line reads as a closing ref when a row or decision id contains close/fix/resolve, so deliver refuses fr's own body (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · R4 deliver check fails open: discharged_owed returns [] on an unreadable default ref, merge-base, diff or identity (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Under quiet/stealth the section is always None and unenforced while resolve claims the PR body closes it; the issue never closes (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · Held-issue deliver tests monkeypatch run_held_issues; the real hold -> Refs render -> both gates chain is untested (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · _refuse_unclosed_owed swallows every exception from run_held_issues (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · owed-close-at-merge.sh header claims more than it proves and drops the discharge-comment assertion (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · 01-fr-goal.md and the fr-goal skill state the listing and refusal unconditionally (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-11-15T22:42:49+00:00 phase=2 state=open review_scope=out -->
+### p2-r8 · finding [open] (reviewer: out of scope) · normalize_issue_ref's _URL_REF accepts any host, so a foreign-host URL with the same path satisfies the owed closing check (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: The render's Refs-held line reads as a closing ref when a row or decision id contains close/fix/resolve, so deliver refuses fr's own body (phase 2)
+
+346afa141: held ids rendered as code spans and closing_refs strips code spans before keyword matching; render -> premature_closes tests with keyword-bearing ids fail without the change.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: R4 deliver check fails open: discharged_owed returns [] on an unreadable default ref, merge-base, diff or identity (phase 2)
+
+346afa141: discharged_owed raises UnreadableDischargeError naming the input; _refuse_unclosed_owed refuses by name (exit 2); the section reads Unknown. Per-input tests plus a deliver-level refusal.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Under quiet/stealth the section is always None and unenforced while resolve claims the PR body closes it; the issue never closes (phase 2)
+
+05fac35a1 + 346afa141 + e18f76dc7 + f4f13de55: spec R15 — under quiet/stealth resolve closes at once (discharge_travels); the section reads Not applicable and deliver's check stands aside. Decision p2-quiet-stealth-close-now; row owed-close-at-merge cites R15. Real quiet-repo tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: Held-issue deliver tests monkeypatch run_held_issues; the real hold -> Refs render -> both gates chain is untested (phase 2)
+
+346afa141: two deliver tests on a real acceptance fragment (walk-owed row whose issues: names the owed issue) — render then deliver passes both gates; a hand-written Closes for it is still refused.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: _refuse_unclosed_owed swallows every exception from run_held_issues (phase 2)
+
+346afa141: catches only AcceptanceError and UnreadableJournalError and refuses by name; other exceptions propagate (tested).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: owed-close-at-merge.sh header claims more than it proves and drops the discharge-comment assertion (phase 2)
+
+8b12ea489: header narrowed to R1-R3; the default-branch close asserts the Discharged evidence comment.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: 01-fr-goal.md and the fr-goal skill state the listing and refusal unconditionally (phase 2)
+
+277b78577: explainer and fr-goal skill state the this-repo filter, repo-placement-only listing, and the unreadable-input refusal; mirrors regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-11-15T22:42:49+00:00 phase=2 state=open resolves=p2-r8 out_of_scope=true -->
+### p2-r8-resolved · finding [out-of-scope] · resolves p2-r8: normalize_issue_ref's _URL_REF accepts any host, so a foreign-host URL with the same path satisfies the owed closing check (phase 2)
+
+normalize_issue_ref's host-agnostic URL reading predates this change (premature_closes has used it since it shipped); this change only reuses it.
