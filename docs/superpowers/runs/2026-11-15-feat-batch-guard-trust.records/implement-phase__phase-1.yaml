@@ -19,4 +19,4 @@ journal:
       `bun test` (293 pass) are green; `fr docs check` and the change-fragment gate pass. The full
       suite is owed (deliver reruns it).
 resolves: []
-evidence: {}
+evidence: {tests: ci}
