@@ -503,72 +503,73 @@ def discharged_owed(repo_root: Path) -> list[DischargedOwed]:
     cannot be read, or when the journals live outside the checkout (quiet and
     stealth placements): resolve's printed closing line is the route then (R2)."""
     from fr.archive_followups import owed_identity
-    from fr.artifacts.paths import artifact_root
-    from fr.git import GitUnavailableError, git_answer, remote_default_ref
-    from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL, owed_filed_as
+    from fr.git import GitUnavailableError
+    from fr.journal.model import owed_filed_as
     from fr.owed_refs import own_issue
-    from fr.proportionality import feature_merge_base
 
     try:
-        if artifact_root(repo_root).resolve() != repo_root.resolve():
-            return []
-        default = remote_default_ref(repo_root)
-        if not isinstance(default, str):
-            return []
-        base = feature_merge_base(repo_root, default)
-        if base is None:
-            return []
-        diff = git_answer(
-            repo_root,
-            "diff",
-            "-z",
-            "--no-renames",
-            "--name-only",
-            "--diff-filter=AM",
-            base,
-            "HEAD",
-            "--",
-            JOURNALS_REL.as_posix(),
-            IMPLEMENTED_JOURNALS_REL.as_posix(),
-        )
-        if diff.returncode != 0:
-            return []
-        own, _why = owed_identity(repo_root)
-        if own is None:
-            return []
-        out: list[DischargedOwed] = []
-        seen: set[str] = set()
-        for rel in (p for p in diff.stdout.split("\0") if p.endswith(".md")):
-            entries = _journal_at(repo_root, "HEAD", rel)
-            if entries is None:
-                continue
-            fixed = _fixed_owed(entries)
-            if not fixed:
-                continue
-            tail = Path(rel).relative_to(
-                IMPLEMENTED_JOURNALS_REL
-                if Path(rel).is_relative_to(IMPLEMENTED_JOURNALS_REL)
-                else JOURNALS_REL
-            )
-            before: set[str] = set()
-            for root_rel in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
-                then = _journal_at(repo_root, default, (root_rel / tail).as_posix())
-                if then is not None:
-                    before |= _fixed_owed(then)
-            filed = owed_filed_as(entries)
-            for entry in entries:
-                if entry.id not in fixed or entry.id in before or entry.id not in filed:
-                    continue
-                target = own_issue(repo_root, filed[entry.id], own)
-                if isinstance(target, str):
-                    continue
-                ref = f"{target[0]}#{target[1]}"
-                if ref.lower() not in seen:
-                    seen.add(ref.lower())
-                    out.append(DischargedOwed(ref=ref, entry=entry.id))
-        return out
+        changed = _changed_journals(repo_root)
     except GitUnavailableError:
         return []
+    own, _why = owed_identity(repo_root)
+    if changed is None or own is None:
+        return []
+    default, rels = changed
+    out: list[DischargedOwed] = []
+    seen: set[str] = set()
+    for rel in rels:
+        entries = _journal_at(repo_root, "HEAD", rel)
+        fixed = _fixed_owed(entries or []) - _fixed_at_default(repo_root, default, rel)
+        filed = owed_filed_as(entries or [])
+        for eid in (e.id for e in entries or [] if e.id in fixed and e.id in filed):
+            target = own_issue(repo_root, filed[eid], own)
+            if isinstance(target, tuple) and f"{target[0]}#{target[1]}".lower() not in seen:
+                seen.add(f"{target[0]}#{target[1]}".lower())
+                out.append(DischargedOwed(ref=f"{target[0]}#{target[1]}", entry=eid))
+    return out
+
+
+def _changed_journals(repo_root: Path) -> tuple[str, list[str]] | None:
+    """`(default ref, journal paths)` the branch added or modified since its
+    merge-base with the default ref, or None when that cannot be told here (no
+    default ref or merge-base, or journals outside the checkout)."""
+    from fr.artifacts.paths import artifact_root
+    from fr.git import git_answer, remote_default_ref
+    from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL
+    from fr.proportionality import feature_merge_base
+
+    if artifact_root(repo_root).resolve() != repo_root.resolve():
+        return None
+    default = remote_default_ref(repo_root)
+    base = feature_merge_base(repo_root, default) if isinstance(default, str) else None
+    if not isinstance(default, str) or base is None:
+        return None
+    dirs = (JOURNALS_REL.as_posix(), IMPLEMENTED_JOURNALS_REL.as_posix())
+    diff = git_answer(
+        repo_root,
+        *("diff", "-z", "--no-renames", "--name-only", "--diff-filter=AM", base, "HEAD"),
+        *("--", *dirs),
+    )
+    if diff.returncode != 0:
+        return None
+    return default, [p for p in diff.stdout.split("\0") if p.endswith(".md")]
+
+
+def _fixed_at_default(repo_root: Path, default: str, rel: str) -> set[str]:
+    """The owed ids already fixed in this journal at the default ref, read at its
+    live and its archived path (a journal archived on the branch was live there)."""
+    from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL
+
+    path = Path(rel)
+    top = (
+        IMPLEMENTED_JOURNALS_REL if path.is_relative_to(IMPLEMENTED_JOURNALS_REL) else JOURNALS_REL
+    )
+    tail = path.relative_to(top)
+    fixed: set[str] = set()
+    for where in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
+        then = _journal_at(repo_root, default, (where / tail).as_posix())
+        fixed |= _fixed_owed(then or [])
+    return fixed
 
 
 def render_owed_discharged(items: Sequence[DischargedOwed], held: Mapping[str, str]) -> str:
