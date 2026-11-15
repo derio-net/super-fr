@@ -7326,6 +7326,8 @@ batches:
     at: '2026-11-15T07:09:12.097164Z'
     keys:
     - super-fr#1459
+  - kind: post_merge
+    at: '2026-11-15T07:17:55.358743Z'
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -7593,3 +7595,12 @@ exports:
   pr: 1084
   head: a3536416e5d5085e132151213f52e1c11e91b515
   merged: true
+closeouts:
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-15-1
+  branch: chore/closeout-2026-11-15-1
+  at: '2026-11-15T07:17:57.929511Z'
+  runner: herdr
+  handle: w3D:p2
+  planned:
+  - retire-vk
