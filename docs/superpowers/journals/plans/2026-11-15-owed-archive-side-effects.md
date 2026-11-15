@@ -277,3 +277,8 @@ Review p3-r3. The migration gate treats `archive … --dry-run` as a context tha
 ### p3-dry-run-cannot-tell-refuses · decision · Under quiet or stealth, a dry run that cannot see what the real run would read refuses by name, exit 2, never 'nothing to archive' (phase 3)
 
 Review p3-r5. Cases: no fr worktree yet under quiet; a stealth tracking clone that is gone, unreachable or not synced with its tracking ref. Checked by fr.placement.preview.cannot_tell before anything resolves the placement's space, in the gate and in the command. R10 amended: exit-code parity holds except where the preview refuses because it cannot tell.
+
+<!-- fr:journal kind=decision scope=plan id=p3-no-global-prune created=2026-11-15T23:50:25+00:00 phase=3 -->
+### p3-no-global-prune · decision · The dry-run scratch never runs a global git worktree prune; it and stale scratches are removed by their own path (phase 3)
+
+Review p3-r2 (and pr1431-n1): in a devcontainer a global prune deregisters every unmounted host worktree. archive_preview._remove runs `git worktree remove --force <path>` and clears the registration by path as quiet._forget_own_stale_entry does; stale fr-archive-dry-run-<pid> copies of dead pids are removed one by one. Spec §C.1 amended.
