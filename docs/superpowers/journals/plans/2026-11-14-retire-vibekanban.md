@@ -152,3 +152,66 @@ forge_of deleted from tests/unit/fakes.py. Commit 08b125434.
 ### p1-r8-resolved · finding [fixed] · resolves p1-r8: backfill_cmd recorded a logical origin's slug instead of its spec paths, so it listed logically cited specs as uncited (phase 1)
 
 Fixed by the p1-r2 helper: a logical origin now adds its candidate spec paths. test_backfill_counts_a_logical_citation pins this, live and archived.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-suite-log-unwitnessed created=2026-11-15T00:38:31+00:00 phase=2 -->
+### p2-suite-log-unwitnessed · discovery · The phase 2 suite log is not attested: fr's witness does not expand $TMPDIR in the writing command (phase 2)
+
+The full suite ran last on a clean committed tree: 15969 passed, 128 skipped, exit=0. It wrote the log through `> $TMPDIR/p2-suite.log`, a literal variable, as the orchestrator's brief said. resolve's tests witness matches the command text and does not expand variables, so it refused the path, and `tests` was dropped from this record (it is optional here). deliver runs the full suite again with a literal path.
+
+<!-- fr:journal kind=decision scope=plan id=p2-install-bridge-test-deleted created=2026-11-15T00:38:31+00:00 phase=2 -->
+### p2-install-bridge-test-deleted · decision · tests/integration/test_install_bridge.py is deleted rather than un-xfailed (phase 2)
+
+Its only case asserted that --install-bridge writes a wrapper execing fr_vk.bridge, a
+behaviour R5 removes. No acceptance row cites it (phase 1 dropped it from
+installed-fr-carries-every-runner). The refusal is pinned twice instead:
+test_install_sh.py::TestVkResidue::test_install_bridge_refuses_naming_the_removal (fixture
+home) and test_runner_package_lists.py::test_install_bridge_names_no_fr_vk (uv stub).
+
+<!-- fr:journal kind=decision scope=plan id=p2-vk-tests-placement created=2026-11-15T00:38:31+00:00 phase=2 -->
+### p2-vk-tests-placement · decision · R4 tests live in a new tests/unit/test_isolation_vk_profile.py; R5 tests replace TestMcpConfig and TestMissingBinary (phase 2)
+
+The R4 cases reuse test_isolation's FakeRunner, _upped and make_repo_with_origin. up is
+exercised with a committed stale profile (the worktree is cut from origin/main); rebuild,
+the customised postCreateCommand, the clean profile and the absent config edit the
+upped worktree's config. In test_install_sh.py, TestMcpConfig (which asserted the
+vibe_kanban entry is written) and TestMissingBinary (the VK binary warning) are replaced
+by TestVkResidue; the VK binary stubs in the fake homes of test_install_sh,
+test_install_atomic and test_install_worktree_settings_hooks are gone; uninstall's
+vibe_kanban case now pre-seeds the entry instead of relying on install to write it.
+fake_home still creates $HOME/bin explicitly: test_install_opencode_agents writes an fr
+stub there and had relied on the VK stub's mkdir (caught by the first full suite run).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-docs-pages-for-phase-3 created=2026-11-15T00:38:31+00:00 phase=2 -->
+### p2-docs-pages-for-phase-3 · discovery · fr docs check now also flags docs/reference/install.md and fr-isolation.md (local.py) (phase 2)
+
+Beyond phase 1's list, scripts/install.sh makes docs/reference/install.md stale (line 88
+describes uninstall removing the vibe_kanban MCP entry; it should also say install removes
+it and an fr-written vk-bridge wrapper, and that --install-bridge refuses), and
+packages/fr/src/fr/isolation/local.py adds to fr-isolation.md's staleness (the R4
+refusal of a profile that still installs packages/fr-vk). Left for phase 3's docs pass.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-r10-allowlist-lines created=2026-11-15T00:38:31+00:00 phase=2 -->
+### p2-r10-allowlist-lines · discovery · The lines the R10 tripwire must allowlist from this phase (phase 2)
+
+packages/fr/src/fr/isolation/local.py: the `_VK_PROFILE_NEEDLE = "subdirectory=packages/fr-vk"`
+line (plus the comment above it naming the spec, and the refusal message's "installs
+fr-vk" wording). scripts/install.sh: the cleanup_vk_residue block and --install-bridge
+refusal (lines 185-204) and uninstall's kept vibe_kanban removal (lines ~217-221).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-11-15T00:38:31+00:00 phase=2 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: test_install_bridge_names_no_fr_vk passes on an import crash; phase 2 must assert the --install-bridge refusal text (phase 2)
+
+install.sh --install-bridge now refuses by name and exits 2 before importing anything.
+test_runner_package_lists.py::test_install_bridge_names_no_fr_vk asserts exit 2, the text
+"VibeKanban support was removed", no packages/fr-vk in the output, and that no wrapper was
+written at VK_BRIDGE_WRAPPER_PATH.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-15T00:38:31+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+The needle was named once as the module constant _VK_PROFILE_NEEDLE beside _refuse_vk_profile in the GREEN commit itself, with one call site; nothing further to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-15T00:38:31+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+cleanup_vk_residue is one contiguous function directly followed by the --install-bridge refusal (install.sh:185-204), called once at section 8; the only other VK lines are uninstall's kept removal, which the spec keeps as is
