@@ -130,14 +130,15 @@ When a queued phase sits still, work through these, in order:
 
 1. **Is the bridge ticking?** A bridge that passes `tick` a metrics pusher stamps a
    heartbeat gauge, `<namespace>_heartbeat_last_success_timestamp`, at the end of each
-   tick. Each failure increments `<namespace>_failure_total` with a `reason`:
-   `preflight` (the runner refused the whole tick, for example `cncd` with no
-   `CNCD_URL`), `repo_gate`, `unknown_repo` (the runner refused the item, usually because
-   of its repo), `unit_mismatch`, `backend_error` or `gh_error`. Plan discovery adds `stale_artifact` for
-   a plan whose files this `fr` cannot read.
-   `unit_mismatch` means an issue has the label of a runner that never takes that unit.
-   `fr apply --to` refuses that up front, so look for labels set by hand or by an older
-   `fr`.
+   tick. Each failure increments `<namespace>_failure_total` with a `reason`: `preflight`,
+   `repo_gate`, `unknown_repo`, `unit_mismatch`, `backend_error` or `gh_error`. Plan
+   discovery adds `stale_artifact` for a plan whose files this `fr` cannot read.
+
+   `preflight` means the runner refused the whole tick, for example `cncd` with no
+   `CNCD_URL`. `unknown_repo` means the runner refused the item, usually because of its
+   repo. `unit_mismatch` means an issue has the label of a runner that never takes that
+   unit. `fr apply --to` refuses that up front, so look for labels set by hand or by an
+   older `fr`.
 2. **Is the phase eligible?** `fr status <plan-dir>`. A phase dispatches only when its
    rendered labels say ready-but-not-synced, it has a `tracking_issue`, and plan and spec
    are on the default branch.
@@ -146,16 +147,16 @@ When a queued phase sits still, work through these, in order:
 
 ## Which runners are there?
 
-The repo ships three adapters. `cncd` (the CNC control plane) takes phases, so it is the
-one `fr apply --to` queues to. `herdr` and `claude-cloud` take whole runs only, so
-`fr apply --to` refuses them. The triage batch driver uses those two to start whole-run
-sessions. See [fr-triage](fr-triage.md), the [herdr guide](../herdr-control-sessions.md)
-and the [cloud guide](../cloud-setup.md).
+The repo ships three adapters. `cncd` (a control plane that keeps a ledger of phases)
+takes phases, so it is the one `fr apply --to` queues to. `herdr` and `claude-cloud` take
+whole runs only, so `fr apply --to` refuses them. The triage batch driver uses those two
+to start whole-run sessions. See [fr-triage](fr-triage.md), the [herdr
+guide](../herdr-control-sessions.md) and the [cloud guide](../cloud-setup.md).
 
 ## What does dispatch not do?
 
-- A runner's bridge never creates issues (only `fr apply --yes` does, at an operator's command),
-  and never implements work itself.
+- A runner's bridge never creates issues (only `fr apply --yes` does, at an operator's
+  command), and never implements work itself.
 - Dispatch needs the plan and spec merged first. That is a feature: the runner works from
   its own checkout.
 - Operating a runner is not queueing to it, and neither is implementing the phase. See
