@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body
+reviewed: 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1181,10 +1181,15 @@ command prints the close command; it does not run it.
 An owed action works the other way round. When you discharge one with `fr
 journal resolve --state fixed` on a branch, its issue does not close yet: the
 branch could still be abandoned, and the issue would then be closed for work
-that never shipped. Resolve prints a `Closes owner/repo#n` line instead. The PR
-body lists that line under **Owed actions discharged**, so the issue closes
-when the pull request merges, and `deliver` refuses a description that leaves
-it out. On the default branch itself, resolve closes the issue at once.
+that never shipped. For an issue in this repo, resolve prints a `Closes
+owner/repo#n` line instead. The PR body lists that line under **Owed actions
+discharged**, so the issue closes when the pull request merges, and `deliver`
+refuses a description that leaves it out. `deliver` also refuses when it
+cannot read the default branch to tell what the branch discharged. On the
+default branch itself, resolve closes the issue at once. It does the same when
+fr keeps its files outside your checkout (the quiet and stealth placements):
+there the discharge never travels with the pull request, so the PR body says
+the section does not apply.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`. It lists:
