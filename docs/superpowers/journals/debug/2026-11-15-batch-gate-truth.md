@@ -25,3 +25,8 @@ ops/gate.py stage_7 records no tester step remains and leaves the label; run/clo
 ### 9496e9c666dd · finding [fixed] · 1399 fixed: ledger reads archived runs
 
 _run_text lists RUNS_DIR and ARCHIVED_RUNS_DIR. Test first: test_triage_exit_gates_drive.py::test_gh1399_an_archived_run_keeps_its_gated_rows (failed: rows == ()).
+
+<!-- fr:journal kind=finding scope=debug id=e014176e2658 created=2026-11-15T17:13:23+00:00 state=fixed -->
+### e014176e2658 · finding [fixed] · 1389 fixed: gate pass --yes exits 1 on a failed close
+
+The pass stands; the command exits 1 after the retry line. test_gate_cmd.py::test_a_tracker_failure_never_reverses_the_pass_but_exits_1 (it previously pinned exit 0).
