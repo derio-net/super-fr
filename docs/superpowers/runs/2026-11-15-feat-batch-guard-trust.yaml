@@ -1,0 +1,27 @@
+schema_version: 11
+run: 2026-11-15-feat-batch-guard-trust
+workflow: fr-goal@1
+branch: feat/batch-guard-trust
+started: '2026-11-15T11:04:21+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 8.0.0
