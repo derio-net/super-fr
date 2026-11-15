@@ -43,8 +43,8 @@ rows:
       would make, changes no file, index or forge state, and exits with the real run's
       code.
     origin:
-    - spec:2026-11-15-owed-archive-side-effects#R8
-    - spec:2026-11-15-owed-archive-side-effects#R9
+    - spec:2026-11-15-owed-archive-side-effects#R10
+    - spec:2026-11-15-owed-archive-side-effects#R11
     levels: {}
     status: not-implemented
     notes: ''
