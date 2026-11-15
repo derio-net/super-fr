@@ -90,3 +90,8 @@ CI run on 91007c7: green, wall clock 323 s (budget 360), slowest shard job 288 s
 ### 7ebecf953acd · review · Review of the batch diff
 
 Self-review of origin/main...HEAD (no independent reviewer dispatched). Findings: (1) test_suite_isolation_git_dates relies on its two tests sharing a process; under xdist they may split and the second passes vacuously; it is a real check serially, where the leak was reproduced. Accepted, noted here. (2) The load-aware -n auto rule reads a one-minute load, so sessions starting together still each take every CPU; documented in AGENTS.md and the docstring, with FR_PYTEST_WORKERS as the exact bound. (3) #1225's host-wide suite lock and temp pruning are not done (pruning broke the archive tests); stated in the PR. No other findings.
+
+<!-- fr:journal kind=finding scope=debug id=lock-double-hold created=2026-11-15T10:39:31+00:00 state=open -->
+### lock-double-hold · finding [open] · #1463: worktree hook lock double-hold not reproduced
+
+Both CI failures were real double-holds (OVERLAP logged; the create stub's rmdir found in-flight already removed). 120 loaded trials on macOS and 80 in ubuntu:24.04 under load reproduced none, and no two-process interleaving of the mkdir lock and its dead-holder reclaim double-holds by code read. Per the operator's decision it leaves this PR.
