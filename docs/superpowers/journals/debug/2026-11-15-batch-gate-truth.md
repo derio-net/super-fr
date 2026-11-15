@@ -40,3 +40,6 @@ Skip only when the closure is already recorded on the ops branch (_recorded_here
 ### e61144b49d4a · finding [fixed] · 1275 fixed: stage 7 passes an unowned gate:tester; pickup reports a finished stage
 
 gate:tester came from a live-strategy row (row gates default by strategy), so it can be legitimate on a devops-only spec. Stage 7 keeps it while a tester step has no outcome, a tester row is unwalked, or the spec declares gate: tester; otherwise passes it with a generated note. devops_brief returns a completion brief once the host gate record holds stage 8. Tests: test_gh1275_* in test_ops_gate.py and test_ops_devops_brief.py.
+
+<!-- fr:journal kind=review scope=debug id=b1325f2d3231 created=2026-11-15T18:54:49+00:00 -->
+### b1325f2d3231 · review · Review: no findings. Checked closeout_read now reading archived runs: an archived run's snapshot has no live spec, so member_steps adds no outcome steps and close-out still goes verify-merge then archive; the read now also sees the archived run's narrowing and gated rows, which is the intended #1399 behaviour. Checked #1389 exit-1 against printed-command tests, #1293 recorded-close predicate against at_head, #1275 gate pass only when no tester step, row or declared gate is owed.
