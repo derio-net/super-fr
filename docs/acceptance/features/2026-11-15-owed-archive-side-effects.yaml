@@ -29,8 +29,9 @@ rows:
     acceptance: A refused fr archive leaves the working tree, the index and the forge
       as they were, and on the default branch a held plan records no owed entry.
     origin:
-    - spec:2026-11-15-owed-archive-side-effects#R6
     - spec:2026-11-15-owed-archive-side-effects#R7
+    - spec:2026-11-15-owed-archive-side-effects#R8
+    - spec:2026-11-15-owed-archive-side-effects#R9
     levels: {}
     status: not-implemented
     notes: ''
