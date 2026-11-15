@@ -10,6 +10,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from fr.archive import archive_plan_dir
 
 
@@ -82,3 +84,16 @@ def test_an_existing_untracked_gitkeep_is_staged(tmp_path: Path) -> None:
     keep.write_text("")
     archive_plan_dir(repo, _plan(repo, "a"))
     assert "docs/superpowers/plans/.gitkeep" in _git(repo, "diff", "--cached", "--name-only")
+
+
+def test_a_gitkeep_that_cannot_be_staged_is_reported_not_swallowed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # review l-errors-r1: git refuses to add an ignored path; the archive still succeeds
+    # but says the live root was not staged, naming the path and git's own message.
+    repo = _repo(tmp_path, "a")
+    (repo / ".gitignore").write_text("docs/superpowers/plans/.gitkeep\n")
+    archive_plan_dir(repo, _plan(repo, "a"))
+    err = capsys.readouterr().err
+    assert "docs/superpowers/plans/.gitkeep not staged" in err
+    assert "git add failed" in err and "ignored" in err

@@ -336,6 +336,9 @@ describe("quiet and stealth are fr-enabled (R26)", () => {
     }
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("no `fr` found");
+    // review l-errors-r4: it also names the relative-entry cause and what stops working.
+    expect(lines[0]).toContain("relative or empty PATH entry");
+    expect(lines[0]).toContain("session binding, phase claims, the idle nudge");
   });
 });
 

@@ -167,3 +167,17 @@ def test_only_a_line_starting_with_the_exact_export_counts_as_a_pin(tmp_path: Pa
     (session / "sessionstart-hook-1.sh").write_text(lookalike)
     assert run_hook(f"{bin_dir}:/usr/bin:/bin", session / "sessionstart-hook-2.sh").returncode == 0
     assert (session / "sessionstart-hook-1.sh").read_text() == lookalike
+
+
+def test_a_sibling_without_a_final_newline_gets_the_pin_on_its_own_line(tmp_path: Path) -> None:
+    """review l-security-r2: another hook's file may end mid-line; the pin must not glue
+    onto (or be swallowed by) that line."""
+    bin_dir = tmp_path / "bin"
+    _fake_fr(bin_dir, f"printf '%s\\n' \"{IDENTITY}\"")
+    session = tmp_path / "session-env"
+    session.mkdir()
+    sibling = session / "sessionstart-hook-3.sh"
+    sibling.write_text("export FR_HARNESS_FR='old 1.0.0 /x'\nexport X='abc'")
+    assert run_hook(f"{bin_dir}:/usr/bin:/bin", session / "sessionstart-hook-4.sh").returncode == 0
+    assert sibling.read_text().splitlines()[1] == "export X='abc'"
+    assert _sourced_pin(sibling) == IDENTITY

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { createBindHandler, createUnbindHandler } from "../src/bind";
 import { createClaimHandler } from "../src/claim";
 import { createIdleHandler } from "../src/idle";
+import { createNagHandler } from "../src/nag";
 import { createPinHandler } from "../src/pin";
 
 let saved: { PATH?: string; HARNESS?: string; cwd: string };
@@ -124,5 +125,29 @@ describe("idle", () => {
     absolute();
     await createIdleHandler({ session, directory: process.cwd() })(event);
     expect(readFileSync(mark, "utf8")).toContain("run check --idle");
+  });
+});
+
+describe("nag", () => {
+  // review l-tests-r2: the real default runFr, never a stub.
+  function nagRepo(): string {
+    const repo = join(scratch, "work");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    mkdirSync(join(repo, "docs", "acceptance", "features"), { recursive: true });
+    writeFileSync(join(repo, "docs", "acceptance", "features", "f.yaml"), "rows: []\n");
+    return repo;
+  }
+  const ctx = () => ({ sessionID: "ses_n", system: [] as { type: "text"; text: string }[] });
+  test("a planted relative fr is never spawned and nothing is said", async () => {
+    process.env.PATH = planted();
+    const event = ctx();
+    await createNagHandler({ session, directory: nagRepo() })(event);
+    expect(existsSync(mark)).toBe(false);
+    expect(event.system).toEqual([]);
+  });
+  test("an absolute fr is the one asked", async () => {
+    absolute();
+    await createNagHandler({ session, directory: nagRepo() })(ctx());
+    expect(readFileSync(mark, "utf8")).toContain("acceptance status --brief");
   });
 });

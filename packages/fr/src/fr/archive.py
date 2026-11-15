@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -467,28 +468,44 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
     regular file (a symlink included, dangling or not) is left alone and unstaged, and the
     create refuses to follow one; an existing regular one is staged, so an untracked copy
     still reaches the archive's commit (review p1-r1).
+
+    Best effort: it never fails the archive (the plan has already moved), but a step that
+    fails says so on stderr, naming the path and the cause, because the result is the
+    silent ungated clone this exists to prevent (review l-errors-r1).
     """
     live_root = plan_dir.parent
     if live_root != kind_dir("plan", space_for(repo_root)):
         return
-    live_root.mkdir(parents=True, exist_ok=True)
-    if any(e.name != ".gitkeep" for e in live_root.iterdir()):
-        return
     keep = live_root / ".gitkeep"
+    rel = keep.relative_to(repo_root)
     try:
-        if not stat.S_ISREG(os.lstat(keep).st_mode):
+        live_root.mkdir(parents=True, exist_ok=True)
+        if any(e.name != ".gitkeep" for e in live_root.iterdir()):
             return
-    except FileNotFoundError:
-        flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
         try:
+            if not stat.S_ISREG(os.lstat(keep).st_mode):
+                return
+        except FileNotFoundError:
+            flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
             os.close(os.open(keep, flags, 0o644))
-        except OSError:
-            return
-    subprocess.run(
-        ["git", "-C", str(repo_root), "add", "--", str(keep.relative_to(repo_root))],
+    except OSError as e:
+        _warn_live_root(rel, f"could not write it: {e}")
+        return
+    added = subprocess.run(
+        ["git", "-C", str(repo_root), "add", "--", str(rel)],
         check=False,
         capture_output=True,
         text=True,
+    )
+    if added.returncode != 0:
+        _warn_live_root(rel, f"git add failed: {(added.stderr or '').strip()}")
+
+
+def _warn_live_root(rel: Path, cause: str) -> None:
+    print(
+        f"fr archive: warning: {rel} not staged ({cause}); commit it yourself, or a fresh "
+        "clone of a repo with no devcontainer profile reads as not fr-enabled (super-fr#1277)",
+        file=sys.stderr,
     )
 
 

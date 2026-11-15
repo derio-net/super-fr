@@ -27,7 +27,15 @@ lib="$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 [ -r "$lib" ] || exit 0
 # shellcheck source=lib/fr-isolation-decision.sh
 . "$lib"
-fr_fr_resolve || exit 0
+if ! fr_fr_resolve; then
+  # A `fr` reachable only through a relative or empty PATH entry is never run (super-fr#1429).
+  # Say so once, on stderr, rather than let the nag vanish with no cause (review l-errors-r2);
+  # `command -v` only looks the name up, it runs nothing.
+  if command -v fr >/dev/null 2>&1; then
+    echo "fr hooks: the only fr on PATH is reached through a relative or empty PATH entry, so the hooks ignore it; put fr's directory on PATH as an absolute path" >&2
+  fi
+  exit 0
+fi
 fr=$FR_FR_BIN
 
 # The cheap early exit, before any `fr` process: no acceptance fragment

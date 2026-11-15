@@ -126,7 +126,13 @@ trap 'rm -rf "$lock"' EXIT
 echo $$ > "$lock/pid"
 
 case "$name" in agent-*) agent_worktree ;; esac
-if ! _fr_is_enabled "$root" || ! fr_fr_resolve; then mimic_default; fi
+_fr_is_enabled "$root" || mimic_default
+if ! fr_fr_resolve; then
+  # Said, not silent (review l-errors-r3): the plain worktree carries no marker, so the
+  # edit gate will deny edits in it, and nothing else would point back here.
+  echo "fr-worktree-create: no trusted fr (only absolute PATH entries count); created a plain worktree, and edits in it will be gated" >&2
+  mimic_default
+fi
 
 branch="$name"; case "$name" in */*) ;; *) branch="wt/$name" ;; esac
 if [ -z "${FR_ISOLATION_TARGET:-}" ] && ! has_profile; then

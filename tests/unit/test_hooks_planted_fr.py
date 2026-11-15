@@ -40,6 +40,8 @@ def world(tmp_path: Path) -> dict:
     repo = tmp_path / "repo"
     (repo / "docs" / "superpowers" / "plans").mkdir(parents=True)
     (repo / "docs" / "superpowers" / "plans" / ".keep").write_text("")
+    (repo / "docs" / "acceptance" / "features").mkdir(parents=True)  # the nag needs a fragment
+    (repo / "docs" / "acceptance" / "features" / "f.yaml").write_text("rows: []\n")
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(
@@ -96,6 +98,10 @@ def _payloads(world: dict) -> dict[str, tuple[str, dict]]:
                 "name": "agent-a",
             },
         ),
+        "acceptance-nag": (
+            "fr-acceptance-nag.sh",
+            {"hook_event_name": "SessionStart", "session_id": "s1", "cwd": repo},
+        ),
         "worktree-create-up": (
             "fr-worktree-create.sh",
             {"session_id": "s1", "cwd": repo, "hook_event_name": "WorktreeCreate", "name": "feat"},
@@ -111,6 +117,7 @@ HOOK_IDS = [
     "run-idle-guard",
     "worktree-create-gc",
     "worktree-create-up",
+    "acceptance-nag",
 ]
 
 
@@ -161,6 +168,9 @@ def test_a_planted_fr_on_a_relative_path_entry_is_never_run(
         assert not env_file.exists() or env_file.read_text() == ""
     if hook == "worktree-create-up":
         assert done.stdout.strip() == str(world["repo"] / ".claude" / "worktrees" / "feat")
+        assert "no trusted fr" in done.stderr  # review l-errors-r3: said, not silent
+    if hook == "acceptance-nag":
+        assert "relative or empty PATH entry" in done.stderr  # review l-errors-r2
 
 
 @pytest.mark.parametrize("hook", HOOK_IDS)

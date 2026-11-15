@@ -44,6 +44,9 @@ for sibling in "$envdir"/sessionstart-hook-*.sh; do
   [ "$sibling" = "$CLAUDE_ENV_FILE" ] && continue
   [ -f "$sibling" ] && [ ! -L "$sibling" ] || continue
   grep -q '^export FR_HARNESS_FR=' "$sibling" 2>/dev/null || continue
+  # Another hook's file may end without a newline; start a fresh line rather than glue
+  # the pin onto its last one (review l-security-r2).
+  [ -z "$(tail -c 1 "$sibling" 2>/dev/null)" ] || printf '\n' >>"$sibling" 2>/dev/null || true
   printf '%s\n' "$line" >>"$sibling" 2>/dev/null || true
 done
 printf '%s\n' "$line" >>"$CLAUDE_ENV_FILE" 2>/dev/null || exit 0
