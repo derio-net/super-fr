@@ -77,9 +77,15 @@ rows:
     origin:
     - spec:2026-11-15-guard-trust#R7
     - spec:2026-11-15-guard-trust#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_binary_pin.py#test_the_pin_reaches_every_pinned_sibling_hook_file
+      - super-fr:tests/unit/test_hooks_binary_pin.py#test_a_sibling_without_a_final_newline_gets_the_pin_on_its_own_line
+      - super-fr:tests/unit/test_fr_binary_identity.py
+    status: ci
+    notes: 'R7/R8 proven in CI: every pinned sibling env file ends on the newest pin
+      (append-only, symlinks skipped, newline-safe, own file once); warning says resume
+      or restart'
     verify: none
 amendments:
   - row: hooks-trust-absolute-path-only
