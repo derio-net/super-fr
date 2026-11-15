@@ -284,3 +284,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1483.
 ### l-security-r1-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1484] · resolves l-security-r1: Edit-gate JSON parser runs python3 -c without -P and resolves python3/jq via command -v
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1484.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved-2 created=2026-11-15T19:05:10+00:00 state=open resolves=p2-r5 tracked_by=derio-net/super-fr#1481 -->
+### p2-r5-resolved-2 · finding [deferred → derio-net/super-fr#1481] · resolves p2-r5: Other hooks keep bare git calls
+
+Same class as spec finding f9 (other bare-name spawns in hooks): tracked there.
