@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-15-guard-trust-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-15T16:55:40+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-15T16:55:40+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: b83407b1-d50a-45a9-8b70-4834a24ffcfa
   plan:
     state: pending
   plan-review:
