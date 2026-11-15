@@ -60,3 +60,8 @@ Root cause: the test timed the whole commit_records call on the real clock, so t
 ### 824263d00513 · ruled-out · #1280: test_install_atomic's bounds are not too tight
 
 Its subprocess bounds are 120-180 s (INSTALL_BOUND_S = 180) around a stubbed install that takes seconds. Failing them needs a 20-50x slowdown: the load 100-300 of #1280's run (another session's suite in the other slot), which the load-aware -n auto now avoids. Left unchanged.
+
+<!-- fr:journal kind=ruled-out scope=debug id=33c8f6e7d66d created=2026-11-15T10:04:11+00:00 -->
+### 33c8f6e7d66d · ruled-out · #1428 fix 1 (longest-first shards) gave no wall-clock gain
+
+Run 43691468025: overhead beyond work/4 fell from 50-87 s to 39-49 s, but scenario tests ran 1.36x their previous duration (other tests 1.03x): started together, they contend, and a module-scoped install repeats per worker. Max py3.14 shard pytest step 329 s before and after. Reverted.
