@@ -32,6 +32,8 @@ def fake_home(tmp_path: Path) -> Path:
     """Set up a fake HOME with the minimal structure install.sh expects."""
     home = tmp_path / "home"
     home.mkdir()
+    # $HOME/bin is on _run_install's PATH; callers drop stubs (uv, fr) there.
+    (home / "bin").mkdir()
     seed_claude_files(home)
     return home
 
