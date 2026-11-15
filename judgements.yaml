@@ -7309,6 +7309,13 @@ batches:
     runner: herdr
     handle: w3D:p1
     branch: feat/batch-retire-vk
+  - kind: red_handback
+    at: '2026-11-15T05:58:41.592940Z'
+    pr: 1465
+    head: cb864d24ba4dcf5026b900f6e64088fb604f85af
+    checks:
+    - 2 failing check(s)
+    delivered: session
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
