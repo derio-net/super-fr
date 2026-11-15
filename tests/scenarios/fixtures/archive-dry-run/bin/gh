@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# A recording forge double for tests/scenarios/archive-dry-run.sh: reads
+# answer with empty results, every call is one argv line in $FAKE_GH_LOG, and a WRITE
+# (issue create/comment/close, label create) is recorded and then fails the call, so a
+# refused archive that reaches the forge fails twice.
+log="${FAKE_GH_LOG:?FAKE_GH_LOG is required}"
+printf '%s\n' "$*" >> "$log"
+case "$1 ${2:-}" in
+  "api user") echo scenario-bot ;;
+  "issue list") echo '[]' ;;
+  *) echo "fake gh: unexpected call: gh $*" >&2; exit 1 ;;
+esac

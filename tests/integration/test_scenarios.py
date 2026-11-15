@@ -268,6 +268,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "owed-reuse-uncapped",
         "owed-close-at-merge",
         "archive-refusal-writes-nothing",
+        "archive-dry-run",
     }
     assert on_disk == here
 
@@ -382,6 +383,10 @@ def test_owed_close_at_merge(installed: Path, tmp_path: Path) -> None:
 
 def test_archive_refusal_writes_nothing(installed: Path, tmp_path: Path) -> None:
     _scenario("archive-refusal-writes-nothing", installed, tmp_path)
+
+
+def test_archive_dry_run(installed: Path, tmp_path: Path) -> None:
+    _scenario("archive-dry-run", installed, tmp_path)
 
 
 def test_auto_migrate_workspace(installed: Path, tmp_path: Path) -> None:
