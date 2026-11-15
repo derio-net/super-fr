@@ -8,7 +8,7 @@ stay in `fr` / `fr_dispatch`; cncd's server owns validation (the Go
 port of the v2 schema, parity-tested against this repo's fixtures
 corpus) and files-win upsert semantics.
 
-Config mirrors the VK runner's env convention:
+Config comes from the environment:
 
   - `CNCD_URL` — base URL of the cncd server (e.g.
     `http://localhost:8787`). An explicit `base_url=` ctor arg wins.

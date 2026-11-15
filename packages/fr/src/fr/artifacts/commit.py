@@ -423,8 +423,8 @@ LOCK_NAME = "fr-migrate.lock"
 Not in the working tree: the lock must not be an artifact, must not be
 committed, and must be shared by every linked worktree of one repository
 (`--git-common-dir`), because two worktrees of the same repo commit to the
-same object store. Same `flock` shape the VK bridge uses for its single-tick
-lock.
+same object store. The same non-blocking `flock` shape as the isolation gc
+lock (`fr.isolation.local`).
 """
 
 

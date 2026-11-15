@@ -44,7 +44,7 @@ class Plan:
     phases: tuple[PhaseDoc, ...]
     repo_root: Path | None = None  # absolute path to the git repo root, if discoverable
     # Raw plan texts, loaded by parse() so the (I/O-free) renderer can embed
-    # them in Issue bodies / VK card descriptions. `prose` is `_prose.md`
+    # them in Issue bodies. `prose` is `_prose.md`
     # verbatim (None when absent); `phase_texts` maps phase NUMBER → raw
     # `NN.yaml` file content. Defaults keep direct `Plan(...)` constructions
     # (tests, builders) valid — enrichment then degrades to nothing.
@@ -126,9 +126,9 @@ def _find_repo_root(start: Path) -> Path | None:
 _PHASE_FILE_RE = re.compile(r"^(\d{2})\.yaml$")
 
 # Cached at module-import time because `importlib.metadata.version()` is not
-# free. The bridge runs under supercronic, which kills and respawns the
-# process on every cron tick after `vk-bump`, so a stale cache is not a real
-# concern — the new process always re-reads the metadata.
+# free. A long-lived process (a runner bridge) is respawned to pick up an
+# upgraded `fr`, so a stale cache is not a real concern — the new process
+# always re-reads the metadata.
 INSTALLED_FR_VERSION = importlib.metadata.version("fr")
 
 

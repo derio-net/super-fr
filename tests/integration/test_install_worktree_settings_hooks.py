@@ -116,9 +116,6 @@ def test_command_survives_a_home_with_a_space(tmp_path: Path) -> None:
 
     home = tmp_path / "with space" / "home"
     (home / "bin").mkdir(parents=True)
-    vk = home / "bin" / "vibe-kanban-mcp"
-    vk.write_text("#!/bin/sh\necho stub\n")
-    vk.chmod(0o755)
     plugins = home / ".claude" / "plugins"
     plugins.mkdir(parents=True)
     (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 2}))

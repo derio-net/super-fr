@@ -1,0 +1,303 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-14-retire-vibekanban
+repo: derio-net/super-fr
+rows:
+  - id: vk-runner-removed
+    capability: Dispatch
+    acceptance: No `vk` runner is registered or installed, `fr apply --to vk` refuses
+      it as an unknown runner, and no shipped source names fr_vk, fr-vk or vibe_kanban
+      outside the named exceptions
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R1
+    - spec:2026-11-14-retire-vibekanban#R7
+    - spec:2026-11-14-retire-vibekanban#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: dispatch-docs-name-no-vk
+    capability: Dispatch
+    acceptance: The dispatch plugin ships no fr-runner skill, and its skills, plugin
+      manifest and published docs describe no VibeKanban runner
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R6
+    - spec:2026-11-14-retire-vibekanban#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: stale-vk-profile-refused
+    capability: Isolation
+    acceptance: '`fr isolation up` and `rebuild` in devcontainer mode refuse, before
+      starting a container, a profile that installs packages/fr-vk, naming the file
+      and the segment to delete'
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R3
+    - spec:2026-11-14-retire-vibekanban#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_vk_profile.py
+      - super-fr:tests/unit/test_vk_compat_removed.py
+    status: ci
+    notes: 'Refusal in the shared _devcontainer_up path; up (workspace recorded, no
+      container), rebuild, a customised postCreateCommand, a clean profile and an absent
+      config pinned with a fake runner. Scaffold/this repo''s profiles: phase 1 (test_vk_compat_removed).'
+    verify: none
+  - id: installer-removes-vk-residue
+    capability: Install
+    acceptance: install.sh writes no VK pieces, removes a vibe_kanban MCP entry and
+      an fr-written vk-bridge wrapper when present, and `--install-bridge` refuses naming
+      the removal
+    origin:
+    - spec:2026-11-14-retire-vibekanban#R5
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_sh.py#TestVkResidue
+      - super-fr:tests/integration/test_runner_package_lists.py#test_install_bridge_names_no_fr_vk
+      - super-fr:tests/integration/test_install_sh.py#TestUninstall::test_removes_vk_from_mcp_config
+    status: ci
+    notes: 'install.sh over a fixture home: no vibe_kanban entry or VK warning, the
+      entry and an fr-written vk-bridge wrapper (default path and VK_BRIDGE_WRAPPER_PATH)
+      removed with one line each, a foreign file kept, --install-bridge exits 2 naming
+      the removal, --uninstall still removes the entry.'
+    verify: none
+amendments:
+  - row: stale-vk-profile-refused
+    op: reword
+    base: 0
+    acceptance: Scaffolding and this repo's profiles install no fr-vk, and `fr isolation
+      up` and `rebuild` in devcontainer mode refuse, before starting a container, a
+      profile that installs packages/fr-vk, naming the file and the segment to delete
+    why: spec-review s-r7, the row cites R3 and must state it
+  - row: bridge-checkout-self-heal
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: bridge-pr-autoclose
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: bridge-done-issue-close
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: vk-dispatch-unchanged-after-cutover
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: multibackend-vk-dispatch
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: vk-bridge-init-timeout-graceful
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: vk-mcp-timeout-survives-slow-ops
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: vk-mcp-post-timeout-correctness
+    op: retire
+    base: 0
+    notes: VK support removed (spec 2026-11-14-retire-vibekanban R9)
+    why: The capability lived only in the fr-vk bridge, MCP client or VK runner, which
+      are deleted
+  - row: vk-legacy-fallbacks-removed
+    op: drop-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_bridge_cli.py
+    why: The VK_BRIDGE_* half went with the fr-vk bridge; the isolation spellings stay
+      covered by test_isolation.py
+  - row: dispatch-unit-declared-by-shape
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_bridge_shape_binding.py
+    why: That test drove the deleted fr-vk bridge daemon; the shape-declared unit stays
+      covered by the item-graph, no-PR-shape and spec-fanout tests
+  - row: shape-resolution-fails-loud
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_bridge_shape_binding.py
+    why: That test drove the deleted fr-vk bridge daemon; test_plan_workflow_binding.py
+      still covers the loud failure
+  - row: runner-capability-refusal
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_bridge_shape_binding.py
+    why: That test drove the deleted fr-vk bridge daemon; test_capabilities.py still
+      covers the preflight refusal
+  - row: gitlab-selfhosted-host-targeting
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_pr_observe.py
+    why: test_pr_observe.py tested the deleted fr_vk.pr_observe; the host targeting
+      stays covered by the _hosts, hostclient and glab tests
+  - row: forge-calls-through-adapter
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_forge_error_kind.py#test_the_bridge_guard_backs_off_on_any_forges_rate_limit
+    why: That case drove the deleted fr-vk bridge's rate-limit guard; the adapter tripwire
+      tests remain
+  - row: installed-fr-carries-every-runner
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_install_bridge.py
+    why: --install-bridge wrote the fr-vk bridge wrapper, which is removed; test_runner_package_lists.py
+      still pins the runner set
+  - row: installed-fr-carries-every-runner
+    op: reword
+    base: 1
+    acceptance: An installed fr loads every runner the workspace declares (fr.runners
+      entry points), so dispatch --to herdr/cncd works outside uv run
+    why: The vk runner and install.sh --install-bridge are removed (spec 2026-11-14-retire-vibekanban
+      R1)
+  - row: vk-legacy-fallbacks-removed
+    op: reword
+    base: 4
+    acceptance: 'The vk-spelling dual-read fallbacks (vk-profiles.yaml, the .git/vk/isolation
+      state dir) no longer resolve: vk spellings are not read, and a devcontainer mount
+      is followed whatever its path is named'
+    why: 'VK support is removed (R1, R9): the bridge env and its project-id variable
+      went with fr-vk, so only the isolation spellings remain to pin'
+  - row: vk-legacy-fallbacks-removed
+    op: set-status
+    base: 5
+    status: ci
+    notes: test_isolation.py pins profiles_config and the state dir reading fr spellings
+      only, and that a mounted env file is created whatever its path. Run in CI.
+    why: 'test_bridge_cli.py was deleted with fr-vk (R9: no row cites a deleted test)'
+  - row: daemon-refuses-stale-artifacts
+    op: set-status
+    base: 0
+    status: ci
+    notes: 'Spec 3.C. discover_plans (fr_dispatch/__init__.py) no longer catches PlanSchemaError
+      as a quiet warning-and-continue; it logs ERROR, pushes a stale_artifact failure
+      metric, and reports the failure to its caller via a failures outparam that folds
+      into the tick error total -- one stale plan excludes only itself (I9 boundary),
+      the daemon never migrates or commits (issue #286). The "and CI" half is covered
+      by the ensure_artifacts_current CLI-entry gate (non-interactive when CI is set).'
+    why: bridge_cli.py was deleted with fr-vk; the note names the surviving tick caller
+  - row: vk-runner-removed
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_vk_runner_entry_point
+    why: phase 1 landed the runner-removal evidence; the source tripwire half (R10)
+      lands in phase 3
+  - row: vk-runner-removed
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_apply_to_vk_is_unknown_runner
+    why: phase 1 landed the runner-removal evidence; the source tripwire half (R10)
+      lands in phase 3
+  - row: vk-runner-removed
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_vk_residue_in_shipped_sources
+    why: phase 3 landed the R10 source tripwire
+  - row: vk-runner-removed
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_vk_residue_allowlist_has_no_dead_entries
+    why: phase 3 landed the R10 source tripwire
+  - row: vk-runner-removed
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_vk_residue_fails_on_a_planted_fr_vk_line
+    why: phase 3 landed the R10 source tripwire
+  - row: vk-runner-removed
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_vk_residue_fails_on_a_planted_vibekanban_line_in_plugins
+    why: phase 3 landed the R10 source tripwire
+  - row: vk-runner-removed
+    op: set-status
+    base: 6
+    status: ci
+    notes: R1 registry tests and the R10 source tripwire (with its allowlist and planted-line
+      cases) run in CI
+    why: every half of the row now has a test that runs in CI
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_fr_skills_lists_no_fr_runner
+    why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
+      pages
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_shipped_skill_is_fr_runner
+    why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
+      pages
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_published_pages_name_no_vk_runner
+    why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
+      pages
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_vk_residue_in_shipped_sources
+    why: phase 3 removed fr-runner and the VK runner text from skills, manifest and
+      pages
+  - row: dispatch-docs-name-no-vk
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_readme_sync.py
+    why: sync-readme --check is the README half of R6
+  - row: dispatch-docs-name-no-vk
+    op: set-status
+    base: 5
+    status: ci
+    notes: fr skills, the shipped skills, README and every published page are pinned
+      free of fr-runner and the VK runner; the R10 tripwire covers the plugin manifest;
+      fr docs check runs in CI
+    why: the skill, manifest and docs evidence runs in CI
+  - row: installer-removes-vk-residue
+    op: reword
+    base: 0
+    acceptance: install.sh writes no VK pieces, removes a vibe_kanban MCP entry and
+      an fr-written vk-bridge wrapper when present, warns and continues when a removal
+      fails (a 0600 sidecar, never world-readable), points at a crontab entry naming
+      the wrapper, and `--install-bridge` refuses naming the removal and the crontab
+      entry
+    why: spec R5 now states the failure warnings and the crontab hint (lens-review security/errors
+      findings)

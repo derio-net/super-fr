@@ -1,9 +1,8 @@
 """Backend identity — which git-forge CLI a repo talks to.
 
 `detect_backend()` is the single place that answers "gh, glab, or tea for
-this repo?" for the whole codebase (fr apply's CLI wiring, fr-vk's dispatch
-bridge, the isolation lifecycle, and scaffold all resolve through this
-instead of hardcoding gh). Resolution order:
+this repo?" for the whole codebase (fr apply's CLI wiring, the isolation
+lifecycle, and scaffold all resolve through this instead of hardcoding gh). Resolution order:
 
 1. `.devcontainer/fr-profiles.yaml`'s `forge:` service (or, in a version-1
    file, its flat top-level `backend:` key), if present — authoritative.
@@ -60,11 +59,9 @@ DEFAULT_HOST_BACKENDS: dict[str, HostBackend] = {
     "gitlab.com": "gitlab",
 }
 
-# Shared with fr_vk._cardref (VK card-title tag) and fr_dispatch.prompt
-# (dispatched-agent prompt wording) — lives here, not in fr_vk, since
-# fr_dispatch depends only on `fr`, never on the fr_vk runner adapter
-# (fr_dispatch is meant to be runner-agnostic; a future non-VK runner
-# needs this map too). See docs/superpowers/specs/
+# Used by fr_dispatch.prompt (dispatched-agent prompt wording) — lives here,
+# not in a runner adapter, since fr_dispatch depends only on `fr`, never on
+# an adapter (fr_dispatch is meant to be runner-agnostic). See docs/superpowers/specs/
 # 2026-07-09-multi-backend-git-host-adapters-design.md §2/§7.
 TAG_FOR_BACKEND: dict[HostBackend, str] = {"github": "gh", "gitlab": "gl", "gitea": "gt"}
 BACKEND_FOR_TAG: dict[str, HostBackend] = {v: k for k, v in TAG_FOR_BACKEND.items()}
@@ -130,9 +127,8 @@ def origin_slug(repo_root: Path) -> str | None:
 def backend_for_hostname(hostname: str | None) -> HostBackend:
     """Resolve a backend from a bare hostname alone — the plain heuristic
     tier of `detect_backend`, for contexts that only have a URL, not a
-    `repo_root` to read explicit config from (e.g. fr-vk's PR-status
-    poller, which may be watching cards across repos on different
-    backends from one bridge process — see `fr_vk.pr_observe`). Falls
+    `repo_root` to read explicit config from (e.g. `fr.services.resolve`,
+    which has only the origin's hostname). Falls
     back to "github" the same way `detect_backend` does when nothing
     else resolves.
     """
@@ -144,8 +140,8 @@ def backend_for_hostname(hostname: str | None) -> HostBackend:
 # A forge URL's PATH identifies the forge where its HOSTNAME cannot.
 # `backend_for_hostname` knows two SaaS domains, so every self-hosted
 # instance falls through to "github" — fine as a default for a repo that
-# can declare `backend:`, useless for a bare URL, which is all the VK
-# bridge has (gh-486 gap 2).
+# can declare `backend:`, useless for a bare URL, which is all a
+# caller without a checkout has (gh-486 gap 2).
 #
 # Each pattern is ANCHORED on a route keyword followed by a complete
 # numeric segment, and that anchoring is the whole correctness argument.
@@ -182,8 +178,8 @@ def backend_for_url(url: str) -> HostBackend:
     """Resolve a backend from a forge URL: its path shape first, its
     hostname second.
 
-    For `fr_vk.pr_observe`/`pr_state` and `fr_dispatch.prompt`, which hold
-    a URL and no checkout, so `detect_backend`'s config tier is
+    For `fr.hostclient.client_for_url`, `fr_dispatch.prompt` and the stealth
+    placement, which hold a URL and no checkout, so `detect_backend`'s config tier is
     unavailable. A bare `/issues/N` is deliberately NOT a shape: it is
     both GitHub's and Gitea's, so it falls through to the hostname rather
     than being guessed — the same documented Gitea boundary as before.
@@ -245,8 +241,8 @@ def self_hosted_hostname(hostname: str | None) -> str | None:
     """The hostname, but only when it is NOT a recognized SaaS domain —
     else None. `github.com`/`gitlab.com` need no override, and naming one
     would make an ordinary repo look self-hosted. Shared by `host_for`
-    (which has a checkout) and `fr_vk.pr_observe` (which has only a PR
-    URL), so the rule cannot drift between them — see gh-486, spec §4.C."""
+    (which has a checkout) and `fr.hostclient.client_for_url` (which has
+    only a URL), so the rule cannot drift between them — see gh-486, spec §4.C."""
     if hostname and hostname not in DEFAULT_HOST_BACKENDS:
         return hostname
     return None

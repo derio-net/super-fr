@@ -6,7 +6,7 @@ Spec: docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md §4.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -16,6 +16,9 @@ from fr.acceptance.fragment import FRAGMENTS_DIR
 from fr.acceptance.model import AcceptanceError, Matrix, Row, Walk
 from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
 from fr.commands.common import resolve_repo_root
+
+if TYPE_CHECKING:
+    from fr.acceptance.fold import Effective
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
@@ -57,7 +60,13 @@ def _say_if_off(root: Path) -> bool:
 def _load(root: Path) -> Matrix:
     """The effective matrix (`fr.acceptance.fold.load_effective`). A repo with no
     fragment and no `docs/acceptance/features/` directory has no acceptance: exit 1."""
-    from fr.acceptance.fold import has_fragments, load_effective
+    return _load_effective(root).matrix
+
+
+def _load_effective(root: Path) -> Effective:
+    """The whole fold (`fr.acceptance.fold.effective`), with `_load`'s refusals, for a
+    reader that needs more than the matrix (its retired rows)."""
+    from fr.acceptance.fold import effective, has_fragments
 
     if not has_fragments(root) and not (artifact_root(root) / FRAGMENTS_DIR).is_dir():
         err_console.print(
@@ -66,7 +75,7 @@ def _load(root: Path) -> Matrix:
         )
         raise typer.Exit(1)
     try:
-        return load_effective(root)
+        return effective(root)
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {escape(str(e))}", soft_wrap=True)
         raise typer.Exit(1) from e
@@ -159,9 +168,10 @@ def check_cmd(
         typer.echo(f"default ref: {branch.source}")
     for w in branch.warnings:
         typer.echo(f"::warning title=acceptance-matrix::{w}")
-    matrix = _load(root)
+    folded = _load_effective(root)
+    matrix = folded.matrix
     try:
-        result = check(matrix, root, sibling_root)
+        result = check(matrix, root, sibling_root, retired=folded.retired)
         added = _added_since(root, added_since, matrix) if added_since else []
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
@@ -1468,24 +1478,18 @@ def backfill_cmd() -> None:
     """Emit the agent backfill protocol + deterministic inventory (markdown)."""
     import yaml
 
-    from fr.acceptance.check import SPEC_DIRS, spec_test_plan
-    from fr.acceptance.model import archive_twin, split_ref
+    from fr.acceptance.check import SPEC_DIRS, cited_spec_paths, resolve_identity, spec_test_plan
 
     root = resolve_repo_root()
     _refuse_if_off(root, "`fr acceptance backfill` writes no row")
-    matrix = _load(root)
+    folded = _load_effective(root)
+    matrix = folded.matrix
 
-    referenced: set[str] = set()
-    for r in matrix.rows:
-        for ref in r.origin:
-            try:
-                _, path, _ = split_ref(ref)
-            except AcceptanceError:
-                continue
-            referenced.add(path)
-            twin = archive_twin(path)
-            if twin:
-                referenced.add(twin)
+    try:
+        own: str | None = resolve_identity(matrix, root)[1]
+    except AcceptanceError:
+        own = None  # no identity to filter by: every path origin counts, as before
+    referenced = cited_spec_paths((*matrix.rows, *folded.retired), own)
     from fr.artifacts.paths import artifact_root
 
     aroot = artifact_root(root)  # a quiet or stealth feature's specs live below it

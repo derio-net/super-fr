@@ -71,7 +71,6 @@ its own. Each name links to the page that covers it.
 | [`fr-origins`](https://derio-net.github.io/super-fr/fr-triage.html) | super-fr | Classify where a repo's recent bugs came from and which process change would have prevented them. |
 | [`fr-plan`](https://derio-net.github.io/super-fr/fr-brainstorming-and-plan.html) | super-fr | Turn a spec into a phase-by-phase plan that tooling can track and an agent can execute. |
 | [`fr-progress`](https://derio-net.github.io/super-fr/fr-progress.html) | super-fr | Report what is in progress, what drifted and what is ready to archive. |
-| [`fr-runner`](https://derio-net.github.io/super-fr/fr-dispatch.html) | super-fr-dispatch | Check that an autonomous runner is alive and diagnose phases it did not pick up. |
 | [`fr-triage`](https://derio-net.github.io/super-fr/fr-triage.html) | super-fr | Rank a repo's or an org's open issues, group them into batches and drive the batches to merged PRs. |
 <!-- /generated:skills -->
 

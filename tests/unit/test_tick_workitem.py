@@ -13,9 +13,8 @@ part: per-item accumulation, one bad item never aborts the loop, a raising
 Issue creation stays operator-only (`skip_issue_create=True` — the
 2026-05-18 incident, sfv#196-#214 / sfv#216-#234).
 
-These tests use a `FakeRunner` implementing the v2 protocol directly rather
-than `VkRunner`, so they pin the *framework's* doctrine independent of any
-adapter. The adapters move in Phase 4.
+These tests use a `FakeRunner` implementing the v2 protocol directly, so they
+pin the *framework's* doctrine independent of any adapter.
 """
 
 from __future__ import annotations
@@ -58,12 +57,14 @@ class FakeRunner:
         unroutable: set[str] = frozenset(),  # type: ignore[assignment]
         dispatch_fails: set[str] = frozenset(),  # type: ignore[assignment]
         raise_in: set[str] = frozenset(),  # type: ignore[assignment]
+        dispatch_error: type[BaseException] = RuntimeError,
     ) -> None:
         self._preflight_error = preflight_error
         self._budget = budget
         self._existing = set(existing or set())
         self._unroutable = set(unroutable)
         self._dispatch_fails = set(dispatch_fails)
+        self._dispatch_error = dispatch_error
         self._raise_in = set(raise_in)
         self.refreshed = 0
         self.preflight_items: Any = None
@@ -100,7 +101,7 @@ class FakeRunner:
 
     def dispatch(self, item: Any) -> None:
         if item.id in self._dispatch_fails:
-            raise RuntimeError("injected backend failure")
+            raise self._dispatch_error("injected backend failure")
         self.dispatched.append(item)
 
 
@@ -384,6 +385,56 @@ def test_one_failing_item_does_not_abort_the_loop():
     assert m.syncs == 1
     assert m.reasons == ["backend_error"]
     # Only the good item got stamped.
+    assert [c["number"] for c in _synced_adds(gh)] == [102]
+
+
+def test_tick_stamps_a_gitlab_tracked_issue_on_its_repo_and_number():
+    """`tick` parses a GitLab `/-/issues/N` tracking URL and stamps `fr:synced`
+    through whatever GhClient-shaped object it is given (spec
+    2026-07-09-multi-backend-git-host-adapters §7)."""
+    from fr import parse
+    from fr_dispatch import tick
+
+    repo, n = "group/proj", 7
+    plan = parse(MINIMAL)
+    phase = plan.phases[0].model_copy(
+        update={
+            "phase": plan.phases[0].phase.model_copy(
+                update={"tracking_issue": f"https://gitlab.example.com/{repo}/-/issues/{n}"}
+            )
+        }
+    )
+    plan = dc_replace(
+        plan, phases=(phase,), meta=plan.meta.model_copy(update={"target_repo": repo})
+    )
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (n,))
+
+    result = tick(plan, gh, FakeRunner())
+
+    assert result.synced == 1
+    assert result.errors == 0
+    assert [(c["repo"], c["number"]) for c in _synced_adds(gh)] == [(repo, n)]
+
+
+def test_a_dispatch_raising_a_non_runtime_error_fails_only_that_item():
+    """A backend timeout is not a RuntimeError: the guard must catch any Exception,
+    or one slow backend call kills the tick for every sibling."""
+    from fr_dispatch import tick
+
+    plan = _two_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, REPO, (101, 102))
+    bad = f"{REPO}/_no-spec/2026-05-09-fixture-multi-phase/phase/1"
+    good = f"{REPO}/_no-spec/2026-05-09-fixture-multi-phase/phase/2"
+    runner = FakeRunner(dispatch_fails={bad}, dispatch_error=TimeoutError)
+
+    result = tick(plan, gh, runner)
+
+    assert [i.id for i in runner.dispatched] == [good]
+    assert result.synced == 1
+    assert result.errors == 1
+    assert list(result.failures) == [f"{bad}: injected backend failure"]
     assert [c["number"] for c in _synced_adds(gh)] == [102]
 
 
@@ -861,8 +912,8 @@ def test_existing_dispatches_receives_this_tick_s_items():
     honest source for that mapping is the item list itself. Passing it
     removes the alternative — an adapter caching the items from an earlier
     `preflight(items)` call and silently returning an empty snapshot if the
-    two are ever reordered (VkRunner did exactly that: duplicate cards and
-    workspaces on a re-ordered tick).
+    two are ever reordered (an adapter once did exactly that: duplicate
+    dispatches on a re-ordered tick).
     """
     import inspect
 
@@ -1105,8 +1156,7 @@ def test_a_raising_tracker_check_is_a_blocker_not_a_crash() -> None:
 
 
 class _UnitLimitedRunner(FakeRunner):
-    """A runner that takes phases only — the shape both shipped adapters have
-    after review r5-a2, and the shape `protocols.Runner.can_dispatch`
+    """A runner that takes phases only — the shape `protocols.Runner.can_dispatch`
     documents ("a runner that only handles some units can say so")."""
 
     def __init__(self, **kw: Any) -> None:
@@ -1118,18 +1168,9 @@ class _UnitLimitedRunner(FakeRunner):
         return item.unit == "phase"
 
     def existing_dispatches(self, items: Any) -> set[str]:
+        # Records what `tick` asked about, so a test can see which units reached it.
         self.existing_dispatches_seen = list(items)
-        return _titles_to_ids(items)
-
-
-def _titles_to_ids(items: Any) -> set[str]:
-    """`fr_vk.dedup.map_titles_to_item_ids`, exercised through the framework.
-
-    Its inversion reads `item.payload["issue_number"]`, so a mixed list is
-    exactly where a `KeyError` would live."""
-    from fr_vk.dedup import map_titles_to_item_ids
-
-    return map_titles_to_item_ids(set(), items)
+        return set()
 
 
 def _mixed_items(plan, repo: str, issue_number: int):
@@ -1210,20 +1251,6 @@ def test_the_unit_refusal_runs_before_the_backend_is_asked_to_dispatch(monkeypat
         if item.unit != "phase":
             assert item.id not in dispatched_ids
             assert any(item.id in f for f in result.failures), result.failures
-
-
-def test_map_titles_to_item_ids_survives_a_mixed_list() -> None:
-    """Unit-level, so the guarantee does not depend on tick's shape."""
-    from fr_vk._cardref import DISPATCH_BACKEND, TAG_FOR_BACKEND
-    from fr_vk.dedup import map_titles_to_item_ids
-
-    plan, repo, issue_number = _one_phase_plan()
-    items = _mixed_items(plan, repo, issue_number)
-    tag = TAG_FOR_BACKEND[DISPATCH_BACKEND]
-
-    resolved = map_titles_to_item_ids({f"{tag}#{issue_number}: [{repo}]"}, items)
-
-    assert resolved == {items[0].id}
 
 
 # --- R9 (amended), p3-r2: the bridge's label writes answer to the repo's forge policy ---

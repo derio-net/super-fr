@@ -313,7 +313,7 @@ def test_apply_to_unknown_runner_exits_2(tmp_path, monkeypatch):
     assert result.exit_code == 2
     combined = result.output + (result.stderr or "")
     assert "unknown runner 'nope'" in combined
-    assert "vk" in combined  # the registered runner is listed
+    assert "cncd" in combined  # the registered runners are listed
 
 
 def test_apply_to_requires_fr_dispatch(tmp_path, monkeypatch):
@@ -336,6 +336,6 @@ def test_apply_to_requires_fr_dispatch(tmp_path, monkeypatch):
     sp.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
-    result = CliRunner().invoke(app, ["apply", "--all", "--to", "vk"])
+    result = CliRunner().invoke(app, ["apply", "--all", "--to", "cncd"])
     assert result.exit_code == 2
     assert "requires fr-dispatch" in (result.output + (result.stderr or ""))

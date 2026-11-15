@@ -4,8 +4,8 @@ super-fr#644: `fr apply --to herdr` passed the name-only check, labelled phase
 Issues `runner:herdr`, and every tick then refused each item — herdr takes
 `unit="run"` work only — under a message that blamed the repo. `apply` could not
 ask the runner, because a runner's unit limit lived only inside
-`can_dispatch(item)`, which needs a built runner (vk and cncd cannot be built
-outside their bridge). `Runner.units` is the declaration `apply` reads off the
+`can_dispatch(item)`, which needs a built runner (cncd cannot be built outside
+its bridge). `Runner.units` is the declaration `apply` reads off the
 registered class, before any forge call.
 """
 
@@ -49,7 +49,6 @@ def test_every_registered_runner_declares_the_units_it_takes():
         )
         assert units <= vocabulary, f"{name}: {sorted(units - vocabulary)} is not a unit"
         declared[name] = units
-    assert declared["vk"] == frozenset({"phase"})
     assert declared["cncd"] == frozenset({"phase"})
     assert declared["herdr"] == frozenset({"run"})
 
@@ -84,7 +83,7 @@ def test_apply_to_a_runner_declaring_no_units_refuses(tmp_path, monkeypatch):
     assert "legacy" in out and "units" in out
 
 
-@pytest.mark.parametrize("runner", ["vk", "cncd"])
+@pytest.mark.parametrize("runner", ["cncd"])
 def test_apply_to_a_phase_runner_passes_the_unit_check(tmp_path, monkeypatch, runner):
     result, out, forge_calls = _invoke_apply(tmp_path, monkeypatch, runner)
 

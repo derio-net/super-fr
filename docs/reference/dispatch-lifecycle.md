@@ -5,13 +5,16 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr-dispatch/src/**
+  - packages/fr-cncd/src/**
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - packages/fr-claude-cloud/src/**
   - packages/fr/src/fr/commands/repos_cmd.py
   - packages/fr/src/fr/repos.py
   - packages/fr/src/fr/labels.py
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch
 ---
 
 # Dispatch labels and the per-repo plan profile
@@ -23,9 +26,10 @@ labels mean.
 
 ## The label lifecycle
 
-A runner is the program that picks up queued phases and works them (VibeKanban's `vk`
-adapter, for one). It wakes on a timer, and each wake is a tick. A queued phase carries
-exactly one lifecycle label. On every tick, the label is derived from the issue and its PRs:
+A runner is the program that picks up queued phases and works them (the `cncd`
+adapter, for one). This repo ships no process that calls `fr_dispatch.tick`. The
+deployment that runs a runner supplies that scheduled process, and each call is a tick. A
+queued phase carries exactly one lifecycle label. On every tick, the label is derived from the issue and its PRs:
 
 ```
 fr:ready ──→ fr:in-progress ──→ fr:pr-ready ──→ (issue closed)
@@ -41,15 +45,13 @@ tracking-only and carries no lifecycle label.
 All of this is what the defaults give you. A repo's forge settings (`.fr/settings.yaml`
 on its default branch, `fr settings show`) can switch writes off by kind:
 
-- **`forge.labels: off`**: the bridge writes none of these labels, and not `fr:synced`
-  either. The bridge's dedup snapshot is then the only thing that stops a second handover
-  of a phase.
-- **`forge.issues: off`**: the bridge makes and closes no tracking issue, and its
-  close-on-merge backstop closes nothing.
+- **`forge.labels: off`**: `tick` writes none of these labels, and not `fr:synced`
+  either. The runner's dedup snapshot is then the only thing that stops a second handover
+  of a phase. `fr apply --yes` stops (exit 2) and names the setting.
+- **`forge.issues: off`**: no tracking issue is made or closed. `fr apply --yes` and
+  `fr undispatch --yes` stop (exit 2) and name the setting.
 
-Under either of these two, `fr apply --yes` stops (exit 2) and names the setting.
-
-If the bridge cannot read the settings of a repo, it does not write to that repo, and it
+If `tick` cannot read the settings of a repo, it does not write to that repo, and it
 reports the failure. It never falls back to the defaults.
 
 ## The reachability gate

@@ -3,8 +3,8 @@
 F2 verifies the agent-images sibling plan has actually retired the
 1089-LOC legacy bridge files. G4 enumerates the spec's inventory of
 bridge concerns (A-P) and asserts every non-DELETED entry maps to an
-importable module in the current `vk` package — no orphans, no dead
-shim modules for the DELETED entries.
+importable module — no orphans, no dead shim modules for the DELETED
+entries.
 
 Cross-repo F2 needs `gh` auth at runtime; it skips gracefully when the
 sibling repo / auth aren't reachable, since the agent-images sibling
@@ -101,25 +101,26 @@ def test_agent_images_bridge_files_deleted() -> None:
 # Source: spec §"Migration table (per concern → new home)" of
 # docs/superpowers/specs/2026-05-17-v2-bridge-rebuild-design.md.
 # Each value is either:
-#   - "DELETED" — the concern retired with the rebuild; verify absence
-#   - a dotted module path — must be importable under the live `vk` package
+#   - "DELETED" — the concern retired with the rebuild, or with the VK runner
+#     (spec 2026-11-14-retire-vibekanban); verify absence
+#   - a dotted module path — must be importable
 INVENTORY: dict[str, str] = {
-    "A": "fr_vk.bridge_cli",
+    "A": "DELETED",
     "A'": "DELETED",
     "B": "DELETED",
     "C": "fr.render",
-    "D": "fr_vk.workspaces",
+    "D": "DELETED",
     "E": "fr_dispatch.lifecycle",
-    "F": "fr_vk.pr_state",
-    "G": "fr_vk.dispatch",
-    "H": "fr_vk.slots",
-    "I": "fr_vk.dedup",
-    "J": "fr_vk.config",
+    "F": "DELETED",
+    "G": "DELETED",
+    "H": "DELETED",
+    "I": "DELETED",
+    "J": "DELETED",
     "K": "fr_dispatch.prompt",
     "L": "fr_dispatch.metrics",
     "M": "fr.gh",
     "N": "fr_dispatch.lifecycle",
-    "O": "fr_vk.bridge_cli",
+    "O": "DELETED",
     "P": "fr.parser",
 }
 
@@ -128,6 +129,7 @@ INVENTORY: dict[str, str] = {
 DELETED_SHIMS: tuple[str, ...] = (
     "fr_dispatch.body_parse",
     "fr_dispatch.gh_ready_listing",
+    "fr_vk",
 )
 
 

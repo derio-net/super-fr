@@ -1169,6 +1169,35 @@ def classify_branch(
     return BranchDecision("cold", None, ())
 
 
+# A profile scaffolded before VK support was removed installs this package; its
+# postCreateCommand would fail on every container start (spec 2026-11-14 R4,
+# retiring the VK runner).
+_VK_PROFILE_NEEDLE = "subdirectory=packages/fr-vk"
+
+
+class StaleProfileError(IsolationError):
+    """The profile itself is wrong, so no container was touched. Exec's resume
+    and `rebuild` re-raise it as-is: their hints (rebuild recreates it, the old
+    container may be gone) would mislead. `up` keeps its own wrapper (R4)."""
+
+
+def _refuse_vk_profile(config: Path) -> None:
+    """Refuse a devcontainer config that still installs fr-vk, before any
+    container starts. A config that is absent or unreadable is `devcontainer
+    up`'s to report."""
+    try:
+        text = config.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    if _VK_PROFILE_NEEDLE in text:
+        raise StaleProfileError(
+            f"{config} installs fr-vk, but VK support was removed: delete the "
+            f"`--with '…#{_VK_PROFILE_NEEDLE}'` segment from its postCreateCommand. "
+            "Fix the profile on the default branch too, because every new branch "
+            "is cut from it."
+        )
+
+
 class LocalWorktreeDevcontainerTarget:
     # The mode this class implements — pinned on the background gc it spawns
     # (gh#569). HostWorktreeTarget overrides it.
@@ -1299,6 +1328,7 @@ class LocalWorktreeDevcontainerTarget:
     ) -> None:
         """The one `devcontainer up` — shared by `up`, `rebuild` and exec's
         resume, so the mount and config rules cannot drift between them."""
+        _refuse_vk_profile(self._config_path(worktree, profile))
         self._ensure_mounted_env_file(self._config_path(worktree, profile))
         # Resolve the shared common dir, not <repo_root>/.git: correct even if
         # repo_root is a worktree (a gitfile), independent of normalization (#292).
@@ -1378,6 +1408,8 @@ class LocalWorktreeDevcontainerTarget:
             )
             try:
                 self._devcontainer_up(state.worktree, state.profile)
+            except StaleProfileError:
+                raise
             except IsolationError as err:
                 # The hint leads: devcontainer's output is multi-line (p2-f6).
                 raise IsolationError(
@@ -1423,6 +1455,8 @@ class LocalWorktreeDevcontainerTarget:
             self._devcontainer_up(
                 state.worktree, state.profile, remove_existing=True, no_cache=no_cache
             )
+        except StaleProfileError:
+            raise
         except IsolationError as err:
             raise IsolationError(
                 f"rebuild of {branch} failed: {err}\n"
@@ -1603,7 +1637,7 @@ class LocalWorktreeDevcontainerTarget:
     # Backend CLI name + PR/MR label for push_check's guidance line —
     # shares the gh/glab/tea vocabulary `fr._hosts.TAG_FOR_BACKEND` already
     # uses elsewhere, kept local (not imported) since that map's values are
-    # the short vk-card tags ("gh"/"gl"/"gt"), not the CLI binary names.
+    # the short issue-reference tags ("gh"/"gl"/"gt"), not the CLI binary names.
     _CLI_FOR_BACKEND: ClassVar[dict[str, str]] = {
         "github": "gh",
         "gitlab": "glab",
@@ -2158,8 +2192,8 @@ class LocalWorktreeDevcontainerTarget:
 
     def _acquire_gc_lock(self) -> IO[str]:
         """flock(LOCK_EX | LOCK_NB) on the host-wide gc lock; BlockingIOError if
-        another sweep holds it. Idiom mirrored from fr_vk.bridge_cli (reimplemented
-        locally — `fr` must not depend on `fr_vk`, which is being dropped)."""
+        another sweep holds it. The same non-blocking flock idiom as
+        `fr.artifacts.atomic`'s migration lock."""
         lock_path = _home() / ".cache" / "fr" / "isolation-gc.lock"
         try:
             lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3005,7 +3039,7 @@ class LocalWorktreeDevcontainerTarget:
         """
         try:
             run_args = json.loads(config.read_text()).get("runArgs", [])
-        except (OSError, json.JSONDecodeError):
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return
         for flag, value in zip(run_args, run_args[1:]):
             if flag != "--env-file":

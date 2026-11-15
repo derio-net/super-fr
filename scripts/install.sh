@@ -113,7 +113,6 @@ CLAUDE_DIR="$HOME/.claude"
 RULES_DIR="$CLAUDE_DIR/rules"
 SETTINGS="$CLAUDE_DIR/settings.json"
 MCP_CONFIG="$CLAUDE_DIR/.mcp.json"
-VK_MCP_BINARY="$HOME/bin/vibe-kanban-mcp"
 # A Claude Code marketplace name is a 1:1 namespace over ONE source repo: its
 # manifest (marketplaces/<name>/.claude-plugin/marketplace.json) is a single
 # file listing every plugin of that marketplace, and the rsync that populates
@@ -183,41 +182,53 @@ RETIRED_OPENCODE_AGENTS=(
   fr-phase-reviewer-hard.md
 )
 
+# Earlier installs wrote these for the VibeKanban runner, which is removed (spec
+# 2026-11-14 R5, retiring the VK runner). Remove the MCP entry, and the bridge wrapper
+# only when its exec line is the one fr wrote. Install and --uninstall both call it.
+# The config is written back in place (cat into it, not mv over it), so its mode
+# and a symlink at its path survive. The edited copy is made 0600 and checked to
+# parse before it is written back. A failure only warns: the install goes on. When
+# the write-back fails, the copy stays as the recoverable edit (cleanup_tmps still
+# removes it if the install later fails). The crontab is never edited, only named.
+cleanup_vk_residue() {
+  local vk_wrapper="${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}"
+  local tmp="$MCP_CONFIG.tmp" had_wrapper=0 cron=""
+  local warn="WARNING: could not remove vibe_kanban from $MCP_CONFIG; delete mcpServers.vibe_kanban by hand"
+  if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null \
+     && jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
+    rm -f "$tmp" 2>/dev/null || true
+    if ! (umask 077; jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "$tmp") \
+       || [ ! -s "$tmp" ] || ! jq -e . "$tmp" >/dev/null 2>&1; then
+      rm -f "$tmp" 2>/dev/null || true
+      echo "$warn" >&2
+    elif cat "$tmp" > "$MCP_CONFIG"; then
+      rm -f "$tmp" 2>/dev/null || true
+      echo "  Removed vibe_kanban (VibeKanban support was removed) from $MCP_CONFIG"
+    else
+      echo "$warn (the edited copy is kept at $tmp)" >&2
+    fi
+  fi
+  [ -e "$vk_wrapper" ] && had_wrapper=1
+  # `install.sh --install-bridge` wrote: exec "<python>" -m fr_vk.bridge "$@"
+  if [ -f "$vk_wrapper" ] && grep -qE '^exec .*-m fr_vk\.bridge( |$)' "$vk_wrapper"; then
+    if rm -f "$vk_wrapper"; then
+      echo "  Removed $vk_wrapper (VibeKanban support was removed)"
+    else
+      echo "WARNING: could not remove $vk_wrapper; delete it by hand" >&2
+    fi
+  fi
+  if [ "$had_wrapper" = 1 ]; then
+    cron="$(crontab -l 2>/dev/null || true)"
+    if grep -v '^[[:space:]]*#' <<<"$cron" | grep -qF -e "$vk_wrapper" -e vk-bridge; then
+      echo "  Your crontab still runs $vk_wrapper or vk-bridge: remove that entry (crontab -e)"
+    fi
+  fi
+}
+
 if [[ "${1:-}" == "--install-bridge" ]]; then
-  # Write the cron wrapper that exec's `python -m fr_vk.bridge`. Hidden by
-  # design — there is no `vk bridge` public CLI verb.
-  # Default to a user-writable path so operators don't need sudo. The
-  # legacy default was /opt/vk-bridge/run.sh — fine for root-owned pod
-  # deployments, but painful for shared-pod setups where the bridge runs
-  # as the same user as the operator (no write access to /opt). Override
-  # with VK_BRIDGE_WRAPPER_PATH=/opt/vk-bridge/run.sh (run via sudo) for
-  # the system-path layout.
-  wrapper_path="${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}"
-  mkdir -p "$(dirname "$wrapper_path")"
-  # Prefer the active uv tool's interpreter so the wrapper can't pick
-  # up a stale system Python that doesn't have fr installed.
-  vk_python="$(uv tool dir 2>/dev/null)/fr/bin/python"
-  if [ ! -x "$vk_python" ]; then
-    # Fallback chain: any `uv run` env, then plain `python3`.
-    vk_python="$(uv run --no-project which python 2>/dev/null || command -v python3 || echo /usr/bin/python3)"
-  fi
-  # The wrapper is only correct if its interpreter can actually import the
-  # adapter — verify before writing (review finding, 2026-06-06).
-  if ! "$vk_python" -c "import fr_vk.bridge" >/dev/null 2>&1; then
-    echo "  ERROR: $vk_python cannot import fr_vk.bridge — bridge wrapper not installed" >&2
-    echo "  (re-run after: uv tool install --force ${FR_RUNNER_WITH[*]} ${FR_EXECUTABLES_FROM[*]-} $PLUGIN_ROOT/packages/fr)" >&2
-    exit 1
-  fi
-  cat > "$wrapper_path" <<EOF
-#!/bin/bash
-exec "$vk_python" -m fr_vk.bridge "\$@"
-EOF
-  chmod +x "$wrapper_path"
-  echo "Wrapper installed at $wrapper_path"
-  echo ""
-  echo "To schedule the bridge, add this line to your crontab:"
-  echo "*/2 * * * * $wrapper_path"
-  exit 0
+  echo "VibeKanban support was removed; there is no bridge to install." >&2
+  echo "Remove any crontab entry that runs vk-bridge (crontab -e); a normal install.sh run removes the old wrapper and MCP entry." >&2
+  exit 2
 fi
 
 if [[ "${1:-}" == "--uninstall" ]]; then
@@ -231,12 +242,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     jq "$WT_HOOKS_STRIP" "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
     echo "  Removed fr's WorktreeCreate/WorktreeRemove hooks from $SETTINGS"
   fi
-  if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
-    if jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
-      jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
-      echo "  Removed vibe_kanban from $MCP_CONFIG"
-    fi
-  fi
+  cleanup_vk_residue
   if [ -d "$OPENCODE_SKILLS_DIR" ]; then
     for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
       skill="$(basename "$skill_dir")"
@@ -498,15 +504,6 @@ else
 fi
 fi  # end FR_INSTALL_SKIP_PREFLIGHT guard
 
-# VK MCP binary is optional — warn but continue if missing.
-if [ ! -x "$VK_MCP_BINARY" ]; then
-  echo "WARNING: VK MCP binary not found at $VK_MCP_BINARY" >&2
-  echo "  MCP server configuration will be skipped." >&2
-  echo "  Install it later: see https://github.com/derio-net/vibe-kanban" >&2
-  SKIP_MCP=true
-else
-  SKIP_MCP=false
-fi
 
 echo ""
 echo "Installing super-fr..."
@@ -806,25 +803,8 @@ fi
 # 7b. OpenCode skill + command + agent delivery — moved to after step 10 (fr CLI install)
 # because it now shells out to `fr models apply`.
 
-# 8. VK MCP server at user level
-if [ "$SKIP_MCP" = true ]; then
-  echo ""
-  echo "Skipping MCP configuration (binary not found)."
-else
-  echo ""
-  echo "Configuring MCP..."
-  VK_MCP_ENTRY='{"command":"'"$VK_MCP_BINARY"'","args":["--mode","global"],"env":{"VIBE_BACKEND_URL":"http://localhost:8081"}}'
-  if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
-    jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
-    echo "  Updated vibe_kanban in $MCP_CONFIG"
-  elif command -v jq &>/dev/null; then
-    echo '{"mcpServers":{}}' | jq --argjson entry "$VK_MCP_ENTRY" '.mcpServers.vibe_kanban = $entry' > "$MCP_CONFIG"
-    echo "  Created $MCP_CONFIG with vibe_kanban"
-  else
-    echo "  WARNING: jq not found — cannot configure MCP server automatically" >&2
-    echo "  Add vibe_kanban manually to $MCP_CONFIG" >&2
-  fi
-fi
+# 8. Remove what earlier installs wrote for the VibeKanban runner (silent when none)
+cleanup_vk_residue
 
 # 9. PostToolUse hook hint
 if [ ! -f "$SETTINGS" ]; then
@@ -1112,6 +1092,5 @@ echo ""
 echo "Installation complete. Restart Claude Code to pick up plugin changes."
 echo ""
 echo "Verify with:"
-echo "  jq '.mcpServers.vibe_kanban' ~/.claude/.mcp.json"
 echo "  cat ~/.claude/rules/fr-plan-override.md"
 echo "  fr --version"

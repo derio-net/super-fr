@@ -20,7 +20,8 @@ delete that row in `matrix.yaml`, migrate, then re-apply the edit with
 SAME PR:**
 
 - adds or changes a spec `## Test Plan` (new spec ⇒ new rows; the CI
-  staleness guard fails a spec with a Test Plan that no row cites)
+  staleness guard fails a spec with a Test Plan that no row cites;
+  a row retired by amendment still cites its origin)
 - adds tests that verify an existing row (add the ref to `levels`, move
   `status` up: `not-implemented` → `unwired` → `ci`/`scheduled`)
 - ships a surface or capability a `not-implemented` row waits on

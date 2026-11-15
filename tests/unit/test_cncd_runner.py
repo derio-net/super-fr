@@ -1,11 +1,10 @@
 """Unit tests for `fr_cncd.runner.CncdRunner` — config + the non-HTTP
 protocol methods (cnc-fr spec 2026-07-02, §3.5).
 
-Config mirrors VkRunner's env convention: `CNCD_URL` is the base URL of
+Config comes from the environment: `CNCD_URL` is the base URL of
 the cncd server (explicit `base_url=` wins), `CNCD_SLOT_BUDGET`
 optionally caps per-tick dispatches. `preflight(items)` fails every
-eligible phase cleanly when unset — same contract the VK runner has for
-its project id.
+eligible phase cleanly when unset.
 
 Dedup is deliberately server-side: cncd's ingest is idempotent by
 content hash (spec §3.3), so `existing_dispatches(items)` is honestly empty

@@ -1,12 +1,13 @@
 """Public runner contract — the fr-dispatch / adapter seam.
 
 A *runner* is whatever consumes queued work items and executes them:
-VibeKanban (`fr_vk.VkRunner`, the first implementation), the cncd control
-plane (`fr_cncd.CncdRunner`), a future GitHub-Actions runner, a headless
-agent daemon. `fr_dispatch.tick` orchestrates the queue against this
-Protocol and nothing else — no adapter types, no board vocabulary, no VK
-strings (2026-06-05 super-fr split design, §Runner registry; promoted from
-the duck-typed MCP seam the bridge tests already used).
+the cncd control plane (`fr_cncd.CncdRunner`), a herdr pane
+(`fr_herdr.HerdrRunner`), a Claude Code cloud session
+(`fr_claude_cloud.ClaudeCloudRunner`), a future GitHub-Actions runner.
+`fr_dispatch.tick` orchestrates the queue against this Protocol and nothing
+else — no adapter types, no board vocabulary, no adapter strings
+(2026-06-05 super-fr split design, §Runner registry; promoted from the
+duck-typed seam the bridge tests already used).
 
 **v2 (2026-08-14 workflow-shapes-and-workitem-dispatch spec §4.D).** The
 unit of dispatch is a `WorkItem`, not a `(plan, phase, repo, issue_number)`
@@ -38,7 +39,7 @@ class Runner(Protocol):
     """One dispatch backend, as seen by `fr_dispatch.tick`."""
 
     name: str
-    """Registry name (`runner:<name>` label value; e.g. ``vk``)."""
+    """Registry name (`runner:<name>` label value; e.g. ``cncd``)."""
 
     capabilities: frozenset[str]
     """What this backend can provide (§4.F).
@@ -56,7 +57,7 @@ class Runner(Protocol):
     A CLASS attribute, readable without building the runner: `fr apply --to`
     reads it off the registered class (`registry.runner_units`) and refuses a
     runner that takes no phases before it touches the forge (super-fr#644),
-    because vk and cncd cannot be built outside their bridge. `can_dispatch`
+    because cncd cannot be built outside its bridge. `can_dispatch`
     still makes the per-item decision and must refuse any unit not named
     here; `tick` reports that refusal as the unit, not as a repo problem.
     """
@@ -65,8 +66,8 @@ class Runner(Protocol):
         """Config/capability check before any dispatch this tick.
 
         Return an error string (every eligible item fails cleanly with it,
-        and none is dispatched) or None when ready. Examples: the VK runner
-        requires a project id outside workspace contexts; a shape requiring
+        and none is dispatched) or None when ready. Examples: the cncd runner
+        requires `CNCD_URL`; a shape requiring
         `browser` on a headless runner is refused here rather than dying
         mid-flight (§4.F).
         """
@@ -85,8 +86,8 @@ class Runner(Protocol):
 
         Item ids, not backend-native keys — identity is the item's position
         in the graph (`work_item.item_id`), computable before any tracker
-        artifact exists. An adapter whose board stores something else (a VK
-        card title, say) maps back to ids here; the title stays that
+        artifact exists. An adapter whose board stores something else (a card
+        title, say) maps back to ids here; the title stays that
         backend's *presentation* of an item and stops being its identity.
 
         `items` is the same sequence `preflight` receives. An adapter that
@@ -129,8 +130,8 @@ CloseOutcome = Literal["closed", "busy", "absent"]
 class SessionCloser(Protocol):
     """An optional second protocol: a runner that can close what it dispatched.
 
-    Beside `Runner`, never part of it, so a runner without live sessions (vk,
-    cncd) needs no edit. `closed`: the item's sessions are gone now. `busy`:
+    Beside `Runner`, never part of it, so a runner without live sessions (cncd)
+    needs no edit. `closed`: the item's sessions are gone now. `busy`:
     at least one is still working; nothing was closed. `absent`: the runner
     holds nothing for the item. Raising is a failed close.
     """

@@ -14,8 +14,8 @@ outside the files that ARE the GitHub backend:
 - a `["gh", …]` argv literal.
 
 There is no allowlist (spec 2026-10-06-forge-remainder §4.G, R7): the sites
-that predated this tripwire — triage collect, the isolation lookups and the
-fr-vk rate-limit guard — now all go through the adapter. A future exemption
+that predated this tripwire — triage collect and the isolation lookups — now
+all go through the adapter. A future exemption
 means arguing for a `BACKEND` entry in a diff.
 """
 

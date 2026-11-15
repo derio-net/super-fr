@@ -16,9 +16,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from fr_vk.runner import VkRunner
-
-from tests.unit.fakes import FakeGhClient, FakeMcpClient
+from tests.unit.fakes import FakeGhClient
+from tests.unit.test_tick_workitem import FakeRunner
 
 TARGET_REPO = "derio-net/superpowers-for-vk"
 
@@ -145,10 +144,9 @@ def test_tick_emits_zero_issue_creates_when_partial_dispatch(tmp_path: Path, cap
         state="OPEN",
         labels={"fr:ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
     )
-    mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, VkRunner(mcp))
+        tick(plan, gh, FakeRunner())
 
     assert _count_issue_creates(gh) == 0, (
         f"bridge tick must NEVER create Issues; got {_count_issue_creates(gh)}"
@@ -273,10 +271,9 @@ def test_tick_mixed_state_syncs_labels_and_state_but_skips_create(
         state="OPEN",
         labels={"fr:ready", "phase:2", "plan:2026-05-18-no-issue-create-fixture"},
     )
-    mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, VkRunner(mcp))
+        tick(plan, gh, FakeRunner())
 
     # Headline assertion
     assert _count_issue_creates(gh) == 0
@@ -330,10 +327,9 @@ def test_tick_fully_dispatched_plan_no_creates_no_warnings(tmp_path: Path, caplo
                 "plan:2026-05-18-no-issue-create-fixture",
             },
         )
-    mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, VkRunner(mcp))
+        tick(plan, gh, FakeRunner())
 
     assert _count_issue_creates(gh) == 0
     assert _count_skip_warnings(caplog) == 0
@@ -388,10 +384,9 @@ def test_tick_stoa_company_shape_emits_no_creates_and_one_warning_per_phase(
         state="OPEN",
         labels={"fr:ready", "phase:1", "plan:2026-05-18-no-issue-create-fixture"},
     )
-    mcp = FakeMcpClient()
 
     with caplog.at_level(logging.WARNING, logger="fr.apply"):
-        tick(plan, gh, VkRunner(mcp))
+        tick(plan, gh, FakeRunner())
 
     assert _count_issue_creates(gh) == 0, (
         f"regression: bridge tick must NOT create Issues; got "

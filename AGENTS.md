@@ -373,9 +373,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
   and `item_graph.py` (`build_items` — the one item builder for all three
   decomposition units, `run`/`phase`/`spec`) are the dispatch-cutover core;
   `reachability.py` is the item-level gate wrapping `fr.workflow.reachability`.
-- `fr-vk`, `fr-cncd` — runner adapters (`vk`, `cncd`) implementing that
-  protocol. `fr-cncd` is real but predates its own README/CLAUDE mentions —
-  don't assume tables in `README.md` are exhaustive; check `packages/*/pyproject.toml`
+- `fr-cncd` — the `cncd` runner adapter (entry point `fr.runners: cncd`),
+  a thin HTTP client implementing that protocol; it takes `phase` items. It
+  predates its own README/CLAUDE mentions — don't assume tables in `README.md` are exhaustive; check `packages/*/pyproject.toml`
   and `plugins/super-fr/skills/` against prose before trusting a list.
 - `fr-herdr` — the `herdr` runner (entry point `fr.runners: herdr`),
   managed OpenCode lifecycle/restart adapter as well as Claude resume. Host-local
@@ -431,7 +431,7 @@ uv run pytest -q --no-cov -n auto                   # fast, parallel (pytest-xdi
 uv run pytest tests/unit/test_foo.py::test_bar -q   # single test
 uv run ruff check packages/ tests/                  # lint
 uv run ruff format packages/ tests/                 # format (no --check: writes)
-uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src
+uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src
 uv run --no-project python scripts/bump-version.py --check   # version lockstep
 uv run pytest -n auto --no-cov --store-durations    # refresh .test_durations (pytest-split shard weights)
 ```
@@ -455,7 +455,7 @@ watch-list tripwire) until it is either named in `ci-budget.yml`'s
 `-n auto` is ~6x faster than serial (~150 s vs ~870 s on a 12-core host).
 A test that passes serially but fails under `-n auto` is order-dependent or
 wall-clock-tight, not an xdist bug: reset process-global state in an autouse
-fixture in `tests/conftest.py` (see `_fresh_vk_repo_cache`) rather than
+fixture in `tests/conftest.py` (see `_fresh_forge_policy_cache`) rather than
 pinning tests to one worker.
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
@@ -748,19 +748,20 @@ classifies every deployed wrapper as foreign and refuses to upgrade it
 
 ## Bridge audit rule
 
-Any brainstorm, spec, or plan touching dispatch / sync / cron / VK card /
-workspace / GitHub Issue label-lifecycle surfaces **MUST start by reading
-`fr_dispatch.*` + `fr_vk.*`** (`packages/fr-dispatch/src/`,
-`packages/fr-vk/src/`) end-to-end first. Confabulating what the bridge does
-without reading it is the root cause documented in #147. These two packages
-are the canonical read-target for any bridge-behavior investigation (they
-replaced a pre-rebuild single script, `agent-images/kali/scripts/vk-issue-bridge.py`).
+Any brainstorm, spec, or plan touching dispatch / sync / cron / runner
+session / workspace / GitHub Issue label-lifecycle surfaces **MUST start by
+reading `fr_dispatch.*` and the remaining runner adapters** (`fr_herdr.*`,
+`fr_cncd.*`, `fr_claude_cloud.*`: `packages/fr-dispatch/src/`,
+`packages/fr-herdr/src/`, `packages/fr-cncd/src/`, `packages/fr-claude-cloud/src/`)
+end-to-end first. Confabulating what the bridge does
+without reading it is the root cause documented in #147. These packages are
+the canonical read-target for any bridge-behavior investigation.
 Since the 2026-08-14 workitem-dispatch cutover, the seam is **split, not
 moved**: `fr_dispatch.tick`'s decision-making (unit/capability/reachability
 rules) now calls into `fr.workflow.*` + `fr.capabilities` + `fr.tracker`
 (`packages/fr/src/fr/`) rather than owning that logic itself — a bridge
 investigation touching *why* an item was or wasn't dispatched needs both
-packages, not `fr_dispatch`/`fr_vk` alone; the wire protocol
+packages, not `fr_dispatch` and an adapter alone; the wire protocol
 (`Runner`/`WorkItem`/`tick`'s outer signature) is still entirely
 `fr_dispatch`'s.
 

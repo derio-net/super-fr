@@ -20,7 +20,7 @@ fr-execute to implement this phase."
 ## PR format (unified) — for an agentic phase's PR
 
 - **Title:** `[{owner}/{repo}] {slug} · Phase {n}/{total} · {phase_title}` —
-  matches the Issue title shape so VK / GH / PR surfaces align; the
+  matches the Issue title shape so runner / Issue / PR surfaces align; the
   `fr pickup` output below is the canonical template.
 - **Body:** first content block is the tracking block copied verbatim from
   the Issue body (the `📦 Repo:` / `📋 Plan:` / … lines plus the
@@ -85,7 +85,7 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    fr-goal's step 8, opened as a draft by the orchestrator *after* its review
    pass — opening here reorders deliver ahead of review and reintroduces the
    #320 merge-race; with no PR here there is nothing to relay. Per-phase PRs are the standalone
-   **dispatched** (Issue/VK) flow only — there, once the PR opens, relay `closeout: fr pickup --branch
+   **dispatched** (Issue/runner) flow only — there, once the PR opens, relay `closeout: fr pickup --branch
    <phase-branch>` verbatim (a non-final phase's brief holds the plan until the last phase lands).
 
 7. **Reconcile GitHub state:**

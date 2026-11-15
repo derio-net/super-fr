@@ -157,16 +157,15 @@ class GhClient(Protocol):
         """Resolve a single PR/MR's merge/draft state from its own URL.
 
         Returns `{"state": "OPEN"|"CLOSED"|"MERGED", "draft": bool}`, or
-        `None` on any not-found/error condition (fail soft — the caller,
-        fr-vk's PR-merge poller, treats an unresolvable PR as "hold this
-        card", not an error). Distinct from `list_linked_prs`: this method
+        `None` on any not-found/error condition (fail soft — callers such
+        as `fr push`, `fr pr` and run adoption treat an unresolvable PR as
+        undeterminable, not an error). Distinct from `list_linked_prs`: this method
         takes a PR URL directly rather than deriving PRs from an Issue, and
         its `state` vocabulary includes `MERGED` as a third value (not
         collapsed into `CLOSED`) since the caller branches on it
         separately. See docs/superpowers/specs/
         2026-07-09-multi-backend-git-host-adapters-design.md §6 — added
-        specifically to let fr-vk's `pr_observe.py` stop shelling out to a
-        literal `gh pr view` subprocess.
+        so no caller shells out to a literal `gh pr view` subprocess.
         """
         ...
 

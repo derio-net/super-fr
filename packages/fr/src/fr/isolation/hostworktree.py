@@ -4,7 +4,7 @@ Mode host-worktree (spec §B, Type 2): fr owns workspace isolation — a genuine
 linked git worktree plus the `.fr-isolation` marker, exactly as the local
 target — but the *host process env is the env*. There is no devcontainer, no
 `resolve_profile` / profile-committed gate, no secrets env-file, and no docker:
-the docker-less pods (VK, Hermes Talos) already carry their ESO-injected
+the docker-less pods (e.g. Hermes Talos) already carry their ESO-injected
 credentials, so isolation here is honest that it isolates the filesystem/branch,
 not credentials or toolchain. The marker stays `mode="worktree"` (it *is* a real
 linked worktree, so the edit-gate hook is byte-identical); the host/devcontainer

@@ -64,8 +64,8 @@ class MetricsPusher:
 
     The metric namespace and job name are runner-supplied so this
     framework carries no adapter strings; an adapter constructs the
-    pusher with its historical names (see `fr_vk.runner` for the
-    constants that preserve the legacy wire format byte-for-byte).
+    pusher with its own names, so a dashboard built on an adapter's
+    historical metric names keeps reading the same wire format.
     """
 
     def __init__(

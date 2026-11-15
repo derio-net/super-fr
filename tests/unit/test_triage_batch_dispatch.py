@@ -416,9 +416,9 @@ def test_the_missing_dispatch_package_is_named_like_apply(
 def test_a_runner_without_from_env_is_refused(
     tmp_path: Path, gh: FakeGhClient, checkout: FakeCheckout
 ) -> None:
-    """The real loader: `vk` is registered but cannot be built outside its bridge."""
+    """The real loader: `cncd` is registered but cannot be built outside its bridge."""
     _state(tmp_path)
-    code, out = _dispatch(tmp_path, "lifecycle", "--to", "vk")
+    code, out = _dispatch(tmp_path, "lifecycle", "--to", "cncd")
     assert code == 2
     assert "cannot be constructed outside its own bridge" in out
 

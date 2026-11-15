@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-13 placement-resolver phase 6 review, the plugin resolves fr from absolute PATH entries and asks it read-only; install delivery and channels are unchanged
+reviewed: 2026-11-14 VK support removed; install removes the VK MCP entry and bridge wrapper, --install-bridge exits 2
 ---
 
 # Install super-fr
@@ -26,6 +26,16 @@ first, download it with `-o bootstrap.sh` and run `bash bootstrap.sh`.
 
 For Claude Code it registers the `derio-net--super-fr` marketplace and enables
 `super-fr@derio-net--super-fr` and `super-fr-dispatch@derio-net--super-fr`.
+
+VibeKanban support was removed. An earlier install can have written two files for it, and
+the installer removes them when it finds them. It prints one line for each removal:
+
+- the `vibe_kanban` entry in `~/.claude/.mcp.json`. The other servers in that file stay.
+- the bridge wrapper at `~/.local/bin/vk-bridge` (or at `VK_BRIDGE_WRAPPER_PATH`). The
+  installer removes it only if its `exec` line is the one that fr wrote. It keeps any other
+  file at that path.
+
+`scripts/install.sh --install-bridge` now writes nothing and exits 2.
 
 ## Release channels
 
@@ -84,9 +94,9 @@ the acceptance matrix, but not to run `/fr-goal`.
 
 ## Uninstall
 
-`scripts/install.sh --uninstall` removes the Claude Code rules, fr's worktree hooks and the
-`vibe_kanban` MCP entry. It also removes the OpenCode skills, commands, agents and plugin, and
-the Hermes hooks, rules and skills.
+`scripts/install.sh --uninstall` removes the Claude Code rules, fr's worktree hooks, the
+`vibe_kanban` MCP entry and an fr-written bridge wrapper. It also removes the OpenCode
+skills, commands, agents and plugin, and the Hermes hooks, rules and skills.
 
 It leaves the Claude Code plugin registration in `~/.claude/settings.json` in place. It also
 leaves the marketplace entry in `~/.claude/plugins/known_marketplaces.json` and the

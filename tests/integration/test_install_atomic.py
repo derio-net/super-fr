@@ -98,9 +98,6 @@ esac
 def sandbox(tmp_path: Path) -> dict[str, Path]:
     home = tmp_path / "home"
     (home / "bin").mkdir(parents=True)
-    vk = home / "bin" / "vibe-kanban-mcp"
-    vk.write_text("#!/bin/sh\necho stub\n")
-    vk.chmod(0o755)
     plugins = home / ".claude" / "plugins"
     plugins.mkdir(parents=True)
     (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 1}))

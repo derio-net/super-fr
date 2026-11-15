@@ -24,8 +24,7 @@ INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 SUPER_FR_GIT = "git+https://github.com/derio-net/super-fr"
 
 # `tool install` logs its argv one per line; `tool dir` names a tool dir whose
-# `fr` runs (install.sh's smoke check) and whose python cannot import anything
-# (so `--install-bridge` reaches its refusal and prints the recovery hint).
+# `fr` runs (install.sh's smoke check).
 _UV_STUB = r"""#!/bin/sh
 case "$1 $2" in
 "tool dir")
@@ -35,8 +34,7 @@ case "$1 $2" in
   for a in "$@"; do printf '%s\n' "$a" >> "$UV_STUB_LOG"; done
   mkdir -p "$UV_STUB_TOOLDIR/fr/bin"
   printf '#!/bin/sh\necho "fr 9.9.9"\n' > "$UV_STUB_TOOLDIR/fr/bin/fr"
-  printf '#!/bin/sh\nexit 1\n' > "$UV_STUB_TOOLDIR/fr/bin/python"
-  chmod +x "$UV_STUB_TOOLDIR/fr/bin/fr" "$UV_STUB_TOOLDIR/fr/bin/python"
+  chmod +x "$UV_STUB_TOOLDIR/fr/bin/fr"
   ;;
 *)
   exit 0
@@ -55,9 +53,6 @@ def stub_env(tmp_path: Path) -> dict[str, str]:
         '{"version": 2, "plugins": {}}'
     )
     (home / ".claude" / "settings.json").write_text("{}")
-    vk_mcp = bin_dir / "vibe-kanban-mcp"
-    vk_mcp.write_text("#!/bin/sh\necho stub\n")
-    vk_mcp.chmod(0o755)
     uv = bin_dir / "uv"
     uv.write_text(_UV_STUB)
     uv.chmod(0o755)
@@ -78,8 +73,10 @@ def _with_args(env: dict[str, str]) -> list[str]:
 
 
 def test_the_workspace_declares_the_runners_the_issues_name() -> None:
-    """The derivation finds something: an empty list would pass every check below."""
-    assert {"fr-vk", "fr-cncd", "fr-herdr", "fr-claude-cloud"} <= set(runner_packages())
+    """The derivation finds something: an empty list would pass every check below.
+    fr-vk is gone (spec 2026-11-14-retire-vibekanban R1)."""
+    assert {"fr-cncd", "fr-herdr", "fr-claude-cloud"} <= set(runner_packages())
+    assert "fr-vk" not in runner_packages()
 
 
 def test_install_sh_installs_fr_with_every_runner_package(stub_env: dict[str, str]) -> None:
@@ -89,22 +86,17 @@ def test_install_sh_installs_fr_with_every_runner_package(stub_env: dict[str, st
     withs = _with_args(stub_env)
     expected = [str(REPO_ROOT / "packages" / p) for p in runner_packages()]
     assert sorted(withs) == sorted(expected)
+    assert not any(w.endswith("/fr-vk") for w in withs)
 
 
-def test_install_bridge_hint_names_every_runner_package(stub_env: dict[str, str]) -> None:
-    """The refusal's recovery command is the install command, not a smaller one."""
-    Path(stub_env["UV_STUB_LOG"]).write_text("")
-    subprocess.run(["uv", "tool", "install"], env=stub_env, check=True)  # seeds the tool dir
-
+def test_install_bridge_names_no_fr_vk(stub_env: dict[str, str]) -> None:
+    """`--install-bridge` refuses, and nothing it prints names fr-vk any more."""
     result = subprocess.run(
-        ["bash", str(INSTALL_SH), "--install-bridge"],
-        capture_output=True,
-        text=True,
-        env={**stub_env, "VK_BRIDGE_WRAPPER_PATH": str(Path(stub_env["HOME"]) / "run.sh")},
+        ["bash", str(INSTALL_SH), "--install-bridge"], capture_output=True, text=True, env=stub_env
     )
-    assert result.returncode != 0
-    for pkg in runner_packages():
-        assert f"--with {REPO_ROOT / 'packages' / pkg} " in result.stderr, result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "VibeKanban support was removed" in result.stdout + result.stderr
+    assert "packages/fr-vk" not in result.stdout + result.stderr, result.stderr
 
 
 def test_scaffold_runner_packages_are_the_workspace_runners() -> None:

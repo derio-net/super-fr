@@ -1,6 +1,6 @@
 """The shapes fr dispatches at today, expressed as data (spec §4.A/§4.E).
 
-`fr apply --to <runner>` and the VK/cncd bridge have always dispatched one
+`fr apply --to <runner>` and the runner bridge (cncd) have always dispatched one
 work item per plan phase, and have always refused to do so unless the plan
 and spec were merged to `origin/HEAD` (the 2026-05-17 reachability-gate
 design). Both facts were hardcoded. This module writes the second one down

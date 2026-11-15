@@ -59,19 +59,6 @@ def native_herdr_cache(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
 
 @pytest.fixture(autouse=True)
-def _default_vk_project_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Default `VK_DERIO_OPS_PROJECT` for the suite.
-
-    The bridge reads this env var to scope `create_issue` / `list_issues`
-    to the right VK project — VK requires it when the MCP server isn't
-    running inside a workspace context. Setting it here keeps the
-    existing tests' tick() calls transparent. Tests that want to
-    exercise the unset path can `monkeypatch.delenv` explicitly.
-    """
-    monkeypatch.setenv("VK_DERIO_OPS_PROJECT", "test-vk-project-id")
-
-
-@pytest.fixture(autouse=True)
 def _fresh_forge_policy_cache() -> None:
     """`fr.settings.remote.client_policy` keeps a repo's policy per client for minutes; a
     test's fake client must never meet an answer a previous test's client read."""
@@ -491,23 +478,6 @@ def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
     monkeypatch.delenv("FR_OPENCODE_SESSION_ID", raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _fresh_vk_repo_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Start every test with an empty `fr_vk.config` repo cache.
-
-    `fr_vk.config._cache` is a process-global `list_repos` snapshot that
-    production clears once per tick. A test that fills it through `tick()` and
-    a later one that calls `dispatch_phase` directly (no tick, so no clear)
-    used to share it — `test_bridge_e2e.py`'s `{foo, bar}` registry broke
-    `test_bridge_lifecycle.py` whenever the order put them together, which
-    `pytest -n auto` does. monkeypatch restores the slot afterwards too, so a
-    test cannot leak it forward either.
-    """
-    from fr_vk import config
-
-    monkeypatch.setattr(config, "_cache", None)
 
 
 @pytest.fixture

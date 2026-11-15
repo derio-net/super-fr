@@ -913,7 +913,7 @@ class RealGhRestClient:
         return _commit_check_records(runs, status.get("statuses") or [], actions, sha)
 
     def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
-        """None on any failure, as the `GhClient` contract says (fr-vk holds the card)."""
+        """None on any failure, as the `GhClient` contract says."""
         parts = _pr_url_parts(url)
         if parts is None:
             return None

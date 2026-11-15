@@ -217,3 +217,91 @@ def test_plan_self_review_links_rows_from_the_fragments(tmp_path: Path) -> None:
     assert not [i for i in ok if "acceptance" in i.message and i.severity == "error"]
     bad = review(tmp_path / "bad", "row-zzz")
     assert any("unknown acceptance row id 'row-zzz'" in i.message for i in bad)
+
+
+def test_the_staleness_guard_counts_a_retired_rows_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A spec whose every row a later feature retired by amendment has been answered:
+    the retirement is the recorded outcome of its Test Plan, so the guard must not
+    ask for a live row that would describe removed behaviour (spec
+    2026-11-14-retire-vibekanban R9)."""
+    root = _repo(tmp_path)
+    later = "2026-02-01-removal"
+    spec = root / f"docs/superpowers/specs/{later}-design.md"
+    spec.write_text("# Removal\n\n## Requirements\n\nR1. Gone.\n")
+    path = root / FRAGMENTS_REL / f"{later}.yaml"
+    path.write_text(
+        "schema_version: 2\n"
+        f"feature: {later}\n"
+        "repo: acme/widget\n"
+        "rows: []\n"
+        "amendments:\n"
+        + "".join(
+            f"  - row: {rid}\n    op: retire\n    base: 0\n    notes: removed\n    why: gone\n"
+            for rid in ("w-built", "w-owed")
+        )
+    )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "retire")
+    clear_fold_cache()
+    assert load_effective(root).rows == ()
+
+    check = _cli(root, monkeypatch, "check")
+    backfill = _cli(root, monkeypatch, "backfill")
+
+    assert check.exit_code == 0, check.output
+    assert "staleness" not in check.output, check.output
+    # backfill reads the same citation set, so it offers no rows for removed behaviour
+    assert backfill.exit_code == 0, backfill.output
+    assert LIVE not in backfill.output, backfill.output
+
+
+def test_backfill_counts_a_logical_citation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fr acceptance backfill` and the staleness guard share one citation set: a spec
+    cited only by `spec:<slug>` is not listed as uncited, live or archived."""
+    for archived in (False, True):
+        root = _repo(tmp_path / str(archived), archived=archived)
+        backfill = _cli(root, monkeypatch, "backfill")
+        assert backfill.exit_code == 0, backfill.output
+        assert "(none — every Test Plan spec is cited)" in backfill.output, backfill.output
+
+
+def test_backfill_without_a_resolvable_identity_still_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fragment always carries `repo:` (the model requires it), so the identity is
+    unresolvable only with no fragment and no github origin: backfill must not fail
+    on it, and lists the Test-Plan spec as uncited."""
+    root = tmp_path / "anon"
+    spec = root / LIVE
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# Widget\n\n## Test Plan\n\n1. x\n")
+    (root / FRAGMENTS_REL).mkdir(parents=True)
+    _git(root, "init", "-q", "-b", "main")
+    clear_fold_cache()
+
+    backfill = _cli(root, monkeypatch, "backfill")
+
+    assert backfill.exit_code == 0, backfill.output
+    assert LIVE in backfill.output, backfill.output
+
+
+def test_with_no_identity_a_path_origin_of_any_repo_counts_as_cited() -> None:
+    """The other half of the no-identity case, which no fragment can express: with
+    `own` None, `cited_spec_paths` keeps a path origin whatever repo it names."""
+    from fr.acceptance.check import cited_spec_paths
+    from fr.acceptance.model import Row
+
+    row = Row(
+        id="r",
+        capability="c",
+        acceptance="a",
+        origin=(f"elsewhere:{LIVE}#R1",),
+        status="not-implemented",
+    )
+
+    assert LIVE in cited_spec_paths([row], None)
+    assert LIVE not in cited_spec_paths([row], "widget")

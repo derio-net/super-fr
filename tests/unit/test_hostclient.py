@@ -89,8 +89,8 @@ class TestClientForHost:
         assert _hosts.host_for(repo) is None
 
     def test_client_for_backend_stays_provenance_blind(self) -> None:
-        """`fr_vk.pr_observe` derives a host from a bare PR URL's hostname;
-        the dumb factory must accept it without reading any config — which
+        """A caller may derive a host from a bare PR URL's hostname; the
+        dumb factory must accept it without reading any config — which
         is also what keeps it from warning about a derived host (§4.D)."""
         client = hostclient.client_for_backend("gitlab", host="gl.corp.com")
         assert isinstance(client, RealGlabClient)
@@ -203,8 +203,8 @@ class TestClientForWarnsOnAnUnthreadedDeclaredHost:
 
 class TestClientForUrl:
     """`client_for_url` (spec 2026-10-06-forge-remainder §4.D, Test Plan 2):
-    the forge AND instance a bare URL names, shared by `fr_vk.pr_state` and
-    the triage batch verbs."""
+    the forge AND instance a bare URL names, used by the triage batch verbs,
+    the gate and release commands."""
 
     def test_a_ghe_pr_url_gives_a_github_client_on_that_host(self) -> None:
         client = hostclient.client_for_url("https://ghe.example/o/r/pull/3")

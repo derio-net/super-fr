@@ -89,7 +89,7 @@ class RealGlabClient(UnsupportedBatchOps):
     logged into is never threaded: each call fails closed with
     `GlabHostRefusedError` (gh#1014). The client is deliberately dumb about where the
     host came from: `fr.hostclient.client_for` resolves it from a
-    checkout, `fr_vk.pr_observe` from a bare PR URL, and neither
+    checkout, `fr.hostclient.client_for_url` from a bare URL, and neither
     provenance changes what this class does with it (gh-486; spec §4.C).
     """
 
