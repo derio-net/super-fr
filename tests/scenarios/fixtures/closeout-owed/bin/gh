@@ -6,6 +6,7 @@
 #   gh api user --jq .login            -> the viewer's login
 #   gh issue list ... --json ...       -> the open issue it created, if any, as
 #                                         the JSON gh prints for those fields
+#   gh issue view 1 ...                -> the one issue's record (closing reads it)
 #   gh label create ...                -> ok, no output
 #   gh issue create ...                -> the new issue's URL, which is all
 #                                         `gh issue create` prints on stdout
@@ -28,6 +29,15 @@ PY
     else
       echo '[]'
     fi ;;
+  "issue view")
+    python3 - "$store" "$store.closed" <<'PY'
+import json, os, sys
+body = open(sys.argv[1]).read()
+print(json.dumps({"number": 1, "title": "Owed", "url": "https://github.com/example-org/widgets/issues/1",
+                  "body": body, "author": {"login": "scenario-bot"}, "labels": [{"name": "fr:owed"}],
+                  "state": "CLOSED" if os.path.exists(sys.argv[2]) else "OPEN", "closedAt": None}))
+PY
+    ;;
   "label create") : ;;
   "issue create")
     shift 2

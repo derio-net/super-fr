@@ -265,6 +265,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "acceptance-matrix-migration",
         "acceptance-fragments-amendments",
         "acceptance-local-status",
+        "owed-reuse-uncapped",
+        "archive-refusal-writes-nothing",
     }
     assert on_disk == here
 
@@ -367,6 +369,14 @@ def test_test_plan_repair_covers_refused(installed: Path, tmp_path: Path) -> Non
 
 def test_closeout_owed(installed: Path, tmp_path: Path) -> None:
     _scenario("closeout-owed", installed, tmp_path)
+
+
+def test_owed_reuse_uncapped(installed: Path, tmp_path: Path) -> None:
+    _scenario("owed-reuse-uncapped", installed, tmp_path)
+
+
+def test_archive_refusal_writes_nothing(installed: Path, tmp_path: Path) -> None:
+    _scenario("archive-refusal-writes-nothing", installed, tmp_path)
 
 
 def test_auto_migrate_workspace(installed: Path, tmp_path: Path) -> None:
