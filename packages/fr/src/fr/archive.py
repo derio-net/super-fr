@@ -22,8 +22,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import click
-
 from fr.artifacts.paths import KIND_DIRS, artifact_root, below, kind_dir, space_for
 from fr.git import (
     GIT_TIMEOUT_SECONDS,
@@ -508,7 +506,8 @@ def undoing_staged_moves(repo_root: Path) -> Iterator[None]:
         try:
             yield
         except BaseException as e:
-            if not (isinstance(e, click.exceptions.Exit) and not e.exit_code):
+            # a `typer.Exit` carrying code 0 is a normal early return, not a failure
+            if type(e).__name__ != "Exit" or getattr(e, "exit_code", True):
                 _undo_staged(repo_root, log, start, e)
             raise
 
