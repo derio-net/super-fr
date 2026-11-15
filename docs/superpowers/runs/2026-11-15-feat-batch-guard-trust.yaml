@@ -59,16 +59,21 @@ steps:
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-15T17:07:10+00:00'
           agent: a8c071ec732e6ad94
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
-          model: claude-sonnet-5
+          model: claude-sonnet-5-5
           tier: standard
           bound: claude-sonnet-5
           session: b83407b1-d50a-45a9-8b70-4834a24ffcfa
+          returned: '2026-11-15T18:01:37+00:00'
+          outcome: done
+        evidence:
+          tests: ci:e648483b2b829147e4dc47929a970e158e9b757d+f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37;tree=7cc4eded3bb1ffc67b450ae9c53a25cfe1af0e12e5866f21a7cf4d0406e260b5
+          visual: none
   journal-check:
     state: pending
   lens-review:
