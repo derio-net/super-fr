@@ -751,8 +751,9 @@ classifies every deployed wrapper as foreign and refuses to upgrade it
 Any brainstorm, spec, or plan touching dispatch / sync / cron / runner
 session / workspace / GitHub Issue label-lifecycle surfaces **MUST start by
 reading `fr_dispatch.*` and the remaining runner adapters** (`fr_herdr.*`,
-`fr_cncd.*`: `packages/fr-dispatch/src/`, `packages/fr-herdr/src/`,
-`packages/fr-cncd/src/`) end-to-end first. Confabulating what the bridge does
+`fr_cncd.*`, `fr_claude_cloud.*`: `packages/fr-dispatch/src/`,
+`packages/fr-herdr/src/`, `packages/fr-cncd/src/`, `packages/fr-claude-cloud/src/`)
+end-to-end first. Confabulating what the bridge does
 without reading it is the root cause documented in #147. These packages are
 the canonical read-target for any bridge-behavior investigation.
 Since the 2026-08-14 workitem-dispatch cutover, the seam is **split, not
