@@ -436,7 +436,7 @@ uv run --no-project python scripts/bump-version.py --check   # version lockstep
 uv run pytest -n auto --no-cov --store-durations    # refresh .test_durations (pytest-split shard weights)
 ```
 
-The `test` job in CI is sharded 6 ways with pytest-split, balanced by the
+The `test` job in CI is sharded 7 ways with pytest-split (the release's shards stay at 6), balanced by the
 committed `.test_durations` file. Refresh it with the command above after a
 test file grows or shrinks a lot — a stale file only makes the shards less
 balanced, never wrong; the CI time-budget watcher is what notices when the
@@ -458,8 +458,14 @@ wall-clock-tight, not an xdist bug: reset process-global state in an autouse
 fixture in `tests/conftest.py` (see `_fresh_forge_policy_cache`) rather than
 pinning tests to one worker.
 
+Outside CI, `-n auto` starts only the workers the host's load leaves free (never
+fewer than 2; the header line says how many), because parallel sessions each
+running a full suite once drove a 16-thread host to load ~800 (gh#1225).
+`FR_PYTEST_WORKERS=<n>` sets the count exactly, in CI too; `tests/conftest.py`
+holds the rule.
+
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
-`plan`, `collect`, `test` (sharded x6), `split-check`, `coverage`,
+`plan`, `collect`, `test` (sharded x7), `split-check`, `coverage`,
 `validate-artifacts`, `opencode-plugin-test`, `version-sync`, `change-fragment`,
 `docs-check`, `site-build`, `ci-ok` jobs) is the single source of truth for the
 gate; if this file and `ci.yml` ever disagree, trust `ci.yml` and fix this

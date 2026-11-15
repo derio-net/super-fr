@@ -33,8 +33,11 @@ def test_ci_runs_fr_docs_check_on_every_pull_request_inside_ci_ok() -> None:
     checkout = next(s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@"))
     assert checkout["with"]["fetch-depth"] == 0
     runs = {s.get("if"): s["run"] for s in steps if "run" in s}
+    # The base reaches the script through env, never interpolated into it (gh#1289).
+    pr_step = next(s for s in steps if s.get("if") == "github.event_name == 'pull_request'")
+    assert pr_step["env"] == {"BASE_REF": "${{ github.base_ref }}"}
     assert runs["github.event_name == 'pull_request'"] == (
-        'uv run fr docs check --base "origin/${{ github.base_ref }}"'
+        'uv run fr docs check --base "origin/$BASE_REF"'
     )
     assert runs["github.event_name != 'pull_request'"] == "uv run fr docs check"
     assert "docs-check" in jobs["ci-ok"]["needs"]

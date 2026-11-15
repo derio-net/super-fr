@@ -739,3 +739,12 @@ amendments:
     why: 'Walked from evidence: run 37562684062 published the placeholder and the explainers
       and went red; no Pages run was ever cancelled (cancel-in-progress: false). The
       placeholder''s text naming the commit is no longer observable.'
+  - row: ci-shards-complete
+    op: reword
+    base: 0
+    acceptance: CI splits every leg's tests across 7 shards by one CI-derived durations
+      file per run, and fails when the shards together did not run exactly the collected
+      test set once each
+    why: 'ci.yml moved from 6 to 7 shards per leg (super-fr#1428): runner speed varies
+      x0.72-x1.40 between runs and at 6 a slow runner''s shard alone filled the 360
+      s budget. The release''s shards stay at 6.'
