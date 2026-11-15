@@ -13,9 +13,14 @@ rows:
       so the live plans root exists in every fresh clone
     origin:
     - spec:2026-11-15-guard-trust#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_live_root.py#test_archiving_the_last_plan_leaves_a_staged_gitkeep
+      - super-fr:tests/unit/test_archive_live_root.py#test_a_gitkeep_symlink_is_neither_followed_nor_replaced
+    status: ci
+    notes: 'R1 proven in CI: last-plan archive stages plans/.gitkeep (fresh clone keeps
+      the dir), symlink neither followed nor replaced, untracked copy staged, staging
+      failure reported'
     verify: none
   - id: gate-survives-last-plan-archive
     capability: fr-isolation edit gate
