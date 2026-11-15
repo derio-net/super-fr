@@ -9,7 +9,7 @@ covers:
   - .hermes/config.snippet.yaml
   - plugins/super-fr/hooks/hermes/**
   - HERMES.md
-reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
+reviewed: 2026-11-14 VK support removed; HERMES.md drops fr-vk from its package list and mypy line, which this page does not repeat
 ---
 
 # Run super-fr under Hermes Agent

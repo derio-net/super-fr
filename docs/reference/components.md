@@ -7,7 +7,7 @@ covers:
   - packages/*/pyproject.toml
   - packages/fr-opencode-plugin/package.json
   - plugins/*/.claude-plugin/plugin.json
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-14 VK support removed; the fr-vk package and its MCP requirement are gone
 ---
 
 # Components and requirements
@@ -18,7 +18,6 @@ reviewed: 2026-11-11 docs-currency phase 5
 |---|---|
 | `fr` | The CLI: the plan-as-folder engine, tracking on GitHub, GitLab and Gitea, isolation, the run cursor, the acceptance matrix, triage, and `fr hermes` |
 | `fr-dispatch` | The runner protocol and tick framework, a library that knows no particular runner |
-| `fr-vk` | The VibeKanban runner: an MCP client, card and workspace dispatch, and the bridge daemon |
 | `fr-cncd` | The `cncd` runner: a thin HTTP adapter that hands a plan's phases to a cncd daemon's ledger |
 | `fr-herdr` | The herdr runner ([herdr control sessions](../herdr-control-sessions.md)): starts `fr triage batch dispatch` runs in a herdr tab |
 | `fr-claude-cloud` | The claude-cloud runner: the mailbox the cloud wave driver's agent uses to create, message and archive Claude Code cloud sessions |
@@ -43,10 +42,6 @@ entry-point group. So to add a runner, you do not edit `fr-dispatch`.
 - `git`, `jq` and `rsync`: the installer checks for them first and names any that is absent.
 - The `devcontainer` CLI, for the default isolation. The installer tries to install it with
   `npm` when it is absent.
-- The [VibeKanban](https://github.com/derio-net/vibe-kanban) MCP server, only if you dispatch
-  to the `vk` runner. The installer registers `~/bin/vibe-kanban-mcp` when that binary is
-  present. When it is not present, the installer skips the MCP setup and gives a warning.
-  Without the binary on `PATH`, `fr-vk` falls back to `npx -y vibe-kanban@latest --mcp`.
 
 ## Services
 

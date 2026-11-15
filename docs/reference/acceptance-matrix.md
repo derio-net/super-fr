@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-14 the local status, its stamp and its debt (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-14 still true after VK support was removed; a retired row counting as a citation is not detailed here
 ---
 
 # The acceptance matrix

@@ -373,9 +373,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
   and `item_graph.py` (`build_items` — the one item builder for all three
   decomposition units, `run`/`phase`/`spec`) are the dispatch-cutover core;
   `reachability.py` is the item-level gate wrapping `fr.workflow.reachability`.
-- `fr-vk`, `fr-cncd` — runner adapters (`vk`, `cncd`) implementing that
-  protocol. `fr-cncd` is real but predates its own README/CLAUDE mentions —
-  don't assume tables in `README.md` are exhaustive; check `packages/*/pyproject.toml`
+- `fr-cncd` — the `cncd` runner adapter (entry point `fr.runners: cncd`),
+  a thin HTTP client implementing that protocol; it takes `phase` items. It
+  predates its own README/CLAUDE mentions — don't assume tables in `README.md` are exhaustive; check `packages/*/pyproject.toml`
   and `plugins/super-fr/skills/` against prose before trusting a list.
 - `fr-herdr` — the `herdr` runner (entry point `fr.runners: herdr`),
   managed OpenCode lifecycle/restart adapter as well as Claude resume. Host-local
@@ -748,19 +748,19 @@ classifies every deployed wrapper as foreign and refuses to upgrade it
 
 ## Bridge audit rule
 
-Any brainstorm, spec, or plan touching dispatch / sync / cron / VK card /
-workspace / GitHub Issue label-lifecycle surfaces **MUST start by reading
-`fr_dispatch.*` + `fr_vk.*`** (`packages/fr-dispatch/src/`,
-`packages/fr-vk/src/`) end-to-end first. Confabulating what the bridge does
-without reading it is the root cause documented in #147. These two packages
-are the canonical read-target for any bridge-behavior investigation (they
-replaced a pre-rebuild single script, `agent-images/kali/scripts/vk-issue-bridge.py`).
+Any brainstorm, spec, or plan touching dispatch / sync / cron / runner
+session / workspace / GitHub Issue label-lifecycle surfaces **MUST start by
+reading `fr_dispatch.*` and the remaining runner adapters** (`fr_herdr.*`,
+`fr_cncd.*`: `packages/fr-dispatch/src/`, `packages/fr-herdr/src/`,
+`packages/fr-cncd/src/`) end-to-end first. Confabulating what the bridge does
+without reading it is the root cause documented in #147. These packages are
+the canonical read-target for any bridge-behavior investigation.
 Since the 2026-08-14 workitem-dispatch cutover, the seam is **split, not
 moved**: `fr_dispatch.tick`'s decision-making (unit/capability/reachability
 rules) now calls into `fr.workflow.*` + `fr.capabilities` + `fr.tracker`
 (`packages/fr/src/fr/`) rather than owning that logic itself — a bridge
 investigation touching *why* an item was or wasn't dispatched needs both
-packages, not `fr_dispatch`/`fr_vk` alone; the wire protocol
+packages, not `fr_dispatch` and an adapter alone; the wire protocol
 (`Runner`/`WorkItem`/`tick`'s outer signature) is still entirely
 `fr_dispatch`'s.
 

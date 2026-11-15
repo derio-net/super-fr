@@ -11,7 +11,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-14 VK support removed; the example runner is cncd
 ---
 
 # Dispatch labels and the per-repo plan profile
@@ -23,7 +23,7 @@ labels mean.
 
 ## The label lifecycle
 
-A runner is the program that picks up queued phases and works them (VibeKanban's `vk`
+A runner is the program that picks up queued phases and works them (the `cncd`
 adapter, for one). It wakes on a timer, and each wake is a tick. A queued phase carries
 exactly one lifecycle label. On every tick, the label is derived from the issue and its PRs:
 

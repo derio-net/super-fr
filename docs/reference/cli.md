@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-14 still true after gh#1456, the commands and their help are unchanged
+reviewed: 2026-11-14 VK support removed; fr skills drops fr-runner, the apply --to example is cncd
 writing_standard: none
 ---
 

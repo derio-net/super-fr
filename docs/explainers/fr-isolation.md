@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-13 placement-resolver phase 6 review, no fr on a plain repo, a trusted bounded read-only fr, one switch spelling (R26)
+reviewed: 2026-11-14 VK support removed; a profile that still installs fr-vk is refused before a container starts
 ---
 
 ## What are the two boundaries and the bridge?
@@ -214,6 +214,12 @@ cursor, and a changed profile is a rebuild, not a teardown. Even a forced `down`
 own records under `docs/superpowers/` (unless you pass `--no-preserve`). It preserves them
 inside the repository's git directory, and the `up --branch` that re-creates the worktree
 puts them back.
+
+A profile that fr scaffolded before VibeKanban support was removed still installs the
+removed `fr-vk` package, so its container would fail on every start. `up`, `rebuild` and
+the resume inside `exec` stop on such a profile before any container starts, and the
+message names the `--with` part to delete from its `postCreateCommand`. Fix the profile
+on the default branch too, because every new branch is cut from it.
 
 The restore only ever adds. When a file changed since the teardown, fr reports it as a
 conflict and keeps the preserved copy. The restore reports a recorded deletion but never

@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
 ---
 
 ## Why write the idea down twice?

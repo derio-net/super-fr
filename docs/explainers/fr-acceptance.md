@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-14 the local status for repos with no CI, and how deliver stamps it (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-14 a retired row still cites its spec for the staleness guard and backfill (VK support removed)
 ---
 
 ## What does the matrix record?
@@ -154,7 +154,8 @@ branch's own sequence on one row applies as written.
    existing CI, or with `--with-ci`. It is idempotent.
 2. `fr acceptance backfill` prints an inventory and the protocol to follow. The inventory
    lists specs with a Test Plan no row cites yet, plans with no linked rows, and hints
-   from the test tree.
+   from the test tree. A row retired by amendment still cites its spec: the retirement is
+   that Test Plan's recorded outcome.
 3. Draft **one row per business acceptance, not per test**:
 
    ```bash

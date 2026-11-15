@@ -1,21 +1,19 @@
 ---
-title: "fr-dispatch and fr-runner: Handing Phases to a Machine That Works Alone"
+title: "fr-dispatch: Handing Phases to a Machine That Works Alone"
 date: 2026-11-11
 draft: false
 tldr: |
   Dispatch turns a plan's phases into GitHub issues a runner can pick up, and keeps
-  those issues in step with the plan as it changes. fr-runner is the other half: the
-  checks for when no runner picks up a queued phase.
+  those issues in step with the plan as it changes. A runner takes the queued phases
+  through one shared contract, so the steps are the same for every runner.
 standalone: true
 standalone_style: broadsheet
 covers:
   - plugins/super-fr-dispatch/skills/fr-dispatch/SKILL.md
-  - plugins/super-fr-dispatch/skills/fr-runner/SKILL.md
   - packages/fr/src/fr/commands/apply_cmd.py
   - packages/fr/src/fr/commands/undispatch_cmd.py
   - packages/fr-dispatch/src/**
-  - packages/fr-vk/src/**
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-14 VK support removed; the fr-runner skill is gone, the examples use the cncd runner
 ---
 
 ## Why does the plan stay the source of truth?
@@ -53,11 +51,13 @@ The plan and its spec must already be on the default branch, because the runner 
 from its own checkout of it. Otherwise this exits 2 (see "What do you check before you dispatch?" below):
 
 ```bash
-fr apply docs/superpowers/plans/2026-11-11-webhook-limiter --to vk --yes
+fr apply docs/superpowers/plans/2026-11-11-webhook-limiter --to cncd --yes
 ```
 
-`--to vk` queues the phases. It adds `fr:ready` and `runner:vk` labels, checks the runner
-name against the registered runners, and enforces the reachability gate. `--yes` applies.
+`--to cncd` queues the phases. It adds `fr:ready` and `runner:cncd` labels, checks the
+runner name against the registered runners, and enforces the reachability gate. It also
+refuses a runner that does not take phases, before it calls the forge (see "Which runners
+are there?" below). `--yes` applies.
 Afterwards fr prints the URLs of the issues it created. It stages the `tracking_issue`
 line into each affected phase file.
 
@@ -115,53 +115,46 @@ bridge skips each kind of write (labels or issues) that is off for the repo. See
 
 `fr apply --format json` gives the machine-readable form, and an empty diff means in sync.
 
-## What if a queued phase sits still? (fr-runner)
+## How does a runner take a queued phase?
 
 The runner is the autonomous consumer of queued phases. The framework half is the
-`fr_dispatch` package. It discovers plans and ticks them against a `Runner` protocol.
-Runners register through the `fr.runners` entry-point group, so adding one edits no
-existing package.
+`fr_dispatch` package. Its `tick` function discovers the eligible items and hands each one
+to a runner through the `Runner` protocol. Runners register through the `fr.runners`
+entry-point group, so adding one edits no existing package.
 
-The VibeKanban adapter, `fr_vk`, is the one the skill operates. Its
-daemon runs on its own pod and uses those packages as a library; it is not an `fr`
-command. `fr apply --to` and `fr triage batch dispatch` do call into `fr_dispatch` (its
-runner registry, item graph and reachability gate).
+`tick` is a library function, not an `fr` command: a runner's own bridge process calls it
+on a schedule. `fr apply --to` and `fr triage batch dispatch` call other parts of
+`fr_dispatch` (its runner registry, item graph and reachability gate).
 
-Work through these, in order:
+When a queued phase sits still, work through these, in order:
 
-1. **Is the daemon ticking?** Its heartbeat gauge,
-   `willikins_heartbeat_last_success_timestamp`, must be recent. Failure counters carry a
-   `reason`; the common ones are `project_id_missing`, `unknown_repo`, `unit_mismatch`,
-   `mcp_error` and `gh_error`. `unknown_repo` means the runner refused the item, usually
-   because of its repo. `unit_mismatch` means an issue has the label of a runner that
-   never takes that unit. `fr apply --to` now refuses that up front, so look for labels
-   set by hand or by an older `fr`.
+1. **Is the bridge ticking?** A bridge that passes `tick` a metrics pusher stamps a
+   heartbeat gauge, `<namespace>_heartbeat_last_success_timestamp`, at the end of each
+   tick. Each failure increments `<namespace>_failure_total` with a `reason`:
+   `preflight` (the runner refused the whole tick, for example `cncd` with no
+   `CNCD_URL`), `repo_gate`, `unknown_repo` (the runner refused the item, usually because
+   of its repo), `unit_mismatch`, `backend_error` or `gh_error`. Plan discovery adds `stale_artifact` for
+   a plan whose files this `fr` cannot read.
+   `unit_mismatch` means an issue has the label of a runner that never takes that unit.
+   `fr apply --to` refuses that up front, so look for labels set by hand or by an older
+   `fr`.
 2. **Is the phase eligible?** `fr status <plan-dir>`. A phase dispatches only when its
    rendered labels say ready-but-not-synced, it has a `tracking_issue`, and plan and spec
    are on the default branch.
-3. **Does the runner know the repo?** The adapter refuses a repo its board does not list
-   (`unknown_repo`). Add the repo there first.
+3. **Dispatched in error?** `fr undispatch <plan-dir> --yes` closes the issues. It leaves
+   the runner's own records alone: reaping them is the runner's job.
 
-These are the usual faults:
+## Which runners are there?
 
-- *Queued forever with no failures* means the pod's checkout is stale (pull it), or every
-  workspace slot is in use (it retries next tick, no action).
-- `project_id_missing` means the pod lost its project id environment variable.
-- *Dispatched in error* is `fr undispatch`. The runner's reaper archives the orphan
-  workspaces on its next pass.
-- *Card exists, workspace missing*: set `FR_BRIDGE_RECOVER_ORPHAN_CARDS=1` for one tick to
-  recover it.
-
-## Which other runners are there?
-
-Besides `vk`, the repo ships adapters registered as `cncd`, `herdr` and `claude-cloud`.
-The triage batch driver uses the last two to start whole-run sessions. See
-[fr-triage](fr-triage.md), the [herdr guide](../herdr-control-sessions.md) and the
-[cloud guide](../cloud-setup.md).
+The repo ships three adapters. `cncd` (the CNC control plane) takes phases, so it is the
+one `fr apply --to` queues to. `herdr` and `claude-cloud` take whole runs only, so
+`fr apply --to` refuses them. The triage batch driver uses those two to start whole-run
+sessions. See [fr-triage](fr-triage.md), the [herdr guide](../herdr-control-sessions.md)
+and the [cloud guide](../cloud-setup.md).
 
 ## What does dispatch not do?
 
-- The daemon never creates issues (only `fr apply --yes` does, at an operator's command),
+- A runner's bridge never creates issues (only `fr apply --yes` does, at an operator's command),
   and never implements work itself.
 - Dispatch needs the plan and spec merged first. That is a feature: the runner works from
   its own checkout.
