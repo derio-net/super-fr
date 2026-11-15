@@ -190,3 +190,6 @@ Verification explains the absent Test Plan (d5: no post-merge rows) and names, p
 ### s-r12-resolved · finding [out-of-scope] · resolves s-r12: _existing_markers (open-ends dedupe) keeps the same 200-issue cap and best-effort fallback
 
 Pre-existing in _existing_markers (open-end follow-ups), not caused by this change and outside #1184, which names _existing_owed.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-15-owed-archive-side-effects-p2 created=2026-11-15T17:17:38+00:00 -->
+### phase-split-2026-11-15-owed-archive-side-effects-p2 · decision · ask: #1400 close at merge (R1-R6) is its own reviewable ask
