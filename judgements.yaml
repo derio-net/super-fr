@@ -7341,6 +7341,10 @@ batches:
     run: 2026-11-14-feat-batch-retire-vk
     archive: chore/closeout-2026-11-15-1
     archived: 1469
+  - kind: claims_released
+    at: '2026-11-15T07:31:46.835235Z'
+    keys:
+    - super-fr#1459
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
