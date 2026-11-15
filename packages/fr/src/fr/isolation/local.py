@@ -1175,15 +1175,22 @@ def classify_branch(
 _VK_PROFILE_NEEDLE = "subdirectory=packages/fr-vk"
 
 
+class StaleProfileError(IsolationError):
+    """The profile itself is wrong, so no container was touched. Exec's resume
+    and `rebuild` re-raise it as-is: their hints (rebuild recreates it, the old
+    container may be gone) would mislead. `up` keeps its own wrapper (R4)."""
+
+
 def _refuse_vk_profile(config: Path) -> None:
     """Refuse a devcontainer config that still installs fr-vk, before any
-    container starts. An absent config is `devcontainer up`'s to report."""
+    container starts. A config that is absent or unreadable is `devcontainer
+    up`'s to report."""
     try:
         text = config.read_text(encoding="utf-8")
-    except FileNotFoundError:
+    except (OSError, UnicodeDecodeError):
         return
     if _VK_PROFILE_NEEDLE in text:
-        raise IsolationError(
+        raise StaleProfileError(
             f"{config} installs fr-vk, but VK support was removed: delete the "
             f"`--with '…#{_VK_PROFILE_NEEDLE}'` segment from its postCreateCommand. "
             "Fix the profile on the default branch too, because every new branch "
@@ -1401,6 +1408,8 @@ class LocalWorktreeDevcontainerTarget:
             )
             try:
                 self._devcontainer_up(state.worktree, state.profile)
+            except StaleProfileError:
+                raise
             except IsolationError as err:
                 # The hint leads: devcontainer's output is multi-line (p2-f6).
                 raise IsolationError(
@@ -1446,6 +1455,8 @@ class LocalWorktreeDevcontainerTarget:
             self._devcontainer_up(
                 state.worktree, state.profile, remove_existing=True, no_cache=no_cache
             )
+        except StaleProfileError:
+            raise
         except IsolationError as err:
             raise IsolationError(
                 f"rebuild of {branch} failed: {err}\n"
@@ -3028,7 +3039,7 @@ class LocalWorktreeDevcontainerTarget:
         """
         try:
             run_args = json.loads(config.read_text()).get("runArgs", [])
-        except (OSError, json.JSONDecodeError):
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return
         for flag, value in zip(run_args, run_args[1:]):
             if flag != "--env-file":

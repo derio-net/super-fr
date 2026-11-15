@@ -76,7 +76,27 @@ def test_rebuild_refuses_the_same_profile(tmp_path: Path, monkeypatch: pytest.Mo
         target.rebuild(st)
 
     _assert_refusal(str(exc.value), config)
+    assert "may already have been removed" not in str(exc.value)
     assert _dc_up(runner) == []
+
+
+def test_exec_resume_refuses_the_same_profile_without_the_rebuild_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _runner, _target, st = _upped(tmp_path, monkeypatch)
+    config = st.worktree / ".devcontainer" / "dev" / "devcontainer.json"
+    _write_profile(config, _STALE)
+    runner = FakeRunner(stdout={"docker": "cid1 exited"})
+    target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
+
+    with pytest.raises(IsolationError) as exc:
+        target.exec(st, ["echo", "hi"])
+
+    _assert_refusal(str(exc.value), config)
+    assert "recreates it" not in str(exc.value)
+    assert "could not resume" not in str(exc.value)
+    assert _dc_up(runner) == []
+    assert not [c for c in runner.argv_for("devcontainer") if c[1:2] == ["exec"]]
 
 
 def test_a_customised_post_create_still_naming_the_segment_is_refused(
@@ -114,6 +134,17 @@ def test_an_absent_config_falls_through_to_devcontainer_up(
 ) -> None:
     _repo, runner, target, st = _upped(tmp_path, monkeypatch)
     (st.worktree / ".devcontainer" / "dev" / "devcontainer.json").unlink()
+
+    target.rebuild(st)
+
+    assert len(_dc_up(runner)) == 1
+
+
+def test_an_undecodable_config_falls_through_to_devcontainer_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _repo, runner, target, st = _upped(tmp_path, monkeypatch)
+    (st.worktree / ".devcontainer" / "dev" / "devcontainer.json").write_bytes(b"\xff\xfe{\x80}")
 
     target.rebuild(st)
 
