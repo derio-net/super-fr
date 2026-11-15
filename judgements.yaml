@@ -1,5 +1,5 @@
 schema: 12
-ranked_at: '2026-11-14'
+ranked_at: 2026-11-15
 tiers:
 - n: 1
   title: Work can be lost
@@ -14,6 +14,33 @@ tiers:
   title: Improve or investigate
   description: Friction, observability, compatibility, or work needing new live evidence.
 issues:
+  super-fr#1468:
+    tier: 3
+    theme: test-isolation
+    cx: S
+    severity: med
+    kind: defect
+    verified: false
+    detail: 'During the retire-vk run a test left a branch `feat/fixture` with five empty commits by `scenario@example.invalid` (the author `tests/scenarios/_common.sh` sets) in the run worktree, one of them on `feat/batch-retire-vk`. Nothing was lost (empty commits, recovered from the reflog). The leaking test is not identified.'
+    note: 'A scenario script that commits outside its tmp repo can move a live workspace''s branch. Feature group "Test-suite trust".'
+  super-fr#1467:
+    tier: 4
+    theme: test-naming
+    cx: XS
+    severity: low
+    kind: parked
+    verified: false
+    detail: '`test_vk_bridge_discover.py` tests `fr_dispatch.discover_plans` but keeps a vk name after #1465. Renaming it needs acceptance amendments on the two rows that cite it.'
+    note: 'Parked: cosmetic; ride along with the next PR that amends those rows.'
+  super-fr#1466:
+    tier: 4
+    theme: test-simplicity
+    cx: XS
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Three per-adapter fr_dispatch-never-imports tests (`tests/unit/test_import_direction.py:92-181`) could be one loop over `_ADAPTERS`. Predates #1465.'
+    note: 'Parked: simplification only.'
   super-fr#1086:
     tier: 2
     theme: triage-board
@@ -3347,7 +3374,7 @@ issues:
     kind: defect
     verified: true
     detail: 'Two lock tests in `tests/unit/test_hooks_worktree.py` (:463, :499) failed once each on 2026-11-14 and passed on rerun; the second blocked the v7.0.0 release until shard 3 was rerun (a red shard publishes nothing). Either the worktree lock races or the tests are timing-tight under `-n auto`.'
-    note: 'Batch suite-health (wave 15). Decide race vs timing before marking flaky.'
+    note: 'suite-health (#1470) split it out and left it open: CI logs show real double-holds, but 200 loaded trials (macOS and Linux) reproduced none and a code read found no two-process interleaving. Feature group "Test-suite trust".'
   super-fr#1462:
     tier: 2
     theme: run-evidence-gates
@@ -7600,6 +7627,13 @@ features:
   - super-fr#1459
   why: 'Decision already made: the only VK deployment is retired. Large removal that conflicts with most batches, so it wants a wave of its own; it shrinks the test suite (#1428).'
   start: '/fr-goal drop VibeKanban support (#1459)'
+- rank: 22
+  title: 'Test-suite trust'
+  ids:
+  - super-fr#1463
+  - super-fr#1468
+  why: 'Leftovers of suite-health: a lock double-hold CI sees and nobody reproduces, and a scenario fixture that commits into a live worktree.'
+  start: '/fr-debugging super-fr#1468 then super-fr#1463'
 exports:
 - wave: '1'
   repo: derio-net/super-fr
