@@ -224,3 +224,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_vk_compat_removed.py#test_no_vk_residue_in_shipped_sources
     why: phase 3 landed the R10 source tripwire
+  - row: vk-runner-removed
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_vk_compat_removed.py#test_vk_residue_allowlist_has_no_dead_entries
+    why: phase 3 landed the R10 source tripwire
