@@ -45,9 +45,16 @@ rows:
     origin:
     - spec:2026-11-15-guard-trust#R3
     - spec:2026-11-15-guard-trust#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_planted_fr.py#test_a_planted_fr_on_a_relative_path_entry_is_never_run
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_relative_path_entry_holding_a_git_is_never_run
+      - super-fr:packages/fr-opencode-plugin/test/resolved-fr.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/git.test.ts
+    status: ci
+    notes: 'R3/R4 proven in CI: planted git/fr behind bin, ./bin, . and empty PATH entries
+      never run by the git resolvers, any fr-starting hook or OpenCode module; absolute
+      ones are'
     verify: none
   - id: lock-probe-ignores-cwd
     capability: file lock probes
