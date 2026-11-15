@@ -54,3 +54,18 @@ Added the absent-plans-dir and absent-profile assertions to the Hermes R2 test.
 ### p1-r3-resolved · finding [out-of-scope] · resolves p1-r3: O_NOFOLLOW guards only the final component; a symlinked live plans root is not defended (phase 1)
 
 Pre-existing: archive_plan_dir git-mv'd out of the live root before this change; the new write adds no path through the root that the move did not already take.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-lib-var-clobber created=2026-11-15T18:25:42+00:00 phase=2 -->
+### p2-lib-var-clobber · discovery · fr_git_resolve must not reuse _fr_dir/_fr_rest (phase 2)
+
+fr_decide_edit and others keep their own _fr_dir across calls that resolve git; the first PATH walk reused fr_fr_resolve's names and broke the quiet-worktree tests. It uses _fr_gdir/_fr_grest.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-tsc-needs-install created=2026-11-15T18:25:42+00:00 phase=2 -->
+### p2-tsc-needs-install · discovery · package typecheck needs bun install first (phase 2)
+
+node_modules is absent in a fresh worktree; `bun install --frozen-lockfile && bunx tsc --noEmit` (as CI does) is clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-15T18:25:42+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+two small resolver edits (a PATH walk and a stat check); nothing to clean
