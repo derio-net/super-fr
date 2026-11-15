@@ -187,6 +187,8 @@ gate: developer
 There is no `## Test Plan`: the operator chose no post-merge rows (d5), and every
 behaviour here shows in a candidate install against a recording forge stub.
 
+## Negative evidence per row
+
 The tests lens asks for negative evidence. Each row's scenario and unit tests prove the
 side effect that must NOT happen:
 
