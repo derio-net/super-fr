@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -217,12 +219,38 @@ def on_default_branch(root: Path, default_ref: str) -> bool:
     return bool(branch) and branch == default_ref.partition("/")[2]
 
 
+_PINNED_ON_DEFAULT: dict[Path, bool] = {}
+"""Checkouts whose `head_on_default_branch` answer is pinned (`pinned_head_on_default_branch`)."""
+
+
+@contextmanager
+def pinned_head_on_default_branch(root: Path, answer: bool) -> Iterator[None]:
+    """While active, `head_on_default_branch(root)` answers *answer* for the checkout at
+    *root*. `fr archive --dry-run` runs in a detached scratch copy of the checkout, which
+    must answer as the real checkout does (review p3-r4)."""
+    key = Path(root).resolve()
+    previous = _PINNED_ON_DEFAULT.get(key)
+    _PINNED_ON_DEFAULT[key] = answer
+    try:
+        yield
+    finally:
+        if previous is None:
+            _PINNED_ON_DEFAULT.pop(key, None)
+        else:
+            _PINNED_ON_DEFAULT[key] = previous
+
+
 def head_on_default_branch(root: Path) -> bool:
     """Whether HEAD is the local branch of the remote's default ref.
 
     False when the default ref cannot be read (no remote, a refusal, no ref) or
-    HEAD is detached: the caller then behaves as off the default branch.
+    HEAD is detached: the caller then behaves as off the default branch. A checkout
+    `pinned_head_on_default_branch` names answers what it was pinned to.
     """
+    if _PINNED_ON_DEFAULT:
+        pinned = _PINNED_ON_DEFAULT.get(Path(root).resolve())
+        if pinned is not None:
+            return pinned
     found = remote_default_ref(root)
     if found is None or isinstance(found, GitRefusal):
         return False

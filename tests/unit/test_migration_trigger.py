@@ -1316,3 +1316,67 @@ def test_a_drifted_workspace_is_refused_naming_migrate_branch_and_nothing_migrat
             argv=[], invoked_subcommand=sub, env={"CI": "true"}, repo_root=tmp_path,
             err=lines.append,
         )  # fmt: skip
+
+
+# --- `fr archive --dry-run` may not write (review p3-r3) ---------------------------
+
+
+def _gate_argv(
+    root: Path, argv: list[str], env: dict[str, str] | None = None
+) -> tuple[int, list[str]]:
+    lines: list[str] = []
+    try:
+        trigger.ensure_artifacts_current(
+            argv=argv,
+            invoked_subcommand=argv[0],
+            env=env or {},
+            repo_root=root,
+            err=lines.append,
+        )
+    except typer.Exit as e:
+        return e.exit_code, lines
+    return 0, lines
+
+
+def test_asks_for_dry_run_reads_the_flag_of_archive_only() -> None:
+    assert trigger.asks_for_dry_run(
+        argv=["archive", "--all", "--dry-run"], invoked_subcommand="archive"
+    )
+    assert not trigger.asks_for_dry_run(argv=["archive", "--all"], invoked_subcommand="archive")
+    assert not trigger.asks_for_dry_run(argv=["apply", "--dry-run"], invoked_subcommand="apply")
+    assert not trigger.asks_for_dry_run(
+        argv=["archive", "--", "--dry-run"], invoked_subcommand="archive"
+    )
+    assert "archive" not in trigger.READ_ONLY_COMMANDS
+
+
+@pytest.mark.parametrize("env", [{}, {"CI": "true"}], ids=["workspace", "ci"])
+def test_an_archive_dry_run_over_stale_artifacts_refuses_and_writes_nothing(
+    tmp_path: Path, env: dict[str, str]
+) -> None:
+    fx = _Fixture(tmp_path)
+    before = fx.meta(fx.wt).read_text()
+    code, lines = _gate_argv(fx.wt, ["archive", "--all", "--dry-run"], env)
+    assert code == 2, lines
+    flat = _flat(lines)
+    assert "`fr archive --dry-run` writes nothing" in flat
+    assert "fr migrate artifacts --yes" in flat
+    assert fx.meta(fx.wt).read_text() == before
+    assert _g(fx.wt, "rev-parse", "HEAD") == fx.work_sha
+    assert _g(fx.wt, "status", "--porcelain") == ""
+
+
+def test_an_archive_dry_run_over_current_artifacts_proceeds(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    assert _gate(fx.wt)[0] == 0  # the workspace migrates and commits first
+    head = _g(fx.wt, "rev-parse", "HEAD")
+    code, lines = _gate_argv(fx.wt, ["archive", "--all", "--dry-run"])
+    assert code == 0, lines
+    assert _g(fx.wt, "rev-parse", "HEAD") == head
+
+
+def test_an_archive_without_dry_run_still_migrates(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    code, lines = _gate_argv(fx.wt, ["archive", "--all"])
+    assert code == 0, lines
+    assert _g(fx.wt, "rev-parse", "HEAD~1") == fx.work_sha

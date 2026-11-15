@@ -76,7 +76,7 @@ def resolve_repo_root(cwd: Path | None = None) -> Path:
         return (cwd or Path.cwd()).resolve()
 
 
-def require_migrated_layout(repo_root: Path | None = None) -> None:
+def require_migrated_layout(repo_root: Path | None = None, *, create: bool = True) -> None:
     """Hard-stop (exit 2) when the legacy archived-plans/ layout exists.
 
     2026-06-05 dispatch-guards spec: the canonical archive location is
@@ -90,9 +90,11 @@ def require_migrated_layout(repo_root: Path | None = None) -> None:
 
     No-op when there is no superpowers tree at all (e.g. running --help
     in an unrelated directory) — the guard targets repos that have plans.
+    `create=False` (a dry run) resolves the placement's space without creating or
+    syncing it.
     """
     root = repo_root if repo_root is not None else resolve_repo_root()
-    sp = kind_dir("superpowers", space_for(root))
+    sp = kind_dir("superpowers", space_for(root, create=create))
     legacy_dirs = [d for d in (sp / "archived-plans", sp / "archived-specs") if d.is_dir()]
     if legacy_dirs:
         import typer

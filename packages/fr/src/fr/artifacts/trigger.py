@@ -268,6 +268,29 @@ def is_exempt(
     return _asks_for_help(tokens)
 
 
+DRY_RUN_COMMANDS: Final[frozenset[str]] = frozenset({"archive"})
+"""Commands whose `--dry-run` previews a run and writes nothing (review p3-r3). They are
+NOT exempt: over stale artifacts the gate refuses them, because the real run would
+migrate first and a preview cannot honestly show that."""
+
+
+def asks_for_dry_run(
+    *, argv: Sequence[str] | None = None, invoked_subcommand: str | None = None
+) -> bool:
+    """Is this a `DRY_RUN_COMMANDS` invocation carrying `--dry-run`? Conservative, like
+    `_asks_for_help`'s reading of the argv: a `--dry-run` anywhere before a bare `--`
+    counts, and a false positive only refuses a stale tree instead of migrating it."""
+    if invoked_subcommand not in DRY_RUN_COMMANDS:
+        return False
+    tokens = sys.argv[1:] if argv is None else argv
+    for token in tokens:
+        if token == "--":
+            return False
+        if token == "--dry-run":
+            return True
+    return False
+
+
 def _asks_for_help(tokens: Sequence[str]) -> bool:
     """Is one of `EXEMPT_OPTIONS` here as an OPTION rather than as a value?
 
@@ -498,6 +521,22 @@ def ensure_artifacts_current(
 
     root = gate_root()
 
+    dry_run = asks_for_dry_run(argv=argv, invoked_subcommand=invoked_subcommand)
+    if dry_run:
+        # Review p3-r5: reading a quiet or stealth placement's artifacts would create or
+        # sync its checkout first. A dry run that cannot see them without that refuses.
+        from fr.placement.preview import cannot_tell
+
+        why = cannot_tell(root)
+        if why is not None:
+            raise _refuse(
+                emit,
+                [
+                    f"fr: dry run cannot tell what `fr {invoked_subcommand}` would do here: {why}.",
+                    "  Nothing was written.",
+                ],
+            )
+
     try:
         stale = is_stale(root, registry=registry)
     except Exception as e:
@@ -514,6 +553,21 @@ def ensure_artifacts_current(
 
     if not stale:
         return
+
+    # A dry run may not write (review p3-r3, spec 2026-11-15 R11): in every context, CI
+    # included, it refuses over stale artifacts as the opt-out row does.
+    if dry_run:
+        raise _refuse(
+            emit,
+            _will_not_act_here(
+                root,
+                registry,
+                f"`fr {invoked_subcommand} --dry-run` writes nothing, so fr will not migrate "
+                "or commit here:",
+                "the real run would migrate first, and a preview cannot honestly show a run "
+                "it does not run. Migrate, then preview.",
+            ),
+        )
 
     # Step 2 (spec 2026-11-01 §B): classify from the environment and the
     # streams alone. `None` is the workspace candidate, decided with git below.

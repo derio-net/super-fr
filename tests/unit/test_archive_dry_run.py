@@ -146,11 +146,19 @@ def test_a_stale_scratch_worktree_is_pruned_first(tmp_path: Path) -> None:
 # --- Task 3: the flag in every mode -------------------------------------------------
 
 
-def _state(repo: Path) -> tuple[str, str, str]:
+def _state(repo: Path) -> tuple[str, ...]:
+    """Everything a dry run must leave as it was: tree, index, HEAD, every ref, the local
+    config and the registered worktrees (review p3-r11)."""
+    common = Path(_git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip())
+    worktrees = common / "worktrees"
+    listing = sorted(p.name for p in worktrees.iterdir()) if worktrees.is_dir() else []
     return (
         _git(repo, "status", "--porcelain", "--untracked-files=all"),
         _git(repo, "diff", "--cached"),
         _git(repo, "rev-parse", "HEAD"),
+        _git(repo, "for-each-ref", "--format=%(refname) %(objectname)"),
+        _git(repo, "config", "--list", "--local"),
+        "\n".join(listing),
     )
 
 
@@ -213,14 +221,17 @@ def test_archive_reads_no_git_ignored_file(
     assert poisoned.exit_code == clean.exit_code == 0
 
 
-def test_all_and_sweep_only_dry_runs_change_nothing(
-    merged_repo: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("argv", [["archive", "--all"], ["archive", "--sweep-only"]])
+def test_all_and_sweep_only_dry_runs_change_nothing_and_exit_as_the_real_run(
+    merged_repo: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
 ) -> None:
     before = _state(merged_repo)
-    for argv in (["archive", "--all", "--dry-run"], ["archive", "--sweep-only", "--dry-run"]):
-        out = _invoke(monkeypatch, merged_repo, argv)
-        assert out.exit_code == 0, out.output
-        assert _state(merged_repo) == before
+    dry = _invoke(monkeypatch, merged_repo, [*argv, "--dry-run"])
+    assert _state(merged_repo) == before
+    if argv[1] == "--all":
+        assert "archived:" in dry.output and "would stage" in dry.output
+    real = _invoke(monkeypatch, merged_repo, argv)
+    assert dry.exit_code == real.exit_code, (dry.output, real.output)
 
 
 def test_a_refused_plan_exits_with_the_real_runs_code(
@@ -239,18 +250,24 @@ def test_a_refused_plan_exits_with_the_real_runs_code(
 
 
 def test_dry_run_never_prompts_and_lists_the_open_ends(
-    merged_repo: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.artifacts import trigger
 
-    monkeypatch.setattr(trigger, "is_interactive", lambda: True)
+    from tests.unit.test_archive_open_ends import SLUG, _open_ends_repo
+
+    repo = _open_ends_repo(tmp_path)
+    monkeypatch.setattr(trigger, "is_interactive", lambda **_k: True)
     monkeypatch.setattr(
         "builtins.input", lambda *_a: (_ for _ in ()).throw(AssertionError("prompted"))
     )
-    out = _invoke(
-        monkeypatch, merged_repo, ["archive", "docs/superpowers/plans/2026-06-01-p", "--dry-run"]
-    )
+    before = _state(repo)
+    out = _invoke(monkeypatch, repo, ["archive", f"docs/superpowers/plans/{SLUG}", "--dry-run"])
     assert out.exit_code == 0, out.output
+    assert f"plan/{SLUG}/f1: first open" in out.output
+    assert f"plan/{SLUG}/f2: second, scoped out" in out.output
+    assert "create_issue" not in out.output
+    assert _state(repo) == before
 
 
 def test_an_unknown_forge_call_exits_one_naming_it(
@@ -270,12 +287,22 @@ def test_an_unknown_forge_call_exits_one_naming_it(
     assert _state(merged_repo) == before
 
 
-def test_branch_dry_run_changes_nothing(merged_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    before = _state(merged_repo)
-    out = _invoke(monkeypatch, merged_repo, ["archive", "--branch", "main", "--dry-run"])
-    # Whatever the real run decides, a dry run leaves tree and index alone.
-    assert _state(merged_repo) == before
-    assert out.exit_code in (0, 2), out.output
+def test_branch_dry_run_previews_the_moves_and_exits_as_the_real_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit import test_archive_branch as tb
+
+    repo = tb._base(tmp_path)
+    plan = "2026-09-28-thing"
+    tb._merged(repo, lambda r: tb._plan(r, plan, ticked=True))
+    before = _state(repo)
+    dry = _invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH, "--dry-run"])
+    assert f"archived: docs/superpowers/plans/{plan}" in dry.output, dry.output
+    assert "would stage" in dry.output and f"implemented/plans/{plan}" in dry.output
+    assert _state(repo) == before
+    real = _invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH])
+    assert f"archived: docs/superpowers/plans/{plan}" in real.output, real.output
+    assert dry.exit_code == real.exit_code == 0
 
 
 # --- quiet and stealth: the record is previewed, never written -----------------------
@@ -365,6 +392,7 @@ def test_stealth_branch_dry_run_previews_the_record_and_writes_nothing(
     head = _git(wt, "rev-parse", "HEAD")
     from tests.unit.test_placement_merged_archive import _fr
 
+    stealth.reset_caches()  # a new process: nothing reached or synced yet
     result = _fr(stealthy.root, "archive", "--branch", "feat/a", "--dry-run")
     assert result.exit_code == 0, result.output
     assert "would" in result.output
@@ -372,3 +400,406 @@ def test_stealth_branch_dry_run_previews_the_record_and_writes_nothing(
     assert git(target_origin, "for-each-ref", "--format=%(refname) %(objectname)") == refs
     assert _git(wt, "rev-parse", "HEAD") == head
     assert _git(wt, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+# --- review p3: the scratch removes only its own, and replays faithfully ------------
+
+
+def _porcelain_z(repo: Path) -> bytes:
+    return subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain=v2", "-z", "--untracked-files=all"],
+        check=True,
+        capture_output=True,
+    ).stdout.replace(b"0000000000000000000000000000000000000000", b"")
+
+
+def _without_shas(z: bytes) -> list[bytes]:
+    """Porcelain v2 records with their object names dropped (the scratch's index stat
+    differs, the content does not)."""
+    out = []
+    for rec in z.split(b"\0"):
+        fields = rec.split(b" ")
+        if rec.startswith(b"1 ") and len(fields) >= 9:
+            out.append(b" ".join([*fields[:3], *fields[8:]]))
+        else:
+            out.append(rec)
+    return out
+
+
+def test_scratch_never_deregisters_another_worktree(tmp_path: Path) -> None:
+    """Review p3-r2 (pr1431-n1): no global `git worktree prune`. A worktree whose
+    directory is not there (in a devcontainer: a host worktree that is not mounted)
+    stays registered."""
+    repo = _world(tmp_path)
+    other = tmp_path / "unmounted"
+    _git(repo, "worktree", "add", "-q", "--detach", str(other), "HEAD")
+    import shutil
+
+    shutil.rmtree(other)
+    with ap.scratch_checkout(repo):
+        pass
+    assert str(other) in _git(repo, "worktree", "list", "--porcelain").replace(
+        "/private/", "/"
+    ) or str(other.resolve()) in _git(repo, "worktree", "list", "--porcelain")
+
+
+def test_a_stale_scratch_whose_directory_is_gone_is_forgotten_by_its_own_path(
+    tmp_path: Path,
+) -> None:
+    repo = _world(tmp_path)
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    stale = Path(ap.scratch_root()) / f"fr-archive-dry-run-{dead.pid}"
+    _git(repo, "worktree", "add", "-q", "--detach", str(stale), "HEAD")
+    import shutil
+
+    shutil.rmtree(stale)
+    with ap.scratch_checkout(repo):
+        pass
+    assert "fr-archive-dry-run" not in _git(repo, "worktree", "list", "--porcelain")
+
+
+def test_scratch_copies_an_untracked_nested_repository(tmp_path: Path) -> None:
+    repo = _world(tmp_path)
+    nested = repo / "vendor" / "lib"
+    nested.mkdir(parents=True)
+    _git(nested, "init", "-q", "-b", "main")
+    (nested / "x").write_text("x\n")
+    (repo / "loose").mkdir()
+    (repo / "loose" / "y").write_text("y\n")
+    with ap.scratch_checkout(repo) as scratch:
+        assert _porcelain_z(scratch) == _porcelain_z(repo)
+        assert (scratch / "vendor" / "lib" / "x").read_text() == "x\n"
+
+
+def test_scratch_replays_a_name_that_is_not_utf8(tmp_path: Path) -> None:
+    import os
+
+    repo = _world(tmp_path)
+    name = os.fsdecode(b"caf\xe9.txt")
+    try:
+        (repo / name).write_text("untracked\n")
+    except OSError:
+        pytest.skip("this filesystem refuses a name that is not UTF-8 (APFS)")
+    tracked = os.fsdecode(b"na\xefve.txt")
+    (repo / tracked).write_text("one\n")
+    _git(repo, "add", "--", tracked)
+    with ap.scratch_checkout(repo) as scratch:
+        assert _porcelain_z(scratch) == _porcelain_z(repo)
+        assert (scratch / name).read_text() == "untracked\n"
+
+
+def test_scratch_replays_names_git_would_quote(tmp_path: Path) -> None:
+    repo = _world(tmp_path)
+    odd = "café\tnew\nline.txt"
+    (repo / odd).write_text("untracked\n")
+    (repo / "naïve.txt").write_text("staged\n")
+    _git(repo, "add", "naïve.txt")
+    with ap.scratch_checkout(repo) as scratch:
+        assert _porcelain_z(scratch) == _porcelain_z(repo)
+        assert (scratch / odd).read_text() == "untracked\n"
+
+
+def test_scratch_keeps_intent_to_add_entries(tmp_path: Path) -> None:
+    repo = _world(tmp_path)
+    (repo / "later.txt").write_text("later\n")
+    _git(repo, "add", "-N", "later.txt")
+    with ap.scratch_checkout(repo) as scratch:
+        assert _porcelain(scratch) == _porcelain(repo)
+        assert "1 .A " in _git(scratch, "status", "--porcelain=v2")
+        assert (scratch / "later.txt").read_text() == "later\n"
+
+
+def test_scratch_replays_whitespace_errors_under_apply_whitespace_error(tmp_path: Path) -> None:
+    repo = _world(tmp_path)
+    _git(repo, "config", "apply.whitespace", "error")
+    (repo / "a.txt").write_text("a staged   \n")
+    _git(repo, "add", "a.txt")
+    (repo / "b.txt").write_text("b unstaged\t\n")
+    with ap.scratch_checkout(repo) as scratch:
+        assert _porcelain(scratch) == _porcelain(repo)
+        assert (scratch / "b.txt").read_text() == "b unstaged\t\n"
+
+
+def test_scratch_runs_no_hook_and_no_lfs_smudge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p3-r7: `worktree add` would run the repo's post-checkout hook and LFS
+    smudge."""
+    repo = _world(tmp_path)
+    marker = tmp_path / "hook-ran"
+    hook = repo / ".git" / "hooks" / "post-checkout"
+    hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    hook.chmod(0o755)
+    seen: list[tuple[list[str], dict[str, str]]] = []
+    real_run = subprocess.run
+
+    def spy(argv: Any, *a: Any, **k: Any) -> Any:
+        if isinstance(argv, list) and "worktree" in argv and "add" in argv:
+            seen.append((list(argv), dict(k.get("env") or {})))
+        return real_run(argv, *a, **k)
+
+    monkeypatch.setattr(ap.subprocess, "run", spy)
+    with ap.scratch_checkout(repo):
+        pass
+    assert not marker.exists()
+    ((argv, env),) = seen
+    assert "core.hooksPath=/dev/null" in argv
+    assert env.get("GIT_LFS_SKIP_SMUDGE") == "1"
+
+
+# --- review p3-r10: the preview URL takes the forge's own shape ----------------------
+
+
+def test_preview_urls_take_the_forges_shape(tmp_path: Path) -> None:
+    lab = ap.PreviewForge(_Recording(), host="gitlab.example.org", backend="gitlab")
+    assert (
+        lab.create_issue("g/p", title="t", body="b", labels=frozenset())
+        == "https://gitlab.example.org/g/p/-/issues/900000"
+    )
+    repo = _world(tmp_path)
+    _git(repo, "remote", "add", "origin", "https://gitlab.com/g/p.git")
+    assert ap.forge_of(repo) == ("gitlab", "gitlab.com")
+
+
+# --- review p3-r4: the scratch answers "on the default branch" as the checkout does ---
+
+
+def test_a_dry_run_on_the_default_branch_previews_the_owed_entries_the_real_run_would(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_archive_owed import PLAN, ListingGh, _manual_repo
+
+    repo = _manual_repo(tmp_path)  # HEAD is main, which origin/main names
+    gh = ListingGh()
+    monkeypatch.setattr(archive_cmd, "_make_gh_client", lambda: gh)
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
+    before = _state(repo)
+    dry = CliRunner().invoke(app, ["archive", "--all", "--dry-run"])
+    assert dry.exit_code == 0, dry.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in dry.output
+    assert "create_issue" not in dry.output and "owed actions:" not in dry.output
+    assert not [n for n, _ in gh.calls if n == "create_issue"]
+    assert _state(repo) == before
+    real = CliRunner().invoke(app, ["archive", "--all"])
+    assert f"would record owed: plan:{PLAN}#p2 — " in real.output
+    assert real.exit_code == dry.exit_code
+
+
+# --- review p3-r8: the output names the real checkout, never the scratch -------------
+
+
+@pytest.mark.parametrize("absolute", [False, True])
+def test_dry_run_output_names_no_scratch_path(
+    merged_repo: Path, monkeypatch: pytest.MonkeyPatch, absolute: bool
+) -> None:
+    plan = "docs/superpowers/plans/2026-06-01-p"
+    arg = str(merged_repo / plan) if absolute else plan
+    out = _invoke(monkeypatch, merged_repo, ["archive", arg, "--dry-run"])
+    assert out.exit_code == 0, out.output
+    assert "archived:" in out.output
+    assert "fr-archive-dry-run-" not in out.output
+    assert "moves staged via git mv" not in out.output
+
+
+# --- review p3-r9: a crash still names the refused forge call ------------------------
+
+
+def test_a_crash_after_a_refused_call_still_names_it_and_exits_one(
+    merged_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def sweep(root: Path, gh: Any) -> Any:
+        gh.future_method("o/r")
+        raise RuntimeError("the sweep broke")
+
+    monkeypatch.setattr(archive_cmd, "spec_archive_sweep", sweep)
+    before = _state(merged_repo)
+    out = _invoke(monkeypatch, merged_repo, ["archive", "--sweep-only", "--dry-run"])
+    assert out.exit_code == 1, out.output
+    assert "future_method" in " ".join(out.output.split())
+    assert "dry run — nothing was written." in out.output
+    assert _state(merged_repo) == before
+
+
+# --- review p3-r1: under quiet and stealth, every forge call is previewed -------------
+
+
+class _NoWrites(FakeGhClient):
+    """The real client of a quiet dry run: any write it receives fails the test."""
+
+    def __getattribute__(self, name: str) -> Any:
+        if name in ap.WRITES:
+            raise AssertionError(f"the dry run reached the real client's {name}")
+        return super().__getattribute__(name)
+
+
+def _tree_bytes(root: Path) -> dict[str, bytes]:
+    return {
+        str(p.relative_to(root)): p.read_bytes()
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and ".git" not in p.relative_to(root).parts
+    }
+
+
+def test_quiet_issues_dry_run_previews_the_filing_and_writes_nothing(
+    quiet: Product, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+    from tests.unit.test_placement_merged_archive import _fr
+
+    quiet.feature("a")
+    _seed(quiet, "a", quiet.space.root, push="origin fr")
+    quiet.merge("a")
+    slug = "2026-11-15-thing"
+    jpath = journal_path(quiet.root, "plan", slug)
+    append_journal_entry(
+        jpath,
+        slug,
+        JournalEntry(
+            kind="finding",
+            scope="plan",
+            id="f1",
+            created="2026-11-15T00:00:00+00:00",
+            state="open",
+            title="an open end",
+            body="why",
+        ),
+    )
+    wt = quiet.space.root
+    git(wt, "add", "-A")
+    git(wt, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "journal")
+    monkeypatch.setattr("fr.settings.require_forge", lambda *a, **k: None)
+    monkeypatch.setattr(archive_cmd, "_repo_slug", lambda root: "acme/widgets")
+    monkeypatch.setattr(archive_cmd, "_make_gh_client", lambda: _NoWrites())
+    hits = _sentinels(monkeypatch)
+    before = (
+        _git(wt, "status", "--porcelain", "--untracked-files=all"),
+        _git(wt, "rev-parse", "HEAD"),
+        _tree_bytes(wt),
+        _state(quiet.root),
+    )
+    result = _fr(
+        quiet.root, "archive", "--branch", "feat/a", "--issues", f"plan/{slug}/f1", "--dry-run"
+    )
+    assert result.exit_code == 0, result.output
+    assert hits == []
+    assert "would defer plan/" in result.output
+    assert "create_issue('acme/widgets'" in result.output
+    after = (
+        _git(wt, "status", "--porcelain", "--untracked-files=all"),
+        _git(wt, "rev-parse", "HEAD"),
+        _tree_bytes(wt),
+        _state(quiet.root),
+    )
+    assert after == before
+
+
+# --- review p3-r5: a preview that cannot see refuses by name --------------------------
+
+
+def test_quiet_dry_run_with_no_fr_worktree_yet_refuses_by_name(
+    quiet: Product, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_placement_merged_archive import _fr
+
+    quiet.feature("a")
+    _seed(quiet, "a", quiet.space.root, push="origin fr")
+    quiet.merge("a")
+    wt = quiet.space.root
+    git(quiet.root, "worktree", "remove", "--force", str(wt))
+    before = _state(quiet.root)
+    result = _fr(quiet.root, "archive", "--branch", "feat/a", "--dry-run")
+    assert result.exit_code == 2, result.output
+    flat = " ".join(result.output.split())
+    assert "dry run cannot tell" in flat and "no `fr` worktree yet" in flat
+    assert "nothing to archive" not in flat
+    assert not wt.exists()
+    assert _state(quiet.root) == before
+
+
+def _stealth_merged(stealthy: Product) -> Path:
+    """A merged stealth feature, the process's caches reset as a new `fr` would start."""
+    from fr.placement import stealth
+
+    stealthy.feature("a")
+    wt = stealth.tracking_root(stealthy.space)
+    _seed(stealthy, "a", wt, push="origin main")
+    stealthy.merge("a")
+    stealth.reset_caches()
+    return wt
+
+
+def test_stealth_dry_run_with_the_tracking_clone_gone_refuses_by_name(
+    stealthy: Product, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from tests.unit.test_placement_merged_archive import _fr
+
+    wt = _stealth_merged(stealthy)
+    shutil.rmtree(wt)
+    result = _fr(stealthy.root, "archive", "--branch", "feat/a", "--dry-run")
+    assert result.exit_code == 2, result.output
+    flat = " ".join(result.output.split())
+    assert "dry run cannot tell" in flat and "is gone" in flat
+    assert not wt.exists()
+
+
+def test_stealth_dry_run_with_an_unreachable_tracking_repo_refuses_by_name(
+    stealthy: Product, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.placement import stealth
+    from fr.settings import SettingsError
+
+    from tests.unit.test_placement_merged_archive import _fr
+
+    _stealth_merged(stealthy)
+
+    def unreachable(ref: Any, cwd: Path) -> None:
+        raise SettingsError("placement stealth: the tracking repo x is unreachable (down)")
+
+    monkeypatch.setattr(stealth, "check_reachable", unreachable)
+    result = _fr(stealthy.root, "archive", "--branch", "feat/a", "--dry-run")
+    assert result.exit_code == 2, result.output
+    assert "unreachable" in " ".join(result.output.split())
+
+
+def test_stealth_dry_run_with_a_clone_behind_its_tip_refuses_by_name(
+    stealthy: Product, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_placement_merged_archive import _fr
+
+    wt = _stealth_merged(stealthy)
+    git(wt, "reset", "-q", "--hard", "HEAD~1")
+    head = _git(wt, "rev-parse", "HEAD")
+    result = _fr(stealthy.root, "archive", "--branch", "feat/a", "--dry-run")
+    assert result.exit_code == 2, result.output
+    assert "not synced" in " ".join(result.output.split())
+    assert _git(wt, "rev-parse", "HEAD") == head
+
+
+def test_the_gate_refuses_a_quiet_dry_run_before_it_creates_the_fr_worktree(
+    quiet: Product,
+) -> None:
+    import typer
+    from fr.artifacts import trigger
+
+    quiet.feature("a")
+    _seed(quiet, "a", quiet.space.root, push="origin fr")
+    quiet.merge("a")
+    wt = quiet.space.root
+    git(quiet.root, "worktree", "remove", "--force", str(wt))
+    lines: list[str] = []
+    with pytest.raises(typer.Exit) as done:
+        trigger.ensure_artifacts_current(
+            argv=["archive", "--branch", "feat/a", "--dry-run"],
+            invoked_subcommand="archive",
+            env={},
+            repo_root=quiet.root,
+            err=lines.append,
+        )
+    assert done.value.exit_code == 2
+    assert "dry run cannot tell" in " ".join(lines)
+    assert not wt.exists()

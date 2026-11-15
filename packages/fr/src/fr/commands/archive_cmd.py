@@ -83,6 +83,28 @@ def _make_gh_client() -> GhClient:
     return client_for(Path.cwd())
 
 
+@dataclass(frozen=True)
+class _Preview:
+    """A `--dry-run` in progress (R10, R11): *wrap* turns a forge client into the preview
+    forge that records into one ledger; *outside* is quiet or stealth, where the run acts
+    on the real checkout, so no follow-up may write anything at all."""
+
+    wrap: Callable[[Any], Any]
+    outside: bool
+
+
+_PREVIEW: _Preview | None = None
+"""Set only while `_dry_run` runs the command."""
+
+STAGED_NOTE = "\nmoves staged via git mv — review, commit, and PR them."
+
+
+def _staged_note() -> None:
+    """The real run's closing line; a dry run staged nothing the operator could commit."""
+    if _PREVIEW is None:
+        typer.echo(STAGED_NOTE)
+
+
 def _report_sweep(repo_root: Path, sweep: SpecSweepResult) -> bool:
     """Print a sweep result's moves and notes. Returns whether anything moved.
 
@@ -232,7 +254,7 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
     if moved_plans or spec_dsts or moved_followers:
         only_plans = frozenset(moved_plans) | plans_referencing_specs(repo_root, spec_dsts)
         _repair_in_passing(repo_root, only_plans)
-        typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+        _staged_note()
 
 
 def _record_merged(repo_root: Path, branch: str, placement: str, *, preview: bool = False) -> None:
@@ -281,6 +303,8 @@ def _record_merged(repo_root: Path, branch: str, placement: str, *, preview: boo
         )
         raise typer.Exit(2)
     forge, why_not = merged_status.forge_for(repo_root)
+    if _PREVIEW is not None and isinstance(forge, merged_status.ClientMergedPrs):
+        forge = forge.with_client(_PREVIEW.wrap)  # R11: every forge call is previewed
     view = merged_status.merged_features(space, repo_root, forge=forge)
     for notice in view.notices:
         err_console.print(f"note: {escape(notice)}", soft_wrap=True)
@@ -336,6 +360,24 @@ def _record_merged(repo_root: Path, branch: str, placement: str, *, preview: boo
         f"recorded: {branch} merged at {short}{via} "
         f"({FEATURES_DIR}/{fid}/{merged_status.MERGED_FILE}); nothing moved (R25)"
     )
+
+
+def _refuse_cannot_tell(repo_root: Path, placement: str) -> None:
+    """R10 (review p3-r5): a preview that cannot see what the real run would act on
+    refuses by name, exit 2, rather than print "nothing to archive" and exit 0. Checked
+    before anything resolves the placement's space, which would create or sync it."""
+    from fr.placement.preview import cannot_tell
+
+    why = cannot_tell(repo_root)
+    if why is None:
+        return
+    err_console.print(
+        f"dry run cannot tell what `fr archive` would do under {placement}: {why}. "
+        "Nothing was written",
+        soft_wrap=True,
+        markup=False,
+    )
+    raise typer.Exit(2)
 
 
 def _unpushed(fr_root: Path, path: Path) -> bool:
@@ -647,6 +689,8 @@ def _refresh_usage(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
 
     from fr.usage.backfill import refresh_archived
 
+    if _PREVIEW is not None and _PREVIEW.outside:
+        return  # R11: under quiet or stealth a dry run writes nothing anywhere
     report = refresh_archived(
         repo_root,
         os.environ,
@@ -724,6 +768,12 @@ def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
             err_console.print(
                 f"[yellow]warning:[/yellow] could not file {qid} — {escape(filed.error or '')}"
             )
+            continue
+        if _PREVIEW is not None and _PREVIEW.outside:
+            # R11: the journal is outside the checkout (quiet, stealth), so a dry run
+            # says where the finding would be deferred and writes nothing.
+            typer.echo(f"  {'reused' if filed.reused else 'filed'}: {qid} -> {filed.url}")
+            typer.echo(f"  would defer {qid} to {filed.url} in its journal")
             continue
         try:
             path = af.write_back(filed)
@@ -828,6 +878,10 @@ def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
                 soft_wrap=True,
             )
             continue
+        if _PREVIEW is not None and _PREVIEW.outside:  # R11: nothing is written
+            typer.echo(f"  {'reused' if filed.reused else 'filed'}: {filed.end.key} -> {filed.ref}")
+            typer.echo(f"  would record {filed.end.key} as {filed.ref} in its journal")
+            continue
         try:
             path = af.write_owed_back(filed)
             subprocess.run(
@@ -853,63 +907,144 @@ def _repo_slug(repo_root: Path) -> str:
 
 
 def _in_checkout(repo_root: Path, path: Path) -> Path:
-    """*path* as it is inside the scratch tree, when it names something in the real one."""
+    """*path* relative to the real checkout, when it names something in it: run from the
+    scratch's root, it names the same thing there, and the output prints no scratch path."""
     try:
         return path.resolve().relative_to(repo_root)
     except ValueError:
         return path
 
 
-def _dry_run(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
-    """`fr archive --dry-run` (R10, R11, design §C): the real command, run in-process against a
-    disposable copy of the checkout with a forge that records every write instead of making
-    it. Under quiet or stealth the record is outside the checkout, so `_record_merged`
-    previews it instead and nothing is copied."""
+class _Rewriting:
+    """A text stream that writes through to *inner* with every scratch path replaced by
+    the real checkout's (review p3-r8): the operator reads paths they can open."""
+
+    def __init__(self, inner: Any, pairs: list[tuple[str, str]]) -> None:
+        self._inner = inner
+        self._pairs = pairs
+
+    def write(self, text: Any) -> Any:
+        if isinstance(text, str):
+            for old, new in self._pairs:
+                text = text.replace(old, new)
+        return self._inner.write(text)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+@contextmanager
+def _real_paths_in_output(scratch: Path, real_root: Path) -> Iterator[None]:
+    import sys
+    import tempfile
+
+    spellings = {str(scratch), str(Path(tempfile.gettempdir()) / scratch.name)}
+    pairs = [(old, str(real_root)) for old in sorted(spellings, key=len, reverse=True)]
+    saved = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = _Rewriting(sys.stdout, pairs), _Rewriting(sys.stderr, pairs)
+    try:
+        yield
+    finally:
+        sys.stdout, sys.stderr = saved
+
+
+@contextmanager
+def _rooted_at(scratch: Path) -> Iterator[None]:
+    """The command's repo root and cwd are the scratch tree for the block."""
     import os
+
+    saved_cwd = Path.cwd()
+    saved_env = os.environ.get("FR_REPO_ROOT")
+    os.environ["FR_REPO_ROOT"] = str(scratch)
+    os.chdir(scratch)
+    try:
+        yield
+    finally:
+        os.chdir(saved_cwd)
+        if saved_env is None:
+            os.environ.pop("FR_REPO_ROOT", None)
+        else:
+            os.environ["FR_REPO_ROOT"] = saved_env
+
+
+def _exit_code_of(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, Any]) -> int:
+    try:
+        run(*args, **kwargs)
+    except typer.Exit as e:
+        return e.exit_code
+    return 0
+
+
+def _porcelain(root: Path) -> set[str]:
     import subprocess
 
+    out = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+        capture_output=True,
+        check=False,
+    ).stdout
+    return set(out.decode(errors="replace").splitlines())
+
+
+def _dry_run(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+    """`fr archive --dry-run` (R10, R11, design §C): the real command, run in-process with
+    a forge that records every write instead of making it. For a repo placement it runs
+    against a disposable copy of the checkout; under quiet or stealth the record lives
+    outside the checkout, so `_record_merged` previews it, the follow-ups write nothing,
+    and nothing is copied. The summary, and the refused forge calls, are reported whatever
+    way the run ends (review p3-r9)."""
     from fr import archive_preview as ap
     from fr.artifacts.paths import outside_repo
+    from fr.git import head_on_default_branch, pinned_head_on_default_branch
 
-    real_root = resolve_repo_root()
-    if outside_repo(real_root) is not None:
-        run(*args, **kwargs)  # refuses, or `_record_merged(..., preview=True)`
-        return
-    real_factory = _make_gh_client
+    global _PREVIEW  # noqa: PLW0603 — set only while the command runs
+    real_root = resolve_repo_root().resolve()
+    backend, host = ap.forge_of(real_root)
     ledger = ap.PreviewLedger()
+
+    def wrap(client: Any) -> Any:
+        return ap.PreviewForge(client, host=host, backend=backend, ledger=ledger)
+
+    outside = outside_repo(real_root) is not None
+    real_factory = _make_gh_client
+    staged: list[str] = []
     code = 0
-    with ap.scratch_checkout(real_root) as scratch:
+    _PREVIEW = _Preview(wrap=wrap, outside=outside)
+    globals()["_make_gh_client"] = lambda: wrap(real_factory())
+    try:
+        if outside:
+            code = _exit_code_of(run, args, kwargs)
+        else:
+            on_default = head_on_default_branch(real_root)  # p3-r4: the real checkout's answer
+            with (
+                ap.scratch_checkout(real_root) as scratch,
+                pinned_head_on_default_branch(scratch, on_default),
+                _real_paths_in_output(scratch, real_root),
+            ):
+                baseline = _porcelain(scratch)
+                plan = kwargs.get("plan_dir")
+                if plan is not None:
+                    kwargs = {**kwargs, "plan_dir": _in_checkout(real_root, Path(plan))}
+                with _rooted_at(scratch):
+                    code = _exit_code_of(run, args, kwargs)
+                staged = sorted(_porcelain(scratch) - baseline)
+    except Exception as e:
+        _report_preview(staged, ledger)
+        if ledger.refused:
+            raise typer.Exit(1) from e
+        raise
+    else:
+        _report_preview(staged, ledger)
+    finally:
+        globals()["_make_gh_client"] = real_factory
+        _PREVIEW = None
+    if ledger.refused:
+        raise typer.Exit(1)
+    if code:
+        raise typer.Exit(code)
 
-        def porcelain() -> set[str]:
-            out = subprocess.run(
-                ["git", "-C", str(scratch), "status", "--porcelain", "--untracked-files=all"],
-                capture_output=True,
-                text=True,
-                check=False,
-            ).stdout
-            return set(out.splitlines())
 
-        baseline = porcelain()
-        plan = kwargs.get("plan_dir")
-        if plan is not None:
-            kwargs = {**kwargs, "plan_dir": scratch / _in_checkout(real_root, Path(plan))}
-        saved_cwd = Path.cwd()
-        saved_env = os.environ.get("FR_REPO_ROOT")
-        globals()["_make_gh_client"] = lambda: ap.PreviewForge(real_factory(), ledger=ledger)
-        os.environ["FR_REPO_ROOT"] = str(scratch)
-        os.chdir(scratch)
-        try:
-            run(*args, **kwargs)
-        except typer.Exit as e:
-            code = e.exit_code
-        finally:
-            globals()["_make_gh_client"] = real_factory
-            os.chdir(saved_cwd)
-            if saved_env is None:
-                os.environ.pop("FR_REPO_ROOT", None)
-            else:
-                os.environ["FR_REPO_ROOT"] = saved_env
-        staged = sorted(porcelain() - baseline)
+def _report_preview(staged: list[str], ledger: Any) -> None:
     typer.echo("\ndry run — nothing was written.")
     if staged:
         typer.echo("would stage:")
@@ -926,9 +1061,6 @@ def _dry_run(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, 
             soft_wrap=True,
             markup=False,
         )
-        raise typer.Exit(1)
-    if code:
-        raise typer.Exit(code)
 
 
 def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
@@ -1068,7 +1200,9 @@ def archive_command(
             "<branch>`, which appends `merged: <sha>` to its feature path and moves nothing. "
             "Nothing was written"
         )
-    require_migrated_layout()
+    if dry_run and placement is not None:
+        _refuse_cannot_tell(resolve_repo_root(), placement)
+    require_migrated_layout(create=not dry_run)
     if branch is not None:
         for conflicting, name in (
             (plan_dir is not None, "plan_dir"),
@@ -1097,7 +1231,7 @@ def archive_command(
         repo_root = resolve_repo_root()
         if _report_sweep(repo_root, spec_archive_sweep(repo_root, _make_gh_client())):
             _repair_in_passing(repo_root, None)
-            typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+            _staged_note()
         else:
             typer.echo("spec sweep: nothing eligible to move.")
         return
@@ -1262,6 +1396,6 @@ def archive_command(
     for s in skipped:
         typer.echo(f"  skipped: {s}")
     if archived or specs_moved or owed_moved:
-        typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+        _staged_note()
     elif all_plans:
         typer.echo("nothing to archive.")
