@@ -7614,10 +7614,9 @@ exports:
   merged: true
 - wave: '15'
   repo: derio-net/super-fr
-  at: '2026-11-15T09:27:09.576505Z'
-  pr: 1472
-  head: 97e15c2937e71fbf52e4401f0fb995781a97b787
-  closed: true
+  at: '2026-11-15T09:34:31.964422Z'
+  pr: 1473
+  head: 4f01acfee9a5417205be621e6d068d9fa9a8982f
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
