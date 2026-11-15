@@ -54,3 +54,15 @@ def own_issue(root: Path, ref: str, own: str) -> tuple[str, int] | str:
     if repo.lower() != own.lower():
         return f"{shown(ref)} names {shown(repo)}, not this repo ({own})"
     return own, number
+
+
+def discharge_travels(root: Path) -> bool:
+    """Whether a discharge committed here reaches the forge with the branch's PR:
+    true when fr's journals live in the product checkout (`placement: repo`). Under
+    quiet and stealth the artifact root is outside it, so a discharge commit never
+    travels with the PR: `fr journal resolve` closes the owed issue at once, and the
+    PR body's `## Owed actions discharged` section and `deliver`'s check for it do
+    not apply (spec 2026-11-15-owed-archive-side-effects R15)."""
+    from fr.artifacts.paths import artifact_root
+
+    return artifact_root(root).resolve() == root.resolve()

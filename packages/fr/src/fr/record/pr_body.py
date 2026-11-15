@@ -43,7 +43,9 @@ __all__ = [
     "OWED_ROW_STATUSES",
     "DURABLE_PR_BODY_SUFFIX",
     "HEADING_OWED_DISCHARGED",
+    "OWED_NOT_APPLICABLE",
     "DischargedOwed",
+    "UnreadableDischargeError",
     "FR_MARKER_PREFIXES",
     "PR_BODY_NAME",
     "REQUIRED_SECTIONS",
@@ -438,7 +440,10 @@ def held_issues(
     narrowings: Sequence[JournalEntry] = (),
 ) -> dict[str, str]:
     """Issue ref -> why `premature_closes` would refuse a closing line for it
-    (owed-archive R5): a discharged owed issue held here is rendered `Refs`."""
+    (owed-archive R5): a discharged owed issue held here is rendered `Refs`.
+    Every row and decision id is quoted in a code span (review p2-r1): the
+    closing-keyword parser skips code, so an id such as `owed-close-at-merge`
+    never turns fr's own `Refs` line into a close."""
     holding, narrowed, tracking = _held_sets(
         matrix, identity, holds_open, exit=exit, narrowings=narrowings
     )
@@ -446,18 +451,37 @@ def held_issues(
     for ref in sorted({*holding, *narrowed, *tracking}):
         why: list[str] = []
         if ref in holding:
-            why.append(f"row {', '.join(holding[ref])} still holds it open")
+            why.append(f"row {_code_ids(holding[ref])} still holds it open")
         if ref in narrowed:
-            why.append(f"decision {', '.join(narrowed[ref])} narrows it, unanswered")
+            why.append(f"decision {_code_ids(narrowed[ref])} narrows it, unanswered")
         if ref in tracking:
-            why.append(f"owed row {', '.join(tracking[ref])} tracks its rest")
+            why.append(f"owed row {_code_ids(tracking[ref])} tracks its rest")
         out[ref] = " and ".join(why)
     return out
 
 
-# --- owed actions discharged (owed-archive-side-effects R4-R6) --------------------
+def _code_ids(ids: Iterable[str]) -> str:
+    """Each id as one inline code span, its own backticks and line breaks replaced
+    so the span cannot end early."""
+    spans = (" ".join(i.replace("`", "'").split()) for i in ids)
+    return ", ".join(f"`{span}`" for span in spans)
+
+
+# --- owed actions discharged (owed-archive-side-effects R4-R6, R15) ---------------
 
 HEADING_OWED_DISCHARGED = "## Owed actions discharged"
+
+OWED_NOT_APPLICABLE = (
+    "Not applicable: under this placement fr's journals live outside the checkout, so "
+    "`fr journal resolve` closed each discharged owed issue at once."
+)
+"""The section's body under quiet and stealth (R15): never "None.", which would read
+as a check that ran."""
+
+
+class UnreadableDischargeError(Exception):
+    """What the branch discharged cannot be told (review p2-r2): an input the R4
+    reading needs could not be read. `deliver` refuses, naming it."""
 
 
 @dataclass(frozen=True)
@@ -470,8 +494,8 @@ class DischargedOwed:
 
 
 def _journal_at(repo_root: Path, rev: str, rel: str) -> list[JournalEntry] | None:
-    """The journal at `rev:rel`, parsed, or None when it is not there or does not
-    parse."""
+    """The journal at `rev:rel`, parsed, or None when it is not there. Raises
+    `UnreadableDischargeError` when it is there and does not parse."""
     from fr.git import git_answer
 
     shown = git_answer(repo_root, "show", f"{rev}:{rel}")
@@ -479,8 +503,8 @@ def _journal_at(repo_root: Path, rev: str, rel: str) -> list[JournalEntry] | Non
         return None
     try:
         return parse_journal(shown.stdout)
-    except JournalParseError:
-        return None
+    except JournalParseError as e:
+        raise UnreadableDischargeError(f"the journal {rel} at {rev} does not parse ({e})") from e
 
 
 def _fixed_owed(entries: list[JournalEntry]) -> set[str]:
@@ -492,6 +516,13 @@ def _fixed_owed(entries: list[JournalEntry]) -> set[str]:
     }
 
 
+def _fixed_filed(entries: list[JournalEntry]) -> set[str]:
+    """The fixed owed ids of `entries` that carry a `filed_as`."""
+    from fr.journal.model import owed_filed_as
+
+    return _fixed_owed(entries) & set(owed_filed_as(entries))
+
+
 def discharged_owed(repo_root: Path) -> list[DischargedOwed]:
     """Every owed entry the branch discharged (R4): in a spec, plan or debug
     journal, live or archived, that `merge-base(HEAD, <default ref>)..HEAD`
@@ -499,59 +530,98 @@ def discharged_owed(repo_root: Path) -> list[DischargedOwed]:
     the default ref (read at either its live or its archived path, so a journal
     archived on the branch compares with its live copy) — and whose `filed_as`
     names an issue in THIS repo (`fr.owed_refs.own_issue`, the reading resolve
-    closes by). Empty when the default ref, the merge-base or the repo's identity
-    cannot be read, or when the journals live outside the checkout (quiet and
-    stealth placements): resolve's printed closing line is the route then (R2)."""
+    closes by).
+
+    Empty under quiet and stealth (R15: `discharge_travels` is false, resolve
+    closed the issue at once), and when no journal at HEAD holds a fixed owed
+    entry with a filed issue (nothing could have been discharged). Otherwise an
+    input that cannot be read — the default ref, the merge-base, the diff, a
+    changed journal, the repo's owed identity — raises `UnreadableDischargeError`
+    naming it (review p2-r2), never an empty answer."""
     from fr.archive_followups import owed_identity
     from fr.git import GitUnavailableError
     from fr.journal.model import owed_filed_as
-    from fr.owed_refs import own_issue
+    from fr.owed_refs import discharge_travels, own_issue
 
+    if not discharge_travels(repo_root):
+        return []
     try:
-        changed = _changed_journals(repo_root)
-    except GitUnavailableError:
+        if not _any_fixed_filed_at_head(repo_root):
+            return []
+        default, rels = _changed_journals(repo_root)
+        found: list[tuple[str, str]] = []
+        for rel in rels:
+            entries = _journal_at(repo_root, "HEAD", rel)
+            if entries is None:
+                raise UnreadableDischargeError(f"the changed journal {rel} cannot be read at HEAD")
+            fixed = _fixed_filed(entries) - _fixed_at_default(repo_root, default, rel)
+            filed = owed_filed_as(entries)
+            found += [(e.id, filed[e.id]) for e in entries if e.id in fixed]
+    except GitUnavailableError as e:
+        raise UnreadableDischargeError(f"git could not be run ({e})") from e
+    if not found:
         return []
-    own, _why = owed_identity(repo_root)
-    if changed is None or own is None:
-        return []
-    default, rels = changed
+    own, why = owed_identity(repo_root)
+    if own is None:
+        raise UnreadableDischargeError(f"the repo's owed identity cannot be read ({why})")
     out: list[DischargedOwed] = []
     seen: set[str] = set()
-    for rel in rels:
-        entries = _journal_at(repo_root, "HEAD", rel)
-        fixed = _fixed_owed(entries or []) - _fixed_at_default(repo_root, default, rel)
-        filed = owed_filed_as(entries or [])
-        for eid in (e.id for e in entries or [] if e.id in fixed and e.id in filed):
-            target = own_issue(repo_root, filed[eid], own)
-            if isinstance(target, tuple) and f"{target[0]}#{target[1]}".lower() not in seen:
-                seen.add(f"{target[0]}#{target[1]}".lower())
-                out.append(DischargedOwed(ref=f"{target[0]}#{target[1]}", entry=eid))
+    for eid, ref in found:
+        target = own_issue(repo_root, ref, own)
+        if isinstance(target, tuple) and f"{target[0]}#{target[1]}".lower() not in seen:
+            seen.add(f"{target[0]}#{target[1]}".lower())
+            out.append(DischargedOwed(ref=f"{target[0]}#{target[1]}", entry=eid))
     return out
 
 
-def _changed_journals(repo_root: Path) -> tuple[str, list[str]] | None:
-    """`(default ref, journal paths)` the branch added or modified since its
-    merge-base with the default ref, or None when that cannot be told here (no
-    default ref or merge-base, or journals outside the checkout)."""
-    from fr.artifacts.paths import artifact_root
-    from fr.git import git_answer, remote_default_ref
+def _journal_dirs() -> tuple[str, str]:
     from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL
+
+    return JOURNALS_REL.as_posix(), IMPLEMENTED_JOURNALS_REL.as_posix()
+
+
+def _any_fixed_filed_at_head(repo_root: Path) -> bool:
+    """Whether any journal at HEAD holds a fixed owed entry with a filed issue —
+    the only state in which the branch can have discharged one."""
+    from fr.git import git_answer
+
+    listed = git_answer(
+        repo_root, "ls-tree", "-r", "-z", "--name-only", "HEAD", "--", *_journal_dirs()
+    )
+    if listed.returncode != 0:
+        raise UnreadableDischargeError(
+            f"HEAD's journals cannot be listed ({listed.stderr.strip() or 'git ls-tree failed'})"
+        )
+    for rel in (p for p in listed.stdout.split("\0") if p.endswith(".md")):
+        if _fixed_filed(_journal_at(repo_root, "HEAD", rel) or []):
+            return True
+    return False
+
+
+def _changed_journals(repo_root: Path) -> tuple[str, list[str]]:
+    """`(default ref, journal paths)` the branch added or modified since its
+    merge-base with the default ref. Raises `UnreadableDischargeError` when the
+    default ref, the merge-base or the diff cannot be read."""
+    from fr.git import git_answer, remote_default_ref
     from fr.proportionality import feature_merge_base
 
-    if artifact_root(repo_root).resolve() != repo_root.resolve():
-        return None
     default = remote_default_ref(repo_root)
-    base = feature_merge_base(repo_root, default) if isinstance(default, str) else None
-    if not isinstance(default, str) or base is None:
-        return None
-    dirs = (JOURNALS_REL.as_posix(), IMPLEMENTED_JOURNALS_REL.as_posix())
+    if not isinstance(default, str):
+        why = "no remote or no default branch" if default is None else str(default)
+        raise UnreadableDischargeError(f"the default ref cannot be read ({why})")
+    base = feature_merge_base(repo_root, default)
+    if base is None:
+        raise UnreadableDischargeError(f"HEAD has no merge-base with {default}")
     diff = git_answer(
         repo_root,
         *("diff", "-z", "--no-renames", "--name-only", "--diff-filter=AM", base, "HEAD"),
-        *("--", *dirs),
+        *("--", *_journal_dirs()),
     )
     if diff.returncode != 0:
-        return None
+        raise UnreadableDischargeError(
+            f"the journal diff against {default} cannot be read "
+            f"({diff.stderr.strip() or 'git diff failed'})"
+        )
     return default, [p for p in diff.stdout.split("\0") if p.endswith(".md")]
 
 
@@ -575,7 +645,8 @@ def _fixed_at_default(repo_root: Path, default: str, rel: str) -> set[str]:
 def render_owed_discharged(items: Sequence[DischargedOwed], held: Mapping[str, str]) -> str:
     """The `## Owed actions discharged` body: `Closes <ref>` per item, `Refs <ref>
     — held: <reason>` for one `held` names (R5, keyed by `normalize_issue_ref`'s
-    lowercase spelling), or "None."."""
+    lowercase spelling; `held_issues` quotes its ids so the line never reads as a
+    close), or "None."."""
     lines = []
     for item in items:
         why = held.get(item.ref.lower())
@@ -617,12 +688,22 @@ def run_held_issues(repo_root: Path, state: RunState) -> dict[str, str]:
 
 
 def _owed_discharged(repo_root: Path, state: RunState) -> str:
-    items = discharged_owed(repo_root)
+    """The section's body: "Not applicable" under quiet and stealth (R15), what
+    could not be read (deliver refuses it, p2-r2), else the listing."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.owed_refs import discharge_travels
+
+    if not discharge_travels(repo_root):
+        return OWED_NOT_APPLICABLE
+    try:
+        items = discharged_owed(repo_root)
+    except UnreadableDischargeError as e:
+        return f"Unknown: fr could not tell what this branch discharged — {e}."
     if not items:
         return "None."
     try:
         held = run_held_issues(repo_root, state)
-    except Exception:  # noqa: BLE001 — deliver's own gate refuses what cannot be read
+    except (AcceptanceError, UnreadableJournalError):  # deliver's own gate refuses these
         held = {}
     return render_owed_discharged(items, held)
 

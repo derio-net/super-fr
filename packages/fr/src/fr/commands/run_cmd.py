@@ -7141,19 +7141,40 @@ def _refuse_unclosed_owed(repo_root: Path, state: RunState, live: str, ref: str,
     """Owed-archive R4: every issue `## Owed actions discharged` lists as `Closes`
     must be closed by the live body — any closing keyword, read as a merge reads
     it (`closing_refs(as_github=True)`) — under `forge.pr_body: full` and `minimal`
-    alike. A held one (rendered `Refs`, R5) is not asked for. When the holds
-    cannot be read, this check stands aside: the premature-close gate refuses
-    that same unreadable state with its own reason."""
+    alike. A held one (rendered `Refs`, R5) is not asked for. Under quiet and
+    stealth (R15) the discharge never travels with the PR and resolve closed the
+    issue at once, so nothing is asked. What cannot be read — the discharges
+    (review p2-r2) or the holds (p2-r5) — refuses, naming it."""
+    from fr.acceptance.model import AcceptanceError
     from fr.hostclient import pr_command
+    from fr.owed_refs import discharge_travels
     from fr.record import pr_body
 
-    items = pr_body.discharged_owed(repo_root)
+    if not discharge_travels(repo_root):
+        return
+    try:
+        items = pr_body.discharged_owed(repo_root)
+    except pr_body.UnreadableDischargeError as e:
+        err_console.print(
+            f"refused: cannot tell which owed actions this branch discharged — {e}. "
+            "Their issues must close when this PR merges; fix that, then resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
     if not items:
         return
     try:
         held = pr_body.run_held_issues(repo_root, state)
-    except Exception:  # noqa: BLE001 — _refuse_premature_closes refuses it, by name
-        return
+    except (AcceptanceError, pr_body.UnreadableJournalError) as e:
+        err_console.print(
+            "refused: cannot tell whether a discharged owed issue is held open (the "
+            f"acceptance matrix or a run journal does not read: {e}); fix it, then resolve "
+            "again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
     owner, _, rest = items[0].ref.partition("/")
     identity = (owner, rest.partition("#")[0])
     closed = {

@@ -8,6 +8,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 from fr.journal.model import (
     JournalEntry,
     append_journal_entry,
@@ -18,6 +19,7 @@ from fr.journal.model import (
 )
 from fr.record.pr_body import (
     DischargedOwed,
+    UnreadableDischargeError,
     discharged_owed,
     held_issues,
     premature_closes,
@@ -169,11 +171,94 @@ def test_nothing_discharged_renders_none(tmp_path: Path) -> None:
     assert _section(render_pr_body(root, _state())).strip() == "None."
 
 
-def test_without_a_default_ref_nothing_is_listed(tmp_path: Path) -> None:
+# --- p2-r2: what cannot be read refuses by name, never an empty answer ----------
+
+
+def test_without_a_default_ref_a_discharge_cannot_be_told(tmp_path: Path) -> None:
     root = _world(tmp_path)
     _discharge_on_branch(root)
     _git(root, "update-ref", "-d", "refs/remotes/origin/main")
+    with pytest.raises(UnreadableDischargeError, match="default ref"):
+        discharged_owed(root)
+
+
+def test_without_a_merge_base_a_discharge_cannot_be_told(tmp_path: Path) -> None:
+    root = _world(tmp_path)
+    _discharge_on_branch(root)
+    _git(root, "checkout", "-q", "--orphan", "unrelated")
+    _git(root, "commit", "-q", "--allow-empty", "-m", "unrelated")
+    _git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _git(root, "checkout", "-q", "feat/x")
+    with pytest.raises(UnreadableDischargeError, match="merge-base"):
+        discharged_owed(root)
+
+
+def test_a_failing_diff_cannot_be_told(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import fr.git
+
+    root = _world(tmp_path)
+    _discharge_on_branch(root)
+    real = fr.git.git_answer
+
+    def failing(where: Path, *args: str, **kw: object) -> subprocess.CompletedProcess[str]:
+        if args and args[0] == "diff":
+            return subprocess.CompletedProcess(list(args), 128, "", "fatal: bad object")
+        return real(where, *args, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(fr.git, "git_answer", failing)
+    with pytest.raises(UnreadableDischargeError, match="diff"):
+        discharged_owed(root)
+
+
+def test_an_unreadable_owed_identity_cannot_be_told(tmp_path: Path) -> None:
+    root = _world(tmp_path)
+    _discharge_on_branch(root)
+    _git(root, "config", "remote.origin.url", "/not/a/forge/repo")
+    with pytest.raises(UnreadableDischargeError, match="identity"):
+        discharged_owed(root)
+
+
+def test_an_unparseable_changed_journal_cannot_be_told(tmp_path: Path) -> None:
+    root = _world(tmp_path)
+    _discharge_on_branch(root)
+    path = archived_journal_path(root, "plan", SLUG)
+    path.write_text(path.read_text() + "\n<!-- fr:journal kind=finding bogus -->\n### x\n")
+    _git(root, "commit", "-qam", "break it")
+    with pytest.raises(UnreadableDischargeError, match=SLUG):
+        discharged_owed(root)
+
+
+def test_no_fixed_filed_owed_entry_at_head_needs_no_default_ref(tmp_path: Path) -> None:
+    """Nothing at HEAD could be discharged, so nothing is unreadable: a repo with no
+    default ref delivers as before."""
+    root = _world(tmp_path)
+    _git(root, "update-ref", "-d", "refs/remotes/origin/main")
     assert discharged_owed(root) == []
+
+
+def test_the_render_names_what_it_could_not_read_never_none(tmp_path: Path) -> None:
+    root = _world(tmp_path)
+    _discharge_on_branch(root)
+    _git(root, "update-ref", "-d", "refs/remotes/origin/main")
+    section = _section(render_pr_body(root, _state())).strip()
+    assert section != "None." and "default ref" in section
+
+
+# --- p2-r1: fr's own Refs line is never read as a close ---------------------------
+
+
+@pytest.mark.parametrize("row_id", ["owed-close-at-merge", "fixes-the-thing", "resolved-gh-12"])
+def test_a_keyword_bearing_row_id_in_the_refs_reason_is_no_premature_close(row_id: str) -> None:
+    from fr.record.pr_body import referenced_refs
+
+    matrix = _matrix("walk-owed", [f"{OWN}#12"], row_id=row_id)
+    identity = ("acme", "widgets")
+    held = held_issues(matrix, identity, lambda r: False)
+    section = render_owed_discharged([DischargedOwed(ref=f"{OWN}#12", entry="e")], held)
+    assert section.startswith(f"Refs {OWN}#12 — held: ") and row_id in section
+    body = f"## Owed actions discharged\n\n{section}\n"
+    assert premature_closes(body, matrix, identity, lambda r: False) == []
+    assert referenced_refs(body) == [f"{OWN}#12"]
 
 
 # --- R5: a held issue is a Refs, and a listed Closes is no premature close --------
@@ -181,15 +266,15 @@ def test_without_a_default_ref_nothing_is_listed(tmp_path: Path) -> None:
 
 def test_a_held_discharged_issue_renders_refs_with_its_reason() -> None:
     items = [DischargedOwed(ref=f"{OWN}#12", entry="owed-phase-2")]
-    held = {f"{OWN}#12": "row r1 still holds it open"}
+    held = {f"{OWN}#12": "row `r1` still holds it open"}
     assert (
-        render_owed_discharged(items, held) == f"Refs {OWN}#12 — held: row r1 still holds it open"
+        render_owed_discharged(items, held) == f"Refs {OWN}#12 — held: row `r1` still holds it open"
     )
     assert render_owed_discharged(items, {}) == f"Closes {OWN}#12"
     assert render_owed_discharged([], {}) == "None."
 
 
-def _matrix(status: str, issues: list[str]):  # noqa: ANN202
+def _matrix(status: str, issues: list[str], *, row_id: str = "r1"):  # noqa: ANN202
     from fr.acceptance.model import Matrix, Row
 
     return Matrix(
@@ -197,7 +282,7 @@ def _matrix(status: str, issues: list[str]):  # noqa: ANN202
         repo="widgets",
         rows=[
             Row(
-                id="r1",
+                id=row_id,
                 capability="c",
                 acceptance="a",
                 origin=["spec:x#R1"],
