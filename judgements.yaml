@@ -7171,6 +7171,15 @@ batches:
     handle: w3E:p2
     archive: chore/closeout-2026-11-15-2
     archived: 1474
+  - kind: claims_released
+    at: '2026-11-15T11:27:31.621333Z'
+    keys:
+    - super-fr#1280
+    - super-fr#1225
+    - super-fr#1289
+    - super-fr#1288
+    - super-fr#1428
+    - super-fr#1463
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
@@ -7707,6 +7716,11 @@ exports:
   pr: 1473
   head: 4f01acfee9a5417205be621e6d068d9fa9a8982f
   merged: true
+- wave: '16'
+  repo: derio-net/super-fr
+  at: '2026-11-15T11:27:29.470592Z'
+  pr: 1475
+  head: 3b0ab7a3c4d310305f5b099e4ef327423da6cf35
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
