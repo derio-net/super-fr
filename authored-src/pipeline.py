@@ -1,6 +1,6 @@
 """Build architecture/pipeline.html: the 5.5.0 diagram with open issues pinned on the
 steps they break, plus the old page's nine diagram snapshots as an evolution tab set."""
-import html, json, os, re
+import html, json, os, re, sys
 
 SP = os.path.dirname(os.path.abspath(__file__))
 D = os.path.dirname(SP)  # the triage state directory this folder sits in
@@ -14,20 +14,23 @@ open_issues = {i["number"]: i["title"] for i in facts["issues"] if i["state"] ==
 # kind: d = defect (behaves wrong today), g = gap (missing capability / unproven claim)
 DRIVER = [
     ("judge + board", "fr triage collect · render", [
-        (1065, "d", "close-out pill"), (1066, "d", "six columns"),
-        (1072, "g", "issue from transcript")]),
-    ("batches + waves", "create · wave · adopt", [
-        (1069, "d", "adopt on main"), (1081, "d", "adopt sets working"),
-        (1070, "g", "multi-repo adopt"), (1071, "g", "adopt --list")]),
-    ("dispatch", "herdr runner · claims", [
-        (1075, "d", "cross-user claims"), (1074, "g", "paperclip runner")]),
-    ("session", "fr-goal / fr-debugging", []),
+        (985, "d", "partial in Done")]),
+    ("batches + waves", "create · wave · after", [
+        (884, "g", "weak cap tests"), (990, "d", "wave-less unadopted")]),
+    ("dispatch", "herdr runner", [
+        (878, "d", "only in herdr"), (931, "d", "busy-pane race"),
+        (956, "d", "brief not sent"), ]),
+    ("session", "fr-goal / fr-debugging", [
+        (959, "g", "manual conflicts")]),
     ("merge train", "update · CI · merge", [
-        (1082, "d", "red after update"), (1076, "d", "held blocks all"),
-        (1062, "g", "merge queue")]),
-    ("post_merge", "install.sh", []),
+        (962, "d", "moved head"),
+        (937, "d", "archive vs refs"), (921, "d", "degraded forge")]),
+    ("post_merge", "install.sh", [
+        (964, "g", "stale sessions"), (998, "d", "new config key")]),
     ("close-out + archive", "fr pickup --run", [
-        (1085, "d", "in-progress stays"), (667, "g", "N close-outs")]),
+        (883, "d", "double close-out"), (991, "d", "phantom close-out"),
+        (1004, "d", "archive base"), (930, "g", "unpriced usage"),
+        (528, "d", "matrix refs"), (458, "g", "file open ends")]),
 ]
 PIPE = [
     ("brainstorm", []),
@@ -37,24 +40,35 @@ PIPE = [
     ("implement-phase", []),
     ("review-phase", []),
     ("journal-check", []),
-    ("deliver", []),
+    ("deliver", [(868, "d", "false keyword"), (869, "d", "split keyword"),
+                 (822, "g", "live-walk close"), (838, "g", "tiers in PR body")]),
 ]
 STRIPS = [
     ("RUN CURSOR · RECORDS · TELEMETRY", [
         ]),
     ("COST + TELEMETRY (measurement owed)", [
-        (597, "g", "perf measures"),
+        (593, "g", "main-session cost"), (597, "g", "perf measures"),
+        (627, "g", "handoff quality"), (793, "g", "per-phase overhead"),
         (509, "g", "OpenCode/Hermes readers"), (511, "g", "no-usage record"),
         (623, "g", "live Hermes db")]),
-    ("HOST · INSTALL · MODELS · ISOLATION", [
-        (1055, "d", "corrupt models.yaml"), (1057, "d", "dead-binding text"),
-        (580, "g", "gc --stop-idle"), (333, "g", "Infisical secrets")]),
+    ("HOST · INSTALL · ISOLATION", [
+        (924, "d", "Pages deploy"), (1014, "d", "glab token: no gate"),
+        (1015, "d", "GH_HOST not applied"), (1013, "d", "refusal by text"), (580, "g", "gc --stop-idle"),
+        (1003, "d", "sync symlink race")]),
 ]
 
-placed = {n for _, _, ps in DRIVER for n, _, _ in ps} | {n for _, ps in PIPE for n, _, _ in ps} \
+# Issues close, so the table goes stale by design. A pin whose issue is no longer open drops
+# off the diagram and is named under it and on stderr, rather than failing the build (gh#1005).
+pinned = {n for _, _, ps in DRIVER for n, _, _ in ps} | {n for _, ps in PIPE for n, _, _ in ps} \
     | {n for _, ps in STRIPS for n, _, _ in ps}
-missing_closed = sorted(placed - set(open_issues))
-assert not missing_closed, f"pinned issues no longer open: {missing_closed}"
+dropped = sorted(pinned - set(open_issues))
+if dropped:
+    print(f"pipeline.py: dropped {len(dropped)} pins whose issue is no longer open: {dropped}", file=sys.stderr)
+keep = lambda ps: [p for p in ps if p[0] in open_issues]
+DRIVER = [(name, sub, keep(ps)) for name, sub, ps in DRIVER]
+PIPE = [(name, keep(ps)) for name, ps in PIPE]
+STRIPS = [(title, keep(ps)) for title, ps in STRIPS]
+placed = pinned - set(dropped)
 other = sorted(set(open_issues) - placed)
 
 COL = {"d": "var(--warn)", "g": "var(--gap)"}
@@ -69,7 +83,7 @@ out = []
 W = 1086
 # ---- driver band
 out.append('<text x="10" y="18" font-size="11" fill="var(--muted)" font-family="var(--mono)" letter-spacing=".06em">'
-           'WAVE DRIVER · fr triage batch drive · fr 5.1 → 5.17 · signed claims · one pass per minute, waves in order</text>')
+           'WAVE DRIVER · fr triage batch drive · fr 5.1 → 5.5 · one pass per minute, waves in order</text>')
 bw, gap, x0, y0 = 142, 12, 10, 30
 maxpins = max(len(p) for _, _, p in DRIVER)
 for i, (name, sub, pins) in enumerate(DRIVER):
@@ -99,11 +113,12 @@ out.append(f'<path d="M{sx+bw} {y0+46} L{sx+bw} {yb+26} L1076 {ys-6}" stroke="va
 out.append(f'<text x="18" y="{ys+8}" font-size="11" fill="var(--muted)" font-family="var(--mono)" letter-spacing=".06em">'
            'ONE SESSION, OPENED · fr-goal@1 workflow steps · each agent step hands one record to fr run resolve --record</text>')
 py = ys + 18
+DASH = ' stroke-dasharray="4 3"'  # outside the f-string: a backslash in its expression needs Python 3.12
 for i, (name, pins) in enumerate(PIPE):
     x = 10 + i * 134; cx = x + 62
     dashed = name in ("plan-review", "journal-check")
     out.append(f'<rect x="{x}" y="{py}" width="124" height="40" rx="5" fill="{"none" if dashed else "var(--box)"}" stroke="currentColor"'
-               f'{" stroke-dasharray=\"4 3\"" if dashed else ""}/>')
+               f'{DASH if dashed else ""}/>')
     out.append(f'<text x="{cx}" y="{py+25}" font-size="12.5" text-anchor="middle" fill="currentColor">{esc(name)}</text>')
     if i:
         out.append(f'<path d="M{x-9} {py+20} L{x-2} {py+20}" stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#now-a)"/>')
@@ -167,6 +182,10 @@ TOK = ("--new:var(--accent);--new-soft:color-mix(in srgb,var(--accent) 14%,trans
        "--bg:var(--ground);--faint:var(--sev-4);--accent-soft:color-mix(in srgb,var(--accent) 12%,transparent);"
        "--c-open:var(--sev-1);--c-closed:var(--sev-3)")
 other_html = ", ".join(f'<a class="gh" href="{GH}{n}" title="{esc(open_issues[n])}">#{n}</a>' for n in other)
+dropped_links = ", ".join(f'<a class="gh" href="{GH}{n}">#{n}</a>' for n in dropped)
+dropped_html = (f'<p style="font-size:13px;color:var(--muted)">{len(dropped)} pins were dropped because their issue '
+                f'is no longer open: {dropped_links}.</p>\n'
+                if dropped else "")
 frag = f'''<div style="{TOK}">
 <h2>The pipeline and its driver, with open issues on the steps they break</h2>
 <p style="color:var(--muted);max-width:75ch">Authored, not measured: each pin is a judgement of where an open issue acts,
@@ -176,9 +195,9 @@ title; click it to open the issue. The tabs step through every version of this d
 page on 2026-09-25 to now; the older ones show issues as they stood that day.</p>
 {tabs("pipeline", "Diagram versions", panels, len(panels) - 1)}
 <p style="font-size:13px;color:var(--muted)">{len(placed)} of {len(open_issues)} open issues are pinned above
-({ndef} defects). The other {len(other)} act on no pipeline or driver step (docs, harness parity, forges, other
-runners, live-evidence owed): {other_html}.</p>
-</div>
+({ndef} defects). The other {len(other)} are not pinned: they act on no pipeline or driver step (docs, harness
+parity, forges, other runners, live-evidence owed), or opened after the pins were judged: {other_html}.</p>
+{dropped_html}</div>
 '''
 open(f"{D}/architecture/pipeline.html", "w").write(frag)
 print("placed", len(placed), "other", len(other), "defects", ndef, "H", H)

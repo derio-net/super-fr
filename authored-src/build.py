@@ -2,7 +2,7 @@
 sources (spec 2026-10-05-triage-pages-goal R15: the dated fragments live on the history page).
 
   pipeline.html       - architecture/, by pipeline.py: the diagram with open issues pinned (pin table in the
-                        script; pins naming a closed issue fail the build), plus the nine
+                        script; a pin whose issue closed drops off and is named under the diagram), plus the nine
                         2026-10-02 diagram versions as tabs.
   closing-order.html  - history/: the 2026-10-02 board's closing-order section, with each batch's
                         outcome looked up live with gh.
@@ -13,7 +13,7 @@ sources (spec 2026-10-05-triage-pages-goal R15: the dated fragments live on the 
 Run from anywhere: python3 build.py   (then: fr triage architecture render ... and
 fr triage history render ...)
 """
-import html, json, os, re, subprocess, runpy
+import html, json, os, re, subprocess, runpy, sys, traceback
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), "history")  # the dated fragments; pipeline.py writes architecture/
@@ -43,8 +43,13 @@ def write(name, text):
         f.write(text)
     print("wrote", name, len(text))
 
-# 1. pipeline diagram
-runpy.run_path(os.path.join(HERE, "pipeline.py"), run_name="__main__")
+# 1. pipeline diagram. The history fragments below do not depend on it, so a diagram that
+# fails is reported at the end rather than stopping them (gh#1005).
+try:
+    runpy.run_path(os.path.join(HERE, "pipeline.py"), run_name="__main__")
+    pipeline_error = None
+except Exception:
+    pipeline_error = traceback.format_exc()
 
 # 2. closing order + outcome
 board = load("board")["closing"]
@@ -93,3 +98,7 @@ write("history-2026-10-02.html", frame(
     "Costs are <code>fr usage</code> figures captured then; nothing here is re-measured.",
     "".join(a[k] for k in ["intro", "one-phase", "wave1", "wave2", "wave34", "wave5", "wave6",
                            "walk", "wave79", "relay", "lean", "detours", "promises", "shipping"])))
+
+if pipeline_error:
+    sys.exit(f"{pipeline_error}\nbuild.py: pipeline.py failed (above); architecture/pipeline.html was not rebuilt, "
+             "the history fragments were.")
