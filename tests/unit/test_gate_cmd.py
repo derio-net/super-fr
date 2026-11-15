@@ -523,7 +523,9 @@ def test_a_pr_with_neither_label_still_refuses(forge: Any) -> None:
     assert "does not carry gate:tester" in result.output
 
 
-def test_a_tracker_failure_never_reverses_the_pass(forge: Any) -> None:
+def test_a_tracker_failure_never_reverses_the_pass_but_exits_1(forge: Any) -> None:
+    """gh#1389: the pass stands, but a close that failed is owed work, so the command
+    exits 1 (as the already-passed retry and backfill do), never 0."""
     from tests.unit.fakes import FakeGhError
 
     fake = forge(["gate:tester"])
@@ -535,7 +537,8 @@ def test_a_tracker_failure_never_reverses_the_pass(forge: Any) -> None:
     fake.list_issues = boom  # type: ignore[method-assign]
     result = _pass("--gate", "tester", "--yes")
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
+    assert "to retry the close" in result.output
     assert "passed: PR #5 now carries gate:tester-passed" in result.output
     assert "rate limited" in result.output
 

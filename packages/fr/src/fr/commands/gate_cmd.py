@@ -428,6 +428,8 @@ def pass_command(
         typer.echo(f"release: this was the PR's last gate; cut the final: {release_command(repo)}")
     if not yes:
         typer.echo("nothing done; re-run with --yes to act")
+    elif report.errors:  # gh#1389: the pass stands, the failed close is still owed
+        raise typer.Exit(code=1)
 
 
 @gate_app.command("backfill")
