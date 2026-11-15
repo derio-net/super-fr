@@ -1,0 +1,69 @@
+schema_version: 12
+run: 2026-11-14-feat-batch-retire-vk
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: "The install test's `if mcp.exists()` guard never runs, so it cannot catch install creating .mcp.json again"
+    body: |
+      tests/integration/test_install_sh.py:226-227. seed_claude_files never creates .mcp.json.
+  - kind: finding
+    id: p2-r2
+    phase: 2
+    review_scope: in
+    title: "cleanup_vk_residue rewrote .mcp.json with mv, which reset a 0600 mode to the umask and replaced a symlink"
+    body: |
+      scripts/install.sh:192. .mcp.json often holds tokens in env.
+  - kind: finding
+    id: p2-r3
+    phase: 2
+    review_scope: in
+    title: "The wrapper match found fr_vk.bridge anywhere in the file, so a foreign file that only mentions it would be deleted"
+    body: |
+      scripts/install.sh:195. R5: a file fr did not write is never deleted.
+  - kind: finding
+    id: p2-r4
+    phase: 2
+    review_scope: in
+    title: "The exec-resume and rebuild wrappers gave the VK-profile refusal a misleading hint, and no test covered resume"
+    body: |
+      local.py:1400-1408 says "rebuild recreates it", which hits the same refusal. local.py:1451 says "the old container may already have been removed".
+  - kind: finding
+    id: p2-r5
+    phase: 2
+    review_scope: in
+    title: "_refuse_vk_profile caught only FileNotFoundError, so an unreadable or non-UTF-8 config escaped as a traceback"
+    body: |
+      local.py:1181-1184.
+  - kind: finding
+    id: p2-r6
+    phase: 2
+    review_scope: in
+    title: "--uninstall repeated the jq removal instead of calling cleanup_vk_residue, and left the fr-written wrapper behind"
+    body: |
+      scripts/install.sh:213-222.
+  - kind: review
+    id: review-phase-2
+    title: "independent phase 2 review: 6 findings, all in scope, all fixed"
+    body: |
+      The reviewer confirmed that R4 is reached on all three paths (up after save_state, so gh#578 holds; rebuild; exec resume) and that its message has every element the spec names. It confirmed that R5's removals are complete, that the cleanup is idempotent and never creates the file, and that the --install-bridge refusal and the uninstall removal work. Deleting test_install_bridge.py is justified, the fake_home fix is correct, and p1-r7 is closed. Both acceptance moves to ci are honest. The fixes are in 38e9a99a5 (installer) and c94629434 (isolation), and each new test was red first except the two p2-r1 tests, which add coverage rather than fix a bug. Suggested lenses: errors and security.
+  - kind: lens
+    lens: errors
+    title: "new refusal and cleanup paths (StaleProfileError, cleanup_vk_residue) must fail loud and clear, never as tracebacks"
+  - kind: lens
+    lens: security
+    title: "the installer edits ~/.claude/.mcp.json, which holds credentials, and deletes files under ~/.local/bin"
+resolves:
+  - {id: p2-r1, state: fixed, body: "The test asserts that .mcp.json is not created. A new case seeds a config with no VK entry and asserts it is unchanged. Commit 38e9a99a5."}
+  - {id: p2-r2, state: fixed, body: "The cleanup writes back in place (jq into .tmp, cat over the original, rm), so the mode and a symlink target survive. Tests pin 0600 and the symlink. Commit 38e9a99a5."}
+  - {id: p2-r3, state: fixed, body: "The match is anchored on the exec line the old installer wrote: '^exec .*-m fr_vk\\.bridge( |$)'. A foreign file that mentions it only in a comment is kept, and a test pins this. Commit 38e9a99a5."}
+  - {id: p2-r4, state: fixed, body: "_refuse_vk_profile raises StaleProfileError, an IsolationError (exit 2), which the resume and rebuild wrappers re-raise unchanged. up keeps its wrapper. Tests cover resume (no rebuild hint, no devcontainer up) and rebuild (no 'may already have been removed'). Commit c94629434."}
+  - {id: p2-r5, state: fixed, body: "_refuse_vk_profile catches (OSError, UnicodeDecodeError) and falls through. So does _ensure_mounted_env_file, which reads the same file next. A test uses a non-UTF-8 config. Commit c94629434."}
+  - {id: p2-r6, state: fixed, body: "--uninstall calls cleanup_vk_residue. The existing uninstall test passes, and a new test asserts the fr-written wrapper is removed. Commit 38e9a99a5."}
+evidence:
+  review: review-phase-2
+  reviewer: a934d965be902f0f8
