@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Row owed-close-at-merge (spec 2026-11-15-owed-archive-side-effects R1-R3): an owed
-# entry's filed issue closes when its discharge reaches the default branch, never
-# before. Off the default branch `fr journal resolve --state fixed` makes no forge call
-# and prints the `Closes <owner/repo>#<n>` line the branch's PR body carries; on the
-# default branch the same resolve closes the issue, exactly once. The world is
+# Row owed-close-at-merge (spec 2026-11-15-owed-archive-side-effects R1-R3): what
+# `fr journal resolve --state fixed` does with an owed entry's filed issue. Off the
+# default branch it makes no forge call and prints the `Closes <owner/repo>#<n>` line
+# the branch's PR body must carry; on the default branch the same resolve closes the
+# issue exactly once, with the discharge note as its comment. The PR-body listing
+# and deliver's check (R4, R5) are proven by tests/unit/test_owed_close_at_merge.py
+# and tests/unit/test_deliver_closing_keywords.py, not here. The world is
 # closeout-owed's (`_owed_world.sh`), with its recording `gh`
 # (fixtures/closeout-owed/bin/gh) — no real forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,6 +49,8 @@ run_fr out journal resolve --scope spec --slug 2026-10-11-widget --id test-plan-
   --state fixed --note "walked live after merge: green"
 require_exit 0 "$out"
 expect_grep 'closed example-org/widgets#1' "$out" "the discharge on main closes the issue"
+expect_grep 'issue comment 1 --repo example-org/widgets --body Discharged: walked live after merge: green' \
+  "$(tr '\n' ' ' < "$FAKE_GH_LOG")" "the close carries the discharge note as its evidence comment"
 [ "$(grep -c '^issue close' "$FAKE_GH_LOG")" -eq 1 ] || fail "expected exactly one close: $(cat "$FAKE_GH_LOG")"
 refuse_grep 'Closes example-org/widgets#1' "$out" "on main no closing line is owed"
 echo "ok: owed-close-at-merge"
