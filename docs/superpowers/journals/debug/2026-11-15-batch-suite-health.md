@@ -25,3 +25,8 @@ Operator chose: keep the single batch PR but fix each cause on its own with its 
 ### ci-hygiene · finding [fixed] · ci.yml: base_ref routed through env; every job bounded
 
 change-fragment and docs-check read BASE_REF from env: instead of interpolating github.base_ref into run: (#1289). Ten jobs gained timeout-minutes, each 5x+ over its measured duration on run 43639946152 (#1288). Pinned by tests/unit/test_ci_workflow_hygiene.py (red before, green after).
+
+<!-- fr:journal kind=ruled-out scope=debug id=a5654773c2d5 created=2026-11-15T07:29:10+00:00 -->
+### a5654773c2d5 · ruled-out · #1428 is not scenario-test CPU contention skewing the split
+
+Plan durations balance every py3.14 shard at 824s, yet actual sums ran 597-1104s (run 43639946152). Across three main runs the shard slowdown does not follow how many scenario seconds the shard held (shard 6, 167s planned scenarios: x1.34 in one run, x0.74 in another), and the non-scenario tests in a shard slow by exactly the shard's own factor. Shard time therefore tracks the runner's speed (x0.72 to x1.40), not the mix. The split is sound.
