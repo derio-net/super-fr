@@ -95,3 +95,8 @@ Self-review of origin/main...HEAD (no independent reviewer dispatched). Findings
 ### lock-double-hold · finding [open] · #1463: worktree hook lock double-hold not reproduced
 
 Both CI failures were real double-holds (OVERLAP logged; the create stub's rmdir found in-flight already removed). 120 loaded trials on macOS and 80 in ubuntu:24.04 under load reproduced none, and no two-process interleaving of the mkdir lock and its dead-holder reclaim double-holds by code read. Per the operator's decision it leaves this PR.
+
+<!-- fr:journal kind=finding scope=debug id=lock-double-hold-resolved created=2026-11-15T10:40:09+00:00 state=open resolves=lock-double-hold tracked_by=derio-net/super-fr#1463 -->
+### lock-double-hold-resolved · finding [deferred → derio-net/super-fr#1463] · resolves lock-double-hold: #1463: worktree hook lock double-hold not reproduced
+
+Not reproduced (200 loaded trials, macOS and Linux); split out of batch suite-health. #1463 stays open.
