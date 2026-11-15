@@ -124,3 +124,23 @@ Spec Design B mandates the pin hook resolve exactly as the hooks do, so the pinn
 ### p2-r5-resolved · finding [out-of-scope] · resolves p2-r5: Other hooks keep bare git calls (phase 2)
 
 Bare git calls inside hook scripts are an explicit non-goal (operator decision d2); filed as a follow-up at deliver.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-15T18:43:34+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+one small loop added to a short hook; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-15T18:43:34+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+one message string changed; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-15T18:43:34+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+one argv element added to each probe; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-11-15T18:43:34+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+comment-only change; nothing to clean
