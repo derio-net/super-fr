@@ -1,0 +1,39 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-owed-archive
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s-r1, review_scope: in, title: "R4 closes only owed entries in the run's own journals; an archived journal's discharged entry never closes", body: "target: spec. debt-engine R24 covers live or archived owed entries; resolve takes any --scope/--slug (journal_cmd.py:582-585). R4 must list every owed entry discharged on the branch, or a merge-time closer must exist."}
+  - {kind: finding, id: s-r2, review_scope: in, title: "Single-plan path can refuse after a git mv; a non-typer.Exit refusal still runs the follow-ups", body: "target: spec. archive.py:485-487 stages the plan move before the journal/run moves that can raise ArchiveError (archive_cmd.py:1041-1046); the placement refusal raises SettingsError (:907-914), so _after_moves still files --issues."}
+  - {kind: finding, id: s-r3, review_scope: in, title: "The quiet/stealth dry run cannot be contained by a scratch worktree of the product repo", body: "target: spec. _record_merged writes the fr worktree / tracking clone and pushes through git (archive_cmd.py:237-409), outside both the scratch copy and the preview forge."}
+  - {kind: finding, id: s-r4, review_scope: in, title: "Replaying git diff --binary HEAD loses the index split, so the dry run can disagree with the real run", body: "target: spec. paths_dirty (archive_cmd.py:1029-1039) and _edited_in_worktree (:604-614) read the staged/unstaged difference; ignored files and a crashed scratch worktree are unaddressed."}
+  - {kind: finding, id: s-r5, review_scope: in, title: "The preview forge's synthetic ref fails _issue_ref, and raising on unknown writes is swallowed", body: "target: spec. _issue_ref needs a URL matching TRACKED_BY_RE (archive_followups.py:536-539); file_owed_ends, ensure_labels and _after_moves catch Exception (:516-519, :533, archive_cmd.py:594-597)."}
+  - {kind: finding, id: s-r6, review_scope: in, title: "On GitLab/Gitea, R10's fail-closed means owed issues are never filed", body: "target: spec. UnsupportedBatchOps.list_issues raises (ghclient.py:664-672); fr journal file exits 1 on any owed error (journal_cmd.py:663-684), which could leave deliver's leftover refusal unpassable."}
+  - {kind: finding, id: s-r7, review_scope: in, title: "_on_default_branch duplicates an existing helper and must strip the remote prefix", body: "target: spec. remote_default_ref answers origin/main (git.py:179-206); fr.docs.load.on_default_branch (docs/load.py:90-102) already strips it and treats detached HEAD as off."}
+  - {kind: finding, id: s-r8, review_scope: in, title: "The Refs-rule exemption changes the premature-close gate but has no requirement and no row", body: "target: spec. premature_closes (pr_body.py:344-406) and _refuse_premature_closes (run_cmd.py:7139-7189); the conflict with an owed row's issues: ref is unsettled."}
+  - {kind: finding, id: s-r9, review_scope: in, title: "R4 does not say what happens under forge.pr_body minimal", body: "target: spec. Under minimal the live body is not section-checked (run_cmd.py:7069-7081), yet the Closes line must be live to close the issue; exact text vs any closing reference unstated."}
+  - {kind: finding, id: s-r10, review_scope: in, title: "R6/R7 amend debt-engine R22 and row owed-durable-at-archive, recorded nowhere", body: "target: spec. debt-engine R22 (implemented spec :79); row owed-durable-at-archive (debt-engine.yaml:56-63)."}
+  - {kind: finding, id: s-r11, review_scope: in, title: "No Test Plan and no named negative tests for the tests lens", body: "target: spec. test_plan is on; the rows' scenario paths are not traced in the spec."}
+  - {kind: finding, id: s-r12, review_scope: out, title: "_existing_markers (open-ends dedupe) keeps the same 200-issue cap and best-effort fallback", body: "target: spec. archive_followups.py:195-218. Pre-existing, outside #1184."}
+  - {kind: review, id: spec-review-1, title: "independent spec review: 12 findings", body: "fr-spec-reviewer checked decisions d1-d5 and lens tests against the spec, every code name in §A-§D, and internal consistency. Raised s-r1..s-r11 (in scope) and s-r12 (out of scope)."}
+resolves:
+  - {id: s-r1, state: fixed, body: "R4 now lists every owed entry discharged on the branch in any spec/plan/debug journal, live or archived, whose resolution is absent at the default ref (§A); R2's printed line covers branches with no deliver."}
+  - {id: s-r2, state: fixed, body: "R7 defines a refusal as any non-zero exit or exception (placement refusal included); _with_followups skips _after_moves on any raise; archive_plan_dir undoes its staged moves on ArchiveError (§B)."}
+  - {id: s-r3, state: fixed, body: "Quiet/stealth gets a read-only preview path in _record_merged that returns before append_record, commit_paths, stealth.commit_and_push, atomic_push and _push_fr (§C); R11 names the fr worktree and tracking clone."}
+  - {id: s-r4, state: fixed, body: "§C replays the index (git apply --index) then the worktree diff, copies untracked non-ignored files, has the plan pin that archive reads no ignored file, and prunes stale fr-archive-dry-run-* worktrees first."}
+  - {id: s-r5, state: fixed, body: "Preview forge: read allowlist delegates, create_issue answers a forge-shaped URL (n from 900000) that _issue_ref accepts, other known writes recorded, anything else recorded as refused; the record is read after the run, and a refusal exits 1 (R11)."}
+  - {id: s-r6, state: fixed, body: "New R13: an adapter that cannot list issues keeps owed actions in the journal like forge.issues off; fr journal file exits 0 and deliver accepts the entry as recorded (§D)."}
+  - {id: s-r7, state: fixed, body: "§A reuses fr.docs.load.on_default_branch, moved to fr.git, with remote_default_ref; commit.py's variant explicitly not used."}
+  - {id: s-r8, state: fixed, body: "New R5 states the exemption and its precedence: a held issue (owed row issues:, post-merge gate, unanswered narrowing) is rendered Refs with the reason and exempt from R4's check; covered by row owed-close-at-merge (origin R5)."}
+  - {id: s-r9, state: fixed, body: "R4's live-body check uses closing_refs (any closing keyword) and runs under forge.pr_body full and minimal alike (§A)."}
+  - {id: s-r10, state: fixed, body: "New R9 records the R22 amendment; this record amends row owed-durable-at-archive."}
+  - {id: s-r11, state: fixed, body: "Verification explains the absent Test Plan (d5: no post-merge rows) and names, per row, the negative evidence each scenario and unit test proves."}
+  - {id: s-r12, state: out-of-scope, body: "Pre-existing in _existing_markers (open-end follow-ups), not caused by this change and outside #1184, which names _existing_owed."}
+acceptance:
+  - row: owed-durable-at-archive
+    op: reword
+    why: "spec 2026-11-15-owed-archive-side-effects R9 amends debt-engine R22: a refused archive, and a hold on the default branch, leave no owed entry and file no issue"
+    acceptance: "Every owed step and every unticked manual phase of a plan that archives, or is held under --branch or skipped under --all off the default branch, leaves an `owed` journal entry plus one fr:owed issue, idempotently, whatever --issues says; a refused archive and a hold on the default branch leave none."
+evidence:
+  review: spec-review-1
+  reviewer: a69bcab5dfbc5c0a4
