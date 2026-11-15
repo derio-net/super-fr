@@ -45,3 +45,8 @@ tests/_workers.py answers xdist's pytest_xdist_auto_num_workers: FR_PYTEST_WORKE
 ### visual-real-clock · root-cause · #1280: test_run_evidence_visual mixes a synthetic transcript clock with the real mtime
 
 The tests stamp transcript reads at the unit's open time + 1-2 s, but _fresh_shot leaves the screenshot's mtime at real now. fr.run.visual counts a read only from mtime - SLACK (1 s) on, so when more than ~3 s pass between _advance opening the unit and _fresh_shot writing the file, every read predates the write and the check refuses. Repro: a 4 s sleep at the top of _fresh_shot fails 6 tests (inline_implement_phase, named_script_that_was_run, dispatched_implement_phase, unclaimed_unit_owing_visual, review_reads, deliver_orchestrator_reads), the set #1280/#1296 saw under load.
+
+<!-- fr:journal kind=finding scope=debug id=visual-clock created=2026-11-15T07:56:06+00:00 state=fixed -->
+### visual-clock · finding [fixed] · test_run_evidence_visual: fresh shots stamped at the unit's open time
+
+_advance records the opened stamp; _fresh_shot sets the file's mtime to it, so the file and the synthetic transcript share one clock. With the 4 s repro sleep still in _fresh_shot: 60 passed (6 failed before). Without it: 60 passed.
