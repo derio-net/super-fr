@@ -187,6 +187,7 @@ journal:
       During the lens fixes the worktree was found on a new branch feat/fixture, holding 5 empty 'fixture' commits by scenario@example.invalid (the author tests/scenarios/_common.sh sets). One of them was also on feat/batch-retire-vk. The fix agent switched back, soft-reset to 2875a66a5 (the commits were empty, so nothing was lost; verified in the reflog), and deleted feat/fixture. origin/feat/batch-retire-vk was never affected. The leaking test is not identified or fixed in this PR.
   - kind: review
     id: lens-review-1
+    global: true
     title: "lens review under docs-accuracy, errors, security, simplicity and tests: 26 findings, 22 in scope"
     body: |
       One read-only reviewer per lens covered the whole diff 1a5aa6d96..HEAD. l-tests-r6 was found while applying the fixes and is recorded here as an out-of-scope finding. Every in-scope finding is fixed except l-errors-r3, which is refuted: jq is a hard prerequisite (install.sh:357), so the cleanup never runs without it. The out-of-scope findings are recorded, and l-docs-accuracy-r4 was fixed because it was cheap. After the fixes: affected tests 263 passed; the -k tick/acceptance/apply/vk/install run 1430 passed and 20 skipped; ruff, mypy, fr docs check, fr acceptance check and the three sync checks are clean.
