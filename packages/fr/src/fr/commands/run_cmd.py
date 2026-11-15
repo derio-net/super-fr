@@ -3374,15 +3374,13 @@ def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
     claim (a failed unit vouches for no tree, and asks no forge). A pending gate
     exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write.
 
-    gh#1395: a failed forge read (`GhError`: a timeout, an EOF, a 5xx) exits
+    gh#1395: a failed forge read (`FORGE_ERRORS`: a timeout, an EOF, a 5xx) exits
     `CI_PENDING_EXIT` too, in one line naming it — never a traceback and exit 1,
     which fr-goal reads as "the record applied and a chained step failed". A host
     trust refusal does not answer on a retry, so it exits 2."""
-    from fr.gh import GhError
     from fr.ghclient import HostRefusedError
-    from fr.glab import GlabError
+    from fr.hostclient import FORGE_ERRORS
     from fr.run import ci_evidence
-    from fr.tea import TeaError
 
     if not done:
         return TESTS_CI
@@ -3395,7 +3393,7 @@ def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    except (GhError, GlabError, TeaError) as e:
+    except FORGE_ERRORS as e:
         stderr = str(getattr(e, "stderr", "") or "")
         detail = " ".join(f"{e} {stderr if stderr not in str(e) else ''}".split())
         err_console.print(
