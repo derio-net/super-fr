@@ -160,3 +160,8 @@ premature_closes' hold computation was extracted into _held_sets in the GREEN st
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 a shell scenario sourcing the shared _owed_world.sh builder and a skill/explainer paragraph; nothing to clean
+
+<!-- fr:journal kind=decision scope=plan id=p2-quiet-stealth-close-now created=2026-11-15T22:06:23+00:00 phase=2 -->
+### p2-quiet-stealth-close-now · decision · Under quiet/stealth placement resolve closes the owed issue at once: the discharge never travels with the PR (phase 2)
+
+Orchestrator decision on review finding p2-r3. Under quiet and stealth the journals live in the placement's artifact root, outside the product checkout, so a discharge commit never reaches the product PR and its Closes line could never close the issue. Resolve keeps its pre-change behaviour there (close at once, same forge settings, ownership and OPEN checks); the PR body's Owed actions discharged section says Not applicable and deliver skips the R4 check. Spec R15.
