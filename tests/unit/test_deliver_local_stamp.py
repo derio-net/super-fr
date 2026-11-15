@@ -22,6 +22,7 @@ from tests.unit.record_support import (
     git,
     implement_record,
     resolve_empty_lens_review,
+    suite_ran_last,
     write_record,
 )
 from tests.unit.test_deliver_pr_body import PR, account_seeded_row
@@ -130,15 +131,6 @@ def _body(root: Path) -> Path:
     return root / "docs" / "superpowers" / "runs" / f"{RUN}.records" / "pr-body.md"
 
 
-def _suite_ran_last(root: Path) -> None:
-    """`suite.log` as if the suite ran after every change the test made to the tree
-    (gh#1454: deliver refuses a log older than a code path)."""
-    import os
-
-    newest = max(p.lstat().st_mtime for p in [root, *root.rglob("*")] if ".git" not in p.parts)
-    os.utime(root / "suite.log", (newest + 5, newest + 5))
-
-
 def _deliver_twice(root: Path, live: dict[str, str], deliver=_deliver_record):  # type: ignore[no-untyped-def]
     """The first resolve renders the PR body and is refused by the PR gate (a refusal
     after the stamp is planned); the second delivers."""
@@ -242,7 +234,7 @@ def test_a_fresh_log_over_an_uncommitted_code_path_refuses_naming_the_row(
     root = _at_deliver(tmp_path)
     _add_local(root)
     (root / TEST).write_text("def test_y():\n    assert 1\n")
-    _suite_ran_last(root)  # the suite ran over the uncommitted edit
+    suite_ran_last(root)  # the suite ran over the uncommitted edit
     before = (root / FRAGMENT).read_bytes()
 
     out = _deliver_record(root)
@@ -533,7 +525,7 @@ def test_a_level_ref_not_committed_at_head_refuses_naming_the_row(
     assert out.exit_code == 0, out.output
     commit_all(root, "local")
     assert git(root, "ls-files", "tests/test_new.py").strip() == ""
-    _suite_ran_last(root)
+    suite_ran_last(root)
     before = (root / FRAGMENT).read_bytes()
 
     out = _deliver_flags(root)
@@ -631,7 +623,7 @@ def test_a_design_named_fragment_that_cannot_be_stamped_refuses(
     _add_local(root)
     design = _rename_to_design(root)
     (root / TEST).write_text("def test_y():\n    assert 1\n")
-    _suite_ran_last(root)
+    suite_ran_last(root)
     before = (root / design).read_bytes()
 
     out = _deliver_record(root)
