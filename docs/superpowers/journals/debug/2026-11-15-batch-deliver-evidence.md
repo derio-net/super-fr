@@ -40,3 +40,8 @@ _ci_tests_witness catches the forge CLI errors (GhError, GlabError, TeaError) an
 ### h-1454-mtime · hypothesis · #1454: bind the fresh log by mtime freshness, not by recording a tree in the witness
 
 Recording code_tree in the fresh deliver witness (the issue's suggestion) changes the cursor's evidence shape (a run-kind stamp bump + migration) and still needs the tree at the moment the suite STARTED, which fr cannot see. The phase path's newest_code_mtime rule answers the same question with no shape change: the edit behind a post-suite commit is newer than the log. Chosen.
+
+<!-- fr:journal kind=finding scope=debug id=fix-1454 created=2026-11-15T17:10:34+00:00 state=fixed -->
+### fix-1454 · finding [fixed] · #1454 fixed: deliver refuses a fresh log older than any code path
+
+_verify_tests_log → _refuse_stale_suite_log (newest_code_mtime since default_merge_base, the log itself ignored). Pinned by test_deliver_local_stamp.py::test_a_fresh_log_older_than_a_committed_code_change_is_refused and ::test_a_fresh_log_written_after_the_last_code_change_is_accepted; three existing tests that changed the tree after writing their log now mark the suite as run last (_suite_ran_last).
