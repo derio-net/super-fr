@@ -184,15 +184,19 @@ RETIRED_OPENCODE_AGENTS=(
 
 # Earlier installs wrote these for the VibeKanban runner, which is removed (spec
 # 2026-11-14-retire-vibekanban R5). Remove the MCP entry, and the bridge wrapper only
-# when its content shows fr wrote it. Uninstall's own MCP removal stays below.
+# when its exec line is the one fr wrote. Install and --uninstall both call it.
+# The config is written back in place (cat into it, not mv over it), so its mode
+# and a symlink at its path survive; cleanup_tmps removes the sidecar on failure.
 cleanup_vk_residue() {
   local vk_wrapper="${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}"
   if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null \
      && jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
-    jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
+    jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" \
+      && cat "${MCP_CONFIG}.tmp" > "$MCP_CONFIG" && rm -f "${MCP_CONFIG}.tmp"
     echo "  Removed vibe_kanban (VibeKanban support was removed) from $MCP_CONFIG"
   fi
-  if [ -f "$vk_wrapper" ] && grep -q 'fr_vk.bridge' "$vk_wrapper"; then
+  # `install.sh --install-bridge` wrote: exec "<python>" -m fr_vk.bridge "$@"
+  if [ -f "$vk_wrapper" ] && grep -qE '^exec .*-m fr_vk\.bridge( |$)' "$vk_wrapper"; then
     rm -f "$vk_wrapper"
     echo "  Removed $vk_wrapper (VibeKanban support was removed)"
   fi
@@ -214,12 +218,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     jq "$WT_HOOKS_STRIP" "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
     echo "  Removed fr's WorktreeCreate/WorktreeRemove hooks from $SETTINGS"
   fi
-  if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
-    if jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
-      jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
-      echo "  Removed vibe_kanban from $MCP_CONFIG"
-    fi
-  fi
+  cleanup_vk_residue
   if [ -d "$OPENCODE_SKILLS_DIR" ]; then
     for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
       skill="$(basename "$skill_dir")"

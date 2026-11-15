@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -225,11 +226,44 @@ class TestVkResidue:
     def test_install_writes_no_vk_mcp_entry_and_no_vk_warning(self, fake_home: Path) -> None:
         result = _run_install(fake_home)
 
-        mcp = fake_home / ".claude" / ".mcp.json"
-        if mcp.exists():
-            assert "vibe_kanban" not in json.loads(mcp.read_text()).get("mcpServers", {})
+        assert not (fake_home / ".claude" / ".mcp.json").exists()
         assert "vibe-kanban" not in result.stdout + result.stderr
         assert "VK MCP" not in result.stdout + result.stderr
+
+    def test_an_existing_mcp_config_gains_no_vk_entry(self, fake_home: Path) -> None:
+        mcp = fake_home / ".claude" / ".mcp.json"
+        servers = {"mcpServers": {"other-server": {"command": "other", "args": []}}}
+        mcp.write_text(json.dumps(servers))
+
+        _run_install(fake_home)
+
+        data = json.loads(mcp.read_text())
+        assert "vibe_kanban" not in data["mcpServers"]
+        assert data == servers
+
+    def test_removal_keeps_the_config_files_mode(self, fake_home: Path) -> None:
+        mcp = fake_home / ".claude" / ".mcp.json"
+        mcp.write_text(json.dumps({"mcpServers": {"vibe_kanban": {"command": "/old"}}}))
+        mcp.chmod(0o600)
+
+        _run_install(fake_home)
+
+        assert "vibe_kanban" not in json.loads(mcp.read_text())["mcpServers"]
+        assert stat.S_IMODE(mcp.stat().st_mode) == 0o600
+
+    def test_removal_writes_through_a_symlinked_config(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "dotfiles" / "mcp.json"
+        target.parent.mkdir()
+        target.write_text(json.dumps({"mcpServers": {"vibe_kanban": {"command": "/old"}}}))
+        mcp = fake_home / ".claude" / ".mcp.json"
+        mcp.symlink_to(target)
+
+        _run_install(fake_home)
+
+        assert mcp.is_symlink() and mcp.resolve() == target.resolve()
+        assert json.loads(target.read_text())["mcpServers"] == {}
 
     def test_removes_only_the_vibe_kanban_entry_and_says_so(self, fake_home: Path) -> None:
         mcp = fake_home / ".claude" / ".mcp.json"
@@ -284,6 +318,17 @@ class TestVkResidue:
         result = _run_install(fake_home)
 
         assert wrapper.read_text() == "#!/bin/sh\necho my own tool\n"
+        assert str(wrapper) not in result.stdout
+
+    def test_keeps_a_file_that_only_mentions_the_bridge_module(self, fake_home: Path) -> None:
+        wrapper = fake_home / ".local" / "bin" / "vk-bridge"
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        body = '#!/bin/sh\n# replaces the old fr_vk.bridge wrapper\nexec my-bridge "$@"\n'
+        wrapper.write_text(body)
+
+        result = _run_install(fake_home)
+
+        assert wrapper.read_text() == body
         assert str(wrapper) not in result.stdout
 
     def test_install_bridge_refuses_naming_the_removal(self, fake_home: Path) -> None:
@@ -375,6 +420,15 @@ class TestUninstall:
 
         data = json.loads(mcp.read_text())
         assert "vibe_kanban" not in data["mcpServers"]
+
+    def test_removes_an_fr_written_wrapper_on_uninstall(self, fake_home: Path) -> None:
+        wrapper = fake_home / ".local" / "bin" / "vk-bridge"
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        wrapper.write_text(_FR_WRAPPER)
+
+        _run_install(fake_home, "--uninstall")
+
+        assert not wrapper.exists()
 
     def test_preserves_other_mcp_servers_on_uninstall(self, fake_home: Path) -> None:
         mcp = fake_home / ".claude" / ".mcp.json"
