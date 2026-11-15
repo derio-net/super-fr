@@ -193,3 +193,6 @@ Pre-existing in _existing_markers (open-end follow-ups), not caused by this chan
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-15-owed-archive-side-effects-p2 created=2026-11-15T17:17:38+00:00 -->
 ### phase-split-2026-11-15-owed-archive-side-effects-p2 · decision · ask: #1400 close at merge (R1-R6) is its own reviewable ask
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-15-owed-archive-side-effects-p3 created=2026-11-15T17:17:40+00:00 -->
+### phase-split-2026-11-15-owed-archive-side-effects-p3 · decision · ask: #1301 fr archive --dry-run (R10-R11) is its own reviewable ask
