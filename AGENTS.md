@@ -458,6 +458,12 @@ wall-clock-tight, not an xdist bug: reset process-global state in an autouse
 fixture in `tests/conftest.py` (see `_fresh_forge_policy_cache`) rather than
 pinning tests to one worker.
 
+Outside CI, `-n auto` starts only the workers the host's load leaves free (never
+fewer than 2; the header line says how many), because parallel sessions each
+running a full suite once drove a 16-thread host to load ~800 (gh#1225).
+`FR_PYTEST_WORKERS=<n>` sets the count exactly, in CI too; `tests/_workers.py`
+holds the rule. A passed test's tmp dir is deleted at session end.
+
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
 `plan`, `collect`, `test` (sharded x6), `split-check`, `coverage`,
 `validate-artifacts`, `opencode-plugin-test`, `version-sync`, `change-fragment`,
