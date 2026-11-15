@@ -89,3 +89,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_archive_owed.py#test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently
     why: 'R7-R9: the test was split; a single-plan refusal no longer records owed'
+  - row: owed-durable-at-archive
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_archive_owed.py#test_a_manual_phase_skipped_under_all_writes_and_files_its_owed_entry_idempotently
+    why: 'R8: --all still records and files off the default branch'
