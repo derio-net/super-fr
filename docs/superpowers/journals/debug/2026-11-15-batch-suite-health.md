@@ -85,3 +85,8 @@ Operator chose, in the session's question round after fix 1 failed: a 7th shard 
 ### ci-seven-shards · finding [fixed] · #1428: ci.yml at 7 shards, 323 s on its first run
 
 CI run on 91007c7: green, wall clock 323 s (budget 360), slowest shard job 288 s (py3.14/2) against 344-369 s on the last ten main runs. One run; runner speed varies x0.72-x1.40, so the budget watcher on main is the real check. ci-shards-complete reworded by amendment (feature legacy). Full local suite on 91007c7: 16013 passed, 120 skipped.
+
+<!-- fr:journal kind=review scope=debug id=7ebecf953acd created=2026-11-15T10:39:13+00:00 -->
+### 7ebecf953acd · review · Review of the batch diff
+
+Self-review of origin/main...HEAD (no independent reviewer dispatched). Findings: (1) test_suite_isolation_git_dates relies on its two tests sharing a process; under xdist they may split and the second passes vacuously; it is a real check serially, where the leak was reproduced. Accepted, noted here. (2) The load-aware -n auto rule reads a one-minute load, so sessions starting together still each take every CPU; documented in AGENTS.md and the docstring, with FR_PYTEST_WORKERS as the exact bound. (3) #1225's host-wide suite lock and temp pruning are not done (pruning broke the archive tests); stated in the PR. No other findings.
