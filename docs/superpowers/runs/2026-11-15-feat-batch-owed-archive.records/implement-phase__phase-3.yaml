@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-owed-archive
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2, P3.T3.S3, P3.T3.S4, P3.T4.S1, P3.T4.S2]
+refactor:
+  P3.T1: "new module written once; nothing to fold"
+  P3.T2: "new module written once; nothing to fold"
+  P3.T4: "a scenario script and a registration; nothing to clean"
+journal:
+  - kind: decision
+    id: p3-dry-run-in-place-under-placement
+    title: Under quiet/stealth the dry run runs in place and previews; elsewhere it runs in a scratch checkout
+    body: The scratch copy cannot carry a stealth marker or the placement worktree, and `_record_merged(preview=True)` is read-only by construction (`space_for(create=False)`), so those modes skip the copy. Any refused (unknown) forge call makes the exit code 1 even when the real run's code was 0.
+    phase: 3
+  - kind: discovery
+    id: p3-dry-run-prints-scratch-path-for-absolute-plan
+    title: A plan given as an absolute path echoes the scratch path in "archived:" lines
+    body: The plan argument is translated into the scratch tree, so an absolute path prints as the scratch location; a relative path prints as typed. Cosmetic only.
+    phase: 3
+  - kind: discovery
+    id: p3-sync-readme-no-change
+    title: --dry-run changes no generated table
+    body: The README and cli.md tables list commands, not options, so sync-readme.py wrote nothing, and `fr docs check` is clean.
+    phase: 3
+resolves: []
+evidence: {}
