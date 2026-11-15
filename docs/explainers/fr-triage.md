@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-14 still true, the board's acceptance line also lists local rows and counts local debt (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-15 still true: the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?

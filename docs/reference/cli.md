@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-14 VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
+reviewed: 2026-11-15 still true: fr gate pass --yes now exits 1 when a tracker close fails; its help line is unchanged
 writing_standard: none
 ---
 
