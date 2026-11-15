@@ -206,6 +206,29 @@ def remote_default_ref(root: Path) -> str | None | GitRefusal:
     return None
 
 
+def on_default_branch(root: Path, default_ref: str) -> bool:
+    """Whether HEAD is the local branch of `default_ref` (`origin/main` -> `main`).
+
+    True there even with commits the remote does not have yet. A detached HEAD
+    is on no branch. Raises `GitUnavailableError` when git cannot run.
+    """
+    done = git_answer(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    branch = done.stdout.strip() if done.returncode == 0 else ""
+    return bool(branch) and branch == default_ref.partition("/")[2]
+
+
+def head_on_default_branch(root: Path) -> bool:
+    """Whether HEAD is the local branch of the remote's default ref.
+
+    False when the default ref cannot be read (no remote, a refusal, no ref) or
+    HEAD is detached: the caller then behaves as off the default branch.
+    """
+    found = remote_default_ref(root)
+    if found is None or isinstance(found, GitRefusal):
+        return False
+    return on_default_branch(root, found)
+
+
 def safe_directory_args(root: Path) -> list[str]:
     """`-c safe.directory=<repo>` for the repository enclosing `root`, else [].
 

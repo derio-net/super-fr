@@ -88,18 +88,11 @@ def resolve_base(root: Path, base: str | None) -> str:
 
 
 def on_default_branch(root: Path, default_ref: str) -> bool:
-    """Whether HEAD is the local branch of `default_ref` (`origin/main` -> `main`).
-
-    True there even with commits the remote does not have yet: R6 runs only the
-    structural checks on the default branch itself, pushed or not. A detached
-    HEAD is on no branch.
-    """
+    """`fr.git.on_default_branch`, with git being unavailable a `DocsEnvError`."""
     try:
-        done = fr_git.git_answer(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+        return fr_git.on_default_branch(root, default_ref)
     except fr_git.GitUnavailableError as e:
         raise DocsEnvError(str(e)) from e
-    branch = done.stdout.strip() if done.returncode == 0 else ""
-    return bool(branch) and branch == default_ref.partition("/")[2]
 
 
 def merge_base_of(root: Path, base: str) -> str:

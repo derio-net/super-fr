@@ -1,0 +1,2 @@
+bump: minor
+summary: owed issues close at merge, a refused archive writes nothing, archive --dry-run, owed dedupe by label
