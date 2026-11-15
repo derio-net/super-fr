@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-14 still true after VK support was removed; shapes.py changed a docstring only
+reviewed: 2026-11-15 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body
 ---
 
 # Workflow shapes and the run cursor
