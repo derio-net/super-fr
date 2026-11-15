@@ -50,3 +50,14 @@ _verify_tests_log → _refuse_stale_suite_log (newest_code_mtime since default_m
 ### fix-1462 · finding [fixed] · #1462 fixed: a merged local row is stamped by a new set-status amendment
 
 _local_stamp_plan → local_stamp_target picks the block; frozen() (merged_row_ids for a row block, membership in the fold's pending for an amendment) routes a merged one to append_amendment(SetStatus(..., status=local, local=stamp)). _feature_local_ids now counts the feature's own merged rows re-set by its amendments. Pinned by test_deliver_local_stamp.py::test_a_merged_local_row_is_stamped_by_an_amendment[slug|slug-design] (the issue's reproduction) and ::test_a_merged_set_status_amendment_is_not_rewritten; ::test_a_pending_set_status_amendment_is_stamped_in_place still holds.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-11-15T20:01:31+00:00 -->
+### review-1 · review · Verification and CI review: three findings, all fixed in the branch
+
+Raised by the full suite and CI on 920ff5c60, after the four fixes:
+
+1. The forge-backend deliver fixtures (test_deliver_pr_body_forges.py, 3 tests) wrote suite.log before committing .devcontainer/fr-profiles.yaml; the #1454 guard rightly refused them. Fixed in the fixtures (record_support.suite_ran_last, shared with test_deliver_local_stamp.py), not the guard.
+2. test_tripwire_forge_adapter: the #1395 handler imported fr.gh in run_cmd. Fixed by catching fr.hostclient.FORGE_ERRORS (same three errors, through the adapter).
+3. test_run_telemetry::test_a_backgrounded_suite_passes_the_deliver_gate_end_to_end drove _verify_tests_log from a non-git directory; the #1454 guard fails closed there (GitUnavailableError). Kept fail-closed; the test now runs in a git checkout tracking no code.
+
+No other failures across both Python versions' 7 shards. ruff, mypy, fr docs check and the change-fragment gate are clean.
