@@ -56,8 +56,9 @@ rows:
       repo has: it finds existing ones by label, and files nothing when its listing
       cannot be complete.'
     origin:
-    - spec:2026-11-15-owed-archive-side-effects#R10
-    - spec:2026-11-15-owed-archive-side-effects#R11
+    - spec:2026-11-15-owed-archive-side-effects#R12
+    - spec:2026-11-15-owed-archive-side-effects#R13
+    - spec:2026-11-15-owed-archive-side-effects#R14
     levels: {}
     status: not-implemented
     notes: ''
