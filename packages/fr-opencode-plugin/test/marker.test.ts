@@ -50,6 +50,12 @@ describe("resolveMarker", () => {
     expect(result.hasValidMarker).toBe(false);
   });
 
+  test("frEnabled is true when only docs/superpowers/implemented/plans exists", () => {
+    mkdirSync(join(repo, "docs", "superpowers", "implemented", "plans", "x"), { recursive: true });
+    const result = resolveMarker(join(repo, "README.md"));
+    expect(result.frEnabled).toBe(true);
+  });
+
   test("frEnabled is true when a docs/superpowers/plans dir exists", () => {
     mkdirSync(join(repo, "docs", "superpowers", "plans"), { recursive: true });
     const result = resolveMarker(join(repo, "README.md"));

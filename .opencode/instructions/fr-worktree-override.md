@@ -1,6 +1,7 @@
 # Worktree Skill Override (fr-enabled repos)
 
-In a repo with fr plans (`docs/superpowers/plans/`) or devcontainer profiles
+In a repo with fr plans (`docs/superpowers/plans/`, or archived ones in
+`docs/superpowers/implemented/plans/`) or devcontainer profiles
 (`.devcontainer/<profile>/`), any skill or instruction that would invoke
 `superpowers:using-git-worktrees` — "work in a worktree", "isolate this",
 executing-plans' isolation step — invokes `fr-isolation` instead:

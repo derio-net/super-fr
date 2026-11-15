@@ -23,8 +23,9 @@ a `pre_tool_call` hook on `write_file` / `patch`, merged into
 `execute_code`, whose writes only the sibling `fr-isolation-guard.sh` sees, and
 it catches git/gh mutations alone: make your edits with `write_file` / `patch`.
 
-A repo is **fr-enabled** when it has a `.devcontainer/<profile>/` profile or a
-`docs/superpowers/plans/` directory.
+A repo is **fr-enabled** when it has a `.devcontainer/<profile>/` profile, a
+`docs/superpowers/plans/` directory or a `docs/superpowers/implemented/plans/`
+directory (the archive survives when the last live plan is archived).
 
 ## Why
 

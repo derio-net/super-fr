@@ -457,6 +457,39 @@ def _git_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> None:
         log.moves.append((src_rel, dst_rel))
 
 
+def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
+    """Leave a staged `.gitkeep` when archiving emptied the live plans root (super-fr#1277).
+
+    Git tracks no empty directory, so without it a fresh clone has no
+    `docs/superpowers/plans` and the edit gate reads the repo as not fr-enabled. Acts only
+    on the root `fr archive` itself reads; a `.gitkeep` that exists as ANY entry (a
+    symlink included, dangling or not) is left alone, and the create refuses to follow one.
+    """
+    live_root = plan_dir.parent
+    if live_root != kind_dir("plan", space_for(repo_root)):
+        return
+    live_root.mkdir(parents=True, exist_ok=True)
+    if any(e.name != ".gitkeep" for e in live_root.iterdir()):
+        return
+    keep = live_root / ".gitkeep"
+    try:
+        os.lstat(keep)
+        return
+    except FileNotFoundError:
+        pass
+    flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
+    try:
+        os.close(os.open(keep, flags, 0o644))
+    except OSError:
+        return
+    subprocess.run(
+        ["git", "-C", str(repo_root), "add", "--", str(keep.relative_to(repo_root))],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
 def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
     """`git mv` an active plan dir to implemented/plans/. Returns the new path.
 
@@ -483,6 +516,7 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"(e.g. `git rm -r {src_rel}`)."
         )
     _git_mv(repo_root, src_rel, dst_rel)
+    _keep_live_root(repo_root, plan_dir)
     _archive_journal(repo_root, "plan", plan_dir.name)
     _archive_run(repo_root, src_rel)
     return repo_root / dst_rel

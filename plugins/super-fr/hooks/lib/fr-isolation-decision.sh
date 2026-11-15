@@ -330,6 +330,7 @@ _fr_is_enabled() {
     [ -f "$_fr_cfg" ] && return 0
   done
   [ -d "$1/docs/superpowers/plans" ] && return 0  # fr-paths-fallback
+  [ -d "$1/docs/superpowers/implemented/plans" ] && return 0  # fr-paths-fallback
   _fr_placement_enabled "$1" && return 0
   _fr_paths_enabled "$1" && return 0
   return 1

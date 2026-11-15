@@ -15,7 +15,8 @@ pauses the operator explicitly waived.
 
 ## Brainstorming Override
 
-In a repo with fr plans (`docs/superpowers/plans/`) or devcontainer profiles
+In a repo with fr plans (`docs/superpowers/plans/`, or archived ones in
+`docs/superpowers/implemented/plans/`) or devcontainer profiles
 (`.devcontainer/<profile>/`), feature brainstorms use `fr-brainstorming`
 instead of plain brainstorming — it enters fr-isolation first, so the base
 repo is never touched. Plain brainstorming remains for non-fr repos and
@@ -23,7 +24,8 @@ non-feature ideation.
 
 ## Debugging Override
 
-In a repo with fr plans (`docs/superpowers/plans/`) or devcontainer profiles
+In a repo with fr plans (`docs/superpowers/plans/`, or archived ones in
+`docs/superpowers/implemented/plans/`) or devcontainer profiles
 (`.devcontainer/<profile>/`), debugging a bug, test failure, or unexpected
 behavior uses `fr-debugging` instead of plain
 `superpowers:systematic-debugging` — it enters fr-isolation first (reusing an

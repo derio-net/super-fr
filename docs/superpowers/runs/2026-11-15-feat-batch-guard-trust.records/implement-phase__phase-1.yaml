@@ -1,0 +1,12 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-guard-trust
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2]
+refactor:
+  P1.T3: "two one-line additions beside the existing plans test; nothing to clean"
+  P1.T4: "prose and generated mirrors only; nothing to clean"
+journal: []
+resolves: []
+evidence: {}

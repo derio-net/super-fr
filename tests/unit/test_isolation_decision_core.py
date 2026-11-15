@@ -613,3 +613,19 @@ def test_a_clone_of_another_repo_or_branch_is_refused(tmp_path: Path) -> None:
     _git(clone, "checkout", "-q", "main")
     _git(clone, "remote", "set-url", "origin", "https://example.com/org/other.git")
     assert decide(spec_in(clone / "target"), env=env) == 1
+
+
+def _archived_only_repo(tmp_path: Path) -> Path:
+    """No plans dir, no profile: only `docs/superpowers/implemented/plans/<x>` (#1277)."""
+    repo = fr_repo(tmp_path, fr_enabled=False)
+    d = repo / "docs" / "superpowers" / "implemented" / "plans" / "x"
+    d.mkdir(parents=True)
+    (d / "_meta.yaml").write_text("plan: x\n")
+    return repo
+
+
+def test_a_repo_with_only_archived_plans_is_fr_enabled(tmp_path: Path) -> None:
+    repo = _archived_only_repo(tmp_path)
+    assert not (repo / "docs" / "superpowers" / "plans").exists()
+    assert enabled(repo, NO_FR) == 0
+    assert decide(repo / "src.py", env=NO_FR) == 1
