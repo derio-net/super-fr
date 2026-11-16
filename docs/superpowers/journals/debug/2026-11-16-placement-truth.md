@@ -10,3 +10,8 @@ parser.py:302 'product_checkout_for(layout, repo_root) or repo_root'. Repro: a q
 ### repro-1433 · repro · A refused quiet fr push leaves the head it never pushed recorded in HEADS on local fr
 
 git_policy/product.py:105 _record_pushed_head commits HEADS on local fr, then atomic_push runs; when the remote refuses the push (e.g. a pre-receive hook on the feature branch), the record commit stays on local fr and the next fr push publishes it.
+
+<!-- fr:journal kind=hypothesis scope=debug id=hyp-one-cause created=2026-11-16T18:18:19+00:00 -->
+### hyp-one-cause · hypothesis · Both members share one root cause
+
+Batched as one root cause.
