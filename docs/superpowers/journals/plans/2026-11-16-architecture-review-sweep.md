@@ -214,3 +214,80 @@ All line refs are to that file unless another path is given. Nothing was edited 
 ### 6. Verdict
 
 **Cheap for the free-function third, costly for the class.** Slices 1–4 move about 1,100 lines with no cycle and near-zero test edits if `local.py` re-exports the names. What should remain is the Target class with `up`, `down`/`_down_worktree_tail`, worktree provisioning and default-branch resolution: the order-sensitive code that the subclass and the instance patches depend on.
+
+<!-- fr:journal kind=discovery scope=plan id=review-plan-ops created=2026-11-16T18:54:40+00:00 phase=2 -->
+### review-plan-ops · discovery · Brainstorm module review, UNVERIFIED reviewer output: plan-ops (re-check every line range and count before use) (phase 2)
+
+## plan_ops.py decomposition review (read-only, nothing run or edited)
+
+All paths are under `/Users/idermitzakis/.cache/fr/worktrees/super-fr/feat__gh-1318`; `plan_ops.py` means `packages/fr/src/fr/plan_ops.py` (2,545 lines).
+
+**Verdict: moderate.** The self-review half (about 1,460 lines) lifts out cheaply because it is read-only and already imports its collaborators lazily. The writer half is tied to roughly 144 test import lines and four monkeypatches on the module object. `plan_ops.py` should stay as the writer facade (`create`, tracking-issue edits, `PlanEditError`, `PhaseSpec`) and re-export the rest.
+
+### 1. Responsibility map
+
+| Cluster | Lines | ~Size | Kind | What it does |
+|---|---|---|---|---|
+| A. Plumbing | 46–196 | 150 | I/O + serialisation | `_stage`, `_now_iso`, `_yaml_dump`, `_splice_block`, `rewrite_phase_text`, `PhaseSpec`, `PlanEditError`. |
+| B. Create/scaffold | 199–535 | 340 | decision + file I/O | Preflights, `create`, idempotence (`_folder_matches`), `_build_phase_doc`. |
+| C. Spec "Implementation Plans" table | 538–668 | 130 | text transform + I/O | Header check, `_ensure_section_text`, `_append_spec_row`. |
+| D. Tick / complete-phase | 671–750 | 80 | file I/O | Mutates `state:` in one phase file. |
+| E. Tracking issue | 753–803 | 50 | file I/O | `set_`/`clear_tracking_issue`. |
+| F. Rework plans | 806–1081 | 275 | decision + I/O | `rework_create`, `rework_add_origin`, `rework_list`. |
+| G. Lint vocabulary | 1084–1360 | 275 | pure | Manual/dispatch regexes, `ReviewIssue`, `_trailing_manual_block`. |
+| H. `self_review` core | 1362–1563 | 200 | pure decision | Inline checks, then eleven `_*_issues` calls. |
+| I. Sub-checks | 1565–2516 | 950 | decision + read-only I/O | Manual placement, workflow, verification, acceptance link, ops floor/gap, skeleton, phase sizing, tier, scope. |
+| J. `_refactor_justifications` | 2519–2545 | 27 | read | Plan-journal read for the refactor gate. |
+
+There is no presentation code; rendering lives in `plan_cmd.py`.
+
+### 2. Destinations and importers
+
+- **G, H, I → new `fr/plan/review/`** (or `fr/plan_review.py`). No cycle: every heavy dependency is already a function-local import (`plan_ops.py:1658–2523`), and nothing in A–F calls into G–I.
+- **J → `fr/record/gates.py`**, its only caller (`gates.py:29`). No cycle: it needs only `fr.journal.model`.
+- **C → `fr/spec_table.py`** (beside `fr.spec`). `migrate.py:757–770` already reaches four of its private names.
+- **D → delete, or keep as a thin wrapper over `fr.record.apply`** (see 4).
+- **A, B, E, F stay**; F could later become `fr/plan/rework.py`.
+
+Importers in `packages/` (code references, not docstrings):
+- `migrate.py`: 6 (`_stage` ×2, `_SPEC_TABLE_HEADER_RE`, `_ensure_section_text`, `_append_spec_row`, `PlanEditError`)
+- `commands/plan_cmd.py`: 2 imports (`:17`, `:88`)
+- `commands/apply_cmd.py`: 3
+- `commands/undispatch_cmd.py`: 3
+- `fr_dispatch/__init__.py`: 3
+- `record/apply.py`: 2 (`rewrite_phase_text` `:699`, `_now_iso` `:720`)
+- `record/gates.py`: 1
+- `commands/run_cmd.py`: 1 (`_manual_placement_issues` `:5014`)
+
+### 3. Coupling obstacles
+
+- **Module state:** only regexes and constants; nothing mutable. `OPS_FR_FLOOR` (`:1861`) is imported by one test.
+- **Cross-cluster private helpers:**
+  - `_stage`: 7 call sites across B, D, E, F, plus `migrate.py`.
+  - `_yaml_dump`: 6, across A, B, F.
+  - `_plan_spec_file`: 4, and `_spec_journal_entries`: 3, `_version_floor_issue`: 4 — all inside I, so they move together.
+  - `_trailing_manual_block`: G, used by I (`:1600`, `:2358`).
+  - `_TASK_ID_RE` (`:1085`, in G) is used by J (`:2544`), so J must take it along.
+- **Tests:** 34 files reference the module, with 144 `from fr.plan_ops import` lines. Most-imported names: `PhaseSpec` 47, `create` 45, `self_review` 29, `PlanEditError` 19, `tick` 18, `complete_phase` 15, `rework_create` 10, `_trailing_manual_block` 3, `_append_spec_row` 3, `rework_add_origin` 2.
+- **Monkeypatches on the module object:**
+  - `set_tracking_issue`: `test_v2_apply.py:485,506,579` and `test_tick_workitem.py:511`.
+  - `plan_ops.space_for`: `test_plan_ops_feature_root.py:20` — pins `space_for` being looked up in this namespace, which matters for B and F.
+  - `patch.object(plan_ops, "parse")`: `test_plan_ops.py:168`.
+- **Tripwires:** none in `tests/unit` pin the filename or contents. One doc names the path: `docs/explainers/01-fr-goal.md:863`, so moving `self_review` owes a page edit under docs-currency.
+
+### 4. Duplication (cited)
+
+- **Tick/complete logic exists twice.** `plan_ops.tick` and `complete_phase` (`:671–750`) versus `record/apply.py:692–775`: same owner lookup, same idempotence test, same manual-note and unticked refusals. They are deliberately different in mechanism: apply builds in an overlay, parses a scratch copy before writing (`apply.py:799–815`), and runs the refactor gate; plan_ops writes first and re-parses after. `plan_cmd.py:285–299` routes `--tick` through the record engine, and I found no production caller of `plan_ops.tick` or `complete_phase` — they appear to be test-only.
+- **Non-atomic writes.** `plan_ops.py` has zero uses of `write_text_atomic` and about 14 raw `write_text` calls (`:357–389`, `:664`, `:717`, `:748`, `:768`, `:793`, `:920–998`). This is not equivalent to the atomic writer; I found no comment saying it is deliberate.
+- **Journal read repeated.** `_spec_journal_entries` (`:2129–2146`) and `_refactor_justifications` (`:2523–2534`) share the same resolve → read → swallow-`JournalParseError` shape; equivalent apart from scope.
+- **YAML re-read.** Writers call `parse()` and then `yaml.safe_load` the same phase file again (`:686/706`, `:726/744`, `:759/764`). This is deliberate: the raw dict is needed for `rewrite_phase_text`'s byte-preserving splice.
+
+### 5. Slice order
+
+1. **S — J → `record/gates.py`** (27 lines plus `_TASK_ID_RE`). No test imports it. Risk: negligible.
+2. **M — G+H+I → `fr/plan/review`** (about 1,430 lines, but a contiguous cut). Re-export `self_review`, `ReviewIssue`, `_trailing_manual_block`, `_manual_placement_issues` and the 8 privately imported names from `plan_ops`, and tests pass unchanged. Risk: low. A test that monkeypatches a lazily imported collaborator on another module is unaffected.
+3. **S — C → `fr/spec_table.py`** (130 lines). Re-export for `migrate.py` and 3 tests. Risk: low.
+4. **M — D: retire `tick`/`complete_phase` onto the record engine.** This is not a pure refactor: 33 test imports and a write-order change. Do it separately.
+5. **L — F → `fr/plan/rework.py`.** Blocked by the `space_for` monkeypatch and shared `_stage`/`_yaml_dump`; move A into a `fr/plan/_io.py` first.
+
+After slices 1–3, `plan_ops.py` is about 950 lines.
