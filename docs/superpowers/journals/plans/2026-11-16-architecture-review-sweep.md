@@ -331,3 +331,54 @@ one table and one function; nothing to clean
 ### no-refactor-p1-t7 · discovery · no-refactor-because P1.T7 (phase 1)
 
 docs, fragment and gate runs only; no code to refactor
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-11-16T20:57:26+00:00 phase=1 -->
+### review-p1 · review · Phase 1 code review: no behaviour change found; four small in-scope findings, all fixed (phase 1)
+
+An independent reviewer read the phase 1 diff against spec R8–R12, R14, R15 and the plan.
+It ran the five new or rewritten test files (43 passed), ruff, mypy on three packages,
+`fr docs check`, the three mirror sync checks and the change-fragment check: all clean.
+It rebuilt the old hand-written gate literals beside the nested form and found identical
+pydantic error lists and JSON schemas, confirmed the four removed timestamp readers were
+statement-for-statement identical to `parse_aware`, and ran the copy scan against the
+pre-change tree, where it reports all four copies. Findings p1-r1..p1-r4.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-16T20:57:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · fr/gates.py: TAG_ALTERNATION inserted between POST_MERGE_GATES and its docstring, leaving that docstring orphaned (phase 1)
+
+packages/fr/src/fr/gates.py:21-23.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-16T20:57:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · test_gate_vocabulary.py: tag patterns pinned to a hard-coded pair, not to POST_MERGE_GATES; a one-sided vocabulary change passes (phase 1)
+
+tests/unit/test_gate_vocabulary.py, test_pinned_tag_patterns. Spec Design C asks for the set of matched tags to equal POST_MERGE_GATES.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-16T20:57:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · test_import_direction.py: `FrStatus is SessionStatus` passes for a re-declared identical Literal (typing cache) (phase 1)
+
+tests/unit/test_import_direction.py, test_cloud_status_is_the_protocol_type. Identity catches different values only.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-16T20:57:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · test_gate_vocabulary.py: planted-divergence test compares two constants and uses no helper the real assertions share (phase 1)
+
+tests/unit/test_gate_vocabulary.py, test_a_divergent_literal_is_reported.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-16T20:57:26+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: fr/gates.py: TAG_ALTERNATION inserted between POST_MERGE_GATES and its docstring, leaving that docstring orphaned (phase 1)
+
+TAG_ALTERNATION and its docstring moved below the POST_MERGE_GATES docstring.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-16T20:57:26+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: test_gate_vocabulary.py: tag patterns pinned to a hard-coded pair, not to POST_MERGE_GATES; a one-sided vocabulary change passes (phase 1)
+
+test_tag_patterns_match_exactly_the_post_merge_gates tries every member of GATES against both patterns and compares the matched set to POST_MERGE_GATES; a planted one-sided pattern is reported.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-16T20:57:26+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: test_import_direction.py: `FrStatus is SessionStatus` passes for a re-declared identical Literal (typing cache) (phase 1)
+
+The test now also parses mailbox.py and requires `FrStatus` to be assigned the name `SessionStatus`; a planted re-declared literal is reported.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-16T20:57:26+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: test_gate_vocabulary.py: planted-divergence test compares two constants and uses no helper the real assertions share (phase 1)
+
+One `mismatch(annotation, vocabulary)` helper serves the real assertions and the planted case, which must return exactly the extra (or missing) name.
