@@ -51,10 +51,13 @@ rows:
       - super-fr:tests/unit/test_isolation_decision_core.py#test_a_relative_path_entry_holding_a_git_is_never_run
       - super-fr:packages/fr-opencode-plugin/test/resolved-fr.test.ts
       - super-fr:packages/fr-opencode-plugin/test/git.test.ts
+      - super-fr:tests/unit/test_hooks_planted_git.py#test_a_planted_git_on_a_relative_path_entry_is_never_run
     status: ci
-    notes: 'R3/R4 proven in CI: planted git/fr behind bin, ./bin, . and empty PATH entries
-      never run by the git resolvers, any fr-starting hook or OpenCode module; absolute
-      ones are'
+    notes: 'R3/R4 proven in CI: a planted git or fr behind bin, ./bin, . and empty PATH
+      entries is never run by either git resolver, any hook that runs git (nag, sentinel,
+      Bash guard, worktree create/remove; independent review of #1478, item 1) or any
+      fr-starting hook or plugin module; a tripwire fails on a bare git command in any
+      hook script'
     verify: none
   - id: lock-probe-ignores-cwd
     capability: file lock probes
