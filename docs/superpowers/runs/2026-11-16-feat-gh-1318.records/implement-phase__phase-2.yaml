@@ -1,0 +1,12 @@
+schema_version: 12
+run: 2026-11-16-feat-gh-1318
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2]
+refactor:
+  P2.T2: "a document section; no code to refactor"
+  P2.T3: "a document section; no code to refactor"
+journal: []
+resolves: []
+evidence: {}
