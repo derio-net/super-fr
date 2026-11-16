@@ -7227,6 +7227,14 @@ batches:
     at: '2026-11-16T15:19:42.697979Z'
     pr: 1477
     head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
+  - kind: conflict
+    at: '2026-11-16T15:31:09.605545Z'
+    head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
+    paths:
+    - docs/reference/cli.md
+    - docs/reference/workflow-shapes.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-gate-truth
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
