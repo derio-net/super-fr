@@ -59,9 +59,16 @@ rows:
     origin:
     - spec:2026-11-15-owed-archive-side-effects#R10
     - spec:2026-11-15-owed-archive-side-effects#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_dry_run.py#test_branch_dry_run_previews_the_moves_and_exits_as_the_real_run
+      - super-fr:tests/unit/test_archive_dry_run.py#test_quiet_issues_dry_run_previews_the_filing_and_writes_nothing
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_archive_dry_run
+    status: ci
+    notes: Built in run 2026-11-15-feat-batch-owed-archive; unit tests plus the row
+      scenario, which CI runs through tests/integration/test_scenarios.py; candidate
+      walk green
     verify: candidate
     scenario: tests/scenarios/archive-dry-run.sh
   - id: owed-reuse-uncapped
