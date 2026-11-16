@@ -752,11 +752,14 @@ def _has_tracker(repo_root: Path) -> bool:
 
 
 def _forge_lists_issues(repo_root: Path) -> bool:
-    """Whether the repo's forge adapter can list issues (GitHub today; glab and tea
-    raise `UnsupportedForgeOperation`), which owed reuse by label needs (R13)."""
-    from fr._hosts import detect_backend
+    """Whether the repo's forge adapter can list issues, which owed reuse by label needs
+    (R13): the adapter's own declaration (`declares_unsupported`), the same `list_issues`
+    whose `UnsupportedForgeOperation` makes `fr archive` and `fr journal file` keep an owed
+    action in the journal. Builds the client and calls nothing on the forge."""
+    from fr.ghclient import declares_unsupported
+    from fr.hostclient import client_for
 
-    return detect_backend(repo_root) == "github"
+    return not declares_unsupported(client_for(repo_root), "list_issues")
 
 
 def _feature_flag(repo_root: Path, row_id: str, state: RunState) -> str:
