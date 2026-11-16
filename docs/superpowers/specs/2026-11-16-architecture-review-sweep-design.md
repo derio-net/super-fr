@@ -298,3 +298,9 @@ the lens review before `deliver` and by the PR review, and R15 by `fr docs check
 - A line ceiling for modules other than the five.
 - Refreshing the audit's score or re-running its mutation and workload measurements.
 - Committing a rendered architecture page.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-16-architecture-review-sweep | `derio-net/super-fr` | `2026-11-16-architecture-review-sweep` | — |

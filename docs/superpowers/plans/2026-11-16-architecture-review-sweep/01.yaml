@@ -1,0 +1,179 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Guards and consolidations — import guard, gate vocabulary, session status,
+    triage timestamps, line budget (R8–R12)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - import-guard-reads-syntax-tree
+  - gate-annotations-follow-vocabulary
+  - session-status-one-vocabulary
+  - triage-timestamps-one-reader
+  - hotspot-modules-cannot-grow
+  skeleton: true
+  tier: standard
+  files:
+  - tests/unit/test_import_direction.py
+  - tests/unit/test_gate_vocabulary.py
+  - tests/unit/test_acceptance_status_labels.py
+  - tests/unit/test_triage_timestamps.py
+  - tests/unit/test_tripwire_module_budget.py
+  - packages/fr/src/fr/gates.py
+  - packages/fr/src/fr/spec.py
+  - packages/fr/src/fr/ops/stub.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/verification/model.py
+  - packages/fr-claude-cloud/src/fr_claude_cloud/mailbox.py
+  - packages/fr/src/fr/triage/timestamps.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - AGENTS.md
+  - docs/**/*.md
+  - .changes/feat-gh-1318.yaml
+  - .test_durations
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Smoke — the touched suites are green on the unchanged tree
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest -q --no-cov tests/unit/test_import_direction.py tests/unit/test_exit_gates*.py tests/unit/test_claude_cloud_mailbox.py tests/unit/test_triage_batch.py tests/unit/test_triage_check.py tests/unit/test_triage_views.py tests/unit/test_ops_stub*.py` (drop a glob that matches no file and name the file that does cover that module instead). All green before any change; a red test is recorded as a discovery, not fixed here.
+- number: 2
+  title: G01 — the package-boundary guard reads the syntax tree (R8)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_import_direction.py add planted-source tests against a new helper `_import_nodes(source: str, package: str | None = None)` that does not exist yet. Each planted string must yield the expected dotted module: `import os, fr_cncd`; `import fr_cncd as c`; `from fr_cncd import x`; an import inside a `def`; an import under `try`; `import os, fr.triage`; `from fr import triage` (module `fr`, names `("triage",)`). Add soft-point planted cases against a new predicate `_soft_point_violations(source)`: a module-level `from fr_dispatch import x`, the same under a module-level `try`, and the same under `if SOMETHING:` each return a violation; an import inside a function body and one under `if TYPE_CHECKING:` return none; a source with no `importlib.util.find_spec("fr_dispatch")` call returns a violation. Add a test that `_import_nodes("    import x\n")` raises SyntaxError. Run the file; the new tests fail on the missing names.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement `_import_nodes` with `ast.parse` and one walk that tracks position: `function` (any enclosing FunctionDef/AsyncFunctionDef/Lambda), `type_checking` (inside the body of an `if` whose test is the name `TYPE_CHECKING` or attribute `typing.TYPE_CHECKING`, not inside a function), else `module`. Return, per Import/ImportFrom node, the full dotted module (resolve a relative `from . import x` against `package`), the imported names for a `from` import, and the position. Do not catch SyntaxError. Implement `_soft_point_violations` on top: every node whose module root is `fr_dispatch` must be `function` or `type_checking`; the tree must hold a Call to `importlib.util.find_spec` with the constant `"fr_dispatch"`; the install message `uv tool install --with fr-dispatch fr` must be in the source. Rewrite `_imports_of` to return root modules from `_import_nodes`; replace `_FR_TRIAGE_IMPORT_RE` and its two tests with a dotted-prefix match on `fr.triage` plus `triage` among the names of a `from fr import`; make `test_soft_points_are_guarded` call `_soft_point_violations` on each `_SOFT_POINTS` file. Rewrite the fixtures of `test_a_third_fr_dispatch_import_is_refused` as the import inside a `def`. Keep `_SOFT_POINTS`, `_SIBLINGS` and every existing test name. Run the file; all green. Confirm `git diff --stat -- packages/` is empty for this task.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: one helper, one walk; remove the now-unused `re` import and any dead regex; the module docstring states that dynamic imports and entry-point loading are not judged. Rerun the file.
+- number: 3
+  title: R01 — gate annotations derive from fr.gates (R9)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED (capture today's behaviour first): create tests/unit/test_gate_vocabulary.py. Pin, against the unchanged code: the pydantic error list (count, `type`, `msg`) for a bad value in `ExitBlock(gates={"candidate": "x"})` and in the strategy manifest's `gate` field (packages/fr/src/fr/verification/model.py, the model holding `gate: Literal["none", "tester", "devops"]`); `model_json_schema()` of each of those two fields; and that `_TAG_RE` (fr/spec.py) and `_LEAD_RE` (fr/ops/stub.py) match `[devops] x` and `[tester] x` and no other member of `fr.gates.GATES` as a tag. These pass now. Then add the vocabulary tests, which fail: `from fr.gates import PostMergeGate`; `POST_MERGE_GATES == frozenset(get_args(PostMergeGate))`; a helper `accepted(annotation) -> frozenset[str]` with `accepted(ExitBlock gates value annotation) == GATES | {"none"}`, `accepted(strategy gate annotation) - {"none"} == POST_MERGE_GATES`, `frozenset(get_args(StepGate)) == POST_MERGE_GATES`; and `accepted(Literal["none", "tester", "devops", "extra"]) != POST_MERGE_GATES | {"none"}` (the planted divergence). Add an identity test that fails now: `StepGate is PostMergeGate`.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in fr/gates.py add `PostMergeGate = Literal["tester", "devops"]` and set `POST_MERGE_GATES: frozenset[str] = frozenset(get_args(PostMergeGate))` (docstring kept). In triage/model.py type the remap value as `Literal["none", Gate]`. In verification/model.py type the field as `Literal["none", PostMergeGate]`. Use the nested form, never `X | Literal[...]`: the union form changes the error list and the schema (spec Design C). In fr/spec.py set `StepGate = PostMergeGate` and build `_TAG_RE` from `"|".join(get_args(PostMergeGate))`; in fr/ops/stub.py build the tag group of `_LEAD_RE` the same way. Leave `PRE_MERGE_HOLD_GATES`, `triage/lanes.py` and `commands/journal_cmd.py` untouched. Run tests/unit/test_gate_vocabulary.py: the pinned error lists and schemas from S1 still pass unchanged, and the vocabulary tests pass. Run `uv run mypy packages/fr/src` and the exit-gate, ops and verification test files.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: if the two tag patterns build their alternation with the same expression, expose one `TAG_ALTERNATION` string from fr/gates.py and use it in both; rerun the file and `uv run ruff check packages/ tests/`.
+- number: 4
+  title: R02 — one session-status vocabulary, and a label for every acceptance status
+    (R10)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_import_direction.py, beside `test_board_status_equals_session_status`, add `test_cloud_status_is_the_protocol_type`: `from fr_claude_cloud.mailbox import FrStatus`; `from fr_dispatch.protocols import SessionStatus`; `assert FrStatus is SessionStatus`. Fails today (two separate Literals). Create tests/unit/test_acceptance_status_labels.py: `set(STATUS_LABEL) == set(get_args(Status))` (passes today; it is the new guard).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in packages/fr-claude-cloud/src/fr_claude_cloud/mailbox.py import `SessionStatus` from `fr_dispatch.protocols` and replace the literal with `FrStatus = SessionStatus`. `STATE_MAP` and `map_state` unchanged. Run both new tests, tests/unit/test_claude_cloud_mailbox.py and the other fr_claude_cloud test files unchanged, and `uv run mypy packages/fr-claude-cloud/src`. Refactor reason for the step record: a one-line alias leaves nothing to clean up.
+- number: 5
+  title: R03 — one aware-timestamp reader for triage (R11)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: create tests/unit/test_triage_timestamps.py. Table test for `fr.triage.timestamps.parse_aware`: `None`, `""`, `"not a time"`, a naive ISO string each give `None`; `"2026-11-16T10:00:00Z"` gives an aware datetime with zero offset; `"2026-11-16T10:00:00+02:00"` keeps `utcoffset() == timedelta(hours=2)`. Scan tests against a function `same_body_functions(source: str, owner_source: str) -> list[str]` defined in the test file: a planted verbatim copy under another name is reported; a planted copy with its parameter and local variable renamed is reported; a function with a different body is not. Then the repo scan: over every `*.py` under `packages/*/src`, the only function reported is `parse_aware` in fr/triage/timestamps.py. Run; fails on the missing module.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/triage/timestamps.py with `parse_aware(stamp: str | None) -> datetime | None`, body copied from `_aware` in triage/check.py, importing only `datetime`; module docstring states the contract and that readers treating a naive time as UTC (usage, debt) are a different contract. Implement `same_body_functions`: parse both sources, drop a leading docstring, rename arguments and assigned local names to `v0, v1, …` by order of first appearance, compare `ast.dump` of the bodies. Delete `_parse_at` (commands/triage_batch_cmd.py), `_parse_time` (triage/batch.py), `_aware` (triage/check.py) and `_parse` (triage/views.py) and point their callers (triage_batch_cmd.py near 4256; batch.py near 241; check.py near 415 and 431; views.py near 95) at `parse_aware`. Change nothing a caller does with `None`. Do not touch `_pr_time` (triage_batch_cmd.py) or `_created_since` (triage/collect.py). Run the new file plus tests/unit/test_triage_batch*.py, test_triage_check*.py, test_triage_views*.py and tests/unit/test_forge_adapter_batch_ops.py unchanged, and mypy on packages/fr/src.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: remove imports the four modules no longer need (`ruff check` names them); rerun the triage test files.
+- number: 6
+  title: Line-budget tripwire for the five largest modules (R12)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: create tests/unit/test_tripwire_module_budget.py with planted-number tests against a function `budget_problem(lines: int, budget: int) -> str | None` that does not exist yet: `(8901, 8900)` returns a message containing "over its budget"; `(8400, 8900)` returns a message containing "lower the budget"; `(8862, 8900)` and `(8500, 8900)` return `None`. Run; fails.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: implement `budget_problem` (`lines > budget`, then `budget - lines > 400`) and `BUDGETS: dict[str, int]` with the five repo-relative paths. Set each budget to that module's physical line count on this branch (`wc -l`, after tasks 2–5) rounded up to the next multiple of 100. Add one parametrised test over `BUDGETS` that reads the file, counts lines and asserts `budget_problem` is `None`, with a message that names the module and says: move the new code into the module the report docs/superpowers/audits/2026-11-16-architecture-review.md names, or change the budget in this diff and say why in the PR. Run; green. Refactor reason for the step record: one table and one function.
+- number: 7
+  title: Docs, change fragment and the full gate
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      Edit AGENTS.md: in the `fr/triage` paragraph name `timestamps.py` (`parse_aware`, the one aware-timestamp reader); where exit gates are described name `fr.gates.PostMergeGate` as the source of the step tag and strategy gate values; in "Standing conventions enforced by tests" add the line-budget tripwire (file, the two bounds, what to do when it fails) and say the import-direction guard reads the syntax tree. Add .changes/feat-gh-1318.yaml (`bump: patch`, summary: one definition each for exit-gate names, runner session status and triage timestamp parsing; no behaviour change). Run `uv run --no-project python scripts/check-change-fragment.py origin/main`, `scripts/sync-opencode.py --check`, `scripts/sync-hermes.py --check`, `scripts/sync-readme.py --check` (regenerate and commit only if one reports drift), and `uv run fr docs check --base origin/main`, fixing each page it names (edit when the page states changed behaviour, else a `reviewed` stamp with a note).
+  - id: P1.T7.S2
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the full mypy command from AGENTS.md, then `uv run pytest -q --no-cov -n auto`. Green, with no existing test edited apart from tests/unit/test_import_direction.py (R14). Refresh `.test_durations` only if the new test files make `split-check` complain.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
