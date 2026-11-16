@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-15 the VK-profile paragraph now follows the restore paragraph
+reviewed: 2026-11-16 up refuses a branch whose slug another workspace holds; a resume keeps the recorded mode; scaffold names secrets after the repo
 ---
 
 ## What are the two boundaries and the bridge?
@@ -89,6 +89,10 @@ session holds each workspace.
 | Claude Code's own worktree commands (`claude --worktree <name>`, `EnterWorktree`) | the same fr location, on branch `wt/<name>`, because the plugin's `WorktreeCreate` hook calls `fr isolation up` | fr state, with the session bound in the same call |
 | A subagent started with `isolation: "worktree"` (`agent-*` names) | `~/.cache/fr/agent-worktrees/<main-checkout>/agent-<id>`, a detached worktree outside the repo | none; `fr isolation gc` removes the finished, clean ones |
 | superpowers' `using-git-worktrees` | routed to `fr isolation up` by the shipped rule `fr-worktree-override.md`; `<repo>/.worktrees/` is never created | fr state |
+
+The slug is the branch name with each `/` written as `__`, so two branches can share one:
+`feat/a__b` and `feat__a/b` both become `feat__a__b`. `fr isolation up` refuses the second
+branch while the first one's workspace exists, rather than put both in one folder.
 
 `fr isolation status` lists the sessions holding each workspace. The shipped script
 `plugins/super-fr/scripts/fr-statusline-segment.sh` prints the branch a session works on and
