@@ -72,3 +72,12 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: hotspot-modules-cannot-grow
+    op: reword
+    base: 0
+    acceptance: Each of the five largest modules fails CI when it grows past its recorded
+      line budget, and a budget more than 400 lines above its module fails too, so an
+      extraction lowers the budget
+    why: 'Spec review sr-6: the lower bound moved from 50 to 400 lines and budgets start
+      with headroom'
