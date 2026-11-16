@@ -6,10 +6,11 @@ journal:
   - kind: decision
     id: d-plan-shape
     global: true
-    answered_by: operator
     title: "Plan shape: two agentic phases, code consolidations (standard) then the report, fragment and issues (hard)"
     body: |
-      Asked how to phase the plan, the operator chose "Two phases": phase 1 lands the guards
+      The operator's answer ("Two phases") is recorded, as operator-answered, in the
+      spec-journal decision `phase-split-2026-11-16-architecture-review-sweep-p2`; this entry
+      restates the shape for the plan journal: phase 1 lands the guards
       and consolidations (R8-R12) on the standard tier as the skeleton phase; phase 2 writes
       the report, the architecture fragment and the issues (R1-R7, R13) on the hard tier,
       after phase 1 so its landed rows and line counts are true. The spec-journal decisions
