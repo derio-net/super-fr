@@ -1,0 +1,108 @@
+schema_version: 12
+run: 2026-11-16-feat-gh-1318
+step: brainstorm
+outcome: done
+journal:
+  - kind: decision
+    id: d-run-scope
+    answered_by: operator
+    title: "Run scope: the report plus the first guarded clusters (G01, R01, R02, R03)"
+    body: |
+      Asked what this one-PR run delivers out of #1318's review and multi-PR sweep. The
+      operator chose "Report + first guarded clusters": the audit report, and in the same PR
+      the import-direction guard fix (G01), the gate and session-status vocabularies (R01,
+      R02) and the shared triage timestamp reader (R03). The remaining clusters are filed
+      as issues.
+  - kind: decision
+    id: d-prior-audit
+    answered_by: operator
+    title: "The report reconciles the full audit, posted on #1318, with the supplement and the current code"
+    body: |
+      Asked how to treat the broader audit the supplement cites. The operator chose to
+      supply it, then posted it on #1318 in two comments, with a bug index linking #1499,
+      #1500, #1419 and #1501 for F01–F04. Those four are behaviour fixes and stay out of
+      this PR. The audit text is recorded as the `brief-audit` entry.
+  - kind: decision
+    id: d-other-findings
+    answered_by: operator
+    title: "F05, F06, F07, F09 and the cursor race: re-check, and file an issue for each one still present and untracked"
+    body: |
+      The operator chose "Re-check and file issues". The report records each one's status
+      at its commit. For each still present, the run looks for an existing issue by that
+      finding's own terms and files one only if none exists. No fix lands in this PR.
+  - kind: decision
+    id: d-decomposition
+    answered_by: operator
+    title: "Module decomposition: plan the cheap slices and design the costly parts in the report; split nothing in this PR"
+    body: |
+      Asked for a size rule, the operator first asked for an architectural examination of
+      the five largest modules, to be reported back if too costly. Four read-only reviews
+      found a cheap part and a costly part in each. The operator then chose "Plan the
+      costly parts too": the report plans the cheap slices and also designs the costly work
+      (typed verdicts for run_cmd's evidence verifiers, the port-based move of the triage
+      driver core, isolation's garbage collection, plan_ops tick retirement), each filed as
+      its own issue with a preservation contract. The agent read this as building on the
+      recommended option and so including the no-growth line budget on the five files; the
+      operator was told and did not object.
+  - kind: decision
+    id: d-architecture-fragment
+    answered_by: operator
+    title: "The architecture page gains one short authored fragment"
+    body: |
+      The operator chose "Report plus one short fragment". The agent had wrongly said the
+      repo has no architecture fragments; they exist under
+      docs/triage/derio-net--super-fr/architecture/, so this adds one fragment and one
+      manifest entry to the existing page.
+  - kind: decision
+    id: d-verification
+    answered_by: operator
+    gate: developer
+    title: "Verification: candidate strategy, CI tests as the contract for each row, nothing owed after merge"
+    body: |
+      The operator chose "Candidate build, tests as contract". The run keeps the workflow's
+      `candidate` strategy; each row is `verify: none` with the CI test that proves it. The
+      gate is `developer`, so no tester or devops gate holds the close-out.
+  - kind: lens
+    lens: tests
+    title: "Every deliverable is a guard; each must be shown to fail on a planted violation, not only to pass"
+resolves: []
+acceptance:
+  - id: import-guard-reads-syntax-tree
+    capability: package boundary guard
+    acceptance: The package-boundary guard reports a sibling-package import in any import form (several names on one line, aliased, from-import, nested in a function or try), and fails a soft point that imports fr_dispatch at module level
+    origin: ["spec:2026-11-16-architecture-review-sweep#R8"]
+    status: not-implemented
+    verify: none
+  - id: gate-annotations-follow-vocabulary
+    capability: exit gates
+    acceptance: The triage gate remap, the plan step gate tag and the strategy manifest's gate field accept exactly the gates fr.gates defines, and a value added to one side only fails CI
+    origin: ["spec:2026-11-16-architecture-review-sweep#R9"]
+    status: not-implemented
+    verify: none
+  - id: session-status-one-vocabulary
+    capability: runner session status
+    acceptance: The dispatch protocol, the triage board and the cloud adapter hold the same session statuses with the adapter's state mapping unchanged, and every acceptance status has a report label
+    origin: ["spec:2026-11-16-architecture-review-sweep#R10"]
+    status: not-implemented
+    verify: none
+  - id: triage-timestamps-one-reader
+    capability: fr triage
+    acceptance: Triage reads an aware timestamp through one function that returns nothing for a missing, empty, malformed or naive value and keeps the offset of an aware one, and no second function with the same body exists in the source
+    origin: ["spec:2026-11-16-architecture-review-sweep#R11"]
+    status: not-implemented
+    verify: none
+  - id: hotspot-modules-cannot-grow
+    capability: module size budget
+    acceptance: Each of the five largest modules fails CI when it grows past its recorded line budget, and a budget more than 50 lines above its module fails too, so a budget follows its module down
+    origin: ["spec:2026-11-16-architecture-review-sweep#R12"]
+    status: not-implemented
+    verify: none
+  - id: architecture-page-shows-decomposition
+    capability: fr triage architecture
+    acceptance: Every authored fragment this repo's architecture manifest names, the decomposition fragment among them, exists and is a valid fragment
+    origin: ["spec:2026-11-16-architecture-review-sweep#R13"]
+    status: not-implemented
+    verify: none
+emitted:
+  spec: docs/superpowers/specs/2026-11-16-architecture-review-sweep-design.md
+evidence: {}
