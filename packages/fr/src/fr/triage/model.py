@@ -32,6 +32,7 @@ from pydantic import (
     model_validator,
 )
 
+from fr.gates import Gate
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
@@ -516,9 +517,7 @@ class ExitBlock(_Strict):
     """`.fr/triage.yaml`'s `exit:` (spec 2026-10-14 exit-gates R4): the repo's
     remap of a strategy kind's gate. It holds whatever the kind's `when` is."""
 
-    gates: dict[
-        str, Literal["none", "developer", "reviewer", "tester", "devops", "owner", "security"]
-    ] = {}
+    gates: dict[str, Literal["none", Gate]] = {}
 
 
 class TriageConfig(_Strict):

@@ -23,6 +23,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from fr.gates import PostMergeGate
+
 SUPPORTED_SCHEMAS = (1, 2)
 """Schema 2 adds `gate:` (spec 2026-10-14 exit-gates R3); schema 1 stays valid."""
 
@@ -72,7 +74,7 @@ class StrategyManifest(BaseModel):
     source: Literal["worktree", "prerelease", "none"] = "none"
     notes: str = ""
     # The strategy's default gate (spec 2026-10-14 R3) — schema 2 only.
-    gate: Literal["none", "tester", "devops"] = "none"
+    gate: Literal["none", PostMergeGate] = "none"
 
     @model_validator(mode="after")
     def _gate_needs_schema_2(self) -> StrategyManifest:
