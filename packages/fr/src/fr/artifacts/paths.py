@@ -186,6 +186,20 @@ def product_checkout_for(layout_root: Path, toplevel: Path) -> Path | None:
     target = Path(layout_root).resolve()
     top = Path(toplevel).resolve()
 
+    def confirms(cand: Path) -> bool:
+        try:
+            return feature_root(space_for(cand, create=False)).resolve() == target
+        except (SettingsError, OSError, ValueError):
+            return False
+
+    # gh#1438: every parse searched every recorded workspace. A checkout already named in
+    # this process is re-confirmed by its own space (one read) before the search.
+    cached = _CHECKOUT_CACHE.get((target, top))
+    if cached is not None:
+        if cached.is_dir() and confirms(cached):
+            return cached
+        _CHECKOUT_CACHE.pop((target, top), None)
+
     def candidates() -> Iterator[Path]:
         env = os.environ.get("FR_REPO_ROOT")
         here: list[Path] = []
@@ -219,13 +233,21 @@ def product_checkout_for(layout_root: Path, toplevel: Path) -> Path | None:
         if cand in seen or cand == top or not cand.is_dir():
             continue
         seen.add(cand)
-        try:
-            root = feature_root(space_for(cand, create=False))
-        except (SettingsError, OSError, ValueError):
-            continue
-        if root.resolve() == target:
+        if confirms(cand):
+            _CHECKOUT_CACHE[(target, top)] = cand
             return cand
     return None
+
+
+_CHECKOUT_CACHE: dict[tuple[Path, Path], Path] = {}
+"""`product_checkout_for`'s named checkouts, per (feature root, toplevel), this process.
+Only a checkout that was named is kept, and each use re-confirms it; a miss is searched
+again, so a workspace brought up later in the process is found."""
+
+
+def clear_checkout_cache() -> None:
+    """Forget every product checkout `product_checkout_for` named (tests)."""
+    _CHECKOUT_CACHE.clear()
 
 
 class AmbiguousArtifactError(Exception):

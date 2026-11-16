@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -397,11 +397,24 @@ def _replay(fr_root: Path, remote: str) -> None:
     )
 
 
-def atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:
+def atomic_push(
+    root: Path,
+    fr_root: Path,
+    remote: str,
+    branch: str,
+    *,
+    code: bool,
+    record: Callable[[], str | None] | None = None,
+) -> list[str]:
     """Quiet's push (R23): the feature branch and `fr` in ONE `git push --atomic` when
     code moved, `fr` alone when only bookkeeping did. When `fr` is rejected because
     another feature moved it, fetch, replay, retry, at most `MAX_PUSH_ATTEMPTS` times.
     Never forced. The refs pushed, in order (empty: nothing was pending).
+
+    *record*, run first under the same lock, commits a record of the push on `fr` and
+    returns that commit's subject (None: it committed nothing). When the push then
+    fails, the record names something that never landed, so it is taken back off `fr`
+    before the refusal is raised (gh#1433).
 
     Held under the fr worktree's lock (p3-r8): every workspace of the repo shares it."""
     from fr.placement.quiet import fr_worktree_lock
@@ -409,9 +422,34 @@ def atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bo
 
     try:
         with fr_worktree_lock(fr_root):
-            return _atomic_push(root, fr_root, remote, branch, code=code)
+            subject = record() if record is not None else None
+            try:
+                return _atomic_push(root, fr_root, remote, branch, code=code)
+            except BaseException as e:
+                if subject is not None:
+                    _take_back(fr_root, subject, e)
+                raise
     except SettingsError as e:
         raise PushRefusedError(str(e)) from e
+
+
+def _take_back(fr_root: Path, subject: str, cause: BaseException) -> None:
+    """Drop the record commit *subject* from local `fr` after a push that did not land.
+    Under the lock no other feature commits on `fr`, and a replay keeps this feature's
+    own commits on top, so the record is the tip; anything else is said, never reset."""
+    tip = run_git(fr_root, ["log", "-1", "--format=%s"])
+    if tip.returncode == 0 and tip.stdout.strip() == subject:
+        done = run_git(fr_root, ["reset", "--quiet", "--keep", "HEAD~1"])
+        if done.returncode == 0:
+            return
+        detail = (done.stderr or done.stdout).strip()
+    else:
+        detail = f"the tip of `{QUIET_BRANCH}` is no longer {subject!r}"
+    raise PushRefusedError(
+        f"{cause}; and the record committed for this push could not be taken back off "
+        f"local `{QUIET_BRANCH}` ({detail}): drop the commit {subject!r} on the fr "
+        "worktree before pushing again"
+    ) from cause
 
 
 def _atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:

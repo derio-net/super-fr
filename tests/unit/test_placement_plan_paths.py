@@ -398,8 +398,10 @@ def test_the_product_checkout_lookup_is_cached_per_process(
         return real(root, *a, **k)
 
     monkeypatch.setattr(paths, "space_for", counting)
+    paths.clear_checkout_cache()  # `fr plan create` already named it in this process
     assert parse(plan_dir).repo_root == worktree.resolve()
     searched = len(calls)
+    assert searched > 1, calls  # the uncached lookup searches the recorded workspaces
     calls.clear()
     assert paths.product_checkout_for(layout, fr_top) == worktree.resolve()
     assert parse(plan_dir).repo_root == worktree.resolve()

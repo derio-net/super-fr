@@ -290,6 +290,7 @@ def test_a_refused_push_leaves_no_unlanded_head_in_heads(ws, recorder: Recorder)
     git(fr_root, "add", "-A")
     git(fr_root, "commit", "-qm", "chore(fr): claim")
     assert _push(wt).exit_code == 0  # the claim lands; nothing is pending on fr
+    first = git(wt, "rev-parse", "HEAD").strip()
     before = git(fr_root, "rev-parse", "HEAD").strip()
     hook = origin / "hooks" / "pre-receive"
     hook.write_text("#!/bin/sh\necho 'refused by policy' >&2\nexit 1\n")
@@ -304,5 +305,5 @@ def test_a_refused_push_leaves_no_unlanded_head_in_heads(ws, recorder: Recorder)
     assert git(fr_root, "status", "--porcelain") == ""
     hook.unlink()
     assert _push(wt).exit_code == 0  # the retry records it, once, and it lands
-    assert git(origin, "show", "fr:features/feat__q/HEADS") == f"{head}\n"
+    assert git(origin, "show", "fr:features/feat__q/HEADS") == f"{first}\n{head}\n"
     _no_force(recorder)
