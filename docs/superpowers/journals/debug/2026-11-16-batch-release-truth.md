@@ -45,3 +45,8 @@ finish() asks release_exists (gh release view); 'not found' -> create_release on
 ### f-1393 · finding [fixed] · #1393 fixed: the RC since-tag is one HEAD contains
 
 _rcs_above(merged=True) picks 'since'; RC numbering still counts every tag. Pinned by test_gh1393_an_rc_tag_head_does_not_contain_is_not_the_since_tag and test_gh1393_the_next_rc_still_numbers_past_a_sibling_rc_tag.
+
+<!-- fr:journal kind=finding scope=debug id=f-1291 created=2026-11-16T18:37:03+00:00 state=fixed -->
+### f-1291 · finding [fixed] · #1291 fixed: a dispatch run has its own concurrency group
+
+release.yml group: release-dispatch-<run_id> for workflow_dispatch, 'release' otherwise. A dispatch beside a push run is superseded loudly by publish's base check. Pinned by test_release_workflow.py::test_a_dispatch_run_has_a_group_of_its_own.
