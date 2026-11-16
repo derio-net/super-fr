@@ -887,7 +887,9 @@ def _forge_writes(gh: FakeGhClient) -> list[str]:
 
 
 def _blocked_repo(tmp_path: Path) -> tuple[Path, Path]:
-    """An unticked plan on the default branch with an unticked `[manual]` phase."""
+    """A merged plan with an unticked `[manual]` phase, checked out on a FEATURE branch:
+    on the default branch R8 records no owed entry anyway, which would hide an R7
+    regression that writes one before refusing."""
     from tests.unit.test_archive_owed import MANUAL_PHASE, _as_github
 
     repo = _repo(tmp_path)
@@ -895,6 +897,7 @@ def _blocked_repo(tmp_path: Path) -> tuple[Path, Path]:
     (plan / "02.yaml").write_text(MANUAL_PHASE)
     _seed(repo)
     _as_github(repo)
+    _git(repo, "checkout", "-q", "-b", "feat/widget")
     return repo, plan
 
 
