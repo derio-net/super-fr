@@ -317,3 +317,86 @@ def test_an_unreadable_session_is_none(tmp_path: Path) -> None:
 
     assert witness_transcript(session, agent_id=AGENT_ID) is None
     assert witness_transcript(session, agent_id=None) is None
+
+
+# --- gh#1303: process wrappers before the program -----------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "timeout 500 uv run --no-project --with playwright python shots.cjs",
+        "timeout --signal=KILL 5m node shots.cjs",
+        "timeout -k 10 5m node shots.cjs",
+        "timeout -s KILL 5m node shots.cjs",
+        "timeout --foreground 30 ./shots.cjs",
+        "nice -n 10 python3 shots.cjs",
+        "nice -10 node shots.cjs",
+        "nice --adjustment=5 node shots.cjs",
+        "nohup node shots.cjs",
+        "env FOO=1 python3 shots.cjs",
+        "env -i PATH=/bin node shots.cjs",
+        "env -u HOME node shots.cjs",
+        "time node shots.cjs",
+        "time -p node shots.cjs",
+        "stdbuf -oL node shots.cjs",
+        "stdbuf -o L -e0 node shots.cjs",
+        "caffeinate -dims node shots.cjs",
+        "caffeinate -t 600 node shots.cjs",
+        "cd /repo && timeout 500 nice -n 5 env A=1 node shots.cjs",
+        "fr isolation exec -- timeout 60 node shots.cjs",
+        "FOO=1 nohup timeout 60 ./shots.cjs",
+        "/usr/bin/timeout 60 node shots.cjs",
+    ],
+)
+def test_a_process_wrapper_before_the_program_is_stepped_over(tmp_path: Path, command: str) -> None:
+    """gh#1303: `timeout`, `nice`, `nohup`, `env`, `time`, `stdbuf` and
+    `caffeinate` run the command after their own options, so the program is
+    that command, never the wrapper."""
+    t = _transcript(tmp_path, _call(AFTER, name="Bash", tool_input={"command": command}))
+
+    assert shell_named_since(t, "shots.cjs", SINCE) == parse_timestamp(AFTER)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "timeout 60 cat shots.cjs",
+        "nice -n 5 ls shots.cjs",
+        "env cat shots.cjs",
+        "timeout",
+        "env -i",
+    ],
+)
+def test_a_wrapper_around_a_command_that_only_names_the_script_is_no_run(
+    tmp_path: Path, command: str
+) -> None:
+    t = _transcript(tmp_path, _call(AFTER, name="Bash", tool_input={"command": command}))
+
+    assert shell_named_since(t, "shots.cjs", SINCE) is False
+
+
+@pytest.mark.parametrize(
+    ("command", "word"),
+    [
+        ("make shots shots.cjs", "make"),
+        ("cd /repo && xargs node shots.cjs", "xargs"),
+        ("cat shots.cjs", "cat"),
+    ],
+)
+def test_the_near_miss_names_the_command_word_that_hid_the_script(command: str, word: str) -> None:
+    """gh#1303: a refusal names the call that named the script without running
+    it, and the word fr read as its program."""
+    from fr.run.telemetry import near_miss_program
+
+    assert near_miss_program(command, Path("shots.cjs")) == word
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["node shots.cjs", "timeout 5 node shots.cjs", "echo hello", "node other.cjs"],
+)
+def test_no_near_miss_for_a_run_or_a_call_not_naming_the_script(command: str) -> None:
+    from fr.run.telemetry import near_miss_program
+
+    assert near_miss_program(command, Path("shots.cjs")) is None

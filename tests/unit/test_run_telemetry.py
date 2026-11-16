@@ -1189,6 +1189,13 @@ def test_a_backgrounded_suite_passes_the_deliver_gate_end_to_end(
 
     from tests.unit.transcript_sessions import ORCHESTRATOR, background_rows, records, write_session
 
+    # deliver reads the code tree the log must postdate (gh#1454): a checkout that
+    # tracks no code, so only the transcript window decides here.
+    for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "empty", "--no-verify"]):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+            cwd=tmp_path, check=True, capture_output=True,
+        )  # fmt: skip
     log = tmp_path / "suite.log"
     log.write_text("1 passed\n")
     root = tmp_path / "projects"

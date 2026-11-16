@@ -3237,7 +3237,37 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
             "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )
+    _refuse_stale_suite_log(key, log, path, repo_root)
     return _log_witness(path, data, repo_root)
+
+
+def _refuse_stale_suite_log(key: str, log: str, path: Path, repo_root: Path) -> None:
+    """Exit 2 when a code path changed after the suite log was written
+    (`fr.run.code_tree.newest_code_mtime`, the phase log's freshness rule).
+
+    gh#1454: `deliver` checked who wrote its fresh log and when, never the code it
+    ran on, so code edited and committed after the suite read as covered by it
+    (and a `local` stamp recorded HEAD's tree for a run that never saw it). A
+    commit moves no mtime, but the edit before it does, and so does a checkout."""
+    from fr.run.code_tree import default_merge_base, newest_code_mtime
+
+    try:
+        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
+    except GitUnavailableError as e:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: cannot tell which code it covers — "
+            f"{escape(str(e))}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    if newest is not None and newest[0] > path.stat().st_mtime:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
+            "the log was written, so the suite did not run the code being delivered. "
+            "Run the full suite again and name the new log.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
 
 
 def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
@@ -3342,13 +3372,36 @@ log (spec 2026-10-07-cloud-triage R22, §I; `fr.run.ci_evidence`)."""
 def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
     """`tests: ci`: on a `done` resolve the `verify_ci` witness, else the bare
     claim (a failed unit vouches for no tree, and asks no forge). A pending gate
-    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write."""
+    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write.
+
+    gh#1395: a failed forge read (`FORGE_ERRORS`: a timeout, an EOF, a 5xx) exits
+    `CI_PENDING_EXIT` too, in one line naming it — never a traceback and exit 1,
+    which fr-goal reads as "the record applied and a chained step failed". A host
+    trust refusal does not answer on a retry, so it exits 2."""
+    from fr.ghclient import HostRefusedError
+    from fr.hostclient import FORGE_ERRORS
     from fr.run import ci_evidence
 
     if not done:
         return TESTS_CI
     try:
         return ci_evidence.verify_ci(repo_root)
+    except HostRefusedError as e:
+        err_console.print(
+            f"[red]{key}: tests: ci — the forge refused the host: {escape(str(e))}. "
+            "Nothing was recorded.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    except FORGE_ERRORS as e:
+        stderr = str(getattr(e, "stderr", "") or "")
+        detail = " ".join(f"{e} {stderr if stderr not in str(e) else ''}".split())
+        err_console.print(
+            f"[yellow]{key}: tests: ci — could not read CI from the forge ({escape(detail)}). "
+            "Nothing was recorded: resolve again.[/yellow]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
     except ci_evidence.CiPending as e:
         err_console.print(
             f"[yellow]{key}: tests: ci — {escape(str(e))}. Nothing was recorded: "
@@ -7350,16 +7403,20 @@ def _deliver_local_stamp_plan(
 
 
 def _feature_local_ids(fragment: Any) -> list[str]:
-    """The rows *fragment* (one feature's) sets `local`: its own rows at `local`, and the
-    rows whose latest `set-status` amendment in it is to `local`."""
-    own = {r.id for r in fragment.rows}
+    """The rows *fragment* (one feature's) sets `local`: the rows whose latest `set-status`
+    amendment in it is to `local` — its own merged rows included, which change only by
+    amendment (gh#1462) — and its own rows at `local` that no amendment in it re-sets."""
     latest: dict[str, str] = {}
     for a in fragment.amendments:
-        if a.op == "set-status" and a.row not in own:
+        if a.op == "set-status":
             latest[a.row] = a.status
-    return [r.id for r in fragment.rows if r.status == "local"] + [
+    return [r.id for r in fragment.rows if r.status == "local" and r.id not in latest] + [
         rid for rid, status in latest.items() if status == "local"
     ]
+
+
+_LOCAL_STAMP_WHY = "deliver stamps the local suite run that covers this row (R4)"
+"""The `why` of the amendment `deliver` writes to stamp a merged `local` row."""
 
 
 def _local_stamp_plan(
@@ -7367,11 +7424,11 @@ def _local_stamp_plan(
 ) -> _LocalStamps | None:
     """`_deliver_local_stamp_plan` for *feature*'s fragment, read where the placement
     keeps it (the artifact root); the blobs come from the product checkout's HEAD."""
-    from fr.acceptance.edit import stamp_local
-    from fr.acceptance.fold import effective
-    from fr.acceptance.fragment import FRAGMENTS_DIR, parse_fragment
+    from fr.acceptance.edit import append_amendment, local_stamp_target, stamp_local
+    from fr.acceptance.fold import effective, merged_row_ids
+    from fr.acceptance.fragment import FRAGMENTS_DIR, SetStatus, parse_fragment
     from fr.acceptance.local import head_blobs, level_ref_paths
-    from fr.acceptance.model import AcceptanceError, LocalStamp
+    from fr.acceptance.model import AcceptanceError, LocalStamp, Row
     from fr.settings import SettingsError, disabled
 
     try:
@@ -7396,22 +7453,42 @@ def _local_stamp_plan(
     folder = artifact_root(repo_root) / FRAGMENTS_DIR
     texts: dict[Path, str] = {}
     wanted: dict[Path, list[str]] = {}
+    own_rows: set[str] = set()
     for path in (folder / f"{feature}.yaml", folder / f"{feature}-design.yaml"):
         if not path.is_file():
             continue
         texts[path] = path.read_text(encoding="utf-8")
         try:
-            ids = _feature_local_ids(parse_fragment(texts[path], source=path.name))
+            fragment = parse_fragment(texts[path], source=path.name)
         except AcceptanceError as e:
             refuse([f"{path.name}: {e}"])
+        own_rows |= {r.id for r in fragment.rows}
+        ids = _feature_local_ids(fragment)
         if ids:
             wanted[path] = ids
     if not wanted:
         return None  # review p2-r1: no `local` row, no fold, deliver as before
     try:
-        rows = {r.id: r for r in effective(repo_root).matrix.rows}
+        current = effective(repo_root)
     except AcceptanceError as e:
         refuse([f"the acceptance matrix: {e}"])
+    rows = {r.id: r for r in current.matrix.rows}
+    merged: frozenset[str] | None = None
+
+    def frozen(target: Row | SetStatus) -> bool:
+        """gh#1462: is the block a stamp would land in history — a row merged on the
+        default ref, or a set-status amendment that is not this branch's own? Such a
+        block is never rewritten: the stamp goes in a new amendment."""
+        nonlocal merged
+        if isinstance(target, SetStatus):
+            return target not in current.pending
+        if merged is None:
+            try:
+                merged = merged_row_ids(repo_root, frozenset(own_rows), current=current)
+            except AcceptanceError as e:
+                refuse([f"the merged acceptance rows: {e}"])
+        return target.id in merged
+
     by_path = {
         path: [
             r
@@ -7445,7 +7522,19 @@ def _local_stamp_plan(
                 continue
             stamp = LocalStamp(at=today, tree=tree, log=log, files={p: blobs[p] for p in paths})
             try:
-                text = stamp_local(text, r.id, stamp)
+                if frozen(local_stamp_target(text, r.id)):
+                    amendment = SetStatus(
+                        row=r.id,
+                        op="set-status",
+                        base=current.revisions.get(r.id, 0),
+                        status="local",
+                        notes=r.notes,
+                        local=stamp,
+                        why=_LOCAL_STAMP_WHY,
+                    )
+                    text = append_amendment(text, amendment)
+                else:
+                    text = stamp_local(text, r.id, stamp)
             except AcceptanceError as e:
                 problems.append(f"row {r.id}: {e}")
         if path_rows:

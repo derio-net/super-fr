@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-14 still true after VK support was removed; a retired row counting as a citation is not detailed here
+reviewed: 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
 ---
 
 # The acceptance matrix
@@ -104,6 +104,11 @@ Use `local` only in a repo with no CI (`fr services` shows `ci none`).
   `local: {at, tree, log, files}`. `files` has the HEAD blob of each file that the level
   refs name. `deliver` stamps only from a fresh suite log with no uncommitted code path,
   or from `tests: reuse`. Other test evidence stops `deliver` (exit 2).
+- A fresh suite log must be newer than each code change. If a code file changed after
+  the suite wrote its log, `deliver` stops (exit 2), also when that change is committed.
+- `deliver` does not change a row or an amendment that is on the default ref. For a
+  merged row, it writes the stamp in a new `set-status` amendment in the feature's
+  fragment.
 - A `local` row is debt when it has no stamp (`local, unstamped`). It is debt when a
   stamped file changed or is not at HEAD, or when its level refs changed
   (`local, stale: <path>`). It is debt when git cannot read HEAD

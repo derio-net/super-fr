@@ -553,6 +553,29 @@ def _merged_outside(
     return view, frozen, tuple(notices)
 
 
+def merged_row_ids(
+    root: Path, own_rows: frozenset[str], *, current: Effective | None = None
+) -> frozenset[str]:
+    """The rows R16 holds to "changes only by amendment": those merged on the default
+    ref. Under `repo`, the default ref's fold defines them (none without a default ref).
+    Under quiet and stealth (R17's clause), every row the fold knows that this branch's
+    own fragments (*own_rows*) do not define, plus every row its own feature defined
+    when it merged (its fragments frozen at the merge; PR #1437 review F2). *current*
+    is the fold of *root* when the caller already has it. Every failure is an
+    `AcceptanceError`. The one definition the record engine and `deliver` share."""
+    from fr.artifacts.paths import outside_repo
+
+    if outside_repo(root) is None:
+        merged = default_ref_fold(root)
+        return frozenset(merged.owners) if merged is not None else frozenset()
+    fold_now = current if current is not None else effective(root)
+    found = frozenset(fold_now.owners) - own_rows
+    frozen = own_merged_fragments(root)
+    if frozen is not None:
+        found |= {r.id for rel, t in frozen[0].items() for r in parse_fragment(t, source=rel).rows}
+    return found
+
+
 def own_merged_fragments(root: Path) -> tuple[dict[str, str], dict[str, str], str] | None:
     """Under quiet and stealth, when this branch's own feature is merged: (its fragments
     frozen at the merge, its working ones, the default ref), keyed relative to the

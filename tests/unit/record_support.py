@@ -8,6 +8,7 @@ resolve records against is the one the shipped shape actually produces.
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 from pathlib import Path
 
@@ -60,6 +61,13 @@ def commit_all(root: Path, message: str = "work") -> None:
     git(root, "add", "-A")
     if git(root, "status", "--porcelain").strip():
         git(root, "commit", "-qm", message, "--no-verify")
+
+
+def suite_ran_last(root: Path, log: str = "suite.log") -> None:
+    """The suite log as if the suite ran after every change the test made to the
+    tree: deliver refuses a fresh log older than any code path (gh#1454)."""
+    newest = max(p.lstat().st_mtime for p in [root, *root.rglob("*")] if ".git" not in p.parts)
+    os.utime(root / log, (newest + 5, newest + 5))
 
 
 def snapshot(root: Path) -> dict[str, str]:

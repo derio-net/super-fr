@@ -1165,6 +1165,47 @@ def test_a_command_that_only_names_the_script_is_refused(tmp_path: Path) -> None
     assert "executed the capture script" in _squash(out.output)
 
 
+def test_the_refusal_names_the_word_that_hid_the_script(tmp_path: Path) -> None:
+    """gh#1303: a call named the script behind a word fr does not read as running
+    it; the refusal says which word, so the executor changes the call instead of
+    repeating it."""
+    from tests.unit.transcript_sessions import bash_rows
+
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    (repo / "shots.cjs").write_text("// capture\n")
+    call, result = bash_rows(_stamp(opened, 1), tool_use_id="toolu_bash1")
+    call["message"]["content"][0]["input"] = {"command": f"xargs node {repo}/shots.cjs"}
+    _session(root, orchestrator=[call, result, _read(_stamp(opened, 2), shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot, script="shots.cjs"))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "fr read its program as `xargs`" in _squash(out.output)
+
+
+def test_a_capture_script_behind_timeout_is_witnessed(tmp_path: Path) -> None:
+    """gh#1303: the executor bounded a long capture with `timeout`; it ran."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    (repo / "shots.cjs").write_text("// capture\n")
+    command = f"cd {repo} && timeout 500 uv run --with playwright python {repo}/shots.cjs"
+    _session(
+        root,
+        orchestrator=[_bash(_stamp(opened, 1), command, 1), _read(_stamp(opened, 2), shot, 1)],
+    )
+    record = _record(repo, "code", "phase/1", visual=_visual(shot, script="shots.cjs"))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert "executed the capture script" not in _squash(out.output), out.output
+
+
 def test_a_row_named_by_two_entries_is_refused(tmp_path: Path) -> None:
     """p2-r9: two entries for one row — which one is the evidence?"""
     shot = _shot(_outside(tmp_path), "a.png")
