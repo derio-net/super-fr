@@ -7432,6 +7432,13 @@ batches:
     at: '2026-11-16T18:15:03.349181Z'
     pr: 1480
     head: 80009831000f40c535d8efbd1b51d0ab6c7cdd39
+  - kind: claims_released
+    at: '2026-11-16T18:21:07.029737Z'
+    keys:
+    - super-fr#1183
+    - super-fr#1184
+    - super-fr#1301
+    - super-fr#1400
 - id: workspace-identity
   title: Workspace identity
   ids:
