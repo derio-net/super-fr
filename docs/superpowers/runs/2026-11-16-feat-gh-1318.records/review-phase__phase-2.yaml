@@ -1,0 +1,58 @@
+schema_version: 12
+run: 2026-11-16-feat-gh-1318
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: review
+    id: review-p2
+    phase: 2
+    title: "Phase 2 review: status tables, counts and side findings hold; twelve in-scope findings in the decomposition plans, two designs, two cluster counts and issue coverage"
+    body: |
+      An independent reviewer checked the report, the fragment and issues #1507–#1523 against the
+      code. It opened every F01–F09 and cursor-race citation and every landed row, recounted the
+      module sizes and inventories, resolved every name:line pair of sections 5 and 6 by script,
+      confirmed the three side findings, read the 17 issues and searched for duplicates of each
+      (none), and found the report, fragment and issues free of third-party or home-path detail.
+      The fragment test fails in a temp copy when the manifest entry or the file is removed.
+      Findings p2-r1..p2-r12. Eleven are fixed in the report, the fragment and the issue bodies;
+      the fixer verified each against the code first and refuted none. p2-r9 (three comments) is
+      not done: the permission layer refused the posts.
+  - {kind: finding, id: p2-r1, phase: 2, review_scope: in, title: "_Driver ends at triage_batch_cmd.py:6862, not 6935 (about 3,132 lines, 13 _say calls); slice 3's range takes module helpers; same numbers in the fragment, #1516 and #1520", body: "Report section 5.2."}
+  - {kind: finding, id: p2-r2, phase: 2, review_scope: in, title: "Triage slices 4 and 6 move function-local fr_dispatch imports into fr/triage/, which test_fr_imports_no_siblings forbids, while the report says _SOFT_POINTS stays unchanged", body: "Report section 5.2."}
+  - {kind: finding, id: p2-r3, phase: 2, review_scope: in, title: "Design 6.2's ports do not match what _Driver reads; how methods leave the class is unstated", body: "sleep is unused by _Driver; _write, _save, claim_env, ci_none_at, dispatch_batch, merge_ready and the consoles were unported."}
+  - {kind: finding, id: p2-r4, phase: 2, review_scope: in, title: "run_cmd slices H, E, C and B bring typer.Exit and console prints into fr/run, the weld that makes D costly; lines 1-169 and 492-543 are in no cluster", body: "Report section 5.1."}
+  - {kind: finding, id: p2-r5, phase: 2, review_scope: in, title: "Design 6.3: the span given to GcSweeper contains three of the four override points said to stay, and tests call moved private gc methods", body: "Report section 6.3 and #1521."}
+  - {kind: finding, id: p2-r6, phase: 2, review_scope: in, title: "R06: the stated test weight is for nine modules, not the five named; a sixth same-policy copy in test_status_owed.py is missed", body: "Report section 3."}
+  - {kind: finding, id: p2-r7, phase: 2, review_scope: in, title: "R04 misses fr/isolation/scaffold.py:902, a fourth importer of the private _StrictLoader, in the report and #1512", body: "Report section 3."}
+  - {kind: finding, id: p2-r8, phase: 2, review_scope: in, title: "No issue covers triage slice 6, the dispatch/replace moves, run_cmd's provenance slice or the 14 non-atomic plan_ops writes", body: "Spec R7."}
+  - {kind: finding, id: p2-r9, phase: 2, review_scope: in, title: "The R7 comments on #1286, #1174 and #1318 are not posted; #1174 does not yet cover finding C3-1 that cites it", body: "Spec R7, plan step P2.T6.S2."}
+  - {kind: finding, id: p2-r10, phase: 2, review_scope: in, title: "plan_ops slice 3: cluster C raises PlanEditError defined in cluster A, an import cycle with the re-export", body: "Report section 5.4 and #1518."}
+  - {kind: finding, id: p2-r11, phase: 2, review_scope: in, title: "S/M/L slice sizes are never defined", body: "Report section 5."}
+  - {kind: finding, id: p2-r12, phase: 2, review_scope: in, title: "Seam table omits the guarded 'runner adapters never import fr.triage' seam", body: "tests/unit/test_import_direction.py:151, :163."}
+  - kind: discovery
+    id: p2-main-moved-run-cmd-budget
+    phase: 2
+    title: "Merging main breached run_cmd.py's line budget; re-seated at 9,000"
+    body: |
+      main added 60 lines to commands/run_cmd.py while the branch was open (8,862 → 8,922), over
+      the 8,900 budget. The budget is re-seated at 9,000 by the spec's own rule (count rounded up
+      to the next hundred); the spec, the report and the fragment say so. It shows how little
+      room a 38-line headroom leaves: one ordinary PR to main used it up.
+resolves:
+  - {id: p2-r1, state: fixed, body: "_Driver is 3731–6862 (3,132 lines, 13 _say calls); lines 6863–6935 have their own row; slice 3 is :6686-6862; fragment, #1516 and #1520 corrected."}
+  - {id: p2-r2, state: fixed, body: "The 13 fr_dispatch sites in _Driver go through work_item and session_supports ports filled in build_driver, which stays in a soft point; _SOFT_POINTS stays unchanged; replace/recovery stays in the command module."}
+  - {id: p2-r3, state: fixed, body: "Port list rebuilt from an AST pass over the names the class body reads (about 25 ports in five groups, sleep dropped); the split is stated as mixins under fr/triage/batch_driver*.py; the ports step is sized L; #1520 updated."}
+  - {id: p2-r4, state: fixed, body: "Exit and print counts given per cluster; only A and the four small helpers at :492-543 are cheap; B, H, E, D and C move after design 6.1, which adds a RunRefusal exception, a warn callable and the rule that fr/run imports neither typer nor a console; lines 1–169 have a row; #1515 and #1519 updated."}
+  - {id: p2-r5, state: fixed, body: "Design 6.3 lists the 14 methods that move and the 8 that stay; the nine test call sites change only their receiver, with no forwarding methods; #1521 updated."}
+  - {id: p2-r6, state: fixed, body: "test_status_owed.py added as a sixth module; weight corrected to 126 entries, 188.4 s (116 / 173.7 s for the original five); #1514 updated."}
+  - {id: p2-r7, state: fixed, body: "scaffold.py:902/905 added to the report and #1512."}
+  - {id: p2-r8, state: fixed, body: "Triage moves added to #1520, run_cmd clusters to #1519; #1500 covers only the cursor and journal, so #1524 was filed for the 14 non-atomic plan_ops.py writes."}
+  - {id: p2-r9, state: deferred, tracked_by: "derio-net/super-fr#1318", body: "The three comments are drafted and the report says so; the permission layer refused the posts from the run, so they are left to the operator. The filed issues already appear on #1318's timeline through their cross-references."}
+  - {id: p2-r10, state: fixed, body: "PlanEditError moves to a leaf fr/plan_errors.py first; added to #1518."}
+  - {id: p2-r11, state: fixed, body: "S, M, L and 'cheap' are defined under the budget table."}
+  - {id: p2-r12, state: fixed, body: "Seam row added (test_import_direction.py:151, :163, planted case :192)."}
+evidence:
+  review: review-p2
+  reviewer: aed1ce2653268aa4b
+  model: claude-fable-5-2
