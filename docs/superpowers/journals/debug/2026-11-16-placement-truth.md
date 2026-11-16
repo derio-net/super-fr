@@ -40,3 +40,8 @@ parser.parse sets Plan.checkout_unnamed and prints one stderr notice per plan pe
 ### fix-1433 · finding [fixed] · A refused quiet push takes its HEADS record back off local fr
 
 Correction to rc-1433: the record CAN run under atomic_push's lock by committing with commit_paths(fr_root, ...), the same form _commit_groups uses under the lock; only the product-root seam takes the lock again. atomic_push now takes a record callback, runs it under the lock, and on any failure resets the record commit (git reset --keep HEAD~1) when it is still the tip, else refuses naming it. Never forced. Test: test_push_quiet.py::test_a_refused_push_leaves_no_unlanded_head_in_heads (pre-receive hook refuses, local fr unchanged, retry records once).
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-11-16T21:30:29+00:00 -->
+### review-1 · review · Self-review: no findings raised
+
+Reviewed the diff: the take-back runs only on a record this push committed; reset --keep leaves an unrelated dirty fr worktree intact or fails loud; a push that landed despite a client error would lose its record until the next fr push re-records it (HEAD unchanged), which is the safe direction. Full suite: 16279 passed, 9 failed under host load 22 (2h45m); the 5 named failures (test_isolation_agent_worktrees.py) pass alone (19/19); the other 4 names were not captured; CI is the gate.
