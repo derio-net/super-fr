@@ -18,9 +18,9 @@ GATES: frozenset[str] = frozenset(get_args(Gate))
 PostMergeGate = Literal["tester", "devops"]
 
 POST_MERGE_GATES: frozenset[str] = frozenset(get_args(PostMergeGate))
+"""Gates that hold a merge's close-out; their labels and pass rules (`fr gate pass`)."""
 TAG_ALTERNATION = "|".join(get_args(PostMergeGate))
 """The regex alternation of the post-merge gate names: a step tag's `[<gate>]`."""
-"""Gates that hold a merge's close-out; their labels and pass rules (`fr gate pass`)."""
 PRE_MERGE_HOLD_GATES: frozenset[str] = frozenset({"devops"})
 """Gates that also hold the merge: the triage merge path refuses a PR carrying
 `gate:<g>` without `gate:<g>-passed` (R14). A forge-UI merge is not blocked."""
