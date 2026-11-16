@@ -1,0 +1,122 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-owed-archive
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: review
+  id: review-p3
+  phase: 3
+  title: 'Phase 3 code review (fr archive --dry-run, R10-R11, §C): 13 in scope'
+  body: 'Independent reviewer ran git diff 3f99128..ced9d605e, the 17 unit tests and the scenario, and probed scratch_checkout live. Found sound: the PreviewForge read/write split and cleanup on exception and KeyboardInterrupt.
+
+    '
+- kind: finding
+  id: p3-r1
+  phase: 3
+  review_scope: in
+  title: Quiet/stealth dry run ran the real run with the real forge and root; --issues filed a real issue and wrote into the fr worktree
+- kind: finding
+  id: p3-r2
+  phase: 3
+  review_scope: in
+  title: Global git worktree prune deregisters unmounted host worktrees in a devcontainer (pr1431-n1 rule)
+- kind: finding
+  id: p3-r3
+  phase: 3
+  review_scope: in
+  title: The CLI migration gate was not exempted for --dry-run, so a dry run could commit a migration
+- kind: finding
+  id: p3-r4
+  phase: 3
+  review_scope: in
+  title: The scratch's detached HEAD made head_on_default_branch False, so the preview on main wrote owed entries
+- kind: finding
+  id: p3-r5
+  phase: 3
+  review_scope: in
+  title: Quiet/stealth preview with no fr worktree or a stale clone said nothing to archive (exit 0)
+- kind: finding
+  id: p3-r6
+  phase: 3
+  review_scope: in
+  title: Replay crashed on nested repos, non-UTF-8 names, apply.whitespace=error and lost intent-to-add
+- kind: finding
+  id: p3-r7
+  phase: 3
+  review_scope: in
+  title: git worktree add ran repo hooks and LFS smudge
+- kind: finding
+  id: p3-r8
+  phase: 3
+  review_scope: in
+  title: Dry-run output printed scratch paths and the real run's moves-staged line
+- kind: finding
+  id: p3-r9
+  phase: 3
+  review_scope: in
+  title: A non-Exit exception skipped the refused-call ledger report
+- kind: finding
+  id: p3-r10
+  phase: 3
+  review_scope: in
+  title: PreviewForge host hardcoded github.com
+- kind: finding
+  id: p3-r11
+  phase: 3
+  review_scope: in
+  title: 'Weak unit tests: no open ends seeded, a no-op --branch, no exit parity, _state skipped refs and worktrees'
+- kind: finding
+  id: p3-r12
+  phase: 3
+  review_scope: in
+  title: Scenario compared different arguments and proved nothing for --branch
+- kind: finding
+  id: p3-r13
+  phase: 3
+  review_scope: in
+  title: Docs and --dry-run help claimed more than the code did
+resolves:
+- id: p3-r1
+  state: fixed
+  body: '222c5243c: every forge call routes through PreviewForge under quiet/stealth (incl. merged-PR read); follow-ups preview and write nothing; real quiet fixture test with a raising client.'
+- id: p3-r2
+  state: fixed
+  body: '222c5243c + 990b3e3b1 + d2d971cd0: only the scratch''s own entry and dead-pid scratch entries are removed by path; spec §C.1 amended; decision p3-no-global-prune.'
+- id: p3-r3
+  state: fixed
+  body: '222c5243c + 3e7140fe7: trigger.asks_for_dry_run makes a stale dry run refuse (exit 2) in every context; current artifacts proceed; decision p3-dry-run-stale-refuses.'
+- id: p3-r4
+  state: fixed
+  body: '222c5243c: fr.git.pinned_head_on_default_branch carries the real checkout''s answer into the scratch; test on main.'
+- id: p3-r5
+  state: fixed
+  body: '222c5243c + 94d0be7ed: preview_problem refuses by name (exit 2), checked before any space resolves; also removed a hidden space_for(create=True) write; R10 amended; decision p3-dry-run-cannot-tell-refuses.'
+- id: p3-r6
+  state: fixed
+  body: '222c5243c: trees and nested repos copied, -z bytes names, intent-to-add re-marked, --whitespace=nowarn; a test per case.'
+- id: p3-r7
+  state: fixed
+  body: '222c5243c: core.hooksPath=/dev/null and GIT_LFS_SKIP_SMUDGE=1 on every scratch git call; real hook test.'
+- id: p3-r8
+  state: fixed
+  body: '222c5243c: output paths mapped back to the real root; the staged note suppressed in a dry run; test asserts no scratch name in output.'
+- id: p3-r9
+  state: fixed
+  body: '222c5243c: ledger reported on every path; a crash after a refused call exits 1 naming it.'
+- id: p3-r10
+  state: fixed
+  body: '222c5243c: forge_of resolves backend and host as fr._hosts does; GitLab /-/issues/ form; tests.'
+- id: p3-r11
+  state: fixed
+  body: '222c5243c: real open ends, a merged branch with a plan, exit parity per mode, _state covers refs, local config and .git/worktrees.'
+- id: p3-r12
+  state: fixed
+  body: 'ae3ce2d92: identical-argument real runs with succeeding gh writes, refs and worktrees snapshot; header names the unit tests covering the unknown-call case.'
+- id: p3-r13
+  state: fixed
+  body: '990b3e3b1: fr-progress explainer documents --dry-run and both refusals; help text names them; cli.md note truthful.'
+evidence:
+  review: review-p3
+  reviewer: a9c74c02f571d582b
+  model: claude-opus-5-5
