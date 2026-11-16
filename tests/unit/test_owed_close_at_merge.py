@@ -301,6 +301,60 @@ def test_held_issues_names_why_each_issue_is_held() -> None:
     assert held_issues(_matrix("ci", [f"{OWN}#12"]), ("acme", "widgets"), lambda r: False) == {}
 
 
+def _gate_exit(row_gates: dict[str, str]):  # noqa: ANN202
+    from fr.verification.exit import Exit
+
+    return Exit(
+        kinds=frozenset({"candidate"}),
+        run_gate="none",
+        gates=frozenset(g for g in row_gates.values() if g != "none"),
+        gated_rows=(),
+        rank=1,
+        rows=(),
+        row_gates=row_gates,
+        row_kinds={},
+        run_kind="candidate",
+    )
+
+
+def _held_section_is_refs_and_no_premature_close(held: dict[str, str], **hold) -> str:  # noqa: ANN003
+    section = render_owed_discharged([DischargedOwed(ref=f"{OWN}#12", entry="e")], held)
+    assert section.startswith(f"Refs {OWN}#12 — held: "), section
+    body = f"## Owed actions discharged\n\n{section}\n"
+    assert (
+        premature_closes(body, hold.pop("matrix"), ("acme", "widgets"), lambda r: False, **hold)
+        == []
+    )
+    return section
+
+
+def test_a_row_gated_post_merge_holds_its_issue_as_refs() -> None:
+    """R5: a row this run gates with a post-merge gate (tester) holds the issue it cites,
+    whatever its status, until a walk verifies it."""
+    matrix = _matrix("ci", [f"{OWN}#12"])  # not an owed status: only the gate holds it
+    identity = ("acme", "widgets")
+    assert held_issues(matrix, identity, lambda r: False) == {}
+    exit = _gate_exit({"r1": "tester"})
+    held = held_issues(matrix, identity, lambda r: False, exit=exit)
+    assert held == {f"{OWN}#12": "row `r1` still holds it open"}
+    _held_section_is_refs_and_no_premature_close(held, matrix=matrix, exit=exit)
+
+
+def test_an_unanswered_narrowing_holds_its_issue_as_refs() -> None:
+    """R5: a narrowing decision the operator did not answer holds the issue it names."""
+    matrix = _matrix("ci", [])
+    identity = ("acme", "widgets")
+    decision = JournalEntry(
+        kind="decision", scope="spec", id="d1", created="2026-10-01T10:00:00+00:00",
+        title="ships half", narrows=(f"{OWN}#12",),
+    )  # fmt: skip
+    held = held_issues(matrix, identity, lambda r: False, narrowings=[decision])
+    assert held == {f"{OWN}#12": "decision `d1` narrows it, unanswered"}
+    _held_section_is_refs_and_no_premature_close(held, matrix=matrix, narrowings=[decision])
+    answered = decision.model_copy(update={"decided_by": "operator"})
+    assert held_issues(matrix, identity, lambda r: False, narrowings=[answered]) == {}
+
+
 def test_a_listed_closes_that_nothing_holds_is_not_a_premature_close() -> None:
     body = f"## Owed actions discharged\n\nCloses {OWN}#12\n"
     assert (
