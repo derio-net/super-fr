@@ -16,7 +16,7 @@ SRC = "packages/fr/src/fr/"
 MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
-    f"{SRC}commands/run_cmd.py": 8900,
+    f"{SRC}commands/run_cmd.py": 9000,
     f"{SRC}commands/triage_batch_cmd.py": 7400,
     f"{SRC}isolation/local.py": 3200,
     f"{SRC}plan_ops.py": 2600,

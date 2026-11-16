@@ -309,6 +309,12 @@ its budget and the budget at most `MAX_HEADROOM = 400` lines above the module:
 | `plan_ops.py` | 2,545 | 2,600 | 55 |
 | `triage/batch_drive.py` | 2,130 | 2,200 | 70 |
 
+`main` moved while this branch was open: merged into it, `commands/run_cmd.py` is 8,922
+lines, which the 8,900 budget refused, so the budget was re-seated at 9,000 by the same
+rule (the line count rounded up to the next hundred). The other four modules are unchanged
+in length. The line numbers in this report stay those of the report's commit; in
+`run_cmd.py` and `triage_batch_cmd.py` they sit a few lines lower after the merge.
+
 Every slice below lowers its module's budget in the same diff. "Guards to widen" are the
 tests that name a file by path and must name the new module too. Slice sizes: **S** moves
 under about 200 lines and edits at most a few importing files; **M** moves about 200 to 800
