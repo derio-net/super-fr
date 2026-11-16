@@ -311,3 +311,23 @@ after phase 1 so its landed rows and line counts are true. The spec-journal deci
 hold the reviewers' reports as returned, with the local workspace path replaced by
 `<workspace>`. Their line ranges and counts were not checked; phase 2 tasks 3 and 4
 confirm each against the code before using it (spec R5).
+
+<!-- fr:journal kind=discovery scope=plan id=p1-identity-test-green-before-change created=2026-11-16T20:47:56+00:00 phase=1 -->
+### p1-identity-test-green-before-change · discovery · FrStatus-is-SessionStatus test passes before the alias (phase 1)
+
+typing caches Literal types with equal arguments, so `FrStatus is SessionStatus` held while two identical literals existed. The test still guards drift: it fails the moment either literal changes.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t4 created=2026-11-16T20:47:56+00:00 phase=1 -->
+### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
+
+the change is a one-line alias; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t6 created=2026-11-16T20:47:56+00:00 phase=1 -->
+### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
+
+one table and one function; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t7 created=2026-11-16T20:47:56+00:00 phase=1 -->
+### no-refactor-p1-t7 · discovery · no-refactor-because P1.T7 (phase 1)
+
+docs, fragment and gate runs only; no code to refactor
