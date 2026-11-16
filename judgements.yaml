@@ -7454,6 +7454,13 @@ batches:
     run: 2026-11-15-feat-batch-owed-archive
     archive: chore/closeout-2026-11-16-4
     archived: 1505
+  - kind: claims_released
+    at: '2026-11-16T18:48:17.596218Z'
+    keys:
+    - super-fr#1400
+    - super-fr#1183
+    - super-fr#1301
+    - super-fr#1184
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -7936,6 +7943,11 @@ exports:
   pr: 1475
   head: 3b0ab7a3c4d310305f5b099e4ef327423da6cf35
   merged: true
+- wave: '17'
+  repo: derio-net/super-fr
+  at: '2026-11-16T18:48:15.888956Z'
+  pr: 1506
+  head: d0b04966399706b4597c1ef3522e685a970f79ea
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
