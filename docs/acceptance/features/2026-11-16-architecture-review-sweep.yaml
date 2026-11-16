@@ -29,9 +29,15 @@ rows:
       side only fails CI
     origin:
     - spec:2026-11-16-architecture-review-sweep#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gate_vocabulary.py#test_annotations_derive_from_the_vocabulary
+      - super-fr:tests/unit/test_gate_vocabulary.py#test_tag_patterns_match_exactly_the_post_merge_gates
+      - super-fr:tests/unit/test_gate_vocabulary.py#test_a_divergent_literal_is_reported
+    status: ci
+    notes: Phase 1 derived the annotations and both tag patterns from fr.gates; CI compares
+      each to the vocabulary and reports a planted divergent literal and a one-sided
+      pattern.
     verify: none
   - id: session-status-one-vocabulary
     capability: runner session status
