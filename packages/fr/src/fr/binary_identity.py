@@ -88,7 +88,7 @@ def judge(env: Mapping[str, str], *, identity: str, from_venv: bool) -> Verdict:
         return Verdict(
             "warn",
             f"fr: this fr was upgraded to {identity.partition(' ')[0]} after the session "
-            f"pinned {pin.partition(' ')[0]}; restart the session to re-pin it.",
+            f"pinned {pin.partition(' ')[0]}; resume or restart the session to re-pin it.",
         )
     if from_venv:
         return Verdict(

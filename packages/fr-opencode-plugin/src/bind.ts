@@ -14,7 +14,8 @@
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { stripCommandPrefix } from "./guard";
-import { run, type RunAnswer } from "./spawn";
+import { runFr } from "./fr";
+import type { RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const S = "[ \\t\\n\\v\\f\\r]";
@@ -93,7 +94,7 @@ async function isChild(session: unknown, id: string): Promise<boolean> {
 }
 
 function defaultRunner(timeoutMs: number): FrRunner {
-  return (args, cwd) => run("fr", args, { cwd, timeoutMs });
+  return (args, cwd) => runFr(args, { cwd, timeoutMs });
 }
 
 /** `execute.after`: bind on a completed `fr isolation up|exec|down` / `fr run start`. */

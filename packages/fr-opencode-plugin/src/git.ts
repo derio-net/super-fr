@@ -15,7 +15,7 @@
 // through `spawn.runSync` — bounded (SIGKILL on expiry) and never throwing.
 // `setup` calls `resolveGit` eagerly and says so when it comes back empty; the
 // gates themselves stay fail-open, deliberately, matching the bash guard.
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
 
 import { runSync } from "./spawn";
@@ -45,6 +45,7 @@ function candidates(env: GitEnv): string[] {
 
 function executable(path: string): boolean {
   try {
+    if (!statSync(path).isFile()) return false;
     accessSync(path, constants.X_OK);
     return true;
   } catch {
@@ -54,7 +55,9 @@ function executable(path: string): boolean {
 
 function onPath(name: string, env: GitEnv): string | undefined {
   for (const dir of (env.PATH ?? "").split(delimiter)) {
-    if (!dir) continue;
+    // Only an absolute entry: a relative or empty one names a file in whatever
+    // directory this process happens to run from, possibly one planted in the repo.
+    if (!dir || !isAbsolute(dir)) continue;
     const full = join(dir, name);
     if (executable(full)) return full;
   }

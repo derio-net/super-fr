@@ -563,7 +563,8 @@ tripwire will catch drift anyway:
 
 super-fr is itself fr-enabled — `.devcontainer/dev` + `.devcontainer/admin`
 profiles exist, and `docs/superpowers/plans/` holds its live plans.
-Either alone qualifies it. Both the Claude Code PreToolUse hook and
+Any one qualifies it (so does a plan archive, `docs/superpowers/implemented/plans/` or the legacy
+`docs/superpowers/archived-plans/`). Both the Claude Code PreToolUse hook and
 the OpenCode 2 plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
 re-export of `packages/fr-opencode-plugin`) block file-writing tools
 outside a valid `.fr-isolation` workspace — editing this repo's own source is

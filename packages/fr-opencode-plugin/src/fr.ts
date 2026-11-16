@@ -5,6 +5,8 @@
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
 
+import { run, type RunAnswer, type RunOptions } from "./spawn";
+
 function executableFile(path: string): string | null {
   try {
     if (!statSync(path).isFile()) return null;
@@ -37,4 +39,17 @@ export function resolveFr(
     if (found !== null) return found;
   }
   return null;
+}
+
+/** The missing-fr answer: nothing ran, so there is no exit status and no output. */
+export const NO_FR: RunAnswer = { code: null, stdout: "" };
+
+/**
+ * `fr <args…>` through the file `resolveFr()` names at CALL time, never a bare `fr` that a
+ * relative PATH entry could answer from the repo's own directory. No trusted fr: `NO_FR`,
+ * with nothing spawned. Bounded and never throwing, like `run`.
+ */
+export async function runFr(args: string[], options: RunOptions): Promise<RunAnswer> {
+  const fr = resolveFr();
+  return fr === null ? NO_FR : run(fr, args, options);
 }

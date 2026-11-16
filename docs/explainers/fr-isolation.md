@@ -127,7 +127,10 @@ hook points; while a pipeline is live, a sibling guard judges the shell.)
    blocks the way back (`git switch <registered branch>`).
 
 Before step 1 the hook asks whether the repo is fr-enabled at all. That answer is not only
-"has a devcontainer profile or a plans directory". A repo on the **quiet** placement keeps
+"has a devcontainer profile, a plans directory or an archived-plans directory". The archive
+directory (`docs/superpowers/implemented/plans/`, or the older `docs/superpowers/archived-plans/`) counts because Git keeps no empty folder: once
+the last live plan is archived, a fresh clone may have no plans directory left (`fr archive`
+now leaves a `.gitkeep` there too). A repo on the **quiet** placement keeps
 neither in its checkout, so the hook also reads the switch directly. It looks for the last
 fetched `origin/fr` carrying `placement: quiet` (and a repo with an origin remote), or a
 workspace whose marker records `placement: quiet` or `stealth`.

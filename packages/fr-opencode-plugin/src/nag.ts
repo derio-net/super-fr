@@ -25,9 +25,9 @@
 //   - NEVER THROWS.
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { resolveFr } from "./fr";
+import { runFr as runResolvedFr } from "./fr";
 import { frPaths, placementEnabled, switchRefMaybe } from "./marker";
-import { run, type RunAnswer } from "./spawn";
+import type { RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -117,10 +117,7 @@ export function createNagHandler(options: NagHandlerOptions) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const runFr =
     options.runFr ??
-    ((cwd: string, args: string[]): Promise<RunAnswer> => {
-      const fr = resolveFr();
-      return fr === null ? Promise.resolve({ code: null, stdout: "" }) : run(fr, args, { cwd, timeoutMs });
-    });
+    ((cwd: string, args: string[]): Promise<RunAnswer> => runResolvedFr(args, { cwd, timeoutMs }));
   const served = options.served ?? new Set<string>();
 
   return async (event: ContextEvent | null | undefined): Promise<void> => {

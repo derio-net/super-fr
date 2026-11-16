@@ -18,16 +18,25 @@ input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 [ -n "$cwd" ] && [ -d "$cwd" ] || exit 0
 
-repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
-# `fr` is the one the decision library trusts (review p6-r2): an absolute FR_HARNESS_FR
-# path, else the first ABSOLUTE PATH entry holding an executable `fr`, never a relative
-# entry (`.`, `bin`), which would run a file the repo being opened planted. Every `fr`
-# below is that exact path. The library is sourced for this and for the placement checks.
+# `fr` and `git` are the ones the decision library trusts (review p6-r2, super-fr#1429):
+# an absolute FR_HARNESS_FR path, else the first ABSOLUTE PATH entry holding an
+# executable `fr` (likewise `git`, through `fr_git`), never a relative entry (`.`, `bin`),
+# which would run a file the repo being opened planted. Every `fr` below is that exact
+# path. The library is sourced for this and for the placement checks.
 lib="$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 [ -r "$lib" ] || exit 0
 # shellcheck source=lib/fr-isolation-decision.sh
 . "$lib"
-fr_fr_resolve || exit 0
+repo_root=$(fr_git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
+if ! fr_fr_resolve; then
+  # A `fr` reachable only through a relative or empty PATH entry is never run (super-fr#1429).
+  # Say so once, on stderr, rather than let the nag vanish with no cause (review l-errors-r2);
+  # `command -v` only looks the name up, it runs nothing.
+  if command -v fr >/dev/null 2>&1; then
+    echo "fr hooks: the only fr on PATH is reached through a relative or empty PATH entry, so the hooks ignore it; put fr's directory on PATH as an absolute path" >&2
+  fi
+  exit 0
+fi
 fr=$FR_FR_BIN
 
 # The cheap early exit, before any `fr` process: no acceptance fragment
@@ -71,10 +80,11 @@ if settings=$(cd "$repo_root" && "$fr" settings show --json 2>/dev/null); then
   fi
 fi
 
-# Capture stderr separately: `fr acceptance status` is exempt from the
-# artifact-migration gate, but `fr` still refuses when it cannot establish the
-# repo's state — and swallowing that made the nag disappear with no explanation
-# at the exact moment the operator most needed to know why (review r5-c5).
+# Capture stderr separately: `fr acceptance status` is NOT exempt from the
+# artifact-migration gate (super-fr#1279), so on the way in the gate may migrate and
+# commit (one `fr: migrated and committed` notice) or refuse. Stderr is captured so
+# both outcomes are relayed to the session, rather than swallowed and the nag
+# vanishing with no explanation (review r5-c5).
 err_file=$(mktemp) || exit 0
 out=$(cd "$repo_root" && "$fr" acceptance status --brief 2>"$err_file") || {
   err=$(cat "$err_file" 2>/dev/null)

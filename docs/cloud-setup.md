@@ -115,7 +115,7 @@ and schedules the next wake. The brief of a re-homed driver contains the same ho
 
 The cloud driver runs no `post_merge`. Every session it starts installs the current release
 through the setup script, and the driver updates itself before each pass (R18, R20). In a
-cloud session, that in-place update prints no "restart the session to re-pin" warning.
+cloud session, that in-place update prints no "resume or restart the session to re-pin it" warning.
 
 The driver's clone is its own, so it needs no manual setup. When `origin/HEAD` is not set,
 fr asks origin for the default branch (`git remote set-head origin --auto`). Before a

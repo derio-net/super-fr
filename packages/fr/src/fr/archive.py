@@ -13,7 +13,9 @@ nudge so the three surfaces can't disagree. The spec decision is
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
+import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -457,6 +459,59 @@ def _git_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> None:
         log.moves.append((src_rel, dst_rel))
 
 
+def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
+    """Leave a staged `.gitkeep` when archiving emptied the live plans root (super-fr#1277).
+
+    Git tracks no empty directory, so without it a fresh clone has no
+    `docs/superpowers/plans` and the edit gate reads the repo as not fr-enabled. Acts only
+    on the root `fr archive` itself reads. A `.gitkeep` that exists as anything but a
+    regular file (a symlink included, dangling or not) is left alone and unstaged, and the
+    create refuses to follow one; an existing regular one is staged, so an untracked copy
+    still reaches the archive's commit (review p1-r1).
+
+    Best effort: it never fails the archive (the plan has already moved), but a step that
+    fails says so on stderr, naming the path and the cause, because the result is the
+    silent ungated clone this exists to prevent (review l-errors-r1).
+    """
+    live_root = kind_dir("plan", space_for(repo_root))
+    # Compared resolved, then used as fr computes it: a caller may reach the plan through
+    # a symlinked prefix (macOS `/var` vs `/private/var`) that `repo_root` does not carry
+    # (independent review of #1478, item 3).
+    if plan_dir.parent.resolve() != live_root.resolve():
+        return
+    keep = live_root / ".gitkeep"
+    rel = keep.relative_to(repo_root)
+    try:
+        live_root.mkdir(parents=True, exist_ok=True)
+        if any(e.name != ".gitkeep" for e in live_root.iterdir()):
+            return
+        try:
+            if not stat.S_ISREG(os.lstat(keep).st_mode):
+                return
+        except FileNotFoundError:
+            flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
+            os.close(os.open(keep, flags, 0o644))
+    except OSError as e:
+        _warn_live_root(rel, f"could not write it: {e}")
+        return
+    added = subprocess.run(
+        ["git", "-C", str(repo_root), "add", "--", str(rel)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if added.returncode != 0:
+        _warn_live_root(rel, f"git add failed: {(added.stderr or '').strip()}")
+
+
+def _warn_live_root(rel: Path, cause: str) -> None:
+    print(
+        f"fr archive: warning: {rel} not staged ({cause}); commit it yourself, or a fresh "
+        "clone of a repo with no devcontainer profile reads as not fr-enabled (super-fr#1277)",
+        file=sys.stderr,
+    )
+
+
 def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
     """`git mv` an active plan dir to implemented/plans/. Returns the new path.
 
@@ -483,6 +538,7 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"(e.g. `git rm -r {src_rel}`)."
         )
     _git_mv(repo_root, src_rel, dst_rel)
+    _keep_live_root(repo_root, plan_dir)
     _archive_journal(repo_root, "plan", plan_dir.name)
     _archive_run(repo_root, src_rel)
     return repo_root / dst_rel

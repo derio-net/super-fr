@@ -44,7 +44,7 @@ session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
 [ -n "$cwd" ] && [ -n "$session_id" ] || exit 0
 
 # Pipeline skills only matter inside a repo; a non-git cwd is a no-op.
-repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
+repo_root=$(fr_git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -n "$repo_root" ] || exit 0
 
 # Linked worktree (.git is a file, not a dir) → this IS the isolation

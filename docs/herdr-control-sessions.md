@@ -7,7 +7,7 @@ covers:
   - packages/fr-herdr/src/**
   - packages/fr/src/fr/triage/batch*.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged
 ---
 
 # Herdr control sessions

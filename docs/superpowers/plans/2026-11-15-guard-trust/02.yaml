@@ -1,0 +1,97 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Hooks and the OpenCode plugin start only absolute-path git and fr (#1429)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - hooks-trust-absolute-path-only
+  tier: standard
+  files:
+  - plugins/super-fr/hooks/lib/fr-isolation-decision.sh
+  - plugins/super-fr/hooks/fr-worktree-create.sh
+  - plugins/super-fr/hooks/fr-binary-pin.sh
+  - plugins/super-fr/hooks/fr-session-bind.sh
+  - plugins/super-fr/hooks/fr-session-unbind.sh
+  - plugins/super-fr/hooks/fr-worktree-remove.sh
+  - plugins/super-fr/hooks/fr-run-idle-guard.sh
+  - packages/fr-opencode-plugin/src/*.ts
+  - packages/fr-opencode-plugin/test/*.test.ts
+  - tests/unit/test_hooks_*.py
+  - tests/unit/test_isolation_decision_core.py
+  - docs/**/*.md
+  estimate_lines: 420
+tasks:
+- number: 1
+  title: Git resolvers trust absolute PATH entries only (R3)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: bash test in tests/unit/test_isolation_decision_core.py: in a tmp cwd put an executable `bin/git` (writes a marker file and exits 0), run the library with PATH="bin:<abs dir holding the real git>" and FR_GIT_CANDIDATES unset; assert FR_GIT_BIN after fr_git_resolve is the absolute real git and the marker is never written; also PATH with "." and an empty entry. TS: in test/git.test.ts the same for resolveGit with PATH relative entries, and a directory named `git` on an absolute entry is skipped (isFile). Run; both fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: fr_git_resolve's non-absolute branch walks PATH like fr_fr_resolve (skip entries not starting with "/", take the first <dir>/<name> that is -f and -x), dropping `command -v`. git.ts onPath skips empty or non-isAbsolute entries and requires statSync().isFile() plus X_OK. Tests pass; `bun test` green.
+- number: 2
+  title: Every fr-starting hook runs the resolved fr (R4, bash)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: for each hook — fr-worktree-create.sh (gc reaper :59-60 and the `fr isolation up --session` call :129/:139), fr-binary-pin.sh, fr-session-bind.sh, fr-session-unbind.sh, fr-worktree-remove.sh, fr-run-idle-guard.sh — a test (extend the matching tests/unit/test_hooks_*.py, create one where none exists) that runs the hook with cwd at a fixture repo holding an executable `bin/fr` that writes a marker, PATH="bin:/usr/bin:/bin" and no absolute fr: assert the marker is never written and the hook exits as it does when fr is missing (0, or mimic_default output for worktree-create). A second case with an absolute fake fr on PATH asserts that one is run. Run; fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: source lib/fr-isolation-decision.sh where not yet sourced (pin, unbind, worktree-remove, idle-guard), replace each `command -v fr` test with `fr_fr_resolve || <today's missing-fr branch>` and each bare `fr` with "$FR_FR_BIN" (idle-guard: `exec "$FR_FR_BIN" run check --idle …`). No hook turns a failed resolve into a non-zero exit. Tests pass; `bash -n` and shellcheck (if available) clean.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: make sure every hook sources the lib the same way the existing ones do (path relative to the hook's own dir), and the existing hook test suites still pass: `uv run pytest -q --no-cov tests/unit/test_hooks_*.py tests/unit/test_isolation_decision_core.py`.
+- number: 3
+  title: Every fr-starting OpenCode module spawns resolveFr() (R4, TS)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in test/pin.test.ts, claim.test.ts, bind.test.ts, idle.test.ts: with PATH holding only a relative dir that contains an `fr` script writing a marker, the default (non-injected) runner spawns nothing and returns each module's missing-fr answer (no pin, no claim, no bind, no idle verdict); with an absolute fake fr on PATH the module spawns that exact path. Run `bun test`; fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: pin.ts, claim.ts, bind.ts and idle.ts call resolveFr() at call time; null gives the missing-fr answer without spawning; otherwise run(<that path>, …). spawn.ts unchanged. `bun test` green and the package typecheck clean.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: if the four modules repeat the same resolve-then-run code, fold it into one helper in fr.ts (e.g. `runFr(args, options)` returning the missing answer on null) and use it everywhere; `bun test` green. Then `uv run fr docs check --base origin/main` and fix any page it names (stamp or content).
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-15T18:25:42+00:00'
+      note: null
+  completion:
+    at: '2026-11-15T18:25:42+00:00'
+    note: null
+    observed_prs: []
