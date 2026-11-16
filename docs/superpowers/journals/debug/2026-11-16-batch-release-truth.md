@@ -40,3 +40,8 @@ fr.cloud._parse_version uses packaging.version (both RC spellings); an unparseab
 ### f-1290 · finding [fixed] · #1290 fixed: a tag with no GitHub Release gets one on the next run
 
 finish() asks release_exists (gh release view); 'not found' -> create_release on the existing tag (no retag), any other failed read refuses. Pinned by test_release_script.py::test_gh1290_a_failed_release_create_is_retried_on_the_next_run, ::test_gh1290_a_tag_with_its_release_is_left_alone, ::test_gh1290_an_unreadable_release_refuses_rather_than_guessing.
+
+<!-- fr:journal kind=finding scope=debug id=f-1393 created=2026-11-16T18:37:01+00:00 state=fixed -->
+### f-1393 · finding [fixed] · #1393 fixed: the RC since-tag is one HEAD contains
+
+_rcs_above(merged=True) picks 'since'; RC numbering still counts every tag. Pinned by test_gh1393_an_rc_tag_head_does_not_contain_is_not_the_since_tag and test_gh1393_the_next_rc_still_numbers_past_a_sibling_rc_tag.
