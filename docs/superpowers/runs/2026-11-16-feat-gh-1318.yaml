@@ -150,6 +150,14 @@ steps:
           findings: l-tests-r1
           lenses: docs-accuracy=17:none;tests=11:l-tests-r1
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-16T22:32:37+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-16T22:32:37+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 65fe70a5-99dc-4a3f-b249-8255221b4257
 driver: standalone
 fr_version: 8.0.3
