@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: d-plan-shape
+    global: true
     answered_by: operator
     title: "Plan shape: two agentic phases, code consolidations (standard) then the report, fragment and issues (hard)"
     body: |
@@ -16,6 +17,7 @@ journal:
       `tier-2026-11-16-architecture-review-sweep-p2` record the reasons.
   - kind: discovery
     id: plan-inputs-stored
+    global: true
     title: "The brainstorm's four module reviews are stored in the plan journal as unverified input for phase 2"
     body: |
       `review-run-cmd`, `review-triage-batch`, `review-isolation-local` and `review-plan-ops`
