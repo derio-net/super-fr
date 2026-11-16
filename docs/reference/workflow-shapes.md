@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-15 still true; the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape
+reviewed: 2026-11-15 still true; the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
 ---
 
 # Workflow shapes and the run cursor

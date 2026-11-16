@@ -28,6 +28,8 @@ from fr.triage.batch_drive import RUNS_DIR, GatedRow, find_run
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 
+ARCHIVED_RUNS_DIR = KIND_DIRS["run-archived"]
+
 EXIT_INPUTS = (
     KIND_DIRS["acceptance-fragment"],
     ".fr",
@@ -70,18 +72,21 @@ def _plan_paths(state: object) -> tuple[str, ...]:
 
 
 def _run_text(checkout: Checkout, ref: str, branch: str) -> tuple[str, str] | None:
-    """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does."""
+    """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does.
+    Both the live and the archived runs directories are read (gh#1399): the close-out
+    archives a run before its post-merge gate passes, and the rows it gates still owe."""
     texts: list[tuple[str, object]] = []
-    for name in checkout.list_dir(ref, RUNS_DIR):
-        if not name.endswith(".yaml"):
-            continue
-        text = checkout.show(ref, f"{RUNS_DIR}/{name}")
-        if text is None:
-            continue
-        try:
-            texts.append((text, yaml.safe_load(text)))
-        except yaml.YAMLError:
-            continue
+    for runs_dir in (RUNS_DIR, ARCHIVED_RUNS_DIR):
+        for name in checkout.list_dir(ref, runs_dir):
+            if not name.endswith(".yaml"):
+                continue
+            text = checkout.show(ref, f"{runs_dir}/{name}")
+            if text is None:
+                continue
+            try:
+                texts.append((text, yaml.safe_load(text)))
+            except yaml.YAMLError:
+                continue
     found = find_run([doc for _, doc in texts], branch)
     if found is None:
         return None

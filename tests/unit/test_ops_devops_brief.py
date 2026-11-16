@@ -5,6 +5,7 @@ close-out brief it printed before."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from fr.run.closeout import closeout_brief
 from fr.run.model import RunState, StepRecord, save_run_state
@@ -87,3 +88,36 @@ def test_the_devops_brief_still_needs_a_done_deliver(tmp_path: Path) -> None:
     save_run_state(tmp_path, state)
     result = _invoke(tmp_path, ["pickup", "--run", "r1"])
     assert result.exit_code == 2
+
+
+def test_gh1275_a_finished_devops_stage_says_so_instead_of_the_brief(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """gh#1275: once the gate's own record holds stage 8, `fr pickup --run` reports the
+    stage complete and names the workspace reap, never the `fr ops gate` command again."""
+    from fr.ops.gate import HostGateState, gate_state_path
+
+    monkeypatch.setenv("FR_OPS_GATE_DIR", str(tmp_path / "gate-state"))
+    _run(tmp_path, ops=True)
+    record = HostGateState(gate_state_path(tmp_path, "r1"))
+    for n in range(1, 9):
+        record.mark(n)
+
+    result = _invoke(tmp_path, ["pickup", "--run", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "fr ops gate --run" not in result.output
+    assert "DevOps stage complete" in result.output
+    assert "fr isolation down --branch feat/x" in result.output
+
+
+def test_gh1275_a_partly_run_stage_still_gets_the_brief(tmp_path: Path, monkeypatch: Any) -> None:
+    from fr.ops.gate import HostGateState, gate_state_path
+
+    monkeypatch.setenv("FR_OPS_GATE_DIR", str(tmp_path / "gate-state"))
+    _run(tmp_path, ops=True)
+    HostGateState(gate_state_path(tmp_path, "r1")).mark(1)
+
+    result = _invoke(tmp_path, ["pickup", "--run", "r1"])
+
+    assert "fr ops gate --run r1" in result.output, result.output
