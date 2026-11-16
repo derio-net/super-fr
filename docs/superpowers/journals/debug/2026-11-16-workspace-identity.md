@@ -20,3 +20,8 @@ Operator chose: three independent fixes, each failing-test-first, one draft PR. 
 ### d4 · finding [fixed] · Three fixes, each pinned by a failing-first test
 
 types.slug_holder/check_slug_free + load_state/delete_state ignore another branch's record, check called from _worktree_up_core (gh#1419); isolation_cmd._up_target routes a recorded workspace through _target_for (gh#1166); scaffold uses repo_cache_name() for name, runArgs, env file and placeholder (gh#1243). Tests: tests/unit/test_workspace_identity.py (4). Full suite: 16280 passed, 9 failed in test_isolation_agent_worktrees.py under host load ~14 over a 2h44m run; that file passes alone (19/19) and the isolation set in parallel (876/876); it uses none of the changed symbols.
+
+<!-- fr:journal kind=review scope=debug id=d5 created=2026-11-16T21:20:16+00:00 -->
+### d5 · review · Self-review of the diff: no findings
+
+Checked: explicit --path still refused (the state file is the shared key); an unreadable same-slug record keeps its old delete/overwrite behaviour; down/exec/status --branch on the colliding name now report no workspace instead of acting on the other branch's (intended). Quiet/stealth already refused via placement.quiet.check_feature_id, which runs first. No findings raised.
