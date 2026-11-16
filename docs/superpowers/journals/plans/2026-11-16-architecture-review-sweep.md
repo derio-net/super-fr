@@ -601,3 +601,35 @@ S, M, L and 'cheap' are defined under the budget table.
 ### p2-r12-resolved · finding [fixed] · resolves p2-r12: Seam table omits the guarded 'runner adapters never import fr.triage' seam (phase 2)
 
 Seam row added (test_import_direction.py:151, :163, planted case :192).
+
+<!-- fr:journal kind=review scope=plan id=review-lenses created=2026-11-16T22:32:36+00:00 -->
+### review-lenses · review · Lens review: docs-accuracy raised nothing; tests raised one finding, fixed
+
+docs-accuracy: the nine touched pages and the AGENTS.md additions were checked against the
+code they cover (gate names, session statuses, timestamp parsing, step gate tags, the
+strategy gate field, the exit remap); every claim and every new `reviewed:` note is true.
+
+tests: the reviewer tried to defeat each guard. The import guard's generic syntax-tree walk
+sees imports in every statement form, and no form the old regex guard caught is missed.
+The gate-vocabulary, status-alias, timestamp-scan, fragment and status-label guards each
+fail on a realistic regression. One gap: the line-budget tripwire did not pin which
+modules it holds (l-tests-r1).
+
+```review-lens
+lens: docs-accuracy
+examined: AGENTS.md, docs/explainers/fr-dispatch.md, docs/explainers/fr-exit-gates.md, docs/explainers/fr-triage.md, docs/explainers/fr-wave-driver.md, docs/herdr-control-sessions.md, docs/ops.md, docs/reference/cli.md, docs/reference/dispatch-lifecycle.md, docs/verification-strategies.md, packages/fr/src/fr/gates.py, packages/fr/src/fr/spec.py, packages/fr/src/fr/ops/stub.py, packages/fr/src/fr/verification/model.py, packages/fr/src/fr/triage/model.py, packages/fr/src/fr/triage/timestamps.py, packages/fr-claude-cloud/src/fr_claude_cloud/mailbox.py
+```
+```review-lens
+lens: tests
+examined: tests/unit/test_import_direction.py, tests/unit/test_gate_vocabulary.py, tests/unit/test_triage_timestamps.py, tests/unit/test_tripwire_module_budget.py, tests/unit/test_acceptance_status_labels.py, tests/unit/test_triage_architecture.py, packages/fr/src/fr/gates.py, packages/fr/src/fr/spec.py, packages/fr/src/fr/ops/stub.py, packages/fr/src/fr/triage/timestamps.py, packages/fr-claude-cloud/src/fr_claude_cloud/mailbox.py
+```
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-16T22:32:36+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · module-budget tripwire does not pin the set of budgeted modules (BUDGETS keys), so dropping or renaming an entry silently unguards that module
+
+tests/unit/test_tripwire_module_budget.py: the test is parametrized over BUDGETS itself.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-16T22:32:36+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: module-budget tripwire does not pin the set of budgeted modules (BUDGETS keys), so dropping or renaming an entry silently unguards that module
+
+A HELD set names the five modules; test_every_held_module_has_a_budget compares it with BUDGETS both ways, and planted dropped and renamed budget lines are reported.
