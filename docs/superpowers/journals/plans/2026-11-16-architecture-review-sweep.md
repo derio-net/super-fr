@@ -382,3 +382,81 @@ The test now also parses mailbox.py and requires `FrStatus` to be assigned the n
 ### p1-r4-resolved · finding [fixed] · resolves p1-r4: test_gate_vocabulary.py: planted-divergence test compares two constants and uses no helper the real assertions share (phase 1)
 
 One `mismatch(annotation, vocabulary)` helper serves the real assertions and the planted case, which must return exactly the extra (or missing) name.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-unverified-inputs-checked created=2026-11-16T22:02:16+00:00 phase=2 -->
+### p2-unverified-inputs-checked · discovery · The four module reviews mostly held; their wrong counts and ranges are corrected in the report (phase 2)
+
+Re-checked at ab3b3a19. Held: plan_ops.py and isolation/local.py line ranges, run_cmd.py's
+176 exits, 228 prints, four ContextVars, 32 environ reads and 55 exits in the evidence
+cluster; plan_ops.tick/complete_phase have no caller under packages/; plan_ops.py has 14 raw
+write_text calls and no write_text_atomic; triage_kanban_cmd.py:355 imports ci_none_at from
+triage_batch_cmd (and its docstring at :7-8 says it never does). Corrected: run_cmd.py has
+223 functions plus 8 classes, evidence starts at :1541 and deliver gates end at :7576;
+triage_batch_cmd.py is 7,334 lines (R03 removed 9), _Driver is 3731-6935 and calls _say 14
+times; plan_ops.py is imported by 30 test files with 125 from-import statements (not 34 and
+144); 9 attribute patches of run_cmd (not 13); the isolation private-method patch counts
+were not reproduced. New: R05 has 11 copies (not 8), R06 has 5 same-policy copies (not 4),
+and usage/compare.py:173 and debt/engine.py:310 are copies of one naive-as-UTC reader.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-render-needs-facts created=2026-11-16T22:02:16+00:00 phase=2 -->
+### p2-render-needs-facts · discovery · fr triage architecture render needs collected forge facts; the fragment is proven by the test only (phase 2)
+
+`fr triage state import --from docs/triage --repo derio-net/super-fr --dir <scratch>` copied
+38 files; `fr triage architecture render --now-ref origin/main --dir <scratch>` then refused
+with "no facts ... run fr triage collect first". No collect was run (a forge-wide read). The
+new test resolves the manifest and validates every fragment, which is the R13 contract.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-acceptance-check-stale-base created=2026-11-16T22:02:16+00:00 phase=2 -->
+### p2-acceptance-check-stale-base · discovery · fr acceptance check fails on 27 errors, all in rows main merged after this branch's base (phase 2)
+
+The check fetches origin/main (now 66c9cb81, past this branch's base 39f06125) and folds its
+fragments: rows owed-close-at-merge, archive-refusal-writes-nothing, archive-dry-run,
+owed-durable-at-archive and owed-reuse-uncapped cite spec 2026-11-15-owed-archive-side-effects
+and tests this branch does not have. None of the errors names a row of this feature. Merging
+origin/main into the branch should clear them; that is the orchestrator's call, not done here.
+Separately, five of this feature's six rows are still not-implemented (phase 1 moved none);
+architecture-page-shows-decomposition is now ci.
+
+<!-- fr:journal kind=decision scope=plan id=p2-comments-left-to-orchestrator created=2026-11-16T22:02:16+00:00 phase=2 -->
+### p2-comments-left-to-orchestrator · decision · The three issue comments the plan asks for (#1286, #1174, #1318) were not posted (phase 2)
+
+P2.T6.S2 asks for a cross-link comment on #1286, the kanban finding on #1174 and the issue
+list on #1318. The dispatch brief forbade commenting on any existing issue and editing #1318,
+so they are owed to the orchestrator. Texts:
+
+#1286: "#1318's review filed #1512 for the same-loader extraction of the two `_StrictLoader`
+classes (artifacts/structure.py:46, harness/model.py:153; lenses/model.py:18 imports the
+private one). This issue keeps the backend switch; one owner should sequence the two."
+
+#1174: "#1318's review (section 3, C3-1): commands/triage_kanban_cmd.py:355 imports
+`ci_none_at` from triage_batch_cmd inside `local_ci_none`, while its docstring (:7-8) says the
+import never goes that way; triage_batch_cmd.py:64 and :85-86 import the kanban module at
+module level. Tracked here, no second issue."
+
+#1318: "Review report: docs/superpowers/audits/2026-11-16-architecture-review.md (this PR).
+Found: #1499, #1500, #1419, #1501 (F01-F04), #1174 (kanban import), #1286 (YAML backend).
+Filed: F05 #1507, F06 #1508, F07 #1509, F09 #1510, cursor race #1511, R04 #1512, R05 #1513,
+R06 #1514, run_cmd slices #1515, triage_batch_cmd/batch_drive slices #1516,
+isolation/local slices #1517, plan_ops slices #1518, designs (a) #1519, (b) #1520, (c) #1521,
+(d) #1522, small readers #1523."
+
+<!-- fr:journal kind=decision scope=plan id=p2-one-commit-for-the-report created=2026-11-16T22:02:16+00:00 phase=2 -->
+### p2-one-commit-for-the-report · decision · Tasks 1-4 were committed as one report commit (phase 2)
+
+Tasks 1-4 each write sections of the same new file; they landed in one commit (b6244cb5)
+rather than four partial ones. Task 5 and task 6 have their own commits.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-16T22:02:16+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+a document section; no code to refactor
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-16T22:02:16+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+a document section; no code to refactor
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t6 created=2026-11-16T22:02:16+00:00 phase=2 -->
+### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
+
+issue filing and gate runs only; no code to refactor
