@@ -7447,6 +7447,13 @@ batches:
     handle: w3F:p8
     run: 2026-11-15-feat-batch-owed-archive
     archive: chore/closeout-2026-11-16-4
+  - kind: closeout
+    at: '2026-11-16T18:41:39.654525Z'
+    runner: herdr
+    handle: w3F:p8
+    run: 2026-11-15-feat-batch-owed-archive
+    archive: chore/closeout-2026-11-16-4
+    archived: 1505
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -8057,6 +8064,7 @@ closeouts:
   planned:
   - owed-archive
   pr: 1505
+  merged: true
   head: a474cebb1d5e9b9762aa5fe68a71e8ca1f9bd230
   members:
   - owed-archive
