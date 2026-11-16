@@ -7268,6 +7268,11 @@ batches:
     - super-fr#1399
   - kind: post_merge
     at: '2026-11-16T16:03:43.376611Z'
+  - kind: closeout
+    at: '2026-11-16T16:04:35.246720Z'
+    runner: herdr
+    handle: w3F:p6
+    archive: chore/closeout-2026-11-16-2
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7883,3 +7888,10 @@ closeouts:
   handle: w3F:p6
   planned:
   - gate-truth
+  pr: 1495
+  head: 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
+  members:
+  - gate-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-gate-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-gate-truth.md"
