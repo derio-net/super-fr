@@ -25,3 +25,8 @@ scripts/release.py _rcs_above reads every RC tag; `since = rcs[-1][1]` can be a 
 ### d9d5e306aba5 · root-cause · #1291: one concurrency group drops a pending workflow_dispatch run
 
 .github/workflows/release.yml: group: release, cancel-in-progress false. GitHub keeps one pending run per group, so a later push run replaces a pending dispatch --version run. Fix: dispatch runs get a group of their own, keyed by run id.
+
+<!-- fr:journal kind=root-cause scope=debug id=1773ac64f6c1 created=2026-11-16T18:18:33+00:00 -->
+### 1773ac64f6c1 · root-cause · #1202: a channel switch keeps untracked files in the managed cache
+
+scripts/bootstrap.sh switches with checkout -f and no clean; install.sh's preflight then refuses 'untracked files'. Fix: git clean -fdx after the switch (the cache is bootstrap-managed, no operator work lives there).
