@@ -1,10 +1,4 @@
 {
   "schema": 1,
-  "stops": {
-    "gate-truth": {
-      "head": "cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd",
-      "reason": "PR #1477 (batch gate-truth) conflicts with origin/main in a change merge will not resolve: docs/reference/cli.md, docs/reference/workflow-shapes.md (only a version file whose PR change is the version alone is resolved). The scratch worktree is kept for inspection at /Users/idermitzakis/Docs/projects/super-fr/.fr/triage-state/derio-net--super-fr/merge/fix/batch-gate-truth",
-      "at": "2026-11-16T15:31:09+00:00"
-    }
-  }
+  "stops": {}
 }

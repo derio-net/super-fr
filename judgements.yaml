@@ -7204,6 +7204,11 @@ batches:
     at: '2026-11-16T15:19:42.697979Z'
     pr: 1478
     head: ccaa3b30616b9056806be81e1972465a2d0fa794
+  - kind: approval
+    at: '2026-11-16T15:54:25.685744Z'
+    pr: 1478
+    head: ccaa3b30616b9056806be81e1972465a2d0fa794
+    voided_at: 50a78c7714b411bb1c92120cd7e1be6d174b430f
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7240,6 +7245,10 @@ batches:
     pr: 1477
     head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
     voided_at: acacea8675acbd7d90e8781ca1d3a0a82c0b4b16
+  - kind: approval
+    at: '2026-11-16T15:54:25.685744Z'
+    pr: 1477
+    head: acacea8675acbd7d90e8781ca1d3a0a82c0b4b16
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7290,6 +7299,13 @@ batches:
     handle: w3F:p5
     archive: chore/closeout-2026-11-16-1
     archived: 1490
+  - kind: claims_released
+    at: '2026-11-16T15:54:55.472007Z'
+    keys:
+    - super-fr#1454
+    - super-fr#1395
+    - super-fr#1303
+    - super-fr#1462
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
