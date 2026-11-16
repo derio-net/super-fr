@@ -30,3 +30,8 @@ The 'or repo_root' fallback is the only place the outcome None of product_checko
 ### rc-1433 · root-cause · The HEADS record is committed before the push and nothing undoes it on refusal
 
 It cannot move inside atomic_push's lock: commit_paths takes the same flock on its own handle, so nesting would self-deadlock. The record must be compensated after a refused push instead.
+
+<!-- fr:journal kind=finding scope=debug id=fix-1438 created=2026-11-16T21:30:25+00:00 state=fixed -->
+### fix-1438 · finding [fixed] · An unnamed product checkout is marked and said; the lookup is cached
+
+parser.parse sets Plan.checkout_unnamed and prints one stderr notice per plan per process when product_checkout_for names nothing; repo_root still falls back to the holding toplevel so the plan stays readable. product_checkout_for keeps named checkouts per (feature root, toplevel) and re-confirms with one space_for (misses not cached). Tests: test_placement_plan_paths.py::test_a_quiet_plan_with_no_nameable_checkout_is_marked_and_warned, ::test_the_product_checkout_lookup_is_cached_per_process (8 space_for calls before, 2 after).
