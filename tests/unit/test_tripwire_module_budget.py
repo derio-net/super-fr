@@ -23,6 +23,36 @@ BUDGETS: dict[str, int] = {
     f"{SRC}triage/batch_drive.py": 2200,
 }
 
+HELD: frozenset[str] = frozenset(
+    f"{SRC}{m}"
+    for m in (
+        "commands/run_cmd.py",
+        "commands/triage_batch_cmd.py",
+        "isolation/local.py",
+        "plan_ops.py",
+        "triage/batch_drive.py",
+    )
+)
+"""The modules R12 holds. A module leaves this set only when the report's plan for it is
+done, in a diff that says so: dropping its budget line alone fails."""
+
+
+def unheld(budgets: dict[str, int]) -> set[str]:
+    """Held modules with no budget, and budgets for a module that is not held."""
+    return set(HELD) ^ set(budgets)
+
+
+def test_every_held_module_has_a_budget() -> None:
+    assert unheld(BUDGETS) == set()
+
+
+def test_a_dropped_or_renamed_budget_is_reported() -> None:
+    """The planted cases: a budget line deleted, and one renamed to another path."""
+    dropped = {k: v for k, v in BUDGETS.items() if not k.endswith("plan_ops.py")}
+    assert unheld(dropped) == {f"{SRC}plan_ops.py"}
+    renamed = {**dropped, f"{SRC}plan_operations.py": 2600}
+    assert unheld(renamed) == {f"{SRC}plan_ops.py", f"{SRC}plan_operations.py"}
+
 
 def budget_problem(lines: int, budget: int) -> str | None:
     """Why `lines` against `budget` fails, or None when it holds."""
