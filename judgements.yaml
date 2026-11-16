@@ -7279,6 +7279,11 @@ batches:
     - super-fr#1462
   - kind: post_merge
     at: '2026-11-16T15:38:58.818659Z'
+  - kind: closeout
+    at: '2026-11-16T15:39:42.077094Z'
+    runner: herdr
+    handle: w3F:p5
+    archive: chore/closeout-2026-11-16-1
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
@@ -7821,3 +7826,10 @@ closeouts:
   handle: w3F:p5
   planned:
   - deliver-evidence
+  pr: 1490
+  head: 1a022c4edd0e09d86a60ef055090f17fa6901037
+  members:
+  - deliver-evidence
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-deliver-evidence.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-deliver-evidence.md"
