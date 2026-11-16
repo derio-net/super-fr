@@ -36,8 +36,12 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_archive_cmd.py#test_a_refused_archive_writes_nothing_even_with_issues_all
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_archive_refusal_writes_nothing
     status: ci
-    notes: x
+    notes: Built in run 2026-11-15-feat-batch-owed-archive; unit tests plus the row
+      scenario, which CI runs through tests/integration/test_scenarios.py; candidate
+      walk green
     verify: candidate
     scenario: tests/scenarios/archive-refusal-writes-nothing.sh
   - id: archive-dry-run
