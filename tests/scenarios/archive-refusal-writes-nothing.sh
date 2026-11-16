@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Row archive-refusal-writes-nothing: a refused `fr archive <plan>` leaves the tree, the
-# index and the forge as it found them, `--issues all` included; and on the default
+# Row archive-refusal-writes-nothing: a refused `fr archive <plan>` on a feature branch
+# leaves the tree, the index and the forge as it found them, `--issues all` included; and on the default
 # branch a plan skipped under `--all` says what it would record and writes nothing.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
@@ -50,6 +50,9 @@ snapshot() {
 before="$(snapshot)"
 
 # 1. A refused single-plan archive, with and without --issues all, changes nothing.
+# Off the default branch: there R8 records no owed entry anyway, which would hide a
+# refusal that records one (R7).
+git checkout -q -b feat/widget || fail "feature branch"
 for flags in "" "--issues all"; do
   # shellcheck disable=SC2086
   run_fr out archive "docs/superpowers/plans/$plan" $flags
@@ -60,6 +63,8 @@ for flags in "" "--issues all"; do
   refuse_grep '^(issue (create|comment|close)|label create)' "$(cat "$FAKE_GH_LOG")" \
     "a refusal wrote to the forge ($flags)"
 done
+
+git checkout -q main || fail "back to main"
 
 # 2. On the default branch, --all skips the plan and says what it would record.
 run_fr out archive --all
