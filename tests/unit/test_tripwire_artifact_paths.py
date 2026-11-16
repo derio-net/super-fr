@@ -447,7 +447,7 @@ FALLBACK_LINES: dict[str, list[str]] = {
     "packages/fr-opencode-plugin/src/marker.ts": [
         "if (isDir(`${toplevel}/docs/superpowers/plans`)) return true; // fr-paths-fallback",
         "if (isDir(`${toplevel}/docs/superpowers/implemented/plans`)) return true; // fr-paths-fallback",  # noqa: E501
-        "if (isDir(`${toplevel}/docs/superpowers/archived-plans`)) return true; // fr-paths-fallback",
+        "if (isDir(`${toplevel}/docs/superpowers/archived-plans`)) return true; // fr-paths-fallback",  # noqa: E501
     ],
     "packages/fr-opencode-plugin/src/nag.ts": [
         'return join(root, "docs", "acceptance"); // fr-paths-fallback',
