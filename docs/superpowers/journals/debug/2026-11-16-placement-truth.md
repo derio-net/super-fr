@@ -20,3 +20,8 @@ Batched as one root cause.
 ### ro-one-cause · ruled-out · Not one cause: two independent mechanisms
 
 1438 is a read-side substitution in parser.parse; 1433 is a write ordering in push_product_branch. No shared code. Operator chose to fix both in this one PR (asked 2026-11-16).
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1438 created=2026-11-16T18:18:22+00:00 -->
+### rc-1438 · root-cause · parse substitutes the toplevel for an unnamed product checkout and records no sign of it
+
+The 'or repo_root' fallback is the only place the outcome None of product_checkout_for is consumed, and it discards it.
