@@ -7232,6 +7232,14 @@ batches:
     checks:
     - 2 failing check(s)
     delivered: session
+  - kind: claims_released
+    at: '2026-11-16T16:49:26.098141Z'
+    keys:
+    - super-fr#1230
+    - super-fr#1259
+    - super-fr#1277
+    - super-fr#1279
+    - super-fr#1429
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7368,6 +7376,17 @@ batches:
     runner: herdr
     handle: w3F:p4
     branch: feat/batch-owed-archive
+  - kind: approval
+    at: '2026-11-16T16:48:33.274549Z'
+    pr: 1480
+    head: dda8eca87eea225ad745069b1967bfbcb1f9e162
+  - kind: conflict
+    at: '2026-11-16T16:49:24.161949Z'
+    head: dda8eca87eea225ad745069b1967bfbcb1f9e162
+    paths:
+    - packages/fr/src/fr/archive.py
+    delivered: session
+    handle: derio-net/super-fr/run/batch-owed-archive
 - id: workspace-identity
   title: Workspace identity
   ids:
