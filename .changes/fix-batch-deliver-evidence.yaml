@@ -1,2 +1,0 @@
-bump: patch
-summary: "Deliver and resolve witnesses no longer pass falsely: deliver refuses a fresh tests log older than a code change, a failed forge read in `tests: ci` exits 75 in one line, a capture script behind timeout/nice/env/nohup/time/stdbuf/caffeinate is witnessed, and a merged `local` row is stamped by amendment."
