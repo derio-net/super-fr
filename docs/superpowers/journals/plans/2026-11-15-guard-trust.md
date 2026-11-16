@@ -304,3 +304,8 @@ Not a defect: spec Design B requires the pin hook to resolve exactly as the hook
 ### ir-1478-1 · finding [open] (reviewer: in scope) · Independent review: the nag, sentinel, Bash guard and worktree create/remove hooks still ran a bare git, so #1429 was half-closed on bash (phase 2)
 
 A git planted in the base clone behind a relative PATH entry ran on the next SessionStart. Fixed: fr_git in the lib (fr_git_resolve, absolute entries only), every hook routed through it; tests/unit/test_hooks_planted_git.py plants git per hook and pins no bare git command in any hook script.
+
+<!-- fr:journal kind=finding scope=plan id=ir-1478-2 created=2026-11-16T15:38:16+00:00 phase=1 state=open review_scope=in -->
+### ir-1478-2 · finding [open] (reviewer: in scope) · Independent review: the fr-enabled fallback missed the legacy docs/superpowers/archived-plans dir on both harnesses (phase 1)
+
+Verified real: plan-legacy-archived is a PLAN_HOME_KINDS member (fr/artifacts/paths.py:71). Fixed in _fr_is_enabled and marker.ts frEnabled, pinned in FALLBACK_LINES, with tests on the bash library, the Claude Code and Hermes entrypoints and bun.
