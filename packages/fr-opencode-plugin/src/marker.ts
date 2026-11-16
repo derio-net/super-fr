@@ -149,10 +149,14 @@ export function warnIfFrUnresolved(): boolean {
   if (announcedMissingFr) return false;
   if (resolveFr() !== null) return false;
   announcedMissingFr = true;
+  // Also the one signal that bind, claim, idle, pin and nag stopped (review l-errors-r4):
+  // each gets `runFr`'s no-fr answer and stays silent by design.
   console.error(
-    "super-fr: no `fr` found on PATH; fr-enabled detection falls back to the plans dir, a " +
-      "devcontainer profile, the quiet switch on origin/fr and the workspace marker's placement. " +
-      "Install fr to resolve artifact paths from the placement."
+    "super-fr: no `fr` found on PATH (an fr reached only through a relative or empty PATH " +
+      "entry is never run, super-fr#1429); fr-enabled detection falls back to the plans dir, a " +
+      "devcontainer profile, the quiet switch on origin/fr and the workspace marker's placement, " +
+      "and session binding, phase claims, the idle nudge, the fr pin and the acceptance nag are off. " +
+      "Put fr's directory on PATH as an absolute path."
   );
   return true;
 }
@@ -271,6 +275,8 @@ export function frEnabled(toplevel: string): boolean {
     // no profiles
   }
   if (isDir(`${toplevel}/docs/superpowers/plans`)) return true; // fr-paths-fallback
+  if (isDir(`${toplevel}/docs/superpowers/implemented/plans`)) return true; // fr-paths-fallback
+  if (isDir(`${toplevel}/docs/superpowers/archived-plans`)) return true; // fr-paths-fallback
   if (placementEnabled(toplevel)) return true;
   if (!switchRefMaybe(toplevel)) return false;
   const paths = frPaths(toplevel);

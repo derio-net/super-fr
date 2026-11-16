@@ -169,7 +169,7 @@ if [ -n "$cd_target" ]; then
         # which answers 0 for any non-fr repo. That is right for the edit gate
         # (no business in a repo that never opted into fr) and wrong here (see
         # the dotfiles case above).
-        if rtop=$(git -C "$rtarget" rev-parse --show-toplevel 2>/dev/null) &&
+        if rtop=$(fr_git -C "$rtarget" rev-parse --show-toplevel 2>/dev/null) &&
            rtop=$(cd "$rtop" 2>/dev/null && pwd -P) && [ -n "$rtop" ]; then
           # The `fr …` allowances may compose with a `cd` that lands on a repo
           # TOPLEVEL — that is the shape #421 needs (`cd <repo-B> && fr
@@ -180,9 +180,9 @@ if [ -n "$cd_target" ]; then
           # Same repository, different linked worktree? Then the cross-repo
           # deny message would misname it "another repo" and tell the caller to
           # cut a worktree of it (rev2-f4).
-          if tcommon=$(git -C "$rtarget" rev-parse --git-common-dir 2>/dev/null) &&
+          if tcommon=$(fr_git -C "$rtarget" rev-parse --git-common-dir 2>/dev/null) &&
              tcommon=$(cd "$rtarget" && cd "$tcommon" 2>/dev/null && pwd -P) &&
-             rcommon=$(git -C "$rroot" rev-parse --git-common-dir 2>/dev/null) &&
+             rcommon=$(fr_git -C "$rroot" rev-parse --git-common-dir 2>/dev/null) &&
              rcommon=$(cd "$rroot" && cd "$rcommon" 2>/dev/null && pwd -P) &&
              [ "$tcommon" = "$rcommon" ]; then
             cd_same_repo_worktree=1
@@ -353,7 +353,7 @@ if [ -n "$(sentinel_workspaces)" ] && fr_sentinel_lock "$sentinel" 20; then
   # created while we waited read as "not listed", i.e. orphaned.
   workspaces=$(sentinel_workspaces)
   live=1   # unknown (non-git repo, or emptied/retired while we waited): no heal
-  if [ -n "$workspaces" ] && wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
+  if [ -n "$workspaces" ] && wt=$(fr_git -C "$rroot" worktree list --porcelain 2>/dev/null); then
     listed=""
     while IFS= read -r line; do
       case "$line" in

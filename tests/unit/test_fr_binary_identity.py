@@ -126,6 +126,7 @@ def test_an_upgraded_install_is_not_a_second_binary() -> None:
     verdict = judge({PIN_ENV: f"0.0.1 {package_dir}"}, identity=here, from_venv=False)
     assert verdict.action == "warn"
     assert "restart" in verdict.message
+    assert verdict.message.endswith("resume or restart the session to re-pin it.")
 
 
 def test_an_upgraded_install_in_a_cloud_session_is_silent() -> None:

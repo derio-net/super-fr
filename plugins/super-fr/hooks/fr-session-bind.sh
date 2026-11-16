@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat)
 
 command -v jq >/dev/null 2>&1 || exit 0
-command -v fr >/dev/null 2>&1 || exit 0
+fr_fr_resolve || exit 0
 
 [ "$(printf '%s' "$input" | jq -r '.tool_name // empty')" = "Bash" ] || exit 0
 [ -z "$(printf '%s' "$input" | jq -r '.agent_id // empty')" ] || exit 0
@@ -66,12 +66,12 @@ branch=$(printf '%s' "$first" | sed -nE 's/.*--branch(=|[[:space:]]+)("([^"]+)"|
 case "$verb" in
   up|exec)
     if [ -n "$branch" ]; then
-      fr isolation attach --session "$session_id" --repo "$repo" --branch "$branch" --harness claude >/dev/null 2>&1 || true
+      "$FR_FR_BIN" isolation attach --session "$session_id" --repo "$repo" --branch "$branch" --harness claude >/dev/null 2>&1 || true
     else
-      fr isolation attach --session "$session_id" --repo "$repo" --harness claude >/dev/null 2>&1 || true
+      "$FR_FR_BIN" isolation attach --session "$session_id" --repo "$repo" --harness claude >/dev/null 2>&1 || true
     fi ;;
   down)
-    fr isolation detach --session "$session_id" >/dev/null 2>&1 || true ;;
+    "$FR_FR_BIN" isolation detach --session "$session_id" >/dev/null 2>&1 || true ;;
 esac
 
 exit 0

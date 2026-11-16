@@ -160,14 +160,36 @@ fr_git_resolve() {
         FR_GIT_BIN="$_fr_cand"
         ;;
       *)
-        _fr_res=$(command -v "$_fr_cand" 2>/dev/null) || continue
-        [ -n "$_fr_res" ] || continue
-        FR_GIT_BIN="$_fr_res"
+        # Walk PATH like fr_fr_resolve: `command -v` honours a RELATIVE entry (`.`,
+        # `bin`, an empty one), i.e. a file in whatever directory the hook runs from.
+        # Only an absolute entry's executable regular file is ever git.
+        _fr_grest="${PATH:-}:"
+        while [ -n "$_fr_grest" ]; do
+          _fr_gdir=${_fr_grest%%:*}
+          _fr_grest=${_fr_grest#*:}
+          case "$_fr_gdir" in /*) ;; *) continue ;; esac
+          if [ -f "$_fr_gdir/$_fr_cand" ] && [ -x "$_fr_gdir/$_fr_cand" ]; then
+            FR_GIT_BIN="$_fr_gdir/$_fr_cand"
+            return 0
+          fi
+        done
+        continue
         ;;
     esac
     return 0
   done
   return 1
+}
+
+# fr_git <args...>: run the git fr_git_resolve trusts (absolute PATH entries, or an
+# absolute FR_GIT_CANDIDATES entry), never one a relative PATH entry reaches. Returns 127,
+# as a missing command would, when there is none, so each hook's own "no git" posture
+# holds: the SessionStart and worktree hooks fail open, the Bash guard stays armed
+# (super-fr#1429; independent review of #1478, item 1). Every hook runs git through this,
+# and tests/unit/test_hooks_planted_git.py fails on a bare `git` command in any of them.
+fr_git() {
+  fr_git_resolve || return 127
+  "$FR_GIT_BIN" "$@"
 }
 
 # --- internal helpers (shared by decide_edit and decide_cwd) ---------------
@@ -314,7 +336,8 @@ fr_switch_ref_maybe() {
 # Return 0 if the given resolved toplevel is fr-enabled, else 1 (spec 2026-11-04
 # repo-feature-settings R26). fr-enabled is any of the DIRECT checks, none of which
 # needs `fr`:
-#   - a devcontainer profile, or an fr plans dir in the checkout (the legacy test; it
+#   - a devcontainer profile, or an fr plan home in the checkout: the live plans dir, the
+#     archive, or the legacy archived-plans dir (super-fr#1277; the legacy test; it
 #     runs whether or not `fr` resolves, plan-journal decision p6-plans-test-always);
 #   - a workspace whose `.fr-isolation` marker records `placement` quiet or stealth;
 #   - the QUIET switch: the last fetched `refs/remotes/origin/fr:settings.yaml`, with
@@ -330,6 +353,8 @@ _fr_is_enabled() {
     [ -f "$_fr_cfg" ] && return 0
   done
   [ -d "$1/docs/superpowers/plans" ] && return 0  # fr-paths-fallback
+  [ -d "$1/docs/superpowers/implemented/plans" ] && return 0  # fr-paths-fallback
+  [ -d "$1/docs/superpowers/archived-plans" ] && return 0  # fr-paths-fallback
   _fr_placement_enabled "$1" && return 0
   _fr_paths_enabled "$1" && return 0
   return 1

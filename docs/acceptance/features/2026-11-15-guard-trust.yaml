@@ -1,0 +1,105 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-15-guard-trust
+repo: derio-net/super-fr
+rows:
+  - id: archive-keeps-live-plans-root
+    capability: fr archive
+    acceptance: Archiving the last live plan leaves a tracked docs/superpowers/plans/.gitkeep,
+      so the live plans root exists in every fresh clone
+    origin:
+    - spec:2026-11-15-guard-trust#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_live_root.py#test_archiving_the_last_plan_leaves_a_staged_gitkeep
+      - super-fr:tests/unit/test_archive_live_root.py#test_a_gitkeep_symlink_is_neither_followed_nor_replaced
+    status: ci
+    notes: 'R1 proven in CI: last-plan archive stages plans/.gitkeep (fresh clone keeps
+      the dir), symlink neither followed nor replaced, untracked copy staged, staging
+      failure reported'
+    verify: none
+  - id: gate-survives-last-plan-archive
+    capability: fr-isolation edit gate
+    acceptance: A repo whose only plans are archived stays fr-enabled on Claude Code,
+      Hermes and OpenCode in every fresh clone, so a base-clone edit is still denied
+    origin:
+    - spec:2026-11-15-guard-trust#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_repo_with_only_archived_plans_is_fr_enabled
+      - super-fr:tests/unit/test_hooks_isolation_required.py#test_a_repo_with_only_archived_plans_blocks_a_base_edit
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py#test_a_repo_with_only_archived_plans_blocks_a_base_edit
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_repo_with_only_legacy_archived_plans_is_fr_enabled
+      - super-fr:tests/unit/test_hooks_isolation_required.py#test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py#test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit
+    status: ci
+    notes: 'R2 proven in CI on every harness: a repo with only docs/superpowers/implemented/plans,
+      or only the legacy docs/superpowers/archived-plans (independent review of #1478,
+      item 2), and no plans root or profile denies a base-clone edit (bash library,
+      Claude Code and Hermes entrypoints, OpenCode frEnabled)'
+    verify: none
+  - id: hooks-trust-absolute-path-only
+    capability: hook binary resolution
+    acceptance: A git or fr reachable only through a relative PATH entry is never run
+      by a super-fr hook or the OpenCode plugin
+    origin:
+    - spec:2026-11-15-guard-trust#R3
+    - spec:2026-11-15-guard-trust#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_planted_fr.py#test_a_planted_fr_on_a_relative_path_entry_is_never_run
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_relative_path_entry_holding_a_git_is_never_run
+      - super-fr:packages/fr-opencode-plugin/test/resolved-fr.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/git.test.ts
+      - super-fr:tests/unit/test_hooks_planted_git.py#test_a_planted_git_on_a_relative_path_entry_is_never_run
+    status: ci
+    notes: 'R3/R4 proven in CI: a planted git or fr behind bin, ./bin, . and empty PATH
+      entries is never run by either git resolver, any hook that runs git (nag, sentinel,
+      Bash guard, worktree create/remove; independent review of #1478, item 1) or any
+      fr-starting hook or plugin module; a tripwire fails on a bare git command in any
+      hook script'
+    verify: none
+  - id: lock-probe-ignores-cwd
+    capability: file lock probes
+    acceptance: The fr and fr-herdr lock probes never import a Python module from their
+      working directory
+    origin:
+    - spec:2026-11-15-guard-trust#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_file_lock.py#test_the_lock_probe_never_imports_from_the_cwd
+      - super-fr:tests/unit/test_herdr_managed.py#test_the_pane_lock_probe_never_imports_from_the_cwd
+    status: ci
+    notes: 'R5 proven in CI: a planted fcntl.py in the cwd is not imported by either
+      lock probe'
+    verify: none
+  - id: resume-repins-fr-binary
+    capability: fr binary pin
+    acceptance: A resumed Claude Code session is pinned to the fr installed at resume,
+      and the upgrade warning gives advice that works
+    origin:
+    - spec:2026-11-15-guard-trust#R7
+    - spec:2026-11-15-guard-trust#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_binary_pin.py#test_the_pin_reaches_every_pinned_sibling_hook_file
+      - super-fr:tests/unit/test_hooks_binary_pin.py#test_a_sibling_without_a_final_newline_gets_the_pin_on_its_own_line
+      - super-fr:tests/unit/test_fr_binary_identity.py
+    status: ci
+    notes: 'R7/R8 proven in CI: every pinned sibling env file ends on the newest pin
+      (append-only, symlinks skipped, newline-safe, own file once); warning says resume
+      or restart'
+    verify: none
+amendments:
+  - row: hooks-trust-absolute-path-only
+    op: reword
+    base: 0
+    acceptance: Neither git resolver, and no super-fr hook or OpenCode plugin module
+      that starts fr, runs a binary reached only through a relative PATH entry
+    why: 'spec-review f4: bare git calls in hook scripts are a non-goal (d2), so the
+      claim is narrowed to what R3/R4 build'

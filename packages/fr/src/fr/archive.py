@@ -13,7 +13,9 @@ nudge so the three surfaces can't disagree. The spec decision is
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
+import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -414,6 +416,9 @@ class MoveLog:
 
     moves: list[tuple[Path, Path]] = field(default_factory=list)
     owed_journals: list[tuple[str, str]] = field(default_factory=list)
+    # `_keep_live_root`'s staged `.gitkeep`s, so R7's undo takes them back too:
+    # `(len(moves) when staged, repo-relative path, whether fr created the file)`.
+    keeps: list[tuple[int, Path, bool]] = field(default_factory=list)
 
     def __bool__(self) -> bool:
         return bool(self.moves)
@@ -458,6 +463,64 @@ def _git_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> None:
         log.moves.append((src_rel, dst_rel))
 
 
+def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
+    """Leave a staged `.gitkeep` when archiving emptied the live plans root (super-fr#1277).
+
+    Git tracks no empty directory, so without it a fresh clone has no
+    `docs/superpowers/plans` and the edit gate reads the repo as not fr-enabled. Acts only
+    on the root `fr archive` itself reads. A `.gitkeep` that exists as anything but a
+    regular file (a symlink included, dangling or not) is left alone and unstaged, and the
+    create refuses to follow one; an existing regular one is staged, so an untracked copy
+    still reaches the archive's commit (review p1-r1).
+
+    Best effort: it never fails the archive (the plan has already moved), but a step that
+    fails says so on stderr, naming the path and the cause, because the result is the
+    silent ungated clone this exists to prevent (review l-errors-r1).
+    """
+    live_root = kind_dir("plan", space_for(repo_root))
+    # Compared resolved, then used as fr computes it: a caller may reach the plan through
+    # a symlinked prefix (macOS `/var` vs `/private/var`) that `repo_root` does not carry
+    # (independent review of #1478, item 3).
+    if plan_dir.parent.resolve() != live_root.resolve():
+        return
+    keep = live_root / ".gitkeep"
+    rel = keep.relative_to(repo_root)
+    created = False
+    try:
+        live_root.mkdir(parents=True, exist_ok=True)
+        if any(e.name != ".gitkeep" for e in live_root.iterdir()):
+            return
+        try:
+            if not stat.S_ISREG(os.lstat(keep).st_mode):
+                return
+        except FileNotFoundError:
+            flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
+            os.close(os.open(keep, flags, 0o644))
+            created = True
+    except OSError as e:
+        _warn_live_root(rel, f"could not write it: {e}")
+        return
+    added = subprocess.run(
+        ["git", "-C", str(repo_root), "add", "--", str(rel)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if added.returncode != 0:
+        _warn_live_root(rel, f"git add failed: {(added.stderr or '').strip()}")
+    log = _MOVE_LOG.get()
+    if log is not None and (created or added.returncode == 0):
+        log.keeps.append((len(log.moves), rel, created))
+
+
+def _warn_live_root(rel: Path, cause: str) -> None:
+    print(
+        f"fr archive: warning: {rel} not staged ({cause}); commit it yourself, or a fresh "
+        "clone of a repo with no devcontainer profile reads as not fr-enabled (super-fr#1277)",
+        file=sys.stderr,
+    )
+
+
 def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
     """`git mv` an active plan dir to implemented/plans/. Returns the new path.
 
@@ -487,6 +550,7 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
         start = len(log.moves)
         try:
             _git_mv(repo_root, src_rel, dst_rel)
+            _keep_live_root(repo_root, plan_dir)
             _archive_journal(repo_root, "plan", plan_dir.name)
             _archive_run(repo_root, src_rel)
         except BaseException as e:
@@ -535,11 +599,57 @@ def _reverse_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> str | None:
     return None if done.returncode == 0 else (done.stderr or "").strip() or "git mv failed"
 
 
+def _unstage_keep(repo_root: Path, rel: Path, created: bool) -> str | None:
+    """Undo `_keep_live_root`: the index entry back to HEAD's, and the file removed when
+    fr created it. The error text, or `None`."""
+    done = subprocess.run(
+        ["git", "-C", str(repo_root), "reset", "-q", "--", str(rel)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if done.returncode != 0:
+        # No HEAD yet: nothing to reset to, so drop the index entry instead.
+        done = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "rm",
+                "-q",
+                "--cached",
+                "--ignore-unmatch",
+                "--",
+                str(rel),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if done.returncode != 0:
+            return (done.stderr or "").strip() or "git reset failed"
+    if created:
+        try:
+            (repo_root / rel).unlink(missing_ok=True)
+        except OSError as e:
+            return f"could not remove it: {e}"
+    return None
+
+
 def _undo_staged(repo_root: Path, log: MoveLog, start: int, error: BaseException) -> None:
     """R7: a plan archive that fails after staging part of its moves leaves the
     index as it was. Reverses `log.moves[start:]`, newest first, and extends
     `error` with each staged path it could not put back."""
     stuck: list[str] = []
+    # A `.gitkeep` was staged after the move that emptied the plans root, so it goes
+    # first: unstaged back to HEAD, and deleted when fr created it.
+    for entry in reversed([k for k in log.keeps if k[0] > start]):
+        _, rel, created = entry
+        why = _unstage_keep(repo_root, rel, created)
+        if why is None:
+            log.keeps.remove(entry)
+        else:
+            stuck.append(f"{rel} (staged by the archive: {why})")
     for src, dst in reversed(log.moves[start:]):
         why = _reverse_mv(repo_root, src, dst)
         if why is None:
@@ -548,7 +658,7 @@ def _undo_staged(repo_root: Path, log: MoveLog, start: int, error: BaseException
             stuck.append(f"{dst} (staged from {src}: {why})")
     if stuck:
         error.args = (
-            f"{error}; these staged moves could not be undone, run `git mv` back by hand: "
+            f"{error}; these staged changes could not be undone, put them back by hand: "
             + "; ".join(stuck),
         )
 

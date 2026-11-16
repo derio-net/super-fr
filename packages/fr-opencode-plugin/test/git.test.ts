@@ -115,3 +115,43 @@ describe("git", () => {
     expect(git(dir, "rev-parse", "--quiet", "--verify", "refs/heads/nope")).toBeUndefined();
   });
 });
+
+// guard-trust R3: only an absolute PATH entry's regular executable file is `git`.
+import { chmodSync, writeFileSync, existsSync } from "node:fs";
+
+describe("resolveGit trusts absolute PATH entries only", () => {
+  test("a relative or empty PATH entry holding a git is never resolved or run", () => {
+    const repo = join(scratch, "planted");
+    mkdirSync(join(repo, "bin"), { recursive: true });
+    const ran = join(scratch, "planted-git-ran");
+    const planted = join(repo, "bin", "git");
+    writeFileSync(planted, `#!/bin/sh\ntouch "${ran}"\nexit 0\n`);
+    chmodSync(planted, 0o755);
+    const realDir = realGit!.slice(0, realGit!.lastIndexOf("/"));
+    delete process.env.FR_GIT_CANDIDATES;
+    const cwd = process.cwd();
+    try {
+      process.chdir(repo);
+      for (const rel of ["bin", "./bin", "", "."]) {
+        process.env.PATH = `${rel}:${realDir}`;
+        const bin = resolveGit();
+        expect(bin).not.toBeNull();
+        expect(bin!.startsWith("/")).toBe(true);
+        expect(bin).not.toContain("planted");
+        git(repo, "rev-parse", "--show-toplevel");
+      }
+    } finally {
+      process.chdir(cwd);
+    }
+    expect(existsSync(ran)).toBe(false);
+  });
+
+  test("a directory named git on an absolute PATH entry is skipped", () => {
+    const trap = join(scratch, "trap");
+    mkdirSync(join(trap, "git"), { recursive: true });
+    const realDir = realGit!.slice(0, realGit!.lastIndexOf("/"));
+    delete process.env.FR_GIT_CANDIDATES;
+    process.env.PATH = `${trap}:${realDir}`;
+    expect(resolveGit()).toBe(`${realDir}/git`);
+  });
+});

@@ -50,6 +50,18 @@ describe("resolveMarker", () => {
     expect(result.hasValidMarker).toBe(false);
   });
 
+  test("frEnabled is true when only docs/superpowers/implemented/plans exists", () => {
+    mkdirSync(join(repo, "docs", "superpowers", "implemented", "plans", "x"), { recursive: true });
+    const result = resolveMarker(join(repo, "README.md"));
+    expect(result.frEnabled).toBe(true);
+  });
+
+  test("frEnabled is true when only the legacy docs/superpowers/archived-plans exists", () => {
+    mkdirSync(join(repo, "docs", "superpowers", "archived-plans", "x"), { recursive: true });
+    const result = resolveMarker(join(repo, "README.md"));
+    expect(result.frEnabled).toBe(true);
+  });
+
   test("frEnabled is true when a docs/superpowers/plans dir exists", () => {
     mkdirSync(join(repo, "docs", "superpowers", "plans"), { recursive: true });
     const result = resolveMarker(join(repo, "README.md"));
@@ -330,6 +342,9 @@ describe("quiet and stealth are fr-enabled (R26)", () => {
     }
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("no `fr` found");
+    // review l-errors-r4: it also names the relative-entry cause and what stops working.
+    expect(lines[0]).toContain("relative or empty PATH entry");
+    expect(lines[0]).toContain("session binding, phase claims, the idle nudge");
   });
 });
 

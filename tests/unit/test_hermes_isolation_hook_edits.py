@@ -216,3 +216,26 @@ def test_hermes_refuses_another_repos_fr_worktree(tmp_path: Path) -> None:
     wt.parent.mkdir(parents=True)
     _git(other, "worktree", "add", "-q", "-b", "fr", str(wt), "refs/remotes/origin/fr")
     assert blocked(run_hook(payload(spec_in(wt)), {"HOME": str(home)}))
+
+
+def test_a_repo_with_only_archived_plans_blocks_a_base_edit(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    shutil.rmtree(repo / ".devcontainer")
+    d = repo / "docs" / "superpowers" / "implemented" / "plans" / "x"
+    d.mkdir(parents=True)
+    (d / "_meta.yaml").write_text("plan: x\n")
+    # R2 alone must carry it (review p1-r2): no live plans root, no profile.
+    assert not (repo / "docs" / "superpowers" / "plans").exists()
+    assert not (repo / ".devcontainer").exists()
+    assert blocked(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"}))
+
+
+def test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit(tmp_path: Path) -> None:
+    # Independent review of #1478, item 2: the legacy `archived-plans/` plan home.
+    repo = fr_repo(tmp_path)
+    shutil.rmtree(repo / ".devcontainer")
+    d = repo / "docs" / "superpowers" / "archived-plans" / "x"
+    d.mkdir(parents=True)
+    (d / "_meta.yaml").write_text("plan: x\n")
+    assert not (repo / "docs" / "superpowers" / "plans").exists()
+    assert blocked(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"}))

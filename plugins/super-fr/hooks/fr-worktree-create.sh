@@ -12,12 +12,18 @@
 # files them under `~/.cache/fr/agent-worktrees/<repo-key>/<name>`, locks each
 # with the Claude pid, and `fr isolation gc` reaps the finished, clean ones.
 set -eu
+# One definition of "fr-enabled" (R26: quiet and stealth count), shared with the edit gate,
+# and the one trusted `git`/`fr` (absolute PATH entries only, super-fr#1429).
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 input=$(cat)
 name=$(printf '%s' "$input" | jq -r '.name // empty')
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
 [ -n "$name" ] && [ -n "$cwd" ] || { echo "fr-worktree-create: missing name or cwd" >&2; exit 1; }
-root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || {
+fr_git_resolve || {
+  echo "fr-worktree-create: no trusted git (only absolute PATH entries count)" >&2; exit 1; }
+root=$(fr_git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || {
   echo "fr-worktree-create: $cwd is not a git repo" >&2; exit 1; }
 
 mimic_default() {
@@ -25,8 +31,8 @@ mimic_default() {
   dir="$root/.claude/worktrees/$name"
   if [ -d "$dir" ]; then printf '%s\n' "$dir"; exit 0; fi
   mkdir -p "$root/.claude/worktrees"
-  base=$(git -C "$root" rev-parse --verify -q origin/HEAD 2>/dev/null || git -C "$root" rev-parse HEAD)
-  git -C "$root" worktree add --detach "$dir" "$base" >&2
+  base=$(fr_git -C "$root" rev-parse --verify -q origin/HEAD 2>/dev/null || fr_git -C "$root" rev-parse HEAD)
+  fr_git -C "$root" worktree add --detach "$dir" "$base" >&2
   copy_worktreeinclude "$dir"
   printf '%s\n' "$dir"
   exit 0
@@ -36,28 +42,28 @@ agent_worktree() {
   # but filed under the MAIN checkout's key, so a subagent dispatching from its
   # own worktree makes a sibling, never a nested child. The key is the main
   # checkout's basename, as `fr.isolation.types.repo_cache_name` computes it.
-  common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
+  common=$(fr_git -C "$root" rev-parse --path-format=absolute --git-common-dir)
   case "$common" in */.git) key=$(basename "$(dirname "$common")") ;; *) key=$(basename "$root") ;; esac
   dir="$HOME/.cache/fr/agent-worktrees/$key/$name"
   if [ -d "$dir" ]; then
     # Two repos can share a basename: never hand a subagent the other's checkout.
-    theirs=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+    theirs=$(fr_git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
     [ "$theirs" = "$common" ] || {
       echo "fr-worktree-create: $dir belongs to another repository (${theirs:-not a git worktree})" >&2
       exit 1; }
     printf '%s\n' "$dir"; exit 0
   fi
   mkdir -p "$(dirname "$dir")"
-  base=$(git -C "$root" rev-parse --verify -q origin/HEAD 2>/dev/null || git -C "$root" rev-parse HEAD)
-  git -C "$root" worktree add --detach "$dir" "$base" >&2
+  base=$(fr_git -C "$root" rev-parse --verify -q origin/HEAD 2>/dev/null || fr_git -C "$root" rev-parse HEAD)
+  fr_git -C "$root" worktree add --detach "$dir" "$base" >&2
   # The hook's parent is the Claude process (measured live): while it lives, gc
   # leaves this worktree alone. Best effort; an unlocked one still ages out.
-  git -C "$root" worktree lock --reason "fr-agent pid=$PPID session=${session_id:-?}" "$dir" >&2 || true
+  fr_git -C "$root" worktree lock --reason "fr-agent pid=$PPID session=${session_id:-?}" "$dir" >&2 || true
   # Claude never fires WorktreeRemove for a subagent, and a non-fr repo never
   # runs `fr isolation up/down`, so each dispatch starts the reaper: detached,
   # every fd closed so Claude does not wait on it, a no-op when one already runs.
-  if command -v fr >/dev/null 2>&1; then
-    (fr isolation gc --agent-worktrees --repo "$root" </dev/null >/dev/null 2>&1 &)
+  if fr_fr_resolve; then
+    ("$FR_FR_BIN" isolation gc --agent-worktrees --repo "$root" </dev/null >/dev/null 2>&1 &)
   fi
   copy_worktreeinclude "$dir"
   printf '%s\n' "$dir"
@@ -72,8 +78,8 @@ copy_worktreeinclude() {
   # checkout has a real directory: never write through one (`no_link_under`),
   # never overwrite, and copy a source symlink as a link (`cp -P`), not its target.
   [ -f "$root/.worktreeinclude" ] || return 0
-  git -C "$root" ls-files -z --others --ignored --exclude-from="$root/.worktreeinclude" 2>/dev/null \
-    | git -C "$root" check-ignore -z --stdin 2>/dev/null \
+  fr_git -C "$root" ls-files -z --others --ignored --exclude-from="$root/.worktreeinclude" 2>/dev/null \
+    | fr_git -C "$root" check-ignore -z --stdin 2>/dev/null \
     | while IFS= read -r -d '' rel; do
         if ! no_link_under "$1" "$rel"; then
           echo "fr-worktree-create: not copying $rel (a symlink or file is in the way)" >&2
@@ -98,9 +104,6 @@ no_link_under() {
   [ ! -e "$p" ]
 }
 has_profile() { ls -d "$root"/.devcontainer/*/ >/dev/null 2>&1; }
-# One definition of "fr-enabled" (R26: quiet and stealth count), shared with the edit gate.
-# shellcheck source=lib/fr-isolation-decision.sh
-. "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 
 # Serialize per repo+worktree name, BEFORE any branch that creates one.
 # install.sh registers this script in settings.json as well as the plugin's
@@ -126,7 +129,13 @@ trap 'rm -rf "$lock"' EXIT
 echo $$ > "$lock/pid"
 
 case "$name" in agent-*) agent_worktree ;; esac
-if ! _fr_is_enabled "$root" || ! command -v fr >/dev/null 2>&1; then mimic_default; fi
+_fr_is_enabled "$root" || mimic_default
+if ! fr_fr_resolve; then
+  # Said, not silent (review l-errors-r3): the plain worktree carries no marker, so the
+  # edit gate will deny edits in it, and nothing else would point back here.
+  echo "fr-worktree-create: no trusted fr (only absolute PATH entries count); created a plain worktree, and edits in it will be gated" >&2
+  mimic_default
+fi
 
 branch="$name"; case "$name" in */*) ;; *) branch="wt/$name" ;; esac
 if [ -z "${FR_ISOLATION_TARGET:-}" ] && ! has_profile; then
@@ -136,7 +145,7 @@ fi
 args=(isolation up --repo "$root" --branch "$branch")
 [ -n "$session_id" ] && args+=(--session "$session_id" --harness claude)
 args+=(--print-path)
-out=$(fr "${args[@]}") || { echo "fr-worktree-create: fr isolation up failed" >&2; exit 1; }
+out=$("$FR_FR_BIN" "${args[@]}") || { echo "fr-worktree-create: fr isolation up failed" >&2; exit 1; }
 path=$(printf '%s\n' "$out" | sed -e 's/\x1b\[[0-9;]*m//g' | awk 'NF{l=$0} END{print l}')
 [ -n "$path" ] && [ -d "$path" ] || {
   echo "fr-worktree-create: no worktree path from fr isolation up" >&2; exit 1; }

@@ -50,8 +50,10 @@ a `pre_tool_call` hook on `write_file` / `patch`, merged into
 `execute_code`, whose writes only the sibling `fr-isolation-guard.sh` sees, and
 it catches git/gh mutations alone: make your edits with `write_file` / `patch`.
 
-A repo is **fr-enabled** when it has a `.devcontainer/<profile>/` profile or a
-`docs/superpowers/plans/` directory.
+A repo is **fr-enabled** when it has a `.devcontainer/<profile>/` profile, a
+`docs/superpowers/plans/` directory, or a plan archive: `docs/superpowers/implemented/plans/`
+or the legacy `docs/superpowers/archived-plans/` (the archive survives when the last live
+plan is archived).
 
 ## Why
 
@@ -268,7 +270,8 @@ pauses the operator explicitly waived.
 
 ## Brainstorming Override
 
-In a repo with fr plans (`docs/superpowers/plans/`) or devcontainer profiles
+In a repo with fr plans (`docs/superpowers/plans/`, or archived ones in
+`docs/superpowers/implemented/plans/` or the legacy `archived-plans/`) or devcontainer profiles
 (`.devcontainer/<profile>/`), feature brainstorms use `fr-brainstorming`
 instead of plain brainstorming — it enters fr-isolation first, so the base
 repo is never touched. Plain brainstorming remains for non-fr repos and
@@ -276,7 +279,8 @@ non-feature ideation.
 
 ## Debugging Override
 
-In a repo with fr plans (`docs/superpowers/plans/`) or devcontainer profiles
+In a repo with fr plans (`docs/superpowers/plans/`, or archived ones in
+`docs/superpowers/implemented/plans/` or the legacy `archived-plans/`) or devcontainer profiles
 (`.devcontainer/<profile>/`), debugging a bug, test failure, or unexpected
 behavior uses `fr-debugging` instead of plain
 `superpowers:systematic-debugging` — it enters fr-isolation first (reusing an
@@ -290,7 +294,8 @@ For a condensed overview of the fr-* skills and their CLI subcommands, run `fr s
 
 # Worktree Skill Override (fr-enabled repos)
 
-In a repo with fr plans (`docs/superpowers/plans/`) or devcontainer profiles
+In a repo with fr plans (`docs/superpowers/plans/`, or archived ones in
+`docs/superpowers/implemented/plans/` or the legacy `archived-plans/`) or devcontainer profiles
 (`.devcontainer/<profile>/`), any skill or instruction that would invoke
 `superpowers:using-git-worktrees` — "work in a worktree", "isolate this",
 executing-plans' isolation step — invokes `fr-isolation` instead:

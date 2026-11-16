@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Durable fr opt-in — archive keeps plans/.gitkeep, gates accept implemented/plans
+    (#1277)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - archive-keeps-live-plans-root
+  - gate-survives-last-plan-archive
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/archive.py
+  - plugins/super-fr/hooks/lib/fr-isolation-decision.sh
+  - packages/fr-opencode-plugin/src/marker.ts
+  - packages/fr-opencode-plugin/test/marker.test.ts
+  - tests/unit/test_archive*.py
+  - tests/unit/test_isolation_decision_core.py
+  - tests/unit/test_hooks_isolation_required.py
+  - tests/unit/test_tripwire_artifact_paths.py
+  - plugins/super-fr/rules/*.md
+  - .claude/rules/fr-isolation-required.md
+  - AGENTS.md
+  - docs/explainers/fr-isolation.md
+  - docs/**/*.md
+  - packages/fr/src/fr/harness/parity.yaml
+  - .opencode/**
+  - .hermes/**
+  - .changes/feat-batch-guard-trust.yaml
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: Smoke — the touched suites are green on the unchanged tree
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest -q --no-cov tests/unit/test_isolation_decision_core.py tests/unit/test_hooks_isolation_required.py tests/unit/test_archive_cmd.py tests/unit/test_tripwire_artifact_paths.py` and `bun test` inside packages/fr-opencode-plugin/; both green before any change (any red is recorded as a discovery, not fixed here).
+- number: 2
+  title: Archive writes plans/.gitkeep when it empties the live root (R1)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in a tests/unit/test_archive_*.py test, a git fixture repo with one plan under docs/superpowers/plans/<slug>/ is archived with archive_plan_dir; assert docs/superpowers/plans/.gitkeep exists, is a regular empty file and is staged (`git diff --cached --name-only`), and that a fresh `git clone` of a commit of that state has the dir. Second test: two plans, archiving one writes no .gitkeep. Third: a committed `.gitkeep` symlink (dangling, and pointing at a file outside the repo) is neither followed nor replaced and the target is untouched. Run; the first and third fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in archive_plan_dir after `_git_mv`, when plan_dir.parent equals kind_dir("plan", space_for(repo_root)) and holds no entry other than .gitkeep, and `.gitkeep` does not exist per os.lstat, create it with os.open(path, O_CREAT|O_EXCL|O_NOFOLLOW|O_WRONLY, 0o644) and `git add` it. MoveLog unchanged. Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep the .gitkeep logic in one small helper (e.g. `_keep_live_root`) with a docstring naming #1277; rerun the archive test files.
+- number: 3
+  title: Gates accept docs/superpowers/implemented/plans (R2)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: fixture repo with docs/superpowers/implemented/plans/<x>/, NO docs/superpowers/plans and NO .devcontainer profile. Bash: in tests/unit/test_isolation_decision_core.py (and the Claude Code entrypoint in test_hooks_isolation_required.py) assert `_fr_is_enabled` returns 0 and a base-clone edit is denied; also the Hermes entrypoint (plugins/super-fr/hooks/hermes/) denies. TS: in packages/fr-opencode-plugin/test/marker.test.ts assert frEnabled(toplevel) is true. Run; all fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `[ -d "$1/docs/superpowers/implemented/plans" ] && return 0  # fr-paths-fallback` after the plans test in _fr_is_enabled, and the matching `isDir` line with a `// fr-paths-fallback` comment in frEnabled. Add both exact lines to FALLBACK_LINES in tests/unit/test_tripwire_artifact_paths.py. Tests and tripwire pass; `bun test` green.
+- number: 4
+  title: Rule text, docs and mirrors state the new test
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Edit plugins/super-fr/rules/fr-isolation-required.md, .claude/rules/fr-isolation-required.md, plugins/super-fr/rules/fr-worktree-override.md, plugins/super-fr/rules/fr-plan-override.md, AGENTS.md ("Either alone qualifies it"), docs/explainers/fr-isolation.md and packages/fr/src/fr/harness/parity.yaml's fr-isolation-required summary to name docs/superpowers/implemented/plans/ as a third qualifier. Run scripts/sync-opencode.py and scripts/sync-hermes.py and commit the regenerated mirrors; run `uv run fr docs check --base origin/main` and fix each page it names (content edit when it states changed behaviour, else a reviewed stamp); run the prose tripwires (`uv run pytest -q --no-cov tests/unit/test_tripwire_*sync*.py tests/unit/test_tripwire_skill_tool_neutrality.py tests/unit/test_tripwire_harness_parity.py`).
+  - id: P1.T4.S2
+    text: |-
+      Add the change fragment .changes/feat-batch-guard-trust.yaml (`bump: patch`, one summary line covering the batch: durable fr opt-in after archiving, hooks start only absolute-path git/fr, cwd-proof lock probes, resume re-pins fr). Run `uv run --no-project python scripts/check-change-fragment.py origin/main`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-15T18:01:31+00:00'
+      note: null
+  completion:
+    at: '2026-11-15T18:01:31+00:00'
+    note: null
+    observed_prs: []

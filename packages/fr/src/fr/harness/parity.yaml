@@ -111,7 +111,7 @@ surfaces:
     script: fr-isolation-required.sh
     summary: >-
       Edits to tracked source must happen inside an fr-isolation workspace; a
-      repo is fr-enabled by a profile, a plans dir, the quiet switch on
+      repo is fr-enabled by a profile, a plans dir, an archived-plans dir, the quiet switch on
       origin/fr or a stealth marker, all found without `fr` (R26). A switch the
       hook cannot read positively as `placement: repo` counts as quiet. A plain
       repo spawns no `fr`; past an origin/fr ref, a bounded read-only `fr

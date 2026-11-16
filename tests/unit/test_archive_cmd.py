@@ -946,6 +946,26 @@ def test_a_move_that_fails_halfway_leaves_the_index_as_it_was(tmp_path, monkeypa
     assert _forge_writes(gh) == []
 
 
+def test_a_refusal_after_the_live_root_keep_unstages_it(tmp_path, monkeypatch):
+    """Archiving the last live plan stages `plans/.gitkeep` (super-fr#1277); a step
+    that fails after it, inside the same single-plan archive, takes that back too (R7)."""
+    repo = _repo(tmp_path)
+    plan = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
+    _seed(repo)
+    assert [p.name for p in plan.parent.iterdir()] == [plan.name]
+    before = _tree_state(repo)
+
+    def boom(*_a, **_k):  # noqa: ANN002, ANN003, ANN202
+        raise RuntimeError("spec sweep failed")
+
+    monkeypatch.setattr("fr.commands.archive_cmd.spec_archive_sweep", boom)
+    gh = _RecordingGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", str(plan.relative_to(repo))])
+    assert result.exit_code != 0, result.output
+    assert _tree_state(repo) == before
+    assert not (plan.parent / ".gitkeep").exists()
+
+
 def test_a_failed_reversal_names_every_staged_path(tmp_path, monkeypatch):
     from fr import archive as archive_mod
 

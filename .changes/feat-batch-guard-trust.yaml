@@ -1,0 +1,2 @@
+bump: patch
+summary: "Guards trust only what they should: fr stays opted in after archiving its last plan, hooks start only absolute-path git and fr, lock probes ignore the cwd, and a resumed session re-pins fr."

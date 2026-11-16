@@ -168,3 +168,15 @@ def test_restarted_archive_conflict_session_reconstructs_its_brief(descriptor, m
     saved = managed.handback(d.model_copy(update={"brief": brief}), brief)
     monkeypatch.setattr(managed, "conflict_current", lambda d: True)
     assert managed.reconstruct(saved) == brief
+
+
+def test_the_pane_lock_probe_never_imports_from_the_cwd(descriptor, tmp_path, monkeypatch):
+    """R5: the probe runs `python -P`, so a planted fcntl.py in the cwd is never imported."""
+    planted = tmp_path / "cwd"
+    planted.mkdir()
+    marker = tmp_path / "marker"
+    (planted / "fcntl.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
+    monkeypatch.chdir(planted)
+    with managed.pane_lock(descriptor.pane):
+        pass
+    assert not marker.exists()
