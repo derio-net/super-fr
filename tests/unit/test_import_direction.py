@@ -1,5 +1,8 @@
 """Package boundary enforcement (super-fr split, B2 style).
 
+Imports are read from the syntax tree (`ast`), not matched by pattern. Dynamic
+imports and entry-point loading are not judged.
+
 Dependency direction is the architecture: `fr` imports neither sibling;
 `fr_dispatch` never imports an adapter (adapters plug in via the Runner
 protocol / entry points). A violation here is a design regression, not
@@ -9,19 +12,20 @@ without the dispatch stack and the framework ships without any adapter.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
 PACKAGES = Path(__file__).resolve().parents[2] / "packages"
 
-_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+([a-zA-Z_][a-zA-Z0-9_]*)", re.M)
-
 
 def _imports_of(package_dir: Path) -> dict[Path, set[str]]:
+    """Root module of every import in every file under `package_dir`."""
     out: dict[Path, set[str]] = {}
-    for py in (package_dir).rglob("*.py"):
-        roots = set(_IMPORT_RE.findall(py.read_text()))
-        out[py] = roots
+    for py in package_dir.rglob("*.py"):
+        package = ".".join(py.relative_to(package_dir.parent).parent.parts)
+        nodes = _import_nodes(py.read_text(), package)
+        out[py] = {module.split(".")[0] for module, _names, _pos in nodes if module}
     return out
 
 
@@ -71,9 +75,10 @@ def test_a_third_fr_dispatch_import_is_refused(tmp_path: Path) -> None:
     fr_dispatch, and a soft point importing an adapter, are offenders."""
     commands = tmp_path / "commands"
     commands.mkdir()
-    (commands / "triage_batch_cmd.py").write_text("    from fr_dispatch.registry import x\n")
-    (commands / "other_cmd.py").write_text("    from fr_dispatch.registry import x\n")
-    (commands / "apply_cmd.py").write_text("    import fr_cncd\n")
+    in_def = "def f():\n    from fr_dispatch.registry import x\n"
+    (commands / "triage_batch_cmd.py").write_text(in_def)
+    (commands / "other_cmd.py").write_text(in_def)
+    (commands / "apply_cmd.py").write_text("def f():\n    import fr_cncd\n")
     offenders = _sibling_offenders(tmp_path)
     assert set(offenders) == {str(commands / "other_cmd.py"), str(commands / "apply_cmd.py")}
 
@@ -83,10 +88,7 @@ def test_soft_points_are_guarded() -> None:
     and carry the same install message."""
     for name in _SOFT_POINTS:
         src = (PACKAGES / "fr" / "src" / "fr" / "commands" / name).read_text()
-        assert 'importlib.util.find_spec("fr_dispatch")' in src, name
-        assert "\nfrom fr_dispatch" not in src, name  # no module-level import
-        assert "\nimport fr_dispatch" not in src, name
-        assert "uv tool install --with fr-dispatch fr" in src, name
+        assert not _soft_point_violations(src), name
 
 
 def test_fr_dispatch_never_imports_fr_cncd() -> None:
@@ -136,17 +138,24 @@ def test_fr_dispatch_never_imports_fr_herdr() -> None:
     assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
 
 
-_FR_TRIAGE_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+fr\.triage\b", re.M)
+def _imports_fr_triage(source: str) -> bool:
+    """True when `source` imports `fr.triage` (or `from fr import triage`)."""
+    return any(
+        module == "fr.triage"
+        or module.startswith("fr.triage.")
+        or (module == "fr" and "triage" in names)
+        for module, names, _position in _import_nodes(source)
+    )
 
 
 def test_fr_herdr_never_imports_fr_triage() -> None:
     """Spec §3.C: `fr-herdr` never imports `fr.triage` — a runner takes a
-    WorkItem, never triage state. `_IMPORT_RE` captures only the root `fr`,
-    so this needs its own pattern."""
+    WorkItem, never triage state. `_imports_of` keeps only the root `fr`,
+    so this reads the dotted module."""
     offenders = [
         str(py)
         for py in (PACKAGES / "fr-herdr" / "src" / "fr_herdr").rglob("*.py")
-        if _FR_TRIAGE_IMPORT_RE.search(py.read_text())
+        if _imports_fr_triage(py.read_text())
     ]
     assert not offenders, f"fr_herdr must not import fr.triage: {offenders}"
 
@@ -156,7 +165,7 @@ def test_fr_claude_cloud_never_imports_fr_triage() -> None:
     and the scope's state directory, never triage state through `fr.triage`."""
     src = PACKAGES / "fr-claude-cloud" / "src" / "fr_claude_cloud"
     assert (src / "__init__.py").is_file()
-    offenders = [str(py) for py in src.rglob("*.py") if _FR_TRIAGE_IMPORT_RE.search(py.read_text())]
+    offenders = [str(py) for py in src.rglob("*.py") if _imports_fr_triage(py.read_text())]
     assert not offenders, f"fr_claude_cloud must not import fr.triage: {offenders}"
 
 
@@ -182,9 +191,11 @@ def test_fr_dispatch_never_imports_fr_claude_cloud() -> None:
 
 def test_fr_herdr_tripwire_catches_a_triage_import(tmp_path: Path) -> None:
     """The pattern above must actually fire, or the guard is decorative."""
-    assert _FR_TRIAGE_IMPORT_RE.search("from fr.triage.model import Batch\n")
-    assert _FR_TRIAGE_IMPORT_RE.search("import fr.triage\n")
-    assert not _FR_TRIAGE_IMPORT_RE.search("from fr.triaged import x\n")
+    assert _imports_fr_triage("from fr.triage.model import Batch\n")
+    assert _imports_fr_triage("import fr.triage\n")
+    assert _imports_fr_triage("from fr import triage\n")
+    assert _imports_fr_triage("import os, fr.triage\n")
+    assert not _imports_fr_triage("from fr.triaged import x\n")
 
 
 def test_board_status_equals_session_status() -> None:
@@ -196,3 +207,130 @@ def test_board_status_equals_session_status() -> None:
     from fr_dispatch.protocols import SessionStatus
 
     assert get_args(BoardStatus) == get_args(SessionStatus)
+
+
+# --- the syntax-tree reader (G01) -------------------------------------------
+
+
+def _call_name(node: ast.expr) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return f"{_call_name(node.value)}.{node.attr}"
+    return ""
+
+
+def _is_type_checking(test: ast.expr) -> bool:
+    return _call_name(test) in {"TYPE_CHECKING", "typing.TYPE_CHECKING"}
+
+
+def _import_nodes(
+    source: str, package: str | None = None
+) -> list[tuple[str, tuple[str, ...], str]]:
+    """Every import in `source` as `(dotted module, imported names, position)`.
+
+    Position is `function` (inside any def or lambda), `type_checking` (in the body
+    of `if TYPE_CHECKING:` outside a function) or `module`. Reads the syntax tree, so
+    a comma list, an alias, a nested import and a multi-line import are all seen.
+    A `SyntaxError` is not caught: an unparseable file must fail the guard, not pass
+    it. Dynamic imports (`importlib.import_module`) and entry-point loading are not
+    judged: nothing here can see them.
+    """
+    found: list[tuple[str, tuple[str, ...], str]] = []
+    parts = package.split(".") if package else []
+
+    def visit(node: ast.AST, position: str) -> None:
+        if isinstance(node, ast.Import):
+            found.extend((a.name, (), position) for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if node.level:
+                keep = parts[: len(parts) - (node.level - 1)]
+                module = ".".join([*keep, *([module] if module else [])])
+            found.append((module, tuple(a.name for a in node.names), position))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            position = "function"
+        for field, value in ast.iter_fields(node):
+            children = value if isinstance(value, list) else [value]
+            for child in children:
+                if not isinstance(child, ast.AST):
+                    continue
+                inner = position
+                if (
+                    isinstance(node, ast.If)
+                    and field == "body"
+                    and position == "module"
+                    and _is_type_checking(node.test)
+                ):
+                    inner = "type_checking"
+                visit(child, inner)
+
+    visit(ast.parse(source), "module")
+    return found
+
+
+def _soft_point_violations(source: str) -> list[str]:
+    """Why `source` is not a well-formed soft point for `fr_dispatch`."""
+    problems = [
+        f"{module} imported at {position} level"
+        for module, _names, position in _import_nodes(source)
+        if module.split(".")[0] == _SOFT_TARGET and position == "module"
+    ]
+    guarded = any(
+        isinstance(n, ast.Call)
+        and _call_name(n.func) == "importlib.util.find_spec"
+        and n.args
+        and isinstance(n.args[0], ast.Constant)
+        and n.args[0].value == _SOFT_TARGET
+        for n in ast.walk(ast.parse(source))
+    )
+    if not guarded:
+        problems.append('no importlib.util.find_spec("fr_dispatch") call')
+    if "uv tool install --with fr-dispatch fr" not in source:
+        problems.append("install message missing")
+    return problems
+
+
+_GUARD = (
+    "import importlib.util\n"
+    'importlib.util.find_spec("fr_dispatch")\n'
+    '"uv tool install --with fr-dispatch fr"\n'
+)
+
+
+def test_import_nodes_read_every_spelling() -> None:
+    def mods(src: str) -> list[str]:
+        return [m for m, _n, _p in _import_nodes(src)]
+
+    assert mods("import os, fr_cncd\n") == ["os", "fr_cncd"]
+    assert mods("import fr_cncd as c\n") == ["fr_cncd"]
+    assert mods("from fr_cncd import x\n") == ["fr_cncd"]
+    assert mods("def f():\n    import fr_cncd\n") == ["fr_cncd"]
+    assert mods("try:\n    import fr_cncd\nexcept ImportError:\n    pass\n") == ["fr_cncd"]
+    assert mods("import os, fr.triage\n") == ["os", "fr.triage"]
+    assert _import_nodes("from fr import triage\n") == [("fr", ("triage",), "module")]
+    assert mods("from . import x\n") == [""]
+    assert _import_nodes("from . import x\n", package="fr.triage") == [
+        ("fr.triage", ("x",), "module")
+    ]
+
+
+def test_import_nodes_do_not_swallow_a_syntax_error() -> None:
+    import pytest
+
+    with pytest.raises(SyntaxError):
+        _import_nodes("    import x\n")
+
+
+def test_soft_point_violations_fire_on_planted_sources() -> None:
+    assert _soft_point_violations(_GUARD + "from fr_dispatch import x\n")
+    assert _soft_point_violations(
+        _GUARD + "try:\n    from fr_dispatch import x\nexcept ImportError:\n    x = None\n"
+    )
+    assert _soft_point_violations(_GUARD + "if SOMETHING:\n    from fr_dispatch import x\n")
+    assert _soft_point_violations('"uv tool install --with fr-dispatch fr"\n')  # no find_spec
+    assert not _soft_point_violations(_GUARD + "def f():\n    from fr_dispatch import x\n")
+    assert not _soft_point_violations(
+        _GUARD
+        + "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from fr_dispatch import x\n"
+    )
