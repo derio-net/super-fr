@@ -55,3 +55,8 @@ release.yml group: release-dispatch-<run_id> for workflow_dispatch, 'release' ot
 ### f-1202 · finding [fixed] · #1202 fixed: a channel switch cleans the managed cache
 
 bootstrap.sh runs git clean -q -f -d after the checkout (no -x: ignored files, which the preflight does not count, stay). Pinned by test_install_channels.py::test_a_channel_switch_removes_untracked_files_from_the_managed_cache and ::test_a_channel_switch_keeps_ignored_files_in_the_managed_cache.
+
+<!-- fr:journal kind=review scope=debug id=ca6b0b56bdbb created=2026-11-16T21:19:41+00:00 -->
+### ca6b0b56bdbb · review · Independent review: no defect in the five fixes; one side effect of #1291 fixed
+
+A separate reviewer read the final code of all five fixes and found no defect. It raised one side effect: with dispatch runs in their own concurrency group, a dispatch run and a push run can both reach finish, and the loser of the tag or Release race went red. Fixed in c8059d0ad: a rejected tag push is fine when origin's tag is on HEAD, and a failed create is fine when the Release now exists (tests test_gh1291_*). Left out of scope: (1) last_final, the base for the 'since' tag when no RC is merged, still reads unmerged final tags, and it must, because the base also sets the version number. (2) The floor-mismatch issue is still not filed when release create fails after the tag push, because a retry cannot recompute the floors. Both gaps were there before this change. Full suite: 16290 passed, 9 failed, all in tests/unit/test_isolation_agent_worktrees.py under host load ~15; that file passes 19/19 on its own.
