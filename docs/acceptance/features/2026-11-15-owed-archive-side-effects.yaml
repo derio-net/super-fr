@@ -80,9 +80,16 @@ rows:
     - spec:2026-11-15-owed-archive-side-effects#R12
     - spec:2026-11-15-owed-archive-side-effects#R13
     - spec:2026-11-15-owed-archive-side-effects#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_owed.py#test_owed_reuse_finds_the_marker_past_the_unlabelled_backlog
+      - super-fr:tests/unit/test_archive_owed.py#test_a_listing_at_its_limit_files_nothing_and_names_the_limit
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_owed_reuse_uncapped
+    status: ci
+    notes: Built in run 2026-11-15-feat-batch-owed-archive; unit tests plus the row
+      scenario, which CI runs through tests/integration/test_scenarios.py; candidate
+      walk green
     verify: candidate
     scenario: tests/scenarios/owed-reuse-uncapped.sh
 amendments:
