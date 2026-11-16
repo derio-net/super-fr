@@ -79,9 +79,13 @@ rows:
       budget follows its module down
     origin:
     - spec:2026-11-16-architecture-review-sweep#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_module_budget.py#test_budget_problem_fires_on_planted_numbers
+      - super-fr:tests/unit/test_tripwire_module_budget.py#test_module_is_within_its_budget
+    status: ci
+    notes: Phase 1 added the line-budget tripwire; CI fails on planted over-budget and
+      slack-budget numbers and passes for the five modules as committed.
     verify: none
   - id: architecture-page-shows-decomposition
     capability: fr triage architecture
