@@ -30,3 +30,8 @@ scripts/release.py _rcs_above reads every RC tag; `since = rcs[-1][1]` can be a 
 ### 1773ac64f6c1 · root-cause · #1202: a channel switch keeps untracked files in the managed cache
 
 scripts/bootstrap.sh switches with checkout -f and no clean; install.sh's preflight then refuses 'untracked files'. Fix: git clean -fdx after the switch (the cache is bootstrap-managed, no operator work lives there).
+
+<!-- fr:journal kind=finding scope=debug id=f-1201 created=2026-11-16T18:36:57+00:00 state=fixed -->
+### f-1201 · finding [fixed] · #1201 fixed: the cloud doctor compares RC installs
+
+fr.cloud._parse_version uses packaging.version (both RC spellings); an unparseable installed version is not ok, an unparseable latest stays unknown. Pinned by tests/unit/test_cloud_remedy.py::test_an_rc_install_is_compared_not_waved_through and ::test_an_unparseable_installed_version_is_not_ok.
