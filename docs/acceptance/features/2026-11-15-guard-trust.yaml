@@ -34,9 +34,14 @@ rows:
       - super-fr:tests/unit/test_hooks_isolation_required.py#test_a_repo_with_only_archived_plans_blocks_a_base_edit
       - super-fr:tests/unit/test_hermes_isolation_hook_edits.py#test_a_repo_with_only_archived_plans_blocks_a_base_edit
       - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      - super-fr:tests/unit/test_isolation_decision_core.py#test_a_repo_with_only_legacy_archived_plans_is_fr_enabled
+      - super-fr:tests/unit/test_hooks_isolation_required.py#test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py#test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit
     status: ci
-    notes: 'R2 proven in CI on a fixture with only implemented/plans, no plans dir,
-      no profile: bash core, Claude Code hook, Hermes hook and OpenCode frEnabled'
+    notes: 'R2 proven in CI on every harness: a repo with only docs/superpowers/implemented/plans,
+      or only the legacy docs/superpowers/archived-plans (independent review of #1478,
+      item 2), and no plans root or profile denies a base-clone edit (bash library,
+      Claude Code and Hermes entrypoints, OpenCode frEnabled)'
     verify: none
   - id: hooks-trust-absolute-path-only
     capability: hook binary resolution
