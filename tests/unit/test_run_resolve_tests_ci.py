@@ -280,3 +280,46 @@ def test_the_missing_tests_hint_offers_no_ci_without_one(tmp_path: Path) -> None
 
     assert result.exit_code == 2, result.output
     assert "tests=ci" not in _squash(result.output)
+
+
+# --- gh#1395: a failed forge read is retryable, never a traceback ----------------
+
+
+@pytest.mark.parametrize(
+    "stderr", ["read: operation timed out", "unexpected EOF", "HTTP 502: Bad Gateway"]
+)
+def test_a_failed_forge_read_exits_75_naming_it_and_applies_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stderr: str
+) -> None:
+    from fr.gh import GhError
+
+    repo, shipped, _ = _at_code(tmp_path)
+    _raising(monkeypatch, GhError(f"gh api failed: {stderr}", stderr=stderr, returncode=1))
+    before = _cursor(repo)
+
+    result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-1", "--evidence", "tests=ci"])
+
+    out = _squash(result.output)
+    assert result.exit_code == CI_PENDING_EXIT, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.exception
+    assert "Traceback" not in result.output
+    assert stderr in out
+    assert "Nothing was recorded" in out
+    assert _cursor(repo) == before
+
+
+def test_a_host_trust_refusal_is_no_retry_and_exits_2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refused host never starts answering on a retry, so it is a refusal."""
+    from fr.gh import GhHostRefusedError
+
+    repo, shipped, _ = _at_code(tmp_path)
+    _raising(monkeypatch, GhHostRefusedError("host git.example.invalid is not trusted"))
+    before = _cursor(repo)
+
+    result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-1", "--evidence", "tests=ci"])
+
+    assert result.exit_code == 2, result.output
+    assert "not trusted" in _squash(result.output)
+    assert _cursor(repo) == before

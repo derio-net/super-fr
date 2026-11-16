@@ -22,6 +22,7 @@ from tests.unit.record_support import (
     git,
     implement_record,
     resolve_empty_lens_review,
+    suite_ran_last,
     write_record,
 )
 from tests.unit.test_deliver_pr_body import PR, account_seeded_row
@@ -233,6 +234,7 @@ def test_a_fresh_log_over_an_uncommitted_code_path_refuses_naming_the_row(
     root = _at_deliver(tmp_path)
     _add_local(root)
     (root / TEST).write_text("def test_y():\n    assert 1\n")
+    suite_ran_last(root)  # the suite ran over the uncommitted edit
     before = (root / FRAGMENT).read_bytes()
 
     out = _deliver_record(root)
@@ -523,6 +525,7 @@ def test_a_level_ref_not_committed_at_head_refuses_naming_the_row(
     assert out.exit_code == 0, out.output
     commit_all(root, "local")
     assert git(root, "ls-files", "tests/test_new.py").strip() == ""
+    suite_ran_last(root)
     before = (root / FRAGMENT).read_bytes()
 
     out = _deliver_flags(root)
@@ -620,6 +623,7 @@ def test_a_design_named_fragment_that_cannot_be_stamped_refuses(
     _add_local(root)
     design = _rename_to_design(root)
     (root / TEST).write_text("def test_y():\n    assert 1\n")
+    suite_ran_last(root)
     before = (root / design).read_bytes()
 
     out = _deliver_record(root)
@@ -628,3 +632,117 @@ def test_a_design_named_fragment_that_cannot_be_stamped_refuses(
     flat = " ".join(out.output.split())
     assert "cannot stamp" in flat and ROW in flat and TEST in flat, out.output
     assert (root / design).read_bytes() == before
+
+
+# --- gh#1462: a merged row is stamped by an amendment, never in place ---------------
+
+
+def _merge_branch(root: Path) -> None:
+    """Everything on the branch so far lands on the default ref, as a merged feature."""
+    git(root, "push", "-q", "origin", "HEAD:main")
+    git(root, "fetch", "-q", "origin")
+
+
+def _assert_stamped_by_amendment(root: Path, fragment: Path, row: str) -> None:
+    data = yaml.safe_load((root / fragment).read_text())
+    merged = git(root, "show", f"origin/main:{fragment.as_posix()}")
+    held = [r for r in data.get("rows") or [] if r["id"] == row]
+    if held:
+        merged_row = next(r for r in yaml.safe_load(merged)["rows"] if r["id"] == row)
+        assert held[0] == merged_row, "the merged row's block is untouched"
+    stamped = [a for a in data["amendments"] if a["row"] == row and a["op"] == "set-status"][-1]
+    assert stamped["status"] == "local"
+    assert stamped["local"]["files"] == {TEST: _blob(root, TEST)}
+    status = fr(root, ["acceptance", "status"])
+    assert "unstamped" not in status.output, status.output
+    # The fixture's rows cite a spec the test repo never wrote, so `check` reports
+    # that; what gh#1462 broke is the in-place-edit refusal and the stale base.
+    check = " ".join(fr(root, ["acceptance", "check", "--no-fetch"]).output.split())
+    assert "edited in place" not in check, check
+    assert "stale" not in check, check
+
+
+@pytest.mark.parametrize("design_named", [False, True], ids=["slug", "slug-design"])
+def test_a_merged_local_row_is_stamped_by_an_amendment(
+    tmp_path: Path, live: dict[str, str], design_named: bool
+) -> None:
+    """gh#1462: deliver rewrote the merged row's block, the fold kept the merged
+    definition (still unstamped) and `fr acceptance check` failed "edited in place"."""
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    fragment = _rename_to_design(root) if design_named else FRAGMENT
+    _merge_branch(root)
+
+    out = _deliver_twice(root, live)
+
+    assert out.exit_code == 0, out.output
+    _assert_stamped_by_amendment(root, fragment, ROW)
+
+
+def test_a_merged_set_status_amendment_is_not_rewritten(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """A later run re-earning a row whose merged amendment set it `local`: the
+    merged amendment is history, so the stamp is a new amendment after it."""
+    root = _at_deliver(tmp_path)
+    _merged_row(tmp_path, root)
+    _set_local(root, "m-1")
+    (merged,) = _set_status_of(root, "m-1")
+    _merge_branch(root)
+
+    out = _deliver_twice(root, live)
+
+    assert out.exit_code == 0, out.output
+    first, second = _set_status_of(root, "m-1")
+    assert first == merged
+    assert second["base"] == merged["base"] + 1
+    _assert_stamped_by_amendment(root, FRAGMENT, "m-1")
+
+
+# --- gh#1454: a fresh deliver log is bound to the code it ran on --------------------
+
+
+def test_a_fresh_log_older_than_a_committed_code_change_is_refused(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """gh#1454: the suite ran, code changed and was committed, and deliver took the
+    log as covering HEAD (and stamped HEAD's tree on the `local` row)."""
+    import os
+
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    log = root / "suite.log"
+    log.write_text("n passed\n")
+    (root / TEST).write_text("def test_y():\n    assert 1 + 1 == 2\n")
+    later = log.stat().st_mtime + 5
+    os.utime(root / TEST, (later, later))
+    commit_all(root, "test: after the suite ran")
+
+    out = _deliver_record(root)
+
+    assert out.exit_code == 2, out.output
+    text = " ".join(out.output.split())
+    assert "is stale" in text and TEST in text, out.output
+    assert "local" not in _row(root)
+    assert load_run_state(root, RUN).steps["deliver"].state == "running"
+
+
+def test_a_fresh_log_written_after_the_last_code_change_is_accepted(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """The other half: editing, committing, THEN running the suite covers HEAD."""
+    import os
+
+    root = _at_deliver(tmp_path)
+    _add_local(root)
+    (root / TEST).write_text("def test_y():\n    assert 1 + 1 == 2\n")
+    commit_all(root, "test: before the suite ran")
+    log = root / "suite.log"
+    log.write_text("n passed\n")
+    later = (root / TEST).stat().st_mtime + 5
+    os.utime(log, (later, later))
+
+    out = _deliver_twice(root, live)
+
+    assert out.exit_code == 0, out.output
+    assert _row(root)["local"]["files"] == {TEST: _blob(root, TEST)}

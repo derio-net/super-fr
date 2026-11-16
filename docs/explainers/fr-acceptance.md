@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-14 a retired row still cites its spec for the staleness guard and backfill (VK support removed)
+reviewed: 2026-11-15 still true after deliver started stamping merged local rows by amendment (gh#1462)
 ---
 
 ## What does the matrix record?

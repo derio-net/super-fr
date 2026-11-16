@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-15 still true, fr gate pass --yes now exits 1 when a tracker close fails; its help line is unchanged
+reviewed: 2026-11-15 still true; the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged
 writing_standard: none
 ---
 
