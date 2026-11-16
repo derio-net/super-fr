@@ -309,3 +309,8 @@ A git planted in the base clone behind a relative PATH entry ran on the next Ses
 ### ir-1478-2 · finding [open] (reviewer: in scope) · Independent review: the fr-enabled fallback missed the legacy docs/superpowers/archived-plans dir on both harnesses (phase 1)
 
 Verified real: plan-legacy-archived is a PLAN_HOME_KINDS member (fr/artifacts/paths.py:71). Fixed in _fr_is_enabled and marker.ts frEnabled, pinned in FALLBACK_LINES, with tests on the bash library, the Claude Code and Hermes entrypoints and bun.
+
+<!-- fr:journal kind=finding scope=plan id=ir-1478-3 created=2026-11-16T15:38:17+00:00 phase=1 state=open review_scope=in -->
+### ir-1478-3 · finding [open] (reviewer: in scope) · Independent review: _keep_live_root compared an unresolved plan path, so a symlinked root skipped the .gitkeep silently (phase 1)
+
+archive_cmd passes repo_root / plan_rel unresolved while repo_root is resolved (macOS /var vs /private/var). Fixed: compare resolved forms, act on the path fr computes; test_a_plan_path_reached_through_a_symlinked_root_still_keeps_the_root.
