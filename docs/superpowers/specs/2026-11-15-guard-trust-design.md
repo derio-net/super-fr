@@ -55,8 +55,8 @@ that something other than the operator put in its path.
 ## Requirements
 
 R1. When `fr archive` moves the last plan folder out of `docs/superpowers/plans/`, it writes `docs/superpowers/plans/.gitkeep` and stages it in the same archive, so the live plans root exists in every fresh clone.
-R2. The edit gate on every harness (the bash decision library behind Claude Code and Hermes, and the OpenCode plugin) also treats a repo as fr-enabled when `docs/superpowers/implemented/plans/` exists; every existing fr-enabled check is kept. The shipped rules, the repo mirror rule and AGENTS.md state the new test.
-R3. The git resolvers (`fr_git_resolve` in the bash library, `resolveGit` in the OpenCode plugin) resolve a bare candidate name only through absolute PATH entries, to an executable regular file, and run exactly that path; an absolute candidate is unchanged.
+R2. The edit gate on every harness (the bash decision library behind Claude Code and Hermes, and the OpenCode plugin) also treats a repo as fr-enabled when `docs/superpowers/implemented/plans/` or the legacy archive `docs/superpowers/archived-plans/` exists; every existing fr-enabled check is kept. The shipped rules, the repo mirror rule and AGENTS.md state the new test.
+R3. The git resolvers (`fr_git_resolve` in the bash library, `resolveGit` in the OpenCode plugin) resolve a bare candidate name only through absolute PATH entries, to an executable regular file, and run exactly that path; an absolute candidate is unchanged. Every Claude Code hook that runs git runs the git `fr_git_resolve` returns (through the library's `fr_git`), never a bare name; when none resolves, it does what it does today when git is missing.
 R4. Every Claude Code hook and OpenCode plugin module that starts `fr` starts the absolute path `fr_fr_resolve` / `resolveFr` returns, never a bare name; when no trusted `fr` resolves, it does what it does today when `fr` is missing.
 R5. The lock probes in `fr/file_lock.py` and `fr_herdr/managed.py` start Python with `-P`, so a module in the inherited cwd is never imported.
 R6. `fr-acceptance-nag.sh` no longer claims that `fr acceptance status` is exempt from the artifact-migration gate.
@@ -68,8 +68,9 @@ R8. When the pin names the running package directory at another version, the war
 ### A. Durable opt-in (R1, R2) — #1277
 
 **Archive.** `archive_plan_dir` (`fr/archive.py`), after its `git mv`, looks at the live root,
-`plan_dir.parent`, and acts only when that equals `kind_dir("plan", space_for(repo_root))`
-(the root `archive_cmd` itself reads). When no entry other than `.gitkeep` is left there, and
+`plan_dir.parent`, and acts only when that, resolved, equals `kind_dir("plan", space_for(repo_root))`
+resolved (the root `archive_cmd` itself reads; resolved because a caller may reach the plan through
+a symlinked prefix that `repo_root` does not carry), and then acts on the path fr computes. When no entry other than `.gitkeep` is left there, and
 `.gitkeep` does not exist as any kind of entry (checked with `lstat`, so a committed symlink,
 dangling or not, counts as existing and is left alone), it creates the file with
 `os.open(…, O_CREAT | O_EXCL | O_NOFOLLOW | O_WRONLY)` and `git add`s it. Nothing else records
@@ -80,8 +81,9 @@ the file is harmless and the gate does not need it: those placements are fr-enab
 `_fr_placement_enabled`.
 
 **Gate.** `_fr_is_enabled` gains one line after the plans test,
-`[ -d "$1/docs/superpowers/implemented/plans" ] && return 0  # fr-paths-fallback`, and
-`frEnabled` in `marker.ts` gains the same `isDir` test with the same marker comment. Both new
+`[ -d "$1/docs/superpowers/implemented/plans" ] && return 0  # fr-paths-fallback`, and one for
+the legacy `docs/superpowers/archived-plans` (a plan home, `plan-legacy-archived`), and
+`frEnabled` in `marker.ts` gains the same `isDir` tests with the same marker comment. Both new
 lines are added, word for word, to `FALLBACK_LINES` in
 `tests/unit/test_tripwire_artifact_paths.py`, the map that pins every literal
 `docs/superpowers/…` path a hook may name. It is a filesystem fallback like the plans test
@@ -174,8 +176,8 @@ strategy: candidate
 gate: developer
 
 - archive-keeps-live-plans-root: none — CI tests: archive the only plan of a fixture repo, clone it fresh, and check `docs/superpowers/plans/.gitkeep` is tracked; a committed `.gitkeep` symlink is neither followed nor replaced
-- gate-survives-last-plan-archive: none — CI tests on a fixture with `docs/superpowers/implemented/plans/<x>`, no `docs/superpowers/plans` and no devcontainer profile (so R1's `.gitkeep` cannot be what passes it): a base-clone edit is denied by the bash library (Claude Code and Hermes entrypoints) and by the OpenCode plugin's `frEnabled`
-- hooks-trust-absolute-path-only: none — CI tests: with a planted `git` or `fr` behind a relative PATH entry, neither git resolver nor any `fr`-starting hook (each site listed in Background, `fr-worktree-create.sh:139` included) or plugin module runs it, and each still exits as it does when `fr` is missing (bash tests and `bun test`)
+- gate-survives-last-plan-archive: none — CI tests on a fixture with `docs/superpowers/implemented/plans/<x>` (and one with the legacy `docs/superpowers/archived-plans/<x>`), no `docs/superpowers/plans` and no devcontainer profile (so R1's `.gitkeep` cannot be what passes it): a base-clone edit is denied by the bash library (Claude Code and Hermes entrypoints) and by the OpenCode plugin's `frEnabled`
+- hooks-trust-absolute-path-only: none — CI tests: with a planted `git` or `fr` behind a relative PATH entry, neither git resolver nor any `fr`-starting hook (each site listed in Background, `fr-worktree-create.sh:139` included) or plugin module runs it, and each still exits as it does when `fr` is missing (bash tests and `bun test`); no hook that runs git (nag, pipeline sentinel, Bash guard, worktree create/remove) runs a planted `git`, and a tripwire fails on a bare `git` command in any hook script
 - lock-probe-ignores-cwd: none — CI test: a planted `fcntl.py` in the cwd is not imported by either probe
 - resume-repins-fr-binary: none — CI tests: a session-env dir holding a stale pin in a sibling file (alone, and beside another hook's lines) ends with the new pin as the last `FR_HARNESS_FR` line of every such file, other lines untouched, symlinks skipped; `judge`'s message names resume
 
@@ -195,16 +197,11 @@ R6 is a comment correction with no product behaviour, so it has no row.
 
 ## Non-goals
 
-- Routing the other bare `git` calls inside the hook scripts (isolation guard, worktree
-  create/remove, nag, sentinel) through the resolved git. The operator kept them out of this
-  batch.
 - A durable opt-in marker beyond the archive directory (for example `.fr/` or
   `docs/superpowers/` as a whole).
 - Silencing the same-package-dir warning.
 - Other bare-name spawns of the same class: `bash` (`tui/segment.ts:47`) and `gh`
-  (`push.ts:35`) in the plugin, `jq` in the hooks. Filed as a follow-up with the bare-git one.
-- The legacy archive dir `docs/superpowers/archived-plans/` as an fr-enabled signal: `fr migrate`
-  moves that layout.
+  (`push.ts:35`) in the plugin, `jq` in the hooks. Filed as a follow-up.
 
 ## Implementation Plans
 
