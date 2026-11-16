@@ -181,6 +181,17 @@ fr_git_resolve() {
   return 1
 }
 
+# fr_git <args...>: run the git fr_git_resolve trusts (absolute PATH entries, or an
+# absolute FR_GIT_CANDIDATES entry), never one a relative PATH entry reaches. Returns 127,
+# as a missing command would, when there is none, so each hook's own "no git" posture
+# holds: the SessionStart and worktree hooks fail open, the Bash guard stays armed
+# (super-fr#1429; independent review of #1478, item 1). Every hook runs git through this,
+# and tests/unit/test_hooks_planted_git.py fails on a bare `git` command in any of them.
+fr_git() {
+  fr_git_resolve || return 127
+  "$FR_GIT_BIN" "$@"
+}
+
 # --- internal helpers (shared by decide_edit and decide_cwd) ---------------
 
 # Echo the resolved git toplevel for a directory, or return non-zero.

@@ -18,15 +18,16 @@ input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 [ -n "$cwd" ] && [ -d "$cwd" ] || exit 0
 
-repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
-# `fr` is the one the decision library trusts (review p6-r2): an absolute FR_HARNESS_FR
-# path, else the first ABSOLUTE PATH entry holding an executable `fr`, never a relative
-# entry (`.`, `bin`), which would run a file the repo being opened planted. Every `fr`
-# below is that exact path. The library is sourced for this and for the placement checks.
+# `fr` and `git` are the ones the decision library trusts (review p6-r2, super-fr#1429):
+# an absolute FR_HARNESS_FR path, else the first ABSOLUTE PATH entry holding an
+# executable `fr` (likewise `git`, through `fr_git`), never a relative entry (`.`, `bin`),
+# which would run a file the repo being opened planted. Every `fr` below is that exact
+# path. The library is sourced for this and for the placement checks.
 lib="$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 [ -r "$lib" ] || exit 0
 # shellcheck source=lib/fr-isolation-decision.sh
 . "$lib"
+repo_root=$(fr_git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 if ! fr_fr_resolve; then
   # A `fr` reachable only through a relative or empty PATH entry is never run (super-fr#1429).
   # Say so once, on stderr, rather than let the nag vanish with no cause (review l-errors-r2);

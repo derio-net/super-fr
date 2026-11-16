@@ -14,12 +14,12 @@ path=$(printf '%s' "$input" | jq -r '.worktree_path // empty')
 [ -n "$path" ] || exit 0
 case "$path" in
   */.claude/worktrees/agent-*|*/.cache/fr/agent-worktrees/*/agent-*)
-    common=$(git -C "$path" rev-parse --git-common-dir 2>/dev/null) || { rm -rf "$path"; exit 0; }
+    common=$(fr_git -C "$path" rev-parse --git-common-dir 2>/dev/null) || { rm -rf "$path"; exit 0; }
     case "$common" in /*) ;; *) common="$path/$common" ;; esac
     # --git-dir, not the common dir's parent: right for bare and
     # --separate-git-dir layouts too, where that parent is not a repository.
-    git --git-dir="$common" worktree unlock "$path" >/dev/null 2>&1 || true
-    git --git-dir="$common" worktree remove --force "$path" >&2 || rm -rf "$path"
+    fr_git --git-dir="$common" worktree unlock "$path" >/dev/null 2>&1 || true
+    fr_git --git-dir="$common" worktree remove --force "$path" >&2 || rm -rf "$path"
     exit 0 ;;
 esac
 fr_fr_resolve || exit 0
