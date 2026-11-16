@@ -7302,6 +7302,12 @@ batches:
     pr: 1495
     head: 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
     reason: 1 failing check(s)
+  - kind: closeout
+    at: '2026-11-16T17:12:42.298923Z'
+    runner: herdr
+    handle: w3F:p6
+    archive: chore/closeout-2026-11-16-2
+    archived: 1495
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7929,6 +7935,7 @@ closeouts:
   planned:
   - gate-truth
   pr: 1495
+  merged: true
   head: 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
   members:
   - gate-truth
