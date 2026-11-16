@@ -628,3 +628,85 @@ def test_under_quiet_the_pr_body_section_does_not_apply_and_deliver_asks_nothing
     assert section == pr_body.OWED_NOT_APPLICABLE and section != "None."
     assert pr_body.discharged_owed(quiet_branch) == []
     _refuse_unclosed_owed(quiet_branch, state, "a body that closes nothing", "1", "body.md")
+
+
+@pytest.fixture
+def stealth_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A real stealth workspace (a tracking clone beside it, its marker recording
+    stealth) on `feat/x`, the target's origin configured as github.com/acme/widgets."""
+    from fr.isolation.hostworktree import HostWorktreeTarget
+    from fr.placement import stealth
+
+    from tests.unit.settings_repo import git, make_repo
+    from tests.unit.stealth_repo import make_tracking
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    # The visibility port, which tests replace: every repo here is private, so no forge
+    # is asked whether a github.com target may sit in a local tracking repo (R24 privacy).
+    monkeypatch.setattr(stealth, "visibility", lambda repo, checkout=None: "private")
+    stealth.reset_caches()
+    target = make_repo(tmp_path)
+    track = make_tracking(tmp_path)
+    state = HostWorktreeTarget(target).up(
+        profile=None, branch="feat/x", stealth=stealth.parse_ref(f"{track}@main")
+    )
+    # Owed identity reads the configured url.
+    url = f"https://github.com/{OWN}.git"
+    git(target, "config", f"url.{tmp_path / 'origin.git'}.insteadOf", url)
+    git(target, "config", "remote.origin.url", url)
+    monkeypatch.setenv("FR_REPO_ROOT", str(state.worktree))
+    yield state.worktree
+    stealth.reset_caches()
+
+
+def test_under_stealth_resolve_takes_the_close_at_once_path_and_prints_the_close(
+    stealth_branch: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R15 under stealth: the discharge never travels with the PR, so resolve takes the
+    close-at-once path, as on the default branch, and prints no closing line. Stealth sets
+    `forge.issues: off` itself (`fr.settings.load._stealth`, R5/R24 of
+    2026-11-04-repo-feature-settings), so that path's own forge-settings check prints the
+    close command for the operator and writes nothing (R15: "same forge settings")."""
+    from fr.artifacts.paths import artifact_root, space_for
+    from fr.owed_refs import discharge_travels
+    from fr.placement.forge_guard import guard
+
+    root = stealth_branch
+    assert space_for(root).placement == "stealth"
+    assert not discharge_travels(root)
+    owed = _owed()
+    path = _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    assert path.is_relative_to(artifact_root(root)), "the journal lives in the tracking clone"
+    fake = OwnedGh()
+    _owned_issue(fake)
+    res = _resolve(monkeypatch, root, guard(fake, root))  # guarded, as `client_for` does
+    assert res.exit_code == 0, res.output
+    assert open_owed_ids(parse_journal(path.read_text())) == []
+    assert "forge.issues: off" in res.output
+    assert f"close it yourself: gh issue close 12 --repo {OWN}" in res.output
+    assert [n for n, _ in fake.calls] == []  # nothing read, nothing written
+    assert "closes when this branch merges" not in res.output
+    assert "Closes" not in res.output
+
+
+def test_under_stealth_the_pr_body_section_does_not_apply_and_deliver_asks_nothing(
+    stealth_branch: Path,
+) -> None:
+    from fr.commands.run_cmd import _refuse_unclosed_owed
+    from fr.record import pr_body
+    from fr.run.model import RunState
+
+    state = RunState(
+        run="run-1",
+        workflow="fr-goal@1",
+        branch="feat/x",
+        started="2026-11-15T00:00:00+00:00",
+        cursor="deliver",
+        steps={},
+    )
+    section = pr_body._owed_discharged(stealth_branch, state)
+    assert section == pr_body.OWED_NOT_APPLICABLE and section != "None."
+    assert pr_body.discharged_owed(stealth_branch) == []
+    _refuse_unclosed_owed(stealth_branch, state, "a body that closes nothing", "1", "body.md")
