@@ -15,3 +15,8 @@ git_policy/product.py:105 _record_pushed_head commits HEADS on local fr, then at
 ### hyp-one-cause · hypothesis · Both members share one root cause
 
 Batched as one root cause.
+
+<!-- fr:journal kind=ruled-out scope=debug id=ro-one-cause created=2026-11-16T18:18:21+00:00 -->
+### ro-one-cause · ruled-out · Not one cause: two independent mechanisms
+
+1438 is a read-side substitution in parser.parse; 1433 is a write ordering in push_product_branch. No shared code. Operator chose to fix both in this one PR (asked 2026-11-16).
