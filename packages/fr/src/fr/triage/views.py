@@ -73,6 +73,7 @@ from fr.triage.model import (
     RedHandbackEvent,
     Severity,
 )
+from fr.triage.timestamps import parse_aware
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -80,19 +81,9 @@ UNWAVED = "none"
 """The key of the pane that holds batches with no `wave`."""
 
 
-def _parse(stamp: str | None) -> datetime | None:
-    if not stamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
 def collected(facts: Facts) -> datetime:
     """The board's "now": when the facts were collected. Never a clock."""
-    parsed = _parse(facts.collected_at)
+    parsed = parse_aware(facts.collected_at)
     if parsed is None:
         raise ValueError(f"facts.collected_at is not an aware timestamp: {facts.collected_at!r}")
     return parsed
@@ -136,7 +127,7 @@ def drive_snapshot(
     for b in batches:
         if stages[b.id] in LANDED and closeout_event(b) is None:
             pr = batch_pr(b, facts)
-            when = _parse(pr.merged_at if pr else None)
+            when = parse_aware(pr.merged_at if pr else None)
             if when is not None:
                 merged_at[b.id] = when
     return Snapshot(

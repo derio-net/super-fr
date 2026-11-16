@@ -77,6 +77,7 @@ from fr.triage.model import (
     issue_key,
     normalize_key,
 )
+from fr.triage.timestamps import parse_aware
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
 
@@ -372,21 +373,6 @@ def duplicates(facts: Facts, judgements: Judgements) -> list[Duplicate]:
     return out
 
 
-def _aware(stamp: str | None) -> datetime | None:
-    """*stamp* as an aware datetime; None when it is missing, unparseable or naive.
-
-    `check` always exits 0 (review r2p-f13), so a time it cannot compare is
-    skipped rather than raised.
-    """
-    if not stamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
 def clearing_rule(scope_args: str = "") -> str:
     """The one sentence every surface uses for how the closed-but-in-progress set clears
     (post-merge truth R4, R15): the next `claim sync --yes` or drive pass settles the
@@ -412,7 +398,7 @@ def clean_label_targets(facts: Facts) -> list[StaleInProgress]:
 
 def stale_dispatches(facts: Facts) -> list[Stale]:
     """The stale-dispatch set: see the module docstring."""
-    collected = _aware(facts.collected_at)
+    collected = parse_aware(facts.collected_at)
     if collected is None:
         return []
     out: list[Stale] = []
@@ -428,7 +414,7 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
             or is_awaiting_live(i)
         ):
             continue
-        marker = _aware(i.dispatch_marker_at)
+        marker = parse_aware(i.dispatch_marker_at)
         if marker is None:
             continue
         age = collected - marker

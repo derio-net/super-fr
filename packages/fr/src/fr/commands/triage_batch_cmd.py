@@ -293,6 +293,7 @@ from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
+from fr.triage.timestamps import parse_aware
 from fr.verification.labels import GATE_PASS_MARKER, close_gate_trackers, pass_gate
 
 if TYPE_CHECKING:
@@ -3608,16 +3609,6 @@ def _chosen(batches: list[Batch], named: list[str] | None) -> list[Batch]:
     return [b for b in batches if b.id in selected]
 
 
-def _parse_at(stamp: str | None) -> datetime | None:
-    if not stamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
 def _settled(batch: Batch) -> bool:
     """Whether *batch* is finished on its events alone, with no forge read: cancelled,
     or its archive PR merged by a driver."""
@@ -4253,7 +4244,7 @@ class _Driver:
                         continue
                     if not mine:
                         continue
-                    when = _parse_at(pr.merged_at if pr else None)
+                    when = parse_aware(pr.merged_at if pr else None)
                     merged_at[b.id] = when or self._first_seen.setdefault(b.id, now)
                     shipped = self._released(repo, merge)
                     if shipped is None:
