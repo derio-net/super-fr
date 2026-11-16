@@ -1,0 +1,176 @@
+schema_version: 12
+run: 2026-11-16-feat-gh-1318
+step: spec-review
+outcome: done
+journal:
+  - kind: finding
+    id: sr-1
+    review_scope: in
+    title: "Design B's soft-point predicate does not prove R8, and silently drops the find_spec check"
+    body: |
+      R8 says the guard proves no fr_dispatch import is at module level; Design B tested "not a
+      direct child of the module". A module-level `try:` or `if cond:` import is not a direct
+      child and runs at import time, so it passes. Two soft points carry module-level
+      `if TYPE_CHECKING:` imports of fr_dispatch (commands/triage_kanban_cmd.py:76-78,
+      commands/triage_batch_cmd.py:298-300), so "inside a function" alone would fail today.
+      Design B also dropped the existing `importlib.util.find_spec("fr_dispatch")` presence
+      check (tests/unit/test_import_direction.py:86) without naming it.
+  - kind: finding
+    id: sr-2
+    review_scope: in
+    title: "Existing planted fixtures are not parseable Python, so 'offender tests keep their assertions' does not hold as written"
+    body: |
+      `test_a_third_fr_dispatch_import_is_refused` (tests/unit/test_import_direction.py:74-76)
+      writes files whose only line is an indented import; `ast.parse` raises on each. The spec
+      did not say what the helper does with an unparseable file; skipping it would turn a
+      syntax error into a pass. R14's exception did not cover the edits R8 makes to this file.
+  - kind: finding
+    id: sr-3
+    review_scope: in
+    title: "The fr.triage import checks stay on a regex with the same blind spot G01 closes"
+    body: |
+      `_FR_TRIAGE_IMPORT_RE` (tests/unit/test_import_direction.py:139-160, 183-187) misses
+      `import os, fr.triage` and `from fr import triage`. A helper returning only root modules
+      cannot serve these two tests, and the spec did not mention them.
+  - kind: finding
+    id: sr-4
+    review_scope: in
+    title: "The annotation forms Design C prescribes would change pydantic error text and schema, against R9 and R14"
+    body: |
+      `Gate | Literal["none"]` and `Literal["none"] | PostMergeGate` are unions of two
+      literals, which typing does not flatten. The reviewer reasoned from reading that pydantic
+      validates such a union branch by branch (triage/model.py:519-521,
+      verification/model.py:75). Also `StepGate`'s member order flips, harmlessly
+      (spec.py:564).
+  - kind: finding
+    id: sr-5
+    review_scope: in
+    title: "A fifth hand-written copy of the step-tag vocabulary is not named"
+    body: |
+      `ops/stub.py:22-24` `_LEAD_RE` restates the tag alternatives of `_TAG_RE`. Also
+      `triage/lanes.py:78` (an ordered tuple, Tester first by rule) and
+      `commands/journal_cmd.py:219` (help text), reasonable to keep but not recorded.
+  - kind: finding
+    id: sr-6
+    review_scope: in
+    title: "R12's zero-headroom budget lets two green PRs turn main red, and brings back same-line conflict churn"
+    body: |
+      Budgets starting at the line count make every PR that adds a line to run_cmd.py edit the
+      same table line. Two PRs that each add 10 lines and set the same budget merge cleanly and
+      leave the module over it; two PRs that each remove 30 lines leave the budget 60 above
+      the module, past the 50 slack. Both pass alone and fail on main, where the release
+      suite then blocks.
+  - kind: finding
+    id: sr-7
+    review_scope: in
+    title: "The line budget is listed as an operator decision; the journal records it as the agent's reading"
+    body: |
+      Background item 4 said flatly that the budget lands here. `d-decomposition` records it
+      as the agent's reading that the operator did not object to. The two-sided rule, the
+      slack figure and the starting headroom appear nowhere in the journal.
+  - kind: finding
+    id: sr-8
+    review_scope: in
+    title: "R11's scan has no planted-violation case and cannot see the near-duplicates that already exist"
+    body: |
+      The row's test only passes; it never shows the scan firing. With names kept, a copy that
+      renames a variable is invisible. `_pr_time` (commands/triage_batch_cmd.py:2042-2048)
+      and `_created_since` (triage/collect.py:1106-1112) implement the same or a close
+      contract with a different body. Verified as holding: the four bodies are identical apart
+      from docstrings, and no test or other module references the four names.
+  - kind: finding
+    id: sr-9
+    review_scope: in
+    title: "R13's test would stay green with the decomposition entry removed or its file missing"
+    body: |
+      `resolve_manifest` records an absent named file in `Resolved.missing` and does not
+      raise (triage/fragments.py:211-214). "Validates every fragment it names" does not prove
+      the decomposition fragment is there.
+  - kind: finding
+    id: sr-10
+    review_scope: in
+    title: "After the alias, the three-name equality test cannot fail for FrStatus"
+    body: |
+      Once `FrStatus = SessionStatus`, comparing their values is a tautology; what can regress
+      is a separate literal coming back. Verified as holding: `FrStatus` is used only inside
+      mailbox.py, the adapter already depends on fr_dispatch, and `STATUS_LABEL`'s nine keys
+      equal `Status`'s nine values today.
+  - kind: finding
+    id: sr-11
+    review_scope: in
+    title: "R1 and R7 leave three points where two implementers would diverge"
+    body: |
+      (a) R7 said both "one issue per remaining cluster (R04, R05, R06)" and "comment on
+      #1286 for the strict YAML loader, file no second issue"; the supplement treats R04 as
+      separate from #1286's backend switch. (b) R1 required a severity with no scale. (c)
+      R1-R7 were said to be checked by spec review, which happens before the report exists.
+      Leaving R1-R7 without acceptance rows is consistent with the repo's rule.
+  - kind: finding
+    id: sr-12
+    review_scope: in
+    title: "R6's ports contract contradicts the supplement the report must reconcile"
+    body: |
+      R6 fixed "tests' patches of the command module keep working" as a preservation
+      contract; the supplement's R07 advises against keeping forwarding wrappers only to
+      preserve monkeypatch locations. R2 requires each supplement item to be re-checked, so
+      the report would have had to disagree with its own requirement.
+  - kind: review
+    id: spec-review
+    title: "independent spec review: 12 findings"
+    body: |
+      Decisions d-run-scope, d-prior-audit, d-other-findings, d-architecture-fragment and
+      d-verification are honoured as written (R1-R7, R13, Verification). d-decomposition is
+      honoured except for sr-7. The reviewer ran nothing; sr-4's pydantic behaviour was from
+      reading. Verified by reading: fr/gates.py:15-20; triage/model.py:519-521;
+      spec.py:564-565 and its users fr/ops/holds.py:21, fr/ops/testplan.py:13;
+      verification/model.py:75-82; fr_claude_cloud/mailbox.py:44, 48-54, 125-127; the four
+      timestamp readers and their callers; tests/unit/test_import_direction.py;
+      commands/apply_cmd.py:136-170, 555-561; acceptance/report.py:31-41 against
+      acceptance/model.py:32-42; triage/fragments.py:100-109, 162-228; the architecture
+      manifest; the five line counts; run/model.py:600; commands/run_cmd.py:6489-6491;
+      hooks/fr-isolation-required.sh:26, 37; commands/triage_kanban_cmd.py:355.
+resolves:
+  - id: sr-1
+    state: fixed
+    body: "R8 and Design B now allow an fr_dispatch import only inside a function body or under `if TYPE_CHECKING:`, keep the find_spec check as a call in the tree, and plant a module-level `try` and plain `if` import in a soft point."
+  - id: sr-2
+    state: fixed
+    body: "Design B rewrites the fixtures as an import inside a `def` and lets a SyntaxError fail the test; R8 says an unparseable file fails the guard; R14's exception now covers the rewrite of this test file."
+  - id: sr-3
+    state: fixed
+    body: "R8 covers the two fr.triage checks; the helper returns the full dotted module and a from-import's names, `_FR_TRIAGE_IMPORT_RE` is dropped, and both blind-spot forms are planted cases."
+  - id: sr-4
+    state: fixed
+    body: "Confirmed by running pydantic on this branch: the union form reports two errors (the first `Input should be 'none'`) and an `anyOf` schema; the nested form `Literal[\"none\", PostMergeGate]` reports the one error and the `enum` schema of today, in today's order. Design C now prescribes the nested form, records that result, and notes the harmless StepGate order flip."
+  - id: sr-5
+    state: fixed
+    body: "R9 and Design C add `ops/stub.py`'s `_LEAD_RE`, built from the vocabulary and covered by the guard test; `triage/lanes.py:78` and the journal help text go to the report's duplicates-to-keep list."
+  - id: sr-6
+    state: fixed
+    body: "R12 and Design F: budgets start at the line count rounded up to the next 100 (36 to 70 lines of headroom) and the lower bound is 400 lines, so ordinary PRs change no budget and several trimming PRs cannot push it out of range. Design F states the residual case (two PRs whose additions together exceed the headroom) and that the report records the cost."
+  - id: sr-7
+    state: fixed
+    body: "Background item 4 now calls the budget the agent's reading that the operator did not object to; R12 says its bounds, headroom and figure are design choices of the spec."
+  - id: sr-8
+    state: fixed
+    body: "R11 and Design E: the scan is a function over source text that normalises local names, tested on a planted copy and a planted renamed copy; `_pr_time` and `_created_since` are named as different-body implementations the report must list with a disposition."
+  - id: sr-9
+    state: fixed
+    body: "R13, Design G and the Verification row: the test asserts `missing` is empty, every fragment validates, and `decomposition.html` is resolved directly after `pipeline.html`."
+  - id: sr-10
+    state: fixed
+    body: "R10, Design D and the Verification row: assert `FrStatus is SessionStatus`; keep the value comparison for `BoardStatus` only."
+  - id: sr-11
+    state: fixed
+    body: "R7: R04 gets its own issue for the same-loader extraction, cross-linked with #1286; only #1174 is comment-only. R1 names the P0-P3 scale. The rows section says the report and issues are checked by the lens review and the PR review."
+  - id: sr-12
+    state: fixed
+    body: "R6 now preserves what the driver's tests assert about output and effects, and has the design state whether patch locations move or stay."
+acceptance:
+  - row: hotspot-modules-cannot-grow
+    op: reword
+    why: "Spec review sr-6: the lower bound moved from 50 to 400 lines and budgets start with headroom"
+    acceptance: Each of the five largest modules fails CI when it grows past its recorded line budget, and a budget more than 400 lines above its module fails too, so an extraction lowers the budget
+evidence:
+  review: spec-review
+  reviewer: afdd3038625936a8a
