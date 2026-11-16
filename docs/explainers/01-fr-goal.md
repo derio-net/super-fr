@@ -1134,6 +1134,9 @@ through the same filer the archive uses, and records where it went. A promise
 gets a gate (`fr verification set --gate`) or its issue (`fr acceptance set-status
 --issue`). A repository that declares no issue tracker keeps its leftovers in
 the journal and the description, as before; only the gate route applies there.
+On a forge that cannot list issues by label (GitLab and Gitea today), an owed
+action stays in the journal too: `fr journal file` says so and exits 0, and
+`deliver` accepts it as recorded.
 
 You do not assemble that description, and neither does the agent. Resolving
 `deliver` makes `fr` render it as `pr-body.md` beside the step's record. It
