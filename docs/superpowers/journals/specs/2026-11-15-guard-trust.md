@@ -228,3 +228,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1482.
 ### ir-scope-1478 · decision · After an independent review of #1478 the operator asked for its three should-fix items in this PR, moving two non-goals in: every hook's git goes through the trusted resolver, and the legacy archived-plans dir counts as fr-enabled
 
 Operator message, verbatim: "The operator had an independent adversarial review run on PR #1478. Read [the review] and fix its three should-fix findings in this PR (test-first, journal them, update the PR body, fr push). Do not add approved-fr; the operator re-approves the new head." Recorded by the agent because the instruction came as a message, not an answered question fr can verify. The spec's R2, R3, design A, Verification and Non-goals are amended to match.
+
+<!-- fr:journal kind=finding scope=spec id=f10-resolved-3 created=2026-11-16T15:40:14+00:00 state=fixed resolves=f10 answered_by=agent -->
+### f10-resolved-3 · finding [fixed] · resolves f10: The legacy archive dir is not an fr-enabled signal
+
+Fixed in this PR after the independent review (item 2, decision ir-scope-1478): _fr_is_enabled and marker.ts frEnabled accept docs/superpowers/archived-plans; #1482 is resolved by it.
