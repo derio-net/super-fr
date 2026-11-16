@@ -329,3 +329,8 @@ Fixed test-first in this PR at the operator's request (independent review of #14
 ### ir-1478-3-resolved · finding [fixed] · resolves ir-1478-3: Independent review: _keep_live_root compared an unresolved plan path, so a symlinked root skipped the .gitkeep silently
 
 Fixed test-first in this PR at the operator's request (independent review of #1478, item 3; decision ir-scope-1478).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved-3 created=2026-11-16T15:38:23+00:00 state=fixed resolves=p2-r5 answered_by=agent -->
+### p2-r5-resolved-3 · finding [fixed] · resolves p2-r5: Other hooks keep bare git calls
+
+Moved into this PR at the operator's request after the independent review (item 1, decision ir-scope-1478): every hook now runs git through fr_git; tests/unit/test_hooks_planted_git.py.
