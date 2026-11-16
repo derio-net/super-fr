@@ -92,7 +92,12 @@ class OwnedGh(FakeGhClient):
 
 
 def _git(root: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=fr-test", "-c", "user.email=fr-test@example.invalid", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
 
 
 def _repo(tmp_path: Path, *, branch: str | None = None) -> Path:

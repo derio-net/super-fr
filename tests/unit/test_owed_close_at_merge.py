@@ -34,7 +34,13 @@ KEY = f"plan:{SLUG}#p2"
 
 
 def _git(root: Path, *args: str) -> str:
-    done = subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
+    done = subprocess.run(
+        ["git", "-c", "user.name=fr-test", "-c", "user.email=fr-test@example.invalid", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     return done.stdout
 
 
