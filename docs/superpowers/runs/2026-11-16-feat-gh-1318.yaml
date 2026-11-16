@@ -83,12 +83,19 @@ steps:
           tests: phase1-suite.log@8348bf2346f0;tree=53217847cb7d0a4665ef61d12105c9fd6ad71a7b16fef1198fbb4bf8bb6fec39
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-16T20:47:59+00:00'
           harness: claude-code
           model: claude-fable-5-2
           session: 65fe70a5-99dc-4a3f-b249-8255221b4257
+          returned: '2026-11-16T20:57:27+00:00'
+          outcome: done
+        evidence:
+          review: review-p1
+          reviewer: ac735354b526a4df8
+          visual: none
+          findings: p1-r1,p1-r2,p1-r3,p1-r4
   journal-check:
     state: pending
   lens-review:
