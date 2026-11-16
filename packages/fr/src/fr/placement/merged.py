@@ -49,6 +49,8 @@ import yaml
 from fr.artifacts import paths
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fr.ghclient import GhClient
 
 MERGED_FILE: Final = "merged.yaml"
@@ -538,6 +540,10 @@ class ClientMergedPrs:
     def __init__(self, client: GhClient, repo: str) -> None:
         self._client = client
         self._repo = repo
+
+    def with_client(self, wrap: Callable[[GhClient], GhClient]) -> ClientMergedPrs:
+        """The same read over `wrap(client)` (`fr archive --dry-run`'s preview forge)."""
+        return ClientMergedPrs(wrap(self._client), self._repo)
 
     def merged_prs(self, branch: str) -> list[MergedPr]:
         out: list[MergedPr] = []

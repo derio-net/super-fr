@@ -466,6 +466,19 @@ def ensure_worktree(root: Path) -> Path:
     return path
 
 
+def preview_problem(root: Path) -> str | None:
+    """Why a read-only preview (`fr archive --dry-run`, review p3-r5) cannot see what a
+    real run at *root* would read, or None when it can: the real run creates the `fr`
+    worktree from `origin/fr` on demand, and a preview creates nothing."""
+    path = worktree_path(root)
+    if not (path / ".git").exists():
+        return (
+            f"there is no `{QUIET_BRANCH}` worktree yet at {path} (the real run creates it "
+            f"from origin/{QUIET_BRANCH} before it reads)"
+        )
+    return None
+
+
 def fast_forward(root: Path) -> None:
     """Move the fr worktree up to `origin/fr` when it is strictly behind (never a reset:
     a local `fr` that diverged keeps its commits, and `fr push` replays them)."""

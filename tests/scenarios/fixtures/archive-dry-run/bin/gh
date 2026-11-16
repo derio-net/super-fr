@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# A recording forge double for tests/scenarios/archive-dry-run.sh. Every call is one
+# argv line in $FAKE_GH_LOG. It answers the calls `fr archive`'s follow-ups make on the
+# default (CLI) client, writes included, so the real run they are compared with does
+# file its owed issue and the parity is not a pair of refusals:
+#   gh api user --jq .login         -> the viewer's login
+#   gh issue list ...               -> no open issue
+#   gh label create ...             -> ok, no output
+#   gh issue create ...             -> a new issue's URL, numbered from 1
+# Anything else fails loudly, so a new forge call cannot slip through unseen.
+log="${FAKE_GH_LOG:?FAKE_GH_LOG is required}"
+printf '%s\n' "$*" >> "$log"
+case "$1 ${2:-}" in
+  "api user") echo scenario-bot ;;
+  "issue list") echo '[]' ;;
+  "label create") : ;;
+  "issue create")
+    n=$(( $(grep -c '^issue create' "$log") ))
+    echo "https://github.com/example-org/widgets/issues/$n" ;;
+  *) echo "fake gh: unexpected call: gh $*" >&2; exit 1 ;;
+esac

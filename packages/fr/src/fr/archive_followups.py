@@ -50,11 +50,14 @@ __all__ = [
     "FiledOwed",
     "OwedEnd",
     "file_owed_ends",
+    "OWED_LIST_LIMIT",
+    "UNSUPPORTED_LISTING",
     "owed_ends",
     "owed_identity",
     "owed_marker",
     "is_owned_issue",
     "owned_owed_key",
+    "manual_owed_preview",
     "write_manual_owed",
     "write_owed_back",
 ]
@@ -361,6 +364,7 @@ class FiledOwed:
     ref: str | None = None
     reused: bool = False
     error: str | None = None
+    unsupported: bool = False  # the forge cannot list issues: the entry stays in the journal
 
 
 def _issue_ref(repo: str, number: object, url: object) -> str | None:
@@ -464,22 +468,52 @@ def owned_owed_key(issue: dict[str, object], me: str) -> str | None:
 OWED_ISSUE_FIELDS = "number,url,body,author,labels"
 
 
-def _existing_owed(gh: GhClient, repo: str) -> dict[str, str]:
-    """`owed key -> owner/repo#n` of the open issues in THIS repo (`repo`, from
-    `owed_identity`) that `owned_owed_key` accepts. A reused ref is later
-    CLOSED by `fr journal resolve`, so nothing anyone else wrote is reused."""
+OWED_LIST_LIMIT = 200  # the one cap on the `fr:owed` listing; reaching it fails closed
+UNSUPPORTED_LISTING = "this forge cannot list issues by label: owed actions stay in the journal"
+
+
+@dataclass(frozen=True)
+class OwedLookup:
+    """What `_existing_owed` learned: the found keys, or why it cannot be trusted."""
+
+    found: dict[str, str]
+    reason: str | None = None
+    unsupported: bool = False
+
+
+def _existing_owed(gh: GhClient, repo: str) -> OwedLookup:
+    """`owed key -> owner/repo#n` of the open `fr:owed` issues in THIS repo (`repo`,
+    from `owed_identity`) that `owned_owed_key` accepts. A reused ref is later
+    CLOSED by `fr journal resolve`, so nothing anyone else wrote is reused.
+
+    Fails closed (R12): a listing that reached `OWED_LIST_LIMIT` may have missed
+    the marker, and one that failed knows nothing; either way the caller files
+    nothing, because a guess is how a duplicate gets filed."""
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.labels import FR_OWED
+
     try:
         me = gh.viewer_login()
-        issues = gh.list_issues(repo, "open", 200, fields=OWED_ISSUE_FIELDS)
-    except Exception:  # noqa: BLE001 — dedup is best-effort, as for open ends
-        return {}
+        issues = gh.list_issues(
+            repo, "open", OWED_LIST_LIMIT, fields=OWED_ISSUE_FIELDS, labels=[FR_OWED.name]
+        )
+    except UnsupportedForgeOperation:
+        return OwedLookup({}, UNSUPPORTED_LISTING, unsupported=True)
+    except Exception as e:  # noqa: BLE001 — unknown state is not "no duplicate"
+        return OwedLookup({}, f"could not list the open fr:owed issues ({type(e).__name__}: {e})")
+    if len(issues) >= OWED_LIST_LIMIT:
+        return OwedLookup(
+            {},
+            f"the open fr:owed listing reached its limit of {OWED_LIST_LIMIT}, "
+            "so an existing issue could be missed",
+        )
     found: dict[str, str] = {}
     for issue in issues:
         key = owned_owed_key(issue, me)
         ref = f"{repo}#{issue.get('number')}"
         if key and TRACKED_BY_RE.match(ref):
             found.setdefault(key, ref)
-    return found
+    return OwedLookup(found)
 
 
 def _owed_body(end: OwedEnd, repo_root: Path) -> str:
@@ -511,7 +545,10 @@ def file_owed_ends(
         return []
     if not _SAFE_REPO.match(repo):
         return [FiledOwed(e, error=f"repo {repo!r} is not owner/repo") for e in ends]
-    known = _existing_owed(gh, repo)
+    lookup = _existing_owed(gh, repo)
+    if lookup.reason is not None:
+        return [FiledOwed(e, error=lookup.reason, unsupported=lookup.unsupported) for e in ends]
+    known = lookup.found
     labels = frozenset({FR_OWED.name})
     try:
         gh.ensure_labels(repo, [FR_OWED])
@@ -563,6 +600,24 @@ def write_owed_back(filed: FiledOwed) -> Path:
     return path
 
 
+def _manual_title(plan_name: str, n: int) -> str:
+    return f"{plan_name}: manual phase {n} is not ticked"
+
+
+def manual_owed_preview(repo_root: Path, plan_name: str, phases: list[int]) -> list[str]:
+    """`<key> — <title>` for each manual phase `write_manual_owed` would record,
+    writing nothing (R8: a hold on the default branch only says what it would)."""
+    from fr.journal.model import OWED_KEY_RE, journal_path
+
+    path = journal_path(repo_root, "plan", plan_name)
+    taken = {e.id for e in parse_journal(path.read_text())} if path.exists() else set()
+    return [
+        f"{key} — {_manual_title(plan_name, n)}"
+        for n in phases
+        if f"manual-phase-{n}" not in taken and OWED_KEY_RE.match(key := f"plan:{plan_name}#p{n}")
+    ]
+
+
 def write_manual_owed(repo_root: Path, plan_name: str, phases: list[int]) -> Path | None:
     """One `owed` entry `manual-phase-<n>` (key `plan:<name>#p<n>`) per unticked
     manual phase holding the plan, into its plan journal (R22). Idempotent: a
@@ -588,7 +643,7 @@ def write_manual_owed(repo_root: Path, plan_name: str, phases: list[int]) -> Pat
             id=eid,
             created=journal_now(),
             phase=n,
-            title=f"{plan_name}: manual phase {n} is not ticked",
+            title=_manual_title(plan_name, n),
             body=owed_body(
                 what=f"do manual phase {n} of {plan_name} and tick its steps",
                 why="fr archive holds the plan until its manual phases are ticked",

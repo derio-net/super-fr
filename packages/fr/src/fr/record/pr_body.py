@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -42,6 +42,10 @@ if TYPE_CHECKING:
 __all__ = [
     "OWED_ROW_STATUSES",
     "DURABLE_PR_BODY_SUFFIX",
+    "HEADING_OWED_DISCHARGED",
+    "OWED_NOT_APPLICABLE",
+    "DischargedOwed",
+    "UnreadableDischargeError",
     "FR_MARKER_PREFIXES",
     "PR_BODY_NAME",
     "REQUIRED_SECTIONS",
@@ -49,8 +53,10 @@ __all__ = [
     "PrematureClose",
     "UnreadableJournalError",
     "closing_refs",
+    "discharged_owed",
     "durable_pr_body_path",
     "fr_markers",
+    "held_issues",
     "holds_open_for_run",
     "issue_refs",
     "missing_sections",
@@ -60,7 +66,9 @@ __all__ = [
     "prerelease_route",
     "referenced_refs",
     "render_out_of_scope",
+    "render_owed_discharged",
     "render_pr_body",
+    "run_held_issues",
     "run_narrowings",
     "shared_closing_keywords",
     "unaccounted",
@@ -363,6 +371,36 @@ def premature_closes(
 
     Merging such a PR would close an issue its promise has not been verified
     for; `Refs <ref>` mentions it without closing."""
+    holding, narrowed, tracking = _held_sets(
+        matrix, identity, holds_open, exit=exit, narrowings=narrowings
+    )
+    out: list[PrematureClose] = []
+    for line, _keyword, written in closing_refs(live_body, as_github=True):
+        ref = normalize_issue_ref(written, identity)
+        if ref is not None and (ref in holding or ref in narrowed or ref in tracking):
+            out.append(
+                PrematureClose(
+                    line,
+                    ref,
+                    tuple(holding.get(ref, ())),
+                    tuple(narrowed.get(ref, ())),
+                    tuple(tracking.get(ref, ())),
+                )
+            )
+    return out
+
+
+def _held_sets(
+    matrix: Matrix,
+    identity: tuple[str, str],
+    holds_open: Callable[[Row], bool],
+    *,
+    exit: Exit | None,
+    narrowings: Sequence[JournalEntry],
+) -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, list[str]]]:
+    """`(holding, narrowed, tracking)`: issue ref (`normalize_issue_ref`'s
+    spelling) -> the rows, decisions and owed rows that hold it open — the one
+    reading `premature_closes` and `held_issues` share."""
     from fr.acceptance.walks import walk_verified
     from fr.gates import POST_MERGE_GATES
 
@@ -390,20 +428,284 @@ def premature_closes(
             continue
         for issue in decision.narrows:
             narrowed.setdefault(key(issue), []).append(decision.id)
-    out: list[PrematureClose] = []
-    for line, _keyword, written in closing_refs(live_body, as_github=True):
-        ref = normalize_issue_ref(written, identity)
-        if ref is not None and (ref in holding or ref in narrowed or ref in tracking):
-            out.append(
-                PrematureClose(
-                    line,
-                    ref,
-                    tuple(holding.get(ref, ())),
-                    tuple(narrowed.get(ref, ())),
-                    tuple(tracking.get(ref, ())),
-                )
-            )
+    return holding, narrowed, tracking
+
+
+def held_issues(
+    matrix: Matrix,
+    identity: tuple[str, str],
+    holds_open: Callable[[Row], bool],
+    *,
+    exit: Exit | None = None,
+    narrowings: Sequence[JournalEntry] = (),
+) -> dict[str, str]:
+    """Issue ref -> why `premature_closes` would refuse a closing line for it
+    (owed-archive R5): a discharged owed issue held here is rendered `Refs`.
+    Every row and decision id is quoted in a code span (review p2-r1): the
+    closing-keyword parser skips code, so an id such as `owed-close-at-merge`
+    never turns fr's own `Refs` line into a close."""
+    holding, narrowed, tracking = _held_sets(
+        matrix, identity, holds_open, exit=exit, narrowings=narrowings
+    )
+    out: dict[str, str] = {}
+    for ref in sorted({*holding, *narrowed, *tracking}):
+        why: list[str] = []
+        if ref in holding:
+            why.append(f"row {_code_ids(holding[ref])} still holds it open")
+        if ref in narrowed:
+            why.append(f"decision {_code_ids(narrowed[ref])} narrows it, unanswered")
+        if ref in tracking:
+            why.append(f"owed row {_code_ids(tracking[ref])} tracks its rest")
+        out[ref] = " and ".join(why)
     return out
+
+
+def _code_ids(ids: Iterable[str]) -> str:
+    """Each id as one inline code span, its own backticks and line breaks replaced
+    so the span cannot end early."""
+    spans = (" ".join(i.replace("`", "'").split()) for i in ids)
+    return ", ".join(f"`{span}`" for span in spans)
+
+
+# --- owed actions discharged (owed-archive-side-effects R4-R6, R15) ---------------
+
+HEADING_OWED_DISCHARGED = "## Owed actions discharged"
+
+OWED_NOT_APPLICABLE = (
+    "Not applicable: under this placement fr's journals live outside the checkout, so "
+    "`fr journal resolve` closed each discharged owed issue at once."
+)
+"""The section's body under quiet and stealth (R15): never "None.", which would read
+as a check that ran."""
+
+
+class UnreadableDischargeError(Exception):
+    """What the branch discharged cannot be told (review p2-r2): an input the R4
+    reading needs could not be read. `deliver` refuses, naming it."""
+
+
+@dataclass(frozen=True)
+class DischargedOwed:
+    """An owed entry the branch discharged whose filed issue is in this repo:
+    merging the branch closes `ref` (`owner/repo#n`)."""
+
+    ref: str
+    entry: str
+
+
+def _journal_at(repo_root: Path, rev: str, rel: str) -> list[JournalEntry] | None:
+    """The journal at `rev:rel`, parsed, or None when it is not there. Raises
+    `UnreadableDischargeError` when it is there and does not parse."""
+    from fr.git import git_answer
+
+    shown = git_answer(repo_root, "show", f"{rev}:{rel}")
+    if shown.returncode != 0:
+        return None
+    try:
+        return parse_journal(shown.stdout)
+    except JournalParseError as e:
+        raise UnreadableDischargeError(f"the journal {rel} at {rev} does not parse ({e})") from e
+
+
+def _fixed_owed(entries: list[JournalEntry]) -> set[str]:
+    states = effective_finding_states(entries)
+    return {
+        e.id
+        for e in entries
+        if e.kind == "owed" and e.resolves is None and states.get(e.id) == "fixed"
+    }
+
+
+def _fixed_filed(entries: list[JournalEntry]) -> set[str]:
+    """The fixed owed ids of `entries` that carry a `filed_as`."""
+    from fr.journal.model import owed_filed_as
+
+    return _fixed_owed(entries) & set(owed_filed_as(entries))
+
+
+def discharged_owed(repo_root: Path) -> list[DischargedOwed]:
+    """Every owed entry the branch discharged (R4): in a spec, plan or debug
+    journal, live or archived, that `merge-base(HEAD, <default ref>)..HEAD`
+    changed, whose effective state is `fixed` at HEAD and not in that journal at
+    the default ref (read at either its live or its archived path, so a journal
+    archived on the branch compares with its live copy) — and whose `filed_as`
+    names an issue in THIS repo (`fr.owed_refs.own_issue`, the reading resolve
+    closes by).
+
+    Empty under quiet and stealth (R15: `discharge_travels` is false, resolve
+    closed the issue at once), and when no journal at HEAD holds a fixed owed
+    entry with a filed issue (nothing could have been discharged). Otherwise an
+    input that cannot be read — the default ref, the merge-base, the diff, a
+    changed journal, the repo's owed identity — raises `UnreadableDischargeError`
+    naming it (review p2-r2), never an empty answer."""
+    from fr.archive_followups import owed_identity
+    from fr.git import GitUnavailableError
+    from fr.journal.model import owed_filed_as
+    from fr.owed_refs import discharge_travels, own_issue
+
+    if not discharge_travels(repo_root):
+        return []
+    try:
+        if not _any_fixed_filed_at_head(repo_root):
+            return []
+        default, rels = _changed_journals(repo_root)
+        found: list[tuple[str, str]] = []
+        for rel in rels:
+            entries = _journal_at(repo_root, "HEAD", rel)
+            if entries is None:
+                raise UnreadableDischargeError(f"the changed journal {rel} cannot be read at HEAD")
+            fixed = _fixed_filed(entries) - _fixed_at_default(repo_root, default, rel)
+            filed = owed_filed_as(entries)
+            found += [(e.id, filed[e.id]) for e in entries if e.id in fixed]
+    except GitUnavailableError as e:
+        raise UnreadableDischargeError(f"git could not be run ({e})") from e
+    if not found:
+        return []
+    own, why = owed_identity(repo_root)
+    if own is None:
+        raise UnreadableDischargeError(f"the repo's owed identity cannot be read ({why})")
+    out: list[DischargedOwed] = []
+    seen: set[str] = set()
+    for eid, ref in found:
+        target = own_issue(repo_root, ref, own)
+        if isinstance(target, tuple) and f"{target[0]}#{target[1]}".lower() not in seen:
+            seen.add(f"{target[0]}#{target[1]}".lower())
+            out.append(DischargedOwed(ref=f"{target[0]}#{target[1]}", entry=eid))
+    return out
+
+
+def _journal_dirs() -> tuple[str, str]:
+    from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL
+
+    return JOURNALS_REL.as_posix(), IMPLEMENTED_JOURNALS_REL.as_posix()
+
+
+def _any_fixed_filed_at_head(repo_root: Path) -> bool:
+    """Whether any journal at HEAD holds a fixed owed entry with a filed issue —
+    the only state in which the branch can have discharged one."""
+    from fr.git import git_answer
+
+    listed = git_answer(
+        repo_root, "ls-tree", "-r", "-z", "--name-only", "HEAD", "--", *_journal_dirs()
+    )
+    if listed.returncode != 0:
+        raise UnreadableDischargeError(
+            f"HEAD's journals cannot be listed ({listed.stderr.strip() or 'git ls-tree failed'})"
+        )
+    for rel in (p for p in listed.stdout.split("\0") if p.endswith(".md")):
+        if _fixed_filed(_journal_at(repo_root, "HEAD", rel) or []):
+            return True
+    return False
+
+
+def _changed_journals(repo_root: Path) -> tuple[str, list[str]]:
+    """`(default ref, journal paths)` the branch added or modified since its
+    merge-base with the default ref. Raises `UnreadableDischargeError` when the
+    default ref, the merge-base or the diff cannot be read."""
+    from fr.git import git_answer, remote_default_ref
+    from fr.proportionality import feature_merge_base
+
+    default = remote_default_ref(repo_root)
+    if not isinstance(default, str):
+        why = "no remote or no default branch" if default is None else str(default)
+        raise UnreadableDischargeError(f"the default ref cannot be read ({why})")
+    base = feature_merge_base(repo_root, default)
+    if base is None:
+        raise UnreadableDischargeError(f"HEAD has no merge-base with {default}")
+    diff = git_answer(
+        repo_root,
+        *("diff", "-z", "--no-renames", "--name-only", "--diff-filter=AM", base, "HEAD"),
+        *("--", *_journal_dirs()),
+    )
+    if diff.returncode != 0:
+        raise UnreadableDischargeError(
+            f"the journal diff against {default} cannot be read "
+            f"({diff.stderr.strip() or 'git diff failed'})"
+        )
+    return default, [p for p in diff.stdout.split("\0") if p.endswith(".md")]
+
+
+def _fixed_at_default(repo_root: Path, default: str, rel: str) -> set[str]:
+    """The owed ids already fixed in this journal at the default ref, read at its
+    live and its archived path (a journal archived on the branch was live there)."""
+    from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL
+
+    path = Path(rel)
+    top = (
+        IMPLEMENTED_JOURNALS_REL if path.is_relative_to(IMPLEMENTED_JOURNALS_REL) else JOURNALS_REL
+    )
+    tail = path.relative_to(top)
+    fixed: set[str] = set()
+    for where in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
+        then = _journal_at(repo_root, default, (where / tail).as_posix())
+        fixed |= _fixed_owed(then or [])
+    return fixed
+
+
+def render_owed_discharged(items: Sequence[DischargedOwed], held: Mapping[str, str]) -> str:
+    """The `## Owed actions discharged` body: `Closes <ref>` per item, `Refs <ref>
+    — held: <reason>` for one `held` names (R5, keyed by `normalize_issue_ref`'s
+    lowercase spelling; `held_issues` quotes its ids so the line never reads as a
+    close), or "None."."""
+    lines = []
+    for item in items:
+        why = held.get(item.ref.lower())
+        lines.append(f"Refs {item.ref} — held: {why}" if why else f"Closes {item.ref}")
+    return "\n".join(lines) if lines else "None."
+
+
+def run_held_issues(repo_root: Path, state: RunState) -> dict[str, str]:
+    """`held_issues` over the run's effective matrix, exit and narrowing decisions
+    — the inputs `deliver`'s premature-close gate reads. Raises what they raise
+    (`AcceptanceError`, `UnreadableJournalError`)."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.requirements import load_spec_matrix, run_spec
+    from fr.verification.exit import run_exit
+
+    narrowings = run_narrowings(repo_root, state)
+    matrix = load_effective(repo_root)
+    if not any(row.issues for row in matrix.rows) and not narrowings:
+        return {}
+    identity = resolve_identity(matrix, repo_root)
+    spec_rel = run_spec(state)
+    spec_ref = (
+        load_spec_matrix(repo_root, spec_rel)[1]
+        if spec_rel is not None and has_fragments(repo_root)
+        else None
+    )
+    try:
+        exit_ = run_exit(repo_root, state)
+    except Exception:  # noqa: BLE001 — as the premature-close gate reads it
+        exit_ = None
+    return held_issues(
+        matrix,
+        identity,
+        holds_open_for_run(repo_root, state, matrix, spec_ref),
+        exit=exit_,
+        narrowings=narrowings,
+    )
+
+
+def _owed_discharged(repo_root: Path, state: RunState) -> str:
+    """The section's body: "Not applicable" under quiet and stealth (R15), what
+    could not be read (deliver refuses it, p2-r2), else the listing."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.owed_refs import discharge_travels
+
+    if not discharge_travels(repo_root):
+        return OWED_NOT_APPLICABLE
+    try:
+        items = discharged_owed(repo_root)
+    except UnreadableDischargeError as e:
+        return f"Unknown: fr could not tell what this branch discharged — {e}."
+    if not items:
+        return "None."
+    try:
+        held = run_held_issues(repo_root, state)
+    except (AcceptanceError, UnreadableJournalError):  # deliver's own gate refuses these
+        held = {}
+    return render_owed_discharged(items, held)
 
 
 # --- leftovers (exit-gates R9) ---------------------------------------------------
@@ -449,6 +751,17 @@ def _has_tracker(repo_root: Path) -> bool:
     return all(forge_allows(repo_root, k, lenient=True) for k in ("issues", "labels"))
 
 
+def _forge_lists_issues(repo_root: Path) -> bool:
+    """Whether the repo's forge adapter can list issues, which owed reuse by label needs
+    (R13): the adapter's own declaration (`declares_unsupported`), the same `list_issues`
+    whose `UnsupportedForgeOperation` makes `fr archive` and `fr journal file` keep an owed
+    action in the journal. Builds the client and calls nothing on the forge."""
+    from fr.ghclient import declares_unsupported
+    from fr.hostclient import client_for
+
+    return not declares_unsupported(client_for(repo_root), "list_issues")
+
+
 def _feature_flag(repo_root: Path, row_id: str, state: RunState) -> str:
     """`--feature <the run's spec slug>`: a leftover's link may run after the merge, with
     no run on the branch, and R16 writes it to this feature's fragment."""
@@ -481,6 +794,7 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
     from fr.journal.model import open_owed_ids, owed_filed_as
 
     tracker = _has_tracker(repo_root)
+    owed_fileable = tracker and _forge_lists_issues(repo_root)  # R13: else it stays recorded
     no_ci: bool | None = None  # asked once, and only when a row is owed
     out: list[Leftover] = []
     if tracker:
@@ -498,7 +812,7 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
                 ):
                     out.append(Leftover("finding", e.id, f"out of scope: {e.title}", file(e.id)))
             filed = owed_filed_as(entries)
-            for oid in open_owed_ids(entries):
+            for oid in open_owed_ids(entries) if owed_fileable else ():
                 if oid not in filed:
                     title = next(e.title for e in entries if e.id == oid)
                     out.append(Leftover("owed", oid, f"owed, not filed: {title}", file(oid)))
@@ -1155,6 +1469,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         _post_merge_owed(repo_root, state),
         "## Manual operations",
         _manual_operations(repo_root, state),
+        HEADING_OWED_DISCHARGED,
+        _owed_discharged(repo_root, state),
     ]
     tests = _tests(repo_root, state)
     if tests is not None:

@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-14 still true, fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-16 owed-archive-side-effects phase 3, the page now describes `fr archive --dry-run` and its two refusals. 2026-11-15 phase 1, a refused archive writes nothing (page now says so); fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## Why is there nothing to sync?
@@ -116,13 +116,28 @@ fr archive docs/superpowers/plans/<name>
 The move is a gate-checked `git mv` into `docs/superpowers/implemented/plans/`. The gate
 wants every phase complete: a dispatched phase by evidence on GitHub, an agentic one
 fully ticked and on the default branch, a manual one ticked locally. `--force` overrides
-for one plan. The owning spec follows once every plan in its Implementation Plans table has reached the
+for one plan. A refused archive of one plan changes nothing: it stages no move and records
+no owed entry. Under `--all` or `--branch`, a run that refuses partway leaves the moves it already
+staged for earlier plans staged, but it runs no follow-up: it files no issue. The owning spec follows once every plan in its Implementation Plans table has reached the
 archive.
 
 fr stages the moves and does not commit them, so you commit them. `--branch <merged-branch>`
 archives everything that branch added, and prints `held:` for anything not yet ready. The
 archive leaves acceptance rows alone: they cite a spec as `spec:<slug>`, which names it in
 either place.
+
+To see what an archive would do before you run it, add `--dry-run`. fr runs the same
+archive with a forge that records each write and does not make it. In the repo placement
+it runs in a temporary git worktree of your checkout, which it adds and then removes. Under
+the quiet or stealth placement it previews the record and the push in place. It prints the
+moves, the holds, the owed entries and the issues the real run would make, and exits with
+the code the real run would. It changes no file in your checkout, no branch and nothing on
+the forge, and it never asks you a question. A fetch can move your remote-tracking refs. It refuses with exit 2
+in two cases. The first is when your fr artifacts need a migration: the real run would
+migrate them first, and a preview cannot show that honestly. The second is under the quiet
+or stealth placement, when it cannot see what the real run would read: there is no `fr`
+worktree yet, or the tracking clone is gone, cannot be reached or is behind. If the preview
+meets a forge call it does not know, it exits 1 and names that call.
 
 ## What can these commands not tell you?
 

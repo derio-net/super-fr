@@ -58,8 +58,17 @@ class ListingGh(FakeGhClient):
     def viewer_login(self) -> str:
         return "me"
 
-    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
-        return list(self.listed)
+    def list_issues(self, repo, state, limit, fields=None, labels=None):  # noqa: ANN001, ANN201
+        self.calls.append(("list_issues", {"repo": repo, "labels": labels, "limit": limit}))
+        held = list(self.listed)
+        if labels:
+            want = set(labels)
+            held = [
+                i
+                for i in held
+                if want <= {x["name"] if isinstance(x, dict) else x for x in i.get("labels", [])}
+            ]
+        return held[:limit]
 
 
 def _created(gh: FakeGhClient) -> list[dict]:
@@ -328,13 +337,20 @@ def _manual_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently(
+def _off_default(repo: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "-c", "feat/x"], check=True)
+
+
+def test_a_manual_phase_skipped_under_all_writes_and_files_its_owed_entry_idempotently(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _manual_repo(tmp_path)
+    _off_default(repo)
     gh = ListingGh()
-    result = _archive(monkeypatch, repo, gh)
-    assert result.exit_code == 2, result.output
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert result.exit_code == 0, result.output
     assert (repo / "docs/superpowers/plans" / PLAN).is_dir()
     entries = parse_journal(journal_path(repo, "plan", PLAN).read_text())
     owed = [e for e in entries if e.kind == "owed"]
@@ -345,11 +361,97 @@ def test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently(
     assert made["body"].rstrip().endswith(f"<!-- fr-owed:plan:{PLAN}#p2 -->")
     assert owed_filed_as(entries) == {"manual-phase-2": f"{OWN}#1"}
 
-    again = _archive(monkeypatch, repo, gh)
-    assert again.exit_code == 2, again.output
+    again = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert again.exit_code == 0, again.output
     entries = parse_journal(journal_path(repo, "plan", PLAN).read_text())
     assert [e.id for e in entries if e.kind == "owed"] == ["manual-phase-2"]
     assert len(_created(gh)) == 1, "a re-run files nothing new"
+
+
+def test_a_single_plan_refusal_records_no_owed_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _manual_repo(tmp_path)
+    _off_default(repo)
+    gh = ListingGh()
+    result = _archive(monkeypatch, repo, gh)
+    assert result.exit_code == 2, result.output
+    assert not journal_path(repo, "plan", PLAN).exists()
+    assert _writes(gh) == []
+
+
+def test_a_hold_on_the_default_branch_says_what_it_would_record_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    def porcelain() -> tuple[str, str]:
+        def out(*a: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+            ).stdout
+
+        return out("status", "--porcelain"), out("diff", "--cached")
+
+    repo = _manual_repo(tmp_path)  # HEAD is main, which origin/main names
+    before = porcelain()
+    gh = ListingGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in result.output
+    assert porcelain() == before
+    assert not journal_path(repo, "plan", PLAN).exists()
+    assert _writes(gh) == []
+
+
+def _branch_with_manual_phase(tmp_path: Path) -> Path:
+    """A merged branch whose plan holds an unticked `[manual]` phase; HEAD is left on
+    the housekeeping branch `tb._squash_merge` stands in."""
+    repo = tb._base(tmp_path)
+
+    def build(r: Path) -> None:
+        plan = tb._plan(r, PLAN, ticked=True)
+        (plan / "02.yaml").write_text(MANUAL_PHASE)
+
+    tb._merged(repo, build)
+    return repo
+
+
+def test_branch_hold_on_the_default_branch_says_what_it_would_record_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    repo = _branch_with_manual_phase(tmp_path)
+    # a merged `--branch` close-out may run on the default branch itself
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "main"], check=True)
+    subprocess.run(["git", "-C", str(repo), "reset", "-q", "--hard", "origin/main"], check=True)
+
+    def state() -> tuple[str, str]:
+        def out(*a: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+            ).stdout
+
+        return out("status", "--porcelain"), out("diff", "--cached")
+
+    before = state()
+    result = tb._invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH])
+    assert result.exit_code == 0, result.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in result.output
+    assert state() == before
+    assert not journal_path(repo, "plan", PLAN).exists()
+
+
+def test_branch_hold_off_the_default_branch_records_the_owed_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _branch_with_manual_phase(tmp_path)
+    result = tb._invoke(monkeypatch, repo, ["archive", "--branch", tb.BRANCH])
+    assert result.exit_code == 0, result.output
+    assert "would record owed" not in result.output
+    entries = parse_journal(journal_path(repo, "plan", PLAN).read_text())
+    assert [e.id for e in entries if e.kind == "owed"] == ["manual-phase-2"]
 
 
 # --- R19: the close-out brief lists the steps -----------------------------
@@ -460,3 +562,111 @@ def test_the_spec_sweep_reports_a_journal_it_cannot_move_as_a_note(tmp_path: Pat
     sweep = spec_archive_sweep(repo, None)
     assert [m.dst.name for m in sweep.moves] == [SPEC_NAME]
     assert any("journal stayed live" in n for n in sweep.notes), sweep.notes
+
+
+# --- R12/R13: owed reuse by label, fail closed --------------------------------
+
+_WRITES = ("create_issue", "ensure_labels", "comment_issue", "edit_issue_state")
+
+
+def _writes(gh: FakeGhClient) -> list[str]:
+    return [n for n, _ in gh.calls if n in _WRITES]
+
+
+def _owed_issue(number: int, marker_key: str) -> dict:
+    return {
+        "number": number,
+        "url": f"https://github.com/{OWN}/issues/{number}",
+        "body": f"x\n<!-- fr-owed:{marker_key} -->",
+        "author": {"login": "me"},
+        "labels": [{"name": "fr:owed"}],
+    }
+
+
+def _ends(tmp_path: Path):  # noqa: ANN202
+    from fr.archive_followups import OwedEnd
+
+    return [
+        OwedEnd(
+            scope="plan",
+            slug="p",
+            id=f"e{i}",
+            key=f"plan:p#e{i}",
+            title=f"t{i}",
+            what="w",
+            how="h",
+            path=tmp_path / "j.md",
+        )
+        for i in (1, 2)
+    ]
+
+
+def test_owed_reuse_finds_the_marker_past_the_unlabelled_backlog(tmp_path: Path) -> None:
+    from fr.archive_followups import file_owed_ends
+
+    crowd = [
+        {"number": n, "body": "b", "author": {"login": "me"}, "labels": []} for n in range(100, 350)
+    ]
+    gh = ListingGh([*crowd, _owed_issue(7, "plan:p#e1")])
+    out = file_owed_ends(tmp_path, _ends(tmp_path)[:1], gh, OWN)
+    assert [(f.ref, f.reused) for f in out] == [(f"{OWN}#7", True)]
+    # The label is ensured once before the loop; the reused issue gets no create.
+    assert _writes(gh) == ["ensure_labels"]
+
+
+def test_a_listing_at_its_limit_files_nothing_and_names_the_limit(tmp_path: Path) -> None:
+    from fr.archive_followups import OWED_LIST_LIMIT, file_owed_ends
+
+    full = [_owed_issue(n, f"plan:other#e{n}") for n in range(1, OWED_LIST_LIMIT + 1)]
+    gh = ListingGh(full)
+    out = file_owed_ends(tmp_path, _ends(tmp_path), gh, OWN)
+    assert len(out) == 2 and all(f.ref is None for f in out)
+    assert all(str(OWED_LIST_LIMIT) in (f.error or "") and "limit" in (f.error or "") for f in out)
+    assert _writes(gh) == []
+
+
+def test_a_listing_that_raises_files_nothing_and_names_the_error(tmp_path: Path) -> None:
+    from fr.archive_followups import file_owed_ends
+
+    class Boom(ListingGh):
+        def list_issues(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise RuntimeError("rate limited")
+
+    gh = Boom()
+    out = file_owed_ends(tmp_path, _ends(tmp_path), gh, OWN)
+    assert all(f.ref is None and "RuntimeError: rate limited" in (f.error or "") for f in out)
+    assert _writes(gh) == []
+
+
+def test_a_forge_that_cannot_list_issues_files_nothing(tmp_path: Path) -> None:
+    from fr.archive_followups import file_owed_ends
+    from fr.ghclient import UnsupportedForgeOperation
+
+    class NoList(ListingGh):
+        def list_issues(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise UnsupportedForgeOperation("list_issues", "glab")
+
+    gh = NoList()
+    out = file_owed_ends(tmp_path, _ends(tmp_path), gh, OWN)
+    assert all(f.ref is None and f.unsupported for f in out)
+    assert all("cannot list issues" in (f.error or "") for f in out)
+    assert _writes(gh) == []
+
+
+def test_archive_says_a_forge_that_cannot_list_issues_keeps_owed_in_the_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.ghclient import UnsupportedForgeOperation
+
+    class NoList(ListingGh):
+        def list_issues(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise UnsupportedForgeOperation("list_issues", "glab")
+
+    repo = _plan_repo(tmp_path, outcomes=[_outcome(1), _outcome(2, "owed")])
+    gh = NoList()
+    result = _archive(monkeypatch, repo, gh, "--no-issues")
+    assert result.exit_code == 0, result.output
+    assert "cannot list issues by label: owed actions stay in the journal" in result.output
+    assert _writes(gh) == []
+    entries = parse_journal(archived_journal_path(repo, "spec", SPEC_SLUG).read_text())
+    assert owed_filed_as(entries) == {}

@@ -285,7 +285,7 @@ def create_issue(
 
 
 # Shared by every caller: only ever ADD a field here, never drop one.
-ISSUE_VIEW_FIELDS = "number,title,body,labels,state,url,closedAt"
+ISSUE_VIEW_FIELDS = "number,title,body,labels,state,url,closedAt,author"
 
 
 def view_issue(repo: str, number: int) -> dict[str, object]:
