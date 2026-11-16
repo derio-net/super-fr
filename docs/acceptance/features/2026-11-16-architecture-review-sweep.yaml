@@ -68,9 +68,12 @@ rows:
       decomposition fragment among them, exists and is a valid fragment
     origin:
     - spec:2026-11-16-architecture-review-sweep#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_architecture.py#test_this_repos_architecture_manifest_resolves_with_the_decomposition_fragment
+    status: ci
+    notes: 'CI test resolves this repo''s architecture manifest: no missing file, every
+      fragment valid, decomposition.html directly after pipeline.html'
     verify: none
 amendments:
   - row: hotspot-modules-cannot-grow
