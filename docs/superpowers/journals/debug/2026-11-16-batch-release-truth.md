@@ -5,3 +5,8 @@
 ### cb1563c4510f · repro · Five release-robustness defects, each reproducible from the code
 
 Batch release-truth (#1201 #1290 #1393 #1291 #1202). Each was confirmed against the code on origin/main 4eb40198d; per-defect failing tests follow.
+
+<!-- fr:journal kind=root-cause scope=debug id=a3bf8f63c6c5 created=2026-11-16T18:18:27+00:00 -->
+### a3bf8f63c6c5 · root-cause · #1201: _version_tuple returns None for X.Y.ZrcN, and _check_fr reads None as ok
+
+packages/fr/src/fr/cloud.py: int('0rc7') raises ValueError -> None; `ok = have is None or ...` makes every RC install pass the fr-version check. Fix: parse with packaging.version (fr already depends on it); an unparseable installed version is not ok.
