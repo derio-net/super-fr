@@ -52,12 +52,12 @@ Behaviour-sensitive points that must not move:
 
 Decomposition along conceptual seams is **moderate** overall: about 2,700 lines (A, B, H, brief part of E) move cheaply with no import cycles and few test edits, but the 2,250-line evidence cluster is **costly** because every decision is welded to a print-and-exit refusal and three ContextVars. The coordinator that should stay is `_resolve_body`/`resolve_in_process`, `_resolve_member`, `_advance_step`/`_advance_group` and the Typer commands, roughly 2,500-3,000 lines, owning effect order and output.
 
-File: `/Users/idermitzakis/.cache/fr/worktrees/super-fr/feat__gh-1318/packages/fr/src/fr/commands/run_cmd.py`
+File: `<workspace>/packages/fr/src/fr/commands/run_cmd.py`
 
 <!-- fr:journal kind=discovery scope=plan id=review-triage-batch created=2026-11-16T18:54:36+00:00 phase=2 -->
 ### review-triage-batch · discovery · Brainstorm module review, UNVERIFIED reviewer output: triage-batch (re-check every line range and count before use) (phase 2)
 
-Read-only review of `/Users/idermitzakis/.cache/fr/worktrees/super-fr/feat__gh-1318`. Nothing edited or run.
+Read-only review of `<workspace>`. Nothing edited or run.
 
 ## 1. Responsibility map
 
@@ -220,7 +220,7 @@ All line refs are to that file unless another path is given. Nothing was edited 
 
 ## plan_ops.py decomposition review (read-only, nothing run or edited)
 
-All paths are under `/Users/idermitzakis/.cache/fr/worktrees/super-fr/feat__gh-1318`; `plan_ops.py` means `packages/fr/src/fr/plan_ops.py` (2,545 lines).
+All paths are under `<workspace>`; `plan_ops.py` means `packages/fr/src/fr/plan_ops.py` (2,545 lines).
 
 **Verdict: moderate.** The self-review half (about 1,460 lines) lifts out cheaply because it is read-only and already imports its collaborators lazily. The writer half is tied to roughly 144 test import lines and four monkeypatches on the module object. `plan_ops.py` should stay as the writer facade (`create`, tracking-issue edits, `PlanEditError`, `PhaseSpec`) and re-export the rest.
 
