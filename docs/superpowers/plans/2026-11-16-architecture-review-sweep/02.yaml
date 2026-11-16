@@ -1,0 +1,142 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Report, architecture fragment and issues — the review of
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - architecture-page-shows-decomposition
+  tier: hard
+  files:
+  - docs/superpowers/audits/2026-11-16-architecture-review.md
+  - docs/triage/derio-net--super-fr/architecture/decomposition.html
+  - docs/triage/derio-net--super-fr/architecture/manifest.yaml
+  - tests/unit/test_triage_architecture.py
+  - docs/**/*.md
+  - AGENTS.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Status of earlier findings (R2, R3, R4 re-checks)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Create docs/superpowers/audits/2026-11-16-architecture-review.md with the section skeleton of spec Design A (Scope and method; Status of earlier findings; Findings by category; Duplicates to keep; Decomposition plan; Order and conflicts; Issues filed). In "Scope and method" record `git rev-parse HEAD` as the report's commit, what was read and run, the limits, and the answer to the issue's first open question (area reviewers plus one reconciliation pass). The inputs are the spec-journal entries `brief` and `brief-audit` (`uv run fr journal render --scope spec --slug 2026-11-16-architecture-review-sweep`) and the plan-journal discoveries `review-*`.
+  - id: P2.T1.S2
+    text: |-
+      Re-check each audit item F01–F09 and the cursor race against the code at the report's commit, reading the cited file and lines (they moved since `f0a45b5b`): fr_dispatch/__init__.py (dedup fallback), fr/run/model.py `save_run_state`, fr/isolation/types.py `branch_slug`, fr_cncd/runner.py `build_ingest_payload`, commands/run_cmd.py the `subprocess.run(..., shell=True` call, scripts/install.sh the `uv tool install` call, plugins/super-fr/hooks/fr-isolation-required.sh the `jq` calls, packages/fr-opencode-plugin/bun.lock the `glob` and `minimatch` versions. Write the audit status table: item, earlier commit, status now (`present` with file:line, `fixed in <ref>`, or `not re-checked: <why>`), tracking reference. F01–F04 carry #1499, #1500, #1419, #1501 and the sentence that they are behaviour fixes outside the refactor lane; F05–F09 and the race get their issue number in task 6. Run nothing destructive and send no network request beyond `gh` reads.
+  - id: P2.T1.S3
+    text: |-
+      Re-check each supplement item and write its table: G01, R01, R02, R03 as `landed in this PR` with the commit and the guard test's name; R04 (the two `_StrictLoader` classes in fr/artifacts/structure.py and fr/harness/model.py, and fr/lenses/model.py's import), R05 (the eight record-writing test helpers), R06 (the four `_hermetic_git` fixtures), R07 (module sizes, from `wc -l`) as `present` with current file:line. Re-run the supplement's two counts with a short AST script kept in the scratch directory, not the repo: direct `yaml.safe_load`/`yaml.load` calls under packages/*/src, and stdlib subprocess calls whose argv literal starts with `git`; report the numbers with the method.
+- number: 2
+  title: Findings by category, and the duplicates to keep (R1)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Write "Findings by category" for the six categories of #1318. Every finding has the R1 fields: id, category, severity (P0–P3 as the audit defines them), where defined and who reads it (file:line), whether the copies disagree today, proposed fix, guard, files the fix touches, tracking reference. Category 1 and 2 hold R01–R06 plus what the re-checks found beyond them: `_pr_time` (commands/triage_batch_cmd.py) and `_created_since` (triage/collect.py) with whether each has `parse_aware`'s contract and its disposition; the journal read repeated in plan_ops.py; `RECORD_SCHEMA_VERSION` against the registry. Category 3 lists each seam (fr never imports a sibling outside `_SOFT_POINTS`; fr_dispatch never imports an adapter; git only through gitseam in batch modules; forge writes only through the adapter; artifact kinds only in the registry) with its tripwire test by name or the statement that none exists, and the import from `triage_batch_cmd` in commands/triage_kanban_cmd.py (#1174). Category 5 states what was proved removable and what was not; a grep hit is not proof. Category 6 lists the duplicated fixtures (R05, R06) and uses `.test_durations` only as recorded weights.
+  - id: P2.T2.S2
+    text: |-
+      Write "Duplicates to keep": default-branch and repo-root readers, atomic writers, marker and workspace checks, schema numbers, legacy and VK readers, the gate tuple in triage/lanes.py and the help text in commands/journal_cmd.py, `BoardStatus`, and the naive-as-UTC timestamp readers in fr/usage and fr/debt. For each, re-read the cited code and state the policy difference in one or two sentences with file:line. An item whose difference cannot be shown moves to "Findings by category".
+- number: 3
+  title: Decomposition plan for the five modules (R5)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      For commands/run_cmd.py and commands/triage_batch_cmd.py with triage/batch_drive.py: write the responsibility map (cluster, line range, size, kind), the destination package for each cluster, the slice order with a size per slice (S, M, L), what each slice must preserve, and the guards to widen in the same change. Start from the plan-journal discoveries `review-run-cmd` and `review-triage-batch`, which are unverified: confirm every line range with `grep -n "^def \|^class "` on the file, every count (`typer.Exit`, monkeypatches, importers) with the grep that produces it, and correct the text where the code differs.
+  - id: P2.T3.S2
+    text: |-
+      The same for isolation/local.py and plan_ops.py, from `review-isolation-local` and `review-plan-ops`. Re-check the three side findings and state each one's status with evidence: whether `plan_ops.tick` and `plan_ops.complete_phase` have a production caller (grep packages/ for both names, excluding tests); the raw `write_text` calls in plan_ops.py (count and lines) against fr/artifacts/atomic.py; the import of `triage_batch_cmd` in commands/triage_kanban_cmd.py.
+- number: 4
+  title: Designs for the costly parts, and the order (R6)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Write four designs, each with a preservation contract (what must stay byte-identical or order-identical, and the test that shows it). (a) Evidence verdict for run_cmd.py: a frozen dataclass a verifier returns (witness, refusal text, exit code, unobserved note, warnings in emit order) and one adapter in the command module that prints and exits, preserving refusal wording, exit codes and warning order; name the first two verifiers to convert. (b) Driver ports for triage_batch_cmd.py: a dataclass (client, checkout, runner, now, sleep, recollect, say, fail, board) filled by `build_driver`; preserve the driver tests' output and effect assertions, the lease-pass-save order and the exit codes 0, 1 and 3; state plainly whether tests' patch locations stay (late-bound from the command module) or move, and reconcile that with the supplement's advice against permanent forwarding wrappers. (c) Garbage collection in isolation/local.py: collaborator or mixin, with the four methods `HostWorktreeTarget` overrides as the contract. (d) Retiring `plan_ops.tick` and `complete_phase`: stated as a behaviour change (write order, refactor gate) that needs its own spec, not a refactor.
+  - id: P2.T4.S2
+    text: |-
+      Write "Order and conflicts": a table of clusters and slices against the files they touch, the order that follows (small vocabulary work, then R04 with #1286, then R05 and R06, then module slices with the ports step before any driver move), and the overlaps with #1419, #1499, #1500 and #1501. State the line-budget rule and its cost as the answer to the issue's third open question, and the fragment as the answer to the second.
+- number: 5
+  title: Architecture fragment (R13)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: in tests/unit/test_triage_architecture.py add a test that calls `resolve_manifest` on docs/triage/derio-net--super-fr/architecture (same arguments `fr triage architecture render` uses; read fr/triage/architecture.py for `GENERATED` and `MOVED`) and asserts: `missing` is empty; every entry of `fragments` passes `validate_fragment`; `"decomposition.html"` is in `fragments`; and in `order` it directly follows `pipeline.html`. Run; fails on the absent fragment.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: write docs/triage/derio-net--super-fr/architecture/decomposition.html in the style of the page's other fragments (CSS variables such as `var(--muted)`, `var(--line)`; no script, no external resource): an `<h2>`, a short introduction, one table (module, lines, what stays, what moves and where, guard), a paragraph on the line budget, and a link to the report on GitHub. Only text from this repo. Add `- decomposition.html` after `- pipeline.html` in manifest.yaml. Run the test; green. Render once to look at it: `uv run fr triage state import --from docs/triage --repo derio-net/super-fr` then `uv run fr triage architecture render --repo derio-net/super-fr --now-ref origin/main`; do not commit the rendered page or the imported state. If the render needs forge facts that are absent, record that as a discovery and rely on the test. Refactor reason for the step record: a static fragment.
+- number: 6
+  title: Issues, links and the final gate (R4, R7)
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      For each of F05, F06, F07, F09 and the cursor race that task 1 found present, search for an existing issue by that finding's own terms only (for example `gh issue list --repo derio-net/super-fr --state open --search "jq in:title,body hook"`), one search per finding, no backlog sweep. Write each new issue body to a file in the scratch directory first, applying .claude/rules/third-party-privacy.md, with: the evidence at the report's commit (file:line), observed against expected, the recommended fix from the audit, and a link to the report. File with `gh issue create --body-file`. Record the number, or the existing issue's number, in the report's status table.
+  - id: P2.T6.S2
+    text: |-
+      File the sweep issues the same way, one each: R04 (same-loader extraction only; cross-link with a comment on #1286, which keeps the backend switch), R05, R06; one per module for its cheap slices (run_cmd.py, triage_batch_cmd.py with batch_drive.py, isolation/local.py, plan_ops.py); one per costly-part design (a–d). Each body states the preserved behaviour, the callers to migrate, the guard, and the files shared with other open work. Comment on #1174 with the kanban import finding and file no second issue. Post one comment on #1318 that lists every issue filed and links the report. Fill the report's "Issues filed" section and every tracking reference; no finding is left without one.
+  - id: P2.T6.S3
+    text: |-
+      Run `uv run fr docs check --base origin/main` and fix what it names; update AGENTS.md only if the report corrected something it states. Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run pytest -q --no-cov tests/unit/test_triage_architecture.py tests/unit/test_triage_fragments.py tests/unit/test_tripwire_module_budget.py`, then the full `uv run pytest -q --no-cov -n auto`. Grep the report and the fragment for any host, org, repo or user outside `derio-net` before committing.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
