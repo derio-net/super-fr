@@ -1097,9 +1097,30 @@ def tag_and_release(repo: Path, version: str, cmds: Commands) -> None:
     is published as a GitHub pre-release (R20)."""
     tag = Version.parse(version).tag
     _git(repo, *_bot("tag", "-a", tag, "-m", tag))
-    _git(repo, "push", "--quiet", REMOTE, f"refs/tags/{tag}", auth=True)
+    pushed = _git(repo, "push", "--quiet", REMOTE, f"refs/tags/{tag}", auth=True, check=False)
+    if pushed.returncode != 0 and not _remote_tag_is_head(repo, tag):
+        raise ReleaseError(f"git push {tag} failed: {pushed.stderr.strip()}")
+    # A dispatch run and a push run can both reach here (gh#1291 gave them separate
+    # concurrency groups): the one that loses the race finds the other's identical
+    # tag, or its Release, and is done, not red.
+    if pushed.returncode != 0 and release_exists(tag, cmds):
+        print(f"{tag} was tagged and released by a concurrent run")
+        return
     create_release(repo, version, cmds)
     print(f"tagged and released {tag}")
+
+
+def _remote_tag_is_head(repo: Path, tag: str) -> bool:
+    """Whether origin already has *tag* on the commit HEAD is (a concurrent run's)."""
+    # Both patterns: an exact ref alone does not list the peeled `^{}` line.
+    ref = f"refs/tags/{tag}"
+    r = _git(repo, "ls-remote", "--tags", REMOTE, ref, f"{ref}^{{}}", check=False)
+    if r.returncode != 0:
+        return False
+    refs = dict(reversed(line.split("\t", 1)) for line in r.stdout.splitlines() if "\t" in line)
+    # An annotated tag lists its peeled commit as `<ref>^{}`; a light one only itself.
+    remote = refs.get(f"refs/tags/{tag}^{{}}") or refs.get(f"refs/tags/{tag}")
+    return remote == _rev(repo, "HEAD")
 
 
 def create_release(repo: Path, version: str, cmds: Commands) -> None:
@@ -1113,7 +1134,7 @@ def create_release(repo: Path, version: str, cmds: Commands) -> None:
         args.append("--prerelease")
     args += ["--generate-notes", "--target", _rev(repo, f"refs/tags/{tag}")]
     r = cmds.gh(args)
-    if r.returncode != 0:
+    if r.returncode != 0 and not release_exists(tag, cmds):  # a concurrent run's is fine
         raise ReleaseError(f"gh release create {tag} failed: {r.stderr.strip()}")
 
 

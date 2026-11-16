@@ -1273,6 +1273,31 @@ def test_gh1290_a_tag_with_its_release_is_left_alone(world: World) -> None:
     assert [c[:3] for c in world.gh_calls] == [["release", "view", f"v{BASE}"]]
 
 
+def _concurrent_tag(world: World, tag: str, ref: str = "origin/main") -> None:
+    """Another run's annotated tag, pushed to origin first."""
+    _git(world.other, "fetch", "-q", "origin")
+    _git(world.other, "-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", tag, "-m", tag, ref)
+    _git(world.other, "push", "-q", "origin", f"refs/tags/{tag}")
+
+
+def test_gh1291_losing_the_tag_race_to_an_identical_tag_is_not_a_failure(world: World) -> None:
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+    _concurrent_tag(world, "v4.23.1")  # same commit, its own tag object
+
+    release.tag_and_release(world.clone, "4.23.1", world.commands())
+
+    assert _release_calls(world) == []  # the concurrent run made the Release
+
+
+def test_gh1291_a_remote_tag_on_another_commit_still_refuses(world: World) -> None:
+    world.land("README.md", "# moved\n")
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+    _concurrent_tag(world, "v4.23.1", "origin/main~1")
+
+    with pytest.raises(release.ReleaseError, match="git push v4.23.1 failed"):
+        release.tag_and_release(world.clone, "4.23.1", world.commands())
+
+
 def test_gh1290_an_unreadable_release_refuses_rather_than_guessing(world: World) -> None:
     world.release_view_error = "HTTP 401: Bad credentials"
     assert world.run() != 0
