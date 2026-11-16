@@ -20,9 +20,16 @@ rows:
     - spec:2026-11-15-owed-archive-side-effects#R5
     - spec:2026-11-15-owed-archive-side-effects#R6
     - spec:2026-11-15-owed-archive-side-effects#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_owed.py#test_off_the_default_branch_resolve_closes_nothing_and_prints_the_closes_line
+      - super-fr:tests/unit/test_owed_close_at_merge.py#test_an_archived_journals_owed_entry_discharged_on_the_branch_is_closed_by_the_body
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_owed_close_at_merge
+    status: ci
+    notes: Built in run 2026-11-15-feat-batch-owed-archive; unit tests plus the row
+      scenario, which CI runs through tests/integration/test_scenarios.py; candidate
+      walk green
     verify: candidate
     scenario: tests/scenarios/owed-close-at-merge.sh
   - id: archive-refusal-writes-nothing
