@@ -314,3 +314,8 @@ Verified real: plan-legacy-archived is a PLAN_HOME_KINDS member (fr/artifacts/pa
 ### ir-1478-3 · finding [open] (reviewer: in scope) · Independent review: _keep_live_root compared an unresolved plan path, so a symlinked root skipped the .gitkeep silently (phase 1)
 
 archive_cmd passes repo_root / plan_rel unresolved while repo_root is resolved (macOS /var vs /private/var). Fixed: compare resolved forms, act on the path fr computes; test_a_plan_path_reached_through_a_symlinked_root_still_keeps_the_root.
+
+<!-- fr:journal kind=finding scope=plan id=ir-1478-1-resolved created=2026-11-16T15:38:19+00:00 state=fixed resolves=ir-1478-1 answered_by=agent -->
+### ir-1478-1-resolved · finding [fixed] · resolves ir-1478-1: Independent review: the nag, sentinel, Bash guard and worktree create/remove hooks still ran a bare git, so #1429 was half-closed on bash
+
+Fixed test-first in this PR at the operator's request (independent review of #1478, item 1; decision ir-scope-1478).
