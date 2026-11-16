@@ -7308,6 +7308,13 @@ batches:
     handle: w3F:p6
     archive: chore/closeout-2026-11-16-2
     archived: 1495
+  - kind: claims_released
+    at: '2026-11-16T17:16:18.858489Z'
+    keys:
+    - super-fr#1399
+    - super-fr#1389
+    - super-fr#1293
+    - super-fr#1275
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7944,3 +7951,11 @@ closeouts:
   - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-gate-truth.md"
   handed:
   - 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-3
+  branch: chore/closeout-2026-11-16-3
+  at: '2026-11-16T17:16:07.620629Z'
+  runner: herdr
+  handle: w3F:p7
+  planned:
+  - guard-trust
