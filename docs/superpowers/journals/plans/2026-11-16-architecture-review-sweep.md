@@ -53,3 +53,106 @@ Behaviour-sensitive points that must not move:
 Decomposition along conceptual seams is **moderate** overall: about 2,700 lines (A, B, H, brief part of E) move cheaply with no import cycles and few test edits, but the 2,250-line evidence cluster is **costly** because every decision is welded to a print-and-exit refusal and three ContextVars. The coordinator that should stay is `_resolve_body`/`resolve_in_process`, `_resolve_member`, `_advance_step`/`_advance_group` and the Typer commands, roughly 2,500-3,000 lines, owning effect order and output.
 
 File: `/Users/idermitzakis/.cache/fr/worktrees/super-fr/feat__gh-1318/packages/fr/src/fr/commands/run_cmd.py`
+
+<!-- fr:journal kind=discovery scope=plan id=review-triage-batch created=2026-11-16T18:54:36+00:00 phase=2 -->
+### review-triage-batch · discovery · Brainstorm module review, UNVERIFIED reviewer output: triage-batch (re-check every line range and count before use) (phase 2)
+
+Read-only review of `/Users/idermitzakis/.cache/fr/worktrees/super-fr/feat__gh-1318`. Nothing edited or run.
+
+## 1. Responsibility map
+
+**`packages/fr/src/fr/commands/triage_batch_cmd.py`** (7,343 lines)
+
+| Lines | ~Size | Cluster | Kind |
+|---|---|---|---|
+| 1–304 | 300 | Imports and module docstring | n/a |
+| 305–570 | 265 | Factories (`make_client`, `make_checkout`, `load_runner`), claim helpers, event writers | effects |
+| 574–1033 | 460 | Option types, `_save`/`_write`, `list/create/edit/cancel/suggest` | CLI |
+| 1035–1305 | 270 | Dispatch preflight: `_tracking_gate`, `_reservation`, `_work_item`, `_forge_writes`, `_probe` | effects |
+| 1306–1710 | 405 | Replace and recovery (`_replacement_transaction`, 1422) | effects |
+| 1712–1962 | 250 | `dispatch_batch` | effects |
+| 1963–2802 | 840 | Adopt (`adopt_batch`, 2051) and session listing | effects, with some pure wording |
+| 2804–2944 | 140 | `batch_merge_command` | CLI |
+| 2945–3232 | 290 | Collected close-out command | effects and CLI |
+| 3233–3730 | 500 | Driver support: `recollect`, pacing, `drive_lock`, `_checkout_map` | effects |
+| 3740–6874 | 3,135 | `_Driver` | effects |
+| 6875–7037 | 160 | Close-out items, small helpers | effects |
+| 7039–7343 | 305 | `build_driver`, `one_pass`, `pass_exit`, host loop, `batch_drive_command` | orchestration and CLI |
+
+`_Driver` is 43% of the file. Its sub-clusters:
+- **Reads and snapshot building**, 3838–4943 (~1,100 lines): `snapshot` is at 4152.
+- **Pass control**, 5121–5356: `run_pass`, pacing, board.
+- **`_act` switch**, 5357–5493: about 25 action kinds.
+- **Merge, queue, conflict and red hand-back**, 5686–6224.
+- **Post-merge, close-out and archive**, 6225–6694.
+- **Wave export**, 6695–6874.
+
+**`packages/fr/src/fr/triage/batch_drive.py`** (2,130 lines) is one cohesive planner, but with separable leaf sub-planners:
+- Snapshot and action types, 149–523.
+- Collected close-out naming and steps, 636–822 and 1037–1194.
+- Hand-back decisions, 824–1035.
+- Wave export, 1219–1443.
+- Queue and merge train, 1467–1675.
+- `drive_pass`, 1732–2066: a 335-line ordered sequence (claims, merge, close-out, archive, idle, export, dispatch, close, dedupe) that must stay whole.
+
+## 2. Where each cluster belongs
+
+- **Dispatch preflight and `dispatch_batch`** belong in `fr/triage/batch_dispatch.py`. They need `WorkItem`/`run_item_id` (1171, 1292), so the item builder must be an injected port.
+- **Replace** would be a new `fr/triage/batch_replace.py`. It needs `fr_dispatch.launch`/`protocols` (1436–1439).
+- **Adopt** would be a new `fr/triage/batch_adopt.py`. It needs no `fr_dispatch` import, because it duck-types the runner (1967–1972).
+- **`_Driver`** would become `fr/triage/batch_driver_*.py`. All these names match the `batch*.py` glob (`tests/unit/test_forge_adapter_batch_ops.py:381`).
+
+`fr_dispatch` lines inside `_Driver`: 4438, 4858, 4910, 4959, 5301, 5576, 5918, 6084, 6162, 6194, 6477–6478, 6627. Outside it: 6959, 7016. Most are `isinstance` checks against `Session*` protocols or `WorkItem` construction, so they can become ports.
+
+Three things block a move below the command layer today:
+- `_Driver` calls `_fail` 29 times, `_say` 15 times and the consoles 16 times.
+- It uses `triage_kanban_cmd.write_board/publish/one_line`, `probe_item` and `try_load`.
+- It calls `recollect`, which reaches `collect_into`; the glob guard bans `fr.triage.collect` in batch modules (`test_forge_adapter_batch_ops.py:389`).
+
+## 3. Coupling, measured
+
+- **Module state:** no mutable globals. All state is on `_Driver`: about 45 fields, roughly 15 of them marked "per pass" (3744–3836).
+- **Production importers:**
+  - `triage_drive_cmd.py` (184, 482, 642, 670) uses 10 names, including `build_driver`, `one_pass`, `pass_exit`, `drive_lock` and `LeaseTerms`.
+  - `triage_claim_cmd.py:23` uses `claim_env`, `_write` and `_save`.
+  - `triage_cmd.py` (932, 1101).
+  - `triage_kanban_cmd.py:355` imports `ci_none_at`, a circular back-import.
+- **Tests:** 46 files and 338 referencing lines. There are 185 `monkeypatch.setattr(<module>, "name")` calls. The top names:
+
+| Name | Patches |
+|---|---|
+| `load_runner` | 30 |
+| `make_client` | 23 |
+| `_sleep` | 21 |
+| `_now` | 14 |
+| `make_checkout` | 13 |
+| `recollect` | 10 |
+| `_pace_forge` | 8 |
+| `ci_is_none` | 6 |
+| `_save` | 5 |
+| `_installed_version` | 5 |
+
+- `_Driver` is named 21 times in tests and constructed 9 times.
+
+The patches are the real obstacle. `_Driver` reads those names as module globals (`_now` 11 times), so moving the class silently disconnects the patches unless the ports are late-bound from the command module.
+
+## 4. Slice order
+
+1. **S: split `batch_drive.py` leaves.** Move wave export (1219–1443) to `batch_drive_export.py` and hand-back decisions (824–1035) to `batch_drive_handback.py`, re-exported from `batch_drive`. Preserve the action order in `drive_pass`. Extend the purity guard (`tests/unit/test_triage_batch_drive.py:705`) from one path to a `batch_drive*.py` glob.
+2. **S: `_Driver` ports.** Add a `DriverPorts` dataclass (client, checkout, runner, now, recollect, say, fail, board) that `build_driver` fills with lambdas calling the module globals. Nothing moves, and all 185 patches keep working.
+3. **M: export executor** (6695–6874) to `fr/triage/batch_driver_export.py`. Preserve `_export_refusals`/`_export_failures` and their per-pass reset.
+4. **M: snapshot builder** (4004–4943) to `batch_driver_reads.py`. Preserve the per-pass caches (`_ci`, `_rules`, `_fetched`) and the process-lifetime ones (`_cursors`, `_ledger_rows`). About 13 tests name `_Driver.forge_off`/`merge_ctx`/`ledger_off`.
+5. **M: adopt** (1963–2802) to `fr/triage/batch_adopt.py`. Move the `_ISOLATION_ALLOWED` imports with it. `test_triage_batch_adopt.py` has 18 references.
+6. **L: executor core** (`run_pass`, `_act`, merge and close-out). Preserve:
+   - the lease, then pass, then `save_pass` order (7081–7091);
+   - the `--yes` and plan-mode split;
+   - `failed_write` feeding `pass_exit` codes 0, 1 and 3 (7094–7099);
+   - claim holds (`_held_now`).
+   
+   `test_import_direction.py:31` `_SOFT_POINTS` must stay unchanged, with ports only.
+
+## 5. Verdict
+
+**Moderate, front-loaded.** The seams are real and the globs already cover `batch_*` names, but `_Driver`'s 3,100 lines are tied to the CLI layer by output and exit calls and by 185 module-attribute patches. Slice 2 (ports) is the prerequisite that makes everything after it cheap.
+
+`batch_drive.py` should not be split at its core: `drive_pass`, `Snapshot` and `Action` are one planner. Only the export and hand-back leaves are worth peeling, and only if the purity guard becomes a glob in the same change.
