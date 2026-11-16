@@ -62,9 +62,15 @@ rows:
       one, and no second function with the same body exists in the source
     origin:
     - spec:2026-11-16-architecture-review-sweep#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_timestamps.py#test_unreadable_or_naive_is_none
+      - super-fr:tests/unit/test_triage_timestamps.py#test_a_renamed_copy_is_reported
+      - super-fr:tests/unit/test_triage_timestamps.py#test_only_the_owner_holds_that_body
+    status: ci
+    notes: Phase 1 replaced four identical readers with fr.triage.timestamps.parse_aware;
+      CI pins its results and the copy scan reports planted verbatim and renamed copies
+      and finds none in the source.
     verify: none
   - id: hotspot-modules-cannot-grow
     capability: module size budget
