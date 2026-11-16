@@ -7248,6 +7248,13 @@ batches:
     handle: w3F:p7
     run: 2026-11-15-feat-batch-guard-trust
     archive: chore/closeout-2026-11-16-3
+  - kind: closeout
+    at: '2026-11-16T17:24:27.021689Z'
+    runner: herdr
+    handle: w3F:p7
+    run: 2026-11-15-feat-batch-guard-trust
+    archive: chore/closeout-2026-11-16-3
+    archived: 1498
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7966,6 +7973,7 @@ closeouts:
   planned:
   - guard-trust
   pr: 1498
+  merged: true
   head: e7884e8850b94bf94e772569d1a03e76c3f7e8e6
   members:
   - guard-trust
