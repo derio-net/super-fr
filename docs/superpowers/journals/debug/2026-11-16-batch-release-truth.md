@@ -10,3 +10,8 @@ Batch release-truth (#1201 #1290 #1393 #1291 #1202). Each was confirmed against 
 ### a3bf8f63c6c5 · root-cause · #1201: _version_tuple returns None for X.Y.ZrcN, and _check_fr reads None as ok
 
 packages/fr/src/fr/cloud.py: int('0rc7') raises ValueError -> None; `ok = have is None or ...` makes every RC install pass the fr-version check. Fix: parse with packaging.version (fr already depends on it); an unparseable installed version is not ok.
+
+<!-- fr:journal kind=root-cause scope=debug id=7e2f56ea7143 created=2026-11-16T18:18:29+00:00 -->
+### 7e2f56ea7143 · root-cause · #1290: finish() reads 'tag exists' as 'released'
+
+scripts/release.py tag_and_release pushes the tag before gh release create; finish returns 'already tagged; nothing to do' whenever the tag exists, so a failed create is never retried. Fix: when the tag exists, ask gh release view; create the Release when it is missing (no retag), refuse when the read fails for another reason.
