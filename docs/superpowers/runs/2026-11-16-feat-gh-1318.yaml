@@ -150,8 +150,10 @@ steps:
           findings: l-tests-r1
           lenses: docs-accuracy=17:none;tests=11:l-tests-r1
   deliver:
-    state: running
-    at: '2026-11-16T22:32:37+00:00'
+    state: done
+    at: '2026-11-16T23:15:29+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1525
     units:
       step/deliver:
         attempts:
@@ -159,6 +161,14 @@ steps:
           harness: claude-code
           model: claude-fable-5-2
           session: 65fe70a5-99dc-4a3f-b249-8255221b4257
+          returned: '2026-11-16T23:15:07+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite.log@fc237dfbbe11
+          walk: 20261116T223336Z.log@b7effe7e9dbe
+          proportionality: 66c9cb81cf8be80a0a26a3187c54a592efd90a64:17dcb10432362e9d3003bc28b072a68d762461f242b86be73f2e9250592d565a
+          docs: 66c9cb81cf8be80a0a26a3187c54a592efd90a64:41a395535672e3b1425cee81d843b1f79c4dc17268057e460193f41f70d09535
+          visual: none
 driver: standalone
 fr_version: 8.0.3
 pr: https://github.com/derio-net/super-fr/pull/1525
