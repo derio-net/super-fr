@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from fr.run.model import load_run_state
 
-from tests.unit.record_support import RUN, commit_all, fr, write_record
+from tests.unit.record_support import RUN, commit_all, fr, suite_ran_last, write_record
 from tests.unit.test_deliver_pr_body import _at_deliver, _body
 
 MR = "https://gitlab.com/example-group/example-project/-/merge_requests/11"
@@ -52,6 +52,7 @@ def _checkout(tmp_path: Path, backend: str) -> Path:
     profiles.parent.mkdir(parents=True, exist_ok=True)
     profiles.write_text(f"backend: {backend}\n")
     commit_all(root, f"declare {backend}")
+    suite_ran_last(root)
     return root
 
 

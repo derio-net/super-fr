@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?
@@ -70,10 +70,10 @@ watch an agent type it in your terminal. It needs a profile declared `ops: true`
 | 1 | Refuses an ops gap. Brings up the ops workspace `chore/ops-<slug>` on the ops profile. Asks you to trust the op set if it changed. Then runs pre-merge status and applies each open op after its own confirmation |
 | 2 | Merges the PR, only with no open pre-merge op, green required checks and the head stage 1 verified |
 | 3 | Verifies the merge, rebases the ops branch onto the default branch, and runs every op's `ready:` probe |
-| 4 | Post-merge status and apply |
+| 4 | Post-merge status and apply. An op whose check already passes is still recorded, so stage 6 can count it |
 | 5 | Probes each Test Plan step that points at an op, asks you about the rest, and records the outcomes |
 | 6 | `fr gate pass --gate devops --run <id>`, from the ops workspace |
-| 7 | Keeps `gate:tester` and lists the steps the Tester gate owns |
+| 7 | Keeps `gate:tester` and lists what the Tester gate owns, or passes `gate:tester` when it owns nothing |
 | 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
 
 fr records each stage's completion in a state directory outside every checkout. By
@@ -122,7 +122,10 @@ pointer yourself and answer `ran <evidence>`, `na <reason>` or `owed <why>`.
 fr records an `owed` answer, but it does not close the step. So stage 6 refuses, and
 prints the `fr closeout outcome` command to record the outcome once you have walked it.
 Steps the Tester gate owns keep `gate:tester` on the PR, and this stage does not walk
-them.
+them. Rows that are not walked, and a spec that declares `gate: tester`, keep it too. When
+the Tester gate owns nothing, stage 7 passes `gate:tester`, so the release does not wait on
+a gate that nobody owes. Once all eight stages are on record, `fr pickup --run` says the
+stage is complete and does not print the DevOps brief again.
 
 ## What does the stage never do?
 

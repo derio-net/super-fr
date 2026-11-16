@@ -465,13 +465,38 @@ def derive_visual(
                     f"row {row.row}: no shell call in the transcript of {whose} executed "
                     f"the capture script {row.script} since this unit opened at {since} — "
                     "re-run it by name (e.g. `node <script>`), then open its fresh "
-                    "screenshots"
+                    "screenshots" + _near_miss(view, row.script, opened_at)
                 )
     if problems:
         raise VisualRefusedError(
             [f"refused — the visual evidence for {ids} was not witnessed:", *problems]
         )
     return Derived(check.witness(), unobserved=False)
+
+
+def _near_miss(view: ObservedSession, script: Path, since: _dt.datetime) -> str:
+    """gh#1303: when a shell call since `since` NAMED `script` without fr reading
+    it as a run, the sentence that says which word hid it — so the executor can
+    change that call instead of repeating it. Empty when there is none."""
+    from fr.run.telemetry import near_miss_program
+
+    words: list[str] = []
+
+    def names(command: str) -> bool:
+        word = near_miss_program(command, script)
+        if word is not None and not words:
+            words.append(word)
+        return word is not None
+
+    view.ran_windows(names, since)
+    if not words:
+        return ""
+    return (
+        f". A call named the script, but fr read its program as `{words[0]}`, which "
+        "it does not treat as running it: make the script the command word, or put it "
+        "after an interpreter, `uv run`, or a process wrapper (timeout, nice, nohup, "
+        "env, time, stdbuf, caffeinate)"
+    )
 
 
 def _unobservable(env: Mapping[str, str]) -> str:

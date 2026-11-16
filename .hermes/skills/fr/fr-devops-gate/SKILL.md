@@ -107,7 +107,9 @@ bracket, list marker or long token, and a bracket anywhere records nothing. An `
 so stage 6 refuses and prints the `fr closeout outcome` command that records it once you
 have walked it (a later `ran`/`na` supersedes the owed one); then re-run the stage. Steps the Tester gate
 owns are listed in the gate-pass comment and keep `gate:tester` on the PR; they are not
-this stage's to walk.
+this stage's to walk. Its unwalked rows, and a spec that declares `gate: tester`, keep it too.
+When the Tester gate owns nothing, stage 7 passes `gate:tester` itself with a generated note:
+never pass it by hand with a note you made up.
 
 ## What the stage never does
 

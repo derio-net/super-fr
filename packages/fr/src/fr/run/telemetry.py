@@ -1183,6 +1183,63 @@ _SEPARATORS = frozenset({"&&", "||", ";", "|", "|&", "&", "(", ")"})
 _LEADING_ASSIGNMENT = re.compile(r"^[A-Za-z_]\w*=")
 
 
+@dataclass(frozen=True)
+class _Wrapper:
+    """A process wrapper's option grammar: the options whose value is the NEXT
+    word (short `-k`, long `--kill-after`; `-k10` and `--kill-after=10` are one
+    word and need no entry), how many operands precede the command it runs, and
+    whether `NAME=value` words may sit before it (`env`)."""
+
+    short_values: frozenset[str] = frozenset()
+    long_values: frozenset[str] = frozenset()
+    operands: int = 0
+    assignments: bool = False
+
+
+_WRAPPERS: dict[str, _Wrapper] = {
+    "timeout": _Wrapper(frozenset({"-s", "-k"}), frozenset({"--signal", "--kill-after"}), 1),
+    "nice": _Wrapper(frozenset({"-n"}), frozenset({"--adjustment"})),
+    "nohup": _Wrapper(),
+    "env": _Wrapper(
+        frozenset({"-u", "-C", "-S"}), frozenset({"--unset", "--chdir"}), assignments=True
+    ),
+    "time": _Wrapper(frozenset({"-f", "-o"}), frozenset({"--format", "--output"})),
+    "stdbuf": _Wrapper(
+        frozenset({"-i", "-o", "-e"}), frozenset({"--input", "--output", "--error"})
+    ),
+    "caffeinate": _Wrapper(frozenset({"-t", "-w"})),
+}
+"""Words that run the command after their own options (gh#1303): `timeout 500
+uv run python x` runs `x`. Without them the wrapper was read as the program and
+a real capture-script run was never witnessed."""
+
+
+def _unwrap(words: list[str]) -> list[str]:
+    """`words` with every leading assignment and process wrapper (`_WRAPPERS`,
+    with its options and operands) stepped over: the command that actually runs.
+    A wrapper with no command after it leaves `[]`."""
+    while True:
+        while words and _LEADING_ASSIGNMENT.match(words[0]):
+            words = words[1:]
+        grammar = _WRAPPERS.get(os.path.basename(words[0])) if words else None
+        if grammar is None:
+            return words
+        i = 1
+        while i < len(words) and words[i].startswith("-") and words[i] != "-":
+            word = words[i]
+            i += 1
+            if word == "--":
+                break
+            if word in grammar.short_values or word in grammar.long_values:
+                i += 1
+        i += grammar.operands
+        rest = words[i:]
+        if grammar.assignments:
+            while rest and _LEADING_ASSIGNMENT.match(rest[0]):
+                rest = rest[1:]
+        words = rest
+
+
 def _simple_commands(command: str) -> Iterator[list[str]]:
     """The words of each simple command in `command`: split on lines and on
     unquoted control operators, quotes removed. Unbalanced quotes fall back to
@@ -1213,12 +1270,13 @@ def _program(words: list[str], depth: int = 0) -> list[str]:
     """The program(s) a simple command executes: its command word and, after an
     interpreter word (`_INTERPRETERS`, `uv run`, a `deno`/`bun` `run`), the first
     non-flag argument — recursively (`uv run python x`, `npx node x`). An
-    `fr isolation exec … --` prefix is stepped over, and a lone quoted argument
-    after it, or after `bash -c`/`sh -c`, is read as a command of its own."""
+    `fr isolation exec … --` prefix and the process wrappers (`_unwrap`:
+    `timeout`, `nice`, `nohup`, `env`, `time`, `stdbuf`, `caffeinate`) are
+    stepped over, and a lone quoted argument after `fr isolation exec --`, or
+    after `bash -c`/`sh -c`, is read as a command of its own."""
     if depth > 4:
         return []
-    while words and _LEADING_ASSIGNMENT.match(words[0]):
-        words = words[1:]
+    words = _unwrap(words)
     if not words:
         return []
     if words[:3] == ["uv", "run", "fr"]:
@@ -1282,6 +1340,20 @@ def _executes(command: str, script: Path) -> bool:
     return any(
         _is_log(word, script) for words in _simple_commands(command) for word in _program(words)
     )
+
+
+def near_miss_program(command: str, script: Path) -> str | None:
+    """The word fr read as the program of a simple command in `command` that
+    NAMES `script` without executing it (`make shots shots.cjs` → `make`), or
+    `None` when `command` executes it or never names it — so a refusal can say
+    which call hid the script and why (gh#1303)."""
+    if _executes(command, script):
+        return None
+    for words in _simple_commands(command):
+        if any(_is_log(word, script) for word in words):
+            program = _program(words)
+            return program[0] if program else words[0]
+    return None
 
 
 def shell_named_since(

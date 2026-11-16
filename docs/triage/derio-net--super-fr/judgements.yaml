@@ -1,5 +1,5 @@
 schema: 12
-ranked_at: '2026-11-14'
+ranked_at: 2026-11-15
 tiers:
 - n: 1
   title: Work can be lost
@@ -14,6 +14,33 @@ tiers:
   title: Improve or investigate
   description: Friction, observability, compatibility, or work needing new live evidence.
 issues:
+  super-fr#1468:
+    tier: 3
+    theme: test-isolation
+    cx: S
+    severity: med
+    kind: defect
+    verified: false
+    detail: 'During the retire-vk run a test left a branch `feat/fixture` with five empty commits by `scenario@example.invalid` (the author `tests/scenarios/_common.sh` sets) in the run worktree, one of them on `feat/batch-retire-vk`. Nothing was lost (empty commits, recovered from the reflog). The leaking test is not identified.'
+    note: 'A scenario script that commits outside its tmp repo can move a live workspace''s branch. Feature group "Test-suite trust".'
+  super-fr#1467:
+    tier: 4
+    theme: test-naming
+    cx: XS
+    severity: low
+    kind: parked
+    verified: false
+    detail: '`test_vk_bridge_discover.py` tests `fr_dispatch.discover_plans` but keeps a vk name after #1465. Renaming it needs acceptance amendments on the two rows that cite it.'
+    note: 'Parked: cosmetic; ride along with the next PR that amends those rows.'
+  super-fr#1466:
+    tier: 4
+    theme: test-simplicity
+    cx: XS
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Three per-adapter fr_dispatch-never-imports tests (`tests/unit/test_import_direction.py:92-181`) could be one loop over `_ADAPTERS`. Predates #1465.'
+    note: 'Parked: simplification only.'
   super-fr#1086:
     tier: 2
     theme: triage-board
@@ -3347,7 +3374,7 @@ issues:
     kind: defect
     verified: true
     detail: 'Two lock tests in `tests/unit/test_hooks_worktree.py` (:463, :499) failed once each on 2026-11-14 and passed on rerun; the second blocked the v7.0.0 release until shard 3 was rerun (a red shard publishes nothing). Either the worktree lock races or the tests are timing-tight under `-n auto`.'
-    note: 'Batch suite-health (wave 15). Decide race vs timing before marking flaky.'
+    note: 'suite-health (#1470) split it out and left it open: CI logs show real double-holds, but 200 loaded trials (macOS and Linux) reproduced none and a code read found no two-process interleaving. Feature group "Test-suite trust".'
   super-fr#1462:
     tier: 2
     theme: run-evidence-gates
@@ -7113,6 +7140,37 @@ batches:
     runner: herdr
     handle: w3E:p1
     branch: fix/batch-suite-health
+  - kind: approval
+    at: '2026-11-15T10:51:37.292144Z'
+    pr: 1470
+    head: abefcfcbe7a7042f92f9aefb7206282f9fbe6502
+  - kind: update
+    at: '2026-11-15T10:51:54.176986Z'
+    pr: 1470
+    head_before: abefcfcbe7a7042f92f9aefb7206282f9fbe6502
+    head_after: 9d3e1aac8fd083cfe3bf4d009527a8d113bc8e7e
+    base: be121114b879145f901857c523b4f9bd3f43e680
+  - kind: claims_released
+    at: '2026-11-15T11:08:21.859240Z'
+    keys:
+    - super-fr#1225
+    - super-fr#1280
+    - super-fr#1288
+    - super-fr#1289
+    - super-fr#1428
+  - kind: post_merge
+    at: '2026-11-15T11:14:28.366693Z'
+  - kind: closeout
+    at: '2026-11-15T11:15:06.251567Z'
+    runner: herdr
+    handle: w3E:p2
+    archive: chore/closeout-2026-11-15-2
+  - kind: closeout
+    at: '2026-11-15T11:24:11.723562Z'
+    runner: herdr
+    handle: w3E:p2
+    archive: chore/closeout-2026-11-15-2
+    archived: 1474
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
@@ -7127,6 +7185,12 @@ batches:
   wave: 17
   after:
   - suite-health
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:03:11.407994Z'
+    runner: herdr
+    handle: w3F:p3
+    branch: feat/batch-guard-trust
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7140,6 +7204,12 @@ batches:
   after:
   - suite-health
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:02:28.611009Z'
+    runner: herdr
+    handle: w3F:p2
+    branch: fix/batch-gate-truth
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7154,6 +7224,12 @@ batches:
   after:
   - suite-health
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:01:44.100348Z'
+    runner: herdr
+    handle: w3F:p1
+    branch: fix/batch-deliver-evidence
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
@@ -7167,6 +7243,12 @@ batches:
   after:
   - suite-health
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-15T11:04:03.090530Z'
+    runner: herdr
+    handle: w3F:p4
+    branch: feat/batch-owed-archive
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -7551,6 +7633,13 @@ features:
   - super-fr#1459
   why: 'Decision already made: the only VK deployment is retired. Large removal that conflicts with most batches, so it wants a wave of its own; it shrinks the test suite (#1428).'
   start: '/fr-goal drop VibeKanban support (#1459)'
+- rank: 22
+  title: 'Test-suite trust'
+  ids:
+  - super-fr#1463
+  - super-fr#1468
+  why: 'Leftovers of suite-health: a lock double-hold CI sees and nobody reproduces, and a scenario fixture that commits into a live worktree.'
+  start: '/fr-debugging super-fr#1468 then super-fr#1463'
 exports:
 - wave: '1'
   repo: derio-net/super-fr
@@ -7614,10 +7703,10 @@ exports:
   merged: true
 - wave: '15'
   repo: derio-net/super-fr
-  at: '2026-11-15T09:27:09.576505Z'
-  pr: 1472
-  head: 97e15c2937e71fbf52e4401f0fb995781a97b787
-  closed: true
+  at: '2026-11-15T09:34:31.964422Z'
+  pr: 1473
+  head: 4f01acfee9a5417205be621e6d068d9fa9a8982f
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -7653,3 +7742,19 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-14-feat-batch-retire-vk.yaml"
   - "D\tdocs/superpowers/specs/2026-11-14-retire-vibekanban-design.md"
   - "D\tdocs/superpowers/usage/2026-11-14-feat-batch-retire-vk.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-15-2
+  branch: chore/closeout-2026-11-15-2
+  at: '2026-11-15T11:14:30.807401Z'
+  runner: herdr
+  handle: w3E:p2
+  planned:
+  - suite-health
+  pr: 1474
+  merged: true
+  head: 5b8bbb4f8c3526b699f58692b949ab9cc1a28817
+  members:
+  - suite-health
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-suite-health.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-suite-health.md"

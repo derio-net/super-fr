@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/gatebackfill/**
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-14 a local row that is debt is not delivery evidence (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-15 still true, only fr gate pass --yes changed, it exits 1 on a failed tracker close (batch gate-truth)
 ---
 
 # `fr gate backfill` — bring old owed work into the gate lanes

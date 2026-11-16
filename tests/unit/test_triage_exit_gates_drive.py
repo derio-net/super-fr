@@ -432,6 +432,31 @@ def test_the_gated_rows_are_read_on_the_default_branch_through_gitseam(
     assert _git(checkout.path, "worktree", "list").count("\n") == 0  # the scratch tree is gone
 
 
+def test_gh1399_an_archived_run_keeps_its_gated_rows(tmp_path: Path) -> None:
+    """gh#1399: the close-out archives a run before its post-merge gate passes, so the
+    ledger must find the cursor (and spec) under `implemented/` too, or an unwalked row
+    reads as no row at all."""
+    from fr.acceptance.model import archive_twin
+    from fr.triage.ledger import gated_rows_at
+
+    checkout = _ledger_repo(tmp_path, walked=False)
+    clone = checkout.path
+    spec = "docs/superpowers/specs/s.md"
+    for old, new in (
+        ("docs/superpowers/runs/r1.yaml", "docs/superpowers/implemented/runs/r1.yaml"),
+        (spec, archive_twin(spec)),
+    ):
+        (clone / new).parent.mkdir(parents=True, exist_ok=True)
+        _git(clone, "mv", old, new)
+    _git(clone, "commit", "--quiet", "-m", "archive")
+    _git(clone, "push", "--quiet", "origin", "HEAD:main")
+    _git(clone, "fetch", "--quiet", "origin")
+
+    read = gated_rows_at(checkout, "origin/main", "feat/batch-b1")
+
+    assert read.rows == (GatedRow("r-live", "tester", walked=False, issues=(ISSUE,)),)
+
+
 def test_a_branch_no_run_names_has_no_gated_row(tmp_path: Path) -> None:
     from fr.triage.ledger import gated_rows_at
 
