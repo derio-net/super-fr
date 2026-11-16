@@ -20,3 +20,8 @@ scripts/release.py tag_and_release pushes the tag before gh release create; fini
 ### 54006a2d9216 · root-cause · #1393: _rcs_above lists RC tags HEAD does not contain
 
 scripts/release.py _rcs_above reads every RC tag; `since = rcs[-1][1]` can be a sibling commit's tag whose tree always differs, so every run cuts another RC. Fix: 'since' comes from RC tags merged into HEAD; RC numbering still counts every tag so a sibling RC number is never reused.
+
+<!-- fr:journal kind=root-cause scope=debug id=d9d5e306aba5 created=2026-11-16T18:18:32+00:00 -->
+### d9d5e306aba5 · root-cause · #1291: one concurrency group drops a pending workflow_dispatch run
+
+.github/workflows/release.yml: group: release, cancel-in-progress false. GitHub keeps one pending run per group, so a later push run replaces a pending dispatch --version run. Fix: dispatch runs get a group of their own, keyed by run id.
