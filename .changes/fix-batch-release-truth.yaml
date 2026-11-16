@@ -1,0 +1,2 @@
+bump: patch
+summary: "Release robustness: the cloud doctor compares RC installs, a tag left without its GitHub Release gets one on the next run, a stray RC tag off HEAD no longer cuts RCs forever, a dispatched release run can no longer be dropped from the queue, and a channel switch cleans the managed cache"

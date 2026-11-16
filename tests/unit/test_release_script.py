@@ -2429,7 +2429,9 @@ def test_r16_a_failing_git_diff_refuses_and_never_reads_as_nothing_changed(
     world.waiting = list(WAITS)
     head = world.origin_log("%H")
     ghost = release.Version.parse("4.24.0-rc.1")  # listed, but no such ref: git really fails
-    monkeypatch.setattr(release, "_rcs_above", lambda repo, base: [(ghost, ghost.tag)])
+    monkeypatch.setattr(
+        release, "_rcs_above", lambda repo, base, merged=False: [(ghost, ghost.tag)]
+    )
 
     assert world.run() == release.EXIT_REFUSED
 
