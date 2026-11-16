@@ -199,3 +199,8 @@ Pre-existing in _existing_markers (open-end follow-ups), not caused by this chan
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-15-owed-archive-side-effects-p2 created=2026-11-15T17:17:42+00:00 -->
 ### tier-2026-11-15-owed-archive-side-effects-p2 · decision · hard: phase 2 changes deliver's premature-close gate and live-body check, which every run passes
+
+<!-- fr:journal kind=finding scope=spec id=s-r12-resolved-2 created=2026-11-16T00:45:39+00:00 state=open resolves=s-r12 tracked_by=https://github.com/derio-net/super-fr/issues/1485 -->
+### s-r12-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1485] · resolves s-r12: _existing_markers (open-ends dedupe) keeps the same 200-issue cap and best-effort fallback
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1485.
