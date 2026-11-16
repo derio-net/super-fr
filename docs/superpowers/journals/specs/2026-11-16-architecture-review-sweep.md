@@ -966,3 +966,6 @@ run_kind: candidate
 ### phase-split-2026-11-16-architecture-review-sweep-p2 · decision · ask: the report, the architecture fragment and the filed issues (R1-R7, R13) are a separate ask from the code consolidations, and must be written after them so the report's landed rows and line counts are true
 
 The operator chose the two-phase shape when asked how to phase the plan.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-16-architecture-review-sweep-p2 created=2026-11-16T18:54:44+00:00 -->
+### tier-2026-11-16-architecture-review-sweep-p2 · decision · hard: the report must design four costly decompositions the spec leaves open (R6) and judge, per apparent duplicate, whether the policies differ (R1, R2)
