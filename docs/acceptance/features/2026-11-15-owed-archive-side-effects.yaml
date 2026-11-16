@@ -33,9 +33,11 @@ rows:
     - spec:2026-11-15-owed-archive-side-effects#R7
     - spec:2026-11-15-owed-archive-side-effects#R8
     - spec:2026-11-15-owed-archive-side-effects#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_cmd.py#test_a_refused_archive_writes_nothing_even_with_issues_all
+    status: ci
+    notes: x
     verify: candidate
     scenario: tests/scenarios/archive-refusal-writes-nothing.sh
   - id: archive-dry-run
