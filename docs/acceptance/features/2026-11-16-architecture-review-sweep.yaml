@@ -46,9 +46,14 @@ rows:
       status has a report label
     origin:
     - spec:2026-11-16-architecture-review-sweep#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_import_direction.py#test_cloud_status_is_the_protocol_type
+      - super-fr:tests/unit/test_import_direction.py#test_board_status_equals_session_status
+      - super-fr:tests/unit/test_acceptance_status_labels.py#test_every_status_has_a_label_and_no_label_is_orphaned
+    status: ci
+    notes: Phase 1 made the cloud adapter's FrStatus the protocol's SessionStatus; CI
+      checks the alias in source, the board's values and STATUS_LABEL coverage.
     verify: none
   - id: triage-timestamps-one-reader
     capability: fr triage
