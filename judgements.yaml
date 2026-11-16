@@ -7428,6 +7428,10 @@ batches:
     pr: 1480
     head: dda8eca87eea225ad745069b1967bfbcb1f9e162
     voided_at: be1f076a1e2b73c752cdf6c69b2d833526f380c9
+  - kind: approval
+    at: '2026-11-16T18:15:03.349181Z'
+    pr: 1480
+    head: 80009831000f40c535d8efbd1b51d0ab6c7cdd39
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -7443,6 +7447,12 @@ batches:
   - deliver-evidence
   - owed-archive
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-16T18:16:52.428041Z'
+    runner: herdr
+    handle: w3H:p3
+    branch: fix/batch-workspace-identity
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
@@ -7456,6 +7466,12 @@ batches:
   - deliver-evidence
   - owed-archive
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-16T18:15:21.260497Z'
+    runner: herdr
+    handle: w3H:p1
+    branch: fix/batch-placement-truth
 - id: release-truth
   title: Release robustness
   ids:
@@ -7473,6 +7489,12 @@ batches:
   - deliver-evidence
   - owed-archive
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-16T18:15:53.576561Z'
+    runner: herdr
+    handle: w3H:p2
+    branch: fix/batch-release-truth
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:

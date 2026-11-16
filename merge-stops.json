@@ -1,10 +1,4 @@
 {
   "schema": 1,
-  "stops": {
-    "owed-archive": {
-      "head": "dda8eca87eea225ad745069b1967bfbcb1f9e162",
-      "reason": "PR #1480 (batch owed-archive) conflicts with origin/main in a change merge will not resolve: packages/fr/src/fr/archive.py (only a version file whose PR change is the version alone is resolved). The scratch worktree is kept for inspection at /Users/idermitzakis/Docs/projects/super-fr/.fr/triage-state/derio-net--super-fr/merge/feat/batch-owed-archive",
-      "at": "2026-11-16T16:49:23+00:00"
-    }
-  }
+  "stops": {}
 }
