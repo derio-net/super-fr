@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-14 quiet/stealth plans, deliver and close-out read artifacts where they live (debug 2026-11-13-placement-plan-paths)
+reviewed: 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 # fr ops — manual operations you can check and run
@@ -207,7 +207,8 @@ fr init scaffold --profile <name> --purpose "<line>" --ops --force   # an existi
 
 A run whose plan carries any op (or whose spec declares `gate: devops`) is held by
 `gate:devops` before merge as well as after it. `fr pickup --run <id>` prints a DevOps
-brief for it, and its one command is:
+brief for it. When the stage record on the host holds all 8 stages, the brief says that the
+stage is complete and names `fr isolation down --branch <branch>`. The brief's one command is:
 
 ```bash
 fr ops gate --run <run-id>          # preview the 8 stages
@@ -231,10 +232,10 @@ The skill `fr-devops-gate` holds the judgement it needs from you.
 | 1 | Before anything comes up, stop on a PR that changes the ops profile itself. That is a PR whose own diff, from the merge base, touches `.devcontainer/<ops>/**` or `.devcontainer/fr-profiles.yaml`. That change must merge in its own PR first. Bring up or reuse the ops workspace `chore/ops-<slug>` on the ops profile. Cut it from exactly the PR head, or from the default branch's tip once the PR has merged (a merged head can never be rebased). Stop on a cut whose profile is not the same as the default branch's, because the workspace runs the cut's copy with the ops credentials. Rebase an open PR onto the default branch; a merged PR's stale workspace is cut again. Grant trust on the host if the op set changed. Then show the pre-merge status, then each open op. Each op is confirmed on the host terminal and run as `fr isolation exec --branch chore/ops-<slug> -- fr ops apply <id> --yes [--yes-mutating]`. Records the head it cut from. |
 | 2 | Merge through the forge, only when all of these are true: no pre-merge op is open; the PR's required checks are green on that head; the head is unchanged since stage 1; the operator confirms a terminal prompt that names the PR, its head and the pre-merge state (asked even under `--yes`). If fr cannot merge through the forge, the stage stops and names the manual merge. |
 | 3 | `fr isolation verify-merge`. Then rebase the ops branch onto the default branch (it then carries only its own evidence commits). Then every `ready:`. |
-| 4 | Post-merge status and apply. |
+| 4 | Post-merge status and apply. An op that a check already shows DONE still goes through `fr ops apply --yes`. That runs nothing and records the closure, so stage 6 can fold it. |
 | 5 | Each Test Plan step whose effective gate is `devops`. A pointed step's probe runs (see Test Plan probes), and the stage asks about the others. Each answer is recorded with `fr closeout outcome`: `ran`, `na`, or `owed` (stage 6 then stops on it; see below). |
 | 6 | `fr gate pass --gate devops --run <id>` from the ops workspace. It folds only recorded evidence. |
-| 7 | Steps whose gate is `tester` are listed in the gate-pass comment, and `gate:tester` stays. |
+| 7 | The Tester gate's work is listed and `gate:tester` stays. That work is its steps with no outcome, its rows that are not walked, and a spec that declares `gate: tester`. When the Tester gate owns nothing, the stage passes `gate:tester` with a generated note. |
 | 8 | `fr archive --branch <feature>`, with `--issues` to file the run's out-of-scope findings, as the close-out brief would. Under `tracking: none`, use `--no-issues`. Then open the ops branch as the housekeeping PR. |
 
 ### What the stage trusts
