@@ -7284,6 +7284,12 @@ batches:
     runner: herdr
     handle: w3F:p5
     archive: chore/closeout-2026-11-16-1
+  - kind: closeout
+    at: '2026-11-16T15:51:11.727626Z'
+    runner: herdr
+    handle: w3F:p5
+    archive: chore/closeout-2026-11-16-1
+    archived: 1490
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
@@ -7827,6 +7833,7 @@ closeouts:
   planned:
   - deliver-evidence
   pr: 1490
+  merged: true
   head: 1a022c4edd0e09d86a60ef055090f17fa6901037
   members:
   - deliver-evidence
