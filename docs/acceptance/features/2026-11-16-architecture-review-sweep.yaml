@@ -14,9 +14,13 @@ rows:
       try), and fails a soft point that imports fr_dispatch at module level
     origin:
     - spec:2026-11-16-architecture-review-sweep#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_import_direction.py#test_import_nodes_read_every_spelling
+      - super-fr:tests/unit/test_import_direction.py#test_soft_point_violations_fire_on_planted_sources
+    status: ci
+    notes: Phase 1 rewrote the guard to read the syntax tree; planted sources in every
+      import spelling and planted soft points are reported in CI.
     verify: none
   - id: gate-annotations-follow-vocabulary
     capability: exit gates
