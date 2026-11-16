@@ -9,6 +9,7 @@ derived annotations byte-compatible with what an author sees today.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal, get_args, get_origin
 
 import pytest
@@ -90,10 +91,46 @@ def test_pinned_tag_patterns() -> None:
         assert lead is not None and f"[{other}]" not in lead.group("lead")
 
 
+def _step_tags(pattern: re.Pattern[str]) -> frozenset[str]:
+    """Every gate name the Test Plan step-tag pattern accepts."""
+    return frozenset(g for g in GATES if pattern.match(f"[{g}] x"))
+
+
+def _lead_tags(pattern: re.Pattern[str]) -> frozenset[str]:
+    """Every gate name the ops stub's leading-tag pattern takes into its lead."""
+    out = set()
+    for g in GATES:
+        m = pattern.match(f"1. [{g}] x")
+        if m is not None and f"[{g}]" in m.group("lead"):
+            out.add(g)
+    return frozenset(out)
+
+
+def test_tag_patterns_match_exactly_the_post_merge_gates() -> None:
+    from fr.gates import POST_MERGE_GATES
+
+    assert _step_tags(_TAG_RE) == POST_MERGE_GATES
+    assert _lead_tags(_LEAD_RE) == POST_MERGE_GATES
+
+
+def test_a_one_sided_tag_pattern_is_reported() -> None:
+    """The planted case: a pattern hand-written without one post-merge gate, the
+    state a value added to `PostMergeGate` alone would leave behind."""
+    from fr.gates import POST_MERGE_GATES
+
+    assert _step_tags(re.compile(r"^\[(devops)\]\s+")) != POST_MERGE_GATES
+    assert _lead_tags(re.compile(r"^(?P<lead>\d+\.\s+(?:\[(?:devops)\]\s+)?)")) != POST_MERGE_GATES
+
+
 def test_post_merge_gate_type_is_the_set() -> None:
     from fr.gates import POST_MERGE_GATES, PostMergeGate
 
     assert POST_MERGE_GATES == frozenset(get_args(PostMergeGate))
+
+
+def mismatch(annotation: Any, vocabulary: frozenset[str]) -> frozenset[str]:
+    """The names an annotation and a vocabulary do not share (empty when equal)."""
+    return accepted(annotation) ^ vocabulary
 
 
 def test_annotations_derive_from_the_vocabulary() -> None:
@@ -101,17 +138,20 @@ def test_annotations_derive_from_the_vocabulary() -> None:
     from fr.spec import StepGate
 
     exit_value = ExitBlock.model_fields["gates"].annotation
-    assert accepted(exit_value) == GATES | {"none"}
-    assert accepted(StrategyManifest.model_fields["gate"].annotation) - {"none"} == POST_MERGE_GATES
-    assert frozenset(get_args(StepGate)) == POST_MERGE_GATES
+    assert mismatch(exit_value, GATES | {"none"}) == frozenset()
+    strategy_gate = StrategyManifest.model_fields["gate"].annotation
+    assert mismatch(strategy_gate, POST_MERGE_GATES | {"none"}) == frozenset()
+    assert mismatch(StepGate, POST_MERGE_GATES) == frozenset()
 
 
 def test_a_divergent_literal_is_reported() -> None:
-    """The planted case: a hand-written literal with an extra name does not match."""
+    """The planted case: the comparison the real assertions use names the extra value
+    of a hand-written literal, and the missing one of a short literal."""
     from fr.gates import POST_MERGE_GATES
 
     planted = Literal["none", "tester", "devops", "extra"]
-    assert accepted(planted) != POST_MERGE_GATES | {"none"}
+    assert mismatch(planted, POST_MERGE_GATES | {"none"}) == {"extra"}
+    assert mismatch(Literal["none", "tester"], POST_MERGE_GATES | {"none"}) == {"devops"}
 
 
 def test_the_step_gate_is_the_post_merge_gate() -> None:

@@ -343,3 +343,28 @@ def test_cloud_status_is_the_protocol_type() -> None:
     from fr_dispatch.protocols import SessionStatus
 
     assert FrStatus is SessionStatus
+    # `typing` caches equal Literals, so identity also holds for a second literal
+    # written with the same values. The source must assign the protocol's name.
+    import fr_claude_cloud.mailbox as mailbox
+
+    assert _alias_target(Path(mailbox.__file__).read_text(), "FrStatus") == "SessionStatus"
+
+
+def _alias_target(source: str, name: str) -> str | None:
+    """The bare name a module-level `name = <Name>` assigns, else None."""
+    for node in ast.parse(source).body:
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+            value = node.value
+            return value.id if isinstance(value, ast.Name) else None
+    return None
+
+
+def test_a_redeclared_status_literal_is_reported() -> None:
+    """The planted case: a separate literal with the protocol's own values."""
+    assert _alias_target('FrStatus = Literal["running", "done"]\n', "FrStatus") is None
+    assert _alias_target("FrStatus = SessionStatus\n", "FrStatus") == "SessionStatus"
