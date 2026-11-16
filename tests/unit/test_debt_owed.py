@@ -76,15 +76,19 @@ class OwnedGh(FakeGhClient):
         raise AssertionError("closing an owed issue must not list issues")
 
     def view_issue_record(self, repo: str, number: int) -> dict:
+        """Only the fields `ISSUE_VIEW_FIELDS` asks for, as the real clients answer."""
+        from fr.gh import ISSUE_VIEW_FIELDS
+
         self.calls.append(("view_issue_record", {"repo": repo, "number": number}))
         i = self.issues[(repo, number)]
-        return {
+        record = {
             "number": number,
             "body": i.body,
             "labels": [{"name": x} for x in sorted(i.labels)],
             "author": {"login": self.author},
             "state": i.state,
         }
+        return {f: record[f] for f in ISSUE_VIEW_FIELDS.split(",") if f in record}
 
 
 def _git(root: Path, *args: str) -> None:

@@ -77,6 +77,15 @@ def test_view_issue_record_has_the_issue_view_fields() -> None:
     assert got["state"] == "OPEN"
 
 
+def test_the_issue_view_carries_what_closing_an_owed_issue_reads() -> None:
+    """`fr journal resolve` closes an owed issue only when `owned_owed_key` accepts the
+    one record it views: its author and labels, and whether it is still open (R14)."""
+    assert {"author", "state", "labels", "body", "number"} <= set(ISSUE_VIEW_FIELDS.split(","))
+    client, _ = _client()
+    got = client.view_issue_record(REPO, 1074)
+    assert isinstance(got["author"], dict) and got["author"].get("login")
+
+
 def test_list_issues_pages_explicitly_and_drops_pull_requests(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
