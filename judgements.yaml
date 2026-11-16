@@ -7242,6 +7242,12 @@ batches:
     - super-fr#1429
   - kind: post_merge
     at: '2026-11-16T16:53:15.746827Z'
+  - kind: closeout
+    at: '2026-11-16T17:16:59.786688Z'
+    runner: herdr
+    handle: w3F:p7
+    run: 2026-11-15-feat-batch-guard-trust
+    archive: chore/closeout-2026-11-16-3
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7959,3 +7965,28 @@ closeouts:
   handle: w3F:p7
   planned:
   - guard-trust
+  pr: 1498
+  head: e7884e8850b94bf94e772569d1a03e76c3f7e8e6
+  members:
+  - guard-trust
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-15-guard-trust.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-15-guard-trust.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-15-feat-batch-guard-trust.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-15-guard-trust-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-15-feat-batch-guard-trust.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-15-guard-trust.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-15-guard-trust.md"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-guard-trust.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-15-guard-trust-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-guard-trust.yaml"
