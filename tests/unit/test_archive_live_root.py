@@ -96,3 +96,20 @@ def test_a_gitkeep_that_cannot_be_staged_is_reported_not_swallowed(
     err = capsys.readouterr().err
     assert "docs/superpowers/plans/.gitkeep not staged" in err
     assert "git add failed" in err and "ignored" in err
+
+
+def test_a_plan_path_reached_through_a_symlinked_root_still_keeps_the_root(
+    tmp_path: Path,
+) -> None:
+    # Independent review of #1478, item 3: `fr archive` passes `repo_root / plan_rel`
+    # unresolved while repo_root is resolved; through a symlinked prefix (macOS `/var`
+    # vs `/private/var`) the live-root comparison failed and no `.gitkeep` was written.
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = _repo(real, "a").resolve()
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    archive_plan_dir(repo, link / "repo" / "docs" / "superpowers" / "plans" / "a")
+    keep = repo / "docs" / "superpowers" / "plans" / ".gitkeep"
+    assert keep.is_file()
+    assert "docs/superpowers/plans/.gitkeep" in _git(repo, "diff", "--cached", "--name-only")

@@ -473,8 +473,11 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
     fails says so on stderr, naming the path and the cause, because the result is the
     silent ungated clone this exists to prevent (review l-errors-r1).
     """
-    live_root = plan_dir.parent
-    if live_root != kind_dir("plan", space_for(repo_root)):
+    live_root = kind_dir("plan", space_for(repo_root))
+    # Compared resolved, then used as fr computes it: a caller may reach the plan through
+    # a symlinked prefix (macOS `/var` vs `/private/var`) that `repo_root` does not carry
+    # (independent review of #1478, item 3).
+    if plan_dir.parent.resolve() != live_root.resolve():
         return
     keep = live_root / ".gitkeep"
     rel = keep.relative_to(repo_root)
