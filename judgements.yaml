@@ -7441,6 +7441,12 @@ batches:
     - super-fr#1400
   - kind: post_merge
     at: '2026-11-16T18:28:03.870122Z'
+  - kind: closeout
+    at: '2026-11-16T18:29:11.438765Z'
+    runner: herdr
+    handle: w3F:p8
+    run: 2026-11-15-feat-batch-owed-archive
+    archive: chore/closeout-2026-11-16-4
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -8050,3 +8056,28 @@ closeouts:
   handle: w3F:p8
   planned:
   - owed-archive
+  pr: 1505
+  head: a474cebb1d5e9b9762aa5fe68a71e8ca1f9bd230
+  members:
+  - owed-archive
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-15-owed-archive-side-effects.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-15-owed-archive-side-effects.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-15-feat-batch-owed-archive.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-15-owed-archive-side-effects-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-15-feat-batch-owed-archive.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-15-owed-archive-side-effects.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-15-owed-archive-side-effects.md"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-owed-archive.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-15-owed-archive-side-effects-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-owed-archive.yaml"
