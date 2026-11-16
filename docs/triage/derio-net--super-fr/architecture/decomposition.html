@@ -1,0 +1,64 @@
+<div>
+<h2>The five largest modules, and where their parts go</h2>
+<p style="color:var(--muted);max-width:75ch">Authored on 2026-11-16 from the architecture review of
+<a href="https://github.com/derio-net/super-fr/issues/1318">#1318</a>. Five modules hold about 24,000 of the
+142,500 lines under <code>packages/*/src</code>. Each has a part that moves cheaply along a seam the code already
+has, and a part that is costly for a reason the review names. Nothing is split yet: the table is the plan, and the
+review holds the line ranges, the slice order and what each slice must keep.</p>
+<div style="overflow-x:auto">
+<table style="border-collapse:collapse;width:100%;min-width:680px;font-size:.88rem">
+<thead>
+<tr>
+<th style="text-align:left;font:500 .72rem var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)">Module</th>
+<th style="text-align:right;font:500 .72rem var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)">Lines</th>
+<th style="text-align:left;font:500 .72rem var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)">What stays</th>
+<th style="text-align:left;font:500 .72rem var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)">What moves, and where</th>
+<th style="text-align:left;font:500 .72rem var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)">Guard</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>commands/run_cmd.py</code></td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">8,862</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">the resolve and advance coordinators, which own the order of saves, commits and output; the Typer commands</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">lookup helpers and the write ledger to <code>fr/run/</code>; deliver gates to <code>fr/run/deliver.py</code>; briefs to <code>fr/run/brief.py</code>; evidence verifiers to <code>fr/run/evidence/</code> once each returns a typed verdict instead of printing and exiting</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget; the journal-writer list in <code>test_journal_stamp_offset.py</code></td>
+</tr>
+<tr>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>commands/triage_batch_cmd.py</code></td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">7,334</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">the factories and clock tests patch, <code>build_driver</code>, <code>one_pass</code>, <code>pass_exit</code>, the commands</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">dispatch, replace and adopt to <code>fr/triage/batch_*.py</code>; the 3,205-line <code>_Driver</code> to <code>fr/triage/batch_driver_*.py</code>, after it takes its clock, client, runner and output through one ports object</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget; the batch-module globs that keep git in <code>gitseam</code> and forge writes in the adapter</td>
+</tr>
+<tr>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>isolation/local.py</code></td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">3,164</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">the target class: up, down, teardown order, worktree provisioning, default branch</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">runner plumbing, landing analysis, branch classification and reap types to new <code>isolation/</code> modules; garbage collection to a collaborator that reaches the four methods the host-worktree target overrides through the target</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget; the forge-argv and VK scans that name the file</td>
+</tr>
+<tr>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>plan_ops.py</code></td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">2,545</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">the writers: create, tracking issue, rework</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">self-review to <code>fr/plan/review/</code>; the spec table to <code>fr/spec_table.py</code>; the refactor-gate read to <code>fr/record/gates.py</code>. Retiring <code>tick</code> and <code>complete_phase</code> changes behaviour and needs its own spec</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget</td>
+</tr>
+<tr>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>triage/batch_drive.py</code></td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">2,130</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>drive_pass</code>, <code>Snapshot</code> and <code>Action</code>: one planner</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">the wave-export and hand-back leaves to <code>batch_drive_*.py</code></td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget; the pure-pass guard, widened to a glob in the same change</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p style="max-width:75ch">The line budget (<code>tests/unit/test_tripwire_module_budget.py</code>) holds each of these five at most
+at its budget, which starts at its size rounded up to the next hundred, and no more than 400 lines above it. It is a
+review trigger, not a ceiling for the codebase: a change that adds past the headroom moves code out or raises the
+budget in its own diff, and an extraction lowers it.</p>
+<p style="max-width:75ch">The full review, with every finding, its evidence and its issue:
+<a href="https://github.com/derio-net/super-fr/blob/main/docs/superpowers/audits/2026-11-16-architecture-review.md">docs/superpowers/audits/2026-11-16-architecture-review.md</a>.</p>
+</div>
