@@ -50,3 +50,8 @@ _rcs_above(merged=True) picks 'since'; RC numbering still counts every tag. Pinn
 ### f-1291 · finding [fixed] · #1291 fixed: a dispatch run has its own concurrency group
 
 release.yml group: release-dispatch-<run_id> for workflow_dispatch, 'release' otherwise. A dispatch beside a push run is superseded loudly by publish's base check. Pinned by test_release_workflow.py::test_a_dispatch_run_has_a_group_of_its_own.
+
+<!-- fr:journal kind=finding scope=debug id=f-1202 created=2026-11-16T18:37:05+00:00 state=fixed -->
+### f-1202 · finding [fixed] · #1202 fixed: a channel switch cleans the managed cache
+
+bootstrap.sh runs git clean -q -f -d after the checkout (no -x: ignored files, which the preflight does not count, stay). Pinned by test_install_channels.py::test_a_channel_switch_removes_untracked_files_from_the_managed_cache and ::test_a_channel_switch_keeps_ignored_files_in_the_managed_cache.
