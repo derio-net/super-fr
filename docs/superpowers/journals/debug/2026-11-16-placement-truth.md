@@ -25,3 +25,8 @@ Batched as one root cause.
 ### rc-1438 · root-cause · parse substitutes the toplevel for an unnamed product checkout and records no sign of it
 
 The 'or repo_root' fallback is the only place the outcome None of product_checkout_for is consumed, and it discards it.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1433 created=2026-11-16T18:18:24+00:00 -->
+### rc-1433 · root-cause · The HEADS record is committed before the push and nothing undoes it on refusal
+
+It cannot move inside atomic_push's lock: commit_paths takes the same flock on its own handle, so nesting would self-deadlock. The record must be compensated after a refused push instead.
