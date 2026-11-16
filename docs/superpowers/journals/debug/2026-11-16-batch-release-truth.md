@@ -35,3 +35,8 @@ scripts/bootstrap.sh switches with checkout -f and no clean; install.sh's prefli
 ### f-1201 · finding [fixed] · #1201 fixed: the cloud doctor compares RC installs
 
 fr.cloud._parse_version uses packaging.version (both RC spellings); an unparseable installed version is not ok, an unparseable latest stays unknown. Pinned by tests/unit/test_cloud_remedy.py::test_an_rc_install_is_compared_not_waved_through and ::test_an_unparseable_installed_version_is_not_ok.
+
+<!-- fr:journal kind=finding scope=debug id=f-1290 created=2026-11-16T18:36:59+00:00 state=fixed -->
+### f-1290 · finding [fixed] · #1290 fixed: a tag with no GitHub Release gets one on the next run
+
+finish() asks release_exists (gh release view); 'not found' -> create_release on the existing tag (no retag), any other failed read refuses. Pinned by test_release_script.py::test_gh1290_a_failed_release_create_is_retried_on_the_next_run, ::test_gh1290_a_tag_with_its_release_is_left_alone, ::test_gh1290_an_unreadable_release_refuses_rather_than_guessing.
