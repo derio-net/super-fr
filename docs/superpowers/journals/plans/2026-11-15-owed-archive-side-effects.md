@@ -468,3 +468,18 @@ d1da923f9: OwnedGh and the closeout-owed gh fixture return only requested fields
 ### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: held_issues render tested for one of R5's three holds
 
 8a3c66a2e: render tests for a post-merge-gated row and an unanswered narrowing decision; premature_closes finds nothing; reverting either hold fails its test.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved-2 created=2026-11-16T00:45:52+00:00 phase=1 state=open resolves=p1-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1486 -->
+### p1-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1486] · resolves p1-r5: head_on_default_branch treats an unreadable default ref as off-default; GitUnavailableError from it is uncaught in _write_manual_owed (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1486.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-11-16T00:45:52+00:00 phase=1 state=open resolves=p1-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1487 -->
+### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1487] · resolves p1-r6: _forge_lists_issues keys on detect_backend()=='github' rather than the adapter's own capability (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1487.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved-2 created=2026-11-16T00:45:52+00:00 phase=2 state=open resolves=p2-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1488 -->
+### p2-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1488] · resolves p2-r8: normalize_issue_ref's _URL_REF accepts any host, so a foreign-host URL with the same path satisfies the owed closing check (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1488.
