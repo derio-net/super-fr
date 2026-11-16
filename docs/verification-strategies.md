@@ -5,7 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/verification/**
-reviewed: 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
+reviewed: 2026-11-16 still true; gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed
 ---
 
 # Verification strategies

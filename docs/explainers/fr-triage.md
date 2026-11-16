@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-16 still true; gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed
 ---
 
 ## Why keep the judgement in a file, with an engine around it?

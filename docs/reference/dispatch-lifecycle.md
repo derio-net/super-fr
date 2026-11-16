@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch
+reviewed: 2026-11-16 still true; gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed
 ---
 
 # Dispatch labels and the per-repo plan profile

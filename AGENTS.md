@@ -76,6 +76,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`CAPABILITIES`, the closed set `requires:` validates against) is a
     sibling of `fr/workflow`, not inside it; `fr_dispatch.capabilities` is
     a two-line re-export kept for import back-compat.
+  - **Gate names** (`fr/gates.py`, 2026-11-16 spec `architecture-review-sweep`): `Gate` is the
+    vocabulary and `PostMergeGate` (`tester`, `devops`) the post-merge subset. The step tag of a Test
+    Plan line (`fr.spec.StepGate`, `_TAG_RE`), the ops stub's leading tag, a strategy manifest's `gate:`
+    and a triage `exit:` remap value all derive from them (`tests/unit/test_gate_vocabulary.py`).
   - **`fr/verification`** (2026-10-06 spec, `verification-strategies`) — how a change
     is proven: `model.py` (`StrategyManifest`, closed placeholders), `resolve.py`
     (repo > env > wheel > marketplace, same order as workflows), `check.py`
@@ -198,6 +202,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     inputs), `snapshot.py` stores/diffs the per-render snapshots (`render.py` reads no clock; the command passes it),
     `components.py` holds the colour tokens, the phone gutter and the one `tabs()` component. `Judgement.kind` and
     `Judgements.features` load on any schema; `check` has an `unplaced` set.
+    **Timestamps:** `timestamps.py`'s `parse_aware` is the one reader of a forge or fact timestamp
+    that must be timezone-aware (`None` for missing, unparseable or naive); a second function with
+    its body fails `tests/unit/test_triage_timestamps.py`.
     **Origins and the architecture page** (same spec, E and F): `fr triage origins {collect,check,render}`
     (`origins.py`; classification is the `fr-origins` skill's) and `fr triage architecture render`
     (`architecture.py`): the snapshot timeline, measured sections (line counts via the `gitseam`
@@ -793,6 +800,15 @@ exists and how it's checked, not a restatement:
   adds tests for an existing row, or ships a surface a `not-implemented` row waits on
   updates the rows in the *same* PR. Gate: `fr acceptance check` via
   `.github/workflows/acceptance-report.yml`. Driver skill: `fr-acceptance`.
+- **import direction** (`tests/unit/test_import_direction.py`) — the package-boundary guard
+  reads imports from the syntax tree (`ast`), so a comma list, an alias or a nested import is
+  seen; dynamic imports and entry-point loading are not judged. An unparseable file fails it.
+- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — the five
+  largest modules (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
+  `triage/batch_drive.py`) may not grow past their budget, and a budget may not sit more than 400
+  lines above its module. When it fails, move the new code into the module the architecture report
+  (`docs/superpowers/audits/2026-11-16-architecture-review.md`) names, or change the budget in the
+  same diff and say why in the PR.
 - **third-party-privacy** (2026-09-19) — live-verification evidence is
   redacted at capture time: hostnames, orgs, repo names and usernames outside
   the `derio-net` org never reach a spec, journal, fixture, matrix note, PR body

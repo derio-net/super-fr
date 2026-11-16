@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-15 guard-trust phase 3, cloud-setup.md quotes the re-pin warning with its new wording; nothing this page describes changed
+reviewed: 2026-11-16 still true; gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed
 ---
 
 ## Why a loop and not a checklist?
