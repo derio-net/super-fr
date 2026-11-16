@@ -708,3 +708,58 @@ The original 3.2/5 assessment and test results belong to the original snapshot; 
 **Implementation boundary:** #1318's refactors preserve behavior. Corrected behavior belongs in the separate bug issues #1499, #1500, #1419, and #1501, with their own regression criteria. See the [bug tracking index](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924421644). Coordinate overlapping code changes with their owners.
 
 All 117 pinned source citations remain in the full text. The separate bug issues contain executable safe reproductions. Raw logs, the inventory/mutation scripts, and the original evidence archive remain in the audit artifacts; this publication supplies the complete report text directly on GitHub.
+
+<!-- fr:journal kind=decision scope=spec id=d-run-scope created=2026-11-16T18:33:29+00:00 decided_by=operator -->
+### d-run-scope · decision · Run scope: the report plus the first guarded clusters (G01, R01, R02, R03)
+
+Asked what this one-PR run delivers out of #1318's review and multi-PR sweep. The
+operator chose "Report + first guarded clusters": the audit report, and in the same PR
+the import-direction guard fix (G01), the gate and session-status vocabularies (R01,
+R02) and the shared triage timestamp reader (R03). The remaining clusters are filed
+as issues.
+
+<!-- fr:journal kind=decision scope=spec id=d-prior-audit created=2026-11-16T18:33:29+00:00 decided_by=operator -->
+### d-prior-audit · decision · The report reconciles the full audit, posted on #1318, with the supplement and the current code
+
+Asked how to treat the broader audit the supplement cites. The operator chose to
+supply it, then posted it on #1318 in two comments, with a bug index linking #1499,
+#1500, #1419 and #1501 for F01–F04. Those four are behaviour fixes and stay out of
+this PR. The audit text is recorded as the `brief-audit` entry.
+
+<!-- fr:journal kind=decision scope=spec id=d-other-findings created=2026-11-16T18:33:29+00:00 decided_by=operator -->
+### d-other-findings · decision · F05, F06, F07, F09 and the cursor race: re-check, and file an issue for each one still present and untracked
+
+The operator chose "Re-check and file issues". The report records each one's status
+at its commit. For each still present, the run looks for an existing issue by that
+finding's own terms and files one only if none exists. No fix lands in this PR.
+
+<!-- fr:journal kind=decision scope=spec id=d-decomposition created=2026-11-16T18:33:29+00:00 decided_by=operator -->
+### d-decomposition · decision · Module decomposition: plan the cheap slices and design the costly parts in the report; split nothing in this PR
+
+Asked for a size rule, the operator first asked for an architectural examination of
+the five largest modules, to be reported back if too costly. Four read-only reviews
+found a cheap part and a costly part in each. The operator then chose "Plan the
+costly parts too": the report plans the cheap slices and also designs the costly work
+(typed verdicts for run_cmd's evidence verifiers, the port-based move of the triage
+driver core, isolation's garbage collection, plan_ops tick retirement), each filed as
+its own issue with a preservation contract. The agent read this as building on the
+recommended option and so including the no-growth line budget on the five files; the
+operator was told and did not object.
+
+<!-- fr:journal kind=decision scope=spec id=d-architecture-fragment created=2026-11-16T18:33:29+00:00 decided_by=operator -->
+### d-architecture-fragment · decision · The architecture page gains one short authored fragment
+
+The operator chose "Report plus one short fragment". The agent had wrongly said the
+repo has no architecture fragments; they exist under
+docs/triage/derio-net--super-fr/architecture/, so this adds one fragment and one
+manifest entry to the existing page.
+
+<!-- fr:journal kind=decision scope=spec id=d-verification created=2026-11-16T18:33:29+00:00 gate=developer decided_by=operator -->
+### d-verification · decision · Verification: candidate strategy, CI tests as the contract for each row, nothing owed after merge
+
+The operator chose "Candidate build, tests as contract". The run keeps the workflow's
+`candidate` strategy; each row is `verify: none` with the CI test that proves it. The
+gate is `developer`, so no tester or devops gate holds the close-out.
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-16T18:33:29+00:00 lens=tests step=brainstorm -->
+### lens-tests-1 · lens · Every deliverable is a guard; each must be shown to fail on a planted violation, not only to pass
