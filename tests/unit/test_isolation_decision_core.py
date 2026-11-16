@@ -631,6 +631,18 @@ def test_a_repo_with_only_archived_plans_is_fr_enabled(tmp_path: Path) -> None:
     assert decide(repo / "src.py", env=NO_FR) == 1
 
 
+def test_a_repo_with_only_legacy_archived_plans_is_fr_enabled(tmp_path: Path) -> None:
+    # Independent review of #1478, item 2: the legacy `archived-plans/` home
+    # (`plan-legacy-archived` in fr.artifacts.paths) is a plan home too.
+    repo = fr_repo(tmp_path, fr_enabled=False)
+    d = repo / "docs" / "superpowers" / "archived-plans" / "x"
+    d.mkdir(parents=True)
+    (d / "_meta.yaml").write_text("plan: x\n")
+    assert not (repo / "docs" / "superpowers" / "plans").exists()
+    assert enabled(repo, NO_FR) == 0
+    assert decide(repo / "src.py", env=NO_FR) == 1
+
+
 # --- guard-trust R3: git is resolved from absolute PATH entries only ----------------
 
 

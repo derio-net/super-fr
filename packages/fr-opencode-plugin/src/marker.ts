@@ -276,6 +276,7 @@ export function frEnabled(toplevel: string): boolean {
   }
   if (isDir(`${toplevel}/docs/superpowers/plans`)) return true; // fr-paths-fallback
   if (isDir(`${toplevel}/docs/superpowers/implemented/plans`)) return true; // fr-paths-fallback
+  if (isDir(`${toplevel}/docs/superpowers/archived-plans`)) return true; // fr-paths-fallback
   if (placementEnabled(toplevel)) return true;
   if (!switchRefMaybe(toplevel)) return false;
   const paths = frPaths(toplevel);

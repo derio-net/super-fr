@@ -1,8 +1,8 @@
 # fr-isolation Required — repo mirror
 
 In this fr-enabled repo (a `.devcontainer/<profile>/` profile, a
-`docs/superpowers/plans/` directory or a `docs/superpowers/implemented/plans/`
-directory qualifies a repo), edits to tracked source/docs belong **inside an
+`docs/superpowers/plans/` directory, or a plan archive, `docs/superpowers/implemented/plans/`
+or the legacy `docs/superpowers/archived-plans/`, qualifies a repo), edits to tracked source/docs belong **inside an
 fr-isolation workspace**, never the base clone. A super-fr edit gate enforces
 this: it allows the edit only when a valid `.fr-isolation` marker sits at the
 repo toplevel, checked by the marker's `mode`:

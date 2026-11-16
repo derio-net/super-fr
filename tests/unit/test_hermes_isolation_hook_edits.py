@@ -228,3 +228,14 @@ def test_a_repo_with_only_archived_plans_blocks_a_base_edit(tmp_path: Path) -> N
     assert not (repo / "docs" / "superpowers" / "plans").exists()
     assert not (repo / ".devcontainer").exists()
     assert blocked(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"}))
+
+
+def test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit(tmp_path: Path) -> None:
+    # Independent review of #1478, item 2: the legacy `archived-plans/` plan home.
+    repo = fr_repo(tmp_path)
+    shutil.rmtree(repo / ".devcontainer")
+    d = repo / "docs" / "superpowers" / "archived-plans" / "x"
+    d.mkdir(parents=True)
+    (d / "_meta.yaml").write_text("plan: x\n")
+    assert not (repo / "docs" / "superpowers" / "plans").exists()
+    assert blocked(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"}))

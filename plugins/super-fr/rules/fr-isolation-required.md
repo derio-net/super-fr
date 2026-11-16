@@ -24,8 +24,9 @@ a `pre_tool_call` hook on `write_file` / `patch`, merged into
 it catches git/gh mutations alone: make your edits with `write_file` / `patch`.
 
 A repo is **fr-enabled** when it has a `.devcontainer/<profile>/` profile, a
-`docs/superpowers/plans/` directory or a `docs/superpowers/implemented/plans/`
-directory (the archive survives when the last live plan is archived).
+`docs/superpowers/plans/` directory, or a plan archive: `docs/superpowers/implemented/plans/`
+or the legacy `docs/superpowers/archived-plans/` (the archive survives when the last live
+plan is archived).
 
 ## Why
 

@@ -128,7 +128,7 @@ hook points; while a pipeline is live, a sibling guard judges the shell.)
 
 Before step 1 the hook asks whether the repo is fr-enabled at all. That answer is not only
 "has a devcontainer profile, a plans directory or an archived-plans directory". The archive
-directory (`docs/superpowers/implemented/plans/`) counts because Git keeps no empty folder: once
+directory (`docs/superpowers/implemented/plans/`, or the older `docs/superpowers/archived-plans/`) counts because Git keeps no empty folder: once
 the last live plan is archived, a fresh clone may have no plans directory left (`fr archive`
 now leaves a `.gitkeep` there too). A repo on the **quiet** placement keeps
 neither in its checkout, so the hook also reads the switch directly. It looks for the last

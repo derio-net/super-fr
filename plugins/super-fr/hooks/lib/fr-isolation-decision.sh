@@ -325,7 +325,8 @@ fr_switch_ref_maybe() {
 # Return 0 if the given resolved toplevel is fr-enabled, else 1 (spec 2026-11-04
 # repo-feature-settings R26). fr-enabled is any of the DIRECT checks, none of which
 # needs `fr`:
-#   - a devcontainer profile, or an fr plans dir in the checkout (the legacy test; it
+#   - a devcontainer profile, or an fr plan home in the checkout: the live plans dir, the
+#     archive, or the legacy archived-plans dir (super-fr#1277; the legacy test; it
 #     runs whether or not `fr` resolves, plan-journal decision p6-plans-test-always);
 #   - a workspace whose `.fr-isolation` marker records `placement` quiet or stealth;
 #   - the QUIET switch: the last fetched `refs/remotes/origin/fr:settings.yaml`, with
@@ -342,6 +343,7 @@ _fr_is_enabled() {
   done
   [ -d "$1/docs/superpowers/plans" ] && return 0  # fr-paths-fallback
   [ -d "$1/docs/superpowers/implemented/plans" ] && return 0  # fr-paths-fallback
+  [ -d "$1/docs/superpowers/archived-plans" ] && return 0  # fr-paths-fallback
   _fr_placement_enabled "$1" && return 0
   _fr_paths_enabled "$1" && return 0
   return 1
