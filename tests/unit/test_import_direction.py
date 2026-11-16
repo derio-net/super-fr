@@ -334,3 +334,12 @@ def test_soft_point_violations_fire_on_planted_sources() -> None:
         _GUARD
         + "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from fr_dispatch import x\n"
     )
+
+
+def test_cloud_status_is_the_protocol_type() -> None:
+    """The cloud adapter's status IS the dispatch protocol's: one vocabulary, so the
+    mailbox can never hand back a status the protocol does not name."""
+    from fr_claude_cloud.mailbox import FrStatus
+    from fr_dispatch.protocols import SessionStatus
+
+    assert FrStatus is SessionStatus

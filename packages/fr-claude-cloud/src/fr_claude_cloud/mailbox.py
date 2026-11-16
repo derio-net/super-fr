@@ -36,12 +36,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from fr_dispatch.protocols import SessionStatus
 
 REQUESTS_FILE = "requests.yaml"
 SESSIONS_FILE = "sessions.yaml"
 
 Kind = Literal["dispatch", "message", "close", "rehome", "status"]
-FrStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
+FrStatus = SessionStatus
 
 # R15: a cloud session's state onto fr's session statuses. `completed` is idle, not
 # done: the agent finished its last turn and can still be messaged (spec §F).
