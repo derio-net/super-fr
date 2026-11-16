@@ -1,0 +1,88 @@
+schema_version: 12
+run: 2026-11-15-feat-batch-owed-archive
+step: lens-review
+outcome: done
+journal:
+- kind: review
+  id: review-lenses
+  global: true
+  title: 'Lens review (docs-accuracy, tests) of the whole feature diff: 9 in scope'
+  body: 'docs-accuracy and tests reviewers each read git diff 15aae97ad...HEAD through their lens; both returned review-lens blocks naming the files they examined.
+
+    '
+- kind: finding
+  id: l-docs-accuracy-r1
+  global: true
+  review_scope: in
+  title: 'R13 undocumented: explainer and fr-goal skill still say fr journal file always files an owed action'
+- kind: finding
+  id: l-docs-accuracy-r2
+  global: true
+  review_scope: in
+  title: fr-progress.md and --dry-run help overstate the dry run (no copy under quiet/stealth; temporary worktree; fetch moves remote-tracking refs)
+- kind: finding
+  id: l-docs-accuracy-r3
+  global: true
+  review_scope: in
+  title: fr-progress.md 'a refused archive stages no move' is unqualified though R7 covers a single-plan archive
+- kind: finding
+  id: l-tests-r1
+  global: true
+  review_scope: in
+  title: R7 refusal tests on main are masked by R8's default-branch preview
+- kind: finding
+  id: l-tests-r2
+  global: true
+  review_scope: in
+  title: deliver's _forge_lists_issues keyed on hostname, a second definition beside the adapter's UnsupportedForgeOperation
+- kind: finding
+  id: l-tests-r3
+  global: true
+  review_scope: in
+  title: Nothing pins the author field R14 closing needs
+- kind: finding
+  id: l-tests-r4
+  global: true
+  review_scope: in
+  title: test_archive_owed.py:613 assertion reduces to 'no create_issue'
+- kind: finding
+  id: l-tests-r5
+  global: true
+  review_scope: in
+  title: R15 tested only under quiet
+- kind: finding
+  id: l-tests-r6
+  global: true
+  review_scope: in
+  title: held_issues render tested for one of R5's three holds
+resolves:
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: '81138982c: 01-fr-goal.md and both fr-goal SKILL.md sentences state that on GitLab/Gitea the owed entry stays in the journal, journal file reports it and exits 0, and deliver accepts it; mirrors regenerated.'
+- id: l-docs-accuracy-r2
+  state: fixed
+  body: 'a6f3fd5c6: page and help describe the temporary worktree, the in-place quiet/stealth preview and the fetch; ''no git state'' dropped.'
+- id: l-docs-accuracy-r3
+  state: fixed
+  body: 'a6f3fd5c6: qualified to a single-plan archive; --all/--branch keep earlier staged moves but run no follow-up.'
+- id: l-tests-r1
+  state: fixed
+  body: '042c86845 + 65683ea9a: the --issues-all unit test and the scenario''s single-plan section run on a feature branch; reverting the R7 move fails both. The placement-refusal test was never masked (it refuses before any plan is read) and now also runs off main.'
+- id: l-tests-r2
+  state: fixed
+  body: 'afa600a6a: fr.ghclient.declares_unsupported reads the adapter''s own stub; _forge_lists_issues uses it; a real GitLab-origin deliver test without monkeypatching; a parametrized test ties predicate and raise across github/gitlab/gitea.'
+- id: l-tests-r3
+  state: fixed
+  body: 'd1da923f9: OwnedGh and the closeout-owed gh fixture return only requested fields; a REST test pins ISSUE_VIEW_FIELDS; dropping author fails 7 tests.'
+- id: l-tests-r4
+  state: fixed
+  body: '0802009d4: asserts the exact write set [''ensure_labels'']; an injected comment on reuse now fails it.'
+- id: l-tests-r5
+  state: fixed
+  body: '6166799d5: real stealth workspace — resolve takes the close-now path and, since stealth keeps forge.issues off, prints the close command and writes nothing; the PR-body section is not applicable. Spec R15 amended to match (9b9064ef5).'
+- id: l-tests-r6
+  state: fixed
+  body: '8a3c66a2e: render tests for a post-merge-gated row and an unanswered narrowing decision; premature_closes finds nothing; reverting either hold fails its test.'
+evidence:
+  review: review-lenses
+  reviewer: docs-accuracy=a500f1b16ee939af2,tests=a2c94186deb98f5c8
