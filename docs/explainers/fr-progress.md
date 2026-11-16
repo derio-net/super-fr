@@ -116,8 +116,9 @@ fr archive docs/superpowers/plans/<name>
 The move is a gate-checked `git mv` into `docs/superpowers/implemented/plans/`. The gate
 wants every phase complete: a dispatched phase by evidence on GitHub, an agentic one
 fully ticked and on the default branch, a manual one ticked locally. `--force` overrides
-for one plan. A refused archive changes nothing: it stages no move and records no owed
-entry. The owning spec follows once every plan in its Implementation Plans table has reached the
+for one plan. A refused archive of one plan changes nothing: it stages no move and records
+no owed entry. Under `--all` or `--branch`, a run that refuses partway leaves the moves it already
+staged for earlier plans staged, but it runs no follow-up: it files no issue. The owning spec follows once every plan in its Implementation Plans table has reached the
 archive.
 
 fr stages the moves and does not commit them, so you commit them. `--branch <merged-branch>`
@@ -126,10 +127,12 @@ archive leaves acceptance rows alone: they cite a spec as `spec:<slug>`, which n
 either place.
 
 To see what an archive would do before you run it, add `--dry-run`. fr runs the same
-archive on a throwaway copy of your checkout, with a forge that records each write and
-does not make it. It prints the moves, the holds, the owed entries and the issues the real
-run would make, and exits with the code the real run would. It changes no file, no git
-state and nothing on the forge, and it never asks you a question. It refuses with exit 2
+archive with a forge that records each write and does not make it. In the repo placement
+it runs in a temporary git worktree of your checkout, which it adds and then removes. Under
+the quiet or stealth placement it previews the record and the push in place. It prints the
+moves, the holds, the owed entries and the issues the real run would make, and exits with
+the code the real run would. It changes no file in your checkout, no branch and nothing on
+the forge, and it never asks you a question. A fetch can move your remote-tracking refs. It refuses with exit 2
 in two cases. The first is when your fr artifacts need a migration: the real run would
 migrate them first, and a preview cannot show that honestly. The second is under the quiet
 or stealth placement, when it cannot see what the real run would read: there is no `fr`
