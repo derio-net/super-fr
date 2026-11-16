@@ -7209,6 +7209,16 @@ batches:
     pr: 1478
     head: ccaa3b30616b9056806be81e1972465a2d0fa794
     voided_at: 50a78c7714b411bb1c92120cd7e1be6d174b430f
+  - kind: approval
+    at: '2026-11-16T15:58:05.885150Z'
+    pr: 1478
+    head: 50a78c7714b411bb1c92120cd7e1be6d174b430f
+  - kind: update
+    at: '2026-11-16T15:58:46.200190Z'
+    pr: 1478
+    head_before: 50a78c7714b411bb1c92120cd7e1be6d174b430f
+    head_after: 1dc73a00801d04bc49cbb4023d351ac26d702b5d
+    base: 8d61459f2da191cd2bef09529780796d240bb083
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7249,6 +7259,13 @@ batches:
     at: '2026-11-16T15:54:25.685744Z'
     pr: 1477
     head: acacea8675acbd7d90e8781ca1d3a0a82c0b4b16
+  - kind: claims_released
+    at: '2026-11-16T15:58:49.644016Z'
+    keys:
+    - super-fr#1275
+    - super-fr#1293
+    - super-fr#1389
+    - super-fr#1399
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
