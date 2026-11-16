@@ -156,3 +156,61 @@ The patches are the real obstacle. `_Driver` reads those names as module globals
 **Moderate, front-loaded.** The seams are real and the globs already cover `batch_*` names, but `_Driver`'s 3,100 lines are tied to the CLI layer by output and exit calls and by 185 module-attribute patches. Slice 2 (ports) is the prerequisite that makes everything after it cheap.
 
 `batch_drive.py` should not be split at its core: `drive_pass`, `Snapshot` and `Action` are one planner. Only the export and hand-back leaves are worth peeling, and only if the purity guard becomes a glob in the same change.
+
+<!-- fr:journal kind=discovery scope=plan id=review-isolation-local created=2026-11-16T18:54:38+00:00 phase=2 -->
+### review-isolation-local · discovery · Brainstorm module review, UNVERIFIED reviewer output: isolation-local (re-check every line range and count before use) (phase 2)
+
+## Decomposition review: `packages/fr/src/fr/isolation/local.py` (3,164 lines)
+
+All line refs are to that file unless another path is given. Nothing was edited or run.
+
+### 1. Responsibility map
+
+| Lines | ~Size | Cluster | Kind |
+|---|---|---|---|
+| 48–168 | 120 | `Runner`, `subprocess_runner`, `devcontainer_id`, `_home`, gc spawners | effects |
+| 172–297 | 125 | gc/reap value types (`GcAction`, `ReapHazard`, `ReapRefused`), `_merged_before`, `_hazard_detail` | pure / presentation |
+| 299–835 | 535 | "did the branch land" analysis (`_fork_point`, `_landed_at`, `branch_changes_present`, `recorded_start`) | git reads, no instance state |
+| 837–1173 | 335 | network env, `RemoteView`, `resolve_branch_refs`, `classify_branch` | mostly pure decision |
+| 1175–1200 | 25 | stale vk-profile refusal | decision |
+| 1201–1700, 3033–3145 | 610 | devcontainer lifecycle and docker probes (`up`, `exec`, `rebuild`, `stop`, `stats`, image/volume reclaim, env-file) | effects |
+| 1701–1975 | 275 | merge verification and `_reap_hazard` | decision over effects |
+| 1976–2160 | 185 | teardown (`down`, `_down_worktree_tail`, `_teardown_container`) | effects |
+| 2162–2657 | 495 | garbage collection (discovery, sweeps, lock) | effects |
+| 2658–2872, 2941–3032 | 305 | worktree provisioning, cold-start base, default branch | effects |
+| 2873–2940 | 70 | marker write/remove | effects |
+| 3147–3164 | 20 | PR lookup | effects |
+
+### 2. Where each belongs, and cycles
+
+- Runner plumbing → new `runner.py`. Landing analysis → new `landing.py`. Branch classification and network → new `branchrefs.py`. Reap types → `types.py` or new `reap.py`.
+- Marker writing → `marker.py` is possible, but it currently holds validation only.
+- No cycle for any of these. `local.py` imports only `preserve` and `types` (30–45); `preserve` imports only `types`; `routing`, `hostworktree` and `external` import `local` one way (`routing.py:17-20`, `hostworktree.py:20`, `external.py:28`).
+- Importers needing re-exports or edits: `commands/isolation_cmd.py:23`, `commands/archive_cmd.py:55`, `fr-herdr/src/fr_herdr/runner.py:118` (a private name, `_main_worktree_root`).
+
+### 3. Coupling obstacles
+
+- **One big class.** `LocalWorktreeDevcontainerTarget` (1201–3164, about 1,960 lines) has about 85 methods but only three instance attributes: `repo_root`, `run`, `_gc_spawner` (1218–1220). `self.run` is used 53 times and `self.repo_root` 40.
+- **The subclass is the real coupling.** `HostWorktreeTarget` overrides `_teardown_container`, `_labelled_containers`, `_sweep_dangling_images` and `_stale_state_reapable` (`hostworktree.py:106-128`), so teardown and gc are template methods.
+- **Module state:** constants only.
+- **Tests:** 27 files reference the module; 23 import 47 names from it. Most used: `LocalWorktreeDevcontainerTarget` (12), `subprocess_runner` (12), `GcAction` (4), `ReapRefused` (3), `branch_changed_paths` (2), `branch_changes_present` (2).
+- **Patches:** module-level ones are few (`client_for` twice, `head_blobs`, `branch_changes_present`). Private methods patched on instances: `_resolve_default_branch` (9), `_reap_hazard` (8), `_pr_from` (7).
+- **Tripwires:** `tests/unit/test_isolation_network_timeouts.py:252-266` scans this file's source for forge argv, and `tests/unit/test_vk_compat_removed.py:59,262-270` names the path. Both must be widened to any new module.
+
+### 4. Hazards
+
+- **#1419 (`branch_slug`):** not touched. `local.py` only calls `default_worktree_path` (1234).
+- **Teardown ordering (2038–2113):** guards → stage → container teardown → `mark_removal_attempted` → verified removal → commit with the recovery-copy fallback (2087–2099) → marker → state. Only moving the teardown or gc clusters would touch it.
+- **Early return (2711–2713):** only moving worktree provisioning would touch it.
+
+### 5. Slice order
+
+1. **S (~120), low risk:** `runner.py`, re-exported from `local`.
+2. **M (~535), low risk:** `landing.py`. The class calls only `branch_changes_present` (3 times) and `recorded_start`; one string patch target must follow or be re-exported.
+3. **M (~335), low risk:** `branchrefs.py`. The class's `_network_env`, `_run_network` and `_fetch_placement` already delegate to these free functions.
+4. **S (~125), low risk:** reap/gc value types.
+5. **L (~500), medium–high risk:** gc as a mixin or collaborator. It crosses the subclass override points and the instance patches.
+
+### 6. Verdict
+
+**Cheap for the free-function third, costly for the class.** Slices 1–4 move about 1,100 lines with no cycle and near-zero test edits if `local.py` re-exports the names. What should remain is the Target class with `up`, `down`/`_down_worktree_tail`, worktree provisioning and default-branch resolution: the order-sensitive code that the subclass and the instance patches depend on.
