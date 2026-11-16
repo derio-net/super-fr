@@ -1,0 +1,83 @@
+schema_version: 2
+run: 2026-11-16-feat-gh-1318
+captures:
+- host: h-6fcd74b3
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-16T18:33:31+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 65fe70a5-99dc-4a3f-b249-8255221b4257
+    role: main
+    models:
+      claude-fable-5-2:
+        input: 126
+        cache_write: 693153
+        cache_read: 7664935
+        output: 67740
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 27
+      other:
+        usd: null
+        turns: 22
+      paperwork:
+        usd: null
+        turns: 10
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 4
+        cache_write: 84427
+        cache_read: 137952
+        output: 1013
+      brainstorm:
+        usd: null
+        turns: 57
+        input: 122
+        cache_write: 608726
+        cache_read: 7526983
+        output: 66727
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 4
+          cache_write: 84427
+          cache_read: 137952
+          output: 1013
+        brainstorm:
+          usd: null
+          turns: 29
+          input: 66
+          cache_write: 121221
+          cache_read: 4980244
+          output: 35931
+      subagent:
+        brainstorm:
+          usd: null
+          turns: 28
+          input: 56
+          cache_write: 487505
+          cache_read: 2546739
+          output: 30796
+    units:
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 28
+          input: 56
+          cache_write: 487505
+          cache_read: 2546739
+          output: 30796
+    briefs:
+      a7462fb49381d3693: 2655
+      a08a2dd72180218ba: 3375
+      a2efe6ecac342f27b: 2663
+      a273c209132f66655: 2643

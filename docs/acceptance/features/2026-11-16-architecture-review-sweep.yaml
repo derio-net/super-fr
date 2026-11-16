@@ -1,0 +1,74 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-16-architecture-review-sweep
+repo: derio-net/super-fr
+rows:
+  - id: import-guard-reads-syntax-tree
+    capability: package boundary guard
+    acceptance: The package-boundary guard reports a sibling-package import in any import
+      form (several names on one line, aliased, from-import, nested in a function or
+      try), and fails a soft point that imports fr_dispatch at module level
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-annotations-follow-vocabulary
+    capability: exit gates
+    acceptance: The triage gate remap, the plan step gate tag and the strategy manifest's
+      gate field accept exactly the gates fr.gates defines, and a value added to one
+      side only fails CI
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: session-status-one-vocabulary
+    capability: runner session status
+    acceptance: The dispatch protocol, the triage board and the cloud adapter hold the
+      same session statuses with the adapter's state mapping unchanged, and every acceptance
+      status has a report label
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-timestamps-one-reader
+    capability: fr triage
+    acceptance: Triage reads an aware timestamp through one function that returns nothing
+      for a missing, empty, malformed or naive value and keeps the offset of an aware
+      one, and no second function with the same body exists in the source
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: hotspot-modules-cannot-grow
+    capability: module size budget
+    acceptance: Each of the five largest modules fails CI when it grows past its recorded
+      line budget, and a budget more than 50 lines above its module fails too, so a
+      budget follows its module down
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: architecture-page-shows-decomposition
+    capability: fr triage architecture
+    acceptance: Every authored fragment this repo's architecture manifest names, the
+      decomposition fragment among them, exists and is a valid fragment
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
