@@ -189,3 +189,522 @@ Likewise, changing the generic tick's availability-first dedup fallback changes 
 Use a reviewed artifact/report for this evidence, then a shorter curated `fr triage architecture` fragment if useful; do not put the whole inventory into the architecture overview. Several area reviewers plus one reconciliation pass worked well here. Use module size as a review trigger and an optional no-growth budget for named hotspots, not a universal line ceiling that encourages arbitrary splitting.
 
 Each PR should state its preserved behavior, migrated callers, guard, and touched-file conflicts; add the required patch fragment. Frozen archives stay unchanged and generated mirrors are regenerated. A behavior fix gets its own contract, evidence, and release scope. No new feature or refactor implementation is included in this supplement.
+
+<!-- fr:journal kind=discovery scope=spec id=brief-audit created=2026-11-16T18:03:22+00:00 input=true -->
+### brief-audit · discovery · Operator brief, continued: the #1318 comments added after the first read (bug index, full audit parts 1 and 2, pointer comment)
+
+--- comment, 2026-11-16T17:50:33Z (1910 chars) ---
+## Confirmed bugs tracked separately from the refactor work
+
+The four confirmed audit bugs now have separate bug tracking. Rechecked against current main at `33e12d678a37a93b7c215ad8ac9f8c070c905090`, using the matching v8.0.3 workspace packages; all four safe reproductions still show the reported behavior.
+
+| Audit finding | Bug issue | Scope |
+|---|---|---|
+| F01 | #1499 | Generic tick dispatches after an unavailable duplicate-work lookup. |
+| F02 | #1500 | A failed cursor save destroys the last valid local cursor. |
+| F03 | #1419 | Branch slugs collide, overwrite state, and resolve another branch's workspace. |
+| F04 | #1501 | cncd plan-directory symlinks include outside-file text in the dispatch payload. |
+
+Each report contains executable reproduction steps, pinned source evidence, observed versus expected behavior, impact limits, recommended fixes, and regression criteria. #1419 already existed and is actively claimed, so I added the state-overwrite reproduction and criteria there rather than creating a competing duplicate or changing its claim.
+
+**These are behavior-changing fixes, outside R01–R07's behavior-preserving refactor lane.** Use separate fix PRs with explicit corrected contracts and regression evidence. In particular, the dedup test currently endorses the unsafe fallback, so preserving that assertion is not an acceptance criterion for its bug fix.
+
+Keep the fix and refactor PRs separate even where they touch the same helper or command module. Coordinate overlapping paths with the existing owner, land the corrected behavior/guard first where practical, and preserve that corrected behavior in subsequent extractions. No behavior change should be hidden inside YAML, persistence, identity, or orchestration cleanup.
+
+No source changes, live runner calls, real secret transfers, or destructive workspace teardown were performed while reproducing and filing these issues.
+
+--- comment, 2026-11-16T17:52:34Z (41248 chars) ---
+<!-- full-principal-audit:f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37:part:1 -->
+## Full engineering audit part 1 of 2
+
+Publishing the complete original audit for the implementing agent. **Original assessment: 15 November 2026, commit `f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37`, v8.0.0.** The report text is unabridged across these two comments. Its statements about read-only work and verification describe that original audit session; later issue filing and the supplement are separate work.
+
+The [focused supplement](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6923555343) is pinned to `a4281f85`. The [bug tracking index](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924421644) records rechecks at `33e12d67`: #1499, #1500, #1419, #1501. Keep those behavior fixes separate from #1318's behavior-preserving refactors. This publication does not refresh the original score or claim to audit current main.
+
+---
+
+# Engineering audit of super-fr
+
+Principal engineer assessment · 15 November 2026 · Read-only review
+
+**Verdict: a capable, thoughtfully engineered automation platform whose safety guarantees are uneven at identity, persistence, and dispatch boundaries.** Retain its core design. Fix the four reproduced defects before expanding unattended operation, then reduce the concentration of workflow policy in the command layer.
+
+The weighted engineering assessment is **3.2 out of 5**, with medium overall confidence. This is an expert assessment, not a measured reliability rate. The repository has substantial behavioral tests, useful pure decision engines, strict typing, and unusually careful recovery mechanisms. Passing tests still coexist with a test that explicitly endorses unsafe dispatch behavior, a cursor writer that can destroy its last valid state, colliding workspace identities, and an overly broad cncd file payload.
+
+## Scope and evidence
+
+Repository: [derio-net/super-fr](https://github.com/derio-net/super-fr). All source conclusions refer to commit **f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37**, version **8.0.0**. The pinned commit was the latest returned by connected GitHub access when this audit began. It is not a promise that the branch still points there when this report is read.
+
+Connected GitHub access established repository metadata, the complete tree, commit identity, and CI job results. A separate detached local clone supplied source inspection and checks. No source, configuration, GitHub issue, pull request, branch, or remote state was changed. Test environments, generated reports, dependency installations, and reproductions were kept outside the clone. The final tracked working-tree check is recorded with the evidence bundle.
+
+Three independent review workstreams covered architecture and state, dispatch and runners, and security and delivery. Their findings were reconciled with source reinspection and safe reproductions. A second challenge pass narrowed the dispatch and cncd impact claims and verified that mutation failures were behavioral assertions. These were separate agent reviews, not a claim of independent human review or different-model consensus.
+
+The audit inspected every major subsystem at the level shown in the coverage map below and traced representative critical paths. It did not inspect every line or every possible state. Evidence labels mean:
+
+| Label | Meaning |
+|---|---|
+| Reproduced | Executed the actual pinned implementation against a disposable local fixture and observed the stated failure. |
+| Static finding | Directly established from source or configuration, without a runtime incident claim. |
+| Expert assessment | A reasoned judgment about fitness, change cost, or design. |
+| Risk | A credible failure path that was not reproduced end to end. |
+| Unknown | Available evidence does not support a conclusion. |
+
+The four defect reproductions used in-memory fake backends, synthetic text, local Git repositories, or a child process with a file-size limit. No live model session, cncd request, Docker operation, deployment, remote mutation, real secret transfer, or destructive workspace teardown was performed.
+
+## Findings at a glance
+
+P0 means emergency action. P1 means a broadly urgent release blocker. P2 means a material defect or risk to address in the next focused maintenance cycle. P3 means planned assurance or maintainability work. There is no demonstrated P0 or generally applicable P1 incident in this audit. Particular deployment conditions can raise the priority of a P2 finding.
+
+| ID | Priority | Finding | Evidence status | Confidence |
+|---|---|---|---|---|
+| F01 | P2 | Generic tick treats failed duplicate-work lookup as an empty backend and submits again. | Reproduced framework behavior | High |
+| F02 | P2 | A failed cursor replacement destroys the last valid local cursor. | Reproduced OS write fault | High |
+| F03 | P2 | Valid branch names can share an isolation state and default workspace path. | Reproduced identity collision | High |
+| F04 | P2, conditional confidentiality impact | cncd payload follows plan-directory symlinks and includes outside-file text. | Reproduced, including real reachability gate | High |
+| F05 | P2 | Workflow CLI steps have no runtime or retained-output bound. | Static risk | High on mechanism; medium on impact |
+| F06 | P2 | Consumer installation does not reproduce the release's locked Python dependencies. | Static finding | High |
+| F07 | P2 | Claude edit hook emits no deny decision when jq is missing from PATH. | Reproduced process behavior; harness continuation untested | High on hook result |
+| F08 | P3 | Workflow policy and side-effect coordination are concentrated in very large command modules. | Measured size plus architectural judgment | High on size; medium on change cost |
+| F09 | P3, review promptly | Plugin lock includes transitive versions covered by two moderate dependency advisories. | Scanner result verified against advisory records | High on version match; exploit reachability unverified |
+
+The priorities reflect demonstrated scope, likely exposure, recovery options, and the presence of other guards. The list is not a count of vulnerabilities, and static risks are not counted as reproduced defects.
+
+## Product and architecture
+
+super-fr turns a feature request into an isolated, planned, tested, reviewed pull request. It also manages plans, acceptance evidence, journals, workflow cursors, backlog batches, runner sessions, manual operations, and close-out. Its important consistency boundaries are files, Git history, the forge, and external agent sessions. It therefore faces partial-failure and ownership problems even though it is primarily a local CLI.
+
+The current source has retired VibeKanban support. The repository description returned by GitHub still mentions it, while the recent history records its removal. Treat current code and version 8 documentation as authoritative for supported adapters. See [the retirement commit](https://github.com/derio-net/super-fr/commit/e0390fd8) and [packages/fr-dispatch/src/fr_dispatch/registry.py:1–60](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-dispatch/src/fr_dispatch/registry.py#L1-L60).
+
+The architectural flow is:
+
+```
+Operator and coding harness
+    skills, rules, Claude hooks, OpenCode plugin, Hermes integration
+                        |
+                       fr CLI
+                        |
+    plans + workflows + run state + journals + acceptance evidence
+                        |
+    observe live state -> calculate decisions -> apply effects
+                        |
+        forge adapters      runner protocol      isolation targets
+        GitHub/GitLab/tea    cncd/herdr/cloud     worktree/container/external
+                        |
+           external services, Git and filesystem state
+```
+
+This is a conceptual map, not a claim that all effects pass through one universal applier. The plan synchronization engine has a particularly clear render-observe-diff-apply structure. Triage, operations, and other workflows have additional writers through their own adapters.
+
+### Subsystem coverage and judgments
+
+| Subsystem | Representative source and path | Assessment |
+|---|---|---|
+| Plan parsing and editing | [packages/fr/src/fr/parser.py:259–279](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/parser.py#L259-L279); [packages/fr/src/fr/plan_ops.py:1362–1400](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/plan_ops.py#L1362-L1400) | Closed artifact schemas and explicit edit rules support predictable behavior. Editing and validation policy are substantial and deserve focused regression tests. |
+| Forge synchronization | [packages/fr/src/fr/observe.py:43–61](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/observe.py#L43-L61); [packages/fr/src/fr/diff.py:118–249](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/diff.py#L118-L249); [packages/fr/src/fr/apply.py:93–157](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/apply.py#L93-L157) | Strong separation between observation, pure mutation calculation, and execution. Foreign labels and completed-plan creation are explicitly handled. |
+| Workflow execution and evidence | [packages/fr/src/fr/workflow/check.py:43–64](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/workflow/check.py#L43-L64); [packages/fr/src/fr/commands/run_cmd.py:6270–6443](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L6270-L6443) | Meaningful state and evidence enforcement, but the command module owns too much policy and coordination. Persistence is weaker than the model's durable-state purpose. |
+| Journals and acceptance | [packages/fr/src/fr/journal/model.py:646–719](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/journal/model.py#L646-L719); [packages/fr/src/fr/acceptance/fold.py:332–399](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/acceptance/fold.py#L332-L399) | Effective-state folding, reopening, and branch amendments model real requirements. Preserve these distinctions. Journal write durability needs repair. |
+| Triage and batch drive | [packages/fr/src/fr/triage/batch_drive.py:1732–1800](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/triage/batch_drive.py#L1732-L1800); [packages/fr/src/fr/triage/batch.py:514–582](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/triage/batch.py#L514-L582) | A pure planner over observed snapshots is a strong boundary. Batch orchestration and cross-store repair concentrate in the command layer. |
+| Dispatch framework | [packages/fr-dispatch/src/fr_dispatch/__init__.py:374–617](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-dispatch/src/fr_dispatch/__init__.py#L374-L617); [packages/fr-dispatch/src/fr_dispatch/protocols.py:88–104](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-dispatch/src/fr_dispatch/protocols.py#L88-L104) | Stable work items and real adapter seams are justified. F01 is a narrow but material inconsistency in failure policy. |
+| Runner adapters | [packages/fr-cncd/src/fr_cncd/runner.py:85–99](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-cncd/src/fr_cncd/runner.py#L85-L99); [packages/fr-herdr/src/fr_herdr/runner.py:368–452](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-herdr/src/fr_herdr/runner.py#L368-L452); [packages/fr-claude-cloud/src/fr_claude_cloud/mailbox.py:1–100](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-claude-cloud/src/fr_claude_cloud/mailbox.py#L1-L100) | Separate transport, terminal-session, and durable-mailbox models fit genuinely different backends. Current external compatibility is partly an integration assumption. |
+| Isolation lifecycle | [packages/fr/src/fr/isolation/types.py:95–177](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/isolation/types.py#L95-L177); [packages/fr/src/fr/isolation/routing.py:24–51](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/isolation/routing.py#L24-L51) | Recorded-mode routing and recovery-aware teardown are good. Lossy branch identity undermines the entry to those protections. |
+| Usage, model binding, debt, docs | [packages/fr/src/fr/usage/file.py:9–18](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/usage/file.py#L9-L18); [packages/fr/src/fr/bindings/choose.py:50–58](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/bindings/choose.py#L50-L58); [packages/fr/src/fr/docs/check.py:26–84](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/docs/check.py#L26-L84) | Small focused policies, explicit missing values, and privacy allowlists are examples to follow when extracting run policy. |
+| Harness enforcement | [packages/fr-opencode-plugin/src/spawn.ts:1–69](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-opencode-plugin/src/spawn.ts#L1-L69); [packages/fr-opencode-plugin/src/idle.ts:1–45](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-opencode-plugin/src/idle.ts#L1-L45); [plugins/super-fr/hooks/fr-isolation-required.sh:24–37](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/plugins/super-fr/hooks/fr-isolation-required.sh#L24-L37) | Delegating domain judgments to fr limits drift. Hook/parser failure behavior remains uneven across entry points. |
+| Manual operations and trust | [packages/fr/src/fr/commands/ops_cmd.py:224–240](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/ops_cmd.py#L224-L240); [packages/fr/src/fr/ops/apply.py:206–265](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/apply.py#L206-L265); [packages/fr/src/fr/ops/probe.py:36–61](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/probe.py#L36-L61) | Operator-local trust, preflight confirmations, dependency ordering, explicit unavailable states, and bounded noninteractive probes are sound. Actual privileged operations were not run. |
+| Artifact migration, settings, placement | [packages/fr/src/fr/artifacts/trigger.py:590–635](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/artifacts/trigger.py#L590-L635); [packages/fr/src/fr/settings/load.py:372–412](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/settings/load.py#L372-L412); [packages/fr/src/fr/placement/move.py:1147–1177](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/placement/move.py#L1147-L1177) | Migration locking, per-key configuration provenance, and verification before placement switching address real consistency needs. Live placement moves and migration recovery were not exercised here. |
+| Install, release, operations | [scripts/install.sh:8–63](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/scripts/install.sh#L8-L63); [.github/workflows/ci.yml:19–37](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/ci.yml#L19-L37); [.github/workflows/release.yml:82–139](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/release.yml#L82-L139) | Serious staging, locking, release checks, and diagnostics. Installation dependency resolution differs from the tested lock. |
+
+### Critical path 1 — plan to forge
+
+The parser produces a validated plan. Observation reads tracked issue and linked-PR state. Rendering derives desired issue state from local progress and accepted work. The diff emits typed mutations. Apply executes those mutations or returns a dry run. Labels outside owned namespaces remain untouched, and locally completed undispatched phases are suppressed rather than recreated. [packages/fr/src/fr/diff.py:159–219](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/diff.py#L159-L219) [packages/fr/src/fr/apply.py:93–157](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/apply.py#L93-L157)
+
+This division is clean architecture in the useful sense: decisions can be exercised without network access, while effects have a constrained interface. The design does not need more enterprise layering. Its limits are GitHub-shaped vocabulary and sequential observations per phase. A new forge is possible but not merely a one-method adapter replacement across the whole product.
+
+### Critical path 2 — workflow advance and resolve
+
+Advance reads a cursor and workflow manifest, checks gates and active attempts, persists a new hold, and emits an agent brief. CLI steps execute directly, and their exit status controls progression. Resolve verifies required evidence and records completion. Those checks are substantive enforcement, not merely prose instructions. [packages/fr/src/fr/commands/run_cmd.py:6270–6443](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L6270-L6443) [packages/fr/src/fr/commands/run_cmd.py:1937–1995](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L1937-L1995)
+
+The transaction boundary is less clear than the type boundary. A transition can involve cursor bytes, a Git commit, evidence files, and live session state. F02 concerns the write mechanism. A separate, unverified concurrency risk concerns two commands reading the same pending state before either persists a hold. Atomic replacement would protect file integrity but would not, by itself, prevent lost updates or duplicate briefs.
+
+### Critical path 3 — triage batch to runner
+
+The pure batch driver takes facts and time and returns ordered actions. The command resolves configuration, reservations, gates, claims, dispatch, and bookkeeping. It acknowledges partial success when a backend launch succeeds but local event recording fails and gives a repair instruction. This is careful handling of irreversible effects. [packages/fr/src/fr/triage/batch_drive.py:1732–1800](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/triage/batch_drive.py#L1732-L1800) [packages/fr/src/fr/commands/triage_batch_cmd.py:1763–1967](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/triage_batch_cmd.py#L1763-L1967)
+
+The principal triage dispatch path calls the duplicate-work lookup directly and aborts if it raises. F01 affects the generic tick fallback, so it must not be attributed to every dispatch entry point. [packages/fr/src/fr/commands/triage_batch_cmd.py:1900–1945](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/triage_batch_cmd.py#L1900-L1945)
+
+### Critical path 4 — isolation and cleanup
+
+The backend for an existing workspace comes from its recorded mode, not a changed ambient environment. Teardown checks dirty or unlanded content, stages preservation, verifies removal, and retains a recovery copy when later bookkeeping fails. Host-worktree mode sensibly reuses lifecycle logic without pretending to provide container-level separation. [packages/fr/src/fr/isolation/routing.py:24–51](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/isolation/routing.py#L24-L51) [packages/fr/src/fr/isolation/local.py:2038–2108](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/isolation/local.py#L2038-L2108)
+
+F03 occurs earlier, during identity selection. Correct cleanup guards cannot make a colliding state key identify the requested workspace. The audit demonstrated wrong state resolution, not destruction of a different real worktree.
+
+### Critical path 5 — trusted manual operations and artifact relocation
+
+Manual operation selection computes a fingerprint and requires an operator-local trust record before status, apply, or attestation executes repository-authored probes. The trust record lives outside the checkout; a PR-carried journal entry cannot grant trust. Referenced commands, configuration, and the committed code tree contribute to the fingerprint. Noninteractive probes use a bounded timeout and an explicit environment. The environment is not a filesystem sandbox, and trusted repository-authored code still has the operator's operating-system access. [packages/fr/src/fr/commands/ops_cmd.py:112–132](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/ops_cmd.py#L112-L132) [packages/fr/src/fr/commands/ops_cmd.py:224–240](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/ops_cmd.py#L224-L240) [packages/fr/src/fr/ops/trust.py:1–17](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/trust.py#L1-L17) [packages/fr/src/fr/ops/probe.py:1–9](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/probe.py#L1-L9)
+
+Apply orders operations before executing them, checks unselected prerequisites, checks required confirmations before a nonterminal run, stops on failure, and rechecks outcomes after execution. An unchecked prior apply does not silently become verified completion. Interactive operations deliberately attach the operator's terminal and have no automatic timeout. That exception is reasonable for human-driven work and is distinct from F05's automatic CLI-step capture. The gate sequencer records completion host-side rather than accepting a PR-controlled journal as authority. [packages/fr/src/fr/ops/apply.py:206–265](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/apply.py#L206-L265) [packages/fr/src/fr/ops/apply.py:285–337](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/apply.py#L285-L337) [packages/fr/src/fr/ops/probe.py:77–105](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/probe.py#L77-L105) [packages/fr/src/fr/ops/gate.py:1–24](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/ops/gate.py#L1-L24)
+
+Artifact migration refuses inappropriate automatic commits and locks the Git common directory before migration and commit. Settings expose per-key provenance and distinguish pending edits from the selected source. Placement moves compare destination bytes, effective acceptance folds, and structural validation before switching the placement. This is appropriate safety work for relocatable Git artifacts. It also illustrates why F02 and F04 are inconsistencies: atomic replacement and path-aware validation already exist in neighboring subsystems. No actual migration, placement move, or manual operation was performed during this audit. [packages/fr/src/fr/artifacts/trigger.py:590–635](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/artifacts/trigger.py#L590-L635) [packages/fr/src/fr/settings/load.py:372–412](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/settings/load.py#L372-L412) [packages/fr/src/fr/placement/move.py:1147–1177](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/placement/move.py#L1147-L1177)
+
+### Architectural evolution
+
+Adding another runner is reasonably local because entry-point registration and optional protocols correspond to existing distinct backends. Adding another harness requires hook wiring, session detection, transcript reading, mirrored rules, and parity evidence. Generated mirrors and tripwires reduce drift, but current event and terminal behavior still needs live verification.
+
+A new evidence kind or delivery gate is more expensive. It can touch a large command module, evidence derivation, persistence, rollback, reporting, and tests. This is the strongest simplification opportunity. Extract typed evidence decisions and state transitions into cohesive modules. Keep a small explicit coordinator for effects. Splitting the same functions into many arbitrary files would not solve the ownership problem.
+
+Git-backed plans, journals, and acceptance fragments are proportionate for reviewable developer workflows. A central service or database would add synchronization and deployment costs without evidence that current scale requires it. The immediate need is reliable file replacement and explicit ownership, not a storage-platform rewrite.
+
+## Detailed findings
+
+### F01 — Failed dedup lookup permits another generic dispatch
+
+**P2 · Reproduced framework defect · High confidence.**
+
+`tick` catches a failure from `existing_dispatches`, records an error, and substitutes an empty set. It then calls `dispatch` for work whose backend state is unknown. For run and spec items, the backend lookup can be the only duplicate-submission protection. [packages/fr-dispatch/src/fr_dispatch/__init__.py:508–518](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-dispatch/src/fr_dispatch/__init__.py#L508-L518) [packages/fr-dispatch/src/fr_dispatch/__init__.py:549–568](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-dispatch/src/fr_dispatch/__init__.py#L549-L568)
+
+The safe fixture used the real tick and manifest parser with an in-memory runner. The first call submitted one stable run ID. The second call made the duplicate lookup raise a timeout. Both calls returned `synced=1`, and the runner recorded the same ID twice. The retry also returned an error, so this is not a silent success; nevertheless, an error did not prevent the fresh allocation.
+
+```
+first call:  synced=1, errors=0
+retry:       synced=1, errors=1, "dedup fetch failed"
+allocations: ["audit/repo/run/same-run", "audit/repo/run/same-run"]
+```
+
+An existing behavioral test explicitly requires this fallback and asserts that dispatch occurs. It is mechanically meaningful testing of the wrong general safety contract. [tests/unit/test_tick_workitem.py:671–684](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/unit/test_tick_workitem.py#L671-L684)
+
+The availability-first choice can be reasonable when every backend independently enforces idempotency. cncd declares a server upsert contract, and cloud pending requests have local reuse protections. The general runner interface does not establish that guarantee for all adapters. Herdr allocation has additional external behavior that was not exercised here. The audit therefore does not claim two paid sessions were actually launched, or that the primary triage dispatch has this failure.
+
+Defer fresh allocations when backend duplicate state is unavailable. Preserve retry on the next tick and report the reason. Alternatively, require and test an authoritative backend idempotency key for every adapter before permitting this fallback. A contract test should submit once, fail the next lookup, retry, and prove that the allocation count remains one.
+
+### F02 — Cursor write failure destroys the last valid local state
+
+**P2 · Reproduced OS fault · High confidence.**
+
+`save_run_state` replaces the cursor with `Path.write_text`, which truncates before a full replacement has succeeded. [packages/fr/src/fr/run/model.py:596–601](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/run/model.py#L596-L601)
+
+A disposable fixture created a valid 134-byte cursor. A child process then set its OS file-size limit to 64 bytes and called the actual save function. The write raised an `OSError`; the original file was now 64 bytes, and the real loader rejected it as invalid YAML.
+
+```
+child_exit: 23
+before_bytes: 134
+after_bytes: 64
+original_preserved: false
+load result: RunStateError, invalid YAML
+```
+
+This proves loss of the latest valid local cursor under a write failure. It does not establish a historical incident or its frequency. An older committed cursor can be recovered from Git, but uncommitted progress is not preserved and normal resume fails.
+
+The repository already has an atomic writer for this class of failure. Reuse it rather than introducing another abstraction. Journal append also reads and rewrites the whole file through `write_text`, so it shares the mechanism; that path was identified statically rather than counted as another separately reproduced defect. [packages/fr/src/fr/artifacts/atomic.py:1–25](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/artifacts/atomic.py#L1-L25) [packages/fr/src/fr/artifacts/atomic.py:41–75](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/artifacts/atomic.py#L41-L75) [packages/fr/src/fr/journal/model.py:878–886](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/journal/model.py#L878-L886)
+
+Verify that interrupted replacement leaves the old cursor and journal readable and unchanged. Include failed temporary writes and failed replace operations. Review filesystem durability requirements separately from cross-process ownership.
+
+### F03 — Lossy branch encoding aliases workspace state
+
+**P2 · Reproduced identity defect · High confidence.**
+
+`branch_slug` replaces `/` with `__`. Both `feat/a` and `feat__a` are valid Git branch names, but they yield the same slug. The slug selects the state file and default worktree directory. Saving state overwrites the shared file, and loading by branch does not compare the stored branch with the requested branch. [packages/fr/src/fr/isolation/types.py:95–102](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/isolation/types.py#L95-L102) [packages/fr/src/fr/isolation/types.py:146–177](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/isolation/types.py#L146-L177)
+
+The fixture verified both names with Git, saved distinct state records, then loaded `feat/a`. It received the branch and workspace recorded for `feat__a`.
+
+```
+same_state_path: true
+requested branch: feat/a
+loaded branch: feat__a
+loaded workspace: workspace-two
+```
+
+The CLI accepts this loaded state without an identity comparison. Creation also has an early return when the default worktree path already exists. Those paths strengthen the practical relevance of the collision, but no destructive teardown of a real wrong workspace was attempted. [packages/fr/src/fr/commands/isolation_cmd.py:178–204](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/isolation_cmd.py#L178-L204) [packages/fr/src/fr/isolation/local.py:2711–2713](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/isolation/local.py#L2711-L2713)
+
+Use a reversible encoding or a readable slug plus a hash of the exact branch string. Refuse a loaded identity mismatch immediately. Define migration or backward-compatible reads for existing records. Verify the encoding over generated valid branch names, including slash and underscore combinations, and assert that state for one branch cannot be returned for another.
+
+### F04 — cncd includes text outside the validated plan directory
+
+**P2 · Reproduced payload inclusion · High confidence; severity depends on trust boundaries.**
+
+`build_ingest_payload` reads every plan-directory child for which `is_file()` is true. That follows symlinks. The parser reads expected plan artifacts but does not reject an unrelated symlink. The transport posts the constructed payload. [packages/fr-cncd/src/fr_cncd/runner.py:85–99](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-cncd/src/fr_cncd/runner.py#L85-L99) [packages/fr/src/fr/parser.py:259–279](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/parser.py#L259-L279) [packages/fr-cncd/src/fr_cncd/runner.py:155–162](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-cncd/src/fr_cncd/runner.py#L155-L162)
+
+A valid plan fixture contained an extra symlink to synthetic text outside the plan. Parsing succeeded and the payload included that text. The challenge fixture committed the symlink in a disposable Git repository and passed the actual apply reachability check and cncd preflight and routing checks. No network request was sent.
+
+```
+Git checkout established: true
+missing required reachable paths: []
+cncd preflight: no refusal
+can_dispatch: true
+outside synthetic value in payload: true
+network calls: 0
+```
+
+Local inclusion is demonstrated. Actual network disclosure was not executed. Impact requires cncd dispatch, a readable target, and a receiving control plane outside the relevant confidentiality boundary. A normal issue title does not create this path. Less-trusted plan content processed by a more privileged dispatcher raises the severity. Even in a fully trusted deployment, accidental auxiliary-file inclusion can transfer unintended data.
+
+Verbatim auxiliary files may be intentional, so removing every non-schema filename without defining attachments could break supported behavior. Establish an explicit attachment policy. Refuse symlinks and non-regular files, bind selected real paths to the plan root, and bound file and payload sizes. Prefer validated artifacts plus declared attachments. Tests should assert refusal and zero transport calls for outside symlinks, unintended hidden files, and oversized content.
+
+### F05 — CLI steps have unbounded runtime and captured output
+
+**P2 · Static reliability and resource risk.**
+
+The workflow executor uses `subprocess.run(..., shell=True, capture_output=True, text=True)` without a timeout. It then persists complete stdout in the cursor. A command that never exits can block the advancing process indefinitely. Large output can grow memory and the tracked cursor. [packages/fr/src/fr/commands/run_cmd.py:6436–6443](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L6436-L6443)
+
+The risk follows directly from the API call, but no representative hang, memory limit breach, or latency regression was measured. Long-running verification may be legitimate. Operator-authored command templates also explain shell execution; shell use alone is not an injection finding because substituted values are quoted. [packages/fr/src/fr/commands/run_cmd.py:3889–3911](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L3889-L3911)
+
+Add an explicit per-step or workflow deadline, process-group cancellation semantics, a bounded diagnostic tail, and a separate log artifact. Represent timeout and cancellation outcomes in state. Allow documented opt-in for unusually long tasks rather than imposing an arbitrary short universal timeout.
+
+### F06 — Installed dependencies can differ from release-tested dependencies
+
+**P2 · Static reproducibility gap · High confidence.**
+
+The normal installer uses `uv tool install --force` against workspace distributions without supplying the workspace lock or release constraints. The core package's five external direct runtime requirements have lower bounds only. The same source release can therefore resolve a different dependency set on a later installation. Optional installation of `@devcontainers/cli` is unversioned. [scripts/install.sh:874–903](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/scripts/install.sh#L874-L903) [packages/fr/pyproject.toml:6–12](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/pyproject.toml#L6-L12) [scripts/install.sh:1074–1083](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/scripts/install.sh#L1074-L1083)
+
+This does not prove an incompatibility or vulnerable installation. Broad library requirements are common and allow fixes to flow. The concern is an integrated automation product whose tested lock and delivered environment diverge. Its staged install checks mitigate some failures but do not establish equality with release CI.
+
+Generate release-specific constraints, test a fresh consumer install against them, and record resolved versions. Keep flexible library metadata if desired. Pin or document and test the supported devcontainer CLI range. Advisory results for this audit's lock cannot certify every dependency set the installer may resolve.
+
+### F07 — Claude edit hook loses its decision without jq on PATH
+
+**P2 · Reproduced enforcement-process gap · High confidence on process behavior.**
+
+The Claude edit hook invokes bare `jq` before calling shared decision logic. With a valid Edit payload and a stripped PATH containing only `dirname` and `cat`, it exits 127 and emits no deny JSON. No edit was attempted. The source itself describes the resulting behavior as fail-open. [plugins/super-fr/hooks/fr-isolation-required.sh:24–37](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/plugins/super-fr/hooks/fr-isolation-required.sh#L24-L37)
+
+Actual Claude continuation after that failure was not exercised, so the demonstrated result is the missing decision, not a completed unauthorized edit. Installation normally requires jq, which reduces exposure. Service PATH differences still matter, and the shared library already resolves parsers through absolute paths. [plugins/super-fr/hooks/lib/fr-isolation-decision.sh:19–45](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/plugins/super-fr/hooks/lib/fr-isolation-decision.sh#L19-L45)
+
+Route entry parsing through the existing resilient parser mechanism and make failure behavior explicit. Verify a valid protected edit produces a deny decision under a stripped service PATH. Treat this as reliability of a discipline guard. The hooks have deliberate bypasses and do not promise containment against hostile code.
+
+### F08 — Command modules concentrate policy and transaction coordination
+
+**P3 · Architectural assessment supported by measurements.**
+
+`run_cmd.py` has 8,773 physical lines, and `triage_batch_cmd.py` has 7,343. Together they account for 11.3% of production Python physical lines. The issue is the mixture of responsibilities, not a file-length rule. Evidence interpretation, transitions, side-effect ordering, persistence, commit behavior, diagnostics, and CLI presentation appear together. [packages/fr/src/fr/commands/run_cmd.py:1937–1995](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L1937-L1995) [packages/fr/src/fr/commands/run_cmd.py:7488–7545](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L7488-L7545) [packages/fr/src/fr/commands/triage_batch_cmd.py:1422–1475](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/triage_batch_cmd.py#L1422-L1475)
+
+Recent history also repeatedly touches these files. Within the last 100 reachable commits, `run_cmd.py` appeared in 14 commit file lists and `triage_batch_cmd.py` in 13. This is a bounded churn sample, not a defect-density estimate or a causal claim.
+
+The realistic cost is adding a delivery evidence requirement or changing dispatch recovery without overlooking another effect or rollback rule. Extract cohesive evidence-policy and state-transition functions with typed inputs and results. Keep effect ordering visible in a small coordinator. Avoid a generic workflow framework or a cosmetic file split that preserves the same hidden dependencies.
+
+
+
+--- comment, 2026-11-16T17:52:39Z (36102 chars) ---
+<!-- full-principal-audit:f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37:part:2 -->
+## Full engineering audit part 2 of 2
+
+Publishing the complete original audit for the implementing agent. **Original assessment: 15 November 2026, commit `f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37`, v8.0.0.** The report text is unabridged across these two comments. Its statements about read-only work and verification describe that original audit session; later issue filing and the supplement are separate work.
+
+The [focused supplement](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6923555343) is pinned to `a4281f85`. The [bug tracking index](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924421644) records rechecks at `33e12d67`: #1499, #1500, #1419, #1501. Keep those behavior fixes separate from #1318's behavior-preserving refactors. This publication does not refresh the original score or claim to audit current main.
+
+---
+
+## Test effectiveness
+
+### What the suite demonstrably does well
+
+The suite contains many tests of externally observable state, negative paths, and persistence. It is not fairly characterized as mostly testing theater. Examples include preserving operator labels after a real render-diff-apply sequence, reopening a mailbox from disk and preserving a pending request ID, refusing workflow dependency cycles, and respecting an operator gate in CLI liveness output. [tests/unit/test_v2_apply.py:116–159](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/unit/test_v2_apply.py#L116-L159) [tests/unit/test_claude_cloud_mailbox.py:130–166](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/unit/test_claude_cloud_mailbox.py#L130-L166) [tests/unit/test_workflow_check.py:77–86](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/unit/test_workflow_check.py#L77-L86) [tests/unit/test_run_idle.py:125–140](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/unit/test_run_idle.py#L125-L140)
+
+Herdr tests cover bounded retries, cleanup, and absence of prompt delivery after repeated launch failure. Recovery tests inspect checkpoints and ownership behavior rather than merely checking that a function ran. Fakes are appropriate for paid or interactive backends, provided they are complemented by contract and live compatibility evidence. [tests/unit/test_fr_herdr_runner.py:453–476](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/unit/test_fr_herdr_runner.py#L453-L476)
+
+The suite also encodes architectural rules. Package-import tests constrain the base, framework, and adapters and include tests that their own tripwires reject representative violations. Generated mirror and registration tests protect shipped integration consistency. Regex import scans are useful but narrower than a complete dependency graph. [tests/unit/test_import_direction.py:20–103](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/unit/test_import_direction.py#L20-L103)
+
+### What passing tests do not establish
+
+The clearest counterexample is F01. Its test observes dispatch and the error accurately but approves the wrong fallback. Increasing line coverage would strengthen confidence in that behavior without making it safe. Requirements and failure-policy review remain necessary.
+
+Global fixtures deliberately replace live model probes, rate-limit reads, label synchronization, ambient sessions, and migration behavior. This protects the operator and makes tests deterministic. It also means most tests do not prove real entry-point migration, current service behavior, or credential routing. Dedicated tests must restore those boundaries explicitly. The fixtures document this responsibility, which is a strength. [tests/conftest.py:76–96](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/conftest.py#L76-L96) [tests/conftest.py:163–190](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/conftest.py#L163-L190) [tests/conftest.py:285–305](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/tests/conftest.py#L285-L305)
+
+Some prose and source-text tripwires verify delivery or architectural constraints rather than runtime business behavior. They provide real value when preventing generated-content drift. They should not be counted as evidence that an interactive agent actually obeys a prompt or that a live external API remains compatible.
+
+Important missing or insufficiently established properties are failure-preserving cursor writes, collision-free branch identity, payload path confinement, and the safe duplicate-lookup contract. Concurrent advance/resolve ownership remains an unverified gap. Property-based tests are especially suitable for identity encodings and journal event sequences; no repository-wide generative-testing result was established here.
+
+### Controlled mutation experiments
+
+The audit changed four functions only in process memory. It never edited repository source. Each selected test set first passed against the original implementation. The mutated run then failed on the intended behavioral assertion, rather than collection or fixture errors. An independent reviewer checked those logs.
+
+| Mutation | Selected requirement | Observed result |
+|---|---|---|
+| Treat every label as managed. | Operator-owned label survives synchronization. | Test fails because `good-first-issue` disappears. |
+| Return no workflow cycles. | Mutually dependent steps are rejected. | Test fails because no cycle is reported. |
+| Ignore later journal resolution states. | Resolved/deferred findings leave the open state. | Two tests fail on handoff/effective-state results. |
+| Always report no pending operator gate. | A gated run is not reported as idle and advanceable. | CLI test fails on exit code, idle flag, and reason. |
+
+**Four deliberately selected mutations were detected by five selected tests.** This is positive local evidence, not a representative sample, a full mutation score, or proof that other critical faults will be caught. No surviving-mutant distribution was measured. The scripts and all eight baseline/mutated logs are included in the evidence bundle.
+
+### Local and remote verification results
+
+| Check | Local result | Scope |
+|---|---|---|
+| Ruff lint | Pass | All packages and tests, no cache writes in the clone. |
+| Ruff formatting | Pass; 1,221 files already formatted | Check-only operation. |
+| Strict mypy | Pass; 415 source files | All five Python source trees. |
+| Unit collection | 15,782 tests collected | Python 3.13.13. Collection is not execution. |
+| Broad unit run | 904 passed, then interrupted; 224.68 seconds | Deliberately bounded, exit code 2 from interruption. Not a full-suite pass. |
+| Focused critical-path run | 458 passed; 321.99 seconds | Twelve test modules spanning tick, journal, runners, synchronization, workflow validation, idle gates, acceptance folding, and import direction. |
+| Plugin typecheck | Pass | Exact source tree copied outside the clone, locked Bun dependencies. |
+| Plugin tests | 292 passed, 0 failed; 75.60 seconds | Sixteen test files, 572 expectations, Bun 1.3.11. No live OpenCode session. |
+| Targeted mutation checks | Four mutants detected; all baselines pass | Five selected tests, in-memory changes only. |
+
+The focused Python run measured 20,563 covered statements out of 64,810 in the whole configured Python source denominator, or 31.73%. It exercised a deliberately small test subset, so that percentage is not the repository's full-suite coverage and must not be compared with the full-suite CI floor. Branch coverage was not enabled. The broad and focused executions overlap, so their pass counts must not be added into a distinct-test total.
+
+Tests ran with network restricted. Python children used offline dependency settings, and the completed focused run put the audit environment's executables first on PATH. The first isolated plugin copy lacked repository-relative hook paths; its failures were fixture-layout errors, not product findings. The final plugin run used a complete copy of the pinned source layout and passed. No installation, hook registration, or live runner was exercised on the operator's environment.
+
+The pinned GitHub CI run completed successfully, including lint, strict type checking, Python 3.11 and 3.14 test legs with seven shards each, coverage combination, split-completeness checks, artifact validation, and two OpenCode version jobs. The change-fragment job was skipped on the main-branch push by its own condition. [Pinned CI run](https://github.com/derio-net/super-fr/actions/runs/43710966002).
+
+The full workflow ran from 11:51:52 to 11:57:57 UTC, 365 seconds. Individual successful test jobs took 168 to 323 seconds including their job setup and other steps. These are recorded workflow durations, not application performance benchmarks or a long-term CI reliability rate. The first run page also contains many ci-budget workflow runs; those were not counted as independent full-suite successes.
+
+Coverage configuration measures statements and enforces an aggregate 75% floor. It does not enable branch coverage in the inspected configuration. A successful coverage job establishes that its configured floor passed, but the precise overall percentage was not retrieved and is not invented here. [pyproject.toml:56–62](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/pyproject.toml#L56-L62) [.github/workflows/ci.yml:218–236](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/ci.yml#L218-L236)
+
+## Quantitative assessment
+
+The reproducible stdlib metrics script enumerated tracked files at the pinned commit and parsed production Python under `packages/*/src`. Generated assets, docs, shell scripts, and TypeScript are excluded from Python size distributions. Physical lines include comments and blanks. Test definitions exclude parametrization multiplicity and are not a quality score.
+
+| Metric | Value | Interpretation and limit |
+|---|---:|---|
+| Tracked files | 3,997 | Includes extensive docs, mirrors, fixtures, and historical artifacts. |
+| Production Python files | 415 | Five Python package source trees. |
+| Production Python physical lines | 142,146 | Size of the Python implementation, not executable statement count. |
+| Production file lines, median / p90 / p95 / maximum | 193 / 703 / 1,110 / 8,773 | Most files are moderate; a few coordination files dominate. |
+| Function definitions | 5,754 | Includes methods and nested definitions. |
+| Function lines, median / p90 / p95 / maximum | 10 / 38 / 57 / 330 | A generally small-function style coexists with concentrated complex coordinators. |
+| AST decision proxy, median / p90 / p95 / maximum | 3 / 11 / 15 / 116 | Branch-node heuristic, including nested definitions; not a calibrated McCabe or cognitive-complexity measure. |
+| Python test files | 806 | Includes test support modules under tests. |
+| Test function definitions | 12,148 unit; 322 integration | Definitions, not executions or independent requirements. |
+| Unit tests collected locally | 15,782 | Includes parametrization, on Python 3.13.13 in this environment. |
+| Direct external runtime dependencies of fr | 5 | Typer, PyYAML, Rich, Pydantic, Packaging. |
+| Exported external runtime lock entries | 16 | Includes Windows-only colorama; 15 applicable entries scanned locally. |
+
+The largest Python files are `run_cmd.py` at 8,773 lines, `triage_batch_cmd.py` at 7,343, `isolation/local.py` at 3,164, `plan_ops.py` at 2,545, and `triage/batch_drive.py` at 2,130. Decision-proxy hotspots include `drive_pass` at line 1732 with 116 and `_acceptance_writes` at line 1227 with 102. These are candidates for careful review, not automatic refactor mandates. The pure driver has substantial domain complexity that a cosmetic split would not remove. [packages/fr/src/fr/triage/batch_drive.py:1732–1800](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/triage/batch_drive.py#L1732-L1800) [packages/fr/src/fr/record/apply.py:1227–1280](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/record/apply.py#L1227-L1280)
+
+Absolute import counts show the expected framework-to-core and adapter-to-framework relationships, plus optional core command imports of the dispatch framework. This does not prove a package cycle or its absence: dynamic and relative imports and runtime loading need a complete graph. No complete internal cycle count or duplication percentage was produced. Reporting either as zero would be misleading.
+
+The last-100-commit source churn sample places `gate_cmd.py` first with 20 appearances, followed by gate-backfill candidates with 15, `run_cmd.py` with 14, and tracker/triage modules with 13. Recent commits include frequent release and close-out changes. This supports targeting high-change policy code for boundary review, but it cannot establish deployment frequency, escaped defect rate, or bus factor.
+
+## Performance and scalability
+
+**Assessment: reasonable for developer-workflow scale; low confidence beyond that scale.** No representative production workload, p95 application latency, throughput, peak memory, startup distribution, or recovery-time benchmark was measured. CI elapsed times and a static complexity proxy do not substitute for these metrics.
+
+Several choices are sound. Tick snapshots capacity and existing work once per batch, reducing repeated backend reads. Lifecycle subprocesses have finite timeouts. Acceptance reconstruction batches Git blob reads rather than spawning a process per blob. The deterministic driver can be tested and profiled without network effects. [packages/fr-dispatch/src/fr_dispatch/__init__.py:486–518](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-dispatch/src/fr_dispatch/__init__.py#L486-L518) [packages/fr-dispatch/src/fr_dispatch/lifecycle.py:33–62](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-dispatch/src/fr_dispatch/lifecycle.py#L33-L62) [packages/fr/src/fr/acceptance/fold.py:155–173](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/acceptance/fold.py#L155-L173)
+
+The likely scale boundaries are specific:
+
+- Observation reads tracked issue and linked-PR state per phase. The number of remote operations grows with tracked phases, and remote latency can dominate pure calculations. This is a source-supported scaling concern, not a measured N+1 latency incident. [packages/fr/src/fr/observe.py:43–61](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/observe.py#L43-L61)
+- Herdr session listing scans agents for each tab, and some status queries scan tabs per item. At high cardinality these become repeated linear or quadratic work. Normal terminal-session counts may make this irrelevant compared with subprocess latency. [packages/fr-herdr/src/fr_herdr/runner.py:209–212](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-herdr/src/fr_herdr/runner.py#L209-L212) [packages/fr-herdr/src/fr_herdr/runner.py:316–329](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-herdr/src/fr_herdr/runner.py#L316-L329)
+- cncd serializes the whole plan folder per phase submission. For P phases and B bytes of folder content, aggregate payload work can be proportional to P times B. Path policy and payload limits are more urgent than compression or caching. [packages/fr-cncd/src/fr_cncd/runner.py:85–99](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-cncd/src/fr_cncd/runner.py#L85-L99)
+- Mailbox collection and YAML replacement favor simplicity at small scale. Large histories can increase scan and rewrite work. There is no evidence here that a database would repay its operational cost.
+- F05 supplies a clearer resource hazard than these algorithmic observations: an unbounded subprocess can block progress or retain arbitrary output regardless of normal plan size.
+
+The next measurement should run a representative plan and batch at documented small, typical, and large sizes with fake remote latency and then an authorized staging backend. Record call counts, wall time, memory, payload bytes, and timeout/recovery outcomes. Optimize the dominant cost only after that measurement. Add per-run API budget evidence and keep unknown/unavailable measurements distinct from zero.
+
+## Security and dependencies
+
+This is a risk-oriented source audit, not a penetration test. The relevant trust boundaries are operator-authored executable configuration, potentially less-trusted repository or forge content, ambient filesystem and credentials, external runners, and generated reports.
+
+Positive controls include quoted template substitutions, argv-based forge calls, finite gh timeouts, safe YAML loading, enterprise-host trust checks before credential routing, escaped board text and HTTPS link restrictions, and an allowlist of usage fields persisted to shared artifacts. These controls address concrete classes of failure. They should remain centralized. [packages/fr/src/fr/commands/run_cmd.py:3889–3911](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/commands/run_cmd.py#L3889-L3911) [packages/fr/src/fr/gh.py:105–208](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/gh.py#L105-L208) [packages/fr/src/fr/yamlio.py:12–19](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/yamlio.py#L12-L19) [packages/fr/src/fr/triage/render.py:404–430](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/triage/render.py#L404-L430) [packages/fr/src/fr/usage/file.py:9–18](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/usage/file.py#L9-L18)
+
+The strongest demonstrated confidentiality concern is F04. Merely seeing `shell=True` is not an additional injection vulnerability when the manifest is intended executable configuration and substituted values are quoted. Likewise, host-worktree isolation and discipline hooks do not claim a hostile-code security sandbox. Assess privileges of the runner environment accordingly.
+
+The Python runtime lock was exported without development or workspace distributions. `pip-audit` checked the 15 entries applicable on this platform and returned no known vulnerabilities. Windows-only colorama was excluded by its environment marker. The scan used exact names and versions without dependency resolution; it did not install or execute repository code. This is advisory-database evidence at audit time, not proof of absence of vulnerabilities or a result for every future consumer install.
+
+**F09 is a confirmed dependency-version finding with unverified product exploitability.** Bun's audit reported two moderate advisories. The checked lock contains `glob` 13.0.5 and a nested 10.5.0, plus `minimatch` 10.2.5 and a nested 9.0.9. These match the published affected ranges. The direct development dependency `@opencode/plugin` 2.1.0 pulls in `@opencode/util`, and another path through `@opencode/ai`, Google authentication, and rimraf supplies nested versions. The host also supplies an OpenCode peer dependency, so the development graph is not proof that the plugin ships all of these packages into every runtime. [packages/fr-opencode-plugin/package.json:14–21](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-opencode-plugin/package.json#L14-L21) [packages/fr-opencode-plugin/bun.lock:294](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-opencode-plugin/bun.lock#L294) [packages/fr-opencode-plugin/bun.lock:360](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-opencode-plugin/bun.lock#L360) [packages/fr-opencode-plugin/bun.lock:532](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-opencode-plugin/bun.lock#L532) [packages/fr-opencode-plugin/bun.lock:560](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr-opencode-plugin/bun.lock#L560)
+
+| Advisory | Affected locked packages | Published concern and scope |
+|---|---|---|
+| [GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4) | glob 13.0.5 and 10.5.0 | Moderate availability issue: cancelled traversal can continue filesystem work. The record lists a fix in 14.0.2. |
+| [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249) | minimatch 10.2.5 and 9.0.9 | Moderate resource-consumption issue with attacker-influenced patterns. The record lists a fix in 11.0.1. |
+
+No advisory proof of concept was run against super-fr, and no attacker-controlled pattern or traversal path was established through its plugin. Update the upstream dependency graph or select compatible patched resolutions, then rerun type checking, the plugin suite, and the live compatibility probe. Do not force a major-version override without compatibility evidence. The raw scan and dependency paths are in the evidence archive. These two dependency records do not change the count of four reproduced product boundary defects.
+
+The committed Dependabot configuration schedules GitHub Actions updates. It does not configure Python or npm ecosystem updates, and no committed runtime-advisory CI gate was found in the inspected workflows. Repository-level alert settings may exist and were not established by this review. Automate advisory scanning and triaged exceptions for the installed release environment, including JavaScript and external CLIs. [.github/dependabot.yml:1–9](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/dependabot.yml#L1-L9)
+
+cncd authentication and transport safety depend partly on its external deployment. The adapter accepts a configured URL and forward-auth identity; localhost or trusted-network HTTP may be intended. No authentication bypass is established without the server and proxy configuration. The public product root is MIT licensed. A complete transitive license compatibility review was not performed.
+
+Main CI does not declare a top-level explicit permissions policy in the inspected file. Effective token permissions depend on repository and organization defaults. Some release paths explicitly reduce credential exposure, which is good. Least-privilege declarations would make the guarantee auditable. Branch protection could not be read through the connected integration: GitHub returned 403. That is an access limitation, not evidence that protection is absent. [.github/workflows/ci.yml:1–37](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/ci.yml#L1-L37) [.github/workflows/release.yml:103–139](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/release.yml#L103-L139)
+
+An escaped issue URL interpolated by the architecture report does not reuse the board's HTTPS gate. A dangerous scheme is a defense-in-depth concern if the cache is untrusted, but normal forge API URLs do not establish an attacker-controlled path. This was deliberately excluded from the demonstrated vulnerability list. [packages/fr/src/fr/triage/architecture.py:234–237](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/packages/fr/src/fr/triage/architecture.py#L234-L237)
+
+## Operations and developer experience
+
+The repository's CI is substantially stronger than a minimal green test badge. It tests the Python floor and newest declared leg, proves shard completeness, combines coverage once, checks artifact structure from an installed CLI, typechecks the plugin, probes real OpenCode delivery in dedicated jobs, validates version lockstep, checks docs currency, and builds the site. The aggregate `ci-ok` job rejects failed or cancelled dependencies. [.github/workflows/ci.yml:76–171](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/ci.yml#L76-L171) [.github/workflows/ci.yml:268–309](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/ci.yml#L268-L309) [.github/workflows/ci.yml:374–384](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/ci.yml#L374-L384)
+
+Release staging and tests separate preparation from publication and reduce credential access in suite jobs. The pinned commit's release runs were successful in the queried snapshot. That supports this release's gate completion, not long-term delivery reliability. Installer locks, staging, stale-lock recovery, and preservation of active executable links demonstrate attention to operational reality. [.github/workflows/release.yml:82–139](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/.github/workflows/release.yml#L82-L139) [scripts/install.sh:8–63](https://github.com/derio-net/super-fr/blob/f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37/scripts/install.sh#L8-L63)
+
+Developer onboarding has extensive current command documentation and explicit test-isolation fixtures. The cost is a large amount of coupled policy documentation and generated mirrors. Technical drift checks help, but source-text agreement cannot prove clarity or live agent compliance. A focused domain glossary for cursor, attempt, finding, acceptance row, gate, claim, and session would reduce the learning burden if maintained beside the types.
+
+Diagnosis benefits from explicit refusal messages, unknown states, partial-success records, journals, and run cost data. Recovery is uneven: sophisticated terminal replacement has checkpoints and locks while ordinary cursor writes still truncate. F02 and F06 are therefore operational priorities, not merely internal style issues.
+
+No rollback or deployment recovery drill was run. External service health, production monitoring, backup retention, actual model/session startup compatibility, and service-level objectives remain unknown. This product is primarily a local workflow tool, so lack of a web-service tracing stack is not itself a defect.
+
+## Engineering scorecard
+
+The requested weights are unchanged. Fractional scores express judgment within the 0–5 rubric: 0 critical, 1 poor, 2 below standard, 3 solid, 4 strong, 5 exceptional. A category score does not mean its percentage of code is correct. Unknowns lower confidence, not automatically the score.
+
+| Category | Weight | Score | Confidence | Main support and limitation |
+|---|---:|---:|---|---|
+| Architecture and design | 20% | 3.5 | Medium-high | Pure planners, typed mutation data, real adapter seams, justified Git artifacts. Command-layer ownership and transaction boundaries need improvement. |
+| Code quality and maintainability | 15% | 3.0 | High on measured structure; medium on future cost | Lint, formatting, and strict typing pass; small median function size. High-change command hotspots concentrate policy and effects. No calibrated duplication/cognitive-complexity result. |
+| Correctness and reliability | 15% | 2.5 | High on four local defects; medium overall | Explicit holds, recovery checkpoints, and failure modeling are strengths. Four boundary defects are reproduced; live incident frequency and concurrency behavior remain unknown. |
+| Test effectiveness | 20% | 3.5 | Medium-high | Strong behavioral and negative tests, four targeted mutants detected, serious CI. One test pins unsafe failure semantics; overall mutation effectiveness and branch coverage are not established. |
+| Performance and scalability | 10% | 3.0, provisional | Low | Batch reads and capacity bounds fit developer workflows. No representative latency, throughput, or memory workload; unbounded CLI execution is a concern. |
+| Security | 10% | 3.0 | Medium | Quoting, safe deserialization, host gating, output escaping, privacy allowlists. Conditional cncd inclusion defect and install drift remain; no penetration or deployment review. |
+| Operability and developer experience | 10% | 3.5 | Medium-high | Extensive CI, release staging, diagnostics, installer recovery, documentation. Durability, dependency reproduction, and hook PATH behavior weaken the guarantees. |
+
+Weighted result: **3.175 out of 5**, rounded to **3.2 out of 5**, or **63.5 out of 100** before rounding. The scale is ordinal judgment with explicit weights, not a statistically calibrated investment rating. No category merits 5 from this evidence. Performance remains particularly uncertain because workload data is unavailable.
+
+## Prioritized roadmap
+
+Effort ranges are planning estimates for an engineer familiar with the code, including focused verification. They are not measured delivery commitments and should be revised after reproducing the finding locally.
+
+| Sequence | Work | Impact and acceptance evidence | Estimated effort | Change risk |
+|---|---|---|---|---|
+| 1 | Correct F01 duplicate-lookup semantics. | Lookup failure defers allocation; retry preserves one stable allocation. Exercise generic run/spec paths and adapters. | 0.5–2 days | Low-medium; changes an explicitly tested policy. |
+| 2 | Reuse atomic replacement for cursors and journal writes. | A failed write preserves exact old readable bytes. Cover interrupted temp write and replacement failure. | 1–2 days | Low-medium; preserve permissions and existing serialization. |
+| 3 | Fix isolation identity and migration. | Distinct valid branches never alias. A stored/requested identity mismatch refuses safely. Existing records remain recoverable. | 1–3 days | Medium; state naming affects existing workspaces. |
+| 4 | Define cncd artifact/attachment confinement. | Outside symlinks and unintended files cannot enter payload; refusal makes no network call. Document attachments and size limits. | 1–3 days | Medium; preserve intentional files-win behavior. |
+| 5 | Bound CLI execution and diagnostics. | Controlled hanging/noisy children produce explicit timeout/cancel outcomes, bounded cursor size, and retrievable logs. | 2–4 days | Medium; cancellation and legitimate long tasks need care. |
+| 6 | Align consumer dependency resolution with release verification; add advisory automation. | Two fresh constrained installs yield the tested package set; advisory results are recorded and exceptions triaged. | 1–3 days | Low-medium; packaging changes affect onboarding. |
+| 7 | Repair jq PATH handling using the existing parser mechanism. | Protected Edit payload yields a deny decision with stripped service PATH. Include real harness compatibility when available. | 0.5–1 day | Low; avoid inconsistent duplicate parser logic. |
+| 8 | Establish ownership semantics for concurrent run commands. | Deterministic competing advance/resolve test proves no lost update or double brief. Add per-run locking or version checks only as required. | 2–4 days | Medium; ordering and recovery behavior are central. |
+| 9 | Extract evidence policy and transition calculation from command hotspots. | Existing behaviors survive; new evidence types can be added without editing CLI/persistence/presentation together. | 1–2 weeks in small slices | Medium; avoid a wholesale rewrite. |
+| 10 | Add sampled mutation and representative workload checks. | Repeatable defect-detection and call/resource evidence for high-risk paths; inspect surviving meaningful mutations. | 2–5 days initially | Low if advisory before gating. |
+
+Include F09 in item 6. Triage the two moderate transitive advisories promptly, while keeping exploit reachability separate from the confirmed affected-version result.
+
+Work items 1–4 are the immediate maintenance batch because they address demonstrated boundary failures. Restrict or supervise the affected features until their contract tests pass. Deployments with less-trusted plan authors and privileged cncd dispatch should treat item 4 as a release blocker for that use case. Work items 5–8 strengthen the operating contract. The architecture refactor follows those repairs so it is guided by observed responsibilities and preserved behavior.
+
+Leave the successful designs intact: typed mutation data, pure batch decisions, explicit unknown values, effective-state journal folding, acceptance fragments, optional runner protocols, generated mirrors, and failure-aware recovery. A rewrite or broad “Clean Architecture” conversion is not supported by the findings.
+
+## Unknowns and follow-up evidence
+
+The audit does not establish a full-suite local pass, an overall mutation score, exact aggregate CI coverage percentage, complete module-cycle count, duplication ratio, long-term flake rate, long-term CI failure rate, production defect rate, representative application latency, peak memory, or recovery-time objectives. Each needs a measurement with an explicit scope and denominator.
+
+It also does not establish current external cncd/herdr/cloud behavior, production credential privileges, branch protection, rollback effectiveness, or every installed dependency combination. The connected integration could not read branch protection. Tests were run with network restricted, and live paid/interactive effects were deliberately kept out of the audit.
+
+The preceding limits do not invalidate the four reproduced defects. They limit claims about exposure, frequency, and deployment severity. Source-supported concurrency and resource risks remain separately labeled until controlled end-to-end experiments establish their behavior.
+
+## Principal engineer verdict
+
+I would accept long-term technical responsibility for this codebase with a focused maintenance commitment. Its domain model contains real engineering insight: unknown evidence is not zero, a resolved finding is not deleted history, an external session is not a local cursor, and a backend launch is not the same event as successful bookkeeping. Those distinctions make the product more credible than a collection of prompts wrapped around shell commands.
+
+I would approve controlled operator-supervised use and require the four reproduced boundary defects to be resolved before making broader unattended-reliability claims. The core problem is inconsistent application of safety policy. Some difficult recovery paths are careful and explicit, while simpler shared paths still assume an empty backend, a collision-free slug, a complete write, or an innocuous directory child.
+
+The best next investment is a small set of consistent guarantees: preserve old durable bytes on failure, preserve exact identity, treat unavailable duplicate state as unknown, and serialize only intended artifacts. Then separate policy from effects in the command layer. That sequence improves reliability and maintainability without replacing the product's sound core architecture.
+
+## Reproduction and evidence
+
+The companion evidence archive contains the metrics and mutation scripts, baseline and mutated logs, four defect reproductions, the additional cncd gate challenge, static-check logs, completed local test results, advisory output, condensed GitHub CI evidence, source-line validation, and repository status. Scripts create disposable fixtures; some require macOS or another POSIX system and the package/test dependencies. The cursor fault experiment uses `fork` and `RLIMIT_FSIZE` in a child only.
+
+The HTML report is self-contained and its source links use the pinned full commit. Local logs are audit evidence rather than proof that future commits or remote deployments behave identically.
+
+
+--- comment, 2026-11-16T17:53:07Z (2126 chars) ---
+## Complete audit for the implementing agent
+
+The **entire original principal-engineer audit is now posted here**, unabridged across two comments:
+
+1. [Full audit part 1](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924468522): verdict, scope, architecture and critical paths, subsystem assessment, and detailed findings F01–F09.
+2. [Full audit part 2](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924470527): test effectiveness and mutation experiments, quantitative metrics, performance, security/dependencies, CI/operations, confidence-rated scorecard, roadmap, unknowns, and principal-engineer verdict.
+
+**Read alongside the [focused duplication-and-seams supplement](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6923555343).** That supplement is the implementation-oriented review for this issue and records already-completed work, preservation contracts, recurrence guards, and touched-file conflicts.
+
+Snapshot boundaries:
+- Original full audit: **15 November 2026, `f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37`, v8.0.0**.
+- Focused #1318 supplement: `a4281f855f2c80ecd901e05cafd55a7599f8d801`.
+- Four bug reproductions rechecked: `33e12d678a37a93b7c215ad8ac9f8c070c905090`, matching v8.0.3 packages.
+
+The original 3.2/5 assessment and test results belong to the original snapshot; publishing them does not re-audit current main. Full local suite completion and repository-wide mutation effectiveness were not claimed.
+
+**Implementation boundary:** #1318's refactors preserve behavior. Corrected behavior belongs in the separate bug issues #1499, #1500, #1419, and #1501, with their own regression criteria. See the [bug tracking index](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924421644). Coordinate overlapping code changes with their owners.
+
+All 117 pinned source citations remain in the full text. The separate bug issues contain executable safe reproductions. Raw logs, the inventory/mutation scripts, and the original evidence archive remain in the audit artifacts; this publication supplies the complete report text directly on GitHub.
