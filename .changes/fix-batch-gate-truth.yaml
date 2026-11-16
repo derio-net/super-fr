@@ -1,2 +1,0 @@
-bump: patch
-summary: "The gate ledger tells the truth: archived runs keep their gated rows, `fr gate pass --yes` exits 1 when a tracker close fails, the DevOps stage records an op its check already shows done, stage 7 passes a `gate:tester` nothing owns, and `fr pickup --run` reports a finished DevOps stage instead of the brief"

@@ -1,7 +1,7 @@
 {
     "name": "super-fr-dispatch",
     "description": "super-fr dispatch: queue phases to autonomous runners with per-PR quality gates",
-    "version": "8.0.2-rc.1",
+    "version": "8.0.2",
     "author": {
         "name": "Ioannis Dermitzakis"
     },
