@@ -7423,6 +7423,11 @@ batches:
     - packages/fr/src/fr/archive.py
     delivered: session
     handle: derio-net/super-fr/run/batch-owed-archive
+  - kind: approval
+    at: '2026-11-16T17:34:46.460734Z'
+    pr: 1480
+    head: dda8eca87eea225ad745069b1967bfbcb1f9e162
+    voided_at: be1f076a1e2b73c752cdf6c69b2d833526f380c9
 - id: workspace-identity
   title: Workspace identity
   ids:
