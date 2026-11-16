@@ -21,21 +21,21 @@ review holds the line ranges, the slice order and what each slice must keep.</p>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>commands/run_cmd.py</code></td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">8,862</td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)">the resolve and advance coordinators, which own the order of saves, commits and output; the Typer commands</td>
-<td style="padding:8px 10px;border-bottom:1px solid var(--line)">lookup helpers and the write ledger to <code>fr/run/</code>; deliver gates to <code>fr/run/deliver.py</code>; briefs to <code>fr/run/brief.py</code>; evidence verifiers to <code>fr/run/evidence/</code> once each returns a typed verdict instead of printing and exiting</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">the write ledger to <code>fr/run/writes.py</code> now; lookup helpers, deliver gates (<code>fr/run/deliver.py</code>), briefs (<code>fr/run/brief.py</code>) and evidence verifiers (<code>fr/run/evidence/</code>) only once they refuse through a typed verdict instead of printing and exiting, because nothing under <code>fr/run/</code> imports typer or a console</td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget; the journal-writer list in <code>test_journal_stamp_offset.py</code></td>
 </tr>
 <tr>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>commands/triage_batch_cmd.py</code></td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">7,334</td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)">the factories and clock tests patch, <code>build_driver</code>, <code>one_pass</code>, <code>pass_exit</code>, the commands</td>
-<td style="padding:8px 10px;border-bottom:1px solid var(--line)">dispatch, replace and adopt to <code>fr/triage/batch_*.py</code>; the 3,205-line <code>_Driver</code> to <code>fr/triage/batch_driver_*.py</code>, after it takes its clock, client, runner and output through one ports object</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>dispatch_batch</code> and <code>adopt_batch</code> to <code>fr/triage/batch_*.py</code>, and the 3,132-line <code>_Driver</code>, split into mixins, to <code>fr/triage/batch_driver*.py</code>; all of it only after the driver takes every effect (forge, runner, clock, state, output, and the <code>fr_dispatch</code> work items) through one ports object. Replace and recovery stay</td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget; the batch-module globs that keep git in <code>gitseam</code> and forge writes in the adapter</td>
 </tr>
 <tr>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>isolation/local.py</code></td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono)">3,164</td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)">the target class: up, down, teardown order, worktree provisioning, default branch</td>
-<td style="padding:8px 10px;border-bottom:1px solid var(--line)">runner plumbing, landing analysis, branch classification and reap types to new <code>isolation/</code> modules; garbage collection to a collaborator that reaches the four methods the host-worktree target overrides through the target</td>
+<td style="padding:8px 10px;border-bottom:1px solid var(--line)">runner plumbing, landing analysis, branch classification and reap types to new <code>isolation/</code> modules; garbage collection to a collaborator; the four methods the host-worktree target overrides stay on the target, and the sweeper calls them there</td>
 <td style="padding:8px 10px;border-bottom:1px solid var(--line)">line budget; the forge-argv and VK scans that name the file</td>
 </tr>
 <tr>
