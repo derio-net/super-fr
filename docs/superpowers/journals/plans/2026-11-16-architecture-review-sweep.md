@@ -291,3 +291,23 @@ Importers in `packages/` (code references, not docstrings):
 5. **L — F → `fr/plan/rework.py`.** Blocked by the `space_for` monkeypatch and shared `_stage`/`_yaml_dump`; move A into a `fr/plan/_io.py` first.
 
 After slices 1–3, `plan_ops.py` is about 950 lines.
+
+<!-- fr:journal kind=decision scope=plan id=d-plan-shape created=2026-11-16T18:57:07+00:00 -->
+### d-plan-shape · decision · Plan shape: two agentic phases, code consolidations (standard) then the report, fragment and issues (hard)
+
+The operator's answer ("Two phases") is recorded, as operator-answered, in the
+spec-journal decision `phase-split-2026-11-16-architecture-review-sweep-p2`; this entry
+restates the shape for the plan journal: phase 1 lands the guards
+and consolidations (R8-R12) on the standard tier as the skeleton phase; phase 2 writes
+the report, the architecture fragment and the issues (R1-R7, R13) on the hard tier,
+after phase 1 so its landed rows and line counts are true. The spec-journal decisions
+`phase-split-2026-11-16-architecture-review-sweep-p2` and
+`tier-2026-11-16-architecture-review-sweep-p2` record the reasons.
+
+<!-- fr:journal kind=discovery scope=plan id=plan-inputs-stored created=2026-11-16T18:57:07+00:00 -->
+### plan-inputs-stored · discovery · The brainstorm's four module reviews are stored in the plan journal as unverified input for phase 2
+
+`review-run-cmd`, `review-triage-batch`, `review-isolation-local` and `review-plan-ops`
+hold the reviewers' reports as returned, with the local workspace path replaced by
+`<workspace>`. Their line ranges and counts were not checked; phase 2 tasks 3 and 4
+confirm each against the code before using it (spec R5).
