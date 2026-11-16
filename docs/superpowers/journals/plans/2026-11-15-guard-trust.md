@@ -324,3 +324,8 @@ Fixed test-first in this PR at the operator's request (independent review of #14
 ### ir-1478-2-resolved · finding [fixed] · resolves ir-1478-2: Independent review: the fr-enabled fallback missed the legacy docs/superpowers/archived-plans dir on both harnesses
 
 Fixed test-first in this PR at the operator's request (independent review of #1478, item 2; decision ir-scope-1478).
+
+<!-- fr:journal kind=finding scope=plan id=ir-1478-3-resolved created=2026-11-16T15:38:22+00:00 state=fixed resolves=ir-1478-3 answered_by=agent -->
+### ir-1478-3-resolved · finding [fixed] · resolves ir-1478-3: Independent review: _keep_live_root compared an unresolved plan path, so a symlinked root skipped the .gitkeep silently
+
+Fixed test-first in this PR at the operator's request (independent review of #1478, item 3; decision ir-scope-1478).
