@@ -3,7 +3,7 @@ run: 2026-11-16-feat-gh-1318
 workflow: fr-goal@1
 branch: feat/gh-1318
 started: '2026-11-16T17:24:23+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-16T22:02:17+00:00'
+    state: done
+    at: '2026-11-16T22:30:03+00:00'
     members:
     - implement-phase
     - review-phase
@@ -113,12 +113,19 @@ steps:
           tests: phase2-suite.log@d262f20a3c7e;tree=3777196de686eafdd5d4d0473262dcd7dbfac95ae6cdc55385f7a02ff735ba84
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-16T22:02:17+00:00'
           harness: claude-code
           model: claude-fable-5-2
           session: 65fe70a5-99dc-4a3f-b249-8255221b4257
+          returned: '2026-11-16T22:30:03+00:00'
+          outcome: done
+        evidence:
+          review: review-p2
+          reviewer: aed1ce2653268aa4b
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6,p2-r7,p2-r8,p2-r9,p2-r10,p2-r11,p2-r12
   journal-check:
     state: pending
   lens-review:

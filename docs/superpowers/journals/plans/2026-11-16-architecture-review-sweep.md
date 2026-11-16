@@ -460,3 +460,144 @@ a document section; no code to refactor
 ### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
 
 issue filing and gate runs only; no code to refactor
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-16T22:30:02+00:00 phase=2 -->
+### review-p2 · review · Phase 2 review: status tables, counts and side findings hold; twelve in-scope findings in the decomposition plans, two designs, two cluster counts and issue coverage (phase 2)
+
+An independent reviewer checked the report, the fragment and issues #1507–#1523 against the
+code. It opened every F01–F09 and cursor-race citation and every landed row, recounted the
+module sizes and inventories, resolved every name:line pair of sections 5 and 6 by script,
+confirmed the three side findings, read the 17 issues and searched for duplicates of each
+(none), and found the report, fragment and issues free of third-party or home-path detail.
+The fragment test fails in a temp copy when the manifest entry or the file is removed.
+Findings p2-r1..p2-r12. Eleven are fixed in the report, the fragment and the issue bodies;
+the fixer verified each against the code first and refuted none. p2-r9 (three comments) is
+not done: the permission layer refused the posts.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · _Driver ends at triage_batch_cmd.py:6862, not 6935 (about 3,132 lines, 13 _say calls); slice 3's range takes module helpers; same numbers in the fragment, #1516 and #1520 (phase 2)
+
+Report section 5.2.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Triage slices 4 and 6 move function-local fr_dispatch imports into fr/triage/, which test_fr_imports_no_siblings forbids, while the report says _SOFT_POINTS stays unchanged (phase 2)
+
+Report section 5.2.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Design 6.2's ports do not match what _Driver reads; how methods leave the class is unstated (phase 2)
+
+sleep is unused by _Driver; _write, _save, claim_env, ci_none_at, dispatch_batch, merge_ready and the consoles were unported.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · run_cmd slices H, E, C and B bring typer.Exit and console prints into fr/run, the weld that makes D costly; lines 1-169 and 492-543 are in no cluster (phase 2)
+
+Report section 5.1.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Design 6.3: the span given to GcSweeper contains three of the four override points said to stay, and tests call moved private gc methods (phase 2)
+
+Report section 6.3 and #1521.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · R06: the stated test weight is for nine modules, not the five named; a sixth same-policy copy in test_status_owed.py is missed (phase 2)
+
+Report section 3.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · R04 misses fr/isolation/scaffold.py:902, a fourth importer of the private _StrictLoader, in the report and #1512 (phase 2)
+
+Report section 3.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · No issue covers triage slice 6, the dispatch/replace moves, run_cmd's provenance slice or the 14 non-atomic plan_ops writes (phase 2)
+
+Spec R7.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · The R7 comments on #1286, #1174 and #1318 are not posted; #1174 does not yet cover finding C3-1 that cites it (phase 2)
+
+Spec R7, plan step P2.T6.S2.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r10 · finding [open] (reviewer: in scope) · plan_ops slice 3: cluster C raises PlanEditError defined in cluster A, an import cycle with the re-export (phase 2)
+
+Report section 5.4 and #1518.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r11 · finding [open] (reviewer: in scope) · S/M/L slice sizes are never defined (phase 2)
+
+Report section 5.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12 created=2026-11-16T22:30:02+00:00 phase=2 state=open review_scope=in -->
+### p2-r12 · finding [open] (reviewer: in scope) · Seam table omits the guarded 'runner adapters never import fr.triage' seam (phase 2)
+
+tests/unit/test_import_direction.py:151, :163.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-main-moved-run-cmd-budget created=2026-11-16T22:30:02+00:00 phase=2 -->
+### p2-main-moved-run-cmd-budget · discovery · Merging main breached run_cmd.py's line budget; re-seated at 9,000 (phase 2)
+
+main added 60 lines to commands/run_cmd.py while the branch was open (8,862 → 8,922), over
+the 8,900 budget. The budget is re-seated at 9,000 by the spec's own rule (count rounded up
+to the next hundred); the spec, the report and the fragment say so. It shows how little
+room a 38-line headroom leaves: one ordinary PR to main used it up.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: _Driver ends at triage_batch_cmd.py:6862, not 6935 (about 3,132 lines, 13 _say calls); slice 3's range takes module helpers; same numbers in the fragment, #1516 and #1520 (phase 2)
+
+_Driver is 3731–6862 (3,132 lines, 13 _say calls); lines 6863–6935 have their own row; slice 3 is :6686-6862; fragment, #1516 and #1520 corrected.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Triage slices 4 and 6 move function-local fr_dispatch imports into fr/triage/, which test_fr_imports_no_siblings forbids, while the report says _SOFT_POINTS stays unchanged (phase 2)
+
+The 13 fr_dispatch sites in _Driver go through work_item and session_supports ports filled in build_driver, which stays in a soft point; _SOFT_POINTS stays unchanged; replace/recovery stays in the command module.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Design 6.2's ports do not match what _Driver reads; how methods leave the class is unstated (phase 2)
+
+Port list rebuilt from an AST pass over the names the class body reads (about 25 ports in five groups, sleep dropped); the split is stated as mixins under fr/triage/batch_driver*.py; the ports step is sized L; #1520 updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: run_cmd slices H, E, C and B bring typer.Exit and console prints into fr/run, the weld that makes D costly; lines 1-169 and 492-543 are in no cluster (phase 2)
+
+Exit and print counts given per cluster; only A and the four small helpers at :492-543 are cheap; B, H, E, D and C move after design 6.1, which adds a RunRefusal exception, a warn callable and the rule that fr/run imports neither typer nor a console; lines 1–169 have a row; #1515 and #1519 updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Design 6.3: the span given to GcSweeper contains three of the four override points said to stay, and tests call moved private gc methods (phase 2)
+
+Design 6.3 lists the 14 methods that move and the 8 that stay; the nine test call sites change only their receiver, with no forwarding methods; #1521 updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: R06: the stated test weight is for nine modules, not the five named; a sixth same-policy copy in test_status_owed.py is missed (phase 2)
+
+test_status_owed.py added as a sixth module; weight corrected to 126 entries, 188.4 s (116 / 173.7 s for the original five); #1514 updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: R04 misses fr/isolation/scaffold.py:902, a fourth importer of the private _StrictLoader, in the report and #1512 (phase 2)
+
+scaffold.py:902/905 added to the report and #1512.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: No issue covers triage slice 6, the dispatch/replace moves, run_cmd's provenance slice or the 14 non-atomic plan_ops writes (phase 2)
+
+Triage moves added to #1520, run_cmd clusters to #1519; #1500 covers only the cursor and journal, so #1524 was filed for the 14 non-atomic plan_ops.py writes.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=open resolves=p2-r9 tracked_by=derio-net/super-fr#1318 -->
+### p2-r9-resolved · finding [deferred → derio-net/super-fr#1318] · resolves p2-r9: The R7 comments on #1286, #1174 and #1318 are not posted; #1174 does not yet cover finding C3-1 that cites it (phase 2)
+
+The three comments are drafted and the report says so; the permission layer refused the posts from the run, so they are left to the operator. The filed issues already appear on #1318's timeline through their cross-references.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r10 -->
+### p2-r10-resolved · finding [fixed] · resolves p2-r10: plan_ops slice 3: cluster C raises PlanEditError defined in cluster A, an import cycle with the re-export (phase 2)
+
+PlanEditError moves to a leaf fr/plan_errors.py first; added to #1518.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r11 -->
+### p2-r11-resolved · finding [fixed] · resolves p2-r11: S/M/L slice sizes are never defined (phase 2)
+
+S, M, L and 'cheap' are defined under the budget table.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12-resolved created=2026-11-16T22:30:02+00:00 phase=2 state=fixed resolves=p2-r12 -->
+### p2-r12-resolved · finding [fixed] · resolves p2-r12: Seam table omits the guarded 'runner adapters never import fr.triage' seam (phase 2)
+
+Seam row added (test_import_direction.py:151, :163, planted case :192).
