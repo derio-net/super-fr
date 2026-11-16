@@ -610,7 +610,8 @@ def test_owed_reuse_finds_the_marker_past_the_unlabelled_backlog(tmp_path: Path)
     gh = ListingGh([*crowd, _owed_issue(7, "plan:p#e1")])
     out = file_owed_ends(tmp_path, _ends(tmp_path)[:1], gh, OWN)
     assert [(f.ref, f.reused) for f in out] == [(f"{OWN}#7", True)]
-    assert _writes(gh) == [] or "create_issue" not in _writes(gh)
+    # The label is ensured once before the loop; the reused issue gets no create.
+    assert _writes(gh) == ["ensure_labels"]
 
 
 def test_a_listing_at_its_limit_files_nothing_and_names_the_limit(tmp_path: Path) -> None:
