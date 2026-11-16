@@ -133,7 +133,15 @@ steps:
     stdout: |
       1 deferred finding(s): p2-r9 → derio-net/super-fr#1318
   lens-review:
-    state: pending
+    state: running
+    at: '2026-11-16T22:30:05+00:00'
+    units:
+      step/lens-review:
+        attempts:
+        - dispatched: '2026-11-16T22:30:05+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 65fe70a5-99dc-4a3f-b249-8255221b4257
   deliver:
     state: pending
 driver: standalone
