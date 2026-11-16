@@ -7200,6 +7200,10 @@ batches:
     runner: herdr
     handle: w3F:p3
     branch: feat/batch-guard-trust
+  - kind: approval
+    at: '2026-11-16T15:19:42.697979Z'
+    pr: 1478
+    head: ccaa3b30616b9056806be81e1972465a2d0fa794
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7219,6 +7223,10 @@ batches:
     runner: herdr
     handle: w3F:p2
     branch: fix/batch-gate-truth
+  - kind: approval
+    at: '2026-11-16T15:19:42.697979Z'
+    pr: 1477
+    head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7239,6 +7247,16 @@ batches:
     runner: herdr
     handle: w3F:p1
     branch: fix/batch-deliver-evidence
+  - kind: approval
+    at: '2026-11-16T15:19:42.697979Z'
+    pr: 1479
+    head: dbad1c9bbf1b188e8e4cafdaf85d8efba669e25c
+  - kind: update
+    at: '2026-11-16T15:20:13.222254Z'
+    pr: 1479
+    head_before: dbad1c9bbf1b188e8e4cafdaf85d8efba669e25c
+    head_after: bb1ec38a435f90f64b492c5ffb152a6db89bfc69
+    base: f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
