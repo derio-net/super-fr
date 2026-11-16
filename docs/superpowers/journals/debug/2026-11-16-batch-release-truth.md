@@ -15,3 +15,8 @@ packages/fr/src/fr/cloud.py: int('0rc7') raises ValueError -> None; `ok = have i
 ### 7e2f56ea7143 · root-cause · #1290: finish() reads 'tag exists' as 'released'
 
 scripts/release.py tag_and_release pushes the tag before gh release create; finish returns 'already tagged; nothing to do' whenever the tag exists, so a failed create is never retried. Fix: when the tag exists, ask gh release view; create the Release when it is missing (no retag), refuse when the read fails for another reason.
+
+<!-- fr:journal kind=root-cause scope=debug id=54006a2d9216 created=2026-11-16T18:18:30+00:00 -->
+### 54006a2d9216 · root-cause · #1393: _rcs_above lists RC tags HEAD does not contain
+
+scripts/release.py _rcs_above reads every RC tag; `since = rcs[-1][1]` can be a sibling commit's tag whose tree always differs, so every run cuts another RC. Fix: 'since' comes from RC tags merged into HEAD; RC numbering still counts every tag so a sibling RC number is never reused.
