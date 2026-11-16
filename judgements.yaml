@@ -7439,6 +7439,8 @@ batches:
     - super-fr#1184
     - super-fr#1301
     - super-fr#1400
+  - kind: post_merge
+    at: '2026-11-16T18:28:03.870122Z'
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -8040,3 +8042,11 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-guard-trust.yaml"
   - "D\tdocs/superpowers/specs/2026-11-15-guard-trust-design.md"
   - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-guard-trust.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-4
+  branch: chore/closeout-2026-11-16-4
+  at: '2026-11-16T18:28:06.684973Z'
+  runner: herdr
+  handle: w3F:p8
+  planned:
+  - owed-archive
