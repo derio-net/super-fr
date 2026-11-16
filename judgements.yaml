@@ -7235,6 +7235,11 @@ batches:
     - docs/reference/workflow-shapes.md
     delivered: session
     handle: derio-net/super-fr/run/batch-gate-truth
+  - kind: approval
+    at: '2026-11-16T15:38:24.023320Z'
+    pr: 1477
+    head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
+    voided_at: acacea8675acbd7d90e8781ca1d3a0a82c0b4b16
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7272,6 +7277,8 @@ batches:
     - super-fr#1395
     - super-fr#1454
     - super-fr#1462
+  - kind: post_merge
+    at: '2026-11-16T15:38:58.818659Z'
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
@@ -7806,3 +7813,11 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-suite-health.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-suite-health.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-1
+  branch: chore/closeout-2026-11-16-1
+  at: '2026-11-16T15:39:01.537880Z'
+  runner: herdr
+  handle: w3F:p5
+  planned:
+  - deliver-evidence
