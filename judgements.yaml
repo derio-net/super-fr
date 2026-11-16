@@ -7265,6 +7265,13 @@ batches:
     head_before: dbad1c9bbf1b188e8e4cafdaf85d8efba669e25c
     head_after: bb1ec38a435f90f64b492c5ffb152a6db89bfc69
     base: f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37
+  - kind: claims_released
+    at: '2026-11-16T15:35:06.927121Z'
+    keys:
+    - super-fr#1303
+    - super-fr#1395
+    - super-fr#1454
+    - super-fr#1462
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
