@@ -7219,6 +7219,12 @@ batches:
     head_before: 50a78c7714b411bb1c92120cd7e1be6d174b430f
     head_after: 1dc73a00801d04bc49cbb4023d351ac26d702b5d
     base: 8d61459f2da191cd2bef09529780796d240bb083
+  - kind: update
+    at: '2026-11-16T16:11:27.301351Z'
+    pr: 1478
+    head_before: 1dc73a00801d04bc49cbb4023d351ac26d702b5d
+    head_after: 5a45830aa81ce6c0d003025b2fb738c376686d1a
+    base: f841b959d6cce3000c8d19296d7daaeb09692388
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7273,6 +7279,12 @@ batches:
     runner: herdr
     handle: w3F:p6
     archive: chore/closeout-2026-11-16-2
+  - kind: closeout_handback
+    at: '2026-11-16T16:11:30.889198Z'
+    item: derio-net/super-fr/run/closeout-2026-11-16-2
+    pr: 1495
+    head: 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
+    reason: 1 failing check(s)
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7895,3 +7907,5 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-gate-truth.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-gate-truth.md"
+  handed:
+  - 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
