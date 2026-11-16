@@ -299,3 +299,8 @@ Same class as spec finding f9: gh in push.ts and jq/dirname/mktemp/sed/gh/git in
 ### p2-r4-resolved-2 · finding [refuted] · resolves p2-r4: Pin hook resolving an inherited absolute FR_HARNESS_FR path re-pins that binary
 
 Not a defect: spec Design B requires the pin hook to resolve exactly as the hooks do, so the pinned identity is the fr the hooks run. The hooks' own pin is an identity string, not a path, and falls through to the PATH walk; only an operator who deliberately exports an absolute FR_HARNESS_FR path gets that binary, the intended override.
+
+<!-- fr:journal kind=finding scope=plan id=ir-1478-1 created=2026-11-16T15:38:14+00:00 phase=2 state=open review_scope=in -->
+### ir-1478-1 · finding [open] (reviewer: in scope) · Independent review: the nag, sentinel, Bash guard and worktree create/remove hooks still ran a bare git, so #1429 was half-closed on bash (phase 2)
+
+A git planted in the base clone behind a relative PATH entry ran on the next SessionStart. Fixed: fr_git in the lib (fr_git_resolve, absolute entries only), every hook routed through it; tests/unit/test_hooks_planted_git.py plants git per hook and pins no bare git command in any hook script.
