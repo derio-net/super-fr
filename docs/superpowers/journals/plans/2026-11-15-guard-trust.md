@@ -319,3 +319,8 @@ archive_cmd passes repo_root / plan_rel unresolved while repo_root is resolved (
 ### ir-1478-1-resolved · finding [fixed] · resolves ir-1478-1: Independent review: the nag, sentinel, Bash guard and worktree create/remove hooks still ran a bare git, so #1429 was half-closed on bash
 
 Fixed test-first in this PR at the operator's request (independent review of #1478, item 1; decision ir-scope-1478).
+
+<!-- fr:journal kind=finding scope=plan id=ir-1478-2-resolved created=2026-11-16T15:38:20+00:00 state=fixed resolves=ir-1478-2 answered_by=agent -->
+### ir-1478-2-resolved · finding [fixed] · resolves ir-1478-2: Independent review: the fr-enabled fallback missed the legacy docs/superpowers/archived-plans dir on both harnesses
+
+Fixed test-first in this PR at the operator's request (independent review of #1478, item 2; decision ir-scope-1478).
