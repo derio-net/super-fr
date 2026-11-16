@@ -64,12 +64,12 @@ of the behaviour they describe.
 | F02 cursor write destroys the last valid state | `f0a45b5b` | present: `fr/run/model.py:600`, `path.write_text(dump_run_state(state))` | #1500 (behaviour fix) |
 | F03 branch slugs alias | `f0a45b5b` | present: `fr/isolation/types.py:99`, `branch.replace("/", "__")` | #1419 (behaviour fix) |
 | F04 cncd payload follows symlinks | `f0a45b5b` | present: `fr_cncd/runner.py:86`, every child with `p.is_file()` is read | #1501 (behaviour fix) |
-| F05 CLI steps unbounded | `f0a45b5b` | present: `commands/run_cmd.py:6489-6491`, `subprocess.run(command, shell=True, cwd=..., capture_output=True, text=True)` with no `timeout`; the full stdout goes into the cursor (`run_cmd.py:6493-6495`, `run_cmd.py:1069`) | ISSUE_F05 |
-| F06 installed dependencies differ from the tested lock | `f0a45b5b` | present: `scripts/install.sh:879-881` and `901-903` run `uv tool install --force` on `packages/fr` with no lock or constraint file; `packages/fr/pyproject.toml:6-12` gives lower bounds only; `install.sh:1080` installs `@devcontainers/cli` with no version | ISSUE_F06 |
-| F07 edit hook loses its decision without `jq` | `f0a45b5b` | present: `plugins/super-fr/hooks/fr-isolation-required.sh:26` and `:37` call bare `jq`; the comment at `:32-34` states the fail-open | ISSUE_F07 |
+| F05 CLI steps unbounded | `f0a45b5b` | present: `commands/run_cmd.py:6489-6491`, `subprocess.run(command, shell=True, cwd=..., capture_output=True, text=True)` with no `timeout`; the full stdout goes into the cursor (`run_cmd.py:6493-6495`, `run_cmd.py:1069`) | #1507 |
+| F06 installed dependencies differ from the tested lock | `f0a45b5b` | present: `scripts/install.sh:879-881` and `901-903` run `uv tool install --force` on `packages/fr` with no lock or constraint file; `packages/fr/pyproject.toml:6-12` gives lower bounds only; `install.sh:1080` installs `@devcontainers/cli` with no version | #1508 |
+| F07 edit hook loses its decision without `jq` | `f0a45b5b` | present: `plugins/super-fr/hooks/fr-isolation-required.sh:26` and `:37` call bare `jq`; the comment at `:32-34` states the fail-open | #1509 |
 | F08 policy concentrated in large command modules | `f0a45b5b` | present: sizes in section 5; this PR adds the line budget and the decomposition plan | this PR (budget), section 5 issues |
-| F09 lock holds advisory-affected versions | `f0a45b5b` | present: `packages/fr-opencode-plugin/bun.lock:294` `glob@13.0.5`, `:532` `glob@10.5.0`, `:360` `minimatch@10.2.5`, `:560` `minimatch@9.0.9`; the advisories were not re-fetched | ISSUE_F09 |
-| Cursor race (two `fr run` commands on one cursor) | `f0a45b5b` | present, not reproduced: `run_cmd.py:369-374` saves whatever state the command loaded; no `fr run` path takes a lock (`fr/file_lock.py` is used only by `fr/triage/operation_lock.py`) and nothing compares the cursor on disk before the write | ISSUE_RACE |
+| F09 lock holds advisory-affected versions | `f0a45b5b` | present: `packages/fr-opencode-plugin/bun.lock:294` `glob@13.0.5`, `:532` `glob@10.5.0`, `:360` `minimatch@10.2.5`, `:560` `minimatch@9.0.9`; the advisories were not re-fetched | #1510 |
+| Cursor race (two `fr run` commands on one cursor) | `f0a45b5b` | present, not reproduced: `run_cmd.py:369-374` saves whatever state the command loaded; no `fr run` path takes a lock (`fr/file_lock.py` is used only by `fr/triage/operation_lock.py`) and nothing compares the cursor on disk before the write | #1511 |
 
 ### 2.2 The supplement (G01, R01–R07, and its "preserve" table)
 
@@ -79,9 +79,9 @@ of the behaviour they describe.
 | R01 gate annotations copy the vocabulary | `a4281f85` | landed in this PR, `95cdcbd0c` and `c57126798`; `fr/gates.py:18` adds `PostMergeGate`; guards `test_gate_vocabulary.py::test_annotations_derive_from_the_vocabulary` (`:136`) and `::test_a_divergent_literal_is_reported` (`:147`) | this PR |
 | R02 the cloud adapter copies `SessionStatus` | `a4281f85` | landed in this PR, `2a3133051`; guards `test_import_direction.py::test_cloud_status_is_the_protocol_type` (`:339`), `::test_a_redeclared_status_literal_is_reported` (`:367`) and `test_acceptance_status_labels.py::test_every_status_has_a_label_and_no_label_is_orphaned` (`:11`) | this PR |
 | R03 four identical aware-timestamp readers | `a4281f85` | landed in this PR, `0fa461055`; `fr/triage/timestamps.py:15`; guard `test_triage_timestamps.py::test_only_the_owner_holds_that_body` (`:101`) with planted copies at `:87` and `:91` | this PR |
-| R04 two `_StrictLoader` classes | `a4281f85` | present: `fr/artifacts/structure.py:46` and `fr/harness/model.py:153`; `fr/lenses/model.py:18` imports the private artifact loader and uses it at `:129` | ISSUE_R04 |
-| R05 copied record-placement test helpers | `a4281f85` | present, and wider than reported: eleven `_record_file` copies, not eight (section 3, C6-1) | ISSUE_R05 |
-| R06 copied `_hermetic_git` fixtures | `a4281f85` | present, and wider than reported: five same-policy copies, not four (section 3, C6-2) | ISSUE_R06 |
+| R04 two `_StrictLoader` classes | `a4281f85` | present: `fr/artifacts/structure.py:46` and `fr/harness/model.py:153`; `fr/lenses/model.py:18` imports the private artifact loader and uses it at `:129` | #1512 |
+| R05 copied record-placement test helpers | `a4281f85` | present, and wider than reported: eleven `_record_file` copies, not eight (section 3, C6-1) | #1513 |
+| R06 copied `_hermetic_git` fixtures | `a4281f85` | present, and wider than reported: five same-policy copies, not four (section 3, C6-2) | #1514 |
 | R07 orchestration in five large modules | `a4281f85` | present: `wc -l` gives 8,862 / 7,334 / 3,164 / 2,545 / 2,130 lines (section 5); `triage_batch_cmd.py` is 9 lines shorter than the supplement's 7,343 because R03 removed `_parse_at` | section 5 issues |
 | Inventory: direct PyYAML loads | `a4281f85` | unchanged: 130 calls in 87 files (125 `safe_load`, 5 `load`); 416 tracked source files, 142,519 physical lines (the supplement's 415 files plus `fr/triage/timestamps.py`) | #1286 |
 | Inventory: git-first subprocess calls | `a4281f85` | unchanged: 40 stdlib `subprocess` calls whose literal argv starts with `"git"`, in 27 files | no work: scoped by design (section 3, C3) |
@@ -116,7 +116,7 @@ spells the six gates by hand, in `Gate`'s order (`fr/gates.py:15`). Spec Design 
 as a duplicate to keep; re-read, it encodes no policy of its own (it is help text for the
 same closed set), so it moves here. Disagree today: no. Fix: build the string from
 `get_args(Gate)`. Guard: a test that the option's help names every member of `GATES`.
-Files: `commands/journal_cmd.py`. Tracking: ISSUE_LEFTOVERS.
+Files: `commands/journal_cmd.py`. Tracking: #1523.
 
 **C1-4 Record schema number.** P3. `RECORD_SCHEMA_VERSION = 12` at `fr/record/model.py:69`
 and the record kind's `current_version=12` at `fr/artifacts/registry.py:593`. Disagree
@@ -135,11 +135,11 @@ other implementations of the contract.
   applies `str()`, and returns `None` for missing, unparseable or naive: the same contract
   as `parse_aware` on the value. Disposition: replace its body with
   `parse_aware(str(stamp) if stamp else None)` in the `triage_batch_cmd.py` slice
-  (ISSUE_TRIAGE_SLICES); callers at `:2197` and `:2255` are unchanged.
+  (#1516); callers at `:2197` and `:2255` are unchanged.
 - `_created_since` (`fr/triage/collect.py:1106-1114`) is a predicate, not a reader: unknown
   or naive creation counts as "yes". Its read is `parse_aware`'s contract followed by
   `created is None → True`. Disposition: read through `parse_aware`, keep the predicate.
-  Tracking: ISSUE_LEFTOVERS.
+  Tracking: #1523.
 
 **C2-3 Naive-as-UTC readers copy each other.** P3, new. `_instant`
 (`fr/usage/compare.py:173-178`) and `_parse` (`fr/debt/engine.py:310-317`) both replace `Z`,
@@ -148,20 +148,20 @@ inlines the same rule. These are not `parse_aware` (a naive value becomes UTC, n
 `None`, section 4), but they are one contract written three times. Disagree today: no, on
 string input (`_instant` has no `None` guard; its callers pass strings). Fix: one
 `parse_as_utc` beside the usage or debt engine; guard: the R03 body scan, pointed at it.
-Tracking: ISSUE_LEFTOVERS.
+Tracking: #1523.
 
 **C2-4 The spec and plan journal read in `plan_ops.py`.** P3. `_spec_journal_entries`
 (`plan_ops.py:2129-2146`) and `_refactor_justifications` (`plan_ops.py:2519-2536`) both
 resolve the journal path, return empty when the file is absent and swallow
 `JournalParseError`. Disagree today: no. Fix: one `_journal_entries(root, scope, slug)`
-when the self-review half moves (section 5.4). Tracking: ISSUE_PLANOPS_SLICES.
+when the self-review half moves (section 5.4). Tracking: #1518.
 
 **C2-5 Strict duplicate-key loader (R04).** P3. `fr/artifacts/structure.py:46`,
 `fr/harness/model.py:153`; `fr/lenses/model.py:18` reaches the private one. Their error
 translation differs on purpose (supplement); the detector is the same. Fix: one detector in
 a dependency-light YAML module, each reader keeping its errors. Guard: single-owner AST
 check plus a dependency check. Files: the three above. Shares `structure.py` with #1286,
-which keeps the backend switch. Tracking: ISSUE_R04.
+which keeps the backend switch. Tracking: #1512.
 
 ### Category 3 — seam violations
 
@@ -204,7 +204,7 @@ candidate is stated with its evidence:
   `commands/plan_cmd.py:17-25`, `apply_cmd.py`, `undispatch_cmd.py`,
   `fr_dispatch/__init__.py`, `record/apply.py`, `record/gates.py`, `run_cmd.py:5014` use
   other names). Tests import them 18 and 15 times. Removing them changes a tested surface
-  and the write order (design 6.4). Tracking: ISSUE_DESIGN_D.
+  and the write order (design 6.4). Tracking: #1522.
 - VK-era code: the live adapter compatibility is gone; `fr/artifacts/plan_vk_version.py` is
   the operator-authorised archive repair. Kept (section 4).
 - Frozen legacy readers (`fr/run/legacy.py`, `fr/record/legacy.py`,
@@ -222,7 +222,7 @@ commit. Each writes `docs/superpowers/runs/r1.records/<stem>.yaml`; text default
 differ on purpose. Fix: `tests/unit/record_helpers.write_record(root, text, *, stem=...)`
 with explicit historical payloads. Guard: a scoped AST check for a copied placement body.
 Recorded weight in `.test_durations`: 115 test entries, 115.3 s in total, for these eleven
-modules. Tracking: ISSUE_R05.
+modules. Tracking: #1513.
 
 **C6-2 `_hermetic_git` fixtures (R06).** P3. The same autouse fixture (set
 `GIT_CONFIG_GLOBAL` to the null device and `GIT_CONFIG_NOSYSTEM=1`) is in
@@ -233,7 +233,7 @@ more fixtures of the same name in `test_isolation_branch_classify.py:36` and
 policy, not part of this cluster. Fix: one fixture module, activated explicitly in the five
 modules. Guard: AST check that they activate it and hold no copy. Recorded weight: 246
 entries, 500.7 s in total, for the five modules; the fixture does not change it. Tracking:
-ISSUE_R06.
+#1514.
 
 **C6-3 Expensive single tests (recorded weights only).** The heaviest recorded entries are
 `test_dispatch_lint_corpus.py::test_the_dispatch_gate_scores_zero_on_this_repos_own_plans`
@@ -355,7 +355,7 @@ Never moved: the tail of `_resolve_body` (stamp, flushed gate decisions, save, p
 capture, commit, then HEAD for the hand-off line) and `resolve_in_process` discarding the
 body's first stdout line. Guards to widen: `test_journal_stamp_offset.py:31` names
 `commands/run_cmd.py` as a journal writer, so moving C's write adds its new module there.
-Tracking: ISSUE_RUNCMD_SLICES.
+Tracking: #1515.
 
 ### 5.2 `commands/triage_batch_cmd.py` with `triage/batch_drive.py`
 
@@ -423,7 +423,7 @@ Slices, in order:
 
 New modules under `fr/triage/batch*.py` are covered by the existing batch globs
 (`test_forge_adapter_batch_ops.py:380-383`); `_SOFT_POINTS` stays unchanged. Tracking:
-ISSUE_TRIAGE_SLICES.
+#1516.
 
 ### 5.3 `isolation/local.py`
 
@@ -461,7 +461,7 @@ Preserve: the teardown order in `_down_worktree_tail` (guards, stage, container 
 path exists. Guards to widen: `test_isolation_network_timeouts.py:249-266` scans `local.py`
 for forge argv, and `test_vk_compat_removed.py:59` and `:262-270` name the path; each new
 module joins both. #1419 (`isolation/types.py`) is not touched by any slice. Tracking:
-ISSUE_LOCAL_SLICES.
+#1517.
 
 ### 5.4 `plan_ops.py`
 
@@ -499,7 +499,7 @@ The three side findings, re-checked:
    `:370`, `:383`, `:389`, `:664`, `:717`, `:748`, `:768`, `:793`, `:920`, `:932`, `:998`;
    no `write_text_atomic` (`fr/artifacts/atomic.py:41`). Switching them changes failure
    behaviour (the old file survives a failed write), so it is a behaviour fix in the same
-   class as F02 and is not a slice. Tracking: ISSUE_PLANOPS_SLICES records it as excluded.
+   class as F02 and is not a slice. Tracking: #1518 records it as excluded.
 3. **`triage_kanban_cmd.py` imports from `triage_batch_cmd`:** confirmed, C3-1, #1174.
 
 Slices: (1) J to `fr/record/gates.py`, with `_TASK_ID_RE`, S; (2) G+H+I to
@@ -509,7 +509,7 @@ and `_manual_placement_issues`, merging the two journal reads (C2-4); (3) C to
 (5) F to `fr/plan/rework.py`, L, after A moves to a private I/O module, because of the
 `space_for` patch. Guards to widen: none pins the file; `docs/explainers/01-fr-goal.md:863`
 names `plan_ops.py` for `self_review`, so slice 2 edits that page. Tracking:
-ISSUE_PLANOPS_SLICES.
+#1518.
 
 ## 6. Designs for the costly parts
 
@@ -604,7 +604,7 @@ byte lands (`_check_plan_parses`, `:799`) and applies the refactor gate (`:782`)
 after. Routing the 18 + 15 test imports
 through the engine changes the write order and adds the refactor gate to callers that never
 had it. The spec must state which tests change their expectations and why. Tracking:
-ISSUE_DESIGN_D.
+#1522.
 
 ## 7. Order and conflicts
 
@@ -649,23 +649,23 @@ issue that existed; "filed" is one this review opened.
 | F02 cursor write | #1500 | found |
 | F03 branch slugs | #1419 | found |
 | F04 cncd symlinks | #1501 | found |
-| F05 unbounded CLI steps | ISSUE_F05 | filed |
-| F06 install does not use the tested lock | ISSUE_F06 | filed |
-| F07 edit hook without `jq` | ISSUE_F07 | filed |
-| F09 plugin lock advisories | ISSUE_F09 | filed |
-| Cursor race | ISSUE_RACE | filed |
-| R04 strict loader extraction | ISSUE_R04 | filed (backend switch stays #1286) |
-| R05 record test helper | ISSUE_R05 | filed |
-| R06 hermetic git fixture | ISSUE_R06 | filed |
-| `run_cmd.py` cheap slices | ISSUE_RUNCMD_SLICES | filed |
-| `triage_batch_cmd.py` and `batch_drive.py` cheap slices | ISSUE_TRIAGE_SLICES | filed |
-| `isolation/local.py` cheap slices | ISSUE_LOCAL_SLICES | filed |
-| `plan_ops.py` cheap slices | ISSUE_PLANOPS_SLICES | filed |
-| Design 6.1 evidence verdicts | ISSUE_DESIGN_A | filed |
-| Design 6.2 driver ports | ISSUE_DESIGN_B | filed |
-| Design 6.3 gc collaborator | ISSUE_DESIGN_C | filed |
-| Design 6.4 retire `tick`/`complete_phase` | ISSUE_DESIGN_D | filed |
-| C1-3, C2-2, C2-3 small readers | ISSUE_LEFTOVERS | filed |
+| F05 unbounded CLI steps | #1507 | filed |
+| F06 install does not use the tested lock | #1508 | filed |
+| F07 edit hook without `jq` | #1509 | filed |
+| F09 plugin lock advisories | #1510 | filed |
+| Cursor race | #1511 | filed |
+| R04 strict loader extraction | #1512 | filed (backend switch stays #1286) |
+| R05 record test helper | #1513 | filed |
+| R06 hermetic git fixture | #1514 | filed |
+| `run_cmd.py` cheap slices | #1515 | filed |
+| `triage_batch_cmd.py` and `batch_drive.py` cheap slices | #1516 | filed |
+| `isolation/local.py` cheap slices | #1517 | filed |
+| `plan_ops.py` cheap slices | #1518 | filed |
+| Design 6.1 evidence verdicts | #1519 | filed |
+| Design 6.2 driver ports | #1520 | filed |
+| Design 6.3 gc collaborator | #1521 | filed |
+| Design 6.4 retire `tick`/`complete_phase` | #1522 | filed |
+| C1-3, C2-2, C2-3 small readers | #1523 | filed |
 | C3-1 kanban import | #1174 | found |
 | Comments: the R04 cross-link on #1286, the kanban finding on #1174, this list on #1318 | — | owed, see below |
 
