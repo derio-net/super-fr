@@ -703,3 +703,13 @@ class UnsupportedBatchOps:
 
     def pages_visibility(self, repo: str) -> str:
         return "unknown"  # a backend with no route for it (Gitea): fail closed
+
+
+def declares_unsupported(client: object, op: str) -> bool:
+    """Whether *client*'s adapter declares *op* unsupported: its method is still the
+    `UnsupportedBatchOps` stub, which raises `UnsupportedForgeOperation` when called. The
+    one definition a caller that may not make the call (a render) reads, and the same
+    method the caller that does make it catches; the stealth guard passes reads through,
+    so a guarded client answers as its adapter."""
+    method = getattr(client, op, None)
+    return getattr(method, "__func__", None) is getattr(UnsupportedBatchOps, op, object())

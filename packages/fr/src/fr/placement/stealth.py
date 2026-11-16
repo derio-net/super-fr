@@ -404,6 +404,36 @@ def stealth_space(root: Path, *, create: bool = True) -> paths.ArtifactSpace:
     return paths.ArtifactSpace(STEALTH, wt / target, fid)
 
 
+def preview_problem(root: Path) -> str | None:
+    """Why a read-only preview (`fr archive --dry-run`, review p3-r5) cannot see what a
+    real run at the stealth workspace *root* would read, or None when it can. The real run
+    checks the tracking repo reachable and syncs the clone before it reads; a preview may
+    do neither write, so a clone that is gone, a repo that does not answer, and a clone
+    that is behind (or diverged from) the tracking ref's tip are each a reason."""
+    found = marker_tracking(Path(root))
+    if found is None:
+        return "this checkout is not a stealth workspace"
+    ref, _ = found
+    wt = worktree_path(root, ref)
+    if not (wt / ".git").exists():
+        return f"the tracking clone {wt} is gone (the real run refuses until it is re-created)"
+    try:
+        check_reachable(ref, wt)
+    except SettingsError as e:
+        return str(e)
+    probe = network(["git", "ls-remote", _url_arg(ref.repo), f"refs/heads/{ref.branch}"], wt)
+    tip = (probe.stdout or "").split()[0] if probe.returncode == 0 and probe.stdout else ""
+    if not tip:
+        return f"the tip of {ref.text} could not be read"
+    head = _git(wt, "rev-parse", "--verify", "--quiet", "HEAD").stdout.strip()
+    if head != tip and not _is_ancestor(wt, tip, "HEAD"):
+        return (
+            f"the tracking clone {wt} is not synced with {ref.text} (the real run brings it "
+            "to the tip before it reads)"
+        )
+    return None
+
+
 def tracking_root(space: paths.ArtifactSpace) -> Path:
     """The tracking worktree of a stealth space (its root is `<worktree>/<target-dir>`)."""
     return space.root.parent

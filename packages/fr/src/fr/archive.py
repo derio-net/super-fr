@@ -71,6 +71,7 @@ __all__ = [
     "GitStatusError",
     "paths_dirty",
     "recording_moves",
+    "undoing_staged_moves",
     "spec_archive_sweep",
     "missing_outcomes",
     "outcome_hold",
@@ -415,6 +416,9 @@ class MoveLog:
 
     moves: list[tuple[Path, Path]] = field(default_factory=list)
     owed_journals: list[tuple[str, str]] = field(default_factory=list)
+    # `_keep_live_root`'s staged `.gitkeep`s, so R7's undo takes them back too:
+    # `(len(moves) when staged, repo-relative path, whether fr created the file)`.
+    keeps: list[tuple[int, Path, bool]] = field(default_factory=list)
 
     def __bool__(self) -> bool:
         return bool(self.moves)
@@ -481,6 +485,7 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
         return
     keep = live_root / ".gitkeep"
     rel = keep.relative_to(repo_root)
+    created = False
     try:
         live_root.mkdir(parents=True, exist_ok=True)
         if any(e.name != ".gitkeep" for e in live_root.iterdir()):
@@ -491,6 +496,7 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
         except FileNotFoundError:
             flags = os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_WRONLY
             os.close(os.open(keep, flags, 0o644))
+            created = True
     except OSError as e:
         _warn_live_root(rel, f"could not write it: {e}")
         return
@@ -502,6 +508,9 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
     )
     if added.returncode != 0:
         _warn_live_root(rel, f"git add failed: {(added.stderr or '').strip()}")
+    log = _MOVE_LOG.get()
+    if log is not None and (created or added.returncode == 0):
+        log.keeps.append((len(log.moves), rel, created))
 
 
 def _warn_live_root(rel: Path, cause: str) -> None:
@@ -537,11 +546,121 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"archived. Remove the stale plans/ copy ({src_rel}) instead "
             f"(e.g. `git rm -r {src_rel}`)."
         )
-    _git_mv(repo_root, src_rel, dst_rel)
-    _keep_live_root(repo_root, plan_dir)
-    _archive_journal(repo_root, "plan", plan_dir.name)
-    _archive_run(repo_root, src_rel)
+    with _own_log() as log:
+        start = len(log.moves)
+        try:
+            _git_mv(repo_root, src_rel, dst_rel)
+            _keep_live_root(repo_root, plan_dir)
+            _archive_journal(repo_root, "plan", plan_dir.name)
+            _archive_run(repo_root, src_rel)
+        except BaseException as e:
+            # R7: any failure — not only an `ArchiveError` — leaves the index as it was.
+            _undo_staged(repo_root, log, start, e)
+            raise
     return repo_root / dst_rel
+
+
+@contextmanager
+def undoing_staged_moves(repo_root: Path) -> Iterator[None]:
+    """R7 for a whole single-plan archive: on any exception or non-zero
+    `typer.Exit`, every move staged inside the block is reversed (newest
+    first) before the failure propagates."""
+    with _own_log() as log:
+        start = len(log.moves)
+        try:
+            yield
+        except BaseException as e:
+            # a `typer.Exit` carrying code 0 is a normal early return, not a failure
+            if type(e).__name__ != "Exit" or getattr(e, "exit_code", True):
+                _undo_staged(repo_root, log, start, e)
+            raise
+
+
+@contextmanager
+def _own_log() -> Iterator[MoveLog]:
+    """The current move log, or a private one when nothing is recording, so the
+    moves a plan archive staged are always known to it."""
+    log = _MOVE_LOG.get()
+    if log is not None:
+        yield log
+        return
+    with recording_moves() as own:
+        yield own
+
+
+def _reverse_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> str | None:
+    """`git mv dst src`, undoing one staged move. The error text, or `None`."""
+    done = subprocess.run(
+        ["git", "-C", str(repo_root), "mv", str(dst_rel), str(src_rel)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return None if done.returncode == 0 else (done.stderr or "").strip() or "git mv failed"
+
+
+def _unstage_keep(repo_root: Path, rel: Path, created: bool) -> str | None:
+    """Undo `_keep_live_root`: the index entry back to HEAD's, and the file removed when
+    fr created it. The error text, or `None`."""
+    done = subprocess.run(
+        ["git", "-C", str(repo_root), "reset", "-q", "--", str(rel)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if done.returncode != 0:
+        # No HEAD yet: nothing to reset to, so drop the index entry instead.
+        done = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "rm",
+                "-q",
+                "--cached",
+                "--ignore-unmatch",
+                "--",
+                str(rel),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if done.returncode != 0:
+            return (done.stderr or "").strip() or "git reset failed"
+    if created:
+        try:
+            (repo_root / rel).unlink(missing_ok=True)
+        except OSError as e:
+            return f"could not remove it: {e}"
+    return None
+
+
+def _undo_staged(repo_root: Path, log: MoveLog, start: int, error: BaseException) -> None:
+    """R7: a plan archive that fails after staging part of its moves leaves the
+    index as it was. Reverses `log.moves[start:]`, newest first, and extends
+    `error` with each staged path it could not put back."""
+    stuck: list[str] = []
+    # A `.gitkeep` was staged after the move that emptied the plans root, so it goes
+    # first: unstaged back to HEAD, and deleted when fr created it.
+    for entry in reversed([k for k in log.keeps if k[0] > start]):
+        _, rel, created = entry
+        why = _unstage_keep(repo_root, rel, created)
+        if why is None:
+            log.keeps.remove(entry)
+        else:
+            stuck.append(f"{rel} (staged by the archive: {why})")
+    for src, dst in reversed(log.moves[start:]):
+        why = _reverse_mv(repo_root, src, dst)
+        if why is None:
+            log.moves.remove((src, dst))
+        else:
+            stuck.append(f"{dst} (staged from {src}: {why})")
+    if stuck:
+        error.args = (
+            f"{error}; these staged changes could not be undone, put them back by hand: "
+            + "; ".join(stuck),
+        )
 
 
 def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:

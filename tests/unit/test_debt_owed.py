@@ -64,34 +64,54 @@ def _journal(root: Path, entries: list[JournalEntry], *, archived: bool = False)
 
 
 class OwnedGh(FakeGhClient):
-    """A forge double that lists its open issues, authored by `me`."""
+    """A forge double that serves one issue by number, authored by `me`. A listing
+    of open issues raises: closing reads the one issue it was filed as (R14)."""
+
+    author = "me"
 
     def viewer_login(self) -> str:
         return "me"
 
-    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
-        self.calls.append(("list_issues", {"repo": repo}))
-        return [
-            {
-                "number": n,
-                "body": i.body,
-                "labels": [{"name": x} for x in sorted(i.labels)],
-                "author": {"login": "me"},
-            }
-            for (r, n), i in self.issues.items()
-            if r == repo and i.state == "OPEN"
-        ]
+    def list_issues(self, repo, state, limit, fields=None, labels=None):  # noqa: ANN001, ANN201
+        raise AssertionError("closing an owed issue must not list issues")
+
+    def view_issue_record(self, repo: str, number: int) -> dict:
+        """Only the fields `ISSUE_VIEW_FIELDS` asks for, as the real clients answer."""
+        from fr.gh import ISSUE_VIEW_FIELDS
+
+        self.calls.append(("view_issue_record", {"repo": repo, "number": number}))
+        i = self.issues[(repo, number)]
+        record = {
+            "number": number,
+            "body": i.body,
+            "labels": [{"name": x} for x in sorted(i.labels)],
+            "author": {"login": self.author},
+            "state": i.state,
+        }
+        return {f: record[f] for f in ISSUE_VIEW_FIELDS.split(",") if f in record}
 
 
-def _repo(tmp_path: Path) -> Path:
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+def _git(root: Path, *args: str) -> None:
     subprocess.run(
-        ["git", "remote", "add", "origin", f"https://github.com/{OWN}.git"],
-        cwd=tmp_path,
+        ["git", "-c", "user.name=fr-test", "-c", "user.email=fr-test@example.invalid", *args],
+        cwd=root,
         check=True,
+        capture_output=True,
     )
+
+
+def _repo(tmp_path: Path, *, branch: str | None = None) -> Path:
+    """A repo whose HEAD is `main`, the local branch of `origin/main` (the
+    default ref, R3), unless `branch` checks out a feature branch."""
+    _git(tmp_path, "init", "-q", "-b", "main")
+    _git(tmp_path, "remote", "add", "origin", f"https://github.com/{OWN}.git")
     (tmp_path / "docs/acceptance").mkdir(parents=True)
     write_matrix_fragments(tmp_path, "schema_version: 5\norg: acme\nrepo: widgets\nrows: []\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "init")
+    _git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
+    if branch is not None:
+        _git(tmp_path, "checkout", "-q", "-b", branch)
     return tmp_path
 
 
@@ -424,3 +444,274 @@ def test_a_step_record_resolves_cannot_discharge_an_owed_entry(tmp_path: Path) -
             StepRecord(resolves=(Resolution(id="test-plan-step-4", state="fixed", body="x"),)),
             target=engine.RecordTarget(journal_scope="spec", journal_slug=SLUG, journal_file=path),
         )
+
+
+# --- R14: closing reads the one issue -----------------------------------------
+
+
+def _resolve_with(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, gh: OwnedGh):  # noqa: ANN202
+    root = _repo(tmp_path)
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    return _resolve(monkeypatch, root, gh)
+
+
+def test_closing_reads_the_one_issue_never_a_listing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh = OwnedGh()
+    _owned_issue(gh)
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert [kw for n, kw in gh.calls if n == "view_issue_record"] == [{"repo": OWN, "number": 12}]
+    (close,) = _calls(gh, "edit_issue_state")
+    assert close["state"] == "CLOSED"
+
+
+def test_an_issue_that_is_closed_is_not_closed_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh = OwnedGh()
+    _owned_issue(gh)
+    gh.issues[(OWN, 12)].state = "CLOSED"
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "edit_issue_state") == [] and _calls(gh, "comment_issue") == []
+    assert "close it yourself" in res.output
+
+
+def test_another_authors_issue_is_not_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh = OwnedGh()
+    gh.author = "mallory"
+    _owned_issue(gh)
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "edit_issue_state") == [] and "close it yourself" in res.output
+
+
+def test_a_wrong_marker_is_not_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    gh = OwnedGh()
+    _owned_issue(gh, body="Owed: x\n\n<!-- fr-owed:spec:other#step9 -->")
+    res = _resolve_with(monkeypatch, tmp_path, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "edit_issue_state") == [] and "close it yourself" in res.output
+
+
+# --- R1-R3: off the default branch, resolve closes nothing -------------------
+
+
+class NoForge(FakeGhClient):
+    """A forge double that refuses every call: off the default branch, resolving
+    an owed entry must not reach the forge at all (R1)."""
+
+    def __getattribute__(self, name: str):  # noqa: ANN204
+        if name in {"calls", "issues", "__class__", "__dict__"} or name.startswith("_"):
+            return object.__getattribute__(self, name)
+        raise AssertionError(f"off the default branch resolve called the forge: {name}")
+
+
+def _off_default(tmp_path: Path, how: str) -> Path:
+    if how == "feature-branch":
+        return _repo(tmp_path, branch="feat/x")
+    root = _repo(tmp_path)
+    if how == "detached":
+        _git(root, "checkout", "-q", "--detach")
+    elif how == "no-default-ref":
+        _git(root, "update-ref", "-d", "refs/remotes/origin/main")
+    return root
+
+
+@pytest.mark.parametrize("how", ["feature-branch", "detached", "no-default-ref"])
+def test_off_the_default_branch_resolve_closes_nothing_and_prints_the_closes_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    root = _off_default(tmp_path, how)
+    owed = _owed()
+    path = _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    res = _resolve(monkeypatch, root, NoForge())
+    assert res.exit_code == 0, res.output
+    assert open_owed_ids(parse_journal(path.read_text())) == [], "the discharge is recorded"
+    assert "closes when this branch merges" in res.output
+    assert f"Closes {OWN}#12" in res.output
+
+
+def test_off_the_default_branch_a_short_ref_prints_the_full_closes_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path, branch="feat/x")
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, "#12")])
+    res = _resolve(monkeypatch, root, NoForge())
+    assert res.exit_code == 0, res.output
+    assert f"Closes {OWN}#12" in res.output
+
+
+def test_off_the_default_branch_a_foreign_ref_gets_no_closes_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path, branch="feat/x")
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, "mallory/elsewhere#12")])
+    res = _resolve(monkeypatch, root, NoForge())
+    assert res.exit_code == 0, res.output
+    assert "Closes" not in res.output
+    assert "not closing" in res.output and "not this repo" in res.output
+
+
+# --- R15: under quiet the discharge never travels with a PR, so it closes at once -----
+
+
+@pytest.fixture
+def quiet_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A product clone under `placement: quiet` (origin's `fr` branch), on a feature
+    branch, its origin configured as github.com/acme/widgets and served from the local
+    bare repo through `insteadOf` (owed identity reads the configured url)."""
+    from fr.placement import stealth
+
+    from tests.unit.settings_repo import git, make_repo
+    from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    stealth.reset_caches()
+    root = make_repo(tmp_path)
+    push_fr_branch(root, QUIET.replace("  labels: off\n", "  labels: on\n"))
+    bare = tmp_path / "origin.git"
+    url = f"https://github.com/{OWN}.git"
+    git(root, "config", "remote.origin.url", url)
+    git(root, "config", f"url.{bare}.insteadOf", url)
+    git(root, "fetch", "-q", "origin")
+    git(root, "checkout", "-q", "-b", "feat/x")
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
+    return root
+
+
+def test_under_quiet_resolve_off_the_default_branch_closes_the_issue_at_once(
+    quiet_branch: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.artifacts.paths import artifact_root, space_for
+    from fr.owed_refs import discharge_travels
+
+    root = quiet_branch
+    assert space_for(root).placement == "quiet"
+    assert not discharge_travels(root)
+    owed = _owed()
+    path = _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    assert path.is_relative_to(artifact_root(root)), "the journal lives in the fr worktree"
+    gh = OwnedGh()
+    _owned_issue(gh)
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert open_owed_ids(parse_journal(path.read_text())) == []
+    (close,) = _calls(gh, "edit_issue_state")
+    assert close["number"] == 12 and close["state"] == "CLOSED"
+    (comment,) = _calls(gh, "comment_issue")
+    assert comment["body"].startswith("Discharged: ")
+    assert "closes when this branch merges" not in res.output
+    assert "Closes" not in res.output
+
+
+def test_under_quiet_the_pr_body_section_does_not_apply_and_deliver_asks_nothing(
+    quiet_branch: Path,
+) -> None:
+    from fr.commands.run_cmd import _refuse_unclosed_owed
+    from fr.record import pr_body
+    from fr.run.model import RunState
+
+    state = RunState(
+        run="run-1",
+        workflow="fr-goal@1",
+        branch="feat/x",
+        started="2026-11-15T00:00:00+00:00",
+        cursor="deliver",
+        steps={},
+    )
+    section = pr_body._owed_discharged(quiet_branch, state)
+    assert section == pr_body.OWED_NOT_APPLICABLE and section != "None."
+    assert pr_body.discharged_owed(quiet_branch) == []
+    _refuse_unclosed_owed(quiet_branch, state, "a body that closes nothing", "1", "body.md")
+
+
+@pytest.fixture
+def stealth_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A real stealth workspace (a tracking clone beside it, its marker recording
+    stealth) on `feat/x`, the target's origin configured as github.com/acme/widgets."""
+    from fr.isolation.hostworktree import HostWorktreeTarget
+    from fr.placement import stealth
+
+    from tests.unit.settings_repo import git, make_repo
+    from tests.unit.stealth_repo import make_tracking
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    # The visibility port, which tests replace: every repo here is private, so no forge
+    # is asked whether a github.com target may sit in a local tracking repo (R24 privacy).
+    monkeypatch.setattr(stealth, "visibility", lambda repo, checkout=None: "private")
+    stealth.reset_caches()
+    target = make_repo(tmp_path)
+    track = make_tracking(tmp_path)
+    state = HostWorktreeTarget(target).up(
+        profile=None, branch="feat/x", stealth=stealth.parse_ref(f"{track}@main")
+    )
+    # Owed identity reads the configured url.
+    url = f"https://github.com/{OWN}.git"
+    git(target, "config", f"url.{tmp_path / 'origin.git'}.insteadOf", url)
+    git(target, "config", "remote.origin.url", url)
+    monkeypatch.setenv("FR_REPO_ROOT", str(state.worktree))
+    yield state.worktree
+    stealth.reset_caches()
+
+
+def test_under_stealth_resolve_takes_the_close_at_once_path_and_prints_the_close(
+    stealth_branch: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R15 under stealth: the discharge never travels with the PR, so resolve takes the
+    close-at-once path, as on the default branch, and prints no closing line. Stealth sets
+    `forge.issues: off` itself (`fr.settings.load._stealth`, R5/R24 of
+    2026-11-04-repo-feature-settings), so that path's own forge-settings check prints the
+    close command for the operator and writes nothing (R15: "same forge settings")."""
+    from fr.artifacts.paths import artifact_root, space_for
+    from fr.owed_refs import discharge_travels
+    from fr.placement.forge_guard import guard
+
+    root = stealth_branch
+    assert space_for(root).placement == "stealth"
+    assert not discharge_travels(root)
+    owed = _owed()
+    path = _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    assert path.is_relative_to(artifact_root(root)), "the journal lives in the tracking clone"
+    fake = OwnedGh()
+    _owned_issue(fake)
+    res = _resolve(monkeypatch, root, guard(fake, root))  # guarded, as `client_for` does
+    assert res.exit_code == 0, res.output
+    assert open_owed_ids(parse_journal(path.read_text())) == []
+    assert "forge.issues: off" in res.output
+    assert f"close it yourself: gh issue close 12 --repo {OWN}" in res.output
+    assert [n for n, _ in fake.calls] == []  # nothing read, nothing written
+    assert "closes when this branch merges" not in res.output
+    assert "Closes" not in res.output
+
+
+def test_under_stealth_the_pr_body_section_does_not_apply_and_deliver_asks_nothing(
+    stealth_branch: Path,
+) -> None:
+    from fr.commands.run_cmd import _refuse_unclosed_owed
+    from fr.record import pr_body
+    from fr.run.model import RunState
+
+    state = RunState(
+        run="run-1",
+        workflow="fr-goal@1",
+        branch="feat/x",
+        started="2026-11-15T00:00:00+00:00",
+        cursor="deliver",
+        steps={},
+    )
+    section = pr_body._owed_discharged(stealth_branch, state)
+    assert section == pr_body.OWED_NOT_APPLICABLE and section != "None."
+    assert pr_body.discharged_owed(stealth_branch) == []
+    _refuse_unclosed_owed(stealth_branch, state, "a body that closes nothing", "1", "body.md")

@@ -112,6 +112,49 @@ def test_each_kind_of_leftover_is_listed_with_its_fix(tmp_path: Path) -> None:
     assert "fr acceptance set-status --id owed-row --status walk-owed --issue" in row_fix
 
 
+def test_an_open_owed_entry_counts_as_recorded_when_the_forge_cannot_list_issues(
+    tmp_path: Path,
+) -> None:
+    """R13: an owed entry on a forge whose adapter cannot list issues (a GitLab origin,
+    declared as such) stays in the journal, as under `forge.issues: off`; `deliver` does
+    not ask for it to be filed. Nothing is monkeypatched: the adapter decides."""
+    root = _repo(tmp_path, rows={})
+    _journal(root, *_out_of_scope(), _owed())
+    _commit(root)
+    assert ("owed", "o1") in {(left.kind, left.id) for left in _leftovers(root)}
+
+    _git(root, "remote", "add", "origin", "https://gitlab.example.com/acme/widgets.git")
+    (root / ".devcontainer").mkdir()
+    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "profiles:\n  dev:\n    purpose: x\nforge: {type: gitlab, host: gitlab.example.com}\n"
+    )
+    _commit(root)
+    kinds = {(left.kind, left.id) for left in _leftovers(root)}
+    assert ("owed", "o1") not in kinds
+    assert ("finding", "f1") in kinds  # only the owed entry is let off
+
+
+@pytest.mark.parametrize(
+    ("backend", "api"), [("github", "graphql"), ("github", "rest"), ("gitlab", ""), ("gitea", "")]
+)
+def test_deliver_and_the_archive_read_one_definition_of_listing_issues(
+    backend: str, api: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R13: `deliver` asks the adapter's declaration; `fr archive` / `fr journal file`
+    call `list_issues` and catch `UnsupportedForgeOperation`. One method answers both."""
+    if api:
+        monkeypatch.setenv("FR_FORGE_API", api)
+    from fr.ghclient import UnsupportedForgeOperation, declares_unsupported
+    from fr.hostclient import client_for_backend
+
+    client = client_for_backend(backend)  # type: ignore[arg-type]
+    declared = declares_unsupported(client, "list_issues")
+    assert declared is (backend != "github")
+    if declared:
+        with pytest.raises(UnsupportedForgeOperation):
+            client.list_issues("acme/widgets", "open", 1, labels=["fr:owed"])
+
+
 def test_accounted_leftovers_are_not_listed(tmp_path: Path) -> None:
     root = _repo(tmp_path, rows={"gated": None, "issued": None, "walked": None})
     _spec(root, "strategy: candidate\ngate: gated=tester\n")

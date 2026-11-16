@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -204,6 +206,55 @@ def remote_default_ref(root: Path) -> str | None | GitRefusal:
         if ref_exists(root, f"refs/remotes/{remote}/{name}"):
             return f"{remote}/{name}"
     return None
+
+
+def on_default_branch(root: Path, default_ref: str) -> bool:
+    """Whether HEAD is the local branch of `default_ref` (`origin/main` -> `main`).
+
+    True there even with commits the remote does not have yet. A detached HEAD
+    is on no branch. Raises `GitUnavailableError` when git cannot run.
+    """
+    done = git_answer(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    branch = done.stdout.strip() if done.returncode == 0 else ""
+    return bool(branch) and branch == default_ref.partition("/")[2]
+
+
+_PINNED_ON_DEFAULT: dict[Path, bool] = {}
+"""Checkouts whose `head_on_default_branch` answer is pinned (`pinned_head_on_default_branch`)."""
+
+
+@contextmanager
+def pinned_head_on_default_branch(root: Path, answer: bool) -> Iterator[None]:
+    """While active, `head_on_default_branch(root)` answers *answer* for the checkout at
+    *root*. `fr archive --dry-run` runs in a detached scratch copy of the checkout, which
+    must answer as the real checkout does (review p3-r4)."""
+    key = Path(root).resolve()
+    previous = _PINNED_ON_DEFAULT.get(key)
+    _PINNED_ON_DEFAULT[key] = answer
+    try:
+        yield
+    finally:
+        if previous is None:
+            _PINNED_ON_DEFAULT.pop(key, None)
+        else:
+            _PINNED_ON_DEFAULT[key] = previous
+
+
+def head_on_default_branch(root: Path) -> bool:
+    """Whether HEAD is the local branch of the remote's default ref.
+
+    False when the default ref cannot be read (no remote, a refusal, no ref) or
+    HEAD is detached: the caller then behaves as off the default branch. A checkout
+    `pinned_head_on_default_branch` names answers what it was pinned to.
+    """
+    if _PINNED_ON_DEFAULT:
+        pinned = _PINNED_ON_DEFAULT.get(Path(root).resolve())
+        if pinned is not None:
+            return pinned
+    found = remote_default_ref(root)
+    if found is None or isinstance(found, GitRefusal):
+        return False
+    return on_default_branch(root, found)
 
 
 def safe_directory_args(root: Path) -> list[str]:

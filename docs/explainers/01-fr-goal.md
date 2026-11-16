@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-13 placement-resolver PR review, stealth never commits on or pushes the target's branch (migrate-branch copies and names the rewrite), a lost marker refuses, squash and PR text name no fr
+reviewed: 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1134,6 +1134,9 @@ through the same filer the archive uses, and records where it went. A promise
 gets a gate (`fr verification set --gate`) or its issue (`fr acceptance set-status
 --issue`). A repository that declares no issue tracker keeps its leftovers in
 the journal and the description, as before; only the gate route applies there.
+On a forge that cannot list issues by label (GitLab and Gitea today), an owed
+action stays in the journal too: `fr journal file` says so and exits 0, and
+`deliver` accepts it as recorded.
 
 You do not assemble that description, and neither does the agent. Resolving
 `deliver` makes `fr` render it as `pr-body.md` beside the step's record. It
@@ -1177,6 +1180,19 @@ narrowed, unless you answered that decision yourself: the agent cannot close
 the rest of your issue by deciding it does not matter. You close the issue
 later, when you record a passing walk (`fr acceptance set-status --walk`). That
 command prints the close command; it does not run it.
+
+An owed action works the other way round. When you discharge one with `fr
+journal resolve --state fixed` on a branch, its issue does not close yet: the
+branch could still be abandoned, and the issue would then be closed for work
+that never shipped. For an issue in this repo, resolve prints a `Closes
+owner/repo#n` line instead. The PR body lists that line under **Owed actions
+discharged**, so the issue closes when the pull request merges, and `deliver`
+refuses a description that leaves it out. `deliver` also refuses when it
+cannot read the default branch to tell what the branch discharged. On the
+default branch itself, resolve closes the issue at once. It does the same when
+fr keeps its files outside your checkout (the quiet and stealth placements):
+there the discharge never travels with the pull request, so the PR body says
+the section does not apply.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`. It lists:

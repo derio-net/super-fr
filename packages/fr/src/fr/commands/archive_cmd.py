@@ -47,6 +47,7 @@ from fr.archive import (
     paths_dirty,
     recording_moves,
     spec_archive_sweep,
+    undoing_staged_moves,
     unticked_manual_phases,
 )
 from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
@@ -80,6 +81,28 @@ def _make_gh_client() -> GhClient:
     from fr.hostclient import client_for
 
     return client_for(Path.cwd())
+
+
+@dataclass(frozen=True)
+class _Preview:
+    """A `--dry-run` in progress (R10, R11): *wrap* turns a forge client into the preview
+    forge that records into one ledger; *outside* is quiet or stealth, where the run acts
+    on the real checkout, so no follow-up may write anything at all."""
+
+    wrap: Callable[[Any], Any]
+    outside: bool
+
+
+_PREVIEW: _Preview | None = None
+"""Set only while `_dry_run` runs the command."""
+
+STAGED_NOTE = "\nmoves staged via git mv — review, commit, and PR them."
+
+
+def _staged_note() -> None:
+    """The real run's closing line; a dry run staged nothing the operator could commit."""
+    if _PREVIEW is None:
+        typer.echo(STAGED_NOTE)
 
 
 def _report_sweep(repo_root: Path, sweep: SpecSweepResult) -> bool:
@@ -231,10 +254,10 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
     if moved_plans or spec_dsts or moved_followers:
         only_plans = frozenset(moved_plans) | plans_referencing_specs(repo_root, spec_dsts)
         _repair_in_passing(repo_root, only_plans)
-        typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+        _staged_note()
 
 
-def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
+def _record_merged(repo_root: Path, branch: str, placement: str, *, preview: bool = False) -> None:
     """`fr archive --branch <b>` under quiet and stealth (R25): append one `merged: <sha>`
     record to the feature's `merged.yaml`, in ONE commit on the placement's branch, pushed
     (quiet: a plain push of `fr`; stealth: compare-and-swap to the tracking ref), and move
@@ -242,7 +265,11 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
     `fr.placement.merged`, which also reads the forge for a squash or rebase merge): a
     branch that is not merged is refused, saying why, and a record that already agrees is
     not written twice (an unpushed one is pushed). A deleted branch is fine: its merge is
-    judged by the heads fr recorded for it (review p5-r3)."""
+    judged by the heads fr recorded for it (review p5-r3).
+
+    *preview* (`--dry-run`, R10/R11) resolves the merge by reads alone — no placement worktree is
+    created — prints the record it would append and the push it would make, and returns before
+    anything is appended, committed or pushed."""
     from fr.artifacts.paths import FEATURES_DIR, STEALTH, checked_feature_id
     from fr.placement import merged as merged_status
     from fr.placement.quiet import owner_of
@@ -257,7 +284,7 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
     # Fetches the branch's remote ref; a branch gone everywhere is no refusal here.
     resolve_branch_refs(subprocess_runner, repo_root, branch, evidence.ref.ref.split("/", 1)[0])
     _note_fetch_error(evidence)
-    space = space_for(repo_root)
+    space = space_for(repo_root, create=not preview)
     try:
         fid = checked_feature_id(branch)
     except SettingsError as e:
@@ -276,6 +303,8 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
         )
         raise typer.Exit(2)
     forge, why_not = merged_status.forge_for(repo_root)
+    if _PREVIEW is not None and isinstance(forge, merged_status.ClientMergedPrs):
+        forge = forge.with_client(_PREVIEW.wrap)  # R11: every forge call is previewed
     view = merged_status.merged_features(space, repo_root, forge=forge)
     for notice in view.notices:
         err_console.print(f"note: {escape(notice)}", soft_wrap=True)
@@ -291,11 +320,31 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
     short = feature.sha[:12]
     record = merged_status.merged_file(froot)
     if feature.cached:
+        if preview:
+            unpushed = placement != STEALTH and _unpushed(space.root, record)
+            typer.echo(
+                f"would push the record: {branch} merged at {short} is committed on the local "
+                f"`fr` branch but not pushed"
+                if unpushed
+                else f"already recorded: {branch} merged at {short}; nothing to write"
+            )
+            return
         if placement != STEALTH and _unpushed(space.root, record):
             _push_fr(repo_root, space.root, record)
             typer.echo(f"already recorded: {branch} merged at {short}; pushed the record")
             return
         typer.echo(f"already recorded: {branch} merged at {short}; nothing to write")
+        return
+    if preview:
+        target = (
+            "the stealth tracking ref (compare-and-swap)" if placement == STEALTH else "`origin fr`"
+        )
+        via_pr = f" (PR #{feature.pr})" if feature.pr else ""
+        typer.echo(
+            f"would record: {branch} merged at {short}{via_pr} "
+            f"in {FEATURES_DIR}/{fid}/{merged_status.MERGED_FILE}; nothing moved (R25)\n"
+            f"would commit it in one commit and push it to {target}"
+        )
         return
     written = [merged_status.append_record(froot, feature.sha, feature.heads, pr=feature.pr)]
     # The verified heads are owned evidence from here on: the merge survives the branch.
@@ -311,6 +360,24 @@ def _record_merged(repo_root: Path, branch: str, placement: str) -> None:
         f"recorded: {branch} merged at {short}{via} "
         f"({FEATURES_DIR}/{fid}/{merged_status.MERGED_FILE}); nothing moved (R25)"
     )
+
+
+def _refuse_cannot_tell(repo_root: Path, placement: str) -> None:
+    """R10 (review p3-r5): a preview that cannot see what the real run would act on
+    refuses by name, exit 2, rather than print "nothing to archive" and exit 0. Checked
+    before anything resolves the placement's space, which would create or sync it."""
+    from fr.placement.preview import cannot_tell
+
+    why = cannot_tell(repo_root)
+    if why is None:
+        return
+    err_console.print(
+        f"dry run cannot tell what `fr archive` would do under {placement}: {why}. "
+        "Nothing was written",
+        soft_wrap=True,
+        markup=False,
+    )
+    raise typer.Exit(2)
 
 
 def _unpushed(fr_root: Path, path: Path) -> bool:
@@ -573,6 +640,7 @@ class _ArchiveOpts:
     branch: str | None = None
     issues: str | None = None
     no_issues: bool = False
+    dry_run: bool = False
 
 
 def _after_moves(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
@@ -621,6 +689,8 @@ def _refresh_usage(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
 
     from fr.usage.backfill import refresh_archived
 
+    if _PREVIEW is not None and _PREVIEW.outside:
+        return  # R11: under quiet or stealth a dry run writes nothing anywhere
     report = refresh_archived(
         repo_root,
         os.environ,
@@ -674,8 +744,8 @@ def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         return
     selection = opts.issues
     if selection is None:
-        if not listed or not trigger.is_interactive():
-            return
+        if opts.dry_run or not listed or not trigger.is_interactive():
+            return  # R11: a dry run lists the ends and never prompts
         answer = input("open issues for these? [y/N/select] ").strip().lower()
         if answer in ("y", "yes"):
             selection = "all"
@@ -698,6 +768,12 @@ def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
             err_console.print(
                 f"[yellow]warning:[/yellow] could not file {qid} — {escape(filed.error or '')}"
             )
+            continue
+        if _PREVIEW is not None and _PREVIEW.outside:
+            # R11: the journal is outside the checkout (quiet, stealth), so a dry run
+            # says where the finding would be deferred and writes nothing.
+            typer.echo(f"  {'reused' if filed.reused else 'filed'}: {qid} -> {filed.url}")
+            typer.echo(f"  would defer {qid} to {filed.url} in its journal")
             continue
         try:
             path = af.write_back(filed)
@@ -726,6 +802,12 @@ def _write_manual_owed(repo_root: Path, plan: Any, blockers: tuple[str, ...]) ->
     if not phases:
         return
     name = plan.dir.name
+    from fr.git import head_on_default_branch
+
+    if head_on_default_branch(repo_root):  # R8: no commit lands here, so nothing is written
+        for line in af.manual_owed_preview(repo_root, name, phases):
+            typer.echo(f"  would record owed: {line}")
+        return
     try:
         path = af.write_manual_owed(repo_root, name, phases)
         if path is not None:
@@ -782,12 +864,23 @@ def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
             soft_wrap=True,
         )
         return
+    said_unsupported = False
     for filed in af.file_owed_ends(repo_root, ends, _make_gh_client(), repo):
+        if filed.unsupported:  # R13: like `ForgeQuietError` above, the entry stays put
+            if not said_unsupported:
+                typer.echo(f"  {af.UNSUPPORTED_LISTING}")
+            said_unsupported = True
+            continue
         if filed.ref is None:
             err_console.print(
                 f"[yellow]warning:[/yellow] could not file owed {filed.end.key} — "
-                f"{escape(filed.error or '')}"
+                f"{escape(filed.error or '')}",
+                soft_wrap=True,
             )
+            continue
+        if _PREVIEW is not None and _PREVIEW.outside:  # R11: nothing is written
+            typer.echo(f"  {'reused' if filed.reused else 'filed'}: {filed.end.key} -> {filed.ref}")
+            typer.echo(f"  would record {filed.end.key} as {filed.ref} in its journal")
             continue
         try:
             path = af.write_owed_back(filed)
@@ -813,34 +906,222 @@ def _repo_slug(repo_root: Path) -> str:
     return "/".join(resolve_identity(load_effective(repo_root), repo_root))
 
 
+def _in_checkout(repo_root: Path, path: Path) -> Path:
+    """*path* relative to the real checkout, when it names something in it: run from the
+    scratch's root, it names the same thing there, and the output prints no scratch path."""
+    try:
+        return path.resolve().relative_to(repo_root)
+    except ValueError:
+        return path
+
+
+class _Rewriting:
+    """A text stream that writes through to *inner* with every scratch path replaced by
+    the real checkout's (review p3-r8): the operator reads paths they can open."""
+
+    def __init__(self, inner: Any, pairs: list[tuple[str, str]]) -> None:
+        self._inner = inner
+        self._pairs = pairs
+
+    def write(self, text: Any) -> Any:
+        if isinstance(text, str):
+            for old, new in self._pairs:
+                text = text.replace(old, new)
+        return self._inner.write(text)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+@contextmanager
+def _real_paths_in_output(scratch: Path, real_root: Path) -> Iterator[None]:
+    import sys
+    import tempfile
+
+    spellings = {str(scratch), str(Path(tempfile.gettempdir()) / scratch.name)}
+    pairs = [(old, str(real_root)) for old in sorted(spellings, key=len, reverse=True)]
+    saved = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = _Rewriting(sys.stdout, pairs), _Rewriting(sys.stderr, pairs)
+    try:
+        yield
+    finally:
+        sys.stdout, sys.stderr = saved
+
+
+@contextmanager
+def _rooted_at(scratch: Path) -> Iterator[None]:
+    """The command's repo root and cwd are the scratch tree for the block."""
+    import os
+
+    saved_cwd = Path.cwd()
+    saved_env = os.environ.get("FR_REPO_ROOT")
+    os.environ["FR_REPO_ROOT"] = str(scratch)
+    os.chdir(scratch)
+    try:
+        yield
+    finally:
+        os.chdir(saved_cwd)
+        if saved_env is None:
+            os.environ.pop("FR_REPO_ROOT", None)
+        else:
+            os.environ["FR_REPO_ROOT"] = saved_env
+
+
+def _exit_code_of(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, Any]) -> int:
+    try:
+        run(*args, **kwargs)
+    except typer.Exit as e:
+        return e.exit_code
+    return 0
+
+
+def _porcelain(root: Path) -> set[str]:
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+        capture_output=True,
+        check=False,
+    ).stdout
+    return set(out.decode(errors="replace").splitlines())
+
+
+def _dry_run(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+    """`fr archive --dry-run` (R10, R11, design §C): the real command, run in-process with
+    a forge that records every write instead of making it. For a repo placement it runs
+    against a disposable copy of the checkout; under quiet or stealth the record lives
+    outside the checkout, so `_record_merged` previews it, the follow-ups write nothing,
+    and nothing is copied. The summary, and the refused forge calls, are reported whatever
+    way the run ends (review p3-r9)."""
+    from fr import archive_preview as ap
+    from fr.artifacts.paths import outside_repo
+    from fr.git import head_on_default_branch, pinned_head_on_default_branch
+
+    global _PREVIEW  # noqa: PLW0603 — set only while the command runs
+    real_root = resolve_repo_root().resolve()
+    backend, host = ap.forge_of(real_root)
+    ledger = ap.PreviewLedger()
+
+    def wrap(client: Any) -> Any:
+        return ap.PreviewForge(client, host=host, backend=backend, ledger=ledger)
+
+    outside = outside_repo(real_root) is not None
+    real_factory = _make_gh_client
+    staged: list[str] = []
+    code = 0
+    _PREVIEW = _Preview(wrap=wrap, outside=outside)
+    globals()["_make_gh_client"] = lambda: wrap(real_factory())
+    try:
+        if outside:
+            code = _exit_code_of(run, args, kwargs)
+        else:
+            on_default = head_on_default_branch(real_root)  # p3-r4: the real checkout's answer
+            with (
+                ap.scratch_checkout(real_root) as scratch,
+                pinned_head_on_default_branch(scratch, on_default),
+                _real_paths_in_output(scratch, real_root),
+            ):
+                baseline = _porcelain(scratch)
+                plan = kwargs.get("plan_dir")
+                if plan is not None:
+                    kwargs = {**kwargs, "plan_dir": _in_checkout(real_root, Path(plan))}
+                with _rooted_at(scratch):
+                    code = _exit_code_of(run, args, kwargs)
+                staged = sorted(_porcelain(scratch) - baseline)
+    except Exception as e:
+        _report_preview(staged, ledger)
+        if ledger.refused:
+            raise typer.Exit(1) from e
+        raise
+    else:
+        _report_preview(staged, ledger)
+    finally:
+        globals()["_make_gh_client"] = real_factory
+        _PREVIEW = None
+    if ledger.refused:
+        raise typer.Exit(1)
+    if code:
+        raise typer.Exit(code)
+
+
+def _report_preview(staged: list[str], ledger: Any) -> None:
+    typer.echo("\ndry run — nothing was written.")
+    if staged:
+        typer.echo("would stage:")
+        for line in staged:
+            typer.echo(f"  {line}")
+    if ledger.writes:
+        typer.echo("would write to the forge:")
+        for w in ledger.writes:
+            typer.echo(f"  {w}")
+    if ledger.refused:
+        err_console.print(
+            "dry run refused forge call(s) it does not know as a read: "
+            + ", ".join(sorted(set(ledger.refused))),
+            soft_wrap=True,
+            markup=False,
+        )
+
+
 def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
     """Run `fn` inside one move log, and `_after_moves` in a `finally` — on
     every entry mode and every exit path (spec 2026-10-06 §0)."""
 
-    @functools.wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> None:
+    def run(*args: Any, **kwargs: Any) -> None:
         # A usage error fires before anything moves (R9).
         if kwargs.get("issues") is not None and kwargs.get("no_issues"):
             err_console.print("--issues and --no-issues are mutually exclusive")
             raise typer.Exit(2)
         with recording_moves() as log:
+            # R7: a refusal — a non-zero exit, a `SettingsError`, any exception —
+            # runs no follow-up: nothing it staged is left to file anything for.
+            done: typer.Exit | None = None
+            # R7: a single-plan archive that fails anywhere writes nothing.
+            single = (
+                kwargs.get("plan_dir") is not None
+                and not kwargs.get("all_plans")
+                and not kwargs.get("sweep_only")
+                and kwargs.get("branch") is None
+            )
             try:
-                fn(*args, **kwargs)
-            finally:
-                try:
-                    root = resolve_repo_root()
-                except Exception:  # noqa: BLE001 — outside a repo there is nothing to follow up
-                    pass
+                if single:
+                    try:
+                        root0 = resolve_repo_root()
+                    except Exception:  # noqa: BLE001 — outside a repo fn refuses by itself
+                        fn(*args, **kwargs)
+                    else:
+                        with undoing_staged_moves(root0):
+                            fn(*args, **kwargs)
                 else:
-                    _after_moves(
-                        root,
-                        log,
-                        _ArchiveOpts(
-                            branch=kwargs.get("branch"),
-                            issues=kwargs.get("issues"),
-                            no_issues=bool(kwargs.get("no_issues")),
-                        ),
-                    )
+                    fn(*args, **kwargs)
+            except typer.Exit as e:
+                if e.exit_code:
+                    raise
+                done = e  # an Exit(0) is a normal return that left early
+            try:
+                root = resolve_repo_root()
+            except Exception:  # noqa: BLE001 — outside a repo there is nothing to follow up
+                root = None
+            if root is not None:
+                _after_moves(
+                    root,
+                    log,
+                    _ArchiveOpts(
+                        branch=kwargs.get("branch"),
+                        issues=kwargs.get("issues"),
+                        no_issues=bool(kwargs.get("no_issues")),
+                        dry_run=bool(kwargs.get("dry_run")),
+                    ),
+                )
+            if done is not None:
+                raise done
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        if kwargs.get("dry_run"):
+            _dry_run(run, args, kwargs)
+            return
+        run(*args, **kwargs)
 
     return wrapper
 
@@ -890,6 +1171,18 @@ def archive_command(
         "--no-issues",
         help="List the open ends but file nothing (and do not prompt).",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what the run would do: the moves, holds, skips, owed entries and issues, "
+        "and under quiet or stealth the record and the push (previewed in place). The repo "
+        "placement runs in a temporary worktree it adds and removes; a fetch may move "
+        "remote-tracking refs. Writes no file in the checkout, no branch and nothing on the "
+        "forge, never prompts, and exits with the code the real run would. "
+        "Refuses (exit 2) over artifacts that need a migration, and under quiet or stealth "
+        "when it cannot see what the run would read (no fr worktree yet; a tracking clone "
+        "gone, unreachable or behind). A forge call it does not know exits 1, named.",
+    ),
 ) -> None:
     """Move a finished plan to implemented/plans/ (and its spec when ready).
 
@@ -912,7 +1205,9 @@ def archive_command(
             "<branch>`, which appends `merged: <sha>` to its feature path and moves nothing. "
             "Nothing was written"
         )
-    require_migrated_layout()
+    if dry_run and placement is not None:
+        _refuse_cannot_tell(resolve_repo_root(), placement)
+    require_migrated_layout(create=not dry_run)
     if branch is not None:
         for conflicting, name in (
             (plan_dir is not None, "plan_dir"),
@@ -924,7 +1219,7 @@ def archive_command(
                 err_console.print(f"--branch takes no {name} — it archives what the branch touched")
                 raise typer.Exit(2)
         if placement is not None:
-            _record_merged(resolve_repo_root(), branch, placement)
+            _record_merged(resolve_repo_root(), branch, placement, preview=dry_run)
             return
         _archive_branch(resolve_repo_root(), branch, no_spec_sweep=no_spec_sweep)
         return
@@ -941,7 +1236,7 @@ def archive_command(
         repo_root = resolve_repo_root()
         if _report_sweep(repo_root, spec_archive_sweep(repo_root, _make_gh_client())):
             _repair_in_passing(repo_root, None)
-            typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+            _staged_note()
         else:
             typer.echo("spec sweep: nothing eligible to move.")
         return
@@ -1004,13 +1299,14 @@ def archive_command(
 
         blockers = archive_blockers(report.plan, report.observed, evidence)
         if blockers and not force:
-            _write_manual_owed(repo_root, report.plan, blockers)
             if not all_plans:
+                # R7: a refusal writes nothing, so it records no owed entry either.
                 err_console.print("refusing to archive — plan is not complete or not merged:")
                 for b in blockers:
                     err_console.print(f"  {b}", soft_wrap=True)
                 err_console.print("(override with --force if you know the work is done)")
                 raise typer.Exit(2)
+            _write_manual_owed(repo_root, report.plan, blockers)
             skipped.append(f"{target.name}: skipped — {'; '.join(blockers)}")
             continue
 
@@ -1105,6 +1401,6 @@ def archive_command(
     for s in skipped:
         typer.echo(f"  skipped: {s}")
     if archived or specs_moved or owed_moved:
-        typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+        _staged_note()
     elif all_plans:
         typer.echo("nothing to archive.")

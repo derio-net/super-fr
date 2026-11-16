@@ -129,15 +129,16 @@ run_fr out debt --offline
 require_exit 0 "$out"
 expect_grep "$key \(journal\)" "$out" "fr debt lists the owed step"
 [ "$(printf '%s\n' "$out" | grep -c "$key")" -eq 1 ] || fail "the owed step is listed more than once"
-# 5. Discharge it: the evidence closes the filed issue through the forge.
+# 5. Discharge it on the housekeeping branch: nothing closes yet (owed-archive R1, R2);
+#    the issue closes when this branch merges, through the printed closing line.
 run_fr out journal resolve --scope spec --slug 2026-10-11-widget --id test-plan-step-2 \
   --state fixed --note "walked live after merge: green"
 require_exit 0 "$out"
-expect_grep 'closed example-org/widgets#1' "$out" "the discharge closes the issue"
-log="$(tr '\n' ' ' < "$FAKE_GH_LOG")"
-expect_grep 'issue comment 1 --repo example-org/widgets --body Discharged: walked live after merge: green' \
-  "$log" "the evidence is the closing comment"
-expect_grep 'issue close --repo example-org/widgets 1' "$log" "the recording gh saw the close"
+expect_grep 'closes when this branch merges' "$out" "the discharge defers the close to the merge"
+expect_grep 'Closes example-org/widgets#1' "$out" "the closing line to carry is printed"
+if grep -q '^issue close\|^issue comment' "$FAKE_GH_LOG"; then
+  fail "a discharge off the default branch reached the forge"
+fi
 run_fr out debt --offline
 require_exit 0 "$out"
 refuse_grep "$key" "$out" "a discharged step is no longer owed"

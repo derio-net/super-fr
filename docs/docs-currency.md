@@ -15,7 +15,7 @@ covers:
   - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-13 writing-standards-docs phase 1, explainers-currency now names each page group's writing standard; this page still defers authoring detail to that rule
+reviewed: 2026-11-15 owed-archive-side-effects phase 1, the default-branch helper moved to fr.git and docs.load wraps it; page unchanged. 2026-11-13 writing-standards-docs phase 1, explainers-currency now names each page group's writing standard; this page still defers authoring detail to that rule
 ---
 
 # Docs currency: keep pages true to the code

@@ -105,3 +105,39 @@ def test_file_on_ref_raises_on_unknown_ref(tmp_path):
 
     with pytest.raises(Exception):
         file_on_ref("origin/HEAD", "tracked.txt", cwd=repo)
+
+
+def _git_repo(tmp_path: Path, branch: str) -> Path:
+    subprocess.run(["git", "init", "-q", "-b", branch, str(tmp_path)], check=True)
+    for k, v in (("user.email", "a@example.com"), ("user.name", "t")):
+        subprocess.run(["git", "-C", str(tmp_path), "config", k, v], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-q", "--allow-empty", "-m", "x"], check=True
+    )
+    return tmp_path
+
+
+def test_on_default_branch_strips_the_remote_and_treats_detached_head_as_off(
+    tmp_path: Path,
+) -> None:
+    from fr.git import on_default_branch
+
+    root = _git_repo(tmp_path, "main")
+    assert on_default_branch(root, "origin/main") is True
+    assert on_default_branch(root, "origin/trunk") is False
+    subprocess.run(["git", "-C", str(root), "switch", "-q", "-c", "feat/x"], check=True)
+    assert on_default_branch(root, "origin/main") is False
+    subprocess.run(["git", "-C", str(root), "switch", "-q", "--detach"], check=True)
+    assert on_default_branch(root, "origin/main") is False
+
+
+def test_head_on_default_branch_answers_false_without_a_default_ref(tmp_path: Path) -> None:
+    from fr.git import head_on_default_branch
+
+    root = _git_repo(tmp_path, "main")
+    assert head_on_default_branch(root) is False  # no remote: no default ref
+    subprocess.run(["git", "-C", str(root), "remote", "add", "origin", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True
+    )
+    assert head_on_default_branch(root) is True

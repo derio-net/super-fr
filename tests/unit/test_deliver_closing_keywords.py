@@ -236,3 +236,250 @@ def test_frs_own_render_never_trips_the_gate(
     assert "#123" in body and "#45" in body
     assert pr_body.shared_closing_keywords(body) == []
     assert pr_body.shared_closing_keywords(f"Closes #1 and #2\n\n{body}") != []
+
+
+# --- owed-archive-side-effects R4, R5: a discharged owed issue closes at merge ------
+
+OWED_REF = "derio-net/super-fr#7"
+
+
+@pytest.fixture
+def discharged(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """The branch discharged one owed entry filed as OWED_REF; the returned map is
+    `run_held_issues`'s answer (empty: nothing holds it)."""
+    import fr.record.pr_body as pr_body
+
+    held: dict[str, str] = {}
+    item = pr_body.DischargedOwed(ref=OWED_REF, entry="owed-1")
+    monkeypatch.setattr(pr_body, "discharged_owed", lambda _root: [item])
+    monkeypatch.setattr(pr_body, "run_held_issues", lambda _root, _state: dict(held))
+    return held
+
+
+def _rendered(root: Path, live: dict[str, str]) -> str:
+    live["body"] = "not yet"
+    _deliver(root)  # refused: renders pr-body.md
+    return _body(root).read_text()
+
+
+def test_the_render_closes_the_discharged_owed_issue_and_delivers(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    root = _at_deliver(tmp_path)
+    body = _rendered(root, live)
+    assert f"## Owed actions discharged\n\nCloses {OWED_REF}\n" in body
+    live["body"] = body
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+@pytest.mark.parametrize("closing", [None, f"Fixes {OWED_REF}", "Resolves #7"])
+def test_a_live_body_must_close_every_listed_owed_issue(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str], closing: str | None
+) -> None:
+    root = _at_deliver(tmp_path)
+    body = _rendered(root, live).replace(f"Closes {OWED_REF}", closing or "None.")
+    live["body"] = body
+    _rec, out = _deliver(root)
+    if closing is None:
+        assert out.exit_code == 2, out.output
+        assert OWED_REF in out.output and "Closes" in out.output
+        assert load_run_state(root, RUN).steps["deliver"].state == "running"
+    else:
+        assert out.exit_code == 0, out.output
+
+
+def test_a_held_owed_issue_is_rendered_refs_and_not_required(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    discharged[OWED_REF] = "row r1 still holds it open"
+    root = _at_deliver(tmp_path)
+    body = _rendered(root, live)
+    assert f"Refs {OWED_REF} — held: row r1 still holds it open" in body
+    assert f"Closes {OWED_REF}" not in body
+    live["body"] = body
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+def test_minimal_still_requires_the_closing_reference(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    from tests.unit.test_forge_quiet_pr_body import PLAIN, _land_policy
+
+    root = _at_deliver(tmp_path)
+    _land_policy(root, "forge:\n  pr_body: minimal\n")
+    live["body"] = PLAIN
+    _rec, out = _deliver(root)
+    assert out.exit_code == 2, out.output
+    assert OWED_REF in out.output
+    live["body"] = f"{PLAIN}\nCloses {OWED_REF}\n"
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+def test_minimal_a_held_owed_issue_is_not_required(
+    tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
+) -> None:
+    from tests.unit.test_forge_quiet_pr_body import PLAIN, _land_policy
+
+    discharged[OWED_REF] = "row r1 still holds it open"
+    root = _at_deliver(tmp_path)
+    _land_policy(root, "forge:\n  pr_body: minimal\n")
+    live["body"] = PLAIN
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+# --- review p2-r4: a REAL acceptance hold, through render and both gates -----------
+
+
+HELD_REF = "t/t#7"
+"""An issue in the fixture's own repo (`t/t`, the identity its legacy fragment names)."""
+
+
+def _really_held(tmp_path: Path, row_id: str) -> Path:
+    """`_at_deliver`'s workspace, its origin configured as github.com/t/t
+    (served from the local bare through `insteadOf`), where the branch files an owed
+    entry as HELD_REF and discharges it, and an acceptance row `row_id` (walk-owed)
+    names HELD_REF in its `issues:` — the hold, read from the real matrix."""
+    import subprocess
+
+    from fr.journal.model import (
+        JournalEntry,
+        append_journal_entry,
+        archived_journal_path,
+        owed_body,
+        resolution_entry,
+    )
+
+    from tests.unit.acceptance_helpers import write_matrix_fragments
+    from tests.unit.record_support import commit_all
+
+    root = _at_deliver(tmp_path)
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    url = "https://github.com/t/t.git"
+    git("config", "remote.origin.url", url)
+    git("config", f"url.{tmp_path / 'origin.git'}.insteadOf", url)
+    slug = "2026-10-01-old-plan"
+    owed = JournalEntry(
+        kind="owed",
+        scope="plan",
+        id="owed-phase-2",
+        created="2026-10-01T10:00:00+00:00",
+        title="phase 2 owed",
+        body=owed_body(what="do it", why="manual", how="resolve it", key=f"plan:{slug}#p2"),
+    )
+    path = archived_journal_path(root, "plan", slug)
+    for entry in (
+        owed,
+        resolution_entry(
+            target=owed, scope="plan", taken={owed.id}, created="2026-10-01T11:00:00+00:00",
+            state="open", body="filed", filed_as=HELD_REF,
+        ),
+        resolution_entry(
+            target=owed, scope="plan", taken={owed.id, f"{owed.id}-resolved"},
+            created="2026-11-15T11:00:00+00:00", state="fixed", body="done by hand",
+        ),
+    ):  # fmt: skip
+        append_journal_entry(path, slug, entry)
+    write_matrix_fragments(
+        root,
+        "schema_version: 5\norg: t\nrepo: t\nrows:\n"
+        f"  - id: {row_id}\n    capability: c\n    acceptance: a\n"
+        "    origin: ['spec:2026-10-01-old#R1']\n"
+        f"    levels: {{}}\n    status: walk-owed\n    issues: ['{HELD_REF}']\n",
+    )
+    commit_all(root, "an owed entry filed and discharged, and the row that holds it")
+    return root
+
+
+def test_a_really_held_owed_issue_renders_refs_and_passes_both_gates(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    from fr.record.pr_body import discharged_owed
+
+    row_id = "owed-close-at-merge"  # carries `close`: must not read as a closing keyword
+    root = _really_held(tmp_path, row_id)
+    assert [d.ref for d in discharged_owed(root)] == [HELD_REF]
+    body = _rendered(root, live)
+    section = body.split("## Owed actions discharged\n\n")[1].split("\n\n")[0]
+    assert section.startswith(f"Refs {HELD_REF} — held: ") and f"`{row_id}`" in section
+    assert f"Closes {HELD_REF}" not in body
+    live["body"] = body
+    _rec, out = _deliver(root)
+    assert out.exit_code == 0, out.output
+
+
+def test_a_really_held_owed_issue_closed_by_hand_is_still_a_premature_close(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    root = _really_held(tmp_path, "owed-close-at-merge")
+    body = _rendered(root, live)
+    live["body"] = f"Closes {HELD_REF}\n\n{body}"
+    _rec, out = _deliver(root)
+    assert out.exit_code == 2, out.output
+    assert "Refs" in out.output and HELD_REF in out.output
+
+
+# --- review p2-r2, p2-r5: what cannot be read refuses, by name ---------------------
+
+
+def test_deliver_refuses_when_the_discharges_cannot_be_told(
+    tmp_path: Path, live: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.record.pr_body as pr_body
+
+    def unreadable(_root: Path) -> list[pr_body.DischargedOwed]:
+        raise pr_body.UnreadableDischargeError("the default ref cannot be read (no remote)")
+
+    monkeypatch.setattr(pr_body, "discharged_owed", unreadable)
+    root = _at_deliver(tmp_path)
+    live["body"] = _rendered(root, live)
+    _rec, out = _deliver(root)
+    assert out.exit_code == 2, out.output
+    assert "cannot tell which owed actions" in out.output and "default ref" in out.output
+    assert load_run_state(root, RUN).steps["deliver"].state == "running"
+
+
+def test_deliver_refuses_when_the_holds_cannot_be_read(
+    tmp_path: Path,
+    live: dict[str, str],
+    discharged: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import fr.record.pr_body as pr_body
+    from fr.acceptance.model import AcceptanceError
+
+    root = _at_deliver(tmp_path)
+    body = _rendered(root, live)
+
+    def broken(_root: Path, _state: object) -> dict[str, str]:
+        raise AcceptanceError("fragments disagree on `repo:`")
+
+    monkeypatch.setattr(pr_body, "run_held_issues", broken)
+    live["body"] = body
+    _rec, out = _deliver(root)
+    assert out.exit_code == 2, out.output
+    assert "held open" in out.output and "fragments disagree" in out.output
+
+
+def test_an_unexpected_error_reading_the_holds_is_not_swallowed(
+    tmp_path: Path, discharged: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r5: the gate catches only the unreadable-input errors; anything else is a
+    bug and propagates, never read as "nothing holds it"."""
+    import fr.record.pr_body as pr_body
+    from fr.commands.run_cmd import _refuse_unclosed_owed
+
+    root = _at_deliver(tmp_path)
+
+    def bug(_root: Path, _state: object) -> dict[str, str]:
+        raise RuntimeError("a bug, not an unreadable input")
+
+    monkeypatch.setattr(pr_body, "run_held_issues", bug)
+    with pytest.raises(RuntimeError, match="a bug"):
+        _refuse_unclosed_owed(root, load_run_state(root, RUN), "no close", "1", "body.md")

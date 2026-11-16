@@ -1,0 +1,110 @@
+schema_version: 2
+phase:
+  number: 3
+  title: fr archive --dry-run (R10, R11)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - archive-dry-run
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/archive_preview.py
+  - tests/unit/test_archive_dry_run.py
+  - tests/scenarios/archive-dry-run.sh
+  - tests/scenarios/fixtures/**
+  - tests/integration/test_scenarios.py
+  - docs/**/*.md
+  - README.md
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: Preview forge
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED in tests/unit/test_archive_dry_run.py: PreviewForge delegates allowlisted reads to the wrapped client, answers create_issue with `https://<host>/<repo>/issues/<900000+k>` that archive_followups._issue_ref accepts, records other known writes, and records an unknown method as refused without calling the wrapped client.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/archive_preview.py with PreviewForge (explicit READS and WRITES sets over the GhClient protocol in packages/fr/src/fr/ghclient.py), plus a test asserting every protocol method is in exactly one set.
+- number: 2
+  title: Scratch-checkout runner
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: a repo with one staged change, one unstaged change and one untracked file; the scratch tree built by `scratch_checkout()` shows the same `git status --porcelain` split; a stale `fr-archive-dry-run-<deadpid>` worktree is pruned first; the scratch worktree is gone after the context exits, on an exception too.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement scratch_checkout in archive_preview.py (git worktree add --detach; git diff --cached --binary piped to git apply --index; git diff --binary piped to git apply; copy untracked non-ignored files; prune stale; remove in finally). Add a test pinning that `fr archive` reads no git-ignored file (a plan-dir archive with a poisoned ignored file gives identical output).
+- number: 3
+  title: --dry-run wiring for every mode
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: `fr archive <plan> --dry-run`, `--all --dry-run`, `--branch <b> --dry-run` and `--sweep-only --dry-run` each print the real run's lines plus a summary of would-be staged paths and forge writes, leave the checkout and index byte-identical, and exit with the real run's code (2 for a refused plan included); with no --issues it never prompts and lists the ends; an unknown forge call exits 1 naming it.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: add the `--dry-run` option to archive_command; when set, run the same arguments in-process inside scratch_checkout with resolve_repo_root pointed at it and _make_gh_client returning PreviewForge, skip _open_ends_step's TTY prompt, print the summary and propagate the exit code.
+  - id: P3.T3.S3
+    text: |-
+      RED then GREEN: under quiet/stealth, `--branch <b> --dry-run` goes through `_record_merged(..., preview=True)`, which prints the record and the push target and returns before append_record, _commit_merged_record, commit_paths, stealth.commit_and_push, atomic_push and _push_fr (assert each is not called, with monkeypatched sentinels).
+  - id: P3.T3.S4
+    text: |-
+      REFACTOR: fold duplicated output code; ruff and mypy clean.
+- number: 4
+  title: Scenario and docs
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Write tests/scenarios/archive-dry-run.sh: dry runs in plan-dir and --branch modes leave tree, index and the recording gh log unchanged and match the real run's exit code. Register it in tests/integration/test_scenarios.py and run it.
+  - id: P3.T4.S2
+    text: |-
+      Run scripts/sync-readme.py (the CLI help changed) and `uv run fr docs check`, update the pages it names, then run the full suite after the last code commit into a host-visible log and return it.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T3.S4:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-11-15T23:24:33+00:00'
+      note: null
+  completion:
+    at: '2026-11-15T23:24:33+00:00'
+    note: null
+    observed_prs: []

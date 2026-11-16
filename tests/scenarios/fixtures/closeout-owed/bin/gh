@@ -6,28 +6,47 @@
 #   gh api user --jq .login            -> the viewer's login
 #   gh issue list ... --json ...       -> the open issue it created, if any, as
 #                                         the JSON gh prints for those fields
+#   gh issue view 1 ...                -> the one issue's record (closing reads it)
 #   gh label create ...                -> ok, no output
 #   gh issue create ...                -> the new issue's URL, which is all
 #                                         `gh issue create` prints on stdout
 #   gh issue comment / gh issue close  -> ok, no output (the close is recorded)
 # Anything else fails loudly, so a new forge call cannot slip through unseen.
+# A list or view answers only the fields its `--json` names, as gh does: a field fr
+# stops asking for is a field fr no longer gets.
 log="${FAKE_GH_LOG:?FAKE_GH_LOG is required}"
 printf '%s\n' "$*" >> "$log"
 store="$log.issue"
+json_fields() {
+  while [ $# -gt 0 ]; do
+    [ "$1" = --json ] && { printf '%s' "$2"; return; }
+    shift
+  done
+}
 case "$1 ${2:-}" in
   "api user") echo scenario-bot ;;
   "issue list")
     if [ -f "$store" ] && [ ! -f "$store.closed" ]; then
-      python3 - "$store" <<'PY'
+      python3 - "$store" "$(json_fields "$@")" <<'PY'
 import json, sys
 body = open(sys.argv[1]).read()
-print(json.dumps([{"number": 1, "url": "https://github.com/example-org/widgets/issues/1",
-                   "body": body, "author": {"login": "scenario-bot"},
-                   "labels": [{"name": "fr:owed"}]}]))
+rec = {"number": 1, "url": "https://github.com/example-org/widgets/issues/1",
+       "body": body, "author": {"login": "scenario-bot"}, "labels": [{"name": "fr:owed"}]}
+print(json.dumps([{f: rec[f] for f in sys.argv[2].split(",") if f in rec}]))
 PY
     else
       echo '[]'
     fi ;;
+  "issue view")
+    python3 - "$store" "$store.closed" "$(json_fields "$@")" <<'PY'
+import json, os, sys
+body = open(sys.argv[1]).read()
+rec = {"number": 1, "title": "Owed", "url": "https://github.com/example-org/widgets/issues/1",
+       "body": body, "author": {"login": "scenario-bot"}, "labels": [{"name": "fr:owed"}],
+       "state": "CLOSED" if os.path.exists(sys.argv[2]) else "OPEN", "closedAt": None}
+print(json.dumps({f: rec[f] for f in sys.argv[3].split(",") if f in rec}))
+PY
+    ;;
   "label create") : ;;
   "issue create")
     shift 2
