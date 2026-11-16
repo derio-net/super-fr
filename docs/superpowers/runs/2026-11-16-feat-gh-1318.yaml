@@ -3,7 +3,7 @@ run: 2026-11-16-feat-gh-1318
 workflow: fr-goal@1
 branch: feat/gh-1318
 started: '2026-11-16T17:24:23+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-16-architecture-review-sweep-design.md
   spec-review:
-    state: running
-    at: '2026-11-16T18:33:33+00:00'
+    state: done
+    at: '2026-11-16T18:40:27+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-11-16T18:33:33+00:00'
+          agent: afdd3038625936a8a
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-fable-5-2
           tier: hard
           bound: claude-opus-5-5
           session: 65fe70a5-99dc-4a3f-b249-8255221b4257
+          returned: '2026-11-16T18:40:25+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: afdd3038625936a8a
+          findings: sr-1,sr-2,sr-3,sr-4,sr-5,sr-6,sr-7,sr-8,sr-9,sr-10,sr-11,sr-12
   plan:
     state: pending
   plan-review:
