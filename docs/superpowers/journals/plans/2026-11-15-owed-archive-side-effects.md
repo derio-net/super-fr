@@ -282,3 +282,112 @@ Review p3-r5. Cases: no fr worktree yet under quiet; a stealth tracking clone th
 ### p3-no-global-prune · decision · The dry-run scratch never runs a global git worktree prune; it and stale scratches are removed by their own path (phase 3)
 
 Review p3-r2 (and pr1431-n1): in a devcontainer a global prune deregisters every unmounted host worktree. archive_preview._remove runs `git worktree remove --force <path>` and clears the registration by path as quiet._forget_own_stale_entry does; stale fr-archive-dry-run-<pid> copies of dead pids are removed one by one. Spec §C.1 amended.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-11-16T00:26:35+00:00 phase=3 -->
+### review-p3 · review · Phase 3 code review (fr archive --dry-run, R10-R11, §C): 13 in scope (phase 3)
+
+Independent reviewer ran git diff 3f99128..ced9d605e, the 17 unit tests and the scenario, and probed scratch_checkout live. Found sound: the PreviewForge read/write split and cleanup on exception and KeyboardInterrupt.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Quiet/stealth dry run ran the real run with the real forge and root; --issues filed a real issue and wrote into the fr worktree (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Global git worktree prune deregisters unmounted host worktrees in a devcontainer (pr1431-n1 rule) (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · The CLI migration gate was not exempted for --dry-run, so a dry run could commit a migration (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · The scratch's detached HEAD made head_on_default_branch False, so the preview on main wrote owed entries (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · Quiet/stealth preview with no fr worktree or a stale clone said nothing to archive (exit 0) (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · Replay crashed on nested repos, non-UTF-8 names, apply.whitespace=error and lost intent-to-add (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · git worktree add ran repo hooks and LFS smudge (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · Dry-run output printed scratch paths and the real run's moves-staged line (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · A non-Exit exception skipped the refused-call ledger report (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r10 · finding [open] (reviewer: in scope) · PreviewForge host hardcoded github.com (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r11 · finding [open] (reviewer: in scope) · Weak unit tests: no open ends seeded, a no-op --branch, no exit parity, _state skipped refs and worktrees (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r12 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r12 · finding [open] (reviewer: in scope) · Scenario compared different arguments and proved nothing for --branch (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r13 created=2026-11-16T00:26:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r13 · finding [open] (reviewer: in scope) · Docs and --dry-run help claimed more than the code did (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Quiet/stealth dry run ran the real run with the real forge and root; --issues filed a real issue and wrote into the fr worktree (phase 3)
+
+222c5243c: every forge call routes through PreviewForge under quiet/stealth (incl. merged-PR read); follow-ups preview and write nothing; real quiet fixture test with a raising client.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Global git worktree prune deregisters unmounted host worktrees in a devcontainer (pr1431-n1 rule) (phase 3)
+
+222c5243c + 990b3e3b1 + d2d971cd0: only the scratch's own entry and dead-pid scratch entries are removed by path; spec §C.1 amended; decision p3-no-global-prune.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: The CLI migration gate was not exempted for --dry-run, so a dry run could commit a migration (phase 3)
+
+222c5243c + 3e7140fe7: trigger.asks_for_dry_run makes a stale dry run refuse (exit 2) in every context; current artifacts proceed; decision p3-dry-run-stale-refuses.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: The scratch's detached HEAD made head_on_default_branch False, so the preview on main wrote owed entries (phase 3)
+
+222c5243c: fr.git.pinned_head_on_default_branch carries the real checkout's answer into the scratch; test on main.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: Quiet/stealth preview with no fr worktree or a stale clone said nothing to archive (exit 0) (phase 3)
+
+222c5243c + 94d0be7ed: preview_problem refuses by name (exit 2), checked before any space resolves; also removed a hidden space_for(create=True) write; R10 amended; decision p3-dry-run-cannot-tell-refuses.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: Replay crashed on nested repos, non-UTF-8 names, apply.whitespace=error and lost intent-to-add (phase 3)
+
+222c5243c: trees and nested repos copied, -z bytes names, intent-to-add re-marked, --whitespace=nowarn; a test per case.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: git worktree add ran repo hooks and LFS smudge (phase 3)
+
+222c5243c: core.hooksPath=/dev/null and GIT_LFS_SKIP_SMUDGE=1 on every scratch git call; real hook test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: Dry-run output printed scratch paths and the real run's moves-staged line (phase 3)
+
+222c5243c: output paths mapped back to the real root; the staged note suppressed in a dry run; test asserts no scratch name in output.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: A non-Exit exception skipped the refused-call ledger report (phase 3)
+
+222c5243c: ledger reported on every path; a crash after a refused call exits 1 naming it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r10 -->
+### p3-r10-resolved · finding [fixed] · resolves p3-r10: PreviewForge host hardcoded github.com (phase 3)
+
+222c5243c: forge_of resolves backend and host as fr._hosts does; GitLab /-/issues/ form; tests.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r11 -->
+### p3-r11-resolved · finding [fixed] · resolves p3-r11: Weak unit tests: no open ends seeded, a no-op --branch, no exit parity, _state skipped refs and worktrees (phase 3)
+
+222c5243c: real open ends, a merged branch with a plan, exit parity per mode, _state covers refs, local config and .git/worktrees.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r12-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r12 -->
+### p3-r12-resolved · finding [fixed] · resolves p3-r12: Scenario compared different arguments and proved nothing for --branch (phase 3)
+
+ae3ce2d92: identical-argument real runs with succeeding gh writes, refs and worktrees snapshot; header names the unit tests covering the unknown-call case.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r13-resolved created=2026-11-16T00:26:35+00:00 phase=3 state=fixed resolves=p3-r13 -->
+### p3-r13-resolved · finding [fixed] · resolves p3-r13: Docs and --dry-run help claimed more than the code did (phase 3)
+
+990b3e3b1: fr-progress explainer documents --dry-run and both refusals; help text names them; cli.md note truthful.
