@@ -7255,6 +7255,14 @@ batches:
     run: 2026-11-15-feat-batch-guard-trust
     archive: chore/closeout-2026-11-16-3
     archived: 1498
+  - kind: claims_released
+    at: '2026-11-16T17:28:29.552563Z'
+    keys:
+    - super-fr#1277
+    - super-fr#1429
+    - super-fr#1230
+    - super-fr#1279
+    - super-fr#1259
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
