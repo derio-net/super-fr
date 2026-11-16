@@ -7266,6 +7266,8 @@ batches:
     - super-fr#1293
     - super-fr#1389
     - super-fr#1399
+  - kind: post_merge
+    at: '2026-11-16T16:03:43.376611Z'
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7873,3 +7875,11 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-deliver-evidence.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-deliver-evidence.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-2
+  branch: chore/closeout-2026-11-16-2
+  at: '2026-11-16T16:03:46.562442Z'
+  runner: herdr
+  handle: w3F:p6
+  planned:
+  - gate-truth
