@@ -961,3 +961,8 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-16-architecture-review-sweep-p2 created=2026-11-16T18:54:42+00:00 decided_by=operator -->
+### phase-split-2026-11-16-architecture-review-sweep-p2 · decision · ask: the report, the architecture fragment and the filed issues (R1-R7, R13) are a separate ask from the code consolidations, and must be written after them so the report's landed rows and line counts are true
+
+The operator chose the two-phase shape when asked how to phase the plan.
