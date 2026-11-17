@@ -177,6 +177,7 @@ order. Tests hold a merged `-design` fragment on a fixture default ref.
 
 ## Verification
 
+strategy: none
 gate: developer
 
 - acceptance-amend-origin-only-keeps-statement: none — verified by CI unit tests of the amend command
