@@ -384,6 +384,9 @@ class Issue(_Strict):
     claims: list[IssueClaim] = []
     # The login that opened the issue (facts schema 11); None when never read.
     author: str | None = None
+    # The author's association with the repo (`OWNER`, `MEMBER`, `COLLABORATOR`,
+    # `CONTRIBUTOR`, `NONE`, ...), facts schema 14; None when never read (intake R1).
+    author_association: str | None = None
 
     @property
     def key(self) -> str:
