@@ -368,3 +368,8 @@ efb833508: the skill names judgements schema 12; mirrors regenerated.
 ### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1539] · resolves p1-r6: Titles of ineligible issues still reach facts.json and triage check output (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1539.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved-2 created=2026-11-17T21:17:36+00:00 phase=2 state=open resolves=p2-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1540 -->
+### p2-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1540] · resolves p2-r3: _fetched_reader lets GitError escape and does not record the failed fetch, so a pass may retry it (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1540.
