@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/cloud.py
   - packages/fr/src/fr/commands/cloud_cmd.py
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
 ---
 
 # fr in a Claude Code cloud session
@@ -84,6 +84,9 @@ spare). Then it checks that it can run the batch's skill (`/fr-goal`, or `/fr-de
 a debug batch). It reads the skill from the plugin's installed copy when the session did not
 load it. Then it checks that both agent types are dispatchable (a file under
 `.claude/agents/` is not proof).
+
+In the `fr` check, a release candidate is older than its final, and a version that `fr` cannot
+read is never current.
 
 When one of these checks fails, the worker ends its turn BLOCKED, with a `needs_action` that
 names what is not there. It is not re-homed: a new session from the same commit starts the

@@ -101,38 +101,43 @@ def push_product_branch(
     if code:
         _refuse_quiet_drift(root)
     space = space_for(root)
-    if code:
-        _record_pushed_head(root, space)
-    return atomic_push(root, space.root, remote, branch, code=code)
+    record = (lambda: _record_pushed_head(root, space)) if code else None
+    return atomic_push(root, space.root, remote, branch, code=code, record=record)
 
 
-def _record_pushed_head(repo_root: Path, space: Any) -> None:
+def _record_pushed_head(repo_root: Path, space: Any) -> str | None:
     """Quiet (review p5-r3): append the head about to be pushed to the feature's `HEADS`
     and commit it on `fr`, so the ONE atomic push carries the code and the record of it.
     A feature's merged status then outlives its branch's refs. Only a claimed feature
-    root (one with `OWNER`) records; nothing is created for a branch with no fr work."""
+    root (one with `OWNER`) records; nothing is created for a branch with no fr work.
+
+    Run by `atomic_push` under the fr worktree's lock, so it commits in the fr worktree
+    directly (the product-root seam would take that lock again). The commit's subject,
+    which `atomic_push` takes back off `fr` when the push fails (gh#1433), or None."""
     from fr.artifacts.commit import commit_paths
     from fr.artifacts.paths import FEATURE_HEADS, FEATURE_OWNER, feature_root
     from fr.placement.merged import record_head
 
     if space.feature is None:
-        return
+        return None
     froot = feature_root(space)
     if not (froot / FEATURE_OWNER).is_file():
-        return
+        return None
     done = run_git(repo_root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
     head = done.stdout.strip() if done.returncode == 0 else ""
     if not head:
-        return
+        return None
     heads = froot / FEATURE_HEADS
     before = heads.read_bytes() if heads.is_file() else None
     path = record_head(froot, head)
     if path is None:
-        return
-    outcome = commit_paths(repo_root, [path], f"chore(fr): record pushed head {head[:12]}")
+        return None
+    subject = f"chore(fr): record pushed head {head[:12]}"
+    outcome = commit_paths(space.root, [path], subject)
     if not (outcome.committed or outcome.unchanged):
         if before is None:
             path.unlink(missing_ok=True)
         else:
             path.write_bytes(before)
         raise PushRefusedError(f"cannot record the pushed head in {path}: {outcome.reason}")
+    return subject if outcome.committed else None

@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - scripts/release.py
   - packages/fr/src/fr/release_status.py
-reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
+reviewed: 2026-11-17 still true after batch release-truth; the walk's stages and evidence are unchanged; release.py now compares with an RC main contains and retries a missing GitHub Release
 ---
 
 # Exit-gates release verification

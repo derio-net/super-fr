@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - scripts/configure-main-protection.sh
   - .github/workflows/release.yml
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-17 dispatched runs have their own concurrency group; a missing GitHub Release is created on the next run (batch release-truth)
 ---
 
 # Merge protection for `main`
@@ -40,7 +40,14 @@ daily cron picks that one up instead. It never retries.
 A rerun whose release commit already landed skips the push and only tags it. A run
 dispatched with an explicit `version` exits non-zero instead. It prints the
 `gh workflow run release.yml -f version=<X>` that dispatches it again. A refusal by the
-ruleset is never treated as superseded: it fails, and names the bypass actor.
+ruleset is never treated as superseded: it fails, and names the bypass actor. A tag
+that has no GitHub Release gets its Release on the next run.
+
+Push and cron runs share one concurrency group and run one at a time. GitHub keeps only
+one pending run per group. A later push run would replace a pending dispatched run, and
+nothing would say so. So a dispatched run has a group of its own, and it can run beside
+a push run. Only one of them can push, by the rule above. When both reach the tag, the
+run that finds the other's tag on the same commit, or its Release, is done.
 
 `release.yml` chooses the mode by the repo variable `FR_AUTOMATION_APP_ID`.
 When the variable is not set, it falls back to `GITHUB_TOKEN`. That is why a repo that
