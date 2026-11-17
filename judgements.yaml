@@ -7648,7 +7648,6 @@ batches:
   - workspace-identity
   - placement-truth
   - release-truth
-  - acceptance-edits
   skill: debug
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
