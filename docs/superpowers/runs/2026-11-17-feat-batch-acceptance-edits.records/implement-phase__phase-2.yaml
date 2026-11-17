@@ -51,5 +51,11 @@ journal:
       four check-ignore sites' files 228 passed/1 skipped, acceptance init/refresh 51
       passed; adopt, supersede, lenses-inflight, historical evidence, trigger, gatebackfill
       196 passed plus the one archival test fixed and rerun (2 passed).
+  - kind: discovery
+    id: p2-not-utf8-must-stay-a-decode-error
+    phase: 2
+    title: NotUtf8Error must subclass UnicodeDecodeError, or existing handlers let it escape
+    body: |
+      CI (run 44094541563, shard 5) failed test_validate_artifacts.py::test_non_utf8_bytes_are_a_failure_naming_the_file: `fr validate artifacts` catches `UnicodeDecodeError` around the stamp read, which now decodes through `fr.artifacts.text`, and a `ValueError` subclass escaped it. ~40 readers across fr catch `UnicodeDecodeError`; the orchestrator made `NotUtf8Error` a `UnicodeDecodeError` subclass whose text is the named reason, so every handler keeps catching it (test_artifacts_text.py, red before).
 resolves: []
 evidence: {tests: ci}
