@@ -7528,6 +7528,11 @@ batches:
     head_before: 6fc2f8993e0c7d801d08bff967fc71d72bbe3a32
     head_after: 7deae04757c2ada3ee5aba280c49630fade4f7aa
     base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: claims_released
+    at: '2026-11-17T08:30:30.084058Z'
+    keys:
+    - super-fr#1433
+    - super-fr#1438
 - id: release-truth
   title: Release robustness
   ids:
