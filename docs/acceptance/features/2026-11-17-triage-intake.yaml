@@ -16,9 +16,17 @@ rows:
     origin:
     - spec:2026-11-17-triage-intake#R1
     - spec:2026-11-17-triage-intake#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_intake.py#test_an_outside_author_is_ineligible_with_a_reason_naming_author_and_association
+      - super-fr:tests/unit/test_triage_intake.py#test_an_unread_author_or_association_never_admits
+      - super-fr:tests/unit/test_triage_intake.py#test_issue_reason_trusts_the_viewer_and_the_pr_authors_of_the_issues_repo
+      - super-fr:tests/unit/test_triage_collect.py#test_the_association_is_read_once_per_repo_and_stored
+      - super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_every_issue_is_admitted_by_login_or_label
+      - super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_the_list_already_carries_the_field
+    status: ci
+    notes: 'Unit tests: intake_reason/issue_reason/rejected_members, and collect over
+      a fake forge for the one-read-per-repo association rule.'
     verify: none
   - id: intake-untrusted-set-apart
     capability: triage intake trust
