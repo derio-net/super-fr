@@ -138,3 +138,34 @@ def test_scaffold_commit_leaves_an_ignored_agent_out_and_warns_on_ignored_devcon
     (repo / ".devcontainer" / "dev" / "devcontainer.json").write_text("{}\n")
     _commit_profile(repo, "dev")
     assert "git-ignored" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("ignored", [True, False], ids=["ignored-agent", "tracked-agent"])
+def test_scaffold_commit_carries_an_agent_only_when_git_does_not_ignore_it(
+    repo: Path, capsys: pytest.CaptureFixture[str], ignored: bool
+) -> None:
+    """l-tests-r1: an ignored agent file is left out (one ignored path would make
+    `git add` refuse every path, so the profile would not commit); a tracked one is
+    committed with the profile. Neither warns: `.devcontainer` is not ignored."""
+    from fr.isolation.scaffold import _commit_profile
+
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "T")
+    agent = ".claude/agents/fr-phase-executor.md"
+    (repo / ".gitignore").write_text(f"{agent}\n" if ignored else "")
+    (repo / ".claude" / "agents").mkdir(parents=True)
+    (repo / agent).write_text("agent\n")
+    (repo / ".devcontainer" / "dev").mkdir(parents=True)
+    (repo / ".devcontainer" / "dev" / "devcontainer.json").write_text("{}\n")
+    (repo / ".devcontainer" / "fr-profiles.yaml").write_text("profiles: {}\n")
+    _commit_profile(repo, "dev")
+    assert "git-ignored" not in capsys.readouterr().err
+    committed = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    assert ".devcontainer/dev/devcontainer.json" in committed
+    assert (agent in committed) is not ignored
