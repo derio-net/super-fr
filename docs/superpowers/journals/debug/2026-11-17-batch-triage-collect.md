@@ -30,3 +30,8 @@ model.py: FACTS_SCHEMA Literal[13] = 13, FACTS_READS tuple, Facts.schema_ Litera
 ### ab6d79d735fb · decision · Operator: fix all four in one PR; collect reports the missing label; schema 14 for closed claims
 
 Asked at the batch's multi-root-cause stop. Answers: fix all 4 in the one PR. #1268: collect drops ensure_approval_label and prints one line counting repos that lack approved-fr; the approval-label-created row is amended. #1210: StaleInProgress gains claims (facts schema 14, #1300 refactor rides it); scope retire releases a retired scope's claims on closed issues with unlabel, leaving them settled.
+
+<!-- fr:journal kind=finding scope=debug id=a5639e5e74bc created=2026-11-17T09:26:19+00:00 state=fixed -->
+### a5639e5e74bc · finding [fixed] · #1197 fixed: render._pr_row asks mergeability.conflicting
+
+Test test_triage_prs_render.py::test_blocked_is_not_a_conflict_on_the_triage_page (BLOCKED+MERGEABLE -> 0, DIRTY -> 1, BLOCKED+CONFLICTING -> 1) failed before, passes now.
