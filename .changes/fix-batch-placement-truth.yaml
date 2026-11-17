@@ -1,2 +1,0 @@
-bump: patch
-summary: "Quiet and stealth: a plan whose product checkout cannot be named now says so (a `Plan.checkout_unnamed` flag and one stderr notice) instead of silently reading the `fr` worktree, the checkout lookup is cached per process, and a refused `fr push` takes its `HEADS` record back off local `fr` so a head that never landed is never published."
