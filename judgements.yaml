@@ -7737,6 +7737,13 @@ batches:
     head_before: 6f6b897a71fa23cc44660f5a9f5493d5bff3ed29
     head_after: e8931668ee4a3adc1aa04d72ab4f3216472fb9ad
     base: 94a7c2442300b19478da094c97a3b03933a9cf80
+  - kind: claims_released
+    at: '2026-11-17T15:08:53.118306Z'
+    keys:
+    - super-fr#1197
+    - super-fr#1210
+    - super-fr#1268
+    - super-fr#1300
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
