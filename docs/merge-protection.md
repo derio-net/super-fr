@@ -146,7 +146,7 @@ An issue that is not eligible has these effects:
 - `batch create`, `batch edit` and `batch dispatch` refuse a batch that holds it. They exit
   2, write nothing, and name the issue, the reason and `ready-fr`.
 - The wave driver, the board and `drive --plan` show the batch as blocked in every pass.
-  The drive stops for the operator. The driver dispatches the batch when no member is rejected.
+  The drive stops for the operator once only blocked or held batches remain. The driver dispatches the batch when no member is rejected.
 
 The launch brief marks the issue text. Its first line holds only the skill command and the
 batch id. The batch title, each member title, detail and note, and the rationale sit in one
