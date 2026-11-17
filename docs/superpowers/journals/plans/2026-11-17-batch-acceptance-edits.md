@@ -26,3 +26,86 @@ note was `post-merge walk owed (gate backfill)` are left alone.
 - pages-explainers-preserved (#1358) [f35dcfed0]: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
 - release-superseded-not-retried (#1360) [4abfd2aaa]: Superseded outcomes pinned by unit tests against a real bare remote (moved base, real non-fast-forward race, override exits non-zero with re-dispatch, never retests). Live walk owed on the first real merge race (Test Plan 2).
 - triage-closed-recovery-live (#1364) [7e5ba73e5]: Disposable actual-client walk remains owed post-merge at Tester; the named instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release workflow version override (operator decision) with #1195 and #1217 gate:tester left held; this walk was deferred, not certified.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-nine-rows-renoted created=2026-11-17T13:02:29+00:00 phase=1 state=open review_scope=in -->
+### p1-r3-nine-rows-renoted · finding [open] (reviewer: in scope) · 9 of the 17 (phase 1)
+
+R3/§B assume all 17 rows still carry the bare `tracked by derio-net/super-fr#N` note.
+On this branch only 8 do: acceptance-pipeline-rows, exit-gates-collected-closeout,
+fr-goal-journal-handoff-complete, fr-goal-main-session-cost, fr-goal-subagent-per-phase,
+gitlab-selfhosted-host-targeting, herdr-opencode-launch, triage-closed-recovery-live.
+Those 8 were restored exactly as d4 says (8 set-status amendments in this feature's
+fragment; status, levels and issues unchanged, verified over the fold).
+The other 9 were re-noted after the sweep with newer evidence: five are `walked`
+(ci-actions-dependabot-updates, pages-acceptance-report-published,
+pages-deploy-survives-report-refusal, pages-explainers-preserved,
+release-superseded-not-retried) and four are walk-owed with a 2026-11-14 half-walk
+after the tracker (ci-under-time-budget, debt-archive-pr-weekly,
+debt-weekly-issue-rename, exit-gates-release-gating). Writing the pre-sweep note over
+them would replace live evidence with stale text, the defect #1394 is about. They are
+untouched and P1.T5.S1 is left unticked: R3 needs narrowing to "rows whose note is
+still the bare tracker" (or another decision) before the step can be called done.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-fold-reads-one-spelling created=2026-11-17T13:02:29+00:00 phase=1 -->
+### p1-fold-reads-one-spelling · discovery · R17 needs the fold itself to read a merged -design fragment as <slug>.yaml, not only amend.py (phase 1)
+
+With only merged_row_edits normalised, `fr acceptance check` still failed after the
+repair: the fold (`fr.acceptance.fold._fold`) saw the tip's `<slug>-design.yaml` rows
+as merged and the branch's `<slug>.yaml` rows as pending ("row r is defined by both").
+`_fold` now respells the tip through `fr.acceptance.spelling.respell`, remapping each
+amendment's history position. A -design path the branch still holds (repair not yet
+run) is kept as is, so an unrepaired branch folds exactly as before; the same `keep`
+rule drives merged_row_edits and outside_merged_row_edits (`by_one_spelling`).
+
+<!-- fr:journal kind=decision scope=plan id=p1-spelling-merge-ids created=2026-11-17T13:02:29+00:00 phase=1 -->
+### p1-spelling-merge-ids · decision · The merge rule's "id" is a row id; amendments merge by value (phase 1)
+
+Amendments carry no id, so "an id held differently" (d3, R14) refuses only a row id
+the two spellings define differently (and a `repo:` mismatch). An identical amendment
+is kept once (the nth copy matches the nth copy); distinct ones are all kept, the slug
+file's first. The R15 fold check guards any reordering this could cause. One rule,
+`fr.acceptance.spelling.merge_spellings`, serves the repair, the fold and the
+merged-row check.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-repair-import-cycle created=2026-11-17T13:02:29+00:00 phase=1 -->
+### p1-repair-import-cycle · discovery · fr.artifacts.fragment_design_name must import fr.acceptance lazily (phase 1)
+
+`fr.acceptance.model` imports `fr.artifacts`, whose package import registers the
+repair; a module-level `fr.acceptance` import in the repair is a cycle that only shows
+when `fr.acceptance` is imported first (one test file failed to collect). The repair
+imports inside its functions, like the other acceptance-reading migrations.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-full-suite-host-load created=2026-11-17T13:02:29+00:00 phase=1 -->
+### p1-full-suite-host-load · discovery · The full suite could not finish on the host (load 33-67 on 12 CPUs, 2 auto workers) (phase 1)
+
+`uv run pytest -q --no-cov -n auto` reached 3% in 25 minutes and was stopped by its
+1500 s timeout (exit=124). Evidence instead: ruff check/format, mypy over packages/fr/src,
+`fr validate artifacts`, `fr acceptance check --no-fetch`, `fr docs check` all clean, and
+the acceptance/fragment/fold/migration/amend selection (1872 passed before the cycle fix;
+the one uncollected file then passed with the new test files, 43 passed). The phase's
+suite evidence is owed on a quieter host or CI.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-nine-rows-renoted-resolved created=2026-11-17T13:02:29+00:00 phase=1 state=fixed resolves=p1-r3-nine-rows-renoted -->
+### p1-r3-nine-rows-renoted-resolved · finding [fixed] · resolves p1-r3-nine-rows-renoted: 9 of the 17 (phase 1)
+
+Operator decision d8 (spec journal, answered by operator): R3 narrowed. The 8 bare rows were restored in this phase; the orchestrator spliced the old text in before the tracker on the 4 walk-owed rows (amendments c3a8024, 42f6788, 44e773e, d50a5ea); the 5 walked rows keep their walk notes. fr acceptance check --no-fetch clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t1 created=2026-11-17T13:02:29+00:00 phase=1 -->
+### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
+
+smoke only: no code changed
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t2 created=2026-11-17T13:02:29+00:00 phase=1 -->
+### no-refactor-p1-t2 · discovery · no-refactor-because P1.T2 (phase 1)
+
+no fr.acceptance helper looks a row definition up by id; the new _own_statement is the only reader
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t5 created=2026-11-17T13:02:29+00:00 phase=1 -->
+### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
+
+data only: set-status amendments, no code
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t6 created=2026-11-17T13:02:29+00:00 phase=1 -->
+### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
+
+change fragment and docs only: no code
