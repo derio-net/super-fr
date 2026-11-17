@@ -125,9 +125,11 @@ rows:
       clone does not open or is not the batch's repo, naming the --checkout it needs.
     origin:
     - spec:2026-11-17-triage-intake#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracking_none.py#test_cancel_dry_run_names_the_checkout_when_none_serves
+    status: ci
+    notes: dry run warns --yes would be refused and names --checkout
     verify: none
   - id: gate-trackers-contain-errors
     capability: gate tracker close
