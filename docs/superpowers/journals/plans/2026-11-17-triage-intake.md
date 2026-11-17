@@ -198,3 +198,18 @@ dbaa04087: two _Clone unit tests — a failed fetch holds and re-raises DefaultB
 ### p2-r3-resolved · finding [out-of-scope] · resolves p2-r3: _fetched_reader lets GitError escape and does not record the failed fetch, so a pass may retry it (phase 2)
 
 Not caused by this change: _fetched_reader's fetch handling predates it and R9 bounds only the merge-context fetch; merge_ctx itself holds after one failure.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-17T16:41:51+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+one bounded loop replacing a single call; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-17T16:41:51+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+_open_checkout delegates to the new _checkout_refusal; nothing left to fold
+
+<!-- fr:journal kind=decision scope=plan id=p3-close-never-raises-drops-forge-failures created=2026-11-17T16:41:51+00:00 phase=3 -->
+### p3-close-never-raises-drops-forge-failures · decision · close.py _FAILURES tuple removed (phase 3)
+
+close_gate_trackers now catches Exception at all three sites, so the _FAILURES tuple (FORGE_ERRORS + UnsupportedForgeOperation) had no remaining user and was deleted with its imports. The list-read message keeps its prior text; per-issue errors read `issue #<n>: <Type>: <msg>`; a failed EvidenceReader build reports `evidence not read: <Type>: <msg>` and closes nothing.
