@@ -75,13 +75,20 @@ steps:
           tests: p1-suite.log@cb64729381e9;tree=9ea30ea75aa88ebba8038528a2bcb2e9a963d47746efaac89eff452980574d35
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-17T12:32:07+00:00'
           agent: acc71197f86668d36
           harness: claude-code
           model: claude-sonnet-5-5
           session: f55704a7-fff8-4fb0-98fe-055a073c49ca
+          returned: '2026-11-17T14:44:51+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-1
+          reviewer: acc71197f86668d36
+          visual: none
+          findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6
   journal-check:
     state: pending
   lens-review:
