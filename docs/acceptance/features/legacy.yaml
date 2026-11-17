@@ -764,3 +764,10 @@ amendments:
     ref: super-fr:tests/unit/test_merge_train_label_board.py#test_collect_creates_the_label_on_each_collected_repo
     why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
       and the first batch dispatch creates it'
+  - row: approval-label-created
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_label_board.py#test_collect_writes_no_label_and_says_which_repos_lack_it
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'
