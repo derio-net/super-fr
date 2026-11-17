@@ -25,7 +25,7 @@ from fr.triage.collect import (
     parse_prs,
 )
 from fr.triage.errors import ForgeError
-from fr.triage.model import Facts, Scope
+from fr.triage.model import FACTS_SCHEMA, Facts, Scope
 
 from tests.unit.triage_fixtures import (
     ISSUES,
@@ -385,7 +385,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 13
+    assert facts.to_json()["schema"] == FACTS_SCHEMA
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -714,7 +714,7 @@ def test_collect_ignores_an_untrusted_authors_marker() -> None:
 
 def test_collected_facts_are_schema_9() -> None:
     facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
-    assert facts.to_json()["schema"] == 13
+    assert facts.to_json()["schema"] == FACTS_SCHEMA
 
 
 def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:
@@ -847,6 +847,23 @@ def test_a_closed_hit_with_a_claim_is_release_pending_when_own_and_held_when_for
         "super-fr#5": "held",
         "super-fr#6": "stale",
     }
+
+
+def test_a_closed_hit_records_its_un_released_claims_for_scope_retire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gh#1210: `scope retire` needs to know WHOSE claim holds a closed issue (facts 14)."""
+    monkeypatch.setenv("FR_HOST_ID", "0123456789abcdef")
+    forge = _closed_forge(
+        closed_in_progress={REPO: [_closed(5, "fr:claimed"), _closed(6, "fr:claimed")]},
+        comments={
+            (REPO, 5): [_marker_comment("s-22222222", 2)],
+            (REPO, 6): [_marker_comment("s-22222222", 3, released=True)],
+        },
+    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    by = {h.key: [c.signer for c in h.claims] for h in facts.stale_in_progress}
+    assert by == {"super-fr#5": ["s-22222222"], "super-fr#6": []}
 
 
 def _only_claimed(number: int) -> dict[str, Any]:

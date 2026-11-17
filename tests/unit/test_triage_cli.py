@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from fr.cli import app
 from fr.triage.errors import ForgeError
+from fr.triage.model import FACTS_SCHEMA
 from typer.testing import CliRunner
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "triage"
@@ -127,7 +128,7 @@ def test_org_scope_reports_a_skipped_repo_verbatim_and_still_writes(
     assert "[no access] [/red]" in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["skipped"] == [{"repo": "example-org/beta", "reason": "[no access] [/red]"}]
-    assert facts["schema"] == 13
+    assert facts["schema"] == FACTS_SCHEMA
 
 
 def test_pr_limit_widens_the_window_and_a_full_list_warns(

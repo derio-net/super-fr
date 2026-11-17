@@ -113,7 +113,7 @@ def test_a_malformed_group_member_is_a_usage_error(
 def test_collect_reads_each_repo_in_turn_and_records_a_failed_repo_as_skipped() -> None:
     forge = _forge(failing={BETA: "HTTP 502"})
     facts = collect_facts(forge, Scope.group([BETA, ALPHA]), now=NOW)
-    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA == 13
+    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA
     assert facts.scope == "example-org--alpha+other-org--beta"
     assert facts.repos == [ALPHA, BETA]
     assert [(s.repo, s.reason) for s in facts.skipped] == [(BETA, "HTTP 502")]

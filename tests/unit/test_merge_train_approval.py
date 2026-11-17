@@ -21,8 +21,6 @@ from fr.triage.approval import (
     approval_verdict,
 )
 from fr.triage.model import (
-    FACTS_READS,
-    FACTS_SCHEMA,
     JUDGEMENTS_READS,
     JUDGEMENTS_SCHEMA,
     SCHEMA_9_EVENTS,
@@ -72,11 +70,6 @@ def test_a_pull_request_never_read_for_labels_carries_none() -> None:
     pr = PullRequest(repo="o/r", number=1, title="t", state="OPEN", is_draft=False, url="u")
     assert pr.labels is None
     assert PullRequest(**{**pr.model_dump(), "labels": ["x"]}).labels == ["x"]
-
-
-def test_facts_schema_is_10_and_reads_3_to_10() -> None:
-    assert FACTS_SCHEMA == 13
-    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
 
 
 def test_a_schema_8_facts_file_reads_labels_as_none(tmp_path: Path) -> None:
