@@ -7625,6 +7625,14 @@ batches:
     handle: w3H:p5
     archive: chore/closeout-2026-11-17-2
     archived: 1528
+  - kind: claims_released
+    at: '2026-11-17T09:13:53.480292Z'
+    keys:
+    - super-fr#1201
+    - super-fr#1290
+    - super-fr#1393
+    - super-fr#1291
+    - super-fr#1202
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
@@ -8272,3 +8280,11 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-batch-release-truth.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-16-batch-release-truth.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-3
+  branch: chore/closeout-2026-11-17-3
+  at: '2026-11-17T09:13:43.561157Z'
+  runner: herdr
+  handle: w3H:p7
+  planned:
+  - workspace-identity
