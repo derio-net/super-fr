@@ -55,3 +55,8 @@ collect._closed_in_progress records the un-released claims; scope_retire_command
 ### d79a84f1dee0 · finding [fixed] · #1300 fixed: FACTS_SCHEMA spelled once; FACTS_READS and Facts.schema_ derive from it
 
 FACTS_SCHEMA: Final[int] = 14; FACTS_READS = tuple(range(3, FACTS_SCHEMA + 1)); Facts.schema_ is StrictInt with a validator over FACTS_READS (bool still refused). One pin: test_triage_model.py::test_the_facts_schema_is_pinned_here_once_and_read_back_to_3; the other modules (more than the seven named) now compare to FACTS_SCHEMA.
+
+<!-- fr:journal kind=review scope=debug id=bae3c2a3e997 created=2026-11-17T09:37:23+00:00 -->
+### bae3c2a3e997 · review · Independent review: no blocking bugs; two findings fixed, two noted
+
+Reviewer (fresh context, code only). Fixed: (1) retire took unlabel from stale facts, so an issue reopened since collect lost fr:in-progress; now re-read via _still_closed, test test_scope_retire_keeps_in_progress_on_an_issue_reopened_since_collect. (2) claim_writes.release docstring said retire never unlabels; updated. Noted, not changed: paced drive passes carry no closed hits for kept repos (existing behaviour, retire then sees those claims only after a full collect); collect_command builds a second forge client for the label read (existing).
