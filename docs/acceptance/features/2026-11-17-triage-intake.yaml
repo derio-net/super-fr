@@ -76,9 +76,16 @@ rows:
       in it.
     origin:
     - spec:2026-11-17-triage-intake#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_the_first_line_is_the_command_and_the_batch_id_only
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_every_untrusted_text_sits_in_the_quoted_block_and_every_block_line_is_quoted
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_forged_text_cannot_close_the_block_or_add_a_top_level_heading
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_the_brief_is_deterministic_with_hostile_text
+    status: ci
+    notes: 'Unit tests: the first line carries only the command and the batch id; titles,
+      detail, note and rationale sit in the quoted untrusted block; forged markers and
+      headings stay quoted; output is deterministic.'
     verify: none
   - id: driver-refetches-origin-each-pass
     capability: wave driver merge path
