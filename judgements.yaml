@@ -7845,6 +7845,10 @@ batches:
     at: '2026-11-17T14:49:36.805492Z'
     pr: 1531
     head: a32833144c0b21a29c914c0e3d480c0303a1116b
+  - kind: claims_released
+    at: '2026-11-17T14:54:07.978594Z'
+    keys:
+    - super-fr#1468
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
