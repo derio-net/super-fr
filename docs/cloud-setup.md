@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/cloud.py
   - packages/fr/src/fr/commands/cloud_cmd.py
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
 ---
 
 # fr in a Claude Code cloud session
@@ -80,7 +80,7 @@ does no harm, because fr's gates accept either.
 A worker session (a batch dispatched through the `claude-cloud` runner) checks this
 first. It runs `fr --version`, then reads the `fr` line of `fr cloud doctor`. It runs the setup
 script again when `fr` is not there or is older than the latest release (as on a pre-warmed
-spare). Then it checks that it can run the batch's skill (`/fr-goal`, or `/fr-debugging` for
+spare). A release candidate is older than its final, and a version `fr` cannot read is never current. Then it checks that it can run the batch's skill (`/fr-goal`, or `/fr-debugging` for
 a debug batch). It reads the skill from the plugin's installed copy when the session did not
 load it. Then it checks that both agent types are dispatchable (a file under
 `.claude/agents/` is not proof).

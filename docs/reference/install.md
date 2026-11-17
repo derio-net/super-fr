@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-15 still true after the OpenCode plugin gates on implemented/plans and resolves git and fr from absolute PATH entries only
+reviewed: 2026-11-17 a channel switch removes untracked files from the managed checkout (batch release-truth)
 ---
 
 # Install super-fr
@@ -54,6 +54,9 @@ curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/boo
 
 An unknown version, or a tag from before channels existed, installs nothing and lists the
 installable ones.
+
+A channel switch also removes untracked files from the managed checkout, so the
+installer's preflight does not refuse them. Ignored files, such as a virtual environment, stay.
 
 ## OpenCode (2.x only)
 
