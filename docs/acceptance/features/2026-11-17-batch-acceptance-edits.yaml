@@ -175,3 +175,15 @@ amendments:
       regressions additionally enforce rejection at/after expiry, no calls after expiry
       and remaining-time limits for each native startup observation; no live walk or
       status change.; tracked by derio-net/super-fr#1353
+  - row: triage-closed-recovery-live
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'Disposable actual-client walk remains owed post-merge at Tester; the named
+      instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified.; tracked by derio-net/super-fr#1364'
+    why: 'Disposable actual-client walk remains owed post-merge at Tester; the named
+      instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified.; tracked by derio-net/super-fr#1364'
