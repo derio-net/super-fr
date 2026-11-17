@@ -7601,6 +7601,11 @@ batches:
     - super-fr#1393
   - kind: post_merge
     at: '2026-11-17T08:49:45.315508Z'
+  - kind: closeout
+    at: '2026-11-17T08:56:23.530151Z'
+    runner: herdr
+    handle: w3H:p5
+    archive: chore/closeout-2026-11-17-2
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
@@ -8208,3 +8213,18 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-placement-truth.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-16-placement-truth.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-2
+  branch: chore/closeout-2026-11-17-2
+  at: '2026-11-17T08:55:41.412197Z'
+  runner: herdr
+  handle: w3H:p5
+  planned:
+  - release-truth
+  pr: 1528
+  head: 28e049abf662293b1ce9512e8467cb8da3b2dbd4
+  members:
+  - release-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-batch-release-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-batch-release-truth.md"
