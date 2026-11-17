@@ -7534,6 +7534,16 @@ batches:
     runner: herdr
     handle: w3H:p2
     branch: fix/batch-release-truth
+  - kind: approval
+    at: '2026-11-17T08:12:07.652028Z'
+    pr: 1503
+    head: 41895ad79a096c3602bb4f5b5f984d7d120c3831
+  - kind: update
+    at: '2026-11-17T08:12:35.613132Z'
+    pr: 1503
+    head_before: 41895ad79a096c3602bb4f5b5f984d7d120c3831
+    head_after: ce648b75888a499a763f0054aa4518b509638c87
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
