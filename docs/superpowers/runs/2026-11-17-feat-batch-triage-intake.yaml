@@ -3,7 +3,7 @@ run: 2026-11-17-feat-batch-triage-intake
 workflow: fr-goal@1
 branch: feat/batch-triage-intake
 started: '2026-11-17T09:02:21+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-17T16:41:52+00:00'
+    state: done
+    at: '2026-11-17T16:47:22+00:00'
     members:
     - implement-phase
     - review-phase
@@ -137,13 +137,20 @@ steps:
           tests: p3-suite.log@2f2c59304877;tree=e2b34f15a5a267c7d6efa63626de2f3527a24ec97176fb2cf54dd934fa4a7cd2
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-17T16:41:52+00:00'
           agent: aa76fb71ae6490050
           harness: claude-code
           model: claude-sonnet-5-5
           session: f55704a7-fff8-4fb0-98fe-055a073c49ca
+          returned: '2026-11-17T16:47:22+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-3
+          reviewer: aa76fb71ae6490050
+          visual: none
+          findings: p3-r1,p3-r2,p3-r3
   journal-check:
     state: pending
   lens-review:

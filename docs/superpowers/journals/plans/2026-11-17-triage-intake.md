@@ -213,3 +213,42 @@ _open_checkout delegates to the new _checkout_refusal; nothing left to fold
 ### p3-close-never-raises-drops-forge-failures · decision · close.py _FAILURES tuple removed (phase 3)
 
 close_gate_trackers now catches Exception at all three sites, so the _FAILURES tuple (FORGE_ERRORS + UnsupportedForgeOperation) had no remaining user and was deleted with its imports. The list-read message keeps its prior text; per-issue errors read `issue #<n>: <Type>: <msg>`; a failed EvidenceReader build reports `evidence not read: <Type>: <msg>` and closes nothing.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-17T16:47:21+00:00 phase=3 -->
+### review-phase-3 · review · Phase 3 code review (R10-R12): no blocking defects; 1 in-scope, 2 out (phase 3)
+
+Independent read-only reviewer over 8f02d19..HEAD. Confirmed: a missing ADD is never swallowed, the retry is
+bounded and idempotent, the REST 404 tolerance is untouched; the dry run and --yes share _checkout_refusal and
+the dry run exits 0 writing nothing; close_gate_trackers catches Exception (not BaseException) at all three
+sites, isolates each issue and records `issue #<n>: <Type>: <msg>`; _pass_gate reports the summary; nothing
+imported close._FAILURES.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-17T16:47:21+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · swap_issue_labels' regex cannot match a label name holding an apostrophe, so #1406 stays unfixed for it (phase 3)
+
+gh.py ~436. Fails safe (re-raises), but the fix did not cover such labels.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-17T16:47:21+00:00 phase=3 state=open review_scope=out -->
+### p3-r2 · finding [open] (reviewer: out of scope) · The retry assumes gh resolves all labels before mutating; unverified without a live gh (phase 3)
+
+A repeated add or removal is idempotent, so the retry is safe either way; only the docstring's claim was too strong.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-17T16:47:21+00:00 phase=3 state=open review_scope=out -->
+### p3-r3 · finding [open] (reviewer: out of scope) · close_gate_trackers returns early on an EvidenceReader failure instead of recording per issue (phase 3)
+
+Matches the 'not read' semantics; the reader is shared by every issue, so per-issue recording would repeat one error.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-17T16:47:21+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: swap_issue_labels' regex cannot match a label name holding an apostrophe, so #1406 stays unfixed for it (phase 3)
+
+ba9de9d0a: each pending removal is matched by its exact quoted name (no name parsing); test test_an_undefined_removal_whose_name_holds_an_apostrophe_is_dropped was red first.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-17T16:47:21+00:00 phase=3 state=open resolves=p3-r2 out_of_scope=true -->
+### p3-r2-resolved · finding [out-of-scope] · resolves p3-r2: The retry assumes gh resolves all labels before mutating; unverified without a live gh (phase 3)
+
+gh's resolve-before-mutate order is gh's behaviour, not this change's; ba9de9d0a reworded the docstring to state that a partial apply would only repeat idempotent edits.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-17T16:47:21+00:00 phase=3 state=refuted resolves=p3-r3 -->
+### p3-r3-resolved · finding [refuted] · resolves p3-r3: close_gate_trackers returns early on an EvidenceReader failure instead of recording per issue (phase 3)
+
+Not a defect: one shared reader failing means no issue can be judged; recording it once is the accurate report.
