@@ -74,47 +74,4 @@ journal:
     title: "dispatch --repair is refused for a batch with a rejected member"
     body: "R6 places the check in dispatch_batch after the repo is resolved and before the tracking gate, which `--repair` shares. A dispatched batch whose member is later edited by an outside author or closed with no association therefore needs ready-fr (or removing the member) before a repair, as the spec's rule reads."
 resolves: []
-acceptance:
-  - id: intake-trust-eligibility
-    status: ci
-    notes: "Unit tests: intake_reason/issue_reason/rejected_members, and collect over a fake forge for the one-read-per-repo association rule."
-    levels:
-      unit:
-        - "super-fr:tests/unit/test_triage_intake.py#test_an_outside_author_is_ineligible_with_a_reason_naming_author_and_association"
-        - "super-fr:tests/unit/test_triage_intake.py#test_an_unread_author_or_association_never_admits"
-        - "super-fr:tests/unit/test_triage_intake.py#test_issue_reason_trusts_the_viewer_and_the_pr_authors_of_the_issues_repo"
-        - "super-fr:tests/unit/test_triage_collect.py#test_the_association_is_read_once_per_repo_and_stored"
-        - "super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_every_issue_is_admitted_by_login_or_label"
-        - "super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_the_list_already_carries_the_field"
-  - id: intake-untrusted-set-apart
-    status: ci
-    notes: "Unit tests: body withheld on a full collect, the view_issue path and a partial collect carrying a schema-13 issue; check's untrusted set; suggest skips it."
-    levels:
-      unit:
-        - "super-fr:tests/unit/test_triage_collect_partial.py#test_an_outside_authors_body_is_cleared_on_a_full_collect"
-        - "super-fr:tests/unit/test_triage_collect_partial.py#test_an_outside_authors_body_is_cleared_on_the_view_issue_path"
-        - "super-fr:tests/unit/test_triage_collect_partial.py#test_a_carried_schema_13_issue_by_an_outside_author_is_cleared_by_a_partial_collect"
-        - "super-fr:tests/unit/test_triage_check.py#test_an_outside_open_issue_is_untrusted_with_its_reason_and_in_no_other_set"
-        - "super-fr:tests/unit/test_triage_batch_verbs.py#test_suggest_never_proposes_an_untrusted_issue"
-  - id: intake-batch-refuses-untrusted
-    status: ci
-    notes: "Unit tests: create/edit/dispatch exit 2 with no write, the edit that removes the member succeeds, both snapshot builders fill rejected alike, the pure pass blocks before the after and cap checks and dispatches once admitted."
-    levels:
-      unit:
-        - "super-fr:tests/unit/test_triage_batch_verbs.py#test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_nothing"
-        - "super-fr:tests/unit/test_triage_batch_verbs.py#test_edit_leaving_a_rejected_member_is_refused_and_removing_the_last_one_succeeds"
-        - "super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_refuses_a_rejected_member_before_any_forge_write_or_runner_call"
-        - "super-fr:tests/unit/test_triage_batch_drive.py#test_a_rejected_batch_is_blocked_before_the_dependency_and_cap_checks"
-        - "super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted"
-        - "super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_driver_and_the_board_fill_rejected_alike"
-        - "super-fr:tests/unit/test_triage_board_views.py#test_the_board_plan_blocks_a_batch_with_an_untrusted_member"
-  - id: intake-brief-quotes-untrusted
-    status: ci
-    notes: "Unit tests: the first line carries only the command and the batch id; titles, detail, note and rationale sit in the quoted untrusted block; forged markers and headings stay quoted; output is deterministic."
-    levels:
-      unit:
-        - "super-fr:tests/unit/test_triage_batch_dispatch.py#test_the_first_line_is_the_command_and_the_batch_id_only"
-        - "super-fr:tests/unit/test_triage_batch_dispatch.py#test_every_untrusted_text_sits_in_the_quoted_block_and_every_block_line_is_quoted"
-        - "super-fr:tests/unit/test_triage_batch_dispatch.py#test_forged_text_cannot_close_the_block_or_add_a_top_level_heading"
-        - "super-fr:tests/unit/test_triage_batch_dispatch.py#test_the_brief_is_deterministic_with_hostile_text"
 evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f55704a7-fff8-4fb0-98fe-055a073c49ca/scratchpad/p1-suite.log}
