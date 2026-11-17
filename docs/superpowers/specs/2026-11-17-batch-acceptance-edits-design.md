@@ -77,31 +77,32 @@ R1. `fr acceptance amend --id <row> --op reword --origin <ref>` given neither `-
 R2. An origin-only reword still refuses a merged row, an unknown row and a non-`reword` op, as today, and writes nothing when it refuses.
 R3. Each of the 17 rows whose note the gate-backfill sweep replaced with a bare `tracked by derio-net/super-fr#N`, and whose note before the sweep was more than `post-merge walk owed (gate backfill)`, carries the note it held before the sweep followed by `; tracked by derio-net/super-fr#N`, with its status, levels and `issues:` unchanged.
 R4. The restore is written as `set-status` amendments in this feature's fragment (the rows are merged), never as in-place edits of their fragments; the 16 rows whose old note was only the gate-backfill boilerplate are not touched.
-R5. When a spec's bytes are not valid UTF-8, the Test Plan heading repair's predicate and its rewrite refuse with the reason `<path> is not UTF-8 text (byte 0x<hh> at offset <n>)`; the file is left byte-identical.
-R6. The `matrix_anchors` repair refuses the same way, with the same reason shape, for a `matrix.yaml` that is not valid UTF-8.
-R7. `fr migrate artifacts` and the CLI-entry gate's refusal print that reason for the file, never a Python codec message, and the gate still refuses over it.
-R8. One module answers "which of these paths does git ignore" and "is this one path ignored"; `acceptance_cmd._committable`, `artifacts/commit.py`, `isolation/scaffold.py` and `run/visual.py` call it instead of running `git check-ignore` themselves, with their current behaviour unchanged. `triage/gitseam.py` is not changed.
-R9. `fr run adopt <plan-dir>` and `fr migrate artifacts --yes --adopt`, given no `--run-id`, name an adopted run after its plan folder's slug; adopting a spec with no plan names the run after the spec's slug (its file stem without `-design`).
+R5. When a spec's bytes are not valid UTF-8, every read the migration runner makes of it — the stamp read (`read_verbatim`) and the Test Plan heading repair's predicate and rewrite — fails with the reason `<path> is not UTF-8 text (byte 0x<hh> at offset <n>)`; the file is left byte-identical.
+R6. A `docs/acceptance/matrix.yaml` that is not valid UTF-8 fails the same way, with the same reason shape, in its stamp read and in the retiring split hop (`fr.artifacts.matrix_fragments`, including the `#L<n>` conversion it applies), and is left byte-identical. (`MATRIX_NAME_ANCHORS_REPAIR` is not registered since the matrix kind retired; its own `read_text` calls go through the same reader.)
+R7. `fr migrate artifacts` and the CLI-entry gate's refusal print that reason for the file, never a Python codec message, and the gate still refuses over it. Every place the runner reports a raised exception uses one formatter, which prints this reason alone.
+R8. One module answers "which of these paths does git ignore" and "is this one path ignored"; `acceptance_cmd._committable`, `artifacts/commit.py`, `isolation/scaffold.py` and `run/visual.py` call it instead of running `git check-ignore` themselves, with their current behaviour unchanged: the set listing reads `check-ignore -z` output (so a path with spaces or non-ASCII bytes matches its input), treats exit 0 and 1 as answers, and returns no paths on any other exit or when git is missing (each set-listing site then drops nothing, as today); the one-path probe answers False on any error. `triage/gitseam.py` is not changed.
+R9. `fr run adopt <plan-dir>` and `fr migrate artifacts --yes --adopt`, given no `--run-id`, name an adopted run after its plan folder's slug. Adopting a spec with no plan keeps today's `<date>-<branch>` id, so a spec-only run never takes the id its plan's later adoption needs (bulk adoption offers plans only).
 R10. `fr migrate artifacts --yes --adopt` on one branch with N adoptable plans adopts all N, one run each, and a follow-up dry run offers none of them.
 R11. An explicit `--run-id` still wins; an id that already names a run is still refused, except the run `--supersede` replaces.
-R12. When the branch an adopted run records is the repository's default branch, adoption prints one warning for that run naming the branch and `--branch <b>`; it still adopts.
+R12. When the branch an adopted run records is the repository's default branch (the remote default ref with its remote prefix removed: `origin/main` → `main`), adoption prints one warning for that run naming the branch and `--branch <b>`; it still adopts. With no remote, or a default ref fr cannot name, there is no warning.
 R13. A `Repair` on the `acceptance-fragment` kind renames `docs/acceptance/features/<slug>-design.yaml` to `<slug>.yaml` and sets its `feature:` key to `<slug>`, leaving every row and amendment as it was.
 R14. When both files exist, the repair moves every row and amendment of the `-design` file into `<slug>.yaml`, keeps an entry identical in both once, and deletes the `-design` file. When the two hold one id differently, it writes nothing, leaves both files byte-identical, and fails that artifact with a reason naming the id.
 R15. After the repair the effective matrix (`fr.acceptance.fold`) is the one before it, row for row; the repair refuses, writing nothing, when it would not be.
+R16. The repair holds back, like any artifact the operator is mid-edit in, when `<slug>.yaml` has uncommitted changes.
+R17. After the repair, `fr acceptance check` and `deliver`'s merged-row rule (R16 of spec `2026-11-04-repo-feature-settings`) report no edit: a fragment merged on the default ref as `<slug>-design.yaml` is compared, row and amendment by id, with the branch's `<slug>.yaml`, on a branch and in CI on the default branch (in-place migration) alike.
 
 ## Design
 
 ### A. Origin-only reword keeps the row's statement (R1, R2)
 
-Delete the CLI's fill at `acceptance_cmd.py:1050-1055`. `AmendmentItem` (record model)
-validates a `reword` against `fr.acceptance.fragment`'s amendment, which needs an
-`acceptance` or `capability`; an origin-only correction carries neither. Add an explicit
-origin-only form to the item, `origin_only: bool = False`, accepted only with `op:
-reword` and neither field, and only on the CLI's `--origin` path (the engine receives
-`origins`; a record's `acceptance:` entry cannot set it, so the record kind's shape is
-unchanged). `_reword_pending` already keeps `existing.acceptance`/`existing.capability`
-when the item has none. The amendment-op validation in `fr.acceptance.fragment` is not
-touched: no amendment is written by an origin correction.
+The CLI keeps filling the item's `acceptance` for an origin-only reword (the record
+model's `AmendmentItem` validates through `fr.acceptance.fragment.Amendment`, which needs
+an `acceptance` or `capability`), but reads it from the row's own definition in the
+pending fragment that holds it, not from `effective(root)`
+(`acceptance_cmd.py:1050-1055`). `_reword_pending` then writes
+`item.acceptance or existing.acceptance`, which is the row's own statement, unchanged.
+No model, record or fragment shape changes. A row not pending on this branch keeps
+today's path to `_reword_pending`'s refusals (R2); the CLI reads no statement for it.
 
 ### B. Restoring the 17 notes (R3, R4)
 
@@ -115,41 +116,63 @@ reviewer can check each restore against history.
 
 ### C. Undecodable files are named (R5–R7)
 
-A small helper in `fr.artifacts` (beside `atomic.py`), `read_utf8(path) -> str`, reads
-bytes and decodes, raising `NotUtf8Error(ValueError)` whose message is
-`<path> is not UTF-8 text (byte 0x<hh> at offset <n>)` from the codec error's `start`.
-Both repairs read through it (`_fn` of the heading repair keeps its no-newline-translation
-decode). The runner already formats a raised exception as `f"{type(e).__name__}: {e}"`;
-for `NotUtf8Error` it prints the message alone, so the gate and `fr migrate artifacts`
-show the named reason.
+`fr.artifacts` gets `NotUtf8Error(ValueError)` and the decode that raises it: message
+`<path> is not UTF-8 text (byte 0x<hh> at offset <n>)`, from the codec error's `start`.
+`read_verbatim` (`registry.py:148`, under every stamp reader) decodes through it, as do
+the heading repair's `_applies`/`_fn` (no newline translation kept), `matrix_anchors`'
+`conversions`/`_fn` and the split hop's reads (`matrix_fragments.py:258`, :270).
+`conversions` keeps returning `{}` only for `OSError`. The runner's seven
+`f"{type(e).__name__}: {e}"` sites (`runner.py:453`, :496, :554, :725, :785, :819, :866)
+call one `describe(e)`, which returns the message alone for `NotUtf8Error` and today's
+text otherwise. Tests run through `run_migrations` and the gate's refusal.
 
 ### D. One `check-ignore` helper (R8)
 
-`fr.git` (`packages/fr/src/fr/git.py`, beside `git_answer` at :113): `ignored_paths(root, paths) -> set[str]` (one `git check-ignore --`
-call, exit 0 and 1 both answers, the paths it prints) and `is_ignored(root, path) ->
-bool` (`check-ignore -q`). The four call sites switch to it. The helper takes the repo root and runs git through
-`git_answer`.
+In `fr.git` (`packages/fr/src/fr/git.py`, beside `git_answer` at :113):
+`ignored_paths(root, paths) -> set[str]` runs `git check-ignore -z --` once through
+`git_answer`, splits on NUL, and returns an empty set on any exit but 0/1 and on
+`GitUnavailableError`; `is_ignored(root, path) -> bool` runs `check-ignore -q` and is
+False on any error, git missing included. `_committable`, `commit.py`'s
+`_without_ignored`, `scaffold.py:672-674` and `visual.py`'s `git_ignored` call them.
+Each site's current error behaviour is pinned by a test before the switch; the one
+narrowing is that a missing git at the two one-path sites reads as "not ignored" instead
+of raising `FileNotFoundError`, which every other failure there already does.
 
 ### E. Adopted run ids come from the plan (R9–R12)
 
 In `adopt_run`, with no `run_id`: `rid = validate_run_id(<plan folder name>)` when a plan
-was observed, else the spec stem without `-design`. `derive_run_id` stays for `fr run
+was observed, else `derive_run_id(resolved_branch)` as today (R9; a spec stem would equal
+the plan folder name its plan's adoption later needs). `derive_run_id` stays for `fr run
 start`. The module docstring (:35) and `fr run adopt`'s help say so. `--supersede`
 already handles an id change (its usage file moves, `_usage_move`). `migrate_cmd`'s bulk
-loop needs no change beyond the id: each plan gets its own. The default-branch warning
-compares `resolved_branch` with the default branch `fr.acceptance.amend.default_ref_name`
-already resolves, and is appended to `notes` (the outparam the callers already print).
+loop needs no change beyond the id: each plan gets its own. The default-branch warning reads
+`fr.git.remote_default_ref` (git.py:181) directly, strips the remote prefix (the remote's
+name and one `/`), compares with `resolved_branch`, and is appended to `notes` (the
+outparam both callers print). `None`, a `GitRefusal` or `GitUnavailableError` mean no
+warning.
 
-### F. The `-design` fragment repair (R13–R15)
+### F. The `-design` fragment repair (R13–R17)
 
 A new module `fr.artifacts.fragment_design_name`, imported by `fr/artifacts/__init__.py`,
-registers `Repair(kind="acceptance-fragment", …)`. `applies(path)`: the file name ends
-`-design.yaml` and its `feature:` key equals the stem. `fn(path)` builds everything in
-memory: the renamed fragment (or the merge with an existing `<slug>.yaml`, refusing on an
-id held differently), checks the fold of the new set equals the fold of the old one, then
-writes through `write_text_atomic` and removes the `-design` file, returning the written
-path as `also_wrote`. The plan confirms the runner stages a removal made by a repair (it
-does for a retiring migration, `PlannedAction.removed`), and adds that support if not.
+registers `Repair(kind="acceptance-fragment", …)` with
+`companions=lambda p: [p.with_name(<slug>.yaml)]`, so the uncommitted-changes veto
+(`runner.py:564-595`) holds a `<slug>.yaml` the operator is editing (R16). `applies(path)`:
+the file name ends `-design.yaml` and its `feature:` key equals the stem. `fn(path)` builds
+everything in memory: the renamed fragment, or the merge into an existing `<slug>.yaml`
+(its rows and amendments first, then the `-design` file's, an identical entry once,
+refusing on an id held differently), checks the fold of the new set equals the fold of
+the old one, then writes `<slug>.yaml` through `write_text_atomic`, deletes the `-design`
+file, and returns `<slug>.yaml` as `also_wrote`. The deleted path is the action's own
+`path`, which `changed_paths` already includes (`runner.py:226-230`), and `commit_paths`
+stages its deletion through `git add` (`commit.py:997-1007`, :1039), so no new runner
+support is needed; a test pins the staged deletion.
+
+R17: `merged_row_edits` and `outside_merged_row_edits` (`fr/acceptance/amend.py:127-189`)
+key the default ref's fragments by their one spelling, `<slug>.yaml`: a tip (and merge
+base) holding `<slug>-design.yaml` is read as that fragment, merged with a `<slug>.yaml`
+there by the repair's own merge rule, before the comparison with the branch's
+`<slug>.yaml`. The merged-amendments-lead check reads the combined list in the repair's
+order. Tests hold a merged `-design` fragment on a fixture default ref.
 
 ## Verification
 
@@ -159,7 +182,7 @@ gate: developer
 - spec-repairs-name-undecodable-files: none — verified by CI unit tests of both repairs and the gate's refusal text
 - adopt-run-id-from-plan-slug: none — verified by CI unit tests of `fr run adopt` and `fr migrate artifacts --adopt`
 - adopt-default-branch-warning: none — verified by CI unit tests of the adoption notes
-- fragment-design-spelling-repair: none — verified by CI unit tests of the repair over fixture fragments
+- fragment-design-spelling-repair: none — verified by CI unit tests of the repair and `fr acceptance check` over fixture fragments on a fixture default ref
 
 There is no `## Test Plan` (d7). R3–R4 (the note restores) are a one-off data correction
 proven by the amendments in this PR's diff and the journal's recovery record; R8 is an
@@ -173,7 +196,7 @@ internal refactor. Neither is a business-level claim, so neither has a row.
 | `spec-repairs-name-undecodable-files` | R5–R7 | A non-UTF-8 artifact is refused by name, not with a codec error. |
 | `adopt-run-id-from-plan-slug` | R9–R11 | Bulk adoption on one branch adopts every in-flight plan. |
 | `adopt-default-branch-warning` | R12 | Adopting onto the default branch is said, not silent. |
-| `fragment-design-spelling-repair` | R13–R15 | `fr migrate artifacts` leaves one fragment per feature. |
+| `fragment-design-spelling-repair` | R13–R17 | `fr migrate artifacts` leaves one fragment per feature. |
 
 ## Implementation Plans
 
