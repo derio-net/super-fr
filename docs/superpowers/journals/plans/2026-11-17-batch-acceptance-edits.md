@@ -191,3 +191,8 @@ CI (run 44094541563, shard 5) failed test_validate_artifacts.py::test_non_utf8_b
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 gates and docs stamps only: no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p2-1 created=2026-11-17T14:05:52+00:00 phase=2 -->
+### review-p2-1 · review · phase 2 review: no findings (phase 2)
+
+Independent reviewer over bc602f2..HEAD against spec R5-R12 and plan 02.yaml. Checked sound: NotUtf8Error subclasses UnicodeDecodeError so every existing handler still catches it; read_verbatim keeps BOM and CRLF byte-exact, the heading repair reads untranslated, matrix reads translate as read_text did; every FailedAction site and the gate's three refusal lines use describe; ignore helper `-z --stdin`, exit 0/1 answers, empty set / False otherwise, four sites switched, gitseam untouched (pinned by test); adopted run ids (explicit wins, plan folder, spec-only keeps the branch id, existing id refuses before any write, supersede usage move refuses before writing); default-branch note via remote_default_ref, prefix stripped once, no note on GitRefusal or no remote. Residual notes not raised: the quiet/stealth `_without_ignored` exit-128 path drops nothing, as the pre-change code did (the orchestrator checked: any non-zero exit dropped nothing); matrix_fragments reads of existing fragments are outside R6.
