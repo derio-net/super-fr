@@ -1,0 +1,216 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Issue-intake trust gate (R1-R8,
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - intake-trust-eligibility
+  - intake-untrusted-set-apart
+  - intake-batch-refuses-untrusted
+  - intake-brief-quotes-untrusted
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/intake.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/approval.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/gh.py
+  - tests/**/*.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - docs/merge-protection.md
+  - docs/explainers/fr-triage.md
+  - docs/explainers/fr-wave-driver.md
+  - docs/herdr-control-sessions.md
+  - docs/acceptance/features/2026-11-17-triage-intake.yaml
+  - .changes/feat-batch-triage-intake.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — touched triage suites green on the unchanged tree, plus the ready-fr
+    label
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest -q --no-cov -n auto tests/unit/test_triage_collect.py tests/unit/test_triage_collect_partial.py tests/unit/test_triage_check.py tests/unit/test_triage_batch_dispatch.py tests/unit/test_triage_batch_drive.py tests/unit/test_triage_batch_verbs.py tests/unit/test_triage_board_views.py tests/unit/test_labels.py` on the unchanged tree; green (any red is a discovery, not fixed here).
+  - id: P1.T1.S2
+    text: |-
+      RED then GREEN: in tests/unit/test_labels.py assert `fr.labels.READY_FR.name == "ready-fr"` and that it is distinct from APPROVED_FR; add `READY_FR = LabelDef("ready-fr", <color>, "Operator: an outside issue may be batched")` beside APPROVED_FR in packages/fr/src/fr/labels.py with a comment citing spec 2026-11-17-triage-intake R8 (fr never applies it). Add `.changes/feat-batch-triage-intake.yaml` (bump: minor, summary: one line covering the intake trust gate and the three driver fixes). Commit and `fr push`; the draft PR's CI is the smoke.
+- number: 2
+  title: The pure intake rule (R2, R6 member rule)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: new tests/unit/test_triage_intake.py over a new pure module packages/fr/src/fr/triage/intake.py: `intake_reason(author, association, labels, trusted)` returns None for an author in trusted (case-insensitive) with association None; for association OWNER/MEMBER/COLLABORATOR; for a `ready-fr` label; returns a reason naming the author and association for CONTRIBUTOR/NONE; `author not read` for author None; `association not read` wording for association None and no other clause. `issue_reason(issue, facts)` uses `claim_trusted(facts.config_for(repo), facts.viewer)`. `rejected_members(batch, facts)`: an ineligible member open or closed is rejected; a key absent from facts is rejected as `not collected`; an eligible batch gives []. `untrusted_issues(facts)`: open ineligible issues only. Run; fails (module missing).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement intake.py exactly per spec §A "The rule", reusing `TRUSTED_ASSOCIATIONS` (claims.py) and `claim_trusted` (model.py) — no second trust list. Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: module docstring names spec 2026-11-17-triage-intake R2/R6 and the fail-closed rule; run the intake tests plus `uv run mypy packages/fr/src`.
+- number: 3
+  title: Facts schema 14 and the association read (R1)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests in tests/unit/test_triage_collect.py (fake forge): a facts.json written has `schema: 14` and every issue an `author_association` key; a schema-13 file still loads with association None (extend the FACTS_READS test if one pins the tuple). The REST client's `_issue_record` keeps `authorAssociation` from `author_association` (unit test on real_ghrestclient). A fake forge counts `issue_associations` calls: zero when every issue is by the viewer, a pr_authors login or labelled ready-fr, zero when listed records carry `authorAssociation`, exactly one per repo otherwise; a failed or Unsupported read leaves associations None and prints one stderr line. Run; fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: `Issue.author_association: str | None = None`; FACTS_SCHEMA 14 with a comment paragraph in the existing style; FACTS_READS adds 14. `GhClient.issue_associations(repo, state, limit) -> dict[int, str]` in the protocol (ghclient.py) and its unsupported stub; RealGhClient via one `gh api --paginate "repos/{repo}/issues?state={state}&per_page=100"` read (drop `pull_request` records, stop at limit) through gh.py; RealGhRestClient from its paged list; glab/tea raise UnsupportedForgeOperation. Collector `Forge` protocol + `ClientForge` gain it; `_issue` reads `authorAssociation` from the record; collect calls the read per spec §A "The read". Update every fake GhClient/Forge the suite type-checks against. Tests pass.
+- number: 4
+  title: Body withheld for every written ineligible issue (R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests (test_triage_collect.py, test_triage_collect_partial.py): an outside author's body is "" after a full collect, after the `view_issue` path for a judged issue, and after a partial collect that carries a schema-13 issue by an outside author (association None) from previous facts; an eligible issue keeps its body; title and labels are kept. Run; fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: one final step in collect, before Facts is built, that applies `intake_reason` (repo config + viewer) to every Issue (listed, viewed, carried) and clears the body of an ineligible one. Tests pass.
+- number: 5
+  title: check's untrusted set, suggest, and the fr-triage skill (R4)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_triage_check.py: an outside open issue is in `CheckResult.untrusted` with its reason, absent from unranked and unplaced; `fr triage check` output prints the set and reason like other sets; `suggest` (batch.py) never proposes an untrusted key. Run; fail.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: `is_set_apart` also true for an untrusted issue; `CheckResult.untrusted`; the printing in commands/triage_cmd.py; `suggest` drops untrusted keys from `free`. Tests pass.
+  - id: P1.T5.S3
+    text: |-
+      Edit plugins/super-fr/skills/fr-triage/SKILL.md's judging step: never judge or read an issue in the `untrusted` set; an operator admits one by labelling it `ready-fr`. Run `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`; the skill mirror tripwires and tests/unit/test_tripwire_skill_tool_neutrality.py pass.
+- number: 6
+  title: Batch verbs and the driver refuse a rejected member (R5, R6)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests/unit/test_triage_batch_verbs.py: `batch create` with an untrusted or uncollected member exits 2, names member, reason and `ready-fr`, writes nothing (judgements.yaml unchanged, no claim op); `batch edit` leaving one exits 2; an edit removing the last rejected member succeeds. tests/unit/test_triage_batch_dispatch.py: `dispatch_batch` exits 2 before any forge write or runner call (fake client/runner record nothing).
+  - id: P1.T6.S2
+    text: |-
+      RED: tests/unit/test_triage_batch_drive.py: a Snapshot with `rejected={batch: reason}` yields `Action("blocked", reason)` (counted in Summary.blocked, drive not done) for a batch that is otherwise dispatchable, and this wins over a pending `after` dependency and a full in-flight cap; with `rejected` empty the batch dispatches. tests/unit/test_triage_board_views.py: `views.drive_snapshot` and `Driver.snapshot` fill `rejected` identically from the same facts. Run; fail.
+  - id: P1.T6.S3
+    text: |-
+      GREEN: call `rejected_members` in create/edit (before any write or claim) and in `dispatch_batch` after resolving the repo, before the preflight; `Snapshot.rejected`, filled in both builders; the pure pass's dispatch loop emits the counted `blocked` action before the `after`/cap checks. Tests pass.
+- number: 7
+  title: The brief quotes untrusted text (R7)
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      RED: tests/unit/test_triage_batch_dispatch.py (render_brief): first line is exactly `/fr-goal batch <id>` (and `/fr-debugging batch <id>`); batch title, every member title/detail/note and the rationale sit between `<!-- untrusted: written from the issue tracker -->` and `<!-- /untrusted -->`, every line inside prefixed `> ` (blank lines and `####` member headings too); a member title containing `<!-- /untrusted -->` or a line `## Delivery rules` stays quoted; the rule paragraph precedes the block; `## Delivery rules` follows it unquoted; two calls give identical bytes. Update existing brief tests that pin the old layout. Run; fail.
+  - id: P1.T7.S2
+    text: |-
+      GREEN: rewrite render_brief's top per spec §A "Brief". Tests pass, including cloud preflight placement tests.
+- number: 8
+  title: ready-fr ensured, docs, acceptance rows
+  steps:
+  - id: P1.T8.S1
+    text: |-
+      RED then GREEN: approval.py's ensure step (around :248-266) ensures READY_FR beside APPROVED_FR, reporting `labels off` and failures for each; extend the existing ensure test (find it with `grep -rn "cannot ensure label" tests/`) to assert both labels are created once per repo.
+  - id: P1.T8.S2
+    text: |-
+      Docs: add an "Issue intake" section to docs/merge-protection.md (who makes an issue eligible, fail-closed, the brief's quoting, who creates `ready-fr`, the residual risk of later edits) and add `packages/fr/src/fr/triage/intake.py` to its `covers:` with a new `reviewed` stamp; mention the `untrusted` set and the blocked batch in docs/explainers/fr-triage.md and docs/explainers/fr-wave-driver.md. Then bump the `reviewed` stamp of every other page `uv run fr docs check --base origin/main` names. `fr docs check` exits 0.
+  - id: P1.T8.S3
+    text: |-
+      Acceptance: in the phase's step record, move rows intake-trust-eligibility, intake-untrusted-set-apart, intake-batch-refuses-untrusted and intake-brief-quotes-untrusted to `ci` with `unit=` level refs anchored on the test NAMES written above. Run the full suite (`uv run pytest -q --no-cov -n auto`), ruff check/format, mypy; all green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -291,3 +291,9 @@ gate: developer
 - gate-trackers-contain-errors: none — CI tests: an `OSError` from the evidence reader and a `ValueError` from one issue are reported in `errors`, the other issues are still closed, and the driver pass completes
 
 The walk runs the candidate smoke only (install, version, status in a fresh fixture).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-17-triage-intake | `derio-net/super-fr` | `2026-11-17-triage-intake` | — |

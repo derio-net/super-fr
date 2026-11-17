@@ -1,0 +1,56 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The driver fetches every pass (R9,
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - driver-refetches-origin-each-pass
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/**/*.py
+  - docs/explainers/fr-wave-driver.md
+  - docs/herdr-control-sessions.md
+  - docs/acceptance/features/2026-11-17-triage-intake.yaml
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: Per-pass fetch and hold in merge_ctx
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: find the existing unreachable-origin driver test (`grep -rn "DefaultBranchUnknown" tests/unit/`) and add next to it: pass 1 fetch ok (an approved PR merges); pass 2 the checkout's fetch raises GitError -> that repo is held with exactly one warning for every merge-context use in the pass (two approved PRs in the repo, neither merged) and the pass completes; pass 3 fetch ok -> it acts again. Assert the fetch count: one per repo per pass even when `_fetched_reader` fetched first.
+  - id: P2.T1.S2
+    text: |-
+      RED: a config change between passes (facts' `merge_method` / `version` block differ in pass 2, with main's .fr/triage.yaml matching) changes `ctx.method` and `ctx.version` without a second `repo_merge_methods` read; a `_closeout_hand_back` in a held pass returns `(…held…, False)` and spends no hand-back budget instead of raising.
+  - id: P2.T1.S3
+    text: |-
+      GREEN: split `_fresh_config` into its fetch and `_config_fresh`; add per-pass `_ctx_checked` / `_ctx_held` reset beside `_fetched`; rework `merge_ctx` per spec §B steps 1-4 (store the allowed methods at build); route `_closeout_hand_back` through `_ctx_or_hold`. Existing `_fresh_config` callers keep their behaviour. Tests pass.
+  - id: P2.T1.S4
+    text: |-
+      REFACTOR: docstrings name spec 2026-11-17-triage-intake R9 and #1213; move row driver-refetches-origin-each-pass to `ci` with level refs on the new test names in the step record; bump `reviewed` stamps `fr docs check` names; full suite, ruff, mypy green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

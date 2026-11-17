@@ -1,0 +1,88 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Cancel converges and gate-tracker close is contained (R10-R12,
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - cancel-converges-undefined-label
+  - cancel-dry-run-names-checkout
+  - gate-trackers-contain-errors
+  tier: standard
+  files:
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/gatebackfill/close.py
+  - tests/**/*.py
+  - docs/gate-backfill.md
+  - docs/explainers/fr-triage.md
+  - docs/herdr-control-sessions.md
+  - docs/acceptance/features/2026-11-17-triage-intake.yaml
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: swap_issue_labels treats an undefined removal as done (R10)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: unit tests on `fr.gh.swap_issue_labels` with `_run_gh` monkeypatched: one undefined remove label -> retried without it and succeeds; two undefined remove labels reported one at a time -> two retries, success; an undefined ADD label -> raises; any other GhError -> raises, no retry; removing everything undefined -> returns with no further call. A `batch cancel --yes` test (fake client raising the gh `'fr:in-progress' not found` shape once) writes its cancel event. Run; fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement the bounded retry loop in swap_issue_labels per spec §C, with a docstring stating gh's resolve-before-mutate assumption. Tests pass.
+- number: 2
+  title: The dry run names the --checkout (R11)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: `batch cancel <id>` without --yes, from a cwd with no clone of the batch's repo and from a clone of another repo, prints `warning: --yes would be refused — <reason>; pass --checkout <path to a clone of OWNER/REPO>` and exits 0; `--yes` from the same place exits 2 with the same reason text.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: `_checkout_refusal(checkout_path, owner_repo) -> str | None` holding `_open_checkout`'s two checks; `_open_checkout` calls it; `_tracking_gate`'s dry-run branch prints the warning. Tests pass (dispatch dry-run tests updated if they pin output).
+- number: 3
+  title: close_gate_trackers never raises (R12)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_gatebackfill_closes.py: EvidenceReader construction raising OSError -> report.errors holds `OSError`, no raise; `_one` raising ValueError for one of two issues -> that issue's error recorded as `issue #<n>: ValueError: …`, the other is closed; the tracker list read raising RuntimeError -> recorded. A driver test (`_drive --once --yes` gate-pass path) with a tracker close raising OSError completes the pass and prints the gate-pass line.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: guard the reader build, broaden the per-issue and list catches per spec §D with a comment giving the reason. Tests pass.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: move rows cancel-converges-undefined-label, cancel-dry-run-names-checkout and gate-trackers-contain-errors to `ci` with level refs on the new test names in the step record; bump `reviewed` stamps `fr docs check` names; full suite, ruff, mypy green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
