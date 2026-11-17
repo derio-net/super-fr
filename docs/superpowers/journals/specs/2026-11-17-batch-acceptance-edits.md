@@ -194,3 +194,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-17-batch-acceptance-edits-p2 created=2026-11-17T09:40:29+00:00 -->
+### phase-split-2026-11-17-batch-acceptance-edits-p2 · decision · ask: phase 2 serves its own asks (#1390, #1154, #1219), a separate subsystem (artifacts runner, git, run adoption)
