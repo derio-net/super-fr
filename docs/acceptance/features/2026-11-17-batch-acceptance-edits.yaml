@@ -196,3 +196,19 @@ amendments:
       instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release
       workflow version override (operator decision) with #1195 and #1217 gate:tester
       left held; this walk was deferred, not certified.; tracked by derio-net/super-fr#1364'
+  - row: ci-under-time-budget
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
+      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
+      is owed.; tracked by derio-net/super-fr#1340. Walk 2026-11-14 FAILED: ci.yml 335-674s
+      vs 240s. Not a balancing problem: cached-durations rebalancing works; even a perfect
+      split is ~320-340s. Fix is #1428 (batch suite-health, wave 15): more shards, cheaper
+      heavy files, or a re-argued budget.'
+    why: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
+      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
+      is owed.; tracked by derio-net/super-fr#1340. Walk 2026-11-14 FAILED: ci.yml 335-674s
+      vs 240s. Not a balancing problem: cached-durations rebalancing works; even a perfect
+      split is ~320-340s. Fix is #1428 (batch suite-health, wave 15): more shards, cheaper
+      heavy files, or a re-argued budget.'
