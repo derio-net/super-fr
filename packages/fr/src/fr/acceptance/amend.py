@@ -23,7 +23,7 @@ from pathlib import Path
 from fr.acceptance.fold import Effective, default_ref_fold, effective
 from fr.acceptance.fragment import Fragment, fragment_slug_for_spec, parse_fragment
 from fr.acceptance.model import AcceptanceError
-from fr.acceptance.spelling import by_one_spelling
+from fr.acceptance.spelling import by_one_spelling, renamed_keep, spelling_target
 
 IMMUTABLE = "rows merged on {ref} change only by amendment"
 """The refusal's wording, one place (the check and its tests read it)."""
@@ -142,9 +142,13 @@ def merged_row_edits(repo_root: Path, merged: Effective | None, ref: str | None)
     raw = _tip_fragments(run, tip_sha)
     fork = run(["merge-base", "HEAD", tip_sha], None)
     raw_fork = _tip_fragments(run, fork.stdout.decode().strip()) if fork.returncode == 0 else {}
-    on_branch = {rel for rel in (*raw, *raw_fork) if (repo_root / rel).is_file()}
-    tip = by_one_spelling(raw, keep=on_branch)
-    forked = by_one_spelling(raw_fork, keep=on_branch)
+    # The fold's rule (review p1-r2): a merged `-design` file is read as `<slug>.yaml`
+    # only when this branch renamed it.
+    candidates = {*raw, *raw_fork}
+    candidates |= {t for f in (raw, raw_fork) for p, g in f.items() if (t := spelling_target(p, g))}
+    on_branch = {rel for rel in candidates if (repo_root / rel).is_file()}
+    tip = by_one_spelling(raw, keep=renamed_keep(raw, on_branch))
+    forked = by_one_spelling(raw_fork, keep=renamed_keep(raw_fork, on_branch))
     errors: list[str] = []
     rule = IMMUTABLE.format(ref=ref)
     for rel, frag in sorted(tip.items()):
@@ -213,7 +217,9 @@ def outside_merged_row_edits(repo_root: Path) -> list[str]:
             frozen[rel] = parse_fragment(text, source=rel)
         except AcceptanceError as e:
             errors.append(str(e))
-    for rel, frag in sorted(by_one_spelling(frozen, keep=live.keys()).items()):
+    for rel, frag in sorted(
+        by_one_spelling(frozen, keep=renamed_keep(frozen, live.keys())).items()
+    ):
         try:
             now = parse_fragment(live[rel], source=rel) if rel in live else None
         except AcceptanceError as e:

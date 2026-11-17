@@ -114,5 +114,24 @@ def by_one_spelling(
     return respell(frags, keep=keep)[0]
 
 
+def spelling_target(path: str, frag: Fragment) -> str | None:
+    """The `<slug>.yaml` a `<slug>-design.yaml` at *path* is the old spelling of."""
+    slug = _old_spelling(path, frag)
+    return None if slug is None else str(PurePosixPath(path).with_name(f"{slug}.yaml"))
+
+
+def renamed_keep(frags: Mapping[str, Fragment], present: Collection[str]) -> set[str]:
+    """The *keep* set for `respell` of merged *frags* against a branch holding the
+    fragment paths *present*: every path but a `<slug>-design.yaml` the branch renamed
+    (it holds `<slug>.yaml` and no longer holds the `-design` file; review p1-r2). An
+    unrepaired tip, or a fold with no branch, is read as it is."""
+    keep: set[str] = set()
+    for path, frag in frags.items():
+        target = spelling_target(path, frag)
+        if target is None or path in present or target not in present:
+            keep.add(path)
+    return keep
+
+
 def _old_spelling(path: str, frag: Fragment) -> str | None:
     return design_slug(PurePosixPath(path).name, frag.feature)

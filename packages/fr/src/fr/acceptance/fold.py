@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING
 
 from fr.acceptance.fragment import FRAGMENTS_DIR, Amendment, Fragment, SetStatus, parse_fragment
 from fr.acceptance.model import LEVELS, AcceptanceError, LocalStamp, Matrix, Row
-from fr.acceptance.spelling import DESIGN_SUFFIX, design_slug, respell
+from fr.acceptance.spelling import DESIGN_SUFFIX, design_slug, renamed_keep, respell
 
 if TYPE_CHECKING:
     from fr.artifacts.paths import ArtifactSpace
@@ -647,10 +647,11 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
     raw = _tip_fragments(run, sha) if sha else {}
     amended = any(f.amendments for f in raw.values())
     raw_intro = _introductions(run, sha, raw) if amended else {}
-    # A merged `<slug>-design.yaml` the branch no longer holds (the repair renamed it)
-    # is read as `<slug>.yaml`, its amendments keeping the position history gave them
-    # (spec 2026-11-17-batch-acceptance-edits R17).
-    merged, moved = respell(raw, keep=working.keys())
+    # A merged `<slug>-design.yaml` the branch renamed (it holds `<slug>.yaml` and no
+    # longer the `-design` file) is read as `<slug>.yaml`, its amendments keeping the
+    # position history gave them (spec 2026-11-17-batch-acceptance-edits R17); with
+    # no such rename (an unrepaired tip, or no working set) the tip is read as it is.
+    merged, moved = respell(raw, keep=renamed_keep(raw, working.keys()))
     intro: dict[tuple[str, int], int] = {}
     for key, pos in raw_intro.items():
         at = moved.get(key, key)

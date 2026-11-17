@@ -130,3 +130,15 @@ def test_the_repair_commit_keeps_each_amendments_original_position(
     assert now.revisions == then.revisions
     assert {r.id: r for r in now.matrix.rows} == {r.id: r for r in then.matrix.rows}
     assert now.owners["r"] == SLUG
+
+
+def test_an_unrepaired_default_ref_folds_as_before(tmp_path: Path) -> None:
+    """A tip holding only `<slug>-design.yaml`, folded with an empty working set, keeps
+    the `-design` feature as the owner and its rows in their order."""
+    root = _repo(tmp_path)
+    design = _frag(f"{SLUG}-design", _row("r") + _row("s"), _amend("r", "a's note", 0))
+    sha = _commit(root, {f"{SLUG}-design.yaml": design}, "feat: alpha")
+    got = _fold_at(root, sha)
+    assert got.owners == {"r": f"{SLUG}-design", "s": f"{SLUG}-design"}
+    assert [r.id for r in got.matrix.rows] == ["r", "s"]
+    assert got.revisions["r"] == 1
