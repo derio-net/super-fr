@@ -36,9 +36,16 @@ rows:
     origin:
     - spec:2026-11-17-triage-intake#R3
     - spec:2026-11-17-triage-intake#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_an_outside_authors_body_is_cleared_on_a_full_collect
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_an_outside_authors_body_is_cleared_on_the_view_issue_path
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_a_carried_schema_13_issue_by_an_outside_author_is_cleared_by_a_partial_collect
+      - super-fr:tests/unit/test_triage_check.py#test_an_outside_open_issue_is_untrusted_with_its_reason_and_in_no_other_set
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_suggest_never_proposes_an_untrusted_issue
+    status: ci
+    notes: 'Unit tests: body withheld on a full collect, the view_issue path and a partial
+      collect carrying a schema-13 issue; check''s untrusted set; suggest skips it.'
     verify: none
   - id: intake-batch-refuses-untrusted
     capability: triage intake trust
