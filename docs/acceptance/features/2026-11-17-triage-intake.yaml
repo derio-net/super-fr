@@ -110,9 +110,14 @@ rows:
       an undefined label still fails.
     origin:
     - spec:2026-11-17-triage-intake#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gh.py#TestSwapIssueLabelsUndefinedRemoval::test_an_undefined_removal_is_retried_without_it
+      - super-fr:tests/unit/test_gh.py#TestSwapIssueLabelsUndefinedRemoval::test_an_undefined_add_still_raises
+      - super-fr:tests/unit/test_tracking_none.py#test_cancel_converges_when_the_repo_has_no_in_progress_label
+    status: ci
+    notes: swap_issue_labels drops an undefined removal and retries; cancel writes its
+      event
     verify: none
   - id: cancel-dry-run-names-checkout
     capability: triage batch cancel
