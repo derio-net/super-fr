@@ -7171,6 +7171,15 @@ batches:
     handle: w3E:p2
     archive: chore/closeout-2026-11-15-2
     archived: 1474
+  - kind: claims_released
+    at: '2026-11-15T11:27:31.621333Z'
+    keys:
+    - super-fr#1280
+    - super-fr#1225
+    - super-fr#1289
+    - super-fr#1288
+    - super-fr#1428
+    - super-fr#1463
 - id: guard-trust
   title: Guards that switch off or trust the wrong binary
   ids:
@@ -7191,6 +7200,69 @@ batches:
     runner: herdr
     handle: w3F:p3
     branch: feat/batch-guard-trust
+  - kind: approval
+    at: '2026-11-16T15:19:42.697979Z'
+    pr: 1478
+    head: ccaa3b30616b9056806be81e1972465a2d0fa794
+  - kind: approval
+    at: '2026-11-16T15:54:25.685744Z'
+    pr: 1478
+    head: ccaa3b30616b9056806be81e1972465a2d0fa794
+    voided_at: 50a78c7714b411bb1c92120cd7e1be6d174b430f
+  - kind: approval
+    at: '2026-11-16T15:58:05.885150Z'
+    pr: 1478
+    head: 50a78c7714b411bb1c92120cd7e1be6d174b430f
+  - kind: update
+    at: '2026-11-16T15:58:46.200190Z'
+    pr: 1478
+    head_before: 50a78c7714b411bb1c92120cd7e1be6d174b430f
+    head_after: 1dc73a00801d04bc49cbb4023d351ac26d702b5d
+    base: 8d61459f2da191cd2bef09529780796d240bb083
+  - kind: update
+    at: '2026-11-16T16:11:27.301351Z'
+    pr: 1478
+    head_before: 1dc73a00801d04bc49cbb4023d351ac26d702b5d
+    head_after: 5a45830aa81ce6c0d003025b2fb738c376686d1a
+    base: f841b959d6cce3000c8d19296d7daaeb09692388
+  - kind: red_handback
+    at: '2026-11-16T16:18:39.871655Z'
+    pr: 1478
+    head: 5a45830aa81ce6c0d003025b2fb738c376686d1a
+    checks:
+    - 2 failing check(s)
+    delivered: session
+  - kind: claims_released
+    at: '2026-11-16T16:49:26.098141Z'
+    keys:
+    - super-fr#1230
+    - super-fr#1259
+    - super-fr#1277
+    - super-fr#1279
+    - super-fr#1429
+  - kind: post_merge
+    at: '2026-11-16T16:53:15.746827Z'
+  - kind: closeout
+    at: '2026-11-16T17:16:59.786688Z'
+    runner: herdr
+    handle: w3F:p7
+    run: 2026-11-15-feat-batch-guard-trust
+    archive: chore/closeout-2026-11-16-3
+  - kind: closeout
+    at: '2026-11-16T17:24:27.021689Z'
+    runner: herdr
+    handle: w3F:p7
+    run: 2026-11-15-feat-batch-guard-trust
+    archive: chore/closeout-2026-11-16-3
+    archived: 1498
+  - kind: claims_released
+    at: '2026-11-16T17:28:29.552563Z'
+    keys:
+    - super-fr#1277
+    - super-fr#1429
+    - super-fr#1230
+    - super-fr#1279
+    - super-fr#1259
 - id: gate-truth
   title: Gate ledger and gate pass tell the truth
   ids:
@@ -7210,6 +7282,60 @@ batches:
     runner: herdr
     handle: w3F:p2
     branch: fix/batch-gate-truth
+  - kind: approval
+    at: '2026-11-16T15:19:42.697979Z'
+    pr: 1477
+    head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
+  - kind: conflict
+    at: '2026-11-16T15:31:09.605545Z'
+    head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
+    paths:
+    - docs/reference/cli.md
+    - docs/reference/workflow-shapes.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-gate-truth
+  - kind: approval
+    at: '2026-11-16T15:38:24.023320Z'
+    pr: 1477
+    head: cc30e0af7aa9acaa404c5f5b81d8b348666dd1bd
+    voided_at: acacea8675acbd7d90e8781ca1d3a0a82c0b4b16
+  - kind: approval
+    at: '2026-11-16T15:54:25.685744Z'
+    pr: 1477
+    head: acacea8675acbd7d90e8781ca1d3a0a82c0b4b16
+  - kind: claims_released
+    at: '2026-11-16T15:58:49.644016Z'
+    keys:
+    - super-fr#1275
+    - super-fr#1293
+    - super-fr#1389
+    - super-fr#1399
+  - kind: post_merge
+    at: '2026-11-16T16:03:43.376611Z'
+  - kind: closeout
+    at: '2026-11-16T16:04:35.246720Z'
+    runner: herdr
+    handle: w3F:p6
+    archive: chore/closeout-2026-11-16-2
+  - kind: closeout_handback
+    at: '2026-11-16T16:11:30.889198Z'
+    item: derio-net/super-fr/run/closeout-2026-11-16-2
+    pr: 1495
+    head: 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
+    reason: 1 failing check(s)
+  - kind: closeout
+    at: '2026-11-16T17:12:42.298923Z'
+    runner: herdr
+    handle: w3F:p6
+    archive: chore/closeout-2026-11-16-2
+    archived: 1495
+  - kind: claims_released
+    at: '2026-11-16T17:16:18.858489Z'
+    keys:
+    - super-fr#1399
+    - super-fr#1389
+    - super-fr#1293
+    - super-fr#1275
 - id: deliver-evidence
   title: Deliver and resolve witnesses that cannot pass falsely
   ids:
@@ -7230,6 +7356,43 @@ batches:
     runner: herdr
     handle: w3F:p1
     branch: fix/batch-deliver-evidence
+  - kind: approval
+    at: '2026-11-16T15:19:42.697979Z'
+    pr: 1479
+    head: dbad1c9bbf1b188e8e4cafdaf85d8efba669e25c
+  - kind: update
+    at: '2026-11-16T15:20:13.222254Z'
+    pr: 1479
+    head_before: dbad1c9bbf1b188e8e4cafdaf85d8efba669e25c
+    head_after: bb1ec38a435f90f64b492c5ffb152a6db89bfc69
+    base: f0a45b5bdab08e8a0b1cdb5947f65cf2fa2b4c37
+  - kind: claims_released
+    at: '2026-11-16T15:35:06.927121Z'
+    keys:
+    - super-fr#1303
+    - super-fr#1395
+    - super-fr#1454
+    - super-fr#1462
+  - kind: post_merge
+    at: '2026-11-16T15:38:58.818659Z'
+  - kind: closeout
+    at: '2026-11-16T15:39:42.077094Z'
+    runner: herdr
+    handle: w3F:p5
+    archive: chore/closeout-2026-11-16-1
+  - kind: closeout
+    at: '2026-11-16T15:51:11.727626Z'
+    runner: herdr
+    handle: w3F:p5
+    archive: chore/closeout-2026-11-16-1
+    archived: 1490
+  - kind: claims_released
+    at: '2026-11-16T15:54:55.472007Z'
+    keys:
+    - super-fr#1454
+    - super-fr#1395
+    - super-fr#1303
+    - super-fr#1462
 - id: owed-archive
   title: Owed trackers and archive side effects
   ids:
@@ -7249,6 +7412,48 @@ batches:
     runner: herdr
     handle: w3F:p4
     branch: feat/batch-owed-archive
+  - kind: approval
+    at: '2026-11-16T16:48:33.274549Z'
+    pr: 1480
+    head: dda8eca87eea225ad745069b1967bfbcb1f9e162
+  - kind: conflict
+    at: '2026-11-16T16:49:24.161949Z'
+    head: dda8eca87eea225ad745069b1967bfbcb1f9e162
+    paths:
+    - packages/fr/src/fr/archive.py
+    delivered: session
+    handle: derio-net/super-fr/run/batch-owed-archive
+  - kind: approval
+    at: '2026-11-16T17:34:46.460734Z'
+    pr: 1480
+    head: dda8eca87eea225ad745069b1967bfbcb1f9e162
+    voided_at: be1f076a1e2b73c752cdf6c69b2d833526f380c9
+  - kind: approval
+    at: '2026-11-16T18:15:03.349181Z'
+    pr: 1480
+    head: 80009831000f40c535d8efbd1b51d0ab6c7cdd39
+  - kind: claims_released
+    at: '2026-11-16T18:21:07.029737Z'
+    keys:
+    - super-fr#1183
+    - super-fr#1184
+    - super-fr#1301
+    - super-fr#1400
+  - kind: post_merge
+    at: '2026-11-16T18:28:03.870122Z'
+  - kind: closeout
+    at: '2026-11-16T18:29:11.438765Z'
+    runner: herdr
+    handle: w3F:p8
+    run: 2026-11-15-feat-batch-owed-archive
+    archive: chore/closeout-2026-11-16-4
+  - kind: closeout
+    at: '2026-11-16T18:41:39.654525Z'
+    runner: herdr
+    handle: w3F:p8
+    run: 2026-11-15-feat-batch-owed-archive
+    archive: chore/closeout-2026-11-16-4
+    archived: 1505
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -7264,6 +7469,12 @@ batches:
   - deliver-evidence
   - owed-archive
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-16T18:16:52.428041Z'
+    runner: herdr
+    handle: w3H:p3
+    branch: fix/batch-workspace-identity
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
@@ -7277,6 +7488,12 @@ batches:
   - deliver-evidence
   - owed-archive
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-16T18:15:21.260497Z'
+    runner: herdr
+    handle: w3H:p1
+    branch: fix/batch-placement-truth
 - id: release-truth
   title: Release robustness
   ids:
@@ -7294,6 +7511,12 @@ batches:
   - deliver-evidence
   - owed-archive
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-16T18:15:53.576561Z'
+    runner: herdr
+    handle: w3H:p2
+    branch: fix/batch-release-truth
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
@@ -7707,6 +7930,12 @@ exports:
   pr: 1473
   head: 4f01acfee9a5417205be621e6d068d9fa9a8982f
   merged: true
+- wave: '16'
+  repo: derio-net/super-fr
+  at: '2026-11-15T11:27:29.470592Z'
+  pr: 1475
+  head: 3b0ab7a3c4d310305f5b099e4ef327423da6cf35
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -7758,3 +7987,105 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-suite-health.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-suite-health.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-1
+  branch: chore/closeout-2026-11-16-1
+  at: '2026-11-16T15:39:01.537880Z'
+  runner: herdr
+  handle: w3F:p5
+  planned:
+  - deliver-evidence
+  pr: 1490
+  merged: true
+  head: 1a022c4edd0e09d86a60ef055090f17fa6901037
+  members:
+  - deliver-evidence
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-deliver-evidence.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-deliver-evidence.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-2
+  branch: chore/closeout-2026-11-16-2
+  at: '2026-11-16T16:03:46.562442Z'
+  runner: herdr
+  handle: w3F:p6
+  planned:
+  - gate-truth
+  pr: 1495
+  merged: true
+  head: 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
+  members:
+  - gate-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-15-batch-gate-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-15-batch-gate-truth.md"
+  handed:
+  - 80f24e9fb8777a365704b0e2753e569b9cfcd8cc
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-3
+  branch: chore/closeout-2026-11-16-3
+  at: '2026-11-16T17:16:07.620629Z'
+  runner: herdr
+  handle: w3F:p7
+  planned:
+  - guard-trust
+  pr: 1498
+  merged: true
+  head: e7884e8850b94bf94e772569d1a03e76c3f7e8e6
+  members:
+  - guard-trust
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-15-guard-trust.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-15-guard-trust.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-guard-trust/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-15-feat-batch-guard-trust.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-15-guard-trust-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-15-feat-batch-guard-trust.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-15-guard-trust.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-15-guard-trust.md"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-guard-trust/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-guard-trust.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-15-guard-trust-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-guard-trust.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-16-4
+  branch: chore/closeout-2026-11-16-4
+  at: '2026-11-16T18:28:06.684973Z'
+  runner: herdr
+  handle: w3F:p8
+  planned:
+  - owed-archive
+  pr: 1505
+  merged: true
+  head: a474cebb1d5e9b9762aa5fe68a71e8ca1f9bd230
+  members:
+  - owed-archive
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-15-owed-archive-side-effects.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-15-owed-archive-side-effects.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-15-owed-archive-side-effects/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-15-feat-batch-owed-archive.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-15-owed-archive-side-effects-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-15-feat-batch-owed-archive.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-15-owed-archive-side-effects.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-15-owed-archive-side-effects.md"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-15-owed-archive-side-effects/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-owed-archive.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-15-owed-archive-side-effects-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-owed-archive.yaml"
