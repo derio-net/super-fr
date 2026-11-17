@@ -7505,6 +7505,12 @@ batches:
     head_before: cd348bae83b20f6451981b71872bb59f82de6abf
     head_after: 0f72498a34bd152bc095d9d2396e9d6b7084ba0a
     base: fa59d15df514104bc758d6a9d948ca4ce35904c8
+  - kind: claims_released
+    at: '2026-11-17T09:01:54.669599Z'
+    keys:
+    - super-fr#1166
+    - super-fr#1243
+    - super-fr#1419
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
@@ -7552,6 +7558,11 @@ batches:
     handle: w3H:p4
     archive: chore/closeout-2026-11-17-1
     archived: 1526
+  - kind: claims_released
+    at: '2026-11-17T09:01:54.669599Z'
+    keys:
+    - super-fr#1438
+    - super-fr#1433
 - id: release-truth
   title: Release robustness
   ids:
@@ -7645,6 +7656,12 @@ batches:
   - placement-truth
   - release-truth
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-17T09:00:59.238632Z'
+    runner: herdr
+    handle: w3K:p3
+    branch: feat/batch-triage-intake
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
@@ -7660,6 +7677,12 @@ batches:
   - placement-truth
   - release-truth
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-17T09:00:04.084527Z'
+    runner: herdr
+    handle: w3K:p2
+    branch: fix/batch-triage-collect
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
@@ -7758,6 +7781,12 @@ batches:
   - placement-truth
   - release-truth
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-17T08:59:30.021417Z'
+    runner: herdr
+    handle: w3K:p1
+    branch: fix/batch-suite-trust
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
