@@ -7871,6 +7871,11 @@ batches:
     handle: w3K:p4
     archive: chore/closeout-2026-11-17-4
     archived: 1535
+  - kind: claims_released
+    at: '2026-11-17T15:23:19.369412Z'
+    keys:
+    - super-fr#1468
+    - super-fr#1463
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -8380,3 +8385,11 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-17-suite-trust.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-17-suite-trust.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-5
+  branch: chore/closeout-2026-11-17-5
+  at: '2026-11-17T15:23:05.037722Z'
+  runner: herdr
+  handle: w3K:p5
+  planned:
+  - triage-collect
