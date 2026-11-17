@@ -8239,6 +8239,7 @@ exports:
   at: '2026-11-17T18:16:03.437067Z'
   pr: 1538
   head: b85870d4827d07eac39dacf2bb9906e6b620cdb6
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
