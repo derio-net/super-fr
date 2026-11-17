@@ -90,17 +90,19 @@ def test_rejected_members_flags_ineligible_open_or_closed_and_uncollected() -> N
         _issue(3, author="eve", author_association="MEMBER"),
         viewer="operator",
     )
-    got = rejected_members(_batch(f"{REPO}#1", f"{REPO}#2", f"{REPO}#3", f"{REPO}#9"), facts)
+    got = rejected_members(
+        _batch(f"super-fr#1", f"super-fr#2", f"super-fr#3", f"super-fr#9"), facts
+    )
     assert got == [
-        (f"{REPO}#1", "author eve is NONE"),
-        (f"{REPO}#2", "author eve is NONE"),
-        (f"{REPO}#9", NOT_COLLECTED),
+        (f"super-fr#1", "author eve is NONE"),
+        (f"super-fr#2", "author eve is NONE"),
+        (f"super-fr#9", NOT_COLLECTED),
     ]
 
 
 def test_an_eligible_batch_has_no_rejected_members() -> None:
     facts = _facts(_issue(1, author="operator"), viewer="operator")
-    assert rejected_members(_batch(f"{REPO}#1"), facts) == []
+    assert rejected_members(_batch(f"super-fr#1"), facts) == []
 
 
 def test_untrusted_issues_lists_open_ineligible_ones_only() -> None:
