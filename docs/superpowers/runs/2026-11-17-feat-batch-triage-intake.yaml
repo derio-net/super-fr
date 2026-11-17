@@ -3,7 +3,7 @@ run: 2026-11-17-feat-batch-triage-intake
 workflow: fr-goal@1
 branch: feat/batch-triage-intake
 started: '2026-11-17T09:02:21+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -158,8 +158,8 @@ steps:
     stdout: |
       3 out-of-scope finding(s): p1-r6, p2-r3, p3-r2
   lens-review:
-    state: running
-    at: '2026-11-17T16:47:24+00:00'
+    state: done
+    at: '2026-11-17T20:01:36+00:00'
     units:
       step/lens-review:
         attempts:
@@ -167,6 +167,14 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: f55704a7-fff8-4fb0-98fe-055a073c49ca
+          returned: '2026-11-17T20:01:36+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=a712192e3bc21765c,security=a771e40b3f17f767f,tests=ad501fb56e87140c6
+          findings: l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-security-r1,l-security-r2,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5,l-tests-r6,l-tests-r7
+          lenses: docs-accuracy=9:l-docs-accuracy-r3;security=14:l-security-r1,l-security-r2;tests=unobserved:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5,l-tests-r6,l-tests-r7
+          unobserved: reviewer-return
   deliver:
     state: pending
 fr_version: 8.1.2

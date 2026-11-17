@@ -252,3 +252,109 @@ gh's resolve-before-mutate order is gh's behaviour, not this change's; ba9de9d0a
 ### p3-r3-resolved · finding [refuted] · resolves p3-r3: close_gate_trackers returns early on an EvidenceReader failure instead of recording per issue (phase 3)
 
 Not a defect: one shared reader failing means no issue can be judged; recording it once is the accurate report.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-17T20:01:36+00:00 -->
+### lens-review-1 · review · Lens review (docs-accuracy, security, tests): 1+1 security, 2 docs, 7 tests findings
+
+Independent read-only reviewers over the whole feature diff, one per lens; docs-accuracy re-run against merge base b52bfadd2 after merging main.
+docs-accuracy: the touched pages match the code apart from the fr-triage skill's bot clause and the
+blocked-drive stop wording. security: the intake rule fails closed, bodies are withheld on every collect
+path, the refusal precedes every write, every batch brief quotes issue text; residual: pre-schema facts
+on disk and post-admission edits. tests: R6/R9 multi-pass and parity tests are sound; gaps sat on
+production-only paths that the fakes hide.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-triage SKILL.md says the untrusted set excludes the repo's own bot; intake admits the bot only with the digest marker
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · merge-protection.md says the drive stops for the operator on a blocked batch; it stops only once nothing but blocked or held batches remain
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-17T20:01:36+00:00 state=open review_scope=out -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: out of scope) · fr-triage SKILL.md step 3 said a first run writes judgements schema 11; the writer stamps 12
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · Facts written before the author-association schema keep outside authors' bodies loaded until the next collect
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-17T20:01:36+00:00 state=open review_scope=out -->
+### l-security-r2 · finding [open] (reviewer: out of scope) · ready-fr admission is not pinned to content: the author can edit the issue after the label
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · No test that gh.list_issues strips authorAssociation from the gh CLI --json list
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · issue_associations jq PR filter and REST implementation (PR filter, limit, null) untested
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · Fail-closed body clearing on a failed association read not asserted at collect or view level
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · Per-label independence of the approved-fr/ready-fr ensure has no failure-path test
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · quote_untrusted hostile tests use only newline; detail and rationale not hostile-tested
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · Cancel-convergence test hand-wires edit_issue_labels instead of the real client path
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-17T20:01:36+00:00 state=open review_scope=in -->
+### l-tests-r7 · finding [open] (reviewer: in scope) · Driver/board rejected-parity test covers one outside author only
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-triage SKILL.md says the untrusted set excludes the repo's own bot; intake admits the bot only with the digest marker
+
+aa29525da: the skill names the debt workflow's bot filing a marked digest; both mirrors regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: merge-protection.md says the drive stops for the operator on a blocked batch; it stops only once nothing but blocked or held batches remain
+
+aa29525da: the drive stops for the operator once only blocked or held batches remain.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-17T20:01:36+00:00 state=open resolves=l-docs-accuracy-r3 out_of_scope=true -->
+### l-docs-accuracy-r3-resolved · finding [out-of-scope] · resolves l-docs-accuracy-r3: fr-triage SKILL.md step 3 said a first run writes judgements schema 11; the writer stamps 12
+
+Stale before this change, which only reflowed the line; corrected anyway in the same PR (schema 12, mirrors regenerated).
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: Facts written before the author-association schema keep outside authors' bodies loaded until the next collect
+
+Spec R3 amended (98644970e); bfebee810 withholds ineligible bodies when an older facts file loads (below 15 after the merge renumbered this branch's schema, 62e1197ab); test 58b366bc8 red before the fix.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-17T20:01:36+00:00 state=open resolves=l-security-r2 out_of_scope=true -->
+### l-security-r2-resolved · finding [out-of-scope] · resolves l-security-r2: ready-fr admission is not pinned to content: the author can edit the issue after the label
+
+The spec's R8 and merge-protection.md state this residual risk; the quoted untrusted block is the mitigation. Pinning admission to content is a separate design decision.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: No test that gh.list_issues strips authorAssociation from the gh CLI --json list
+
+d42531b6e; red when the strip is removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: issue_associations jq PR filter and REST implementation (PR filter, limit, null) untested
+
+d42531b6e: REST and CLI association reads (PR filter, limit, null, exact jq run through jq); red on each broken variant.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: Fail-closed body clearing on a failed association read not asserted at collect or view level
+
+d5e6d1bd7: listed and viewed issues; red with withholding made a no-op.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: Per-label independence of the approved-fr/ready-fr ensure has no failure-path test
+
+2034f534b; red on return-instead-of-continue and on break in the labels-off branch.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: quote_untrusted hostile tests use only newline; detail and rationale not hostile-tested
+
+2bebfc61b: \r\n, \r, U+2028, \x85; hostile rationale, detail, note; red on a newline-only split.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: Cancel-convergence test hand-wires edit_issue_labels instead of the real client path
+
+96c608c35: through RealGhClient.edit_issue_labels with _run_gh patched.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-17T20:01:36+00:00 state=fixed resolves=l-tests-r7 -->
+### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: Driver/board rejected-parity test covers one outside author only
+
+629ccfe55: outside, pr_authors-trusted, ready-fr, maintainer and not-collected members.
