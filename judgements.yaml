@@ -7849,6 +7849,8 @@ batches:
     at: '2026-11-17T14:54:07.978594Z'
     keys:
     - super-fr#1468
+  - kind: post_merge
+    at: '2026-11-17T15:03:50.465990Z'
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -8342,3 +8344,11 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-workspace-identity.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-16-workspace-identity.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-4
+  branch: chore/closeout-2026-11-17-4
+  at: '2026-11-17T15:03:58.365073Z'
+  runner: herdr
+  handle: w3K:p4
+  planned:
+  - suite-trust
