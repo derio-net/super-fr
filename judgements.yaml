@@ -7711,6 +7711,13 @@ batches:
     handle: w3H:p8
     run: 2026-11-17-feat-batch-acceptance-edits
     archive: chore/closeout-2026-11-17-6
+  - kind: closeout
+    at: '2026-11-17T18:12:34.571722Z'
+    runner: herdr
+    handle: w3H:p8
+    run: 2026-11-17-feat-batch-acceptance-edits
+    archive: chore/closeout-2026-11-17-6
+    archived: 1537
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
@@ -8462,6 +8469,7 @@ closeouts:
   planned:
   - acceptance-edits
   pr: 1537
+  merged: true
   head: 570afa5b7a4a879c79658e4183feedaeb0d47b36
   members:
   - acceptance-edits
