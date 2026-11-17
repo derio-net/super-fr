@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -448,14 +450,90 @@ class TestWorktreeRemove:
 # exit fails the worktree creation outright. The hook serializes `fr isolation
 # up` per repo+branch so a double registration is harmless.
 
+# gh#1463: these tests flake on Linux CI only (a double hold the lock should make
+# impossible), and 300 loaded runs reproduced none. So each failure carries its own
+# evidence: the two hooks run under `bash -x` with every traced line stamped by its
+# process and time, so the lock's mkdir / pid read / `kill -0` / reclaim are on record,
+# and the stubs write enter/exit lines (hook pid, time, the lock's recorded holder) to
+# `$FR_STUB_LOG.trace`. All of it is printed, untruncated, only when an assertion fails.
+TRACE_PS4 = "+ ${BASHPID} ${EPOCHREALTIME:-} "
+STUB_TRACE = (
+    r"""printf '%s ppid=%s t=%s lock-holder=%s\n' "$1" "$PPID" "${EPOCHREALTIME:-}" """
+    r""""$(cat "$HOME"/.cache/fr/locks/*/pid 2>/dev/null | tr '\n' ,)" >> "$FR_STUB_LOG.trace"
+"""
+)
+
+
+@dataclass(frozen=True)
+class RaceRun:
+    pid: int
+    out: str
+    err: str
+    code: int | None
+
+
+def run_twice(script: Path, payload: Path, env: dict[str, str]) -> list[RaceRun]:
+    """Start two copies of a hook at once, both traced, and wait for both.
+
+    stdin from a file, not a pipe: with pipes, communicate() on the first
+    process blocks the second on `input=$(cat)` until the first finishes,
+    so the two never actually overlap and the test proves nothing."""
+    procs = []
+    for _ in range(2):
+        with payload.open() as stdin:
+            procs.append(
+                subprocess.Popen(
+                    ["bash", "-x", str(script)],
+                    stdin=stdin,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env={**env, "PS4": TRACE_PS4},
+                )
+            )
+    return [RaceRun(p.pid, *p.communicate(timeout=60), p.returncode) for p in procs]
+
+
+# The traced steps worth reading, matched on the command an xtrace line
+# (`+ BASHPID EPOCHREALTIME cmd`) records: the lock (mkdir, pid file, holder,
+# `kill -0`, the reclaim, the wait, the trap) and the call to fr. PATH walks and jq
+# are noise.
+LOCK_STEP = re.compile(
+    r"^\++ \d+ \S* (mkdir |cat |holder=|kill |rm |sleep |waited=|lock=|trap |echo |"
+    r"out=|exit|\S*/fr )"
+)
+
+
+def race_evidence(runs: list[RaceRun], env: dict[str, str]) -> str:
+    """Everything one failed race left behind, as one plain string: pytest prints
+    an assertion's str message whole, where it shortens a list's repr."""
+    parts = []
+    for i, r in enumerate(runs):
+        kept = [ln for ln in r.err.splitlines() if not ln.startswith("+") or LOCK_STEP.search(ln)]
+        parts.append(
+            f"--- hook {i}: pid {r.pid}, exit {r.code}\n--- stdout:\n{r.out}"
+            "--- stderr (lock steps of the xtrace, `+ BASHPID EPOCHREALTIME cmd`, "
+            "and every message):\n" + "\n".join(kept)
+        )
+    for suffix in ("", ".trace"):
+        log = Path(env["FR_STUB_LOG"] + suffix)
+        parts.append(f"--- stub log{suffix}:\n{log.read_text() if log.exists() else '(none)'}")
+    return "\n".join(parts)
+
+
 SLOW_STUB = (
     r"""#!/bin/bash
-mkdir "$HOME/in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
+"""
+    + STUB_TRACE.replace('"$1"', "enter")
+    + r"""mkdir "$HOME/in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
 sleep 1
 """
     + STUB.split("\n", 1)[1]
     + r"""
-rmdir "$HOME/in-flight" 2>/dev/null
+rmdir "$HOME/in-flight" 2>/dev/null; rc=$?
+"""
+    + STUB_TRACE.replace('"$1"', '"exit rmdir=$rc"')
+    + r"""exit $rc
 """
 )
 
@@ -463,37 +541,29 @@ rmdir "$HOME/in-flight" 2>/dev/null
 def test_two_concurrent_invocations_do_not_overlap(repo: Path, stub_fr: dict[str, str]) -> None:
     stub = Path(stub_fr["PATH"].split(":")[0]) / "fr"
     stub.write_text(SLOW_STUB)
-    # stdin from a file, not a pipe: with pipes, communicate() on the first
-    # process blocks the second on `input=$(cat)` until the first finishes,
-    # so the two never actually overlap and the test proves nothing.
     payload = Path(stub_fr["HOME"]) / "payload.json"
     payload.write_text(json.dumps(create_payload("twice", repo)))
-    procs = []
-    for _ in range(2):
-        with payload.open() as stdin:
-            procs.append(
-                subprocess.Popen(
-                    ["bash", str(CREATE)],
-                    stdin=stdin,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env=stub_fr,
-                )
-            )
-    outs = [p.communicate(timeout=60) for p in procs]
-    assert all(p.returncode == 0 for p in procs), [o[1] for o in outs]
-    assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped"
-    paths = {o[0].strip().splitlines()[-1] for o in outs}
-    assert len(paths) == 1, f"the two invocations disagree on the worktree: {paths}"
+    runs = run_twice(CREATE, payload, stub_fr)
+    evidence = race_evidence(runs, stub_fr)
+    assert all(r.code == 0 for r in runs), evidence
+    assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped\n" + evidence
+    paths = {r.out.strip().splitlines()[-1] for r in runs}
+    assert len(paths) == 1, f"the two invocations disagree on the worktree: {paths}\n{evidence}"
 
 
-SLOW_DOWN_STUB = r"""#!/bin/bash
+SLOW_DOWN_STUB = (
+    r"""#!/bin/bash
 printf '%s\n' "$*" >> "$FR_STUB_LOG"
-mkdir "$HOME/down-in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
-sleep 1
-rmdir "$HOME/down-in-flight" 2>/dev/null
 """
+    + STUB_TRACE.replace('"$1"', "enter")
+    + r"""mkdir "$HOME/down-in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
+sleep 1
+rmdir "$HOME/down-in-flight" 2>/dev/null; rc=$?
+"""
+    + STUB_TRACE.replace('"$1"', '"exit rmdir=$rc"')
+    + r"""exit $rc
+"""
+)
 
 
 def test_two_concurrent_removals_do_not_overlap(
@@ -506,23 +576,10 @@ def test_two_concurrent_removals_do_not_overlap(
     target = tmp_path / "cache" / "wt"
     payload = tmp_path / "remove.json"
     payload.write_text(json.dumps(remove_payload(repo, worktree_path=str(target))))
-    procs = []
-    for _ in range(2):
-        with payload.open() as stdin:
-            procs.append(
-                subprocess.Popen(
-                    ["bash", str(REMOVE)],
-                    stdin=stdin,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env=stub_fr,
-                )
-            )
-    for p in procs:
-        p.communicate(timeout=60)
-    assert all(p.returncode == 0 for p in procs)
-    assert "OVERLAP" not in logged(stub_fr), "two fr isolation down runs overlapped"
+    runs = run_twice(REMOVE, payload, stub_fr)
+    evidence = race_evidence(runs, stub_fr)
+    assert all(r.code == 0 for r in runs), evidence
+    assert "OVERLAP" not in logged(stub_fr), "two fr isolation down runs overlapped\n" + evidence
 
 
 # gh#1124: the lock above covered only the `fr isolation up` path. `agent-*`
@@ -546,23 +603,11 @@ def test_two_concurrent_agent_worktree_creations_both_succeed(
     env = {**stub_fr, "REAL_GIT": shutil.which("git") or "git"}
     payload = Path(stub_fr["HOME"]) / "agent-payload.json"
     payload.write_text(json.dumps(create_payload("agent-twice", repo)))
-    procs = []
-    for _ in range(2):
-        with payload.open() as stdin:
-            procs.append(
-                subprocess.Popen(
-                    ["bash", str(CREATE)],
-                    stdin=stdin,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env=env,
-                )
-            )
-    outs = [p.communicate(timeout=60) for p in procs]
-    assert all(p.returncode == 0 for p in procs), [o[1] for o in outs]
+    runs = run_twice(CREATE, payload, env)
+    evidence = race_evidence(runs, stub_fr)
+    assert all(r.code == 0 for r in runs), evidence
     expected = str(agent_dir(stub_fr, "agent-twice"))
-    assert {last_line(o[0]) for o in outs} == {expected}
+    assert {last_line(r.out) for r in runs} == {expected}, evidence
     assert worktrees(repo).count(expected) == 1
 
 

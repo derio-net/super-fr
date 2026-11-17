@@ -24,8 +24,20 @@ INSTALL = REPO_ROOT / ".fr" / "candidate-install"
 SCENARIOS = REPO_ROOT / "tests" / "scenarios"
 
 
+def _git_scope_vars() -> set[str]:
+    """Every variable git scopes a repository by (`GIT_DIR`, `GIT_INDEX_FILE`, ...).
+
+    A pytest started by a git hook or `git rebase -x` carries them, naming the
+    caller's checkout; passed on, a scenario's git writes there (gh#1468)."""
+    out = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True, check=True
+    ).stdout
+    return set(out.split())
+
+
 def _env(prefix: Path) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if k not in {"FR_HARNESS_FR", "CI"}}
+    drop = {"FR_HARNESS_FR", "CI"} | _git_scope_vars()
+    env = {k: v for k, v in os.environ.items() if k not in drop}
     env.update(
         UV_TOOL_DIR=str(prefix / "uv-tools"),
         UV_TOOL_BIN_DIR=str(prefix / "bin"),
@@ -55,9 +67,10 @@ def _scenario(name: str, prefix: Path, tmp_path: Path) -> None:
     assert script.is_file() and os.access(script, os.X_OK), script
     fixture = tmp_path / "fixture"
     fixture.mkdir()
-    subprocess.run(["git", "init", "-q", str(fixture)], check=True)
+    env = _env(prefix)
+    subprocess.run(["git", "init", "-q", str(fixture)], check=True, env=env)
     done = subprocess.run(
-        [str(script)], cwd=fixture, env=_env(prefix), capture_output=True, text=True, check=False
+        [str(script)], cwd=fixture, env=env, capture_output=True, text=True, check=False
     )
     assert done.returncode == 0, f"{name}:\n{done.stdout[-1500:]}\n{done.stderr[-2500:]}"
     assert f"ok: {name}" in done.stdout
