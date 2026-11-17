@@ -160,3 +160,41 @@ In a loop pass a failed fetch is first met by _fetched_reader / _archived reader
 ### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 the _fresh_config split removed the duplication it would have left; nothing else to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-17T15:57:28+00:00 phase=2 -->
+### review-phase-2 · review · Phase 2 code review (R9 per-pass fetch): contract holds; 2 in-scope test gaps, 1 out (phase 2)
+
+Independent read-only reviewer over e3c1d1f0a..HEAD. Confirmed: merge_ctx checks _ctx_held first, fetches
+unless _fetched has the repo, re-checks the config; _ctx_checked/_ctx_held reset beside _fetched each pass;
+every caller (including _closeout_hand_back) goes through _ctx_or_hold; held repos spend no budget;
+version and method follow each pass's config, allowed methods read once at build; no double fetch.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-17T15:57:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · Loop-level held-pass test passes on lifetime-cached code because other readers fetch every pass (phase 2)
+
+tests/unit/test_triage_batch_drive_cmd.py test_a_failed_fetch_holds_the_repo_for_that_pass_only_and_fetches_once_per_pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-17T15:57:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · No unit test that a held repo re-raises without a second fetch, nor that a stale config leaves the repo unchecked (phase 2)
+
+The hold is spec step 1 of §B.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-17T15:57:28+00:00 phase=2 state=open review_scope=out -->
+### p2-r3 · finding [open] (reviewer: out of scope) · _fetched_reader lets GitError escape and does not record the failed fetch, so a pass may retry it (phase 2)
+
+triage_batch_cmd.py ~4811. Pre-existing reader; the spec bounds only the merge-context fetch.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-17T15:57:28+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: Loop-level held-pass test passes on lifetime-cached code because other readers fetch every pass (phase 2)
+
+dbaa04087: the loop test spies on merge_ctx and asserts pass 2's use is held and pass 3's ok; reverting the per-pass reset turns it red. The check-once-never-refetch variant is caught by test_the_merge_context_follows_each_passs_config_without_a_second_methods_read (expects a second fetch after the pass reset).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-17T15:57:28+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: No unit test that a held repo re-raises without a second fetch, nor that a stale config leaves the repo unchecked (phase 2)
+
+dbaa04087: two _Clone unit tests — a failed fetch holds and re-raises DefaultBranchUnknown with one fetch; a stale config raises ForgeReadError code 2 and leaves the repo out of _ctx_checked and _ctx_held.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-17T15:57:28+00:00 phase=2 state=open resolves=p2-r3 out_of_scope=true -->
+### p2-r3-resolved · finding [out-of-scope] · resolves p2-r3: _fetched_reader lets GitError escape and does not record the failed fetch, so a pass may retry it (phase 2)
+
+Not caused by this change: _fetched_reader's fetch handling predates it and R9 bounds only the merge-context fetch; merge_ctx itself holds after one failure.

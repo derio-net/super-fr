@@ -106,13 +106,20 @@ steps:
           tests: p2-suite.log@84172c963ffc;tree=890a3ec034c3ead8edb4e26efc8f95a340cbc084a291deaf32f7950a6c41a92b
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-17T15:50:32+00:00'
           agent: a8cd93bdbc0bdea74
           harness: claude-code
           model: claude-sonnet-5-5
           session: f55704a7-fff8-4fb0-98fe-055a073c49ca
+          returned: '2026-11-17T15:57:29+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-2
+          reviewer: a8cd93bdbc0bdea74
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3
   journal-check:
     state: pending
   lens-review:
