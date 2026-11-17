@@ -245,3 +245,8 @@ run_kind: candidate
 ### followup-cancel-no-checkout · finding [open] (reviewer: out of scope) · batch cancel of a never-dispatched batch still needs --checkout (gh#803 tracking gate); #1406's second side ask
 
 Decision d3-cancel-scope (operator, round 1): this change keeps the tracking gate and makes the dry run name the --checkout that --yes needs (R11). Letting a batch that was never dispatched cancel with no checkout is a separate change, filed as a follow-up.
+
+<!-- fr:journal kind=finding scope=spec id=followup-cancel-no-checkout-resolved created=2026-11-17T21:18:27+00:00 state=open resolves=followup-cancel-no-checkout out_of_scope=true -->
+### followup-cancel-no-checkout-resolved · finding [out-of-scope] · resolves followup-cancel-no-checkout: batch cancel of a never-dispatched batch still needs --checkout (gh#803 tracking gate); #1406's second side ask
+
+Operator decision d3: a follow-up, not this change.
