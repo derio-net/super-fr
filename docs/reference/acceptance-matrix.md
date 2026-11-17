@@ -72,12 +72,13 @@ The migration names the row and leaves every file as it was.
 
 Earlier fr versions named a fragment `<slug>-design.yaml`, with `feature: <slug>-design`.
 `fr migrate artifacts --yes` renames such a fragment to `<slug>.yaml` and sets its
-`feature:` key to `<slug>`. If `<slug>.yaml` exists, the migration merges the two: the rows
-and amendments of `<slug>.yaml` come first, and an entry that the two files hold
+`feature:` key to `<slug>`. If `<slug>.yaml` exists, the migration merges the two files.
+The rows and amendments of `<slug>.yaml` come first. An entry that the two files hold
 identically stays once. A row that the two files hold *differently* stops the migration.
 The migration names the row and leaves both files as they were. The migration also stops
-if the matrix after it is not the matrix before it. On the default branch, the old file can
-still exist after the merge. `fr acceptance check` reads it as `<slug>.yaml`, so the rename
+if the matrix after it is not the matrix before it.
+
+On the default branch, the old file can still exist after the merge. `fr acceptance check` reads it as `<slug>.yaml`, so the rename
 is not an in-place edit of a merged row.
 
 To continue, put that row back as the fragments hold it, or delete it from `matrix.yaml`.
