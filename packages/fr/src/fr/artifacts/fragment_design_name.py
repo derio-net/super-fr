@@ -20,16 +20,18 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
-from fr.acceptance.edit import append_amendment, render_fragment
-from fr.acceptance.fold import fold_texts
-from fr.acceptance.fragment import Fragment, parse_fragment
-from fr.acceptance.model import AcceptanceError
-from fr.acceptance.spelling import design_slug, merge_spellings
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, Repair
+
+if TYPE_CHECKING:
+    from fr.acceptance.fragment import Fragment
+
+# `fr.acceptance` is imported inside each function: it imports `fr.artifacts`, whose
+# package import registers this module, so a module-level import is a cycle.
 
 REPAIR_NAME = "design-name"
 
@@ -37,6 +39,8 @@ _FEATURE_RE = re.compile(r"^feature:[^\n]*$", re.MULTILINE)
 
 
 def _parse(path: Path) -> Fragment:
+    from fr.acceptance.fragment import parse_fragment
+
     return parse_fragment(path.read_text(encoding="utf-8"), source=path.name)
 
 
@@ -51,6 +55,8 @@ def _slug(path: Path) -> str | None:
     except yaml.YAMLError:
         return None
     feature = data.get("feature") if isinstance(data, dict) else None
+    from fr.acceptance.spelling import design_slug
+
     return design_slug(path.name, feature) if isinstance(feature, str) else None
 
 
@@ -64,6 +70,8 @@ def _target(path: Path) -> Path:
 
 
 def _render(frag: Fragment) -> str:
+    from fr.acceptance.edit import append_amendment, render_fragment
+
     text = render_fragment(frag.feature, frag.repo, frag.rows)
     for amendment in frag.amendments:
         text = append_amendment(text, amendment)
@@ -73,6 +81,8 @@ def _render(frag: Fragment) -> str:
 def _renamed_text(text: str, design: Fragment, slug: str) -> str:
     """*text* with only its `feature:` line rewritten, when that parses back to the
     renamed fragment; else the fragment re-rendered."""
+    from fr.acceptance.fragment import parse_fragment
+
     new = _FEATURE_RE.sub(f"feature: {slug}", text, count=1)
     want = design.model_copy(update={"feature": slug})
     try:
@@ -84,11 +94,17 @@ def _renamed_text(text: str, design: Fragment, slug: str) -> str:
 
 
 def _matrix(texts: dict[str, str]) -> tuple[dict[str, object], dict[str, object]]:
+    from fr.acceptance.fold import fold_texts
+
     eff = fold_texts(texts)
     return {r.id: r for r in eff.matrix.rows}, {r.id: r for r in eff.retired}
 
 
 def _fn(path: Path) -> list[Path]:
+    from fr.acceptance.fragment import parse_fragment
+    from fr.acceptance.model import AcceptanceError
+    from fr.acceptance.spelling import merge_spellings
+
     slug = _slug(path)
     if slug is None:  # the runner re-asks `applies` first; be safe anyway
         return []
