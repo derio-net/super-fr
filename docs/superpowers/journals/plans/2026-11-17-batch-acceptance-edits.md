@@ -109,3 +109,38 @@ data only: set-status amendments, no code
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 change fragment and docs only: no code
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-17T13:17:45+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · After the repair merges, -design-sourced amendments take the repair commit's history position (phase 1)
+
+fold.py `_introductions` found history by the current path name, so a renamed `<slug>.yaml` had no history before the repair commit; an interleaved amendment from another feature could then sort before them, fail `stale_base` and mark the row contested. The R15 guard folds texts without history and cannot see it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-17T13:17:45+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · respell on an empty working set changes owner and order for repos that never ran the repair (phase 1)
+
+fold.py `_fold` respelled every tip `<slug>-design.yaml` not in the working set, so `default_ref_fold` (empty working) read an unrepaired fragment as feature `<slug>`, changing owners, row order and tie-breaks.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-17T13:17:45+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · Restored notes read ".; tracked by" (double punctuation) (phase 1)
+
+Cosmetic; the join follows decision d4.
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-17T13:17:45+00:00 phase=1 -->
+### review-p1-1 · review · phase 1 review: 3 findings (p1-r1, p1-r2 fixed; p1-r3 refuted) (phase 1)
+
+Independent reviewer over 76fb64aca..HEAD (spec R1-R4, R13-R17, plan 01.yaml). Found sound: the repair builds in memory, checks the fold before any byte moves, writes atomically, declares the companion veto; the origin-only path reads the row's own definition; the 12 note restores match p1-restored-notes / d8 with no status, level or issue change. Findings: p1-r1, p1-r2, p1-r3. The orchestrator verified p1-r1 and p1-r2 against fold.py before fixing.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-17T13:17:45+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: After the repair merges, -design-sourced amendments take the repair commit's history position (phase 1)
+
+bb8b0e9bb: `_introductions` reads a tip `<slug>.yaml` and the `<slug>-design.yaml` it replaced as one fragment at every commit (merge_spellings order, by-value counting, `--no-renames`). Test test_acceptance_design_spelling_history.py::test_the_repair_commit_keeps_each_amendments_original_position[rename|merge], red before.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-17T13:17:45+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: respell on an empty working set changes owner and order for repos that never ran the repair (phase 1)
+
+58e6fc1ef: one rule, `spelling.renamed_keep`: a `-design` file is respelled only when the branch holds `<slug>.yaml` and no longer the `-design` file; `_fold`, `merged_row_edits` and `outside_merged_row_edits` use it. Test test_an_unrepaired_default_ref_folds_as_before, red before.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-17T13:17:45+00:00 phase=1 state=refuted resolves=p1-r3 -->
+### p1-r3-resolved · finding [refuted] · resolves p1-r3: Restored notes read ".; tracked by" (double punctuation) (phase 1)
+
+Decision d4 restores the pre-sweep note byte-exact and appends `; tracked by …`; the old notes end in a period, so `.;` is the restored text plus the agreed join. Stripping the period would alter the text the restore exists to bring back.
