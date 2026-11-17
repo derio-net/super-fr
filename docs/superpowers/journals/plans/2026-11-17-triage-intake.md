@@ -363,3 +363,8 @@ d5e6d1bd7: listed and viewed issues; red with withholding made a no-op.
 ### l-docs-accuracy-r3-resolved-2 · finding [fixed] · resolves l-docs-accuracy-r3: fr-triage SKILL.md step 3 said a first run writes judgements schema 11; the writer stamps 12
 
 efb833508: the skill names judgements schema 12; mirrors regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-11-17T21:17:30+00:00 phase=1 state=open resolves=p1-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1539 -->
+### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1539] · resolves p1-r6: Titles of ineligible issues still reach facts.json and triage check output (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1539.
