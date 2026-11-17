@@ -102,6 +102,23 @@ def _matrix(texts: dict[str, str]) -> tuple[dict[str, object], dict[str, object]
     return {r.id: r for r in eff.matrix.rows}, {r.id: r for r in eff.retired}
 
 
+def _differing(a: dict[str, object], b: dict[str, object]) -> list[str]:
+    return sorted(k for k in a.keys() | b.keys() if a.get(k) != b.get(k))
+
+
+def _differences(
+    before: tuple[dict[str, object], dict[str, object]],
+    after: tuple[dict[str, object], dict[str, object]],
+) -> str:
+    """The ids whose folded row, or retired entry, differs between the two folds."""
+    parts = []
+    if rows := _differing(before[0], after[0]):
+        parts.append("rows " + ", ".join(rows))
+    if retired := _differing(before[1], after[1]):
+        parts.append("retired " + ", ".join(retired))
+    return "; ".join(parts)
+
+
 def _fn(path: Path) -> list[Path]:
     from fr.acceptance.fragment import parse_fragment
     from fr.acceptance.model import AcceptanceError
@@ -140,10 +157,11 @@ def _fn(path: Path) -> list[Path]:
             }
         )
         before = _matrix({**texts, key(path): _render(rest)})
-    if _matrix(after) != before:
+    now = _matrix(after)
+    if now != before:
         raise ValueError(
             f"{path.name}: renaming it to {target.name} would change the effective "
-            "matrix; reconcile the two by hand, then migrate"
+            f"matrix ({_differences(before, now)}); reconcile the two by hand, then migrate"
         )
     write_text_atomic(target, new_text)
     path.unlink()

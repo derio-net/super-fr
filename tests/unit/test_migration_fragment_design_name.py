@@ -148,12 +148,18 @@ def test_an_entry_identical_in_both_is_kept_once(tmp_path: Path) -> None:
             ),
         },
     )
+    before = _texts(root)
     report = run_migrations(root, dry_run=False)
     assert report.ok, report.failed
     data = _load(root, f"{SLUG}.yaml")
     assert [r["id"] for r in data["rows"]] == ["a1", "s", "d1"]
     assert [(a["row"], a["notes"]) for a in data["amendments"]] == [("s", "same")]
     assert not (root / FEATURES / f"{SLUG}-design.yaml").exists()
+    # The old set folds only with each shared entry once (a row defined twice is
+    # unfoldable); the fold after equals that reading of it.
+    once = dict(before)
+    once[f"{FEATURES.as_posix()}/{SLUG}-design.yaml"] = _frag(f"{SLUG}-design", [_row("d1")])
+    assert _matrix(_texts(root)) == _matrix(once)
 
 
 def test_an_id_held_differently_fails_the_artifact_and_moves_no_byte(tmp_path: Path) -> None:
@@ -221,3 +227,38 @@ def test_a_non_utf8_design_file_fails_naming_itself(tmp_path: Path) -> None:
     with pytest.raises(UnicodeDecodeError) as info:
         repair.applies(path)
     assert str(info.value).startswith(f"{path} is not UTF-8 text")
+
+
+def test_a_rename_that_would_change_the_fold_names_the_row_and_moves_no_byte(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-tests-r4 / l-errors-r4: the R15 refusal names the rows whose folded row
+    differs, and both files stay byte-identical."""
+    import fr.artifacts.fragment_design_name as mod
+
+    files = {
+        f"{SLUG}.yaml": _frag(SLUG, [_row("a1")]),
+        f"{SLUG}-design.yaml": _frag(f"{SLUG}-design", [_row("d1"), _row("d2")]),
+    }
+    root = _repo(tmp_path, files)
+    real = mod._matrix
+    design_key = f"features/{SLUG}-design.yaml"
+
+    def skewed(texts: dict[str, str]) -> tuple[dict[str, object], dict[str, object]]:
+        rows, retired = real(texts)
+        if design_key in texts:
+            return rows, retired
+        rows = dict(rows)
+        rows["d2"] = rows["d2"].model_copy(update={"notes": "tampered"})  # type: ignore[attr-defined]
+        rows.pop("a1")
+        return rows, {**retired, "gone": object()}
+
+    monkeypatch.setattr(mod, "_matrix", skewed)
+    report = run_migrations(root, dry_run=False)
+    (failure,) = [f for f in report.failed if f.path.name == f"{SLUG}-design.yaml"]
+    assert "would change the effective matrix" in failure.error
+    assert "rows a1, d2" in failure.error
+    assert "retired gone" in failure.error
+    assert "d1" not in failure.error
+    for name, text in files.items():
+        assert (root / FEATURES / name).read_text() == text
