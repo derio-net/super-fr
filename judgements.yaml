@@ -7762,6 +7762,12 @@ batches:
     pr: 1536
     head: 45448904392db1e95e1ddd7a685161d42e0d7d4b
     reason: 1 failing check(s)
+  - kind: closeout
+    at: '2026-11-17T15:42:40.726966Z'
+    runner: herdr
+    handle: w3K:p5
+    archive: chore/closeout-2026-11-17-5
+    archived: 1536
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
@@ -8410,6 +8416,7 @@ closeouts:
   planned:
   - triage-collect
   pr: 1536
+  merged: true
   head: 45448904392db1e95e1ddd7a685161d42e0d7d4b
   members:
   - triage-collect
