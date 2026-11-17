@@ -705,3 +705,17 @@ def test_scope_retire_leaves_a_closed_issue_another_scope_holds(
     assert code == 0, out
     assert "super-fr#10" not in out
     assert client.issues[(REPO, 10)].labels == {"fr:claimed", "fr:in-progress"}
+
+
+def test_scope_retire_keeps_in_progress_on_an_issue_reopened_since_collect(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    """Review: facts say closed, the forge says open again. The claim is released, but
+    `fr:in-progress` says nothing false about a live issue's run, so it stays (R1)."""
+    tmp_path, client = world
+    _closed_held(tmp_path, client, DEAD)
+    client.issues[(REPO, 10)].state = "OPEN"
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    assert _markers(client, 10)[0].released == NOW
+    assert client.issues[(REPO, 10)].labels == {"fr:in-progress"}

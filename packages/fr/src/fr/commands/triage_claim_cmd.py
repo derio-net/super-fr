@@ -14,7 +14,7 @@ import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated, Any, NoReturn
 
 import typer
 import yaml
@@ -428,8 +428,12 @@ def scope_retire_command(
     for k, _ in held:
         owner_repo, number = _repo_of(env, k)
         try:
+            client = env.client(owner_repo)
+            # Closed in facts, and still closed now: an issue reopened since collect keeps
+            # `fr:in-progress`, since its run may be live again (R1).
+            unlabel = k in closed and _still_closed(client, owner_repo, number)
             cw.release(
-                env.client(owner_repo),
+                client,
                 owner_repo,
                 number,
                 me=env.me,
@@ -437,7 +441,7 @@ def scope_retire_command(
                 trusted=env.trusted(owner_repo),
                 of=signer,
                 allow="any" if force else "stale",
-                unlabel=k in closed,
+                unlabel=unlabel,
             )
         except UnsupportedForgeOperation as exc:
             _forget_claims(target, signer, released)  # those already released stay so
@@ -457,6 +461,11 @@ def scope_retire_command(
         f"retired {signer}; `fr triage claim sync --yes` claims the members a batch owes",
         markup=False,
     )
+
+
+def _still_closed(client: Any, repo: str, number: int) -> bool:
+    """Whether the forge shows *repo*#*number* closed now (a FORGE_ERRORS read raises)."""
+    return str(client.view_issue(repo, number).get("state") or "").upper() == "CLOSED"
 
 
 def _forget_claims(target: Path, signer: str, keys: set[str]) -> None:
