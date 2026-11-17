@@ -66,9 +66,10 @@ def _git(root: Path, *args: str) -> str:
     ).stdout
 
 
-def _merged(tmp_path: Path, files: dict[str, str]) -> Path:
-    """origin/main holds *files* as fragments; the branch `feat/b` has run the repair
-    and committed it."""
+def _merged(tmp_path: Path, files: dict[str, str], mode: str = "branch") -> Path:
+    """origin/main holds *files* as fragments. `branch`: the branch `feat/b` has run
+    the repair and committed it. `ci-default` (l-tests-r3): CI on the default branch,
+    HEAD at origin/main's tip, the repair applied in the working tree, uncommitted."""
     bare = tmp_path / "origin.git"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
     root = tmp_path / "widget"
@@ -92,10 +93,15 @@ def _merged(tmp_path: Path, files: dict[str, str]) -> Path:
     _git(root, "push", "-q", "-u", "origin", "main")
     _git(root, "fetch", "-q", "origin")
     _git(root, "remote", "set-head", "origin", "main")
-    _git(root, "checkout", "-q", "-b", "feat/b")
+    if mode == "branch":
+        _git(root, "checkout", "-q", "-b", "feat/b")
     report = run_migrations(root, dry_run=False)
     assert report.ok, report.failed
-    assert commit_migration(root, report).committed
+    if mode == "branch":
+        assert commit_migration(root, report).committed
+    else:
+        assert _git(root, "rev-parse", "HEAD") == _git(root, "rev-parse", "origin/main")
+        assert _git(root, "status", "--porcelain")  # the repair, uncommitted
     assert not (root / FRAGMENTS_REL / f"{SLUG}-design.yaml").exists()
     clear_fold_cache()
     return root
@@ -118,11 +124,17 @@ TIPS = {
 }
 
 
+MODES = ["branch", "ci-default"]
+
+
+@pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize("tip", list(TIPS), ids=list(TIPS))
 def test_a_renamed_design_fragment_is_no_merged_row_edit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tip: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tip: str, mode: str
 ) -> None:
-    root = _merged(tmp_path, TIPS[tip])
+    if mode == "ci-default":
+        monkeypatch.setenv("CI", "true")
+    root = _merged(tmp_path, TIPS[tip], mode)
     assert _edits(root) == []
     # `outside_merged_row_edits` reads nothing in the repo placement; its quiet case is
     # test_placement_merged.py::test_a_merged_design_fragment_renamed_on_the_branch_under_quiet.
@@ -130,17 +142,21 @@ def test_a_renamed_design_fragment_is_no_merged_row_edit(
     assert res.exit_code == 0, res.output
 
 
+@pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize("tip", list(TIPS), ids=list(TIPS))
 def test_a_real_edit_of_a_renamed_row_is_still_reported(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tip: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tip: str, mode: str
 ) -> None:
-    root = _merged(tmp_path, TIPS[tip])
+    if mode == "ci-default":
+        monkeypatch.setenv("CI", "true")
+    root = _merged(tmp_path, TIPS[tip], mode)
     path = root / FRAGMENTS_REL / f"{SLUG}.yaml"
     path.write_text(path.read_text().replace("acceptance: r works", "acceptance: r is fine"))
     found = _edits(root)
     assert any("row r edited in place" in e for e in found), found
     res = _check(root, monkeypatch)
     assert res.exit_code != 0, res.output
+    assert "row r edited in place" in res.output, res.output
 
 
 BETA = "2026-01-02-beta"
