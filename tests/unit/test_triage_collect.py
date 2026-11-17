@@ -1136,10 +1136,13 @@ def test_a_failed_association_read_leaves_none_with_one_stderr_line(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     forge = _assoc_forge(
-        [_by(1, "eve"), _by(2, "bob")], associations_failing={_OUTSIDE: "HTTP 502"}
+        [_by(1, "eve", body="inject one"), _by(2, "bob", body="inject two")],
+        associations_failing={_OUTSIDE: "HTTP 502"},
     )
     facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
     assert [i.author_association for i in facts.issues] == [None, None]
+    # unread means never admitted: no outside author's text is kept (R3)
+    assert [i.body for i in facts.issues] == ["", ""]
     err = capsys.readouterr().err.strip().splitlines()
     assert len(err) == 1 and "author associations not read" in err[0] and "HTTP 502" in err[0]
 
@@ -1206,6 +1209,18 @@ def test_a_viewed_issue_gets_its_association_through_the_per_repo_read() -> None
     assert forge.association_calls == [_OUTSIDE]  # still one read per repo
     viewed = next(i for i in facts.issues if i.number == 5)
     assert viewed.author_association == "MEMBER" and viewed.body == "text"
+
+
+def test_a_viewed_issue_whose_association_read_failed_keeps_no_body(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    forge = _assoc_forge([_by(1, "eve")], associations_failing={_OUTSIDE: "HTTP 502"})
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "bob")}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    viewed = next(i for i in facts.issues if i.number == 5)
+    assert viewed.author_association is None and viewed.body == ""
+    assert forge.association_calls == [_OUTSIDE]  # one failed read, not one per issue
+    assert len(capsys.readouterr().err.strip().splitlines()) == 1
 
 
 def test_a_viewed_issue_needing_the_read_triggers_it_when_the_list_did_not() -> None:
