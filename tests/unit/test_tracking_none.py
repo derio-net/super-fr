@@ -309,15 +309,14 @@ def test_cancel_converges_when_the_repo_has_no_in_progress_label(
         return ""
 
     monkeypatch.setattr(gh_mod, "_run_gh", fake_run)
-    monkeypatch.setattr(
-        gh,
-        "edit_issue_labels",
-        lambda repo, number, *, add, remove: gh_mod.swap_issue_labels(
-            repo=repo, number=number, add=sorted(add), remove=sorted(remove)
-        ),
-    )
+    # the label write goes through the real client wrapper the cancel path uses, not a
+    # hand-wired stand-in for it
+    from fr.real_ghclient import RealGhClient
+
+    monkeypatch.setattr(gh, "edit_issue_labels", RealGhClient().edit_issue_labels)
     code, out = verbs._run(state, "cancel", "lifecycle", "--yes")
     assert code == 0, out
+    assert calls and all("--remove-label" in c and "fr:in-progress" in c for c in calls)
     assert "cancel" in (state / "judgements.yaml").read_text("utf-8").split("events:")[-1]
 
 
