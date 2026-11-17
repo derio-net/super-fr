@@ -1048,11 +1048,10 @@ def amend_cmd(
             )
     _load(root)
     if origin and op == "reword" and acceptance is None and capability is None:
-        # An origin-only correction keeps the row's statement (the item needs one).
-        from fr.acceptance.fold import effective
-
-        current = next((r for r in effective(root).matrix.rows if r.id == row_id), None)
-        acceptance = current.acceptance if current is not None else None
+        # An origin-only correction keeps the row's statement (the item needs one). It is
+        # the row's own definition in the fragment that holds it, never the fold's: a
+        # pending reword amendment would otherwise be restated in the row (#1439).
+        acceptance = _own_statement(root, row_id)
     try:
         item = AmendmentItem(
             row=row_id, op=op, why=why, base=base, acceptance=acceptance,  # type: ignore[arg-type]
@@ -1076,6 +1075,24 @@ def amend_cmd(
         typer.echo(said or f"{row_id}: origin corrected in place")
     else:
         typer.echo(f"{row_id}: {op} amendment written")
+
+
+def _own_statement(root: Path, row_id: str) -> str | None:
+    """The `acceptance` row *row_id* is defined with in this checkout's fragments (the
+    ones `fr.record.apply` rewrites), or None when no fragment defines it: the engine
+    then refuses the row as it does today (spec 2026-11-17 R2)."""
+    from fr.acceptance.fragment import parse_fragment
+
+    folder = artifact_root(root) / FRAGMENTS_DIR
+    for path in sorted(folder.glob("*.yaml")) if folder.is_dir() else ():
+        try:
+            frag = parse_fragment(path.read_text(encoding="utf-8"), source=path.name)
+        except (AcceptanceError, OSError, UnicodeDecodeError):
+            continue  # the engine names a fragment that does not parse
+        row = next((r for r in frag.rows if r.id == row_id), None)
+        if row is not None:
+            return row.acceptance
+    return None
 
 
 def _rebase(root: Path) -> None:
