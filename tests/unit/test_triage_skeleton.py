@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from fr.cli import app
 from fr.triage.errors import ForgeError
+from fr.triage.model import FACTS_SCHEMA
 from typer.testing import CliRunner
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "triage"
@@ -86,7 +87,7 @@ def test_collect_writes_facts_json_from_the_forge(
     facts_path = tmp_path / "facts.json"
     assert facts_path.exists()
     facts = json.loads(facts_path.read_text(encoding="utf-8"))
-    assert facts["schema"] == 13
+    assert facts["schema"] == FACTS_SCHEMA
     assert facts["scope"] == "derio-net--super-fr"
     assert facts["kind"] == "repo"
     collected = {(i["repo"], i["number"]) for i in facts["issues"]}

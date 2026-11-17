@@ -1064,6 +1064,7 @@ def _closed_in_progress(
     out: list[StaleInProgress] = []
     for i in raw:
         state: InProgressState = "stale"
+        held: list[IssueClaim] = []
         names = {label["name"] for label in i.get("labels") or []}
         if FR_CLAIMED.name in names:
             try:
@@ -1074,7 +1075,9 @@ def _closed_in_progress(
                     file=sys.stderr,
                 )
                 comments = []
-            signers = [c.signer for c in read_claims(comments, trusted).claims]
+            read = read_claims(comments, trusted).claims
+            held = [to_issue_claim(c) for c in read]  # whose they are: scope retire (gh#1210)
+            signers = [c.signer for c in read]
             if signers and me is None and not me_failed:
                 try:
                     me = scope_id(scope)
@@ -1098,6 +1101,7 @@ def _closed_in_progress(
                 url=i["url"],
                 closed_at=i.get("closedAt"),
                 state=state,
+                claims=held,
             )
         )
     return out
