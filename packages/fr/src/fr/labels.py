@@ -136,6 +136,12 @@ APPROVED_FR = LabelDef(
     "Operator approval: fr may merge this PR at its approved head",
 )
 
+# The operator's admission of an outside author's issue (spec 2026-11-17-triage-intake R8):
+# an issue that no login or association admits may still be batched when it carries this.
+# Never applied by fr; applying a label needs triage permission on GitHub, which an outside
+# author lacks.
+READY_FR = LabelDef("ready-fr", "5319E7", "Operator: an outside issue may be batched")
+
 RUNNER_LABEL_COLOR = "1D76DB"
 
 

@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr triage: issue-intake trust gate (an outside author's issue is set apart, its body withheld, and its batch blocked until an operator labels it ready-fr; the launch brief quotes issue text as untrusted), plus driver fixes: the merge context refetches origin every pass, cancel converges on an undefined label, and the gate-tracker close never raises"
