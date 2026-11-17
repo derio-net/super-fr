@@ -7533,6 +7533,8 @@ batches:
     keys:
     - super-fr#1433
     - super-fr#1438
+  - kind: post_merge
+    at: '2026-11-17T08:37:23.914588Z'
 - id: release-truth
   title: Release robustness
   ids:
@@ -8150,3 +8152,11 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-owed-archive.yaml"
   - "D\tdocs/superpowers/specs/2026-11-15-owed-archive-side-effects-design.md"
   - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-owed-archive.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-1
+  branch: chore/closeout-2026-11-17-1
+  at: '2026-11-17T08:37:27.238739Z'
+  runner: herdr
+  handle: w3H:p4
+  planned:
+  - placement-truth
