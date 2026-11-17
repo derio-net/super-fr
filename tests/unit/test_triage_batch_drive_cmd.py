@@ -66,6 +66,7 @@ class World:
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
         self.titles: dict[int, str] = {}
+        self.outside: set[int] = set()  # issues by an outside author no operator admitted
         self.labels_defined: set[str] = {"approved-fr"}
         self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
         self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
@@ -110,6 +111,9 @@ class World:
                     url=f"https://github.com/{REPO}/issues/{i}",
                     prs=linked[i],
                     claims=self._claims(i) if s == "open" else [],
+                    # Intake admits a maintainer's issue (triage-intake R2).
+                    author="eve" if i in self.outside else None,
+                    author_association="NONE" if i in self.outside else "OWNER",
                 )
                 for i, s in self.issues.items()
             ],  # fmt: skip
@@ -2056,6 +2060,44 @@ def test_a_preflight_refusal_does_not_stop_a_merge_when_no_closeout_is_due(
     assert code == 0, out
     assert world.merged == [(102, "sha-102", "squash")]
     assert "HERDR_ENV" not in out
+
+
+def test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Triage-intake R6: blocked (counted), never dispatched, until `ready-fr` admits it."""
+    world.issues[1] = "open"
+    world.outside = {1}
+    _state(tmp_path, world, _batch("b1", 1))
+    for _ in range(2):
+        code, out = _drive(tmp_path, "--once", "--yes")
+        assert code == 3, out
+        (line,) = _lines(out, "blocked")
+        assert line.startswith("blocked b1: members intake does not admit: super-fr#1: author eve")
+        assert "ready-fr" in line
+        assert runner.dispatched == []
+    world.outside = set()
+    _state(tmp_path, world, _batch("b1", 1))
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
+    assert code == 0, out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
+
+
+def test_the_driver_and_the_board_fill_rejected_alike(tmp_path: Path, world: World) -> None:
+    from fr.triage.views import drive_snapshot
+
+    world.issues.update({1: "open", 2: "open"})
+    world.outside = {1}
+    state = _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
+    facts = world.facts()
+    jd = load_judgements(state / "judgements.yaml")
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), state, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    live = driver.snapshot(facts, jd, NOW).rejected
+    board = drive_snapshot(facts, jd).rejected
+    assert live == board and set(live) == {"b1"}
 
 
 def _blocked_state(world: World, tmp_path: Path) -> None:
