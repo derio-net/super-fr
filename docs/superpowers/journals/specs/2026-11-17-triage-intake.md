@@ -250,3 +250,8 @@ Decision d3-cancel-scope (operator, round 1): this change keeps the tracking gat
 ### followup-cancel-no-checkout-resolved · finding [out-of-scope] · resolves followup-cancel-no-checkout: batch cancel of a never-dispatched batch still needs --checkout (gh#803 tracking gate); #1406's second side ask
 
 Operator decision d3: a follow-up, not this change.
+
+<!-- fr:journal kind=finding scope=spec id=followup-cancel-no-checkout-resolved-2 created=2026-11-17T21:18:34+00:00 state=open resolves=followup-cancel-no-checkout tracked_by=https://github.com/derio-net/super-fr/issues/1543 -->
+### followup-cancel-no-checkout-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1543] · resolves followup-cancel-no-checkout: batch cancel of a never-dispatched batch still needs --checkout (gh#803 tracking gate); #1406's second side ask
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1543.
