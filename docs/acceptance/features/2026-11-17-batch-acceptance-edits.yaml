@@ -33,9 +33,14 @@ rows:
     - spec:2026-11-17-batch-acceptance-edits#R15
     - spec:2026-11-17-batch-acceptance-edits#R16
     - spec:2026-11-17-batch-acceptance-edits#R17
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_fragment_design_name.py
+      - super-fr:tests/unit/test_acceptance_design_spelling_merged.py
+    status: ci
+    notes: 'Unit-pinned in CI: the repair renames, merges, keeps an identical entry
+      once, refuses by id, holds back on an uncommitted slug file and keeps the fold;
+      check reads a merged -design fragment as its one spelling.'
     verify: none
   - id: spec-repairs-name-undecodable-files
     capability: migration
