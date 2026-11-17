@@ -7535,6 +7535,11 @@ batches:
     - super-fr#1438
   - kind: post_merge
     at: '2026-11-17T08:37:23.914588Z'
+  - kind: closeout
+    at: '2026-11-17T08:38:09.004871Z'
+    runner: herdr
+    handle: w3H:p4
+    archive: chore/closeout-2026-11-17-1
 - id: release-truth
   title: Release robustness
   ids:
@@ -8160,3 +8165,10 @@ closeouts:
   handle: w3H:p4
   planned:
   - placement-truth
+  pr: 1526
+  head: 8e5edea690057ca8cc60fc39cecc6d5117c89735
+  members:
+  - placement-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-placement-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-placement-truth.md"
