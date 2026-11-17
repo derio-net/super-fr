@@ -247,11 +247,12 @@ def approval_label_missing(client: Any, repo: str) -> bool:
     from fr.ghclient import UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS
 
+    soft: tuple[type[Exception], ...] = (UnsupportedForgeOperation, *FORGE_ERRORS)
     if _labels_off(client, repo) is not None:
         return False
     try:
         return not client.label_exists(repo, APPROVED_FR.name)
-    except (UnsupportedForgeOperation, *FORGE_ERRORS):
+    except soft:
         return False
 
 
