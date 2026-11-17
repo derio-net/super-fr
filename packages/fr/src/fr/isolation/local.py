@@ -34,12 +34,14 @@ from fr.isolation.types import (
     IsolationState,
     _git_common_dir,
     carried_state,
+    check_slug_free,
     default_worktree_path,
     delete_state,
     harden_secret_file,
     list_states,
     load_state,
     recorded_mode,
+    repo_cache_name,
     resolve_profile,
     save_state,
 )
@@ -1229,6 +1231,8 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"{self.repo_root} is not a git repo — fr isolation only runs inside one."
             )
+        # Before anything is created: another branch may hold this one's slug (gh#1419).
+        check_slug_free(self.repo_root, branch)
         # Keyed on the MAIN checkout's basename (spec 2026-09-04 §5.C): an `up`
         # from inside a linked worktree files under the repo, never `agent-…`.
         worktree = path or default_worktree_path(self.repo_root, branch)
@@ -3047,7 +3051,7 @@ class LocalWorktreeDevcontainerTarget:
             env_file = Path(value.replace("${localEnv:HOME}", str(_home())))
             if not env_file.is_file():
                 env_file.parent.mkdir(parents=True, exist_ok=True)
-                env_file.write_text(f"# fr isolation secrets — {self.repo_root.name}\n")
+                env_file.write_text(f"# fr isolation secrets — {repo_cache_name(self.repo_root)}\n")
             harden_secret_file(env_file)  # 0600 file / 0700 dirs — self-heals loose perms
 
     def _docker_ps(self, state: IsolationState) -> subprocess.CompletedProcess[str]:

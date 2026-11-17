@@ -75,8 +75,13 @@ permissions:
 env:
   UV_PYTHON: "3.11"
 
+# GitHub keeps ONE pending run per group: a push run queued behind a pending
+# `workflow_dispatch` run replaced it, silently (gh#1291). A dispatch run gets a
+# group of its own, keyed by its run id, so nothing replaces it. If it runs beside
+# a push run, `publish` pushes only onto the base it staged on: the loser is
+# superseded, and a `--version` run exits non-zero and prints its re-dispatch.
 concurrency:
-  group: release
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-dispatch-{0}', github.run_id) || 'release' }}
   cancel-in-progress: false
 
 # The release is a job graph (spec 2026-11-01-ci-speed §3.D, R8-R12). `prepare`

@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 CLOUD_ENV = "CLAUDE_CODE_REMOTE"
 PLUGIN_ID = "super-fr@derio-net--super-fr"
 RELEASE_REPO = "derio-net/super-fr"
@@ -135,11 +137,14 @@ def _latest_release() -> str | None:
         return None
 
 
-def _version_tuple(text: str) -> tuple[int, ...] | None:
-    core = text.strip().lstrip("v").split("+", 1)[0].split("-", 1)[0]
+def _parse_version(text: str) -> Version | None:
+    """Either RC spelling (`X.Y.ZrcN`, `vX.Y.Z-rc.N`) or a final; `None` if neither.
+
+    An RC must parse (gh#1201): the old int-split read `7.0.0rc7` as unparseable,
+    and an unparseable installed version passed the check."""
     try:
-        return tuple(int(p) for p in core.split("."))
-    except ValueError:
+        return Version(text.strip())
+    except InvalidVersion:
         return None
 
 
@@ -200,9 +205,13 @@ def _check_fr(installed: str, latest: str | None) -> Check:
     fix = "start a new session (the setup script installs the latest release)"
     if latest is None:
         return Check("fr", True, f"fr {installed} (latest release unknown)", fix, FR_ITEM)
-    have, want = _version_tuple(installed), _version_tuple(latest)
-    ok = have is None or want is None or have >= want
-    return Check("fr", ok, f"fr {installed}, latest release {latest.lstrip('v')}", fix, FR_ITEM)
+    have, want = _parse_version(installed), _parse_version(latest)
+    detail = f"fr {installed}, latest release {latest.lstrip('v')}"
+    if have is None:  # we cannot say this fr is current, so it is not ok
+        return Check("fr", False, f"{detail} (fr's own version is unparseable)", fix, FR_ITEM)
+    # An unparseable latest release is an unknown answer, which is never a failure.
+    ok = want is None or have >= want
+    return Check("fr", ok, detail, fix, FR_ITEM)
 
 
 def _check_rsync(which: Callable[[str], str | None]) -> Check:

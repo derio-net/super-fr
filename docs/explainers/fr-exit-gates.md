@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-16 still true; gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed
+reviewed: 2026-11-17 gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed; the release compares with the newest candidate main contains; a tag left without its GitHub Release gets one on the next run (batch release-truth)
 ---
 
 ## What work cannot finish in the pull request?
@@ -105,8 +105,9 @@ last **final** tag. If any still holds a post-merge gate:
 
 - it cuts a **release candidate**, `vX.Y.Z-rc.N`, published as a pre-release. It consumes no
   change fragments, so it does not spend the version the final will have;
-- or it cuts nothing, when nothing installable changed since the newest candidate (or since
-  the last final). Documentation, tests and a fragment on its own are not installable.
+- or it cuts nothing, when nothing installable changed since the newest candidate that `main`
+  contains (or since the last final). A candidate tag on another commit is never the
+  comparison point. Documentation, tests and a fragment on its own are not installable.
 
 Once no pull request waits, the next run cuts the **final** release and consumes the
 fragments. People who install candidates test what merged while the gates are open; people

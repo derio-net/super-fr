@@ -503,9 +503,13 @@ def last_final(repo: Path, *, merged: bool = False) -> Version | None:
     return max(finals) if finals else None
 
 
-def _rcs_above(repo: Path, base: Version | None) -> list[tuple[Version, str]]:
-    """Every RC tag above *base*, oldest version first."""
-    rcs = [(Version.from_tag(t), t) for t in _tags(repo) if RC_TAG_RE.match(t)]
+def _rcs_above(
+    repo: Path, base: Version | None, *, merged: bool = False
+) -> list[tuple[Version, str]]:
+    """Every RC tag above *base*, oldest version first; with *merged*, only tags HEAD
+    contains."""
+    extra = ("--merged", "HEAD") if merged else ()
+    rcs = [(Version.from_tag(t), t) for t in _tags(repo, *extra) if RC_TAG_RE.match(t)]
     return sorted((v, t) for v, t in rcs if base is None or v > base)
 
 
@@ -663,7 +667,11 @@ def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> P
         plan.new, plan.fragments = target.semver, fragments
         return _not_backwards(plan, head)
     rcs = _rcs_above(repo, base)
-    since = rcs[-1][1] if rcs else final_tag
+    # Compare with an RC HEAD contains: a tag on a sibling commit has a tree that
+    # always differs, so every run would cut another RC (gh#1393). The number still
+    # counts every RC tag, so a sibling's number is never reused.
+    on_line = _rcs_above(repo, base, merged=True)
+    since = on_line[-1][1] if on_line else final_tag
     if since is not None and not _installable_changed(repo, since):
         plan.why, plan.noop = reason, f"nothing installable changed since {since}: no release"
         return plan
@@ -1089,18 +1097,58 @@ def tag_and_release(repo: Path, version: str, cmds: Commands) -> None:
     is published as a GitHub pre-release (R20)."""
     tag = Version.parse(version).tag
     _git(repo, *_bot("tag", "-a", tag, "-m", tag))
-    _git(repo, "push", "--quiet", REMOTE, f"refs/tags/{tag}", auth=True)
+    pushed = _git(repo, "push", "--quiet", REMOTE, f"refs/tags/{tag}", auth=True, check=False)
+    if pushed.returncode != 0 and not _remote_tag_is_head(repo, tag):
+        raise ReleaseError(f"git push {tag} failed: {pushed.stderr.strip()}")
+    # A dispatch run and a push run can both reach here (gh#1291 gave them separate
+    # concurrency groups): the one that loses the race finds the other's identical
+    # tag, or its Release, and is done, not red.
+    if pushed.returncode != 0 and release_exists(tag, cmds):
+        print(f"{tag} was tagged and released by a concurrent run")
+        return
+    create_release(repo, version, cmds)
+    print(f"tagged and released {tag}")
+
+
+def _remote_tag_is_head(repo: Path, tag: str) -> bool:
+    """Whether origin already has *tag* on the commit HEAD is (a concurrent run's)."""
+    # Both patterns: an exact ref alone does not list the peeled `^{}` line.
+    ref = f"refs/tags/{tag}"
+    r = _git(repo, "ls-remote", "--tags", REMOTE, ref, f"{ref}^{{}}", check=False)
+    if r.returncode != 0:
+        return False
+    refs = dict(reversed(line.split("\t", 1)) for line in r.stdout.splitlines() if "\t" in line)
+    # An annotated tag lists its peeled commit as `<ref>^{}`; a light one only itself.
+    remote = refs.get(f"refs/tags/{tag}^{{}}") or refs.get(f"refs/tags/{tag}")
+    return remote == _rev(repo, "HEAD")
+
+
+def create_release(repo: Path, version: str, cmds: Commands) -> None:
+    """The GitHub Release for *version*'s tag, which must already exist."""
+    tag = Version.parse(version).tag
     args = ["release", "create", tag, "--title", tag]
     notes = release_notes(repo, version)
     if notes:
         args += ["--notes", notes]
     if Version.parse(version).is_rc:
         args.append("--prerelease")
-    args += ["--generate-notes", "--target", _out(repo, "rev-parse", "HEAD").strip()]
+    args += ["--generate-notes", "--target", _rev(repo, f"refs/tags/{tag}")]
     r = cmds.gh(args)
-    if r.returncode != 0:
+    if r.returncode != 0 and not release_exists(tag, cmds):  # a concurrent run's is fine
         raise ReleaseError(f"gh release create {tag} failed: {r.stderr.strip()}")
-    print(f"tagged and released {tag}")
+
+
+def release_exists(tag: str, cmds: Commands) -> bool:
+    """Whether *tag* has a GitHub Release. Only "not found" is a no: any other failed
+    read refuses, because guessing either way is wrong (a duplicate create, or a tag
+    left without its Release for good)."""
+    r = cmds.gh(["release", "view", tag, "--json", "tagName"])
+    if r.returncode == 0:
+        return True
+    err = (r.stderr or r.stdout).strip()
+    if "not found" in err.lower():
+        return False
+    raise ReleaseError(f"cannot tell whether {tag} has a GitHub Release: {err}")
 
 
 def file_floor_issue(version: str, bad: list[str], cmds: Commands) -> None:
@@ -1122,10 +1170,18 @@ def file_floor_issue(version: str, bad: list[str], cmds: Commands) -> None:
 
 
 def finish(repo: Path, cmds: Commands) -> int:
-    """Step 6: tag the current version if it is untagged; the floor check rides along."""
+    """Step 6: tag the current version if it is untagged; the floor check rides along.
+    A tag with no GitHub Release (the create failed after the tag push) gets its
+    Release here, on the next run (gh#1290)."""
     version = Version.parse(current_version(repo)).semver
     if tag_exists(repo, version):
-        print(f"v{version} is already tagged; nothing to do")
+        tag = Version.parse(version).tag
+        if release_exists(tag, cmds):
+            print(f"{tag} is already tagged and released; nothing to do")
+            return EXIT_OK
+        print(f"{tag} is tagged but has no GitHub Release; creating it")
+        create_release(repo, version, cmds)
+        print(f"released {tag}")
         return EXIT_OK
     bad = floor_mismatches(repo, Version.parse(version).final.semver)
     tag_and_release(repo, version, cmds)  # the number is right, so it tags regardless

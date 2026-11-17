@@ -77,7 +77,20 @@ def test_manual_dispatch_takes_an_optional_version() -> None:
 
 
 def test_runs_one_at_a_time_and_is_never_cancelled() -> None:
-    assert _workflow()["concurrency"] == {"group": "release", "cancel-in-progress": False}
+    concurrency = _workflow()["concurrency"]
+    assert concurrency["cancel-in-progress"] is False
+    assert concurrency["group"].endswith("|| 'release' }}")  # push and schedule share it
+
+
+def test_a_dispatch_run_has_a_group_of_its_own() -> None:
+    """gh#1291: GitHub keeps ONE pending run per group, so a push run queued behind a
+    pending `workflow_dispatch --version` run replaced it, silently. A dispatch run is
+    keyed by its run id: nothing replaces it, and a dispatch that runs beside a push
+    run is superseded loudly (it prints the re-dispatch), never dropped."""
+    assert _workflow()["concurrency"]["group"] == (
+        "${{ github.event_name == 'workflow_dispatch'"
+        " && format('release-dispatch-{0}', github.run_id) || 'release' }}"
+    )
 
 
 def test_permissions_are_contents_and_issues_write_and_pull_requests_read() -> None:

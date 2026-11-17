@@ -59,6 +59,17 @@ def native_herdr_cache(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_checkout_caches() -> None:
+    """`product_checkout_for` keeps the checkouts it named and `parse` the plans it said
+    had none, per process (gh#1438); a test must never meet a previous test's answer."""
+    from fr.artifacts.paths import clear_checkout_cache
+    from fr.parser import clear_checkout_notices
+
+    clear_checkout_cache()
+    clear_checkout_notices()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_forge_policy_cache() -> None:
     """`fr.settings.remote.client_policy` keeps a repo's policy per client for minutes; a
     test's fake client must never meet an answer a previous test's client read."""

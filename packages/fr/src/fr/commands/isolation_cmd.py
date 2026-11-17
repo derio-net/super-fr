@@ -53,7 +53,8 @@ _gc_spawner = _detached_gc_spawn
 
 
 def _target(repo: Path) -> Target:
-    """Select the isolation backend where NO workspace exists yet — `up`, `gc`'s
+    """Select the isolation backend where NO workspace exists yet — `up` of a new
+    workspace (`_up_target`; a resume routes by its record), `gc`'s
     host-wide discovery sweep, and `verify-merge` on an already reaped branch.
     Every command addressing an existing workspace uses `_target_for` instead
     (gh#569): the workspace's recorded mode, never this env. Precedence (spec
@@ -173,6 +174,18 @@ def _target_or_exit(repo: Path) -> Target:
     except IsolationError as err:
         typer.echo(f"error: {err}", err=True)
         raise typer.Exit(2) from err
+
+
+def _up_target(repo: Path, branch: str) -> Target:
+    """The backend `up` runs: a workspace already recorded for *branch* is a resume,
+    so its recorded mode owns it (`_target_for`, gh#1166); only a new workspace is
+    selected by `_target`. An unreadable record is no workspace to route by, so `up`
+    takes the env's target and `carried_state` replaces the record with a warning."""
+    try:
+        existing = load_state(repo.resolve(), branch)
+    except (ValueError, OSError):
+        existing = None
+    return _target(repo) if existing is None else _target_for(repo, existing)
 
 
 def _resolve_single(root: Path, branch: str | None) -> IsolationState:
@@ -392,7 +405,7 @@ def up(
         if resume is not None:
             resumed, branch = _prepare_resume(repo, extra, resume, branch)
         assert branch is not None
-        state = _target(repo).up(
+        state = _up_target(repo, branch).up(
             profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch, **extra
         )
         if resumed is not None and resume is not None:

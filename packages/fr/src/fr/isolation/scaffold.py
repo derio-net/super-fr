@@ -26,7 +26,12 @@ import yaml
 
 from fr._hosts import HostBackend
 from fr.git_policy.templates import fr_message
-from fr.isolation.types import IsolationError, harden_secret_file, secrets_env_file
+from fr.isolation.types import (
+    IsolationError,
+    harden_secret_file,
+    repo_cache_name,
+    secrets_env_file,
+)
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
     ensure_validator_wrapper,
@@ -444,7 +449,9 @@ POST_CREATE = (
 
 
 def env_file_path(repo_root: Path, profile: str) -> Path:
-    return secrets_env_file(repo_root.name, profile)
+    """The host secrets file for *profile*, named after the repo (its main checkout),
+    never a linked worktree's folder (gh#1243)."""
+    return secrets_env_file(repo_cache_name(repo_root), profile)
 
 
 OPS_TRUST_MOUNT_TARGET = "/run/fr-ops-trust"
@@ -576,8 +583,9 @@ def scaffold_profile(
         post_create = f"{POST_CREATE} && {render_host_cli_post_create(host_pin)}"
 
     env_file = env_file_path(repo_root, profile)
+    repo_name = repo_cache_name(repo_root)  # the repo, not a worktree's folder (gh#1243)
     config = {
-        "name": f"{repo_root.name} — {profile}",
+        "name": f"{repo_name} — {profile}",
         "image": BASE_IMAGE,
         "features": feature_map,
         "postCreateCommand": post_create,
@@ -589,7 +597,7 @@ def scaffold_profile(
         "workspaceFolder": "${localWorkspaceFolder}",
         "runArgs": [
             "--env-file",
-            f"${{localEnv:HOME}}/.config/fr/secrets/{repo_root.name}/{profile}.env",
+            f"${{localEnv:HOME}}/.config/fr/secrets/{repo_name}/{profile}.env",
         ],
         "customizations": {"fr": {"profile": profile, "purpose": purpose}},
     }
@@ -606,7 +614,7 @@ def scaffold_profile(
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
     _update_profiles_yaml(repo_root, profile, purpose, secrets, default, services, ops=ops)
-    _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
+    _ensure_env_placeholders(env_file, repo_name, profile, secrets)
     include_validator_wrapper = False
     if plans_dir_exists(repo_root):
         try:

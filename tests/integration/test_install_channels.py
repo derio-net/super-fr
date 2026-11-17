@@ -245,6 +245,37 @@ def test_main_checks_out_origin_main(tmp_path: Path) -> None:
     assert _git(src, "rev-parse", "HEAD") == _git(origin, "rev-parse", "main")
 
 
+def test_a_channel_switch_removes_untracked_files_from_the_managed_cache(tmp_path: Path) -> None:
+    """gh#1202: `checkout -f` kept untracked files, and install.sh's preflight then
+    refused the tag checkout until the operator cleaned the cache by hand."""
+    origin = _fixture_remote(tmp_path)
+    res, _ = _bootstrap(tmp_path, origin, "--version", "v1.1.0")
+    assert _installed(res) == "v1.1.0", res.stderr
+    src = tmp_path / "src"
+    (src / "stray.txt").write_text("left by an older channel\n")
+    (src / "leftover" / "nested").mkdir(parents=True)
+    (src / "leftover" / "nested" / "f").write_text("x\n")
+    res, _ = _bootstrap(tmp_path, origin, "--version", "1.2.0")
+    assert _installed(res) == "v1.2.0", res.stderr
+    assert not (src / "stray.txt").exists()
+    assert not (src / "leftover").exists()
+    assert _git(src, "status", "--porcelain") == ""
+
+
+def test_a_channel_switch_keeps_ignored_files_in_the_managed_cache(tmp_path: Path) -> None:
+    """Only what the preflight refuses goes: ignored files (a venv, caches) stay."""
+    origin = _fixture_remote(tmp_path)
+    res, _ = _bootstrap(tmp_path, origin, "--version", "v1.1.0")
+    assert _installed(res) == "v1.1.0", res.stderr
+    src = tmp_path / "src"
+    (src / ".git" / "info" / "exclude").write_text(".venv/\n")
+    (src / ".venv").mkdir()
+    (src / ".venv" / "keep").write_text("x\n")
+    res, _ = _bootstrap(tmp_path, origin, "--version", "1.2.0")
+    assert _installed(res) == "v1.2.0", res.stderr
+    assert (src / ".venv" / "keep").exists()
+
+
 def test_no_marked_final_falls_back_to_main_saying_so(tmp_path: Path) -> None:
     origin = tmp_path / "origin"
     (origin / "scripts").mkdir(parents=True)
