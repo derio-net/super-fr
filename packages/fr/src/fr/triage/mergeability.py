@@ -1,8 +1,8 @@
 """Whether a PR conflicts with its base (spec 2026-10-14-exit-gates R19).
 
-One predicate for the board card and `needs_you`. `BLOCKED` is deliberately not a
-conflict: it is branch protection, the normal state of an unapproved PR. The triage
-page's own test (`render.py`) counts it and is left alone (spec Non-goals).
+One predicate for the board card, `needs_you` and the triage page's PR rows (gh#1197).
+`BLOCKED` is deliberately not a conflict: it is branch protection, the normal state of an
+unapproved PR.
 """
 
 from __future__ import annotations

@@ -6,6 +6,12 @@
 # and exits non-zero on the first failed assertion. It never reaches a forge.
 set -u
 unset FR_HARNESS_FR   # the candidate is judged on its own, not on the operator's pin
+# A git hook and `git rebase -x` export GIT_DIR (a hook GIT_INDEX_FILE too) naming the
+# checkout they run in. Inherited, it points every git command below at THAT repository,
+# not this fixture: a fixture's commit and `checkout -b` once moved a live run
+# worktree's branch (gh#1468). Drop every variable git itself scopes a repository by.
+# shellcheck disable=SC2046  # one word per variable name, by design
+unset $(git rev-parse --local-env-vars)
 export COLUMNS=200 NO_COLOR=1 FR_SKIP_MIGRATION=1 CI=true GIT_TERMINAL_PROMPT=0
 export GIT_AUTHOR_NAME=scenario GIT_AUTHOR_EMAIL=scenario@example.invalid
 export GIT_COMMITTER_NAME=scenario GIT_COMMITTER_EMAIL=scenario@example.invalid
