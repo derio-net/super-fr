@@ -748,3 +748,12 @@ amendments:
     why: 'ci.yml moved from 6 to 7 shards per leg (super-fr#1428): runner speed varies
       x0.72-x1.40 between runs and at 6 a slow runner''s shard alone filled the 360
       s budget. The release''s shards stay at 6.'
+  - row: approval-label-created
+    op: reword
+    base: 0
+    acceptance: fr init scaffold and the triage commands that act on a repo's batch
+      PRs (batch dispatch, batch merge under --yes, every drive pass) create the approved-fr
+      label when it is missing, warning once, and never fail on a forge that cannot;
+      fr triage collect only reports the repos that lack it.
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'
