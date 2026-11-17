@@ -69,9 +69,15 @@ rows:
     - spec:2026-11-17-batch-acceptance-edits#R9
     - spec:2026-11-17-batch-acceptance-edits#R10
     - spec:2026-11-17-batch-acceptance-edits#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py#test_migrate_adopt_adopts_every_in_flight_plan_on_one_branch
+      - super-fr:tests/unit/test_run_adopt.py#test_a_plan_adopted_with_no_run_id_is_named_after_its_folder
+      - super-fr:tests/unit/test_run_adopt.py#test_an_explicit_run_id_wins_and_an_existing_one_still_refuses
+    status: ci
+    notes: 'Unit tests in CI: a plan adopted with no --run-id is named after its folder,
+      a spec-only adoption keeps <date>-<branch>, --run-id wins and an existing id refuses,
+      and migrate --yes --adopt adopts three plans on one branch with none offered after.'
     verify: none
   - id: adopt-default-branch-warning
     capability: run
