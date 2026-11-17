@@ -212,3 +212,17 @@ amendments:
       vs 240s. Not a balancing problem: cached-durations rebalancing works; even a perfect
       split is ~320-340s. Fix is #1428 (batch suite-health, wave 15): more shards, cheaper
       heavy files, or a re-argued budget.'
+  - row: debt-archive-pr-weekly
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
+      scheduled run on main is the post-merge Test Plan step 2.; tracked by derio-net/super-fr#1341.
+      Half observed: the weekly job ran every week since 2026-10-12 and correctly opened
+      nothing (''No plan has been merged and unarchived for more than 14 days''). Still
+      owed: a run with a stale plan, opening or refreshing one draft PR.'
+    why: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
+      scheduled run on main is the post-merge Test Plan step 2.; tracked by derio-net/super-fr#1341.
+      Half observed: the weekly job ran every week since 2026-10-12 and correctly opened
+      nothing (''No plan has been merged and unarchived for more than 14 days''). Still
+      owed: a run with a stale plan, opening or refreshing one draft PR.'
