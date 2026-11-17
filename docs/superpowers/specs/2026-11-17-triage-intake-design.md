@@ -92,7 +92,9 @@ unread author or an unread association never admits an issue: the rule fails clo
 R3. Every issue that `collect` writes has its body cleared when it is ineligible. This
 applies to issues listed this collect, viewed through `view_issue`, and carried from the
 previous facts by a partial collect, which are judged again on their stored fields. The
-title, labels and other fields are kept.
+title, labels and other fields are kept. A facts file written before schema 14 is judged the
+same way when it is loaded, so no reader (`check`, `render`, dedupe, the skill) sees an
+ineligible author's body before the next collect.
 
 R4. `fr triage check` lists the open ineligible issues in an `untrusted` set, each with
 its reason. An untrusted issue is never in the unranked or unplaced sets, and `batch
