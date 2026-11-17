@@ -7499,6 +7499,12 @@ batches:
     checks:
     - 2 failing check(s)
     delivered: session
+  - kind: update
+    at: '2026-11-17T08:39:33.758896Z'
+    pr: 1504
+    head_before: cd348bae83b20f6451981b71872bb59f82de6abf
+    head_after: 0f72498a34bd152bc095d9d2396e9d6b7084ba0a
+    base: fa59d15df514104bc758d6a9d948ca4ce35904c8
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
