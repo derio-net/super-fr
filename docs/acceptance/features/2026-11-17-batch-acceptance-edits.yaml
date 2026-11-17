@@ -51,9 +51,15 @@ rows:
     - spec:2026-11-17-batch-acceptance-edits#R5
     - spec:2026-11-17-batch-acceptance-edits#R6
     - spec:2026-11-17-batch-acceptance-edits#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_plan_heading.py#test_a_non_utf8_spec_fails_the_migration_by_name_and_stays_byte_identical
+      - super-fr:tests/unit/test_test_plan_heading.py#test_the_gate_refuses_a_non_utf8_spec_naming_it_without_a_codec_error
+      - super-fr:tests/unit/test_migration_matrix_fragments.py#test_a_non_utf8_matrix_fails_by_name_and_stays_byte_identical
+    status: ci
+    notes: 'Unit tests in CI: a non-UTF-8 spec and v5 matrix fail run_migrations, the
+      repairs and the CLI-entry gate with ''<path> is not UTF-8 text (byte 0xff at offset
+      n)'', no codec text, file byte-identical.'
     verify: none
   - id: adopt-run-id-from-plan-slug
     capability: run
