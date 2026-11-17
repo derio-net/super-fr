@@ -137,3 +137,15 @@ amendments:
       demonstrated by the feature''s own fr-goal run, but name no dated evidence to
       record as a walk; wiring unit-pinned. Re-walk and record it with set-status --walk.;
       tracked by derio-net/super-fr#1351'
+  - row: gitlab-selfhosted-host-targeting
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
+      against a self-hosted GitLab (host redacted) but give no date to record a walk
+      with; unit refs in CI. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1352'
+    why: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
+      against a self-hosted GitLab (host redacted) but give no date to record a walk
+      with; unit refs in CI. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1352'
