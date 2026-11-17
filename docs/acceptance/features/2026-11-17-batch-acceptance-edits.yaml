@@ -101,3 +101,15 @@ amendments:
       override (operator decision) with #1195 and #1217 gate:tester left held; this
       walk was deferred, not certified. A disposable two-batch rehearsal was started
       and paused unfinished; it is not evidence.; tracked by derio-net/super-fr#1347'
+  - row: fr-goal-journal-handoff-complete
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
+      live in the feature''s own run, but name no dated evidence to record as a walk;
+      render/check unit-pinned. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1349'
+    why: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
+      live in the feature''s own run, but name no dated evidence to record as a walk;
+      render/check unit-pinned. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1349'
