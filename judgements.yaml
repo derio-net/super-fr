@@ -7561,6 +7561,12 @@ batches:
     head_before: 41895ad79a096c3602bb4f5b5f984d7d120c3831
     head_after: ce648b75888a499a763f0054aa4518b509638c87
     base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: update
+    at: '2026-11-17T08:26:56.266835Z'
+    pr: 1503
+    head_before: ce648b75888a499a763f0054aa4518b509638c87
+    head_after: ec6fe1a2415fc741d3efa72263e624955c5f894a
+    base: 6850c71d311fe01ae709f441b7f413970a964df1
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
