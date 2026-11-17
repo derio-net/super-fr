@@ -240,3 +240,35 @@ amendments:
       Half observed: github-actions renamed #363 ''Acceptance debt'' -> ''super-fr:
       Technical debt'' on 2026-10-13, still the only one (no duplicate). Still owed:
       closing at zero debt.'
+  - row: exit-gates-release-gating
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'fr release status, release.py''s RC/final decision (RC tag, pre-release,
+      no fragment consumed; final once nothing waits), both RC spellings and RC-admitting
+      floors are unit-tested against fake forges and temp git repos. Observed on super-fr
+      itself: RC13-RC16 were cut as pre-releases consuming no fragment while #1195/#1217
+      waited (e.g. run 41007180324). Still owed: the held-gate RC then verified-gate
+      final transition through the ordinary workflow, with installer channel checks
+      (see docs/exit-gates-release-walk.md). v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified. The final itself was the ungated
+      --version path (run 41214190564, 13 fragments consumed), so it is not the gated
+      transition.; tracked by derio-net/super-fr#1348. Half observed 2026-11-14: v7.0.0-rc.1..rc.9
+      were cut as pre-releases while gate-labelled PRs waited. Still owed: an automatic
+      final once none waits (v7.0.0 was a manual workflow_dispatch override, so it does
+      not count).'
+    why: 'fr release status, release.py''s RC/final decision (RC tag, pre-release, no
+      fragment consumed; final once nothing waits), both RC spellings and RC-admitting
+      floors are unit-tested against fake forges and temp git repos. Observed on super-fr
+      itself: RC13-RC16 were cut as pre-releases consuming no fragment while #1195/#1217
+      waited (e.g. run 41007180324). Still owed: the held-gate RC then verified-gate
+      final transition through the ordinary workflow, with installer channel checks
+      (see docs/exit-gates-release-walk.md). v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified. The final itself was the ungated
+      --version path (run 41214190564, 13 fragments consumed), so it is not the gated
+      transition.; tracked by derio-net/super-fr#1348. Half observed 2026-11-14: v7.0.0-rc.1..rc.9
+      were cut as pre-releases while gate-labelled PRs waited. Still owed: an automatic
+      final once none waits (v7.0.0 was a manual workflow_dispatch override, so it does
+      not count).'
