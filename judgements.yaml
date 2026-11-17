@@ -7851,6 +7851,11 @@ batches:
     - super-fr#1468
   - kind: post_merge
     at: '2026-11-17T15:03:50.465990Z'
+  - kind: closeout
+    at: '2026-11-17T15:05:23.369103Z'
+    runner: herdr
+    handle: w3K:p4
+    archive: chore/closeout-2026-11-17-4
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -8352,3 +8357,10 @@ closeouts:
   handle: w3K:p4
   planned:
   - suite-trust
+  pr: 1535
+  head: 15e39336cc67fd4628503f629047c60413b651b1
+  members:
+  - suite-trust
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-17-suite-trust.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-17-suite-trust.md"
