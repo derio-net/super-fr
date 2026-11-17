@@ -220,3 +220,8 @@ answered_by: operator
 lowered:
 - run:kind
 ```
+
+<!-- fr:journal kind=decision scope=spec id=d8-restore-scope-filed created=2026-11-17T14:33:16+00:00 narrows=derio-net/super-fr#1394 remainder_tracked_by=https://github.com/derio-net/super-fr/issues/1534 -->
+### d8-restore-scope-filed · decision [filed → https://github.com/derio-net/super-fr/issues/1534] · files d8-restore-scope: #1394 restores 12 of 17 rows: the 5 later walked keep their walk notes
+
+Filed the rest of `d8-restore-scope` at deliver as https://github.com/derio-net/super-fr/issues/1534.
