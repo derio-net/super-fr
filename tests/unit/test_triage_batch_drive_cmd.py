@@ -2402,6 +2402,19 @@ def test_a_failed_fetch_holds_the_repo_for_that_pass_only_and_fetches_once_per_p
 
     monkeypatch.setattr(checkout, "fetch", _fetch)
     seen: list[tuple[int, int, list[tuple[int, str, str]]]] = []
+    uses: list[tuple[int, str]] = []  # (passes napped so far, outcome of each merge_ctx use)
+    real_ctx = triage_batch_cmd._Driver.merge_ctx
+
+    def _spy(self: Any, facts: Any, repo: str) -> Any:
+        try:
+            ctx = real_ctx(self, facts, repo)
+        except triage_batch_cmd.DefaultBranchUnknown:
+            uses.append((len(seen), "held"))
+            raise
+        uses.append((len(seen), "ok"))
+        return ctx
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "merge_ctx", _spy)
 
     def _nap(seconds: float) -> None:
         seen.append((len(fetches), sum(fetches), list(world.merged)))
@@ -2420,6 +2433,10 @@ def test_a_failed_fetch_holds_the_repo_for_that_pass_only_and_fetches_once_per_p
     assert result.output.count(f"held: {REPO} default branch unknown (") == 1, result.output
     # Pass 1: the merge context reuses the fetch a reader made first: one fetch in all.
     assert seen[0][0] == 1, seen
+    # The hold is the MERGE CONTEXT's own verdict, re-checked each pass: pass 2's use
+    # re-fetched and was held, pass 3's was fine again (a context held
+    # or checked once for the driver's lifetime would not have followed the pass).
+    assert (1, "held") in uses and (2, "ok") in uses, uses
 
 
 def test_the_merge_context_follows_each_passs_config_without_a_second_methods_read(
@@ -2473,6 +2490,71 @@ def test_the_merge_context_follows_each_passs_config_without_a_second_methods_re
     ctx = driver.merge_ctx(_facts({"merge_method": "merge", "version": version}), REPO)
     assert ctx.method == "merge" and ctx.version is not None
     assert reads == [REPO] and clone.fetches == 2
+
+
+def _clone_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clone: Any) -> Any:
+    class _Client:
+        def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+            return {"default": None, "allowed": ["squash", "merge"]}
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: _Client())
+    monkeypatch.setattr(driver, "checkout", lambda repo: clone)
+    monkeypatch.setattr(driver, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(driver, "_base_rules", lambda facts, repo: BaseRules())
+    return driver
+
+
+def test_a_failing_fetch_holds_the_repo_and_a_second_use_does_not_fetch_again(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: within one pass a failing fetch holds the repo; a second
+    `merge_ctx` use re-raises the same `DefaultBranchUnknown` with no second fetch."""
+    from fr.triage.gitseam import GitError
+
+    class _Clone:
+        fetches = 0
+
+        def fetch(self) -> None:
+            self.fetches += 1
+            raise GitError("could not read from remote repository")
+
+    clone = _Clone()
+    driver = _clone_driver(tmp_path, monkeypatch, clone)
+    facts = world.facts()
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown) as first:
+        driver.merge_ctx(facts, REPO)
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown) as second:
+        driver.merge_ctx(facts, REPO)
+    assert second.value is first.value and clone.fetches == 1
+    assert REPO in driver._ctx_held and REPO not in driver._ctx_checked
+
+
+def test_a_stale_config_refuses_with_code_two_and_leaves_the_repo_unchecked(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: a config that moved on the default branch under the pass is a
+    `ForgeReadError` (code 2), and the repo is not recorded as checked."""
+    from fr.commands.triage_batch_cmd import ForgeReadError
+
+    class _Clone:
+        def fetch(self) -> None:
+            return None
+
+        def default_branch(self) -> str:
+            return "main"
+
+        def show(self, ref: str, file: str) -> str | None:
+            return yaml.safe_dump({"merge_method": "merge"})  # facts carry the default
+
+    driver = _clone_driver(tmp_path, monkeypatch, _Clone())
+    with pytest.raises(ForgeReadError) as err:
+        driver.merge_ctx(world.facts(), REPO)
+    assert err.value.code == 2
+    assert REPO not in driver._ctx_checked and REPO not in driver._ctx_held
 
 
 def test_a_held_repo_spends_no_close_out_hand_back(
