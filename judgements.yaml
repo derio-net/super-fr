@@ -7546,6 +7546,12 @@ batches:
     runner: herdr
     handle: w3H:p4
     archive: chore/closeout-2026-11-17-1
+  - kind: closeout
+    at: '2026-11-17T08:51:29.058736Z'
+    runner: herdr
+    handle: w3H:p4
+    archive: chore/closeout-2026-11-17-1
+    archived: 1526
 - id: release-truth
   title: Release robustness
   ids:
@@ -8198,6 +8204,7 @@ closeouts:
   planned:
   - placement-truth
   pr: 1526
+  merged: true
   head: 8e5edea690057ca8cc60fc39cecc6d5117c89735
   members:
   - placement-truth
