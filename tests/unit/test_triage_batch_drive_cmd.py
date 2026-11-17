@@ -2086,10 +2086,24 @@ def test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted(
 def test_the_driver_and_the_board_fill_rejected_alike(tmp_path: Path, world: World) -> None:
     from fr.triage.views import drive_snapshot
 
-    world.issues.update({1: "open", 2: "open"})
-    world.outside = {1}
-    state = _state(tmp_path, world, _batch("b1", 1), _batch("b2", 2))
+    # 1 outside author (rejected) · 2 a pr_authors login (trusted) · 3 `ready-fr` (admitted)
+    # · 4 no longer collected (rejected) · 5 a maintainer's (admitted)
+    world.issues.update({1: "open", 2: "open", 3: "open", 4: "open", 5: "open"})
+    world.outside = {1, 2, 3}
+    world.config = {"pr_authors": ["release-bot"]}
+    state = _state(tmp_path, world, *(_batch(f"b{n}", n) for n in (1, 2, 3, 4, 5)))
     facts = world.facts()
+    by = {
+        2: {"author": "release-bot"},
+        3: {"labels": ["ready-fr"]},
+    }
+    facts = facts.model_copy(
+        update={
+            "issues": [
+                i.model_copy(update=by.get(i.number, {})) for i in facts.issues if i.number != 4
+            ]
+        }
+    )
     jd = load_judgements(state / "judgements.yaml")
     driver = triage_batch_cmd._Driver(
         triage_batch_cmd._scope(REPO, None), state, named=None, checkouts={}, max_inflight=4,
@@ -2097,7 +2111,9 @@ def test_the_driver_and_the_board_fill_rejected_alike(tmp_path: Path, world: Wor
     )  # fmt: skip
     live = driver.snapshot(facts, jd, NOW).rejected
     board = drive_snapshot(facts, jd).rejected
-    assert live == board and set(live) == {"b1"}
+    assert live == board
+    assert set(live) == {"b1", "b4"}  # b2 (pr_authors), b3 (ready-fr), b5 (OWNER) are admitted
+    assert "author eve" in live["b1"] and "not collected" in live["b4"]
 
 
 def _blocked_state(world: World, tmp_path: Path) -> None:
