@@ -654,3 +654,69 @@ def test_scope_retire_forgets_the_released_claims_before_an_unsupported_forge_ex
     facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
     by = {i["number"]: i["claims"] for i in facts["issues"]}
     assert by[8] == [] and by[9] != []
+
+
+# ------------------------------------- gh#1210: a retired scope's claims on CLOSED issues
+
+
+def _closed_held(tmp_path: Path, client: FakeGhClient, signer: str, n: int = 10) -> None:
+    """Closed issue *n*, labelled `fr:claimed` and `fr:in-progress`, holding *signer*'s
+    claim: in facts only as a `held` entry of `stale_in_progress`, with its claims."""
+    m = _marker(signer, "dead", at=NOW - timedelta(hours=10), expires=NOW + timedelta(hours=14))
+    client.add_issue(REPO, n, state="CLOSED", labels={"fr:claimed", "fr:in-progress"})
+    client.issue_comments[(REPO, n)] = [_comment(m, 100 + n, LONG_AGO)]
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    facts["stale_in_progress"] = [
+        {
+            "key": f"super-fr#{n}",
+            "title": f"issue {n}",
+            "url": f"https://github.com/{REPO}/issues/{n}",
+            "closed_at": "2026-09-20T00:00:00Z",
+            "state": "held",
+            "claims": [_facts_claim(m, 100 + n, LONG_AGO)],
+        }
+    ]
+    (tmp_path / "facts.json").write_text(json.dumps(facts), "utf-8")
+
+
+def test_scope_retire_settles_a_closed_issue_the_retired_scope_holds(
+    world: tuple[Path, FakeGhClient], me: str
+) -> None:
+    tmp_path, client = world
+    _closed_held(tmp_path, client, DEAD)
+    code, out = _run(tmp_path, "scope", "retire", DEAD)
+    assert code == 0, out
+    assert "release super-fr#10" in out and _writes(client) == []
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    (m,) = _markers(client, 10)
+    assert (m.released, m.released_by) == (NOW, me)
+    # Closed: its run is over, so it ends settled (post-merge truth R1), both labels off.
+    assert client.issues[(REPO, 10)].labels == set()
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    assert facts["stale_in_progress"] == []  # what the next collect would write
+
+
+def test_scope_retire_leaves_a_closed_issue_another_scope_holds(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    tmp_path, client = world
+    _closed_held(tmp_path, client, LIVE)
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    assert "super-fr#10" not in out
+    assert client.issues[(REPO, 10)].labels == {"fr:claimed", "fr:in-progress"}
+
+
+def test_scope_retire_keeps_in_progress_on_an_issue_reopened_since_collect(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    """Review: facts say closed, the forge says open again. The claim is released, but
+    `fr:in-progress` says nothing false about a live issue's run, so it stays (R1)."""
+    tmp_path, client = world
+    _closed_held(tmp_path, client, DEAD)
+    client.issues[(REPO, 10)].state = "OPEN"
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    assert _markers(client, 10)[0].released == NOW
+    assert client.issues[(REPO, 10)].labels == {"fr:in-progress"}

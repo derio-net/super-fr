@@ -19,7 +19,6 @@ from fr.triage.collect import collect_facts
 from fr.triage.cursor import cursor_position, read_cursor
 from fr.triage.gitseam import Checkout
 from fr.triage.model import (
-    FACTS_READS,
     FACTS_SCHEMA,
     CursorPosition,
     PullRequest,
@@ -60,9 +59,7 @@ def _forge(prs: list[dict[str, Any]], **kw: Any) -> FakeForge:
 # ------------------------------------------------------------------ the stamp
 
 
-def test_facts_schema_is_14_and_older_schemas_still_load(tmp_path: Path) -> None:
-    assert FACTS_SCHEMA == 14
-    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
+def test_a_schema_11_facts_file_still_loads(tmp_path: Path) -> None:
     merged = {"repo": REPO, "number": 4, "title": "t", "state": "MERGED", "is_draft": False,
               "url": "u"}  # fmt: skip
     old = {"schema": 11, "scope": REPO, "kind": "repo", "collected_at": AFTER, "repos": [REPO],
@@ -77,13 +74,13 @@ def test_the_stamp_comment_cites_the_labels_the_cursor_and_the_exit_block() -> N
     import fr.triage.model as model
 
     source = Path(model.__file__).read_text(encoding="utf-8")
-    comment = source[source.index("# 12 adds") : source.index("FACTS_SCHEMA: Literal")]
+    comment = source[source.index("# 12 adds") : source.index("FACTS_SCHEMA: Final")]
     for needle in ("labels", "cursor", "TriageConfig.exit"):
         assert needle in comment
 
 
-def test_collected_facts_are_stamped_thirteen() -> None:
-    assert collect_facts(_forge([]), SCOPE, now=NOW).to_json()["schema"] == 14
+def test_collected_facts_are_stamped_the_current_schema() -> None:
+    assert collect_facts(_forge([]), SCOPE, now=NOW).to_json()["schema"] == FACTS_SCHEMA
 
 
 # ---------------------------------------------------------- merged-PR labels

@@ -6,7 +6,7 @@ Implements spec `2026-11-17-triage-intake-design.md` (batch triage-intake: #1252
 1. **Issue-intake trust gate (R1-R8).** The security boundary, and the skeleton: the
    smoke is the touched suites on the unchanged tree plus the `ready-fr` label and the
    change fragment, pushed so the draft PR's CI runs. Then the pure rule
-   (`fr/triage/intake.py`), facts schema 14 with at most one association read per repo,
+   (`fr/triage/intake.py`), facts schema 15 with at most one association read per repo,
    body withholding for every written issue, the `untrusted` set, refusals in the batch
    verbs and dispatch, the driver's counted `blocked` hold in both snapshot builders, the
    quoted brief, the label ensure step and the docs.

@@ -1,0 +1,290 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-17-batch-acceptance-edits
+repo: derio-net/super-fr
+rows:
+  - id: acceptance-amend-origin-only-keeps-statement
+    capability: acceptance
+    acceptance: An origin-only `fr acceptance amend --op reword --origin` changes only
+      the row's origin, never restating a pending reword's statement in the row.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R1
+    - spec:2026-11-17-batch-acceptance-edits#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_amend_origin.py#test_origin_only_reword_keeps_the_rows_own_statement_under_a_pending_reword
+      - super-fr:tests/unit/test_acceptance_amend_origin.py#test_origin_only_reword_refusals_still_change_nothing
+    status: ci
+    notes: 'Unit-pinned in CI: an origin-only reword under a pending reword keeps the
+      row''s own statement; the refusals move no byte.'
+    verify: none
+  - id: fragment-design-spelling-repair
+    capability: acceptance
+    acceptance: '`fr migrate artifacts` renames a `<slug>-design.yaml` acceptance fragment
+      to `<slug>.yaml`, merging into an existing one and refusing by id when the two
+      disagree, without changing the effective matrix.'
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R13
+    - spec:2026-11-17-batch-acceptance-edits#R14
+    - spec:2026-11-17-batch-acceptance-edits#R15
+    - spec:2026-11-17-batch-acceptance-edits#R16
+    - spec:2026-11-17-batch-acceptance-edits#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_fragment_design_name.py
+      - super-fr:tests/unit/test_acceptance_design_spelling_merged.py
+    status: ci
+    notes: 'Unit-pinned in CI: the repair renames, merges, keeps an identical entry
+      once, refuses by id, holds back on an uncommitted slug file and keeps the fold;
+      check reads a merged -design fragment as its one spelling.'
+    verify: none
+  - id: spec-repairs-name-undecodable-files
+    capability: migration
+    acceptance: A spec or matrix that is not UTF-8 text is refused by `fr migrate artifacts`
+      and the CLI-entry gate with a reason naming the file, the byte and its offset,
+      never a codec error, and is left untouched.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R5
+    - spec:2026-11-17-batch-acceptance-edits#R6
+    - spec:2026-11-17-batch-acceptance-edits#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_plan_heading.py#test_a_non_utf8_spec_fails_the_migration_by_name_and_stays_byte_identical
+      - super-fr:tests/unit/test_test_plan_heading.py#test_the_gate_refuses_a_non_utf8_spec_naming_it_without_a_codec_error
+      - super-fr:tests/unit/test_migration_matrix_fragments.py#test_a_non_utf8_matrix_fails_by_name_and_stays_byte_identical
+    status: ci
+    notes: 'Unit tests in CI: a non-UTF-8 spec and v5 matrix fail run_migrations, the
+      repairs and the CLI-entry gate with ''<path> is not UTF-8 text (byte 0xff at offset
+      n)'', no codec text, file byte-identical.'
+    verify: none
+  - id: adopt-run-id-from-plan-slug
+    capability: run
+    acceptance: Adopting in-flight plans names each run after its plan, so `fr migrate
+      artifacts --yes --adopt` on one branch adopts every adoptable plan, one run each.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R9
+    - spec:2026-11-17-batch-acceptance-edits#R10
+    - spec:2026-11-17-batch-acceptance-edits#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py#test_migrate_adopt_adopts_every_in_flight_plan_on_one_branch
+      - super-fr:tests/unit/test_run_adopt.py#test_a_plan_adopted_with_no_run_id_is_named_after_its_folder
+      - super-fr:tests/unit/test_run_adopt.py#test_an_explicit_run_id_wins_and_an_existing_one_still_refuses
+    status: ci
+    notes: 'Unit tests in CI: a plan adopted with no --run-id is named after its folder,
+      a spec-only adoption keeps <date>-<branch>, --run-id wins and an existing id refuses,
+      and migrate --yes --adopt adopts three plans on one branch with none offered after.'
+    verify: none
+  - id: adopt-default-branch-warning
+    capability: run
+    acceptance: Adopting a run onto the repository's default branch warns once for that
+      run, naming the branch and `--branch`, and still adopts.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py#test_adopting_onto_the_default_branch_warns_once_naming_it_and_branch
+      - super-fr:tests/unit/test_run_adopt.py#test_adopting_onto_another_branch_or_with_no_remote_does_not_warn
+    status: ci
+    notes: 'Unit tests in CI: adopting onto origin''s default branch adds one note naming
+      it and --branch; another branch, or no remote, adds none.'
+    verify: none
+amendments:
+  - row: acceptance-pipeline-rows
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      end-to-end toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap.
+      Mechanics unit-pinned per-PR.; tracked by derio-net/super-fr#1338'
+    why: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the end-to-end
+      toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap. Mechanics
+      unit-pinned per-PR.; tracked by derio-net/super-fr#1338'
+  - row: exit-gates-collected-closeout
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'The collected close-out is unit-tested against a fake worktree and forge:
+      the engine''s per-batch steps, holds and one PR (test_triage_batch_closeout),
+      the verb (test_triage_batch_closeout_cmd), and the driver''s one-per-repo plan,
+      shared-head attribution, ready-and-merge and single hand-back (test_triage_collected_closeout_drive).
+      Live walk owed: one close-out over a real merged queue with a real housekeeping
+      PR (Test Plan step 3). v6.0.0 was cut on 2026-10-31 via the release workflow version
+      override (operator decision) with #1195 and #1217 gate:tester left held; this
+      walk was deferred, not certified. A disposable two-batch rehearsal was started
+      and paused unfinished; it is not evidence.; tracked by derio-net/super-fr#1347'
+    why: 'The collected close-out is unit-tested against a fake worktree and forge:
+      the engine''s per-batch steps, holds and one PR (test_triage_batch_closeout),
+      the verb (test_triage_batch_closeout_cmd), and the driver''s one-per-repo plan,
+      shared-head attribution, ready-and-merge and single hand-back (test_triage_collected_closeout_drive).
+      Live walk owed: one close-out over a real merged queue with a real housekeeping
+      PR (Test Plan step 3). v6.0.0 was cut on 2026-10-31 via the release workflow version
+      override (operator decision) with #1195 and #1217 gate:tester left held; this
+      walk was deferred, not certified. A disposable two-batch rehearsal was started
+      and paused unfinished; it is not evidence.; tracked by derio-net/super-fr#1347'
+  - row: fr-goal-journal-handoff-complete
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
+      live in the feature''s own run, but name no dated evidence to record as a walk;
+      render/check unit-pinned. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1349'
+    why: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
+      live in the feature''s own run, but name no dated evidence to record as a walk;
+      render/check unit-pinned. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1349'
+  - row: fr-goal-main-session-cost
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both
+      harnesses were walked live (PR #609, PR #679), but the row stays owed until #637
+      (Claude Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit
+      binding until #636.; tracked by derio-net/super-fr#1350'
+    why: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both harnesses
+      were walked live (PR #609, PR #679), but the row stays owed until #637 (Claude
+      Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit binding
+      until #636.; tracked by derio-net/super-fr#1350'
+  - row: fr-goal-subagent-per-phase
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch
+      was demonstrated by the feature''s own fr-goal run, but name no dated evidence
+      to record as a walk; wiring unit-pinned. Re-walk and record it with set-status
+      --walk.; tracked by derio-net/super-fr#1351'
+    why: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch was
+      demonstrated by the feature''s own fr-goal run, but name no dated evidence to
+      record as a walk; wiring unit-pinned. Re-walk and record it with set-status --walk.;
+      tracked by derio-net/super-fr#1351'
+  - row: gitlab-selfhosted-host-targeting
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
+      against a self-hosted GitLab (host redacted) but give no date to record a walk
+      with; unit refs in CI. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1352'
+    why: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
+      against a self-hosted GitLab (host redacted) but give no date to record a walk
+      with; unit refs in CI. Re-walk and record it with set-status --walk.; tracked
+      by derio-net/super-fr#1352'
+  - row: herdr-opencode-launch
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: RC10 unit coverage now checks OpenCode 2.1.4 default-variant normalization
+      and fail-closed model mismatches. The actual RC10 fixture launch still failed
+      during session confirmation and Herdr automatically closed its newly created tab;
+      no managed launch pass is claimed, so a live walk remains owed. Startup-metadata
+      unit replay now covers a narrowly fingerprinted incomplete frame to ready, finite
+      timeout without submission, and draft/overlay/process/session/status refusals
+      on repeated observations. Strict input admission is unchanged; the later diagnostic
+      PASS is not a native launch or live-walk PASS. Status remains walk-owed. R1 deadline
+      regressions additionally enforce rejection at/after expiry, no calls after expiry
+      and remaining-time limits for each native startup observation; no live walk or
+      status change.; tracked by derio-net/super-fr#1353
+    why: RC10 unit coverage now checks OpenCode 2.1.4 default-variant normalization
+      and fail-closed model mismatches. The actual RC10 fixture launch still failed
+      during session confirmation and Herdr automatically closed its newly created tab;
+      no managed launch pass is claimed, so a live walk remains owed. Startup-metadata
+      unit replay now covers a narrowly fingerprinted incomplete frame to ready, finite
+      timeout without submission, and draft/overlay/process/session/status refusals
+      on repeated observations. Strict input admission is unchanged; the later diagnostic
+      PASS is not a native launch or live-walk PASS. Status remains walk-owed. R1 deadline
+      regressions additionally enforce rejection at/after expiry, no calls after expiry
+      and remaining-time limits for each native startup observation; no live walk or
+      status change.; tracked by derio-net/super-fr#1353
+  - row: triage-closed-recovery-live
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'Disposable actual-client walk remains owed post-merge at Tester; the named
+      instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified.; tracked by derio-net/super-fr#1364'
+    why: 'Disposable actual-client walk remains owed post-merge at Tester; the named
+      instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified.; tracked by derio-net/super-fr#1364'
+  - row: ci-under-time-budget
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
+      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
+      is owed.; tracked by derio-net/super-fr#1340. Walk 2026-11-14 FAILED: ci.yml 335-674s
+      vs 240s. Not a balancing problem: cached-durations rebalancing works; even a perfect
+      split is ~320-340s. Fix is #1428 (batch suite-health, wave 15): more shards, cheaper
+      heavy files, or a re-argued budget.'
+    why: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
+      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
+      is owed.; tracked by derio-net/super-fr#1340. Walk 2026-11-14 FAILED: ci.yml 335-674s
+      vs 240s. Not a balancing problem: cached-durations rebalancing works; even a perfect
+      split is ~320-340s. Fix is #1428 (batch suite-health, wave 15): more shards, cheaper
+      heavy files, or a re-argued budget.'
+  - row: debt-archive-pr-weekly
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
+      scheduled run on main is the post-merge Test Plan step 2.; tracked by derio-net/super-fr#1341.
+      Half observed: the weekly job ran every week since 2026-10-12 and correctly opened
+      nothing (''No plan has been merged and unarchived for more than 14 days''). Still
+      owed: a run with a stale plan, opening or refreshing one draft PR.'
+    why: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
+      scheduled run on main is the post-merge Test Plan step 2.; tracked by derio-net/super-fr#1341.
+      Half observed: the weekly job ran every week since 2026-10-12 and correctly opened
+      nothing (''No plan has been merged and unarchived for more than 14 days''). Still
+      owed: a run with a stale plan, opening or refreshing one draft PR.'
+  - row: debt-weekly-issue-rename
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
+      on main is the post-merge Test Plan step 1.; tracked by derio-net/super-fr#1381.
+      Half observed: github-actions renamed #363 ''Acceptance debt'' -> ''super-fr:
+      Technical debt'' on 2026-10-13, still the only one (no duplicate). Still owed:
+      closing at zero debt.'
+    why: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
+      on main is the post-merge Test Plan step 1.; tracked by derio-net/super-fr#1381.
+      Half observed: github-actions renamed #363 ''Acceptance debt'' -> ''super-fr:
+      Technical debt'' on 2026-10-13, still the only one (no duplicate). Still owed:
+      closing at zero debt.'
+  - row: exit-gates-release-gating
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'fr release status, release.py''s RC/final decision (RC tag, pre-release,
+      no fragment consumed; final once nothing waits), both RC spellings and RC-admitting
+      floors are unit-tested against fake forges and temp git repos. Observed on super-fr
+      itself: RC13-RC16 were cut as pre-releases consuming no fragment while #1195/#1217
+      waited (e.g. run 41007180324). Still owed: the held-gate RC then verified-gate
+      final transition through the ordinary workflow, with installer channel checks
+      (see docs/exit-gates-release-walk.md). v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified. The final itself was the ungated
+      --version path (run 41214190564, 13 fragments consumed), so it is not the gated
+      transition.; tracked by derio-net/super-fr#1348. Half observed 2026-11-14: v7.0.0-rc.1..rc.9
+      were cut as pre-releases while gate-labelled PRs waited. Still owed: an automatic
+      final once none waits (v7.0.0 was a manual workflow_dispatch override, so it does
+      not count).'
+    why: 'fr release status, release.py''s RC/final decision (RC tag, pre-release, no
+      fragment consumed; final once nothing waits), both RC spellings and RC-admitting
+      floors are unit-tested against fake forges and temp git repos. Observed on super-fr
+      itself: RC13-RC16 were cut as pre-releases consuming no fragment while #1195/#1217
+      waited (e.g. run 41007180324). Still owed: the held-gate RC then verified-gate
+      final transition through the ordinary workflow, with installer channel checks
+      (see docs/exit-gates-release-walk.md). v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified. The final itself was the ungated
+      --version path (run 41214190564, 13 fragments consumed), so it is not the gated
+      transition.; tracked by derio-net/super-fr#1348. Half observed 2026-11-14: v7.0.0-rc.1..rc.9
+      were cut as pre-releases while gate-labelled PRs waited. Still owed: an automatic
+      final once none waits (v7.0.0 was a manual workflow_dispatch override, so it does
+      not count).'

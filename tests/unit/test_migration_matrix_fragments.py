@@ -485,3 +485,44 @@ def test_an_untracked_report_is_left_alone_and_not_listed(tmp_path: Path) -> Non
     assert adhoc not in changed
     assert set(REPORTS) - {adhoc} <= changed
     assert outcome.committed, outcome.reason
+
+
+# --- super-fr#1390: a matrix that is not UTF-8 is refused by name -------------
+
+
+def _undecodable(tmp_path: Path) -> tuple[Path, bytes, str]:
+    root = _repo(tmp_path)
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    good = matrix.read_bytes()
+    offset = good.index(b"org: derio-net")
+    data = good[:offset] + b"\xff" + good[offset:]
+    matrix.write_bytes(data)
+    return matrix, data, f"{matrix} is not UTF-8 text (byte 0xff at offset {offset})"
+
+
+def test_a_non_utf8_matrix_fails_by_name_and_stays_byte_identical(tmp_path: Path) -> None:
+    matrix, data, reason = _undecodable(tmp_path)
+
+    report = run_migrations(matrix.parents[2], dry_run=False)
+
+    (failure,) = [f for f in report.failed if f.path == matrix]
+    assert failure.error == reason
+    assert "UnicodeDecodeError" not in failure.error and "codec" not in failure.error
+    assert matrix.read_bytes() == data
+    assert not (matrix.parents[2] / FEATURES).exists()
+
+
+def test_the_split_and_the_anchor_conversion_refuse_a_non_utf8_matrix_by_name(
+    tmp_path: Path,
+) -> None:
+    from fr.artifacts import NotUtf8Error
+    from fr.artifacts.matrix_anchors import MATRIX_NAME_ANCHORS_REPAIR, conversions
+    from fr.artifacts.matrix_fragments import split_matrix
+
+    matrix, data, reason = _undecodable(tmp_path)
+
+    for call in (split_matrix, conversions, MATRIX_NAME_ANCHORS_REPAIR.fn):
+        with pytest.raises(NotUtf8Error) as e:
+            call(matrix)
+        assert str(e.value) == reason
+    assert matrix.read_bytes() == data

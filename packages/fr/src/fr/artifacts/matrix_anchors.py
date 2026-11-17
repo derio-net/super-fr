@@ -30,6 +30,7 @@ from pathlib import Path
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import Repair
+from fr.artifacts.text import read_utf8
 
 REPAIR_NAME = "matrix-name-anchors"
 _LINE_ANCHOR_HINT = re.compile(r"\.py#L\d")
@@ -58,7 +59,7 @@ def conversions(path: Path) -> dict[str, str]:
 
     root = _root(path)
     try:
-        text = path.read_text()
+        text = read_utf8(path, translate_newlines=True)
     except OSError:
         return {}
     if not _LINE_ANCHOR_HINT.search(text):
@@ -99,7 +100,7 @@ def _applies(path: Path) -> bool:
 def _fn(path: Path) -> Iterable[Path]:
     from fr.acceptance.legacy import parse_matrix_v5_body
 
-    text = path.read_text()
+    text = read_utf8(path, translate_newlines=True)
     for old, new in conversions(path).items():
         # Whole refs only: `#L1` must not match inside `#L10` or `#L1-L5`, and
         # own repo `fr` must not match inside a sibling's `super-fr:…`.

@@ -365,11 +365,37 @@ def test_one_key_in_both_duplicate_fields_is_refused(tmp_path: Path) -> None:
 # --------------------------------------- triage-claims §3.H (facts 6, judgements 6)
 
 
-@pytest.mark.parametrize("schema", [3, 4, 5, 6, 7, 8, 9, 10, 11])
-def test_facts_schemas_3_to_10_load(tmp_path: Path, schema: int) -> None:
-    from fr.triage.model import FACTS_READS, FACTS_SCHEMA, load_facts
+def test_the_facts_schema_is_pinned_here_once_and_read_back_to_3() -> None:
+    """gh#1300: the ONE pin of the facts stamp. Every other test names `FACTS_SCHEMA`;
+    a bump edits this line, the constant and its comment in `model.py`, nothing else."""
+    from fr.triage.model import FACTS_READS, FACTS_SCHEMA, Facts
 
-    assert FACTS_SCHEMA == 14 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
+    assert FACTS_SCHEMA == 15
+    assert FACTS_READS == tuple(range(3, FACTS_SCHEMA + 1))
+    assert Facts.model_fields["schema_"].default == FACTS_SCHEMA
+
+
+@pytest.mark.parametrize("schema", [2, 15])
+def test_a_facts_stamp_outside_the_reads_is_refused(schema: int) -> None:
+    from fr.triage.model import Facts
+
+    with pytest.raises(ValueError):
+        Facts.model_validate(
+            {
+                "schema": schema,
+                "scope": "s",
+                "kind": "repo",
+                "collected_at": "t",
+                "repos": [],
+                "issues": [],
+            }  # fmt: skip
+        )
+
+
+@pytest.mark.parametrize("schema", [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+def test_older_facts_schemas_load(tmp_path: Path, schema: int) -> None:
+    from fr.triage.model import load_facts
+
     path = tmp_path / "facts.json"
     doc = {
         "schema": schema,

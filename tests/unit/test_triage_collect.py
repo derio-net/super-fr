@@ -25,7 +25,7 @@ from fr.triage.collect import (
     parse_prs,
 )
 from fr.triage.errors import ForgeError
-from fr.triage.model import Facts, Scope
+from fr.triage.model import FACTS_SCHEMA, Facts, Scope
 
 from tests.unit.triage_fixtures import (
     ISSUES,
@@ -389,7 +389,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 14
+    assert facts.to_json()["schema"] == FACTS_SCHEMA
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -718,7 +718,7 @@ def test_collect_ignores_an_untrusted_authors_marker() -> None:
 
 def test_collected_facts_are_schema_9() -> None:
     facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
-    assert facts.to_json()["schema"] == 14
+    assert facts.to_json()["schema"] == FACTS_SCHEMA
 
 
 def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:
@@ -851,6 +851,23 @@ def test_a_closed_hit_with_a_claim_is_release_pending_when_own_and_held_when_for
         "super-fr#5": "held",
         "super-fr#6": "stale",
     }
+
+
+def test_a_closed_hit_records_its_un_released_claims_for_scope_retire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gh#1210: `scope retire` needs to know WHOSE claim holds a closed issue (facts 14)."""
+    monkeypatch.setenv("FR_HOST_ID", "0123456789abcdef")
+    forge = _closed_forge(
+        closed_in_progress={REPO: [_closed(5, "fr:claimed"), _closed(6, "fr:claimed")]},
+        comments={
+            (REPO, 5): [_marker_comment("s-22222222", 2)],
+            (REPO, 6): [_marker_comment("s-22222222", 3, released=True)],
+        },
+    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    by = {h.key: [c.signer for c in h.claims] for h in facts.stale_in_progress}
+    assert by == {"super-fr#5": ["s-22222222"], "super-fr#6": []}
 
 
 def _only_claimed(number: int) -> dict[str, Any]:
@@ -1077,21 +1094,21 @@ def _assoc_forge(issues: list[dict[str, Any]], **kw: Any) -> FakeForge:
 _ASSOC_SCOPE = Scope(kind="repo", target=_OUTSIDE)
 
 
-def test_facts_are_schema_14_and_every_issue_has_an_author_association_key() -> None:
+def test_facts_are_schema_15_and_every_issue_has_an_author_association_key() -> None:
     facts = collect_facts(_assoc_forge([_by(1, "eve")]), _ASSOC_SCOPE, now=NOW)
     doc = facts.to_json()
-    assert doc["schema"] == 14
+    assert doc["schema"] == FACTS_SCHEMA
     assert all("author_association" in i for i in doc["issues"])
 
 
-def test_a_schema_13_facts_file_still_loads_with_no_association(tmp_path: Path) -> None:
+def test_a_schema_14_facts_file_still_loads_with_no_association(tmp_path: Path) -> None:
     from fr.triage.model import load_facts
 
     facts = collect_facts(_assoc_forge([_by(1, "eve")]), _ASSOC_SCOPE, now=NOW)
     doc = facts.to_json()
     for issue in doc["issues"]:
         issue.pop("author_association")
-    doc["schema"] = 13
+    doc["schema"] = 14
     path = tmp_path / "facts.json"
     path.write_text(json.dumps(doc), encoding="utf-8")
     assert load_facts(path).issues[0].author_association is None

@@ -64,6 +64,16 @@ from fr.artifacts.registry import (
     iter_paths_of,
     own_feature,
 )
+from fr.artifacts.text import NotUtf8Error
+
+
+def describe(e: BaseException) -> str:
+    """The one text the runner reports for a raised exception (spec
+    `2026-11-17-batch-acceptance-edits` R7): a `NotUtf8Error`'s message alone,
+    which already names the file and the byte, and `<Type>: <message>` otherwise."""
+    if isinstance(e, NotUtf8Error):
+        return str(e)
+    return f"{type(e).__name__}: {e}"
 
 
 class ArtifactMigrationError(ArtifactError):
@@ -451,9 +461,7 @@ def _scan_extra(repo_root: Path, reg: MigrationRegistry, *, first_only: bool = F
                     if not os.access(path.parent, os.W_OK):
                         raise PermissionError(f"{path.parent} is not writable")
                 except Exception as e:
-                    unrepairable.append(
-                        FailedAction(name, path, r.summary, f"{type(e).__name__}: {e}")
-                    )
+                    unrepairable.append(FailedAction(name, path, r.summary, describe(e)))
                     continue
                 repairable.append(_ExtraTarget(name, r, path))
                 if first_only:
@@ -493,7 +501,7 @@ def _chain_for(
     try:
         declared = kind.read_stamp(path)
     except Exception as e:
-        return (), FailedAction(name, path, f"{name} stamp", f"{type(e).__name__}: {e}")
+        return (), FailedAction(name, path, f"{name} stamp", describe(e))
     version = PRE_FRAMEWORK_VERSION if declared is None else declared
     try:
         return reg.chain(name, version), None
@@ -551,7 +559,7 @@ def _actions_for(
         try:
             needed = r.applies(path)
         except Exception as e:
-            failures.append(FailedAction(name, path, r.summary, f"{type(e).__name__}: {e}"))
+            failures.append(FailedAction(name, path, r.summary, describe(e)))
             continue
         if needed:
             actions.append(PlannedAction(kind=name, path=path, summary=r.summary, repair=r.name))
@@ -722,7 +730,7 @@ def _repair_extra(target: _ExtraTarget) -> PlannedAction | FailedAction | None:
             return None
         wrote = tuple(r.fn(target.path) or ())
     except Exception as e:
-        return FailedAction(target.name, target.path, r.summary, f"{type(e).__name__}: {e}")
+        return FailedAction(target.name, target.path, r.summary, describe(e))
     return PlannedAction(
         kind=target.name, path=target.path, summary=r.summary, repair=r.name, also_wrote=wrote
     )
@@ -782,7 +790,7 @@ def _apply_to_one(
         except Exception as e:
             # Unstamped on purpose: the artifact stays stale, so the next run
             # retries it instead of skipping a half-migration forever.
-            failed.append(FailedAction(name, path, step.summary, f"{type(e).__name__}: {e}"))
+            failed.append(FailedAction(name, path, step.summary, describe(e)))
             return applied, failed
         if step.retires:
             # The last hop deleted the artifact: there is nothing to stamp, and
@@ -815,9 +823,7 @@ def _apply_to_one(
             landed = kind.read_version(path)
         except Exception as e:
             failed.append(
-                FailedAction(
-                    name, path, step.summary, f"{type(e).__name__}: {e}", also_wrote=also_wrote
-                )
+                FailedAction(name, path, step.summary, describe(e), also_wrote=also_wrote)
             )
             return applied, failed
         if landed != step.to_version:
@@ -863,7 +869,7 @@ def _apply_to_one(
                 continue
             wrote = tuple(r.fn(path) or ())
         except Exception as e:
-            failed.append(FailedAction(name, path, r.summary, f"{type(e).__name__}: {e}"))
+            failed.append(FailedAction(name, path, r.summary, describe(e)))
             continue
         applied.append(
             PlannedAction(kind=name, path=path, summary=r.summary, repair=r.name, also_wrote=wrote)

@@ -748,3 +748,38 @@ amendments:
     why: 'ci.yml moved from 6 to 7 shards per leg (super-fr#1428): runner speed varies
       x0.72-x1.40 between runs and at 6 a slow runner''s shard alone filled the 360
       s budget. The release''s shards stay at 6.'
+  - row: approval-label-created
+    op: reword
+    base: 0
+    acceptance: fr init scaffold and the triage commands that act on a repo's batch
+      PRs (batch dispatch, batch merge under --yes, every drive pass) create the approved-fr
+      label when it is missing, warning once, and never fail on a forge that cannot;
+      fr triage collect only reports the repos that lack it.
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'
+  - row: approval-label-created
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_label_board.py#test_collect_creates_the_label_on_each_collected_repo
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'
+  - row: approval-label-created
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_label_board.py#test_collect_writes_no_label_and_says_which_repos_lack_it
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'
+  - row: approval-label-created
+    op: set-status
+    base: 3
+    status: ci
+    notes: 'ensure_approval_label creates a missing approved-fr label once per repo
+      per pass or command and warns; a forge that cannot is a warning. Called by batch
+      dispatch, batch merge (under --yes), every drive pass and fr init scaffold on
+      a GitHub origin. fr triage collect writes no label (gh#1268): approval_label_missing
+      reports the repos lacking it. Scenario: the label-gate scenario''s first pass
+      creates it.'
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'

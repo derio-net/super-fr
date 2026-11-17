@@ -66,20 +66,20 @@ tasks:
     text: |-
       REFACTOR: module docstring names spec 2026-11-17-triage-intake R2/R6 and the fail-closed rule; run the intake tests plus `uv run mypy packages/fr/src`.
 - number: 3
-  title: Facts schema 14 and the association read (R1)
+  title: Facts schema 15 and the association read (R1)
   steps:
   - id: P1.T3.S1
     text: |-
-      RED: tests in tests/unit/test_triage_collect.py (fake forge): a facts.json written has `schema: 14` and every issue an `author_association` key; a schema-13 file still loads with association None (extend the FACTS_READS test if one pins the tuple). The REST client's `_issue_record` keeps `authorAssociation` from `author_association` (unit test on real_ghrestclient). A fake forge counts `issue_associations` calls: zero when every issue is by the viewer, a pr_authors login or labelled ready-fr, zero when listed records carry `authorAssociation`, exactly one per repo otherwise; a failed or Unsupported read leaves associations None and prints one stderr line. Run; fail.
+      RED: tests in tests/unit/test_triage_collect.py (fake forge): a facts.json written has `schema: 15` and every issue an `author_association` key; a schema-14 file still loads with association None (extend the FACTS_READS test if one pins the tuple). The REST client's `_issue_record` keeps `authorAssociation` from `author_association` (unit test on real_ghrestclient). A fake forge counts `issue_associations` calls: zero when every issue is by the viewer, a pr_authors login or labelled ready-fr, zero when listed records carry `authorAssociation`, exactly one per repo otherwise; a failed or Unsupported read leaves associations None and prints one stderr line. Run; fail.
   - id: P1.T3.S2
     text: |-
-      GREEN: `Issue.author_association: str | None = None`; FACTS_SCHEMA 14 with a comment paragraph in the existing style; FACTS_READS adds 14. `GhClient.issue_associations(repo, state, limit) -> dict[int, str]` in the protocol (ghclient.py) and its unsupported stub; RealGhClient via one `gh api --paginate "repos/{repo}/issues?state={state}&per_page=100"` read (drop `pull_request` records, stop at limit) through gh.py; RealGhRestClient from its paged list; glab/tea raise UnsupportedForgeOperation. Collector `Forge` protocol + `ClientForge` gain it; `_issue` reads `authorAssociation` from the record; collect calls the read per spec §A "The read". Update every fake GhClient/Forge the suite type-checks against. Tests pass.
+      GREEN: `Issue.author_association: str | None = None`; FACTS_SCHEMA 15 with a comment paragraph in the existing style; FACTS_READS adds 15. `GhClient.issue_associations(repo, state, limit) -> dict[int, str]` in the protocol (ghclient.py) and its unsupported stub; RealGhClient via one `gh api --paginate "repos/{repo}/issues?state={state}&per_page=100"` read (drop `pull_request` records, stop at limit) through gh.py; RealGhRestClient from its paged list; glab/tea raise UnsupportedForgeOperation. Collector `Forge` protocol + `ClientForge` gain it; `_issue` reads `authorAssociation` from the record; collect calls the read per spec §A "The read". Update every fake GhClient/Forge the suite type-checks against. Tests pass.
 - number: 4
   title: Body withheld for every written ineligible issue (R3)
   steps:
   - id: P1.T4.S1
     text: |-
-      RED: tests (test_triage_collect.py, test_triage_collect_partial.py): an outside author's body is "" after a full collect, after the `view_issue` path for a judged issue, and after a partial collect that carries a schema-13 issue by an outside author (association None) from previous facts; an eligible issue keeps its body; title and labels are kept. Run; fail.
+      RED: tests (test_triage_collect.py, test_triage_collect_partial.py): an outside author's body is "" after a full collect, after the `view_issue` path for a judged issue, and after a partial collect that carries a schema-14 issue by an outside author (association None) from previous facts; an eligible issue keeps its body; title and labels are kept. Run; fail.
   - id: P1.T4.S2
     text: |-
       GREEN: one final step in collect, before Facts is built, that applies `intake_reason` (repo config + viewer) to every Issue (listed, viewed, carried) and clears the body of an ineligible one. Tests pass.

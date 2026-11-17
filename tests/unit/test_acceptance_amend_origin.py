@@ -168,3 +168,64 @@ def test_quiet_set_status_on_an_own_merged_row_writes_an_amendment(quiet: Produc
     assert [(a["row"], a["op"]) for a in data["amendments"]] == [(ROW, "set-status")]
     clear_fold_cache()
     assert branch_refusals(quiet.root, fetch=False).errors == []
+
+
+# --- #1439: an origin-only reword keeps the row's own statement (spec 2026-11-17 R1, R2) ---
+
+
+def _pending_with_reword(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Row `p` pending on this branch ("p works"), and a pending `reword` amendment
+    of it ("p works better")."""
+    _add_pending(root, monkeypatch)
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "p", "--op", "reword",
+        "--acceptance", "p works better", "--why", "sharper", "--feature", SLUG_A,
+    )  # fmt: skip
+    assert res.exit_code == 0, res.output
+    assert fragment(root, SLUG_A)["amendments"][0]["acceptance"] == "p works better"
+
+
+def test_origin_only_reword_keeps_the_rows_own_statement_under_a_pending_reword(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """R1: the fold says "p works better" (the amendment); the row's own definition
+    still says "p works", and the origin correction must not restate the amendment in
+    it."""
+    root = merged_repo(tmp_path)
+    _pending_with_reword(root, monkeypatch)
+    before = fragment(root, SLUG_A)
+    res = invoke(
+        root, monkeypatch, "amend", "--id", "p", "--op", "reword",
+        "--origin", f"spec:{SLUG_A}#R2", "--why", "the requirement was mistyped",
+    )  # fmt: skip
+    assert res.exit_code == 0, res.output
+    after = fragment(root, SLUG_A)
+    row = next(r for r in after["rows"] if r["id"] == "p")
+    old = next(r for r in before["rows"] if r["id"] == "p")
+    assert row["acceptance"] == old["acceptance"] == "p works"
+    assert row["capability"] == old["capability"]
+    assert row["origin"] == [f"spec:{SLUG_A}#R2"]
+    assert after["amendments"] == before["amendments"]
+
+
+@pytest.mark.parametrize(
+    ("row", "op"),
+    [("r", "reword"), ("nope", "reword"), ("p", "set-status")],
+    ids=["merged-row", "unknown-row", "non-reword-op"],
+)
+def test_origin_only_reword_refusals_still_change_nothing(
+    tmp_path: Path, monkeypatch, row: str, op: str
+) -> None:
+    """R2: the refusals are today's, and no byte moves."""
+    root = merged_repo(tmp_path)
+    _pending_with_reword(root, monkeypatch)
+    head = git(root, "rev-parse", "HEAD")
+    frags = {p: p.read_bytes() for p in (root / FRAGMENTS_REL).glob("*.yaml")}
+    res = invoke(
+        root, monkeypatch, "amend", "--id", row, "--op", op,
+        "--origin", f"spec:{SLUG_A}#R2", "--why", "w",
+    )  # fmt: skip
+    assert res.exit_code == 2, res.output
+    assert git(root, "rev-parse", "HEAD") == head
+    assert {p: p.read_bytes() for p in (root / FRAGMENTS_REL).glob("*.yaml")} == frags
+    assert not git(root, "status", "--porcelain")

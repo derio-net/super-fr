@@ -290,7 +290,7 @@ def test_a_label_admits_and_keeps_the_body() -> None:
 
 def test_a_carried_schema_13_issue_by_an_outside_author_is_cleared_by_a_partial_collect() -> None:
     previous = collect_facts_counted(_intake_forge(), ORG, now=NOW)[0]
-    # A schema-13 file: no association, and the body as an older fr stored it.
+    # A schema-14 file: no association, and the body as an older fr stored it.
     old = previous.model_copy(
         update={
             "issues": [

@@ -650,3 +650,30 @@ def test_supersede_refuses_when_no_file_carries_the_named_run_id(
     assert result.exit_code == 2, result.output
     assert "disagrees with its `run:` field" in _squash(result.output)
     assert _snapshot(repo) == before
+
+
+def test_supersede_moves_a_branch_derived_id_to_the_plan_slug_with_its_usage(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """#1219: a run adopted under the old `<date>-<branch>` id moves to the plan's."""
+    repo, shipped, plan_dir = _plan_repo(tmp_path, repo_root)
+    _commit_all(repo)
+    first = _invoke(
+        repo, shipped, ["run", "adopt", str(plan_dir), "--branch", BRANCH, "--run-id", OLD_RUN]
+    )
+    assert first.exit_code == 0, first.output
+    usage = repo / "docs" / "superpowers" / "usage" / f"{OLD_RUN}.yaml"
+    usage.parent.mkdir(parents=True)
+    usage.write_text(f"schema_version: 1\nrun: {OLD_RUN}\ncaptures: []\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "old run")
+
+    result = _invoke(
+        repo, shipped, ["run", "adopt", str(plan_dir), "--supersede", "--yes", "--branch", BRANCH]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not run_path(repo, OLD_RUN).exists()
+    assert load_run_state(repo, PLAN_SLUG).run == PLAN_SLUG
+    assert not usage.exists()
+    assert (usage.parent / f"{PLAN_SLUG}.yaml").is_file()

@@ -239,6 +239,23 @@ def _labels_off(client: Any, repo: str) -> str | None:
         return str(exc)
 
 
+def approval_label_missing(client: Any, repo: str) -> bool:
+    """Whether *repo* lacks the `approved-fr` label that fr would create there: a READ
+    (gh#1268). `fr triage collect` reports it and writes nothing; the first batch
+    dispatch to the repo creates it (R4's other call sites). A repo whose labels are off,
+    or a forge that cannot say, is never reported missing."""
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.hostclient import FORGE_ERRORS
+
+    soft: tuple[type[Exception], ...] = (UnsupportedForgeOperation, *FORGE_ERRORS)
+    if _labels_off(client, repo) is not None:
+        return False
+    try:
+        return not client.label_exists(repo, APPROVED_FR.name)
+    except soft:
+        return False
+
+
 def ensure_approval_label(
     client: Any, repo: str, say: Callable[[str], None], *, seen: set[str]
 ) -> None:

@@ -39,7 +39,8 @@ from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
-from fr.triage.approval import ensure_approval_label
+from fr.labels import APPROVED_FR
+from fr.triage.approval import approval_label_missing
 from fr.triage.batch import last_dispatch, lifecycle_events
 from fr.triage.check import CLEARING_RULE, ClaimSets, classify, clean_label_targets
 from fr.triage.collect import (
@@ -467,10 +468,14 @@ def collect_command(
         raise typer.Exit(code=2) from exc
     _report(facts)
     forge = make_forge()
-    if isinstance(forge, ClientForge):  # the label the operator approves with (R4)
-        seen: set[str] = set()
-        for name in facts.collected:
-            ensure_approval_label(forge.client, name, _say_err, seen=seen)
+    if isinstance(forge, ClientForge):  # collect is a read: report the label, never create it
+        lacking = [n for n in facts.collected if approval_label_missing(forge.client, n)]
+        if lacking:
+            each = "it" if len(lacking) == 1 else "each"
+            _say_err(
+                f"{plural(len(lacking), 'repo')} {'lacks' if len(lacking) == 1 else 'lack'} "
+                f"{APPROVED_FR.name}; the first batch dispatch to {each} creates it"
+            )
     n_open = sum(1 for i in facts.issues if i.state == "open")
     console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
 

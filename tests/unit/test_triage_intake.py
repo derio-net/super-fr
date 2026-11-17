@@ -30,7 +30,7 @@ def _issue(number: int, **kw: Any) -> Issue:
 
 def _facts(*issues: Issue, **kw: Any) -> Facts:
     return Facts(
-        schema=13,
+        schema=14,
         scope="derio-net--super-fr",
         kind="repo",
         collected_at="2026-11-17T00:00:00+00:00",
@@ -142,7 +142,7 @@ def test_a_bot_issue_without_the_marker_is_ineligible_in_facts() -> None:
     assert issue_reason(facts.issues[0], facts) is not None
 
 
-def test_a_pre_14_facts_file_loads_with_ineligible_bodies_withheld(tmp_path: Any) -> None:
+def test_a_pre_15_facts_file_loads_with_ineligible_bodies_withheld(tmp_path: Any) -> None:
     import json
 
     from fr.debt.render import MARKER

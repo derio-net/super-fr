@@ -76,7 +76,7 @@ issue needs it when R2's login and label clauses do not admit it). A read that f
 that the forge does not support, leaves the association `None`. Issues read through
 `view_issue` (past the list limit, or judged in a repo the list did not cover) get their
 association too, through the same per-repo read, so a trusted member's issue is not
-rejected only because it was viewed rather than listed. Facts move to schema 14.
+rejected only because it was viewed rather than listed. Facts move to schema 15 (main's schema 14, gh#1210's `StaleInProgress.claims`, merged first).
 Older files still load, reading `author_association` as `None`.
 
 R2. One pure function decides intake trust. An issue is eligible when at least one holds:
@@ -92,7 +92,7 @@ unread author or an unread association never admits an issue: the rule fails clo
 R3. Every issue that `collect` writes has its body cleared when it is ineligible. This
 applies to issues listed this collect, viewed through `view_issue`, and carried from the
 previous facts by a partial collect, which are judged again on their stored fields. The
-title, labels and other fields are kept. A facts file written before schema 14 is judged the
+title, labels and other fields are kept. A facts file written before schema 15 is judged the
 same way when it is loaded, so no reader (`check`, `render`, dedupe, the skill) sees an
 ineligible author's body before the next collect.
 
@@ -162,7 +162,8 @@ prints, and the pass goes on.
 ### A. Intake trust (R1–R8)
 
 **Data.** `Issue` gains `author_association: str | None = None`. `FACTS_SCHEMA` moves to
-14 with the usual comment paragraph, and `FACTS_READS` adds 14. Facts are a cache under the
+15 with the usual comment paragraph (14 is main's: gh#1210's `StaleInProgress.claims`), and
+`FACTS_READS` adds 15 (it derives from the stamp). Facts are a cache under the
 scope's state directory and not a registered artifact kind, so no migration is owed: the
 next collect rewrites the file.
 
@@ -192,7 +193,7 @@ association of that repo `None`.
 **Body (R3).** Collect judges every `Issue` it is about to write, in one final step before
 facts are built: listed, viewed and carried alike. The step uses each issue's repo config
 and the viewer, both of which collect already holds. An ineligible issue gets `body=""`. A
-carried issue from a schema-13 file has no association, so an outside author's body is
+carried issue from a schema-14 file has no association, so an outside author's body is
 cleared on the first collect after the upgrade, partial or not.
 
 **Sets (R4).** `check.py`'s `is_set_apart` also returns true for an untrusted issue, which
@@ -294,7 +295,7 @@ strategy: candidate
 gate: developer
 
 - intake-trust-eligibility: none — CI unit tests on `intake_reason` and collect over a fake forge: a member's issue, the viewer's, a `pr_authors` login's (association unread, still eligible), a `ready-fr` one and an outside one are judged correctly; an unread author or association never admits; the association read happens at most once per repo, and not at all when every issue is admitted or the list carries the field
-- intake-untrusted-set-apart: none — CI unit tests: an outside issue's body is not stored on a full collect, a `view_issue` read or a partial collect that carries a schema-13 issue; it is in `check`'s `untrusted` set with its reason, and never unranked, unplaced or suggested
+- intake-untrusted-set-apart: none — CI unit tests: an outside issue's body is not stored on a full collect, a `view_issue` read or a partial collect that carries a schema-14 issue; it is in `check`'s `untrusted` set with its reason, and never unranked, unplaced or suggested
 - intake-batch-refuses-untrusted: none — CI tests: `batch create`/`edit`/`dispatch` exit 2 with no write for a rejected or uncollected member, and an edit removing it succeeds; both snapshot builders fill `rejected` alike, and the pure pass emits `blocked` (counted) before the `after` and cap checks, then dispatches once the member carries `ready-fr`
 - intake-brief-quotes-untrusted: none — CI unit test: the first line carries only the command and the batch id; titles, detail, note and rationale are inside the quoted untrusted block; member text with a forged heading or closing marker stays quoted; output is deterministic
 - driver-refetches-origin-each-pass: none — CI test: a driver whose second pass cannot fetch holds the repo with one warning, for every merge-context use of that pass including a close-out hand-back, and acts again on a third pass whose fetch works; a config change between passes changes the context's version and method

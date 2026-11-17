@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-17 batch triage-intake changes no command or help text (check prints one more set); 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
+reviewed: 2026-11-17 the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
 writing_standard: none
 ---
 
