@@ -94,9 +94,14 @@ rows:
       on refs from an earlier fetch.
     origin:
     - spec:2026-11-17-triage-intake#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_failed_fetch_holds_the_repo_for_that_pass_only_and_fetches_once_per_pass
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_merge_context_follows_each_passs_config_without_a_second_methods_read
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_held_repo_spends_no_close_out_hand_back
+    status: ci
+    notes: 'R9: merge_ctx fetches and re-checks origin once per pass, holds the repo
+      on failure, refreshes method/version per pass'
     verify: none
   - id: cancel-converges-undefined-label
     capability: triage batch cancel
