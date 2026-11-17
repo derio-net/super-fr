@@ -1,0 +1,136 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Acceptance edits — origin-only reword, -design fragment repair, restored
+    notes (#1439,
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - acceptance-amend-origin-only-keeps-statement
+  - fragment-design-spelling-repair
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/acceptance/amend.py
+  - packages/fr/src/fr/acceptance/fragment*.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/fragment_design_name.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - tests/unit/test_acceptance_amend_origin.py
+  - tests/unit/test_migration_fragment_design_name.py
+  - tests/unit/test_acceptance_fragment_writes.py
+  - docs/acceptance/features/*.yaml
+  - docs/**/*.md
+  - .changes/feat-batch-acceptance-edits.yaml
+  estimate_lines: 520
+tasks:
+- number: 1
+  title: Smoke — the touched suites are green on the unchanged tree
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest -q --no-cov tests/unit/test_acceptance_amend_origin.py tests/unit/test_acceptance_amend.py tests/unit/test_acceptance_fragment_writes.py tests/unit/test_migration_runner.py`; all green before any change (a red one is recorded as a discovery, not fixed here).
+- number: 2
+  title: An origin-only reword keeps the row's own statement (R1, R2)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_acceptance_amend_origin.py, a fixture repo whose branch holds a pending row R (acceptance "old") and a pending `reword` amendment of R (acceptance "new"); run `fr acceptance amend --id R --op reword --origin <spec ref> --why x`. Assert the fragment's row R still says "old" (byte-identical acceptance and capability), its origin is the new one, and the amendment is unchanged. Second test: the existing refusals (merged row, unknown row, non-reword op with --origin) still exit 2 and change no byte. Run; the first fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in acceptance_cmd.py's origin-only branch (around :1050), read `acceptance` from the row as defined in the pending fragment that holds it (parse the branch's fragments, the same rows `_reword_pending` rewrites), not from `effective(root)`; when no pending fragment holds the row, leave it as today so `_reword_pending` refuses. No model change. Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: if the pending-row lookup duplicates a helper in fr.acceptance (fragment loading by row id), call the helper; rerun the amend test files.
+- number: 3
+  title: The -design fragment repair renames and merges (R13–R16)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: new tests/unit/test_migration_fragment_design_name.py over a git fixture repo: (a) only `<slug>-design.yaml` (feature `<slug>-design`) → after `run_migrations`, `<slug>.yaml` exists with `feature: <slug>`, same rows/amendments, the -design file is gone and its deletion is staged in the migration commit; (b) both files, disjoint ids → merged, `<slug>.yaml`'s entries first; (c) both with one identical entry → kept once; (d) both holding one id differently → both byte-identical, the artifact failed with a reason naming the id; (e) uncommitted edits in `<slug>.yaml` → held back by the veto; (f) the fold (`fr.acceptance.fold`) before and after is equal row for row. Run; all fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add packages/fr/src/fr/artifacts/fragment_design_name.py registering `Repair(kind="acceptance-fragment", name=..., applies=..., fn=..., companions=lambda p: [p.with_name(<slug>.yaml)], description=...)` and import it from fr/artifacts/__init__.py. `applies`: name ends `-design.yaml` and `feature:` equals the stem. `fn`: build the renamed/merged fragment in memory with the fragment model, refuse on an id held differently or an unequal fold, write `<slug>.yaml` via write_text_atomic, unlink the -design file, return `[<slug>.yaml]`. Tests pass.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: share the merge rule (order, identical-once, conflict-by-id) as one function the repair and Task 4 both call; rerun the new test file.
+- number: 4
+  title: The merged-row rule reads a merged -design fragment as its one spelling (R17)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_acceptance_fragment_writes.py (or a new test beside it), a fixture with a remote default ref whose tip holds `<slug>-design.yaml` (rows + an amendment) and a branch where the repair has run (only `<slug>.yaml`). Assert `merged_row_edits` and `outside_merged_row_edits` report nothing and `fr acceptance check --no-fetch` exits 0; and that a real edit of one of those rows in `<slug>.yaml` IS still reported. Same with a tip holding both spellings. Run; the clean cases fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in fr/acceptance/amend.py, key the tip's (and merge base's) fragments by their one spelling: map a `<slug>-design.yaml` rel to `<slug>.yaml`, merging with a same-tip `<slug>.yaml` by Task 3's rule, before `_fragment_edits`; the merged-amendments-lead check reads the combined list. Tests pass.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: one normalising helper for "fragments by their one spelling", used by both functions; rerun the acceptance test files.
+- number: 5
+  title: Restore the 17 replaced notes (R3, R4)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      For each of the 17 rows listed in the plan journal discovery `p1-restored-notes`, run `uv run fr acceptance set-status --id <row> --status <its current status> --notes "<old note>; tracked by derio-net/super-fr#<n>" --feature 2026-11-17-batch-acceptance-edits`. Touch none of the 16 boilerplate rows. Then `uv run fr acceptance check --no-fetch` exits 0, and a script over the fold confirms each of the 17 rows' effective note equals the journal's text plus the tracker and its status, levels and issues are unchanged.
+- number: 6
+  title: Change fragment, docs currency, phase suite
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Add `.changes/feat-batch-acceptance-edits.yaml` (`bump: patch`, one-line summary of the batch). Run `uv run fr docs check`; fix each finding by editing the page it names or its `reviewed` stamp. Run the full suite last into a host-visible log outside the repo, after the last code commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

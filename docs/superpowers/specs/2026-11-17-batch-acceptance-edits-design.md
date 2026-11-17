@@ -202,3 +202,4 @@ internal refactor. Neither is a business-level claim, so neither has a row.
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-11-17-batch-acceptance-edits | `derio-net/super-fr` | `2026-11-17-batch-acceptance-edits` | — |
