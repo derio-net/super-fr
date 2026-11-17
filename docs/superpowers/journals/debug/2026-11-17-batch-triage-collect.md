@@ -50,3 +50,8 @@ Retire filtered to open issues, and the only facts record of a closed fr:claimed
 ### a7410cea1abb · finding [fixed] · #1210 fixed: StaleInProgress.claims (facts 14); retire releases a retired scope's closed claims with unlabel
 
 collect._closed_in_progress records the un-released claims; scope_retire_command adds them to its held set and releases with unlabel=True; _forget_claims drops a settled hit from stale_in_progress. Tests test_triage_claim_cmd.py::test_scope_retire_settles_a_closed_issue_the_retired_scope_holds, ::test_scope_retire_leaves_a_closed_issue_another_scope_holds, test_triage_collect.py::test_a_closed_hit_records_its_un_released_claims_for_scope_retire. Out of scope: p1-r8 (an own marker on an unlabelled closed issue) stays tracked by #1211.
+
+<!-- fr:journal kind=finding scope=debug id=d79a84f1dee0 created=2026-11-17T09:32:03+00:00 state=fixed -->
+### d79a84f1dee0 · finding [fixed] · #1300 fixed: FACTS_SCHEMA spelled once; FACTS_READS and Facts.schema_ derive from it
+
+FACTS_SCHEMA: Final[int] = 14; FACTS_READS = tuple(range(3, FACTS_SCHEMA + 1)); Facts.schema_ is StrictInt with a validator over FACTS_READS (bool still refused). One pin: test_triage_model.py::test_the_facts_schema_is_pinned_here_once_and_read_back_to_3; the other modules (more than the seven named) now compare to FACTS_SCHEMA.
