@@ -7518,6 +7518,12 @@ batches:
     runner: herdr
     handle: w3H:p7
     archive: chore/closeout-2026-11-17-3
+  - kind: closeout
+    at: '2026-11-17T09:27:08.733807Z'
+    runner: herdr
+    handle: w3H:p7
+    archive: chore/closeout-2026-11-17-3
+    archived: 1530
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
@@ -8294,6 +8300,7 @@ closeouts:
   planned:
   - workspace-identity
   pr: 1530
+  merged: true
   head: 4f618093fd01f616484eac2422c8113a0e38c25b
   members:
   - workspace-identity
