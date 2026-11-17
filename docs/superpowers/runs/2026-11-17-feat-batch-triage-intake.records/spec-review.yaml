@@ -1,0 +1,132 @@
+schema_version: 12
+run: 2026-11-17-feat-batch-triage-intake
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s-r1
+  title: 'R6 driver hold: the awaiting-live analogue emits `held`, not `blocked`; the design does not say which the untrusted hold is'
+  body: The design cited awaiting-live's `held` path as if it emitted `blocked` (batch_drive.py:1981-1999); the kind and its summary effect were unspecified.
+  review_scope: in
+- kind: finding
+  id: s-r2
+  title: Snapshot.untrusted is built only in Driver.snapshot; the board and `drive --plan` would still show the batch dispatching
+  body: views.drive_snapshot (views.py:104,152) builds its own Snapshot from facts.
+  review_scope: in
+- kind: finding
+  id: s-r3
+  title: R3 body withholding does not hold for carried issues of a partial collect or for the view_issue path
+  body: collect.py:722-769 carry and view paths bypassed the verdict.
+  review_scope: in
+- kind: finding
+  id: s-r4
+  title: R1's per-issue association read costs O(outside issues) API calls on every collect, i.e. every driver pass; one list read already carries the field
+  body: Per-issue reads scale with outside issues on a per-pass path.
+  review_scope: in
+- kind: finding
+  id: s-r5
+  title: R2's fail-closed sentence contradicts R1's lazy read
+  body: As written, every login- or label-admitted issue would be ineligible.
+  review_scope: in
+- kind: finding
+  id: s-r6
+  title: '§B per-pass check: `_fresh_config` always fetches; a failed check''s in-pass state is undefined; a direct merge_ctx caller bypasses the hold'
+  body: Three gaps that decided whether R9 holds.
+  review_scope: in
+- kind: finding
+  id: s-r7
+  title: The cached MergeContext keeps creation-time `version` and merge `method` while R9 re-validates the config each pass
+  body: Context fields set only at creation (triage_batch_cmd.py:4011-4031).
+  review_scope: in
+- kind: finding
+  id: s-r8
+  title: '§C dry-run warning: `_open_checkout` never raises TriageError; it exits 2'
+  body: '`_open_checkout` calls `_fail`, which raises typer.Exit(2).'
+  review_scope: in
+- kind: finding
+  id: s-r9
+  title: R10 retries only once, and the design does not state the no-partial-write assumption the retry relies on
+  body: A single retry fails when two removal labels are undefined.
+  review_scope: in
+- kind: finding
+  id: s-r10
+  title: '`ready-fr` is not bound to the issue''s content: an outside author can edit the title or body after an operator admits it'
+  body: Accepted as a documented residual risk under d1 rather than silent.
+  review_scope: in
+- kind: finding
+  id: s-r11
+  title: The brief's `/fr-goal <batch.title>` line and `rationale` stay outside the untrusted block, but the triage agent writes them from issue text
+  body: Agent-written fields were left unmarked in the most instruction-like position.
+  review_scope: in
+- kind: finding
+  id: s-r12
+  title: R5's edit refusal and the dispatch-vs-driver member rule differ from the design
+  body: Requirement and design disagreed; two refusal paths could judge one batch differently.
+  review_scope: in
+- kind: finding
+  id: s-r13
+  title: Who creates the `ready-fr` label is left vague; a triage-permission operator cannot create a missing label
+  body: There was no generic operator-label ensurer.
+  review_scope: in
+- kind: finding
+  id: s-r14
+  title: Several Background citations are off by a line or name the wrong field list
+  body: Citation drift.
+  review_scope: in
+- kind: review
+  id: spec-review-1
+  title: 'independent spec review: 14 findings'
+  body: 'fr-spec-reviewer raised s-r1..s-r14, all in scope; all fixed in the spec. Decisions d1-d4 honoured. Suggested lenses: security (already added at brainstorm) and tests (added here).'
+- kind: lens
+  lens: tests
+  title: R6 and R9 need multi-pass and snapshot-builder-parity tests
+resolves:
+- id: s-r1
+  state: fixed
+  body: R6/§A now specify `Action("blocked", reason)`, counted as blocked so the drive stalls for the operator, placed before the `after` and in-flight-cap checks; the analogy is gone.
+- id: s-r2
+  state: fixed
+  body: '§A: `Snapshot.rejected` is filled by both builders (`Driver.snapshot` and `views.drive_snapshot`) from one `rejected_members`; the row tests the builders agree.'
+- id: s-r3
+  state: fixed
+  body: 'R3 and §A Body: every issue collect writes, listed, viewed or carried, is judged in one final step and its body cleared when ineligible; a schema-13 carried issue is cleared on the first collect
+    after the upgrade; the row covers the partial and view paths.'
+- id: s-r4
+  state: fixed
+  body: 'R1/§A The read: at most one extra read per repo per collect (one paginated `gh api repos/{r}/issues` read on the gh CLI client), none under REST (the list record keeps `authorAssociation`) or when
+    every issue is admitted.'
+- id: s-r5
+  state: fixed
+  body: 'R2 reworded: an issue no clause admits is ineligible; an unread author or association never admits. The row covers trusted-login-with-unread-association as eligible.'
+- id: s-r6
+  state: fixed
+  body: '§B: `_fresh_config` split into fetch and `_config_fresh`; `_ctx_held` makes a failed repo held for the rest of the pass (marked checked only on success); `_closeout_hand_back` goes through `_ctx_or_hold`.'
+- id: s-r7
+  state: fixed
+  body: 'R9/§B step 4: `version` and `method` follow each pass''s config (method recomputed over the allowed methods stored at build, no forge read); the row tests a config change between passes.'
+- id: s-r8
+  state: fixed
+  body: '§C: a non-exiting `_checkout_refusal` shared by `_open_checkout` and the dry run, so the warning and the `--yes` refusal come from one check (R11).'
+- id: s-r9
+  state: fixed
+  body: '§C: loops while gh names a further remove label (at most len(remove) retries); the gh resolve-before-mutate assumption is stated and documented in the docstring; the row adds a two-missing-labels
+    case.'
+- id: s-r10
+  state: fixed
+  body: R8 now requires the docs to state the residual risk (the label admits later edits; R7's quoting still applies), and Out of scope records why voiding is not done (a timeline read per labelled issue).
+- id: s-r11
+  state: fixed
+  body: 'R7/§A Brief: the first line is the skill command and batch id only; batch title and rationale move inside the quoted untrusted block.'
+- id: s-r12
+  state: fixed
+  body: 'R5/R6: one member rule (`rejected_members`: ineligible whether open or closed; absent from facts = `not collected`) used by create, edit (on the batch it would write), dispatch and both snapshot
+    builders; an edit removing the last rejected member succeeds.'
+- id: s-r13
+  state: fixed
+  body: 'R8/§A: the driver ensures `ready-fr` beside `approved-fr` in approval.py''s ensure step and reports when it cannot; the docs say a write-permission operator creates it where fr has not.'
+- id: s-r14
+  state: fixed
+  body: 'Citations corrected: close.py:359/:36, triage_batch_cmd.py:895/:749, collect.py:61 ISSUE_FIELDS with the reason (gh''s issue JSON has no association field).'
+evidence:
+  review: spec-review-1
+  reviewer: a78571610109d7862
