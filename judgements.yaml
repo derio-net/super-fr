@@ -7524,6 +7524,12 @@ batches:
     handle: w3H:p7
     archive: chore/closeout-2026-11-17-3
     archived: 1530
+  - kind: claims_released
+    at: '2026-11-17T09:31:14.568087Z'
+    keys:
+    - super-fr#1419
+    - super-fr#1166
+    - super-fr#1243
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
