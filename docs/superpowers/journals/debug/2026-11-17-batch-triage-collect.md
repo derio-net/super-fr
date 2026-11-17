@@ -40,3 +40,8 @@ Test test_triage_prs_render.py::test_blocked_is_not_a_conflict_on_the_triage_pag
 ### ada78e7dc3ea · finding [fixed] · #1268 fixed: collect reports the missing approved-fr label, never creates it
 
 triage_cmd.collect_command calls approval.approval_label_missing (read-only; labels off or a forge error reports nothing) and prints one line. Tests test_merge_train_label_board.py::test_collect_writes_no_label_and_says_which_repos_lack_it and ::test_collect_counts_no_repo_whose_labels_are_off failed before. Row approval-label-created amended in legacy.yaml.
+
+<!-- fr:journal kind=root-cause scope=debug id=4b8fbbb3cf3c created=2026-11-17T09:31:56+00:00 -->
+### 4b8fbbb3cf3c · root-cause · #1210: closed claimed issues carried no signer in facts, so retire had nothing to act on
+
+Retire filtered to open issues, and the only facts record of a closed fr:claimed issue (stale_in_progress) held a state but not whose claim it was.
