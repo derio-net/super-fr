@@ -7690,6 +7690,10 @@ batches:
     pr: 1533
     head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
     voided_at: a5952ce0f686bde18358a4866c6d39fb6f1b5ed6
+  - kind: approval
+    at: '2026-11-17T17:48:26.320411Z'
+    pr: 1533
+    head: 09b466a9d85edcc823042a98495c9d0471fe6ed7
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
