@@ -226,3 +226,17 @@ amendments:
       Half observed: the weekly job ran every week since 2026-10-12 and correctly opened
       nothing (''No plan has been merged and unarchived for more than 14 days''). Still
       owed: a run with a stale plan, opening or refreshing one draft PR.'
+  - row: debt-weekly-issue-rename
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
+      on main is the post-merge Test Plan step 1.; tracked by derio-net/super-fr#1381.
+      Half observed: github-actions renamed #363 ''Acceptance debt'' -> ''super-fr:
+      Technical debt'' on 2026-10-13, still the only one (no duplicate). Still owed:
+      closing at zero debt.'
+    why: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
+      on main is the post-merge Test Plan step 1.; tracked by derio-net/super-fr#1381.
+      Half observed: github-actions renamed #363 ''Acceptance debt'' -> ''super-fr:
+      Technical debt'' on 2026-10-13, still the only one (no duplicate). Still owed:
+      closing at zero debt.'
