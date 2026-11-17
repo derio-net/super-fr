@@ -771,3 +771,15 @@ amendments:
     ref: super-fr:tests/unit/test_merge_train_label_board.py#test_collect_writes_no_label_and_says_which_repos_lack_it
     why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
       and the first batch dispatch creates it'
+  - row: approval-label-created
+    op: set-status
+    base: 3
+    status: ci
+    notes: 'ensure_approval_label creates a missing approved-fr label once per repo
+      per pass or command and warns; a forge that cannot is a warning. Called by batch
+      dispatch, batch merge (under --yes), every drive pass and fr init scaffold on
+      a GitHub origin. fr triage collect writes no label (gh#1268): approval_label_missing
+      reports the repos lacking it. Scenario: the label-gate scenario''s first pass
+      creates it.'
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'
