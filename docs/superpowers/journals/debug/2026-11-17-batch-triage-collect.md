@@ -5,3 +5,8 @@
 ### 9d88f14e34f6 · repro · #1268: fr triage collect calls ensure_approval_label for every collected repo
 
 triage_cmd.collect_command loops facts.collected through ensure_approval_label after writing facts. Pinned as wanted by tests/unit/test_merge_train_label_board.py::test_collect_creates_the_label_on_each_collected_repo and by merge-train-safety R4, which lists collect among the check sites. Dispatch, merge (--yes), every drive pass and init scaffold already ensure it.
+
+<!-- fr:journal kind=repro scope=debug id=d559a56eaff2 created=2026-11-17T09:03:13+00:00 -->
+### d559a56eaff2 · repro · #1197: render._pr_row counts mergeStateStatus BLOCKED as a conflict
+
+render.py:611 conflict = merge in {DIRTY, BLOCKED} or mergeable == CONFLICTING. mergeability.conflicting() is the one predicate (exit-gates R19) and excludes BLOCKED (branch protection).
