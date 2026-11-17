@@ -15,3 +15,8 @@ Sandbox repro: a linked worktree `wt`; `GIT_DIR=<live>/.git/worktrees/wt` (what 
 ### a90c7c7b2a5c · ruled-out · gh#1463: no two-process interleaving of the mkdir+pid lock double-holds; not reproduced on Linux
 
 Hand trace of fr-worktree-create.sh/fr-worktree-remove.sh lock (mkdir, pid file, kill -0 reclaim, EXIT-trap rm -rf): with exactly two hook processes a reclaim can only delete a lock nobody holds, and a live holder never reads as dead. The stub is reached once per hook, inside the lock (_fr_is_enabled returns before any fr call: the fixture repo has docs/superpowers/plans). Stress: 150x each of the two tests at -n 8 on a 2-CPU aarch64 Linux devcontainer (bash 5.2.21): 300/300 passed. CI failures (runs 43918039963, 43903442254, 43901622994) show only the truncated `fr isolation up failed` variant (stub rmdir of in-flight failed, i.e. the two stubs overlapped); py3.11 and py3.14 both. No confident hypothesis yet.
+
+<!-- fr:journal kind=decision scope=debug id=9e08a8b57c98 created=2026-11-17T09:22:15+00:00 decided_by=operator -->
+### 9e08a8b57c98 · decision · Operator: fix #1468, instrument #1463 (stays open, Refs not Closes)
+
+Two root causes found where the batch assumed one; asked per the batch rules. Operator chose: one PR that fixes #1468 (strip the GIT_* scope vars in the scenario harness and _common.sh, failing test first) and adds failure diagnostics to the two lock tests so the next CI flake of #1463 shows the overlap. #1463 is referenced, not closed.
