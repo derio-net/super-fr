@@ -45,3 +45,8 @@ triage_cmd.collect_command calls approval.approval_label_missing (read-only; lab
 ### 4b8fbbb3cf3c · root-cause · #1210: closed claimed issues carried no signer in facts, so retire had nothing to act on
 
 Retire filtered to open issues, and the only facts record of a closed fr:claimed issue (stale_in_progress) held a state but not whose claim it was.
+
+<!-- fr:journal kind=finding scope=debug id=a7410cea1abb created=2026-11-17T09:32:00+00:00 state=fixed -->
+### a7410cea1abb · finding [fixed] · #1210 fixed: StaleInProgress.claims (facts 14); retire releases a retired scope's closed claims with unlabel
+
+collect._closed_in_progress records the un-released claims; scope_retire_command adds them to its held set and releases with unlabel=True; _forget_claims drops a settled hit from stale_in_progress. Tests test_triage_claim_cmd.py::test_scope_retire_settles_a_closed_issue_the_retired_scope_holds, ::test_scope_retire_leaves_a_closed_issue_another_scope_holds, test_triage_collect.py::test_a_closed_hit_records_its_un_released_claims_for_scope_retire. Out of scope: p1-r8 (an own marker on an unlabelled closed issue) stays tracked by #1211.
