@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr acceptance amend --origin keeps a row's own statement, fr migrate artifacts renames a <slug>-design.yaml acceptance fragment to <slug>.yaml, undecodable artifacts are refused by name, git check-ignore runs through one helper, adopted runs are named after their plan, and adopting onto the default branch warns"
