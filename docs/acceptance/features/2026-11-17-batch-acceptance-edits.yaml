@@ -125,3 +125,15 @@ amendments:
       were walked live (PR #609, PR #679), but the row stays owed until #637 (Claude
       Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit binding
       until #636.; tracked by derio-net/super-fr#1350'
+  - row: fr-goal-subagent-per-phase
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch
+      was demonstrated by the feature''s own fr-goal run, but name no dated evidence
+      to record as a walk; wiring unit-pinned. Re-walk and record it with set-status
+      --walk.; tracked by derio-net/super-fr#1351'
+    why: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch was
+      demonstrated by the feature''s own fr-goal run, but name no dated evidence to
+      record as a walk; wiring unit-pinned. Re-walk and record it with set-status --walk.;
+      tracked by derio-net/super-fr#1351'
