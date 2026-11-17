@@ -85,9 +85,13 @@ rows:
       run, naming the branch and `--branch`, and still adopts.
     origin:
     - spec:2026-11-17-batch-acceptance-edits#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py#test_adopting_onto_the_default_branch_warns_once_naming_it_and_branch
+      - super-fr:tests/unit/test_run_adopt.py#test_adopting_onto_another_branch_or_with_no_remote_does_not_warn
+    status: ci
+    notes: 'Unit tests in CI: adopting onto origin''s default branch adds one note naming
+      it and --branch; another branch, or no remote, adds none.'
     verify: none
 amendments:
   - row: acceptance-pipeline-rows
