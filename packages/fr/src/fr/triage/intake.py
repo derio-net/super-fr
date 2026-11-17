@@ -3,7 +3,8 @@
 On a public repo anyone can open an issue, and issue text reaches the implementing session's
 launch brief. An issue is therefore ELIGIBLE only when at least one clause admits it:
 
-- its author is one of `claim_trusted(config, viewer)` (case-insensitive);
+- its author is one of `claim_trusted(config, viewer)` or the debt workflow's bot
+  (`BOT_LOGINS`, whose digest `check` already trusts; case-insensitive);
 - its author association is in `TRUSTED_ASSOCIATIONS` (OWNER, MEMBER, COLLABORATOR);
 - it carries the operator's `ready-fr` label (`fr.labels.READY_FR`), which only an account
   with triage permission can apply.
@@ -19,11 +20,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from fr.debt.render import BOT_LOGINS
 from fr.labels import READY_FR
 from fr.triage.claims import TRUSTED_ASSOCIATIONS
-from fr.triage.model import Batch, Facts, Issue, claim_trusted
+from fr.triage.model import Batch, Facts, Issue, TriageConfig, claim_trusted
 
 NOT_COLLECTED = "not collected"
+
+
+def intake_trusted(config: TriageConfig, viewer: str | None) -> frozenset[str]:
+    """The logins intake admits, lowercased: `claim_trusted(config, viewer)` plus the debt
+    workflow's own bot (`fr.triage.debt.BOT_LOGINS`), whose digest `check` already trusts: its
+    body must survive collect or the digest would never be read."""
+    return claim_trusted(config, viewer) | BOT_LOGINS
 
 
 def intake_reason(
@@ -48,7 +57,7 @@ def intake_reason(
 
 def issue_reason(issue: Issue, facts: Facts) -> str | None:
     """`intake_reason` over a collected issue, with its repo's trusted logins."""
-    trusted = claim_trusted(facts.config_for(issue.repo), facts.viewer)
+    trusted = intake_trusted(facts.config_for(issue.repo), facts.viewer)
     return intake_reason(issue.author, issue.author_association, issue.labels, trusted)
 
 

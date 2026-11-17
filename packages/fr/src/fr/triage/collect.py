@@ -29,7 +29,7 @@ from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, READY_FR, held_gates
 from fr.triage.claims import read_claims, to_issue_claim
 from fr.triage.errors import ForgeError, TriageError
-from fr.triage.intake import intake_reason
+from fr.triage.intake import intake_reason, intake_trusted
 from fr.triage.model import (
     BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
@@ -518,7 +518,7 @@ def _withhold_untrusted_bodies(
     fields, so an outside author's text is never kept. Title, labels and the rest stay."""
     out: list[Issue] = []
     for issue in issues:
-        trusted = claim_trusted(config.get(issue.repo, TriageConfig()), viewer)
+        trusted = intake_trusted(config.get(issue.repo, TriageConfig()), viewer)
         reason = intake_reason(issue.author, issue.author_association, issue.labels, trusted)
         out.append(issue.model_copy(update={"body": ""}) if reason and issue.body else issue)
     return out
@@ -711,7 +711,13 @@ def collect_facts_counted(
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
             repo_config, dropped = read_config_lenient(forge, repo)
             trusted = claim_trusted(repo_config or TriageConfig(), viewer)
-            issues = _with_associations(forge, repo, issues, trusted, issue_limit)
+            issues = _with_associations(
+                forge,
+                repo,
+                issues,
+                intake_trusted(repo_config or TriageConfig(), viewer),
+                issue_limit,
+            )
             for raw in issues:
                 at, found = _comment_facts(forge, repo, raw, trusted)
                 if at:

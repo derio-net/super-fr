@@ -1,5 +1,5 @@
 {
-  "schema": 13,
+  "schema": 14,
   "scope": "example-org--widgets",
   "kind": "repo",
   "collected_at": "2026-10-06T00:00:00Z",
@@ -33,7 +33,8 @@
           "created_at": "2026-09-01T00:00:00Z"
         }
       ],
-      "author": null
+      "author": null,
+      "author_association": "OWNER"
     },
     {
       "repo": "example-org/widgets",
@@ -49,7 +50,8 @@
       "prs": [],
       "dispatch_marker_at": null,
       "claims": [],
-      "author": null
+      "author": null,
+      "author_association": "OWNER"
     }
   ],
   "prs": [],

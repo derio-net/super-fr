@@ -872,6 +872,12 @@ def check_command(
     for i in result.owed:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
+        f"[bold]untrusted[/bold] ({len(result.untrusted)}) — open, by an author intake does not "
+        "admit: never judged, ranked or batched; label it ready-fr to admit it"
+    )
+    for i, why in result.untrusted:
+        console.print(f"  {escape(i.key)}  {escape(i.title)} — {escape(why)}", soft_wrap=True)
+    console.print(
         f"[bold]no severity[/bold] ({len(result.no_severity)}) — open, judged, no severity"
     )
     for i in result.no_severity:

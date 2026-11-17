@@ -35,6 +35,7 @@ def facts(expires: str) -> Facts:
             number=1,
             title="claimed elsewhere",
             state="open",
+            author_association="OWNER",
             labels=["fr:claimed"],
             url=f"https://github.com/{REPO}/issues/1",
             claims=[claim],
@@ -44,6 +45,7 @@ def facts(expires: str) -> Facts:
             number=2,
             title="free",
             state="open",
+            author_association="OWNER",
             url=f"https://github.com/{REPO}/issues/2",
         ),
     ]

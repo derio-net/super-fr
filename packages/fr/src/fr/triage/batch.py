@@ -784,9 +784,14 @@ def suggest(judgements: Judgements, facts: Facts) -> list[Suggestion]:
     group has two or more members. Pure and model-free: the agent accepts one
     with `create` or ignores it.
     """
+    # Imported here: `intake` reads `claims`, which imports this module.
+    from fr.triage.intake import untrusted_issues
+
     held = {k for b in judgements.batches if is_open(b, facts) for k in b.ids}
     open_keys = {i.key for i in facts.issues if i.state == "open"}
-    free = [k for k in judgements.issues if k in open_keys and k not in held]
+    # An untrusted issue is never proposed (triage-intake R4): its text is not to be read.
+    untrusted = {i.key for i, _ in untrusted_issues(facts)}
+    free = [k for k in judgements.issues if k in open_keys and k not in held and k not in untrusted]
     out: list[Suggestion] = []
 
     cites = {k: cited_paths(judgements.issues[k].detail) for k in free}

@@ -69,6 +69,8 @@ def _issue(number: int, **kw: Any) -> Issue:
         title=f"issue {number}",
         state=kw.pop("state", "open"),
         url=f"https://github.com/{REPO}/issues/{number}",
+        # Intake admits a maintainer's issue; a test about the outside says so itself.
+        author_association=kw.pop("author_association", "OWNER"),
         **kw,
     )
 
@@ -646,6 +648,18 @@ def test_suggest_groups_by_cited_file_theme_and_pattern_and_writes_nothing(
     kinds = [ln.split()[0] for ln in lines if ln.split()[:1] in (["file"], ["theme"], ["pattern"])]
     assert kinds == sorted(kinds, key=["file", "theme", "pattern"].index)
     assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
+
+
+def test_suggest_never_proposes_an_untrusted_issue(tmp_path: Path) -> None:
+    """Triage-intake R4: an outside author's issue is never offered for a batch."""
+    facts = _facts(
+        _issue(577, author="eve", author_association="NONE"),
+        *(_issue(n) for n in (575, 471, 438, 420)),
+    )
+    _state(tmp_path, facts)
+    code, out = _run(tmp_path, "suggest")
+    assert code == 0, out
+    assert "super-fr#577" not in out
 
 
 def test_suggest_leaves_out_members_of_open_batches(tmp_path: Path) -> None:

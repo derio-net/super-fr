@@ -1,5 +1,5 @@
 {
-  "schema": 13,
+  "schema": 14,
   "scope": "derio-net--super-fr",
   "kind": "repo",
   "collected_at": "2026-10-14T00:00:00Z",
@@ -21,7 +21,8 @@
       "prs": [],
       "dispatch_marker_at": null,
       "claims": [],
-      "author": null
+      "author": null,
+      "author_association": "OWNER"
     }
   ],
   "prs": [],

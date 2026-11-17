@@ -574,7 +574,7 @@ def issue_associations(*, repo: str, state: str, limit: int) -> dict[int, str]:
             *("api", "--paginate"),
             *(
                 "--jq",
-                '.[] | select(has("pull_request") | not) | "\(.number)\t\(.author_association)"',
+                '.[] | select(has("pull_request") | not) | "\\(.number)\t\\(.author_association)"',
             ),
             f"repos/{repo}/issues?state={state}&per_page=100",
         ]

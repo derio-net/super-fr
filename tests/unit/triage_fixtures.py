@@ -184,7 +184,11 @@ class FakeForge:
         self.association_calls.append(repo)
         if repo in self.associations_failing:
             raise ForgeError(self.associations_failing[repo])
-        return dict(self.associations.get(repo, {}))
+        if repo in self.associations:
+            return dict(self.associations[repo])
+        # Unscripted: the captured records carry no association (`gh issue list --json` has
+        # no such field), so every issue reads as the repo's own, as a maintainer's would.
+        return {int(i["number"]): "OWNER" for i in self.issues.get(repo, [])}
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_prs", {"repo": repo, "state": state, "limit": limit}))

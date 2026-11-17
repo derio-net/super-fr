@@ -251,6 +251,7 @@ def _intake_forge(**kw):  # type: ignore[no-untyped-def]
         repos=[{"name": "alpha", "isArchived": False}, {"name": "beta", "isArchived": False}],
         issues={A: [_with_body(1, "eve"), _with_body(2, "operator")], B: [_with_body(3, "eve")]},
         prs={A: [], B: []},
+        associations={A: {1: "NONE", 2: "OWNER"}, B: {3: "CONTRIBUTOR"}},
         closed={
             (A, 99): {
                 **_with_body(99, "eve"),
