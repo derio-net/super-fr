@@ -14,9 +14,13 @@ rows:
     origin:
     - spec:2026-11-17-batch-acceptance-edits#R1
     - spec:2026-11-17-batch-acceptance-edits#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_amend_origin.py#test_origin_only_reword_keeps_the_rows_own_statement_under_a_pending_reword
+      - super-fr:tests/unit/test_acceptance_amend_origin.py#test_origin_only_reword_refusals_still_change_nothing
+    status: ci
+    notes: 'Unit-pinned in CI: an origin-only reword under a pending reword keeps the
+      row''s own statement; the refusals move no byte.'
     verify: none
   - id: fragment-design-spelling-repair
     capability: acceptance
