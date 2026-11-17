@@ -6,5 +6,5 @@ acceptance: []
 emitted:
   pr: https://github.com/derio-net/super-fr/pull/1529
 evidence:
-  tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f55704a7-fff8-4fb0-98fe-055a073c49ca/scratchpad/full-suite.log
+  tests: ci
   walk: /Users/idermitzakis/.cache/fr/walks/2026-11-17-feat-batch-triage-intake/20261117T200214Z.log
