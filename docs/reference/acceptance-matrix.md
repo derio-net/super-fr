@@ -70,20 +70,25 @@ do not have. A row that the fragments do not know goes to its spec's fragment. A
 they hold identically is dropped. A row that they hold *differently* stops the migration.
 The migration names the row and leaves every file as it was.
 
+To continue, put that row back as the fragments hold it, or delete it from `matrix.yaml`.
+Then run `fr migrate artifacts --yes`, and then apply your change again with
+`fr acceptance set-status`.
+
 Earlier fr versions named a fragment `<slug>-design.yaml`, with `feature: <slug>-design`.
 `fr migrate artifacts --yes` renames such a fragment to `<slug>.yaml` and sets its
 `feature:` key to `<slug>`. If `<slug>.yaml` exists, the migration merges the two files.
 The rows and amendments of `<slug>.yaml` come first. An entry that the two files hold
-identically stays once. A row that the two files hold *differently* stops the migration.
+identically stays once.
+
+A row that the two files hold *differently* stops the migration.
 The migration names the row and leaves both files as they were. The migration also stops
-if the matrix after it is not the matrix before it.
+if the matrix after it is not the matrix before it. To continue, make the two files hold
+that row the same way, or remove it from one of them. Then run `fr migrate artifacts --yes`.
 
-On the default branch, the old file can still exist after the merge. `fr acceptance check` reads it as `<slug>.yaml`, so the rename
-is not an in-place edit of a merged row.
-
-To continue, put that row back as the fragments hold it, or delete it from `matrix.yaml`.
-Then run `fr migrate artifacts --yes`, and then apply your change again with
-`fr acceptance set-status`.
+Until the branch that ran the repair merges, the default branch still holds
+`<slug>-design.yaml`. While your branch holds `<slug>.yaml` and not the `-design` file,
+`fr acceptance check` and `deliver` read the default branch's file as `<slug>.yaml`. So
+the rename is not an in-place edit of a merged row.
 
 A repo can turn the matrix off with `artifacts.acceptance: off` in `.fr/settings.yaml`
 (`fr settings show`). fr then writes no rows, reports or matrix CI. `fr acceptance add` and
