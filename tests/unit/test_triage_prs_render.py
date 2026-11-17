@@ -135,3 +135,17 @@ def test_empty_prs_section_says_so(tmp_path: Path) -> None:
     section = _prs_section(render(_facts([]), _judgements()))
 
     assert "No open pull requests." in section
+
+
+def test_blocked_is_not_a_conflict_on_the_triage_page() -> None:
+    """gh#1197: `BLOCKED` is branch protection (every unapproved batch PR), never a
+    conflict; the page asks `mergeability.conflicting`, the one predicate (R19)."""
+    prs = [
+        _pr(1, merge_state="BLOCKED", mergeable="MERGEABLE"),
+        _pr(2, merge_state="DIRTY"),
+        _pr(3, merge_state="BLOCKED", mergeable="CONFLICTING"),
+    ]
+    section = _prs_section(render(_facts(prs), _judgements()))
+
+    rows = dict(re.findall(r'data-key="super-fr#(\d)".*?data-conflicts="(\d)"', section, re.S))
+    assert rows == {"1": "0", "2": "1", "3": "1"}

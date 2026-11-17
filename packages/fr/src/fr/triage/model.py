@@ -19,7 +19,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Final, Literal
 
 import yaml
 from pydantic import (
@@ -27,6 +27,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictInt,
     ValidationError,
     field_validator,
     model_validator,
@@ -69,8 +70,15 @@ from fr.triage.stage import Stage, derive_stage
 # `gate:*` label, batch or not) and `gated_unread` (repos whose gate-labelled PRs could not
 # be read): `to_json` dumps both, `[]` included, which a closed-world schema-12 reader
 # rejects; a file below 13 reads both as `[]`, so no gate-labelled PR outside a batch shows.
-FACTS_SCHEMA: Literal[13] = 13
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+# 14 adds (gh#1210) each `StaleInProgress`'s `claims` (the un-released markers that hold
+# a closed issue, so `scope retire` can settle a retired scope's): `to_json` dumps it,
+# `[]` included, which a closed-world schema-13 reader rejects; a file below 14 reads it
+# as `[]`, so retire finds no closed issue to settle until the next collect.
+# The stamp is spelled ONCE, here (gh#1300): the reads and `Facts.schema_` derive from
+# it, and one test (`test_triage_model.py`) pins it. A bump edits this line and adds a
+# comment above it; a schema below 3 stays unreadable.
+FACTS_SCHEMA: Final[int] = 14
+FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 12 (recovery ownership/session
 # metadata; 11 added the `archive_conflict` event,
 # 2026-10-14-merge-truth §E; 10 was the `closeout_handback` and `closeout_hold` events and
@@ -600,13 +608,17 @@ class StaleInProgress(_Strict):
     """A CLOSED issue still labelled `fr:in-progress` or `fr:claimed` (board-truth §B R2;
     post-merge truth R3). `stale` is safe to clean; `release-pending` carries this scope's
     own un-released claim (the next `claim sync --yes` or drive pass releases it and takes
-    both labels off); `held` carries another scope's."""
+    both labels off); `held` carries another scope's (`fr triage scope retire` settles it
+    once that scope is retired)."""
 
     key: str
     title: str
     url: str
     closed_at: str | None = None
     state: InProgressState
+    # The un-released claim markers read from its comments (a `fr:claimed` hit only),
+    # schema 14: `scope retire` releases a retired scope's from them (gh#1210).
+    claims: list[IssueClaim] = []
 
 
 class GatedUnread(_Strict):
@@ -633,7 +645,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] = Field(13, alias="schema")
+    schema_: StrictInt = Field(FACTS_SCHEMA, alias="schema")  # one of FACTS_READS
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -668,6 +680,13 @@ class Facts(_Strict):
     # (gate-backfill §I, schema 13).
     gated_prs: list[PullRequest] = []
     gated_unread: list[GatedUnread] = []
+
+    @field_validator("schema_")
+    @classmethod
+    def _a_readable_schema(cls, value: int) -> int:
+        if value not in FACTS_READS:
+            raise ValueError(f"facts schema {value} is not one this fr reads ({FACTS_READS})")
+        return value
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:

@@ -14,7 +14,7 @@ from fr.real_ghrestclient import RealGhRestClient
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 from fr.triage.collect import ClientForge
-from fr.triage.model import FACTS_READS, FACTS_SCHEMA, Facts, StaleInProgress, load_facts
+from fr.triage.model import FACTS_SCHEMA, Facts, StaleInProgress, load_facts
 
 from tests.unit.github_rest_support import REPO, R, parse_api
 
@@ -100,7 +100,6 @@ def _doc(**extra: Any) -> dict[str, Any]:
 
 
 def test_schema_9_round_trips_stale_in_progress_and_config_ignored(tmp_path: Path) -> None:
-    assert FACTS_SCHEMA == 13 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
     facts = Facts(
         schema=FACTS_SCHEMA,
         **_doc(),
@@ -117,7 +116,7 @@ def test_schema_9_round_trips_stale_in_progress_and_config_ignored(tmp_path: Pat
     )
     path = tmp_path / "facts.json"
     path.write_text(json.dumps(facts.to_json()), encoding="utf-8")
-    assert json.loads(path.read_text())["schema"] == 13
+    assert json.loads(path.read_text())["schema"] == FACTS_SCHEMA
     assert load_facts(path) == facts
 
 

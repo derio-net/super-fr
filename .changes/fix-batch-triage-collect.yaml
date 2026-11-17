@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr triage collect no longer creates the approved-fr label (it reports the repos lacking it); the triage page stops counting BLOCKED PRs as conflicts; fr triage scope retire settles closed issues a retired scope holds (facts schema 14)"

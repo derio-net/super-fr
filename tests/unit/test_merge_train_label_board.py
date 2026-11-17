@@ -103,15 +103,12 @@ def test_a_forge_error_warns_too() -> None:
     assert said[0].startswith("warning:")
 
 
-def test_collect_creates_the_label_on_each_collected_repo(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _collect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: Labels) -> Any:
     from fr.commands import triage_cmd
     from fr.triage.collect import ClientForge
 
     from tests.unit.triage_fixtures import FakeForge
 
-    labels = Labels()  # the label verbs, reached through the real `ClientForge`
     fake = FakeForge(issues={"derio-net/super-fr": []}, prs={"derio-net/super-fr": []})
     forge = ClientForge(labels)  # type: ignore[arg-type]
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
@@ -120,8 +117,36 @@ def test_collect_creates_the_label_on_each_collected_repo(
         app, ["triage", "collect", "--repo", "derio-net/super-fr", "--dir", str(tmp_path)]
     )
     assert result.exit_code == 0, result.output
-    assert "create derio-net/super-fr ['approved-fr']" in labels.calls
-    assert "created label approved-fr on derio-net/super-fr" in result.output
+    return result
+
+
+def test_collect_writes_no_label_and_says_which_repos_lack_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh#1268: collect is a read. It never creates `approved-fr`; it counts the repos
+    that lack it, which the first dispatch to each creates (R4's other call sites)."""
+    labels = Labels()
+    result = _collect(tmp_path, monkeypatch, labels)
+    assert labels.calls == ["exists derio-net/super-fr approved-fr"]
+    assert "1 repo lacks approved-fr; the first batch dispatch to it creates it" in result.output
+
+
+def test_collect_is_silent_when_every_repo_has_the_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    labels = Labels(exists=True)
+    result = _collect(tmp_path, monkeypatch, labels)
+    assert labels.calls == ["exists derio-net/super-fr approved-fr"]
+    assert "approved-fr" not in result.output
+
+
+def test_collect_counts_no_repo_whose_labels_are_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    labels = Labels()
+    labels.files[".fr/settings.yaml"] = "forge:\n  labels: 'off'\n"
+    result = _collect(tmp_path, monkeypatch, labels)
+    assert labels.calls == [] and "approved-fr" not in result.output
 
 
 def _collected(fake: Any) -> Any:

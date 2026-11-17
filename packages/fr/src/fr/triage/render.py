@@ -45,6 +45,7 @@ from fr.triage.components import (
 from fr.triage.debt import digest_for, issue_figures, untrusted_for
 from fr.triage.fragments import Entry, Resolved, splice
 from fr.triage.merge_stops import MergeStop
+from fr.triage.mergeability import conflicting
 from fr.triage.model import issue_key
 from fr.triage.stage import IN_FLIGHT
 from fr.triage.views import (
@@ -608,7 +609,7 @@ def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_
     else:
         ci_class, ci_symbol, ci_label = "pass", "✓", "pass"
     merge = pr.merge_state or "UNKNOWN"
-    conflict = merge in {"DIRTY", "BLOCKED"} or pr.mergeable == "CONFLICTING"
+    conflict = conflicting(pr.mergeable, merge)  # BLOCKED is branch protection (gh#1197)
     delivery = judgement.delivery if judgement and judgement.delivery else "unranked"
     delivery_note = judgement.delivery_note if judgement else ""
     anchor = pr.anchor_path or pr.anchor_body or pr.anchor_reason or pr.anchor

@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-17 collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues; the page's BLOCKED-is-no-conflict and the facts schema 14 change no claim here. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -89,7 +89,7 @@ owner for `--org`; `--repo A/B,C/D` is a group.
 
 | File | Written by | Holds |
 |---|---|---|
-| `facts.json` | `fr triage collect` | forge data: issues, labels, PRs |
+| `facts.json` | `fr triage collect` | forge data: issues, labels, PRs (it only reads the forge) |
 | `judgements.yaml` | **you**, plus the `batch` verbs | tiers, rankings, kinds, patterns, batches |
 | `triage.html`, `board.html` | `render`, `board` | the pages |
 
@@ -157,7 +157,9 @@ hold cards get the room.
 
 Several scopes can work one repo, so a scope **claims** each issue it plans to act on with an
 `fr:claimed` label and a marker comment. Another scope's claim is hands-off. Taking one over
-(`fr triage claim take`) or releasing it is the operator's call, never yours. The
+(`fr triage claim take`) or releasing it is the operator's call, never yours. When a scope
+has stopped for good, `fr triage scope retire <id>` releases all its claims. For a closed
+issue it also removes both `fr:` labels, because that issue's work is over. The
 [herdr guide](../herdr-control-sessions.md) and the [cloud guide](../cloud-setup.md) cover
 runners, restarts and the cloud driver. [The wave driver](fr-wave-driver.md) walks through
 what one pass does and where you act.
