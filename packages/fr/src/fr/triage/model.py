@@ -69,8 +69,12 @@ from fr.triage.stage import Stage, derive_stage
 # `gate:*` label, batch or not) and `gated_unread` (repos whose gate-labelled PRs could not
 # be read): `to_json` dumps both, `[]` included, which a closed-world schema-12 reader
 # rejects; a file below 13 reads both as `[]`, so no gate-labelled PR outside a batch shows.
-FACTS_SCHEMA: Literal[13] = 13
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+# 14 adds (2026-11-17-triage-intake R1) `Issue.author_association` (OWNER, MEMBER, ...): the
+# intake trust gate reads it, and `to_json` dumps it, `null` included, which a closed-world
+# schema-13 reader rejects; a file below 14 reads it as None, so an outside author's issue is
+# never admitted by it (the rule fails closed) and its body is withheld on the next collect.
+FACTS_SCHEMA: Literal[14] = 14
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
 # The version this fr WRITES: every engine write stamps 12 (recovery ownership/session
 # metadata; 11 added the `archive_conflict` event,
 # 2026-10-14-merge-truth §E; 10 was the `closeout_handback` and `closeout_hold` events and
@@ -636,7 +640,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] = Field(13, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] = Field(14, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str

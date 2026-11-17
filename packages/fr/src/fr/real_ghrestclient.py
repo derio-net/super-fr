@@ -276,6 +276,7 @@ def _issue_record(issue: dict[str, Any]) -> dict[str, Any]:
         "body": issue.get("body") or "",
         "closed": issue.get("state") == "closed",
         "author": _author(issue.get("user")),
+        "authorAssociation": _upper(issue.get("author_association")),
         "closedAt": issue.get("closed_at"),
         "createdAt": issue.get("created_at"),
         "labels": [_label_record(lbl) for lbl in issue.get("labels") or []],
@@ -637,7 +638,28 @@ class RealGhRestClient:
             limit=limit,
             keep=lambda i: "pull_request" not in i,
         )
-        return [_project(_issue_record(i), fields or _gh.ISSUE_LIST_FIELDS) for i in raw]
+        records = [_issue_record(i) for i in raw]
+        # The association rides along whatever *fields* asks for: `gh issue list --json` has
+        # no such field, so no caller names it (triage-intake R1).
+        return [
+            {
+                **_project(r, fields or _gh.ISSUE_LIST_FIELDS),
+                "authorAssociation": r["authorAssociation"],
+            }
+            for r in records
+        ]
+
+    def issue_associations(self, repo: str, state: str, limit: int) -> dict[int, str]:
+        raw = self._paged(
+            f"repos/{repo}/issues?state={state}",
+            limit=limit,
+            keep=lambda i: "pull_request" not in i,
+        )
+        return {
+            int(i["number"]): str(i["author_association"]).upper()
+            for i in raw
+            if i.get("author_association")
+        }
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         return [_comment_record(c) for c in self._paged(f"repos/{repo}/issues/{number}/comments")]

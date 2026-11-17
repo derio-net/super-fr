@@ -105,7 +105,15 @@ class FakeForge:
         pr_labels: dict[tuple[str, int], list[str]] | None = None,
         gated: dict[str, list[dict[str, Any]]] | None = None,
         gated_failing: dict[str, str] | None = None,
+        associations: dict[str, dict[int, str]] | None = None,
+        associations_failing: dict[str, str] | None = None,
     ) -> None:
+        # repo -> {issue number: author association} `issue_associations` answers; a repo in
+        # `associations_failing` raises its message (triage-intake R1). Counted apart from
+        # `calls`, like the visibility reads: the call-sequence assertions predate it.
+        self.associations = associations or {}
+        self.associations_failing = associations_failing or {}
+        self.association_calls: list[str] = []
         # repo -> merged PR records (with `labels`) `list_merged_prs_by_label` filters;
         # a repo in `gated_failing` raises its message (gate-backfill §I).
         self.gated = gated or {}
@@ -171,6 +179,12 @@ class FakeForge:
         if repo in self.failing:
             raise ForgeError(self.failing[repo])
         return self.issues[repo]
+
+    def issue_associations(self, *, repo: str, state: str, limit: int) -> dict[int, str]:
+        self.association_calls.append(repo)
+        if repo in self.associations_failing:
+            raise ForgeError(self.associations_failing[repo])
+        return dict(self.associations.get(repo, {}))
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_prs", {"repo": repo, "state": state, "limit": limit}))

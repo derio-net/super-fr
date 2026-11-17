@@ -26,9 +26,10 @@ from fr import real_ghclient
 from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
-from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, held_gates
+from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, READY_FR, held_gates
 from fr.triage.claims import read_claims, to_issue_claim
 from fr.triage.errors import ForgeError, TriageError
+from fr.triage.intake import intake_reason
 from fr.triage.model import (
     BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
@@ -87,6 +88,8 @@ class Forge(Protocol):
         fields: str | None = None,
         labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]: ...
+
+    def issue_associations(self, *, repo: str, state: str, limit: int) -> dict[int, str]: ...
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]: ...
@@ -166,6 +169,10 @@ class ClientForge:
     ) -> list[dict[str, Any]]:
         with _forge_errors():
             return self._client.list_issues(repo, state, limit, fields or ISSUE_FIELDS, labels)
+
+    def issue_associations(self, *, repo: str, state: str, limit: int) -> dict[int, str]:
+        with _forge_errors():
+            return self._client.issue_associations(repo, state, limit)
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():
@@ -463,7 +470,58 @@ def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: Iss
         body=_body(raw.get("body") or ""),
         prs=prs,
         author=_login(raw),
+        author_association=str(raw.get("authorAssociation") or "").upper() or None,
     )
+
+
+def _with_associations(
+    forge: Forge,
+    repo: str,
+    issues: list[dict[str, Any]],
+    trusted: frozenset[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """*issues* with each record's `authorAssociation` filled in where the list lacked it
+    (spec 2026-11-17-triage-intake R1).
+
+    One read per repo, and none when every record carries the field or every record without
+    it is admitted by its author's login or the `ready-fr` label (R2's other clauses), so the
+    read is made only for an issue whose answer can change the outcome. A failed or
+    unsupported read is one stderr line and leaves the association unread: never admitted.
+    """
+
+    def admitted(raw: dict[str, Any]) -> bool:
+        login = _login(raw)
+        names = {label.get("name") for label in raw.get("labels") or []}
+        return (login is not None and login.lower() in trusted) or READY_FR.name in names
+
+    if all("authorAssociation" in raw or admitted(raw) for raw in issues):
+        return issues
+    try:
+        found = forge.issue_associations(repo=repo, state="open", limit=limit)
+    except ForgeError as exc:
+        print(f"fr triage: {repo}: author associations not read: {exc}", file=sys.stderr)
+        return issues
+    return [
+        raw
+        if "authorAssociation" in raw or raw["number"] not in found
+        else {**raw, "authorAssociation": found[raw["number"]]}
+        for raw in issues
+    ]
+
+
+def _withhold_untrusted_bodies(
+    issues: list[Issue], config: Mapping[str, TriageConfig], viewer: str | None
+) -> list[Issue]:
+    """Every issue about to be written with its body cleared when intake finds it ineligible
+    (spec 2026-11-17-triage-intake R3): listed, viewed and carried alike, judged on its stored
+    fields, so an outside author's text is never kept. Title, labels and the rest stay."""
+    out: list[Issue] = []
+    for issue in issues:
+        trusted = claim_trusted(config.get(issue.repo, TriageConfig()), viewer)
+        reason = intake_reason(issue.author, issue.author_association, issue.labels, trusted)
+        out.append(issue.model_copy(update={"body": ""}) if reason and issue.body else issue)
+    return out
 
 
 PR_PAST_LIMIT = (
@@ -653,6 +711,7 @@ def collect_facts_counted(
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
             repo_config, dropped = read_config_lenient(forge, repo)
             trusted = claim_trusted(repo_config or TriageConfig(), viewer)
+            issues = _with_associations(forge, repo, issues, trusted, issue_limit)
             for raw in issues:
                 at, found = _comment_facts(forge, repo, raw, trusted)
                 if at:
@@ -805,7 +864,7 @@ def collect_facts_counted(
         kind=scope.kind,
         collected_at=now.isoformat(timespec="seconds"),
         repos=repos,
-        issues=out,
+        issues=_withhold_untrusted_bodies(out, config, viewer),
         prs=unlinked,
         skipped=skipped,
         unviewed=unviewed,

@@ -467,6 +467,12 @@ class GhClient(Protocol):
         keeps only issues carrying all of them."""
         ...
 
+    def issue_associations(self, repo: str, state: str, limit: int) -> dict[int, str]:
+        """Each issue's author association (`OWNER`, `MEMBER`, `NONE`, ...) by number, for
+        the issues of *state* (spec 2026-11-17-triage-intake R1). glab and tea raise
+        `UnsupportedForgeOperation`."""
+        ...
+
     def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
 
     def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]: ...
@@ -670,6 +676,9 @@ class UnsupportedBatchOps:
         labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
         raise self._unsupported("list_issues")
+
+    def issue_associations(self, repo: str, state: str, limit: int) -> dict[int, str]:
+        raise self._unsupported("issue_associations")
 
     def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         raise self._unsupported("list_prs")

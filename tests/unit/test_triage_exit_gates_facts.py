@@ -60,9 +60,9 @@ def _forge(prs: list[dict[str, Any]], **kw: Any) -> FakeForge:
 # ------------------------------------------------------------------ the stamp
 
 
-def test_facts_schema_is_13_and_older_schemas_still_load(tmp_path: Path) -> None:
-    assert FACTS_SCHEMA == 13
-    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+def test_facts_schema_is_14_and_older_schemas_still_load(tmp_path: Path) -> None:
+    assert FACTS_SCHEMA == 14
+    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
     merged = {"repo": REPO, "number": 4, "title": "t", "state": "MERGED", "is_draft": False,
               "url": "u"}  # fmt: skip
     old = {"schema": 11, "scope": REPO, "kind": "repo", "collected_at": AFTER, "repos": [REPO],
@@ -83,7 +83,7 @@ def test_the_stamp_comment_cites_the_labels_the_cursor_and_the_exit_block() -> N
 
 
 def test_collected_facts_are_stamped_thirteen() -> None:
-    assert collect_facts(_forge([]), SCOPE, now=NOW).to_json()["schema"] == 13
+    assert collect_facts(_forge([]), SCOPE, now=NOW).to_json()["schema"] == 14
 
 
 # ---------------------------------------------------------- merged-PR labels

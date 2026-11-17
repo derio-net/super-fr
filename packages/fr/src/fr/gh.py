@@ -560,6 +560,35 @@ def list_issues(
     return issues
 
 
+def issue_associations(*, repo: str, state: str, limit: int) -> dict[int, str]:
+    """Each issue's author association (`OWNER`, `MEMBER`, `NONE`, ...), by number.
+
+    ``gh issue list --json`` offers no association field, so this is one paginated
+    ``gh api`` read of the issues route; pull requests (which that route also lists) are
+    dropped, and at most *limit* issues are kept (spec 2026-11-17-triage-intake R1).
+    """
+    if (rest := _rest()) is not None:
+        return rest.issue_associations(repo, state, limit)
+    out = _run_gh(
+        [
+            *("api", "--paginate"),
+            *(
+                "--jq",
+                '.[] | select(has("pull_request") | not) | "\(.number)\t\(.author_association)"',
+            ),
+            f"repos/{repo}/issues?state={state}&per_page=100",
+        ]
+    )
+    found: dict[int, str] = {}
+    for line in out.splitlines():
+        number, _, association = line.partition("\t")
+        if number.isdigit() and association and association != "null":
+            found[int(number)] = association.upper()
+        if len(found) >= limit:
+            break
+    return found
+
+
 def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
     """Return PRs in *repo* via one bulk ``gh pr list`` (explicit ``--limit``)."""
     import json

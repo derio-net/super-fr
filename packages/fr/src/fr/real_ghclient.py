@@ -676,6 +676,10 @@ class RealGhClient:
         )
 
     @_hosted
+    def issue_associations(self, repo: str, state: str, limit: int) -> dict[int, str]:
+        return _gh.issue_associations(repo=repo, state=state, limit=limit)
+
+    @_hosted
     def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         return cast("list[dict[str, Any]]", _gh.list_prs(repo=repo, state=state, limit=limit))
 
