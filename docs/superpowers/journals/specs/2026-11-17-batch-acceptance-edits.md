@@ -205,3 +205,18 @@ run_kind: candidate
 ### d8-restore-scope · decision · #1394 restores 12 of 17 rows: the 5 later walked keep their walk notes
 
 Recovery first read fragment row definitions, not the fold; 9 of the 17 rows were re-noted on 2026-11-14. The operator chose: splice the old text in before the tracker on the 4 walk-owed rows, keep the 5 walked rows' walk notes (their walk evidence supersedes the pre-sweep text). 8 bare rows restored by phase 1, 4 by the orchestrator.
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-1 created=2026-11-17T14:31:26+00:00 -->
+### exit-change-1 · decision · exit change: the run -> strategy none
+
+Operator decision d7 (round 1, question 7): CI tests verify every row, no walk; the spec named each row none but omitted the run-level line, so the shape's candidate default applied
+
+before: kinds ['candidate', 'none'], gates ['developer']
+after: kinds ['none'], gates ['developer']
+lowered with an operator answer: the run: kind `candidate` -> `none` waits for less
+
+```yaml
+answered_by: operator
+lowered:
+- run:kind
+```
