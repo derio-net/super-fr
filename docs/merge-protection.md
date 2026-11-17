@@ -130,7 +130,10 @@ An issue is eligible when at least one of these is true:
 
 - Its author is the user that ran `collect`, or a login in `pr_authors` of `.fr/triage.yaml`.
 - Its author association is `OWNER`, `MEMBER` or `COLLABORATOR`.
-- It has the `ready-fr` label.
+- It has the `ready-fr` label. The forge compares label names without regard to case, and so
+  does intake.
+- Its author is the workflow bot of the debt digest, and its body holds the digest marker. A
+  bot-authored issue without the marker is judged like any other.
 
 The rule fails closed. If `collect` could not read the author or the association, no clause
 admits the issue.

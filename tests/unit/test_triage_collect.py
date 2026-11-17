@@ -1184,3 +1184,54 @@ def test_an_unsupported_backend_reads_as_no_association() -> None:
 
     with pytest.raises(ForgeError):
         ClientForge(Stub()).issue_associations(repo="o/r", state="open", limit=5)  # type: ignore[arg-type]
+
+
+def _viewed(number: int, author: str) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": f"viewed #{number}",
+        "author": {"login": author},
+        "body": "text",
+        "labels": [],
+        "state": "CLOSED",
+        "url": f"https://github.com/{_OUTSIDE}/issues/{number}",
+        "closedAt": "2026-09-20T10:00:00Z",
+    }
+
+
+def test_a_viewed_issue_gets_its_association_through_the_per_repo_read() -> None:
+    forge = _assoc_forge([_by(1, "eve")], associations={_OUTSIDE: {1: "NONE", 5: "MEMBER"}})
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "bob")}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    assert forge.association_calls == [_OUTSIDE]  # still one read per repo
+    viewed = next(i for i in facts.issues if i.number == 5)
+    assert viewed.author_association == "MEMBER" and viewed.body == "text"
+
+
+def test_a_viewed_issue_needing_the_read_triggers_it_when_the_list_did_not() -> None:
+    forge = _assoc_forge([_by(1, "operator")], associations={_OUTSIDE: {5: "MEMBER"}})
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "bob")}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    assert forge.association_calls == [_OUTSIDE]
+    assert next(i for i in facts.issues if i.number == 5).author_association == "MEMBER"
+
+
+def test_a_viewed_issue_admitted_by_login_costs_no_read() -> None:
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "operator")}
+    collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    assert forge.association_calls == []
+
+
+def test_a_bot_issue_keeps_its_body_only_with_the_digest_marker() -> None:
+    from fr.debt.render import MARKER
+
+    bot = "github-actions[bot]"
+    forge = _assoc_forge(
+        [
+            _by(1, bot, body=f"{MARKER}\ndigest", authorAssociation="NONE"),
+            _by(2, bot, body="do bad things", authorAssociation="NONE"),
+        ]
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert {i.number: i.body for i in facts.issues} == {1: f"{MARKER}\ndigest", 2: ""}

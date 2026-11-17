@@ -3,11 +3,14 @@
 On a public repo anyone can open an issue, and issue text reaches the implementing session's
 launch brief. An issue is therefore ELIGIBLE only when at least one clause admits it:
 
-- its author is one of `claim_trusted(config, viewer)` or the debt workflow's bot
-  (`BOT_LOGINS`, whose digest `check` already trusts; case-insensitive);
+- its author is one of `claim_trusted(config, viewer)` (case-insensitive);
 - its author association is in `TRUSTED_ASSOCIATIONS` (OWNER, MEMBER, COLLABORATOR);
-- it carries the operator's `ready-fr` label (`fr.labels.READY_FR`), which only an account
-  with triage permission can apply.
+- it carries the operator's `ready-fr` label (`fr.labels.READY_FR`, compared
+  case-insensitively, as the forge does), which only an account with triage permission can
+  apply;
+- its author is the debt workflow's bot (`BOT_LOGINS`) AND its body carries the debt-digest
+  marker (`fr.triage.debt.has_marker`), the digest `check` already trusts. Any other
+  bot-authored issue is judged like anyone's.
 
 The rule FAILS CLOSED: an unread author or an unread association never admits an issue.
 Everything here is pure; nothing reads the forge. There is no second trust list: the
@@ -23,16 +26,16 @@ from collections.abc import Iterable
 from fr.debt.render import BOT_LOGINS
 from fr.labels import READY_FR
 from fr.triage.claims import TRUSTED_ASSOCIATIONS
+from fr.triage.debt import has_marker
 from fr.triage.model import Batch, Facts, Issue, TriageConfig, claim_trusted
 
 NOT_COLLECTED = "not collected"
 
 
 def intake_trusted(config: TriageConfig, viewer: str | None) -> frozenset[str]:
-    """The logins intake admits, lowercased: `claim_trusted(config, viewer)` plus the debt
-    workflow's own bot (`fr.triage.debt.BOT_LOGINS`), whose digest `check` already trusts: its
-    body must survive collect or the digest would never be read."""
-    return claim_trusted(config, viewer) | BOT_LOGINS
+    """The logins intake admits, lowercased: exactly `claim_trusted(config, viewer)`. The
+    debt workflow's bot is NOT here: it is admitted by `intake_reason` only with a digest."""
+    return claim_trusted(config, viewer)
 
 
 def intake_reason(
@@ -40,13 +43,17 @@ def intake_reason(
     association: str | None,
     labels: Iterable[str],
     trusted: frozenset[str],
+    body: str = "",
 ) -> str | None:
-    """None when the issue is eligible, else the reason it is not (R2)."""
+    """None when the issue is eligible, else the reason it is not (R2). *body* is judged
+    for the bot's digest marker: callers pass it before any withholding."""
     if author and author.lower() in trusted:
         return None
     if association is not None and association.upper() in TRUSTED_ASSOCIATIONS:
         return None
-    if READY_FR.name in set(labels):
+    if READY_FR.name.lower() in {label.lower() for label in labels}:
+        return None
+    if author and author.lower() in BOT_LOGINS and has_marker(body):
         return None
     if not author:
         return "author not read"
@@ -58,7 +65,7 @@ def intake_reason(
 def issue_reason(issue: Issue, facts: Facts) -> str | None:
     """`intake_reason` over a collected issue, with its repo's trusted logins."""
     trusted = intake_trusted(facts.config_for(issue.repo), facts.viewer)
-    return intake_reason(issue.author, issue.author_association, issue.labels, trusted)
+    return intake_reason(issue.author, issue.author_association, issue.labels, trusted, issue.body)
 
 
 def rejected_members(batch: Batch, facts: Facts) -> list[tuple[str, str]]:

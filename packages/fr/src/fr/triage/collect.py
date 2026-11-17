@@ -476,12 +476,58 @@ def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: Iss
     )
 
 
+Associations = dict[str, "dict[int, str] | None"]
+"""Per repo, what one `issue_associations` read returned (`None`: it failed), so a collect
+reads each repo's associations at most once however many issues need them."""
+
+
+def _admitted(raw: dict[str, Any], trusted: frozenset[str]) -> bool:
+    """Whether R2's login or label clause already admits *raw*, so its association cannot
+    change the outcome."""
+    login = _login(raw)
+    names = {str(label.get("name") or "").lower() for label in raw.get("labels") or []}
+    return (login is not None and login.lower() in trusted) or READY_FR.name.lower() in names
+
+
+def _association_read(
+    forge: Forge, repo: str, limit: int, cache: Associations
+) -> dict[int, str] | None:
+    """The repo's open-issue associations, read once per collect. A failed or unsupported
+    read is one stderr line and caches `None`: the association stays unread, never admitted."""
+    if repo not in cache:
+        try:
+            cache[repo] = forge.issue_associations(repo=repo, state="open", limit=limit)
+        except ForgeError as exc:
+            print(f"fr triage: {repo}: author associations not read: {exc}", file=sys.stderr)
+            cache[repo] = None
+    return cache[repo]
+
+
+def _with_association(
+    forge: Forge,
+    repo: str,
+    raw: dict[str, Any],
+    trusted: frozenset[str],
+    limit: int,
+    cache: Associations,
+) -> dict[str, Any]:
+    """A viewed record with its `authorAssociation` filled in through the per-repo read the
+    list path uses (triage-intake R1), when it lacks one and no other clause admits it."""
+    if "authorAssociation" in raw or _admitted(raw, trusted):
+        return raw
+    found = _association_read(forge, repo, limit, cache)
+    if found is None or raw.get("number") not in found:
+        return raw
+    return {**raw, "authorAssociation": found[raw["number"]]}
+
+
 def _with_associations(
     forge: Forge,
     repo: str,
     issues: list[dict[str, Any]],
     trusted: frozenset[str],
     limit: int,
+    cache: Associations,
 ) -> list[dict[str, Any]]:
     """*issues* with each record's `authorAssociation` filled in where the list lacked it
     (spec 2026-11-17-triage-intake R1).
@@ -489,20 +535,12 @@ def _with_associations(
     One read per repo, and none when every record carries the field or every record without
     it is admitted by its author's login or the `ready-fr` label (R2's other clauses), so the
     read is made only for an issue whose answer can change the outcome. A failed or
-    unsupported read is one stderr line and leaves the association unread: never admitted.
+    unsupported read leaves the association unread: never admitted.
     """
-
-    def admitted(raw: dict[str, Any]) -> bool:
-        login = _login(raw)
-        names = {label.get("name") for label in raw.get("labels") or []}
-        return (login is not None and login.lower() in trusted) or READY_FR.name in names
-
-    if all("authorAssociation" in raw or admitted(raw) for raw in issues):
+    if all("authorAssociation" in raw or _admitted(raw, trusted) for raw in issues):
         return issues
-    try:
-        found = forge.issue_associations(repo=repo, state="open", limit=limit)
-    except ForgeError as exc:
-        print(f"fr triage: {repo}: author associations not read: {exc}", file=sys.stderr)
+    found = _association_read(forge, repo, limit, cache)
+    if found is None:
         return issues
     return [
         raw
@@ -521,7 +559,9 @@ def _withhold_untrusted_bodies(
     out: list[Issue] = []
     for issue in issues:
         trusted = intake_trusted(config.get(issue.repo, TriageConfig()), viewer)
-        reason = intake_reason(issue.author, issue.author_association, issue.labels, trusted)
+        reason = intake_reason(
+            issue.author, issue.author_association, issue.labels, trusted, issue.body
+        )
         out.append(issue.model_copy(update={"body": ""}) if reason and issue.body else issue)
     return out
 
@@ -698,6 +738,7 @@ def collect_facts_counted(
     # issue, and must never reach `view_issue`, which answers for PRs too (gh#902).
     listed_prs: dict[str, PullRequest] = {}
     config: dict[str, TriageConfig] = {}
+    associations: Associations = {}
     ignored: dict[str, tuple[str, ...]] = {}
     markers: dict[tuple[str, int], str] = {}
     claims: dict[tuple[str, int], list[IssueClaim]] = {}
@@ -719,6 +760,7 @@ def collect_facts_counted(
                 issues,
                 intake_trusted(repo_config or TriageConfig(), viewer),
                 issue_limit,
+                associations,
             )
             for raw in issues:
                 at, found = _comment_facts(forge, repo, raw, trusted)
@@ -833,7 +875,15 @@ def collect_facts_counted(
             unviewed.append(Unviewed(key=issue_key(repo, number), reason=PR_PAST_LIMIT))
             continue
         state: IssueState = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
-        out.append(_issue(repo, {"number": number, **raw}, linked(repo, number), state=state))
+        raw = _with_association(
+            forge,
+            repo,
+            {"number": number, **raw},
+            intake_trusted(config.get(repo, TriageConfig()), viewer),
+            issue_limit,
+            associations,
+        )
+        out.append(_issue(repo, raw, linked(repo, number), state=state))
     linked_prs = {(p.repo, p.number) for issue in out for p in issue.prs}
     unlinked = [
         p
