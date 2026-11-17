@@ -178,6 +178,10 @@ case "$TAG" in
     git -C "$SRC" checkout -q -f --detach "refs/tags/$TAG" </dev/null
     echo "Channel: $TAG" ;;
 esac
+# `checkout -f` leaves untracked files behind, and install.sh's preflight refuses
+# them (gh#1202). This cache is bootstrap's own, so remove them. Ignored files (a
+# venv, caches) stay: the preflight does not count them, so there is no `-x`.
+git -C "$SRC" clean -q -f -d </dev/null
 
 echo "Running installer ..."
 exec "$SRC/scripts/install.sh" "${ARGS[@]+"${ARGS[@]}"}"

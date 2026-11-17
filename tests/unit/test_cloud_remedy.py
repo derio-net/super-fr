@@ -128,6 +128,25 @@ def test_an_fr_older_than_the_latest_release_fails(home: Path, repo: Path) -> No
     assert "5.17.1" in failed[0].detail and "5.18.0" in failed[0].detail
 
 
+@pytest.mark.parametrize(
+    ("installed", "latest", "ok"),
+    [
+        ("7.0.0rc7", "v7.0.0", False),  # an RC of the latest final is older than it
+        ("7.0.0rc7", "v7.0.0-rc.8", False),
+        ("7.0.0rc7", "v7.0.0-rc.7", True),  # the two spellings of one RC
+        ("7.0.0rc7", "v6.9.0", True),
+        ("7.0.0", "v7.0.0-rc.7", True),
+    ],
+)
+def test_an_rc_install_is_compared_not_waved_through(installed: str, latest: str, ok: bool) -> None:
+    """gh#1201: `X.Y.ZrcN` used to parse as None, and None passed the check."""
+    assert cloud._check_fr(installed, latest).ok is ok
+
+
+def test_an_unparseable_installed_version_is_not_ok() -> None:
+    assert cloud._check_fr("not-a-version", "v7.0.0").ok is False
+
+
 def test_an_unknown_latest_release_is_not_a_failure(home: Path, repo: Path) -> None:
     _healthy(home, repo)
     assert all(c.ok for c in _check(repo, latest=None))

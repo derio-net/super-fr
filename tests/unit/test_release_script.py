@@ -113,6 +113,9 @@ class World:
         self.other = tmp / "other"
         _git(tmp, "clone", "-q", str(self.origin), str(self.other))
         self.gh_calls: list[list[str]] = []
+        self.missing_releases: set[str] = set()  # tags `gh release view` reports not found
+        self.release_view_error: str | None = None  # any other `gh release view` failure
+        self.release_create_error: str | None = None
         self.bump_calls: list[str] = []
         self.lock_ok = True
         self.test_calls: list[tuple[str, str]] = []  # (version tested, origin's version then)
@@ -195,6 +198,19 @@ class World:
 
         def gh(args: list[str]) -> subprocess.CompletedProcess[str]:
             self.gh_calls.append(list(args))
+            if args[:2] == ["release", "view"]:
+                if self.release_view_error is not None:
+                    return subprocess.CompletedProcess(
+                        ["gh", *args], 1, "", self.release_view_error
+                    )
+                if args[2] in self.missing_releases:
+                    return subprocess.CompletedProcess(["gh", *args], 1, "", "release not found")
+            if args[:2] == ["release", "create"]:
+                if self.release_create_error is not None:
+                    return subprocess.CompletedProcess(
+                        ["gh", *args], 1, "", self.release_create_error
+                    )
+                self.missing_releases.discard(args[2])
             return subprocess.CompletedProcess(["gh", *args], 0, "", "")
 
         def migrate(repo: Path) -> str | None:
@@ -245,6 +261,11 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     return World(tmp_path)
+
+
+def _gh_writes(world: World) -> list[list[str]]:
+    """Every gh call but the read-only `release view` `finish` asks (gh#1290)."""
+    return [c for c in world.gh_calls if c[:2] != ["release", "view"]]
 
 
 def _release_calls(world: World) -> list[list[str]]:
@@ -309,7 +330,7 @@ def test_no_fragments_and_a_tagged_version_is_a_no_op(world: World) -> None:
     before = world.origin_log("%H")
     assert world.run() == 0
     assert world.origin_log("%H") == before
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     assert world.bump_calls == []
     assert world.origin_tags() == [f"v{BASE}"]
 
@@ -361,7 +382,7 @@ def test_a_push_lost_to_a_new_commit_is_superseded_and_pushes_nothing(
     assert len(world.test_calls) == 1
     assert not any(s.startswith("release:") for s in world.origin_log())
     assert world.origin_tags() == [f"v{BASE}"]
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     assert world.origin_show(".changes/feat-late.yaml") is not None
     assert world.origin_show(".changes/fix-a.yaml") is not None
     assert f"superseded: main moved to {_tip(world)}" in capsys.readouterr().out
@@ -376,7 +397,7 @@ def test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_red
     assert code == release.EXIT_SUPERSEDED
     assert world.bump_calls == ["4.30.0"]
     assert not any(s.startswith("release:") for s in world.origin_log())
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     captured = capsys.readouterr()
     assert f"superseded: main moved to {_tip(world)}" in captured.out
     # No later run carries the override, so the operator is told to re-dispatch it.
@@ -403,7 +424,7 @@ def test_a_base_moved_before_publish_is_superseded_without_attempting_the_push(
     world.before_push = lambda n: world.land("docs/late.md", "late\n")
     assert world.run() == 0
     assert pushes == []
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
 
 
 @pytest.mark.parametrize(
@@ -565,7 +586,7 @@ def test_dry_run_prints_the_bump_and_writes_nothing(
     assert "4.24.0" in out and "minor" in out
     assert _git(world.clone, "status", "--porcelain") == status_before
     assert world.origin_log("%H") == head
-    assert world.bump_calls == [] and world.gh_calls == []
+    assert world.bump_calls == [] and _gh_writes(world) == []
 
 
 # -- the release-time floor check (§3.E) ---------------------------------------
@@ -1172,7 +1193,7 @@ def test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op(world: W
     assert world.run() == 0
 
     assert world.origin_log("%H") == head
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     assert world.origin_tags() == sorted([f"v{BASE}", "v4.24.0-rc.1"])
 
 
@@ -1186,6 +1207,101 @@ def test_something_waits_and_a_new_merge_since_the_rc_cuts_the_next_rc(world: Wo
 
     assert world.origin_log()[0] == "release: v4.24.0-rc.2"
     assert "v4.24.0-rc.2" in world.origin_tags()
+
+
+def _sibling_rc_tag(world: World, tag: str) -> None:
+    """A hand-pushed RC tag on a commit main does not contain, with a different tree."""
+    _git(world.other, "fetch", "-q", "origin")
+    _git(world.other, "checkout", "-q", "-B", "sibling", "origin/main")
+    path = world.other / "packages/demo/src/demo/sibling.py"
+    path.write_text("# only on the sibling\n")
+    _git(world.other, "add", "-A")
+    _git(world.other, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
+    _git(world.other, "tag", "-a", tag, "-m", tag)
+    _git(world.other, "push", "-q", "origin", f"refs/tags/{tag}")
+    _git(world.other, "checkout", "-q", "main")
+
+
+def test_gh1393_an_rc_tag_head_does_not_contain_is_not_the_since_tag(world: World) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0  # cuts v4.24.0-rc.1 on main
+    _sibling_rc_tag(world, "v4.24.0-rc.5")
+    head = world.origin_log("%H")
+    world.gh_calls.clear()
+
+    assert world.run() == 0
+
+    assert world.origin_log("%H") == head  # nothing installable changed since rc.1
+    assert _gh_writes(world) == []
+
+
+def test_gh1393_the_next_rc_still_numbers_past_a_sibling_rc_tag(world: World) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    _sibling_rc_tag(world, "v4.24.0-rc.2")
+    world.change("fix-a", "patch", "fix the thing")
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.3"  # rc.2 is taken
+
+
+def test_gh1290_a_failed_release_create_is_retried_on_the_next_run(world: World) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.release_create_error = "HTTP 502"
+    world.missing_releases = {"v4.24.0"}
+    assert world.run() != 0  # the tag pushed, the Release did not
+    assert "v4.24.0" in world.origin_tags()
+    head = world.origin_log("%H")
+    world.release_create_error = None
+    world.gh_calls.clear()
+
+    assert world.run() == 0
+
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0"
+    assert "add the feature" in _arg(call, "--notes")
+    assert world.origin_log("%H") == head  # no new commit, no retag
+    assert world.missing_releases == set()
+
+
+def test_gh1290_a_tag_with_its_release_is_left_alone(world: World) -> None:
+    assert world.run() == 0
+    assert _release_calls(world) == []
+    assert [c[:3] for c in world.gh_calls] == [["release", "view", f"v{BASE}"]]
+
+
+def _concurrent_tag(world: World, tag: str, ref: str = "origin/main") -> None:
+    """Another run's annotated tag, pushed to origin first."""
+    _git(world.other, "fetch", "-q", "origin")
+    _git(world.other, "-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", tag, "-m", tag, ref)
+    _git(world.other, "push", "-q", "origin", f"refs/tags/{tag}")
+
+
+def test_gh1291_losing_the_tag_race_to_an_identical_tag_is_not_a_failure(world: World) -> None:
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+    _concurrent_tag(world, "v4.23.1")  # same commit, its own tag object
+
+    release.tag_and_release(world.clone, "4.23.1", world.commands())
+
+    assert _release_calls(world) == []  # the concurrent run made the Release
+
+
+def test_gh1291_a_remote_tag_on_another_commit_still_refuses(world: World) -> None:
+    world.land("README.md", "# moved\n")
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+    _concurrent_tag(world, "v4.23.1", "origin/main~1")
+
+    with pytest.raises(release.ReleaseError, match="git push v4.23.1 failed"):
+        release.tag_and_release(world.clone, "4.23.1", world.commands())
+
+
+def test_gh1290_an_unreadable_release_refuses_rather_than_guessing(world: World) -> None:
+    world.release_view_error = "HTTP 401: Bad credentials"
+    assert world.run() != 0
+    assert _release_calls(world) == []
 
 
 def test_a_bigger_bump_after_an_rc_starts_that_versions_rcs_at_one(world: World) -> None:
@@ -1576,7 +1692,7 @@ def test_prepare_writes_the_plan_and_a_bundle_and_pushes_nothing(world: World) -
     }
     assert _tip(world) == base  # prepare never pushes
     assert world.test_calls == []  # the suite is the test jobs', not prepare's
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     lines = gh_out.read_text().splitlines()
     assert "cut=true" in lines and f"base_sha={base}" in lines
     # The bundle, fetched into a fresh clone at base, yields exactly the staged commit.
@@ -1591,7 +1707,7 @@ def test_prepare_with_nothing_to_release_writes_no_plan_and_reports_no_cut(world
     assert world.run("prepare", "--out", str(out), "--github-output", str(gh_out)) == 0
     assert not (out / release.PLAN_FILE).exists()
     assert "cut=false" in gh_out.read_text().splitlines()
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
 
 
 def test_prepare_tags_an_untagged_rc_at_head_and_reports_no_cut(world: World) -> None:
@@ -1780,7 +1896,7 @@ def test_publish_when_main_moved_is_superseded_and_exits_zero(
 
     assert _tip(world) == tip
     assert world.origin_tags() == [f"v{BASE}"]
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     assert f"superseded: main moved to {tip}" in capsys.readouterr().out
 
 
@@ -1810,7 +1926,7 @@ def test_publish_still_raises_a_protection_refusal(
 
     err = capsys.readouterr().err
     assert "bypass actor" in err and "superseded" not in err
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
 
 
 def _racing_push(world: World, monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -1840,7 +1956,7 @@ def test_p3_r2_a_real_non_fast_forward_at_the_push_is_superseded(
     tip = _tip(world)
     assert tip != plan["staged_sha"]
     assert world.origin_tags() == [f"v{BASE}"]
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     assert f"superseded: main moved to {tip}" in capsys.readouterr().out
 
 
@@ -1853,7 +1969,7 @@ def test_p3_r2_a_real_non_fast_forward_with_an_override_names_the_redispatch(
     assert _publish(world, out, plan) == release.EXIT_SUPERSEDED
 
     assert replies == ["race"]
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
     assert "re-dispatch: gh workflow run release.yml -f version=4.30.0" in capsys.readouterr().err
 
 
@@ -2338,7 +2454,9 @@ def test_r16_a_failing_git_diff_refuses_and_never_reads_as_nothing_changed(
     world.waiting = list(WAITS)
     head = world.origin_log("%H")
     ghost = release.Version.parse("4.24.0-rc.1")  # listed, but no such ref: git really fails
-    monkeypatch.setattr(release, "_rcs_above", lambda repo, base: [(ghost, ghost.tag)])
+    monkeypatch.setattr(
+        release, "_rcs_above", lambda repo, base, merged=False: [(ghost, ghost.tag)]
+    )
 
     assert world.run() == release.EXIT_REFUSED
 
@@ -2402,7 +2520,7 @@ def test_r16_prepare_prints_the_no_op_line_and_reports_no_cut(
     assert "cut=false" in gh_out.read_text().splitlines()
     assert not (out / release.PLAN_FILE).exists()
     assert world.origin_log("%H") == head
-    assert world.gh_calls == []
+    assert _gh_writes(world) == []
 
 
 def test_r18_gates_passing_with_identical_code_since_the_rc_cut_the_final(world: World) -> None:
