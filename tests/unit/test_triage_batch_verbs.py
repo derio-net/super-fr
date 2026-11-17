@@ -167,6 +167,58 @@ def test_create_stores_only_the_launch_values_given(tmp_path: Path) -> None:
     assert _raw(tmp_path)["batches"][0]["launch"] == {"model": "claude-opus-5-5"}
 
 
+def _outside_state(tmp_path: Path, *numbers: int) -> Path:
+    """The facts with *numbers* by an outside author; the judgements are left as they are."""
+    issues = [
+        _issue(n, author="eve", author_association="NONE") if n in numbers else _issue(n)
+        for n in (577, 575, 471, 438, 420)
+    ]
+    (tmp_path / "facts.json").write_text(json.dumps(_facts(*issues).to_json()), "utf-8")
+    return tmp_path
+
+
+def test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_nothing(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _state(tmp_path)
+    _outside_state(tmp_path, 577)
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    calls = list(gh.calls)
+    code, out = _run(
+        tmp_path, "create", "x", "--title", "t",
+        "--issue", "super-fr#577", "--issue", "super-fr#575", "--wave", "1", "--yes",
+    )  # fmt: skip
+    flat = " ".join(out.split())
+    assert code == 2, out
+    assert "super-fr#577: author eve is NONE" in flat and "ready-fr" in flat
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
+    assert gh.calls == calls  # no claim op
+
+
+def test_create_refuses_an_uncollected_member(tmp_path: Path, gh: FakeGhClient) -> None:
+    _state(tmp_path, _facts(*(_issue(n) for n in (575, 471, 438, 420))))
+    code, out = _run(tmp_path, "create", "x", "--title", "t", "--issue", "super-fr#577")
+    assert code == 2 and "super-fr#577: not collected" in " ".join(out.split())
+
+
+def test_edit_leaving_a_rejected_member_is_refused_and_removing_the_last_one_succeeds(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _state(tmp_path)
+    assert _run(tmp_path, "create", "x", "--title", "t", "--issue", "super-fr#577")[0] == 0
+    _outside_state(tmp_path, 577, 575)
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    code, out = _run(tmp_path, "edit", "x", "--add-issue", "super-fr#575")
+    assert code == 2 and "super-fr#575: author eve is NONE" in " ".join(out.split())
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
+    # the batch holds the rejected 577; swapping it for an admitted member succeeds
+    code, out = _run(
+        tmp_path, "edit", "x", "--add-issue", "super-fr#471", "--remove-issue", "super-fr#577"
+    )
+    assert code == 0, out
+    assert _batches(tmp_path)[0].ids == ["super-fr#471"]
+
+
 def test_create_refuses_an_existing_id(tmp_path: Path) -> None:
     _state(tmp_path)
     assert _run(tmp_path, "create", "x", "--title", "t", "--issue", "super-fr#577")[0] == 0

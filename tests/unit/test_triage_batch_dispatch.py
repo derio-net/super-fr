@@ -72,6 +72,8 @@ def _issue(number: int, **kw: Any) -> Issue:
         title=kw.pop("title", f"issue {number}"),
         state=kw.pop("state", "open"),
         url=f"https://github.com/{REPO}/issues/{number}",
+        # Intake admits a maintainer's issue; a test about the outside says so itself.
+        author_association=kw.pop("author_association", "OWNER"),
         **kw,
     )
 
@@ -250,6 +252,40 @@ def _dispatch_writes(client: FakeGhClient) -> int:
 
 def _mutations(client: FakeGhClient) -> list[str]:
     return [name for name, _ in client.calls if name != "list_issue_comments"]
+
+
+# ------------------------------------------------------------ intake (triage-intake R6)
+
+
+def test_dispatch_refuses_a_rejected_member_before_any_forge_write_or_runner_call(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    outside = _issue(577, author="eve", author_association="NONE")
+    _state(tmp_path, _facts(issues=[outside, _issue(575), _issue(420)]))
+    before = list(gh.calls)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    flat = " ".join(out.split())
+    assert code == 2, out
+    assert "super-fr#577" in flat and "author eve is NONE" in flat and "ready-fr" in flat
+    assert gh.calls == before and runner.calls == []
+
+
+def test_dispatch_refuses_an_uncollected_member(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, _facts(issues=[_issue(575), _issue(420)]))
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2 and "super-fr#577: not collected" in " ".join(out.split())
+    assert runner.calls == []
+
+
+def test_dispatch_goes_ahead_once_the_member_carries_ready_fr(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    outside = _issue(577, author="eve", author_association="NONE", labels=["ready-fr"])
+    _state(tmp_path, _facts(issues=[outside, _issue(575), _issue(420)]))
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 0, out
 
 
 # ------------------------------------------------------------ checkout (§3.I)

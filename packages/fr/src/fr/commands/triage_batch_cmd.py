@@ -246,6 +246,12 @@ from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
+from fr.triage.intake import (
+    NOT_COLLECTED,
+    rejected_by_batch,
+    rejected_members,
+    rejection_line,
+)
 from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.ledger import LedgerRead, closeout_read, gated_rows_at
 from fr.triage.merge_stops import (
@@ -284,6 +290,7 @@ from fr.triage.model import (
     UpdateEvent,
     load_judgements,
     load_scope_facts,
+    normalize_key,
 )
 from fr.triage.operation_lock import replacement_scope_lock
 from fr.triage.pacing import Pacer
@@ -371,6 +378,22 @@ def _skip_held(env: ClaimEnv, queue: Sequence[QueueEntry]) -> list[QueueEntry]:
         scopes = ", ".join(dict.fromkeys(h.signer for _, h in found))
         console.print(f"skipped {e.batch.id}: held by {scopes}", markup=False, soft_wrap=True)
     return kept
+
+
+def _refuse_rejected(
+    batch: Batch, facts: Facts, what: str, judgements: Judgements | None = None
+) -> None:
+    """Exit 2, before anything is written or claimed, when *batch* holds a member intake
+    rejects (triage-intake R5, R6): an outside author's issue no operator has admitted, or one
+    collect did not read. One rule for `create`, `edit` and `dispatch`. With *judgements*
+    (create, edit), an uncollected member that is not judged either is left to the save's own
+    "not judged" refusal, which names the real cause."""
+    rejected = rejected_members(batch, facts)
+    if judgements is not None:
+        judged = {normalize_key(k) for k in judgements.issues}
+        rejected = [(k, why) for k, why in rejected if why != NOT_COLLECTED or k in judged]
+    if rejected:
+        _fail(f"{what}: {rejection_line(rejected)}")
 
 
 def _admit_held(env: ClaimEnv, keys: Iterable[str], what: str) -> list[tuple[str, Claim]]:
@@ -783,6 +806,7 @@ def batch_create_command(
         _fail(f"invalid batch: {exc}")
     if any(b.id == new.id for b in judgements.batches):
         _fail(f"batch {new.id!r} already exists; use `fr triage batch edit`")
+    _refuse_rejected(new, facts, f"batch {new.id!r} cannot be created", judgements)
     env = claim_env(target, facts)
     admitted = _admit_held(env, new.ids, f"batch {new.id!r} cannot be created")
     _write(target, [*judgements.batches, new], facts, read=judgements.batches)
@@ -870,6 +894,7 @@ def batch_edit_command(
         new = Batch.model_validate(doc)
     except ValidationError as exc:
         _fail(f"invalid batch: {exc}")
+    _refuse_rejected(new, facts, f"batch {new.id!r} cannot be edited", judgements)
     env = claim_env(target, facts)
     added = [k for k in new.ids if k not in batch.ids]
     checked = new.ids if wave is not None else added
@@ -1799,6 +1824,7 @@ def dispatch_batch(
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
+    _refuse_rejected(batch, facts, f"batch {batch.id!r} cannot be dispatched")  # intake R6
     _tracking_gate(checkout_path, owner_repo, yes=yes)  # before any forge call
     env = claim_env(target, facts)
     _refuse_held(env, batch.ids, f"batch {batch.id!r} cannot be dispatched")  # R6
@@ -4351,6 +4377,7 @@ class _Driver:
             finished=done_waves,
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
+            rejected=rejected_by_batch(judgements.batches, facts),
             refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
             ledgers=ledgers,
             awaiting_unlabelled=awaiting_unlabelled(facts),

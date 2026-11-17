@@ -90,3 +90,23 @@ def untrusted_issues(facts: Facts) -> list[tuple[Issue, str]]:
         if reason is not None:
             out.append((issue, reason))
     return out
+
+
+def rejection_line(rejected: list[tuple[str, str]]) -> str:
+    """The one sentence naming each rejected member with its reason, and the way out."""
+    members = "; ".join(f"{key}: {reason}" for key, reason in rejected)
+    return (
+        f"members intake does not admit: {members}; an operator admits an issue by "
+        f"labelling it `{READY_FR.name}`"
+    )
+
+
+def rejected_by_batch(batches: Iterable[Batch], facts: Facts) -> dict[str, str]:
+    """Batch id -> `rejection_line`, for each batch holding a rejected member: what both
+    snapshot builders put in `Snapshot.rejected`, so the board, `drive --plan` and the live
+    pass agree (R6)."""
+    out: dict[str, str] = {}
+    for batch in batches:
+        if rejected := rejected_members(batch, facts):
+            out[batch.id] = rejection_line(rejected)
+    return out
