@@ -541,6 +541,43 @@ def test_an_in_place_edit_of_a_merged_row_is_refused_under_quiet(quiet: Product)
         git(quiet.root, "checkout", "-q", quiet.home)
 
 
+def _design_fragment(quiet: Product, name: str, rows: Sequence[dict[str, Any]]) -> Path:
+    """Feature *name*'s fragment in its pre-#1451 spelling, `<name>-design.yaml`."""
+    frag = quiet.feature_root(name) / KIND_DIRS["acceptance-fragment"] / f"{name}-design.yaml"
+    frag.parent.mkdir(parents=True, exist_ok=True)
+    data = {"schema_version": 1, "feature": f"{name}-design", "repo": REPO,
+            "rows": list(rows), "amendments": []}  # fmt: skip
+    frag.write_text(yaml.safe_dump(data, sort_keys=False))
+    return frag
+
+
+@pytest.mark.parametrize("edited", [False, True], ids=["renamed-only", "renamed-and-edited"])
+def test_a_merged_design_fragment_renamed_on_the_branch_under_quiet(
+    quiet: Product, edited: bool
+) -> None:
+    """l-tests-r2 (spec 2026-11-17-batch-acceptance-edits R17): under quiet, the merged
+    `a-design.yaml` renamed on the branch to `a.yaml` is no edit of the frozen
+    fragment; a real in-place edit of its row still is."""
+    from fr.acceptance.amend import outside_merged_row_edits
+
+    design = _design_fragment(quiet, "a", [_row(ROW)])
+    quiet.feature("a")  # claims the root and commits the -design fragment with it
+    quiet.merge("a")
+    git(quiet.root, "checkout", "-q", "feat/a")
+    try:
+        assert outside_merged_row_edits(quiet.root) == []
+        design.unlink()
+        quiet.write_fragment("a", [_row(ROW, "ci" if edited else "not-implemented")])
+        clear_fold_cache()
+        errors = outside_merged_row_edits(quiet.root)
+        if edited:
+            assert any(f"row {ROW} edited in place" in e for e in errors), errors
+        else:
+            assert errors == []
+    finally:
+        git(quiet.root, "checkout", "-q", quiet.home)
+
+
 # --- stealth -----------------------------------------------------------------------
 
 

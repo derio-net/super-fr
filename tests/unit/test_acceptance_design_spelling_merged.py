@@ -12,7 +12,7 @@ from pathlib import Path
 
 import fr.artifacts  # noqa: F401  (registration rides on the package import)
 import pytest
-from fr.acceptance.amend import merged_row_edits, outside_merged_row_edits
+from fr.acceptance.amend import merged_row_edits
 from fr.acceptance.fold import clear_fold_cache, default_ref_fold, fold_texts
 from fr.artifacts.commit import commit_migration
 from fr.artifacts.runner import run_migrations
@@ -124,7 +124,8 @@ def test_a_renamed_design_fragment_is_no_merged_row_edit(
 ) -> None:
     root = _merged(tmp_path, TIPS[tip])
     assert _edits(root) == []
-    assert outside_merged_row_edits(root) == []
+    # `outside_merged_row_edits` reads nothing in the repo placement; its quiet case is
+    # test_placement_merged.py::test_a_merged_design_fragment_renamed_on_the_branch_under_quiet.
     res = _check(root, monkeypatch)
     assert res.exit_code == 0, res.output
 
