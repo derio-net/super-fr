@@ -68,3 +68,14 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: acceptance-pipeline-rows
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      end-to-end toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap.
+      Mechanics unit-pinned per-PR.; tracked by derio-net/super-fr#1338'
+    why: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the end-to-end
+      toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap. Mechanics
+      unit-pinned per-PR.; tracked by derio-net/super-fr#1338'
