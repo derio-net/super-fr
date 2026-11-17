@@ -25,3 +25,8 @@ model.py: FACTS_SCHEMA Literal[13] = 13, FACTS_READS tuple, Facts.schema_ Litera
 ### db145d129a2d · hypothesis · Four independent defects, not one root cause
 
 1268 is a policy choice pinned by a spec requirement; 1197 is a duplicated predicate; 1210 is missing data (closed-claim signers not collected); 1300 is a duplicated constant. 1210's fix needs a facts-schema bump (signers on StaleInProgress), which is when 1300 says to do its refactor.
+
+<!-- fr:journal kind=decision scope=debug id=ab6d79d735fb created=2026-11-17T09:21:35+00:00 decided_by=operator -->
+### ab6d79d735fb · decision · Operator: fix all four in one PR; collect reports the missing label; schema 14 for closed claims
+
+Asked at the batch's multi-root-cause stop. Answers: fix all 4 in the one PR. #1268: collect drops ensure_approval_label and prints one line counting repos that lack approved-fr; the approval-label-created row is amended. #1210: StaleInProgress gains claims (facts schema 14, #1300 refactor rides it); scope retire releases a retired scope's claims on closed issues with unlabel, leaving them settled.
