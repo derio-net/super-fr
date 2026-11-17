@@ -90,7 +90,7 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-17T14:44:52+00:00'
           agent: a99793fe2125a63ed
@@ -100,6 +100,11 @@ steps:
           tier: standard
           bound: claude-sonnet-5
           session: f55704a7-fff8-4fb0-98fe-055a073c49ca
+          returned: '2026-11-17T15:50:32+00:00'
+          outcome: done
+        evidence:
+          tests: p2-suite.log@84172c963ffc;tree=890a3ec034c3ead8edb4e26efc8f95a340cbc084a291deaf32f7950a6c41a92b
+          visual: none
   journal-check:
     state: pending
   lens-review:

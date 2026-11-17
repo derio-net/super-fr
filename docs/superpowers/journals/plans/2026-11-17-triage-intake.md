@@ -145,3 +145,18 @@ Kept on purpose. At a security boundary a batch whose member is now ineligible m
 ### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: Titles of ineligible issues still reach facts.json and triage check output (phase 1)
 
 R3 deliberately clears bodies only; titles are needed to triage at all. Not caused by this change, which removes the body surface; title hardening is a separate decision.
+
+<!-- fr:journal kind=decision scope=plan id=p2-held-reason-stored-per-pass created=2026-11-17T15:50:30+00:00 phase=2 -->
+### p2-held-reason-stored-per-pass · decision · merge_ctx holds a repo by storing its DefaultBranchUnknown for the pass (phase 2) (phase 2)
+
+_ctx_held maps repo to the DefaultBranchUnknown raised first and re-raises that same instance, so every later use is instant, with no second fetch and, through _ctx_or_hold's existing _unknown_said set, no second warning. The allowed merge methods are kept in _allowed[repo] from the build; method is recomputed each use with choose_method over them.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-driver-loop-test-green-before-impl created=2026-11-17T15:50:30+00:00 phase=2 -->
+### p2-driver-loop-test-green-before-impl · discovery · The loop-level held-pass test already passed before the change (phase 2) (phase 2)
+
+In a loop pass a failed fetch is first met by _fetched_reader / _archived readers, which hold or skip the pass by design (gh#1025), so the end-to-end test guards the behaviour (one fetch when a reader fetched first, held pass, acts again) but is not red against the old code. The red tests are the two merge_ctx unit tests (method/version refresh with one methods read, hand-back held).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-17T15:50:30+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the _fresh_config split removed the duplication it would have left; nothing else to clean
