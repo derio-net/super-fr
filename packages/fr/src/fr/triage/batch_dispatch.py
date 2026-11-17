@@ -145,6 +145,14 @@ def quote_untrusted(text: Iterable[str]) -> list[str]:
     return [f"> {line}" for chunk in text for line in (chunk.splitlines() or [""])]
 
 
+def title_block(batch: Batch) -> list[str]:
+    """The batch's title as every non-launch brief carries it (triage-intake R7): the same
+    untrusted rule and delimited, quoted block `render_brief` uses. The brief's own command
+    line names the batch by id only."""
+    return [UNTRUSTED_RULE, UNTRUSTED_OPEN, *quote_untrusted([f"Batch title: {batch.title}"]),
+            UNTRUSTED_CLOSE]  # fmt: skip
+
+
 def render_brief(
     batch: Batch,
     judgements: Judgements,
@@ -253,8 +261,8 @@ def red_brief(batch: Batch, *, pr_url: str, head: str, checks: Sequence[str]) ->
     return (
         "\n".join(
             [
-                f"Red CI on batch {batch.id} ({batch.title}): {pr_url} is red at {head}; "
-                f"failing: {named}.",
+                f"Red CI on batch {batch.id}: {pr_url} is red at {head}; failing: {named}.",
+                *title_block(batch),
                 "Fix it on the PR's own branch: commit the fix and push. Do not force-push "
                 "and do not rebase: the PR's history stays as it is.",
                 "Leave the PR's draft or ready state and its labels alone.",
@@ -287,9 +295,10 @@ def conflict_brief(
         regenerate += " (rerun whatever generates them), then stage what they wrote."
     return "\n".join(
         [
-            f"Merge conflict on batch {batch.id} ({batch.title}): {where} on {branch}, at "
+            f"Merge conflict on batch {batch.id}: {where} on {branch}, at "
             f"head {head}, conflicts with {base} in a change the wave driver will not "
             f"resolve: {', '.join(paths)}.",
+            *title_block(batch),
             f"Resolve it on {branch} itself, in these six steps:",
             f"1. Enter the batch's workspace first: `fr isolation up --branch {branch}`. "
             f"{branch} is checked out there, not in the clone you may have started in; "
@@ -312,9 +321,10 @@ def archive_conflict_brief(batch: Batch, *, pr: int, head: str, branch: str, bas
     batch's archive PR, its head and branch, and how to make it mergeable again."""
     return "\n".join(
         [
-            f"Archive PR conflict on batch {batch.id} ({batch.title}): archive PR #{pr} on "
+            f"Archive PR conflict on batch {batch.id}: archive PR #{pr} on "
             f"{branch}, at head {head}, conflicts with {base}, so the wave driver will not "
             "merge it.",
+            *title_block(batch),
             f"1. Enter the archive branch's workspace first: `fr isolation up --branch "
             f"{branch}`. {branch} is checked out there, not in the clone you may have "
             "started in; on an existing workspace the command resumes it. Every later step "
@@ -335,8 +345,8 @@ def dispatch_comment(batch: Batch, item_id: str, key: str) -> str:
     company = f", with {', '.join(others)}" if others else ""
     return (
         f"{batch_marker(item_id)}\n"
-        f"Dispatched as batch `{batch.id}` ({batch.title}){company}. "
-        f"Branch `{recorded_branch(batch)}`."
+        f"Dispatched as batch `{batch.id}`{company}. "
+        f"Branch `{recorded_branch(batch)}`.\n\n" + "\n".join(title_block(batch))
     )
 
 

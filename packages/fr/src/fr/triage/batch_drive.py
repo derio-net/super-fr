@@ -37,6 +37,7 @@ from fr.triage.batch import (
     last_dispatch,
     recorded_branch,
 )
+from fr.triage.batch_dispatch import title_block
 from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
@@ -818,8 +819,9 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
     branch = recorded_branch(batch)
     pickup = f"fr pickup --run {run}" if run else f"fr pickup --branch {branch}"
     return (
-        f"Close out batch {batch.id} ({batch.title}): its PR on {branch} has merged.\n"
-        f"In {checkout}, run `{pickup}` and follow the brief it prints, in order."
+        f"Close out batch {batch.id}: its PR on {branch} has merged.\n"
+        f"In {checkout}, run `{pickup}` and follow the brief it prints, in order.\n"
+        + "\n".join(title_block(batch))
     )
 
 
