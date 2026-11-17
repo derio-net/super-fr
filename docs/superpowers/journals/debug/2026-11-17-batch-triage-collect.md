@@ -60,3 +60,8 @@ FACTS_SCHEMA: Final[int] = 14; FACTS_READS = tuple(range(3, FACTS_SCHEMA + 1)); 
 ### bae3c2a3e997 · review · Independent review: no blocking bugs; two findings fixed, two noted
 
 Reviewer (fresh context, code only). Fixed: (1) retire took unlabel from stale facts, so an issue reopened since collect lost fr:in-progress; now re-read via _still_closed, test test_scope_retire_keeps_in_progress_on_an_issue_reopened_since_collect. (2) claim_writes.release docstring said retire never unlabels; updated. Noted, not changed: paced drive passes carry no closed hits for kept repos (existing behaviour, retire then sees those claims only after a full collect); collect_command builds a second forge client for the label read (existing).
+
+<!-- fr:journal kind=finding scope=debug id=feddf137660b created=2026-11-17T13:29:45+00:00 state=fixed -->
+### feddf137660b · finding [fixed] · Full suite: six generated scenario fixtures and one scope-groups test still pinned schema 13
+
+The full suite (16304 passed, 14 failed) showed five real failures. Six generated scenario fixtures were still committed at schema 13, and their generator tests compare them byte for byte against the live model's output. test_triage_scope_groups also kept a literal 13. The fixtures were regenerated (stamp 14 and claims: [] on settle's stale hits) and the pin now reads FACTS_SCHEMA. On a rerun the affected modules plus the scenario integration tests passed (174). The other nine failures, all in test_isolation_agent_worktrees, were from host load (load average about 38) and pass on a rerun.
