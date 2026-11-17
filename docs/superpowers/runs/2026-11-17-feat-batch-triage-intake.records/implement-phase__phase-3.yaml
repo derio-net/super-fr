@@ -1,0 +1,15 @@
+schema_version: 12
+run: 2026-11-17-feat-batch-triage-intake
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2, P3.T3.S3]
+refactor:
+  P3.T1: "one bounded loop replacing a single call; nothing to clean"
+  P3.T2: "_open_checkout now delegates to the new _checkout_refusal; the refactor was the task itself"
+journal:
+  - {kind: discovery, id: no-refactor-p3-t1, title: "no-refactor-because P3.T1", body: "one bounded loop replacing a single call; nothing to clean", phase: 3}
+  - {kind: discovery, id: no-refactor-p3-t2, title: "no-refactor-because P3.T2", body: "_open_checkout delegates to the new _checkout_refusal; nothing left to fold", phase: 3}
+  - {kind: decision, id: p3-close-never-raises-drops-forge-failures, title: "close.py _FAILURES tuple removed", body: "close_gate_trackers now catches Exception at all three sites, so the _FAILURES tuple (FORGE_ERRORS + UnsupportedForgeOperation) had no remaining user and was deleted with its imports. The list-read message keeps its prior text; per-issue errors read `issue #<n>: <Type>: <msg>`; a failed EvidenceReader build reports `evidence not read: <Type>: <msg>` and closes nothing.", phase: 3}
+resolves: []
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f55704a7-fff8-4fb0-98fe-055a073c49ca/scratchpad/p3-suite.log}
