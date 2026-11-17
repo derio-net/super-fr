@@ -200,4 +200,5 @@ internal refactor. Neither is a business-level claim, so neither has a row.
 
 ## Implementation Plans
 
-- `docs/superpowers/plans/2026-11-17-batch-acceptance-edits/` (written at `plan`).
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
