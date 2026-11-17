@@ -1459,14 +1459,13 @@ def _committable(root: Path, written: list[str]) -> list[str]:
     (a gitignored path) fails the whole add, and
     so the whole commit (gh#775 review). An ignored path cannot dirty the tree,
     so leaving it out loses nothing; it is named so nobody assumes otherwise."""
-    from fr.git import GitUnavailableError, git_answer
+    from fr.git import ignored_paths
 
     if not written:
         return []
-    try:
-        ignored = set(git_answer(root, "check-ignore", "--", *written).stdout.split())
-    except GitUnavailableError:
-        return written  # commit_records reports whatever git then says
+    # No answer (git missing, not a repo) is an empty set: nothing is dropped and
+    # commit_records reports whatever git then says.
+    ignored = ignored_paths(root, written)
     for rel in sorted(ignored):
         typer.echo(f"ignored {rel} (gitignored here, so not committed)")
     return [p for p in written if p not in ignored]
