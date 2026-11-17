@@ -35,3 +35,8 @@ Asked at the batch's multi-root-cause stop. Answers: fix all 4 in the one PR. #1
 ### a5639e5e74bc · finding [fixed] · #1197 fixed: render._pr_row asks mergeability.conflicting
 
 Test test_triage_prs_render.py::test_blocked_is_not_a_conflict_on_the_triage_page (BLOCKED+MERGEABLE -> 0, DIRTY -> 1, BLOCKED+CONFLICTING -> 1) failed before, passes now.
+
+<!-- fr:journal kind=finding scope=debug id=ada78e7dc3ea created=2026-11-17T09:27:33+00:00 state=fixed -->
+### ada78e7dc3ea · finding [fixed] · #1268 fixed: collect reports the missing approved-fr label, never creates it
+
+triage_cmd.collect_command calls approval.approval_label_missing (read-only; labels off or a forge error reports nothing) and prints one line. Tests test_merge_train_label_board.py::test_collect_writes_no_label_and_says_which_repos_lack_it and ::test_collect_counts_no_repo_whose_labels_are_off failed before. Row approval-label-created amended in legacy.yaml.
