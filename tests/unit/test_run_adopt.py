@@ -11,11 +11,12 @@ The inference table this file pins, verbatim from the spec:
 
 Two properties matter as much as the table itself:
 
-1. **Archival must still key on `emitted.plan`** (2026-08-14 spec §4.B). A run
-   id is `<date>-<flattened-branch>` and a plan slug is authored independently,
-   so every fixture here uses a plan slug that does NOT resemble its run id —
-   a fixture where the two coincide would pass against a name-keyed lookup and
-   prove nothing.
+1. **Archival must still key on `emitted.plan`** (2026-08-14 spec §4.B). An
+   adopted plan's run is named after the plan by default (super-fr#1219), but a
+   started run's id is `<date>-<flattened-branch>` and `--run-id` can be
+   anything, so the archival tests name a run id that does NOT resemble the plan
+   slug — a fixture where the two coincide would pass against a name-keyed
+   lookup and prove nothing.
 2. **A completed plan gets no run.** Adoption exists for work still in flight;
    a cursor over finished work is noise. Both directions are asserted.
 """
@@ -348,16 +349,21 @@ def test_archival_finds_the_adopted_run_by_emitted_plan_not_by_name(
     """The whole point of recording `emitted.plan` (2026-08-14 spec §4.B).
 
     The plan slug and the run id share nothing — assert that first, so this
-    test cannot silently degrade into one a name-keyed lookup would pass.
+    test cannot silently degrade into one a name-keyed lookup would pass. An
+    adopted plan's run takes the plan's name by default (#1219), so the id here
+    is an explicit `--run-id`, as `fr run start`'s branch-derived ones are.
     """
     repo, shipped = _repo(tmp_path, repo_root)
     _write_spec(repo)
     plan_dir = _write_plan(repo, phases=2, complete=2)
 
-    state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
+    state = adopt_run(
+        repo, plan_dir, branch=BRANCH, run_id="2026-01-02-feat-widget-machinery",
+        shipped_root=shipped,
+    )  # fmt: skip
 
     assert PLAN_SLUG not in state.run
-    assert "widget-machinery" in state.run  # branch-derived, as run ids are
+    assert "widget-machinery" in state.run
     assert find_run_for_plan(repo, Path("docs/superpowers/plans") / PLAN_SLUG) == state.run
 
 
@@ -1235,3 +1241,120 @@ def test_a_review_entry_created_after_adoption_started_is_not_historical(
     record = state.steps["implement"]  # type: ignore[attr-defined]
     assert units.unit_state(record, "phase/2/review-phase") in (None, "pending")
     assert any("phase 2" in n and "not before this run started" in n for n in notes)
+
+
+# --- super-fr#1219: adopted runs are named after their plan (R9-R12) -------
+
+
+def test_a_plan_adopted_with_no_run_id_is_named_after_its_folder(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+
+    state = adopt_run(repo, plan_dir, branch=BRANCH, shipped_root=shipped)
+
+    assert state.run == PLAN_SLUG
+    assert run_path(repo, PLAN_SLUG).is_file()
+
+
+def test_a_spec_only_adoption_keeps_the_branch_derived_id(tmp_path: Path, repo_root: Path) -> None:
+    """A spec stem would be the id its plan's later adoption needs (R9)."""
+    from fr.commands.run_cmd import derive_run_id
+
+    repo, shipped = _repo(tmp_path, repo_root)
+    spec_rel = _write_spec(repo)
+
+    state = adopt_run(repo, repo / spec_rel, branch=BRANCH, shipped_root=shipped)
+
+    assert state.run == derive_run_id(BRANCH)
+    assert state.run != PLAN_SLUG
+
+
+def test_an_explicit_run_id_wins_and_an_existing_one_still_refuses(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+    other = _write_plan(repo, slug="2019-05-06-other-plan", phases=2)
+
+    state = adopt_run(repo, plan_dir, branch=BRANCH, run_id="chosen-id", shipped_root=shipped)
+    assert state.run == "chosen-id"
+
+    with pytest.raises(AdoptError, match="already exists"):
+        adopt_run(repo, other, branch=BRANCH, run_id="chosen-id", shipped_root=shipped)
+
+
+def _with_origin(repo: Path, tmp_path: Path) -> None:
+    """A bare `origin` whose HEAD is `main`, fetched so `origin/HEAD` resolves."""
+    remote = tmp_path.parent / f"{tmp_path.name}-origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
+    _git(repo, "remote", "add", "origin", str(remote))
+    _git(repo, "push", "-q", "origin", "main")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "remote", "set-head", "origin", "main")
+
+
+def _default_branch_notes(notes: list[str]) -> list[str]:
+    return [n for n in notes if "default branch" in n]
+
+
+def test_adopting_onto_the_default_branch_warns_once_naming_it_and_branch(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+    _commit_all(repo)
+    _with_origin(repo, tmp_path)
+    notes: list[str] = []
+
+    state = adopt_run(repo, plan_dir, shipped_root=shipped, notes=notes)
+
+    assert state.branch == "main"
+    (warning,) = _default_branch_notes(notes)
+    assert "`main`" in warning and "--branch" in warning
+
+
+def test_adopting_onto_another_branch_or_with_no_remote_does_not_warn(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2)
+    other = _write_plan(repo, slug="2019-05-06-other-plan", phases=2)
+    _commit_all(repo)
+    notes: list[str] = []
+    adopt_run(repo, plan_dir, shipped_root=shipped, notes=notes)  # on main, no remote
+    assert _default_branch_notes(notes) == []
+
+    _with_origin(repo, tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feat/elsewhere")
+    notes = []
+    adopt_run(repo, other, shipped_root=shipped, notes=notes)
+    assert _default_branch_notes(notes) == []
+
+
+def test_migrate_adopt_adopts_every_in_flight_plan_on_one_branch(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """R10: three plans on one branch used to collide on one `<date>-<branch>` id."""
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    slugs = [PLAN_SLUG, "2019-05-06-other-plan", "2019-07-08-third-plan"]
+    for slug in slugs:
+        _write_plan(repo, slug=slug, phases=2)
+    _commit_all(repo)
+    _git(repo, "checkout", "-q", "-b", BRANCH)
+
+    result = _invoke(repo, shipped, ["migrate", "artifacts", "--yes", "--adopt"])
+
+    assert result.exit_code == 0, result.output
+    assert "could not adopt" not in result.output
+    runs = sorted(p.stem for p in (repo / "docs" / "superpowers" / "runs").glob("*.yaml"))
+    assert runs == sorted(slugs)
+    again = _invoke(repo, shipped, ["migrate", "artifacts", "--adopt"])
+    assert again.exit_code == 0, again.output
+    assert "would adopt" not in again.output

@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-16 up refuses a branch whose slug another workspace holds; a resume keeps the recorded mode; scaffold names secrets after the repo
+reviewed: 2026-11-17 still true; scaffold asks git check-ignore through fr.git.is_ignored (batch-acceptance-edits). 2026-11-16 up refuses a branch whose slug another workspace holds; a resume keeps the recorded mode; scaffold names secrets after the repo
 ---
 
 ## What are the two boundaries and the bridge?
