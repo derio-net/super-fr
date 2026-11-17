@@ -7482,6 +7482,16 @@ batches:
     runner: herdr
     handle: w3H:p3
     branch: fix/batch-workspace-identity
+  - kind: approval
+    at: '2026-11-17T08:01:38.503004Z'
+    pr: 1504
+    head: b4b38b1aa942de27b82370d367320a7b096b427e
+  - kind: update
+    at: '2026-11-17T08:02:06.564729Z'
+    pr: 1504
+    head_before: b4b38b1aa942de27b82370d367320a7b096b427e
+    head_after: cd348bae83b20f6451981b71872bb59f82de6abf
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
