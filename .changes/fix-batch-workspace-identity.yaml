@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr isolation: `up` refuses a branch whose slug another workspace holds (feat/a__b vs feat__a/b), a resume keeps the workspace's recorded mode instead of FR_ISOLATION_TARGET, and `fr init scaffold` from a linked worktree names the container and secrets path after the repo"

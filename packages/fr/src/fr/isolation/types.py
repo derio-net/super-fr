@@ -166,15 +166,48 @@ def save_state(state: IsolationState) -> Path:
     return p
 
 
+def slug_holder(repo_root: Path, branch: str) -> str | None:
+    """The OTHER branch whose record sits at *branch*'s state path, or None.
+
+    `branch_slug` is not injective (`feat/a__b` and `feat__a/b` are both
+    `feat__a__b`, gh#1419), so two branches can name one state file and one default
+    worktree directory. The record names its own branch, which tells them apart. An
+    absent or unreadable record holds nothing here (`carried_state` reports the
+    unreadable one)."""
+    p = state_path(repo_root, branch)
+    try:
+        recorded = json.loads(p.read_text()).get("branch")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return recorded if isinstance(recorded, str) and recorded != branch else None
+
+
+def check_slug_free(repo_root: Path, branch: str) -> None:
+    """Refuse *branch* when another branch's workspace holds its slug (gh#1419)."""
+    other = slug_holder(repo_root, branch)
+    if other is not None:
+        raise IsolationError(
+            f"branch {branch!r} and {other!r} share the slug {branch_slug(branch)!r} (the "
+            "branch name with `/` as `__`), which names one worktree directory and one "
+            f"state record, already held by {other!r}. Rename one of them, or "
+            f"`fr isolation down --branch {other}` first"
+        )
+
+
 def delete_state(repo_root: Path, branch: str) -> None:
-    (state_dir(repo_root) / f"{_sanitize(branch)}.json").unlink(missing_ok=True)
+    """Remove *branch*'s record, never another branch's that shares its slug."""
+    if slug_holder(repo_root, branch) is None:
+        state_path(repo_root, branch).unlink(missing_ok=True)
 
 
 def load_state(repo_root: Path, branch: str) -> IsolationState | None:
+    """*branch*'s record, or None. A record at its path that names another branch is
+    that branch's (gh#1419), so it is not returned."""
     p = state_path(repo_root, branch)
     if not p.is_file():
         return None
-    return IsolationState.model_validate_json(p.read_text())
+    state = IsolationState.model_validate_json(p.read_text())
+    return state if state.branch == branch else None
 
 
 def carried_state(
