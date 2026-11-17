@@ -1,0 +1,27 @@
+schema_version: 11
+run: 2026-11-17-feat-batch-acceptance-edits
+workflow: fr-goal@1
+branch: feat/batch-acceptance-edits
+started: '2026-11-17T08:57:12+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 8.1.2
