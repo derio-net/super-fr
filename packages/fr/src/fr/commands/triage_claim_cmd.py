@@ -380,7 +380,9 @@ def scope_retire_command(
 ) -> None:
     """Release every claim another scope holds in this scope's facts, in one pass
     (gh#1123): the operator's way to retire a scope that stopped. Refused while any of
-    its claims is fresh (R8), unless --force. Each marker is released naming this scope."""
+    its claims is fresh (R8), unless --force. Each marker is released naming this scope.
+    A CLOSED issue it holds (gh#1210) is settled: its run is over, so `fr:in-progress`
+    comes off with `fr:claimed` once no other scope's claim stands (post-merge truth R1)."""
     if not re.fullmatch(SCOPE_ID_PATTERN, signer):
         _fail(f"{signer!r} is not a scope id (s-<8 hex>); `fr triage claim list` names them")
     scope = _scope(repo, org)
@@ -394,6 +396,14 @@ def scope_retire_command(
         for i in facts.issues
         if i.state == "open"
         for c in (from_issue_claim(c) for c in i.claims)
+        if c.signer == signer
+    ]
+    closed = {h.key for h in facts.stale_in_progress if any(c.signer == signer for c in h.claims)}
+    held += [
+        (h.key, c)
+        for h in facts.stale_in_progress
+        if h.key in closed
+        for c in (from_issue_claim(c) for c in h.claims)
         if c.signer == signer
     ]
     if not held:
@@ -427,6 +437,7 @@ def scope_retire_command(
                 trusted=env.trusted(owner_repo),
                 of=signer,
                 allow="any" if force else "stale",
+                unlabel=k in closed,
             )
         except UnsupportedForgeOperation as exc:
             _forget_claims(target, signer, released)  # those already released stay so
@@ -467,6 +478,14 @@ def _forget_claims(target: Path, signer: str, keys: set[str]) -> None:
         else i
         for i in facts.issues
     ]
-    updated = facts.model_copy(update={"issues": issues})
+    # A closed hit with no claim left was settled (both labels off): it leaves the set.
+    closed = [
+        h.model_copy(update={"claims": [c for c in h.claims if c.signer != signer]})
+        if h.key in keys
+        else h
+        for h in facts.stale_in_progress
+    ]
+    closed = [h for h in closed if h.key not in keys or h.claims]
+    updated = facts.model_copy(update={"issues": issues, "stale_in_progress": closed})
     body = json.dumps(updated.to_json(), indent=2, ensure_ascii=False) + "\n"
     write_text_atomic(target / "facts.json", body)
