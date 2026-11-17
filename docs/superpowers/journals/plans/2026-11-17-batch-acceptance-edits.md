@@ -196,3 +196,88 @@ gates and docs stamps only: no code to clean
 ### review-p2-1 · review · phase 2 review: no findings (phase 2)
 
 Independent reviewer over bc602f2..HEAD against spec R5-R12 and plan 02.yaml. Checked sound: NotUtf8Error subclasses UnicodeDecodeError so every existing handler still catches it; read_verbatim keeps BOM and CRLF byte-exact, the heading repair reads untranslated, matrix reads translate as read_text did; every FailedAction site and the gate's three refusal lines use describe; ignore helper `-z --stdin`, exit 0/1 answers, empty set / False otherwise, four sites switched, gitseam untouched (pinned by test); adopted run ids (explicit wins, plan folder, spec-only keeps the branch id, existing id refuses before any write, supersede usage move refuses before writing); default-branch note via remote_default_ref, prefix stripped once, no note on GitRefusal or no remote. Residual notes not raised: the quiet/stealth `_without_ignored` exit-128 path drops nothing, as the pre-change code did (the orchestrator checked: any non-zero exit dropped nothing); matrix_fragments reads of existing fragments are outside R6.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · acceptance-matrix.md: the matrix-split 'To continue' remedy followed the -design paragraphs, giving the wrong remedy for a -design conflict
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · acceptance-matrix.md: 'the old file can still exist after the merge' was ambiguous and dropped renamed_keep's condition
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · fragment_design_name read with read_text: a non-UTF-8 -design file or sibling failed with the codec message, a bad sibling blamed on the -design file
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · respell's try wrapped the whole loop: one conflicting pair turned respelling off for every fragment
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · is_ignored reads 'git could not answer' as 'not ignored', so the visual check can blame a screenshot when git is missing
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · the -design repair's 'would change the effective matrix' refusal named no row
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · the scaffold ignored-agent test wrote no agent and asserted nothing about agents
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · outside_merged_row_edits == [] could not fail in repo placement; its respell path was untested
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · R17's CI-on-default-branch case (uncommitted in-place migration at the tip) had no test
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-17T14:23:07+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · no test reached the R15 refusal; deleting it passed every test
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-17T14:23:07+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy, errors, tests — 10 findings (9 fixed, 1 refuted)
+
+One reviewer per lens over cefe972a2..HEAD. docs-accuracy: l-docs-accuracy-r1, r2. errors: l-errors-r1..r4 (the reviewer found text.py, describe, the trigger text, the ignore helper at the set-listing sites, the default-branch note and --no-renames sound). tests: l-tests-r1..r4 (the reviewer mutation-checked the fold respell, merged_row_edits' respell and the history merge: each removal fails a test). The orchestrator verified l-errors-r1/r2 and the old visual.git_ignored before triage.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: acceptance-matrix.md: the matrix-split 'To continue' remedy followed the -design paragraphs, giving the wrong remedy for a -design conflict
+
+The matrix-split remedy is back under its paragraph; the -design conflict has its own: make the two files hold the row the same way or remove it from one, then migrate.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: acceptance-matrix.md: 'the old file can still exist after the merge' was ambiguous and dropped renamed_keep's condition
+
+Rewritten: until the repairing branch merges the default branch holds <slug>-design.yaml, read as <slug>.yaml while the branch holds <slug>.yaml and not the -design file.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: fragment_design_name read with read_text: a non-UTF-8 -design file or sibling failed with the codec message, a bad sibling blamed on the -design file
+
+582786172: all four reads through read_utf8; tests test_a_non_utf8_sibling_fails_the_repair_naming_that_sibling and test_a_non_utf8_design_file_fails_naming_itself, red before.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: respell's try wrapped the whole loop: one conflicting pair turned respelling off for every fragment
+
+6113fcc18: a conflicting pair is kept as it is, the rest respelled; test test_a_conflicting_pair_does_not_unspell_another_features_rename, red before.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-17T14:23:07+00:00 state=refuted resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [refuted] · resolves l-errors-r3: is_ignored reads 'git could not answer' as 'not ignored', so the visual check can blame a screenshot when git is missing
+
+Spec R8 (set by spec review s-r7) states the one-path probe answers False on any error. The pre-change visual.git_ignored already returned False for exit 128 and any non-zero exit; only a missing git (FileNotFoundError) changed, and the visual check runs in a git checkout whose run already needs git for every other step.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: the -design repair's 'would change the effective matrix' refusal named no row
+
+d2c1d8a23: the refusal names the differing row ids (and retired ids); test test_a_rename_that_would_change_the_fold_names_the_row_and_moves_no_byte.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: the scaffold ignored-agent test wrote no agent and asserted nothing about agents
+
+20c685ead: test_scaffold_commit_carries_an_agent_only_when_git_does_not_ignore_it[ignored-agent|tracked-agent]; fails with the filter inverted.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: outside_merged_row_edits == [] could not fail in repo placement; its respell path was untested
+
+0cbb4e6db: quiet-placement cases in test_placement_merged.py (renamed-only, renamed-and-edited), both fail without the respell; the vacuous repo-placement assertion removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: R17's CI-on-default-branch case (uncommitted in-place migration at the tip) had no test
+
+675f62765: ci-default parameter (HEAD at origin/main, uncommitted migration, CI=true) for both the no-edit and the real-edit tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-17T14:23:07+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: no test reached the R15 refusal; deleting it passed every test
+
+d2c1d8a23: the R15 refusal is reached with a fold that differs, asserting the named row and byte-identical files; the identical-entry test also asserts fold equality.

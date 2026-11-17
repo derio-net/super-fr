@@ -3,7 +3,7 @@ run: 2026-11-17-feat-batch-acceptance-edits
 workflow: fr-goal@1
 branch: feat/batch-acceptance-edits
 started: '2026-11-17T08:57:12+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -124,8 +124,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-17T14:06:03+00:00'
+    state: done
+    at: '2026-11-17T14:23:09+00:00'
     units:
       step/lens-review:
         attempts:
@@ -133,6 +133,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: fc61d7be-c481-42e8-b2b2-c991f2597c79
+          returned: '2026-11-17T14:23:09+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=a210fe635e152604d,errors=a1e01e4b33e1d9be5,tests=aad06d7c654225665
+          findings: l-docs-accuracy-r1,l-docs-accuracy-r2,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4
+          lenses: docs-accuracy=14:l-docs-accuracy-r1,l-docs-accuracy-r2;errors=20:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4;tests=26:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4
   deliver:
     state: pending
 fr_version: 8.1.2
