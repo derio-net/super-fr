@@ -7513,6 +7513,11 @@ batches:
     - super-fr#1419
   - kind: post_merge
     at: '2026-11-17T09:05:30.602035Z'
+  - kind: closeout
+    at: '2026-11-17T09:14:25.430708Z'
+    runner: herdr
+    handle: w3H:p7
+    archive: chore/closeout-2026-11-17-3
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
@@ -8288,3 +8293,10 @@ closeouts:
   handle: w3H:p7
   planned:
   - workspace-identity
+  pr: 1530
+  head: 4f618093fd01f616484eac2422c8113a0e38c25b
+  members:
+  - workspace-identity
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-workspace-identity.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-workspace-identity.md"
