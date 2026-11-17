@@ -13,7 +13,7 @@ from pathlib import Path
 import fr.artifacts  # noqa: F401  (registration rides on the package import)
 import pytest
 from fr.acceptance.amend import merged_row_edits, outside_merged_row_edits
-from fr.acceptance.fold import clear_fold_cache, default_ref_fold
+from fr.acceptance.fold import clear_fold_cache, default_ref_fold, fold_texts
 from fr.artifacts.commit import commit_migration
 from fr.artifacts.runner import run_migrations
 from fr.cli import app
@@ -140,3 +140,47 @@ def test_a_real_edit_of_a_renamed_row_is_still_reported(
     assert any("row r edited in place" in e for e in found), found
     res = _check(root, monkeypatch)
     assert res.exit_code != 0, res.output
+
+
+BETA = "2026-01-02-beta"
+
+
+def test_a_conflicting_pair_does_not_unspell_another_features_rename(tmp_path: Path) -> None:
+    """l-errors-r2: the default ref holds beta's two spellings defining row b
+    differently (a `SpellingConflictError`); beta's pair is read as it is, and alpha's
+    rename is still read by its one spelling, so it reports no edit."""
+    beta = _frag(BETA, _row("b", "b works"))
+    beta_design = _frag(f"{BETA}-design", _row("b", "b is fine"))
+    files = {
+        f"{SLUG}-design.yaml": DESIGN,
+        f"{BETA}.yaml": beta,
+        f"{BETA}-design.yaml": beta_design,
+    }
+    bare = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
+    root = tmp_path / "widget"
+    (root / FRAGMENTS_REL).mkdir(parents=True)
+    for name, text in files.items():
+        (root / FRAGMENTS_REL / name).write_text(text)
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.email", "t@example.com")
+    _git(root, "config", "user.name", "T")
+    _git(root, "remote", "add", "origin", str(bare))
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "feat: alpha and beta")
+    _git(root, "push", "-q", "-u", "origin", "main")
+    _git(root, "remote", "set-head", "origin", "main")
+    _git(root, "checkout", "-q", "-b", "feat/b")
+    # beta reconciled by hand: its -design file folded into beta.yaml.
+    (root / FRAGMENTS_REL / f"{BETA}.yaml").write_text(beta)
+    _git(root, "rm", "-q", f"{FRAGMENTS_REL}/{BETA}-design.yaml")
+    _git(root, "commit", "-qam", "reconcile beta")
+    report = run_migrations(root, dry_run=False)
+    assert report.ok, report.failed
+    assert commit_migration(root, report).committed
+    assert not (root / FRAGMENTS_REL / f"{SLUG}-design.yaml").exists()
+    # The default ref does not fold (row b defined twice), so the fold of it is not
+    # what is under test here: `merged_row_edits` reads only that one exists.
+    clear_fold_cache()
+    found = merged_row_edits(root, fold_texts({}), "origin/main")
+    assert not [e for e in found if SLUG in e], found

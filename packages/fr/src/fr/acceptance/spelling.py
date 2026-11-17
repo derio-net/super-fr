@@ -90,20 +90,22 @@ def respell(
 ) -> tuple[dict[str, Fragment], dict[Position, Position]]:
     """*frags* (fragment path → fragment) with every `<slug>-design.yaml` not in *keep*
     read as `<slug>.yaml`, merged with a `<slug>.yaml` beside it by the one rule; and
-    where each moved amendment now sits. On a conflict, *frags* as they are: the
-    repair, not a reader, reports it."""
+    where each moved amendment now sits. A pair in conflict is read as it is (the
+    repair, not a reader, reports it); every other pair is still respelled, so one
+    conflict never makes another feature's rename read as a removal."""
     out = {p: f for p, f in frags.items() if p in keep or _old_spelling(p, f) is None}
     moved: dict[Position, Position] = {}
-    try:
-        for path, frag in sorted(frags.items()):
-            slug = _old_spelling(path, frag)
-            if slug is None or path in keep:
-                continue
-            target = str(PurePosixPath(path).with_name(f"{slug}.yaml"))
+    for path, frag in sorted(frags.items()):
+        slug = _old_spelling(path, frag)
+        if slug is None or path in keep:
+            continue
+        target = str(PurePosixPath(path).with_name(f"{slug}.yaml"))
+        try:
             out[target], positions = _merge(out.get(target), frag, slug)
-            moved.update({(path, k): (target, j) for k, j in enumerate(positions)})
-    except SpellingConflictError:
-        return dict(frags), {}
+        except SpellingConflictError:
+            out[path] = frag  # this pair as it is; `<slug>.yaml` stays as it was
+            continue
+        moved.update({(path, k): (target, j) for k, j in enumerate(positions)})
     return dict(sorted(out.items())), moved
 
 
