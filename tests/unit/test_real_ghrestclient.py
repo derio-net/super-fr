@@ -891,3 +891,62 @@ def test_probe_200_and_failure() -> None:
         raise GhError("HTTP 403: rate limit", stderr="HTTP 403", returncode=1)
 
     assert RealGhRestClient(run=boom).probe("p", 'W/"e"') == (True, None)
+
+
+# ------------------------------------------- the author association (triage-intake R1)
+
+
+def _stub_pages(client: RealGhRestClient, pages: list[list[dict[str, Any]]]) -> list[str]:
+    """Answer `client._api` from *pages* in order (an empty list past the end); return the
+    routes it was asked for."""
+    asked: list[str] = []
+
+    def api(route: str, **_: Any) -> Any:
+        asked.append(route)
+        return pages[len(asked) - 1] if len(asked) <= len(pages) else []
+
+    client._api = api  # type: ignore[method-assign]
+    return asked
+
+
+def test_issue_associations_drops_prs_nulls_and_upper_cases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(RealGhRestClient, "PER_PAGE", 3)
+    client = RealGhRestClient(run=lambda argv: "[]")
+    asked = _stub_pages(
+        client,
+        [
+            [
+                {"number": 1, "author_association": "none"},
+                {"number": 2, "author_association": "MEMBER", "pull_request": {"url": "u"}},
+                {"number": 3, "author_association": None},
+            ],
+            [{"number": 4, "author_association": "owner"}],
+        ],
+    )
+    got = client.issue_associations(REPO, "open", 10)
+    # PR #2 excluded; a null association (#3) is absent, never "NONE" and never admitted.
+    assert got == {1: "NONE", 4: "OWNER"}
+    assert asked == [
+        f"repos/{REPO}/issues?state=open&per_page=3&page=1",
+        f"repos/{REPO}/issues?state=open&per_page=3&page=2",
+    ]
+
+
+def test_issue_associations_limit_counts_issues_not_prs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(RealGhRestClient, "PER_PAGE", 3)
+    client = RealGhRestClient(run=lambda argv: "[]")
+    asked = _stub_pages(
+        client,
+        [
+            [
+                {"number": 1, "author_association": "NONE"},
+                {"number": 2, "author_association": "NONE", "pull_request": {}},
+                {"number": 3, "author_association": "MEMBER"},
+            ],
+            [{"number": 4, "author_association": "OWNER"}],
+        ],
+    )
+    assert client.issue_associations(REPO, "open", 2) == {1: "NONE", 3: "MEMBER"}
+    assert len(asked) == 1  # the limit was met on page one: no needless second read

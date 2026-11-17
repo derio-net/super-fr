@@ -4,7 +4,9 @@ These are contract tests: they verify the correct gh invocations
 are constructed, using mocked subprocess calls.
 """
 
+import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -824,3 +826,71 @@ class TestConditionalVisibility:
         gh.repo_visibility(run, None, "o/r")
         gh.repo_visibility(run, None, "o/other")
         assert seen[1] == ["api", "-i", "repos/o/other"]
+
+
+# ------------------------------------------- the author association (triage-intake R1)
+
+
+def test_the_gh_cli_issue_list_never_asks_for_author_association(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`gh issue list --json` rejects `authorAssociation`: it is dropped from the field
+    list, and every other field is kept, in order."""
+    calls: list[list[str]] = []
+
+    def run(args: list[str], **_: Any) -> str:
+        calls.append(args)
+        return "[]"
+
+    monkeypatch.setattr(gh, "_run_gh", run)
+    monkeypatch.setattr(gh, "_rest", lambda: None)
+    fields = "number,title,body,author,authorAssociation,labels"
+    gh.list_issues(repo="o/r", state="open", limit=5, fields=fields)
+    (argv,) = calls
+    sent = argv[argv.index("--json") + 1]
+    assert sent == "number,title,body,author,labels"
+    assert "authorAssociation" not in sent
+
+
+_ASSOC_JQ = '.[] | select(has("pull_request") | not) | "\\(.number)\t\\(.author_association)"'
+
+
+def test_the_gh_cli_association_read_sends_this_exact_jq(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def run(args: list[str], **_: Any) -> str:
+        calls.append(args)
+        return ""
+
+    monkeypatch.setattr(gh, "_run_gh", run)
+    monkeypatch.setattr(gh, "_rest", lambda: None)
+    gh.issue_associations(repo="o/r", state="open", limit=5)
+    (argv,) = calls
+    assert argv[argv.index("--jq") + 1] == _ASSOC_JQ
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq is not installed")
+def test_the_association_jq_drops_a_pull_request_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The filter itself, run by the real `jq` over a captured-shape page that holds a PR."""
+    page = [
+        {"number": 1, "author_association": "NONE"},
+        {"number": 2, "author_association": "MEMBER", "pull_request": {"url": "u"}},
+        {"number": 3, "author_association": None},
+    ]
+    done = subprocess.run(
+        ["jq", "-r", _ASSOC_JQ], input=json.dumps(page), capture_output=True, text=True, check=True
+    )
+    assert done.stdout.splitlines() == ["1\tNONE", "3\tnull"]
+    monkeypatch.setattr(gh, "_run_gh", lambda *a, **k: done.stdout)
+    monkeypatch.setattr(gh, "_rest", lambda: None)
+    assert gh.issue_associations(repo="o/r", state="open", limit=9) == {1: "NONE"}
+
+
+def test_the_gh_cli_association_limit_counts_kept_issues_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = "1\tNONE\n2\tnull\n3\tOWNER\n4\tMEMBER\n5\tNONE\n"
+    monkeypatch.setattr(gh, "_run_gh", lambda *a, **k: out)
+    monkeypatch.setattr(gh, "_rest", lambda: None)
+    got = gh.issue_associations(repo="o/r", state="open", limit=2)
+    assert got == {1: "NONE", 3: "OWNER"}
