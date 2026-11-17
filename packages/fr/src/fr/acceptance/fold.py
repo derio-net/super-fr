@@ -35,12 +35,12 @@ import subprocess
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from fr.acceptance.fragment import FRAGMENTS_DIR, Amendment, Fragment, SetStatus, parse_fragment
 from fr.acceptance.model import LEVELS, AcceptanceError, LocalStamp, Matrix, Row
-from fr.acceptance.spelling import respell
+from fr.acceptance.spelling import DESIGN_SUFFIX, design_slug, respell
 
 if TYPE_CHECKING:
     from fr.artifacts.paths import ArtifactSpace
@@ -196,26 +196,58 @@ def _tip_fragments(run: GitRunner, sha: str) -> dict[str, Fragment]:
     }
 
 
-def _amendment_list(text: str | None) -> list[object]:
-    """The raw `amendments:` entries of a historical blob; lenient, because an old
-    revision is only compared, never validated."""
+def _blob_parts(text: str | None) -> tuple[object, list[object]]:
+    """(the `feature:`, the raw `amendments:` entries) of a historical blob; lenient,
+    because an old revision is only compared, never validated."""
     if text is None:
-        return []
+        return None, []
     import yaml
 
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError:
-        return []
-    amendments = data.get("amendments") if isinstance(data, dict) else None
-    return amendments if isinstance(amendments, list) else []
+        return None, []
+    if not isinstance(data, dict):
+        return None, []
+    amendments = data.get("amendments")
+    return data.get("feature"), amendments if isinstance(amendments, list) else []
+
+
+def _merge_raw(primary: list[object], design: list[object]) -> list[object]:
+    """Two raw amendment lists merged by `fr.acceptance.spelling.merge_spellings`'s
+    order: *primary*'s, then each of *design*'s not identical to a free copy in it."""
+    free = list(primary)
+    extra: list[object] = []
+    for entry in design:
+        if entry in free:
+            free.remove(entry)
+        else:
+            extra.append(entry)
+    return [*primary, *extra]
+
+
+def _old_spellings(fragments: dict[str, Fragment]) -> dict[str, str]:
+    """Tip `<slug>.yaml` -> the `<slug>-design.yaml` beside it whose history it
+    continues (the repair renamed or merged it), when the tip no longer holds that."""
+    out: dict[str, str] = {}
+    for path in fragments:
+        p = PurePosixPath(path)
+        old = str(p.with_name(f"{p.stem}{DESIGN_SUFFIX}.yaml"))
+        if old not in fragments:
+            out[path] = old
+    return out
 
 
 def _introductions(
     run: GitRunner, sha: str, fragments: dict[str, Fragment]
 ) -> dict[tuple[str, int], int]:
     """(fragment path, amendment index) -> the position, in the default ref's
-    first-parent history, of the commit that introduced that amendment."""
+    first-parent history, of the commit that introduced that amendment.
+
+    A tip `<slug>.yaml` is followed through its spelling (spec
+    2026-11-17-batch-acceptance-edits R17, review p1-r1): at every commit it and the
+    `<slug>-design.yaml` it replaced are ONE fragment, their amendments merged by
+    `merge_spellings`'s order, so the repair commit introduces nothing."""
     shallow = _checked(run(["rev-parse", "--is-shallow-repository"], None), "rev-parse")
     if shallow.decode().strip() == "true":
         raise FoldHistoryError(
@@ -229,6 +261,7 @@ def _introductions(
                 "log",
                 "-m",
                 "--first-parent",
+                "--no-renames",
                 "--reverse",
                 "--format=commit %H",
                 "--name-only",
@@ -240,23 +273,38 @@ def _introductions(
         ),
         "log",
     ).decode()
+    amended = [p for p, f in fragments.items() if f.amendments]
+    olds = {p: o for p, o in _old_spellings(fragments).items() if p in amended}
+    names = {p: p for p in amended} | {o: p for p, o in olds.items()}
     commits: list[str] = []
     touched: dict[str, list[int]] = {}
     for line in log.splitlines():
         if line.startswith("commit "):
             commits.append(line.removeprefix("commit ").strip())
-        elif line and commits and line in fragments:
-            positions = touched.setdefault(line, [])
+        elif line and commits and line in names:
+            positions = touched.setdefault(names[line], [])
             if not positions or positions[-1] != len(commits) - 1:
                 positions.append(len(commits) - 1)
-    amended = [p for p, f in fragments.items() if f.amendments]
-    specs = [(path, pos) for path in amended for pos in touched.get(path, [])]
-    texts = _cat(run, [f"{commits[pos]}:{path}" for path, pos in specs])
-    lists = [_amendment_list(t) for t in texts]
+    specs = [
+        (path, pos, name)
+        for path in amended
+        for pos in touched.get(path, [])
+        for name in (path, *((olds[path],) if path in olds else ()))
+    ]
+    texts = _cat(run, [f"{commits[pos]}:{name}" for _, pos, name in specs])
+    parts = {(name, pos): _blob_parts(t) for (_, pos, name), t in zip(specs, texts, strict=True)}
     out: dict[tuple[str, int], int] = {}
     last = max(len(commits) - 1, 0)
     for path in amended:
-        history = [(pos, got) for (q, pos), got in zip(specs, lists, strict=True) if q == path]
+        history: list[tuple[int, list[object]]] = []
+        for pos in touched.get(path, []):
+            got = parts[(path, pos)][1]
+            if path in olds:
+                feature, design = parts[(olds[path], pos)]
+                name = PurePosixPath(olds[path]).name
+                if isinstance(feature, str) and design_slug(name, feature) is not None:
+                    got = _merge_raw(got, design)
+            history.append((pos, got))
         tip = history[-1][1] if history else []
         for k in range(len(fragments[path].amendments)):
             # By value, not list position (review pr1408-r8): the (n+1)-th copy of
