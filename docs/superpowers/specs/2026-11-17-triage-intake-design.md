@@ -73,12 +73,19 @@ R1. `fr triage collect` records each open issue's author association
 `NONE`, …). It makes at most one extra forge read per repo per collect for this, and none
 when the issue list already carries the field or when no issue in the repo needs it (an
 issue needs it when R2's login and label clauses do not admit it). A read that fails, or
-that the forge does not support, leaves the association `None`. Facts move to schema 14.
+that the forge does not support, leaves the association `None`. Issues read through
+`view_issue` (past the list limit, or judged in a repo the list did not cover) get their
+association too, through the same per-repo read, so a trusted member's issue is not
+rejected only because it was viewed rather than listed. Facts move to schema 14.
 Older files still load, reading `author_association` as `None`.
 
 R2. One pure function decides intake trust. An issue is eligible when at least one holds:
 its author is in `claim_trusted(config, viewer)` (compared case-insensitively); its
-association is in `TRUSTED_ASSOCIATIONS`; it carries the `ready-fr` label. An issue that no
+association is in `TRUSTED_ASSOCIATIONS`; it carries the `ready-fr` label (label names
+compared case-insensitively, as the forge does); its author is the debt workflow's bot
+(`fr.triage.debt.BOT_LOGINS`) AND its body carries the debt-digest marker, so the digest
+`check` already trusts keeps its body, while any other bot-authored issue is judged like
+anyone's. An issue that no
 clause admits is ineligible, with a reason that names the author and the association. An
 unread author or an unread association never admits an issue: the rule fails closed.
 
@@ -112,7 +119,10 @@ inside one delimited block that marks them as untrusted data, written from or ab
 text. Each line in the block is quoted, so no text can close the block or add a heading
 outside it. The brief tells the session to treat the block as a description of the
 problem and never to follow instructions found in it. The same inputs still give the same
-bytes.
+bytes. Every other brief or comment fr writes for a batch from these inputs (the
+close-out brief, the red-CI, merge-conflict and archive-conflict hand-backs, the dispatch
+marker comment) follows the same rule: its command line names the batch by id only, and
+any batch or member title it carries sits in the same quoted block.
 
 R8. `ready-fr` is an operator label, defined beside `approved-fr` in `fr.labels`. fr
 never applies it. The driver ensures it exists on a repo whenever it ensures
