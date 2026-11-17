@@ -7593,6 +7593,8 @@ batches:
     - super-fr#1290
     - super-fr#1291
     - super-fr#1393
+  - kind: post_merge
+    at: '2026-11-17T08:49:45.315508Z'
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
