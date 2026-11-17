@@ -757,3 +757,10 @@ amendments:
       fr triage collect only reports the repos that lack it.
     why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
       and the first batch dispatch creates it'
+  - row: approval-label-created
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_label_board.py#test_collect_creates_the_label_on_each_collected_repo
+    why: 'gh#1268: fr triage collect is a read; it reports repos lacking approved-fr
+      and the first batch dispatch creates it'
