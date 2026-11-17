@@ -240,3 +240,8 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-17-triage-intake-p3 created=2026-11-17T09:21:42+00:00 -->
 ### phase-split-2026-11-17-triage-intake-p3 · decision · ask: #1406 and #1299 (R10-R12), two small adapter-boundary fixes reviewed together
+
+<!-- fr:journal kind=finding scope=spec id=followup-cancel-no-checkout created=2026-11-17T21:18:26+00:00 state=open review_scope=out -->
+### followup-cancel-no-checkout · finding [open] (reviewer: out of scope) · batch cancel of a never-dispatched batch still needs --checkout (gh#803 tracking gate); #1406's second side ask
+
+Decision d3-cancel-scope (operator, round 1): this change keeps the tracking gate and makes the dry run name the --checkout that --yes needs (R11). Letting a batch that was never dispatched cancel with no checkout is a separate change, filed as a follow-up.
