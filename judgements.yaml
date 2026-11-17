@@ -7633,7 +7633,6 @@ batches:
   - workspace-identity
   - placement-truth
   - release-truth
-  - acceptance-edits
   bump: minor
 - id: triage-collect
   title: Triage collect and settle correctness
