@@ -68,6 +68,7 @@ anything: a fix that stops new damage but leaves the old damage in place is half
   with one plainly named reason instead of the codec error.
 - **d6 (#1154).** One shared helper module offers a set listing and a one-path probe; the
   four non-triage call sites use it, `gitseam` keeps its own.
+- **d8 (#1394, scope; asked at implement).** The recovery first read row definitions, not the fold: 9 of the 17 rows had been re-noted on 2026-11-14. The 4 `walk-owed` ones get their old text spliced in before the tracker; the 5 `walked` ones are left alone.
 - **d7 (verification).** CI tests verify every row; no walk, gate `developer`, no Test
   Plan.
 
@@ -75,7 +76,7 @@ anything: a fix that stops new damage but leaves the old damage in place is half
 
 R1. `fr acceptance amend --id <row> --op reword --origin <ref>` given neither `--acceptance` nor `--capability` rewrites only the row's `origin`: the row's own `acceptance` and `capability` in its fragment stay byte-identical, even when a pending `reword` amendment of that row exists.
 R2. An origin-only reword still refuses a merged row, an unknown row and a non-`reword` op, as today, and writes nothing when it refuses.
-R3. Each of the 17 rows whose note the gate-backfill sweep replaced with a bare `tracked by derio-net/super-fr#N`, and whose note before the sweep was more than `post-merge walk owed (gate backfill)`, carries the note it held before the sweep followed by `; tracked by derio-net/super-fr#N`, with its status, levels and `issues:` unchanged.
+R3. Of the 17 rows whose note the gate-backfill sweep replaced with a bare `tracked by derio-net/super-fr#N`, and whose note before the sweep was more than `post-merge walk owed (gate backfill)`, each row whose effective note is still that bare note (8 rows) carries the note it held before the sweep followed by `; tracked by derio-net/super-fr#N`; each `walk-owed` row whose later note still opens with that bare tracker (4 rows: ci-under-time-budget, debt-archive-pr-weekly, debt-weekly-issue-rename, exit-gates-release-gating) has that opening replaced by `<old note>; tracked by derio-net/super-fr#N.`, keeping the rest of its note. The 5 rows later `walked` keep their walk notes (decision d8). Status, levels and `issues:` are unchanged.
 R4. The restore is written as `set-status` amendments in this feature's fragment (the rows are merged), never as in-place edits of their fragments; the 16 rows whose old note was only the gate-backfill boilerplate are not touched.
 R5. When a spec's bytes are not valid UTF-8, every read the migration runner makes of it — the stamp read (`read_verbatim`) and the Test Plan heading repair's predicate and rewrite — fails with the reason `<path> is not UTF-8 text (byte 0x<hh> at offset <n>)`; the file is left byte-identical.
 R6. A `docs/acceptance/matrix.yaml` that is not valid UTF-8 fails the same way, with the same reason shape, in its stamp read and in the retiring split hop (`fr.artifacts.matrix_fragments`, including the `#L<n>` conversion it applies), and is left byte-identical. (`MATRIX_NAME_ANCHORS_REPAIR` is not registered since the matrix kind retired; its own `read_text` calls go through the same reader.)
