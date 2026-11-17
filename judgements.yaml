@@ -7685,6 +7685,11 @@ batches:
     checks:
     - 2 failing check(s)
     delivered: session
+  - kind: approval
+    at: '2026-11-17T15:37:32.342893Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+    voided_at: a5952ce0f686bde18358a4866c6d39fb6f1b5ed6
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
