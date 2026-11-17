@@ -112,6 +112,37 @@ def test_a_forge_error_warns_too() -> None:
     assert said[0].startswith("warning:")
 
 
+def test_a_failing_approved_label_ensure_still_creates_ready_fr_with_a_warning() -> None:
+    """One label that cannot be created never hides the other (triage-intake R8)."""
+    from fr.gh import GhError
+
+    class RefusesApproved(Labels):
+        def ensure_labels(self, repo: str, labels: list[Any]) -> None:
+            if any(getattr(x, "name", x) == "approved-fr" for x in labels):
+                raise GhError("HTTP 403", returncode=1)
+            super().ensure_labels(repo, labels)
+
+    client, said = RefusesApproved(), []  # type: ignore[var-annotated]
+    ensure_approval_label(client, "o/r", said.append, seen=set())
+    assert client.created == {"ready-fr"}
+    assert client.calls[-2:] == ["exists o/r ready-fr", "create o/r ['ready-fr']"]
+    assert len(said) == 2
+    assert said[0].startswith("warning: cannot ensure label approved-fr on o/r")
+    assert said[1] == "created label ready-fr on o/r"
+
+
+def test_an_unreadable_labels_policy_says_one_line_per_label_and_writes_nothing() -> None:
+    """`_labels_off`'s second branch: the settings file is unreadable, so the policy is
+    unknown and fr writes no label, one line for each of the two."""
+    client, said = Labels(), []  # type: ignore[var-annotated]
+    client.files[".fr/settings.yaml"] = "forge: [not, a, mapping\n"
+    ensure_approval_label(client, "o/r", said.append, seen=set())
+    assert client.calls == []
+    assert len(said) == 2
+    assert said[0].startswith("label approved-fr not ensured on o/r: ")
+    assert said[1].startswith("label ready-fr not ensured on o/r: ")
+
+
 def test_collect_creates_the_label_on_each_collected_repo(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
