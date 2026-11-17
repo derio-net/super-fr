@@ -27,6 +27,8 @@ rows:
     - spec:2026-11-17-batch-acceptance-edits#R13
     - spec:2026-11-17-batch-acceptance-edits#R14
     - spec:2026-11-17-batch-acceptance-edits#R15
+    - spec:2026-11-17-batch-acceptance-edits#R16
+    - spec:2026-11-17-batch-acceptance-edits#R17
     levels: {}
     status: not-implemented
     notes: ''
