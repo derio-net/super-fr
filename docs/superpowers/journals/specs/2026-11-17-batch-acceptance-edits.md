@@ -81,3 +81,116 @@ ignored_paths and is_ignored in one module; acceptance_cmd, artifacts/commit, is
 ### d7-verification · decision · CI tests verify every row; no walk, gate developer, no Test Plan
 
 Operator answer, round 1 question 7 (recommended option).
+
+<!-- fr:journal kind=finding scope=spec id=s-r1 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r1 · finding [open] (reviewer: in scope) · R5/R7 cannot hold: the spec kind's stamp read decodes the file before any repair predicate runs
+
+`read_verbatim` (registry.py:148) raises UnicodeDecodeError in `_chain_for` before `_applies` runs, so routing only the repairs changes nothing the operator sees. Route `read_verbatim` through the named decode and use one formatter at the runner's seven `type(e).__name__` sites.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r2 · finding [open] (reviewer: in scope) · R6 targets the matrix_anchors repair, which is not registered; the live non-UTF-8 matrix path is the retiring split hop
+
+matrix_anchors.py:123-126: not registered since the matrix kind retired. A non-UTF-8 matrix.yaml fails in the stamp read and the 5 -> 6 split hop (`conversions`, matrix_fragments.py:258/:270). Point R6 there and test through run_migrations.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r3 · finding [open] (reviewer: in scope) · The -design fragment repair trips R16's merged-row-edit check, which is keyed by fragment path
+
+amend.py:127-189: `merged_row_edits` iterates the default ref's fragments by path; after the rename every merged row of `<slug>-design.yaml` reads as removed, so check/deliver refuse, on consumer branches and in main's CI. The R16 check must read a merged `-design` fragment as its `<slug>.yaml` spelling.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r4 · finding [open] (reviewer: in scope) · Fragment repair: declare the merge target as a companion; removal staging already works
+
+Declare `<slug>.yaml` as a companion so the uncommitted-changes veto holds it (runner.py:564-595); the deleted `-design` path is the action's own path, which changed_paths includes and commit_paths stages (commit.py:997-1007, :1039): no new runner support.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r5 · finding [open] (reviewer: in scope) · The `origin_only` flag on AmendmentItem breaks every amendment and changes the record shape
+
+`model_dump(exclude_none=True)` would carry `origin_only=False` into the closed-world Amendment for every item, and a record entry could set it (a shape change). Fill from the row's own definition in its pending fragment instead; no model change.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r6 · finding [open] (reviewer: in scope) · Default-branch warning compares `main` with `origin/main`, so it never fires
+
+`default_ref_name`/`remote_default_ref` return `origin/main`; strip the remote prefix, read `fr.git.remote_default_ref` directly, and state the no-remote / GitRefusal case (no warning).
+
+<!-- fr:journal kind=finding scope=spec id=s-r7 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r7 · finding [open] (reviewer: in scope) · R8's shared check-ignore helper has no error contract
+
+The four sites differ on exit 128, missing git and output parsing (whitespace split, quoted non-ASCII). Specify the error contract, use -z, and pin each site's error behaviour in a test.
+
+<!-- fr:journal kind=finding scope=spec id=s-r8 created=2026-11-17T09:38:26+00:00 state=open review_scope=in -->
+### s-r8 · finding [open] (reviewer: in scope) · Spec-slug run ids collide with the later plan-slug id of the same feature
+
+A spec-only adoption named after the spec stem takes the id the plan's later adoption needs, and `--supersede` cannot match it (it keys on emitted.plan, adopt.py:879-898).
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-17T09:38:26+00:00 -->
+### spec-review-1 · review · independent spec review: 8 findings
+
+findings: s-r1, s-r2, s-r3, s-r4, s-r5, s-r6, s-r7, s-r8 (all in scope). Decisions d1-d7 each honoured; no contradiction found. Every cited file:line verified by the reviewer; the orchestrator re-checked s-r1 (registry.py:148), s-r2 (matrix_anchors.py:123-126), s-r3 (amend.py:127-160) and s-r6 (git.py:181) before fixing.
+
+<!-- fr:journal kind=lens scope=spec id=lens-errors-1 created=2026-11-17T09:38:26+00:00 lens=errors step=spec-review -->
+### lens-errors-1 · lens · The change rewrites failure reporting (non-UTF-8 refusals, the runner's formatter) and the check-ignore helper's fail-toward behaviour at four sites
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-17T09:38:26+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · Fold equality and the merged-row check need fixtures holding a merged -design fragment on a default ref, which unit fixtures easily skip
+
+<!-- fr:journal kind=finding scope=spec id=s-r1-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r1 -->
+### s-r1-resolved · finding [fixed] · resolves s-r1: R5/R7 cannot hold: the spec kind's stamp read decodes the file before any repair predicate runs
+
+R5/R7 now cover the stamp read; design C routes read_verbatim through the named decode and adds one runner formatter for all seven sites.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r2 -->
+### s-r2-resolved · finding [fixed] · resolves s-r2: R6 targets the matrix_anchors repair, which is not registered; the live non-UTF-8 matrix path is the retiring split hop
+
+R6 now names the matrix stamp read and the retiring split hop (conversions included); design C routes those reads through the named decode.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r3 -->
+### s-r3-resolved · finding [fixed] · resolves s-r3: The -design fragment repair trips R16's merged-row-edit check, which is keyed by fragment path
+
+Added R17; design F keys merged_row_edits/outside_merged_row_edits by the one spelling, merging a tip's -design fragment by the repair's rule.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r4 -->
+### s-r4-resolved · finding [fixed] · resolves s-r4: Fragment repair: declare the merge target as a companion; removal staging already works
+
+Added R16 and the companions declaration; design F states removal staging needs no runner change and a test pins it.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r5 -->
+### s-r5-resolved · finding [fixed] · resolves s-r5: The `origin_only` flag on AmendmentItem breaks every amendment and changes the record shape
+
+Design A now fills from the row's own pending definition; no model or shape change.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r6 -->
+### s-r6-resolved · finding [fixed] · resolves s-r6: Default-branch warning compares `main` with `origin/main`, so it never fires
+
+R12 and design E strip the remote prefix, read fr.git.remote_default_ref directly, and warn nothing without a nameable default ref.
+
+<!-- fr:journal kind=finding scope=spec id=s-r7-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r7 -->
+### s-r7-resolved · finding [fixed] · resolves s-r7: R8's shared check-ignore helper has no error contract
+
+R8 and design D give the error contract (-z, exit 0/1 answers, empty set / False otherwise) and pin each site's behaviour in a test.
+
+<!-- fr:journal kind=finding scope=spec id=s-r8-resolved created=2026-11-17T09:38:26+00:00 state=fixed resolves=s-r8 -->
+### s-r8-resolved · finding [fixed] · resolves s-r8: Spec-slug run ids collide with the later plan-slug id of the same feature
+
+R9 and design E keep the branch-derived id for spec-only adoption, so it never takes a plan-slug id.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-17T09:38:29+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  acceptance-amend-origin-only-keeps-statement: none
+  adopt-default-branch-warning: none
+  adopt-run-id-from-plan-slug: none
+  fragment-design-spelling-repair: none
+  spec-repairs-name-undecodable-files: none
+row_kinds:
+  acceptance-amend-origin-only-keeps-statement: none
+  adopt-default-branch-warning: none
+  adopt-run-id-from-plan-slug: none
+  fragment-design-spelling-repair: none
+  spec-repairs-name-undecodable-files: none
+run_gate: developer
+run_kind: candidate
+```
