@@ -7744,6 +7744,8 @@ batches:
     - super-fr#1210
     - super-fr#1268
     - super-fr#1300
+  - kind: post_merge
+    at: '2026-11-17T15:13:07.618288Z'
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
