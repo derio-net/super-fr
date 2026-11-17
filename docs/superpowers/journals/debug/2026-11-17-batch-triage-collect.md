@@ -10,3 +10,8 @@ triage_cmd.collect_command loops facts.collected through ensure_approval_label a
 ### d559a56eaff2 · repro · #1197: render._pr_row counts mergeStateStatus BLOCKED as a conflict
 
 render.py:611 conflict = merge in {DIRTY, BLOCKED} or mergeable == CONFLICTING. mergeability.conflicting() is the one predicate (exit-gates R19) and excludes BLOCKED (branch protection).
+
+<!-- fr:journal kind=repro scope=debug id=3f4804cd27c1 created=2026-11-17T09:03:15+00:00 -->
+### 3f4804cd27c1 · repro · #1210: scope retire never sees closed issues a retired scope holds
+
+scope_retire_command filters facts.issues to state == open. Dropping the filter alone fixes nothing: closed issues in facts carry no claims (collect reads comments for open issues only, and carried closed issues get claims: []). Closed claimed issues appear only in facts.stale_in_progress as state=held, with no signer recorded, so retire cannot tell whose they are.
