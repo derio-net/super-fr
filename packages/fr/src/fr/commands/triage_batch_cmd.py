@@ -1165,6 +1165,20 @@ def _fresh_config(
     read raises `DefaultBranchUnknown` (the merge path's, R13) rather than a `GitError`."""
     try:
         checkout.fetch()
+    except GitError as exc:
+        if not hold_unknown:
+            raise
+        raise DefaultBranchUnknown(owner_repo, exc) from exc
+    return _config_fresh(checkout, facts, owner_repo, hold_unknown=hold_unknown)
+
+
+def _config_fresh(
+    checkout: Checkout, facts: Facts, owner_repo: str, *, hold_unknown: bool = False
+) -> str:
+    """The §3.I rule without the fetch (triage-intake R9, #1213: the driver fetches once
+    per pass and checks here): resolve the default branch and compare the collected
+    `.fr/triage.yaml` with `origin/<default>`'s. Returns that ref."""
+    try:
         default = f"origin/{checkout.default_branch()}"
     except GitError as exc:
         if not hold_unknown:
@@ -3821,6 +3835,10 @@ class _Driver:
         # followed a successful `post_merge` in a repo that opted in (driver-sessions sr-7)
         self._restart: dict[str, Any] = {}
         self._merge: dict[str, MergeContext] = {}
+        self._allowed: dict[str, dict[str, Any]] = {}  # repo -> its merge methods, read at build
+        # per pass (triage-intake R9): repos whose origin this pass checked, and those held
+        self._ctx_checked: set[str] = set()
+        self._ctx_held: dict[str, DefaultBranchUnknown] = {}
         # The waves this process's previous pass found unfinished; None before its first
         # pass, so a wave already finished at start is never reported (R10).
         self._unfinished: frozenset[str] | None = None
@@ -4028,17 +4046,34 @@ class _Driver:
         return None
 
     def merge_ctx(self, facts: Facts, repo: str) -> MergeContext:
-        if repo not in self._merge:
-            client, checkout = self.client(facts, repo), self.checkout(repo)
+        """*repo*'s merge context, checked against origin once per pass (triage-intake R9,
+        #1213). The first use in a pass fetches (unless this pass already did) and re-checks
+        the triage config; a failure holds the repo for the rest of the pass (every later
+        use raises `DefaultBranchUnknown` at once, with no second fetch). Every use
+        refreshes what a pass's own verdict is: `ci_none`, `rules`, `version`, `method`."""
+        if repo in self._ctx_held:
+            raise self._ctx_held[repo]
+        client, checkout = self.client(facts, repo), self.checkout(repo)
+        if repo not in self._ctx_checked:
             try:
-                _fresh_config(checkout, facts, repo, hold_unknown=True)
+                if repo not in self._fetched:
+                    checkout.fetch()
+                    self._fetched.add(repo)
+                _config_fresh(checkout, facts, repo, hold_unknown=True)
+            except GitError as exc:
+                self._ctx_held[repo] = DefaultBranchUnknown(repo, exc)
+                raise self._ctx_held[repo] from exc
+            except DefaultBranchUnknown as exc:
+                self._ctx_held[repo] = exc
+                raise
             except TriageError as exc:  # main's config moved under the pass
                 raise ForgeReadError(str(exc), code=2) from exc
+            self._ctx_checked.add(repo)
+        if repo not in self._merge:
             try:
+                self._allowed[repo] = client.repo_merge_methods(repo)
                 method = choose_method(
-                    None,
-                    client.repo_merge_methods(repo),
-                    configured=facts.config_for(repo).merge_method,
+                    None, self._allowed[repo], configured=facts.config_for(repo).merge_method
                 )
             except UnsupportedForgeOperation as exc:
                 _fail(str(exc))
@@ -4055,10 +4090,17 @@ class _Driver:
                 method=method,
                 say=lambda line: None,  # the driver prints one line per action itself
             )
+        ctx = self._merge[repo]
         # Read each pass, as the pass's own verdict is: the context outlives a pass.
-        self._merge[repo].ci_none = self._ci_none(repo)
-        self._merge[repo].rules = self._base_rules(facts, repo)
-        return self._merge[repo]
+        ctx.ci_none = self._ci_none(repo)
+        ctx.rules = self._base_rules(facts, repo)
+        config = facts.config_for(repo)
+        ctx.version = config.version
+        try:  # the allowed methods were read at the build: no forge read here
+            ctx.method = choose_method(None, self._allowed[repo], configured=config.merge_method)
+        except TriageError as exc:
+            _fail(str(exc))
+        return ctx
 
     def _base_rules(self, facts: Facts, repo: str) -> BaseRules:
         """*repo*'s base branch's rules, once per repo per pass (merge-train-safety §D, R12)."""
@@ -5204,6 +5246,7 @@ class _Driver:
             ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._fetched = set()
+        self._ctx_checked, self._ctx_held = set(), {}
         self._rules = {}
         self._policies = {}
         self._unknown_said = set()
@@ -6510,7 +6553,10 @@ class _Driver:
         name = marker.runner if marker is not None else "hand"
         if name != "hand" and not self.adapter.carries(name):
             return f"{action.detail}; its session runs on {name}: left to that driver", False
-        default = self.merge_ctx(facts, repo).main
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # held for the pass (R9): the hand-back is owed again next pass
+            return f"{action.detail}; held: {repo} default branch unknown", False
+        default = ctx.main
         branch = (started.archive or "") if started is not None else ""
         brief = collected.handback_brief(
             pr=action.pr or 0, branch=branch, base=default, checks=action.checks

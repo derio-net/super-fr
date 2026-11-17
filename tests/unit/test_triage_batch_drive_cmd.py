@@ -2373,6 +2373,134 @@ def test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes(
     assert out.count(f"held: {REPO} default branch unknown (") == 1, out
 
 
+def test_a_failed_fetch_holds_the_repo_for_that_pass_only_and_fetches_once_per_pass(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """triage-intake R9 (#1213): every pass fetches the repo's origin once, however many
+    readers ask. A pass whose fetch fails holds the repo with ONE warning for all its
+    merge-context uses and finishes; the next pass whose fetch works acts again."""
+    from fr.triage.gitseam import GitError
+
+    world.issues.update({1: "open", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1])
+    world.pr(102, "feat/batch-b2", [2])
+    pending = [{"name": "test", "bucket": "pending"}]
+    world.checks.update({101: pending, 102: pending})  # ready only from pass 2 on
+    _state(
+        tmp_path, world,
+        _batch("b1", 1, events=_dispatch_event("b1")),
+        _batch("b2", 2, events=_dispatch_event("b2")),
+    )  # fmt: skip
+    broken = [False]
+    fetches: list[bool] = []
+
+    def _fetch() -> None:
+        fetches.append(broken[0])
+        if broken[0]:
+            raise GitError("could not read from remote repository")
+
+    monkeypatch.setattr(checkout, "fetch", _fetch)
+    seen: list[tuple[int, int, list[tuple[int, str, str]]]] = []
+
+    def _nap(seconds: float) -> None:
+        seen.append((len(fetches), sum(fetches), list(world.merged)))
+        if len(seen) == 3:
+            raise _StopError
+        for n in (101, 102):  # green from pass 2 on
+            world.checks[n] = [{"name": "test", "bucket": "pass"}]
+        broken[0] = len(seen) == 1  # pass 2's fetch fails, pass 3's works
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert seen[0][2] == [] and seen[1][2] == []  # pending, then held: nothing merged
+    assert seen[1][1] >= 1  # pass 2's fetch was tried, and failed
+    assert len(seen[2][2]) >= 1, "the repo was not acted on again"
+    assert result.output.count(f"held: {REPO} default branch unknown (") == 1, result.output
+    # Pass 1: the merge context reuses the fetch a reader made first: one fetch in all.
+    assert seen[0][0] == 1, seen
+
+
+def test_the_merge_context_follows_each_passs_config_without_a_second_methods_read(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: `method` and `version` are refreshed every use from the pass's
+    facts; the repo's allowed merge methods are read once, at the build."""
+    from fr.triage.model import TriageConfig
+
+    reads: list[str] = []
+
+    class _Client:
+        def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+            reads.append(repo)
+            return {"default": None, "allowed": ["squash", "merge"]}
+
+    class _Clone:
+        def __init__(self) -> None:
+            self.config: dict[str, Any] = {}
+            self.fetches = 0
+
+        def fetch(self) -> None:
+            self.fetches += 1
+
+        def default_branch(self) -> str:
+            return "main"
+
+        def show(self, ref: str, file: str) -> str | None:
+            return yaml.safe_dump(self.config)
+
+    clone = _Clone()
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: _Client())
+    monkeypatch.setattr(driver, "checkout", lambda repo: clone)
+    monkeypatch.setattr(driver, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(driver, "_base_rules", lambda facts, repo: BaseRules())
+
+    def _facts(cfg: dict[str, Any]) -> Any:
+        clone.config = cfg
+        return world.facts().model_copy(update={"config": {REPO: TriageConfig.model_validate(cfg)}})
+
+    version = {"source": {"file": "VERSION", "key": "v"}, "files": ["VERSION"], "set": "x"}
+    ctx = driver.merge_ctx(_facts({"merge_method": "squash"}), REPO)
+    assert (ctx.method, ctx.version) == ("squash", None) and clone.fetches == 1
+    driver.merge_ctx(_facts({"merge_method": "squash"}), REPO)
+    assert clone.fetches == 1  # checked once this pass
+    driver._fetched, driver._ctx_checked = set(), set()  # the next pass
+    ctx = driver.merge_ctx(_facts({"merge_method": "merge", "version": version}), REPO)
+    assert ctx.method == "merge" and ctx.version is not None
+    assert reads == [REPO] and clone.fetches == 2
+
+
+def test_a_held_repo_spends_no_close_out_hand_back(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: `_closeout_hand_back` reaches its default branch through the hold."""
+    from types import SimpleNamespace
+
+    from fr.triage.batch_drive import Action
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+
+    def _unknown(facts: Any, repo: str) -> Any:
+        raise triage_batch_cmd.DefaultBranchUnknown(repo, RuntimeError("no remote"))
+
+    monkeypatch.setattr(driver, "merge_ctx", _unknown)
+    member = SimpleNamespace(events=[])
+    monkeypatch.setattr(triage_batch_cmd, "_find", lambda batches, bid: member)
+    monkeypatch.setattr(triage_batch_cmd, "closeout_event", lambda batch: None)
+    judgements = SimpleNamespace(batches=[member], closeouts=[])
+    action = Action(kind="closeout-handback", batch="b1", detail="d", items=("b1",), key="x", pr=9)
+    line, did = driver._closeout_hand_back(action, world.facts(), judgements, REPO)  # type: ignore[arg-type]
+    assert did is False and line.startswith("d; held: ") and "default branch unknown" in line
+
+
 def test_no_origin_head_and_unreachable_origin_warns_once(
     tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
 ) -> None:
