@@ -7705,6 +7705,12 @@ batches:
     - super-fr#1461
   - kind: post_merge
     at: '2026-11-17T17:59:45.950443Z'
+  - kind: closeout
+    at: '2026-11-17T18:01:35.950626Z'
+    runner: herdr
+    handle: w3H:p8
+    run: 2026-11-17-feat-batch-acceptance-edits
+    archive: chore/closeout-2026-11-17-6
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
@@ -8455,3 +8461,26 @@ closeouts:
   handle: w3H:p8
   planned:
   - acceptance-edits
+  pr: 1537
+  head: 570afa5b7a4a879c79658e4183feedaeb0d47b36
+  members:
+  - acceptance-edits
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-17-batch-acceptance-edits.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-17-batch-acceptance-edits.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-17-batch-acceptance-edits-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-17-batch-acceptance-edits.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-17-batch-acceptance-edits.md"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-17-batch-acceptance-edits-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-17-feat-batch-acceptance-edits.yaml"
