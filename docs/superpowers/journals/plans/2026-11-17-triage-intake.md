@@ -378,3 +378,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1540.
 ### p3-r2-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1541] · resolves p3-r2: The retry assumes gh resolves all labels before mutating; unverified without a live gh (phase 3)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1541.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved-2 created=2026-11-17T21:17:51+00:00 state=open resolves=l-security-r2 tracked_by=https://github.com/derio-net/super-fr/issues/1542 -->
+### l-security-r2-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1542] · resolves l-security-r2: ready-fr admission is not pinned to content: the author can edit the issue after the label
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1542.
