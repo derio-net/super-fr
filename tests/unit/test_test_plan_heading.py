@@ -541,9 +541,8 @@ def test_describe_prints_a_not_utf8_reason_alone_and_others_with_their_type() ->
     from fr.artifacts import NotUtf8Error
     from fr.artifacts.runner import describe
 
-    assert describe(NotUtf8Error("p is not UTF-8 text (byte 0xff at offset 3)")) == (
-        "p is not UTF-8 text (byte 0xff at offset 3)"
-    )
+    codec = UnicodeDecodeError("utf-8", b"abc\xff", 3, 4, "invalid start byte")
+    assert describe(NotUtf8Error("p", codec)) == "p is not UTF-8 text (byte 0xff at offset 3)"
     assert describe(ValueError("boom")) == "ValueError: boom"
 
 
