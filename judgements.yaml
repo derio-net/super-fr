@@ -7511,6 +7511,8 @@ batches:
     - super-fr#1166
     - super-fr#1243
     - super-fr#1419
+  - kind: post_merge
+    at: '2026-11-17T09:05:30.602035Z'
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
