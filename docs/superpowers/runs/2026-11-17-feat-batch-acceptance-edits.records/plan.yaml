@@ -1,0 +1,36 @@
+schema_version: 12
+run: 2026-11-17-feat-batch-acceptance-edits
+step: plan
+outcome: done
+journal:
+  - kind: discovery
+    id: p1-restored-notes
+    phase: 1
+    title: The 17 notes to restore (#1394), recovered from docs/acceptance/matrix.yaml history
+    body: |
+      Each row's bare note is `tracked by derio-net/super-fr#<n>`; its last non-bare note in
+      `git log -- docs/acceptance/matrix.yaml` (commit in brackets) is restored as
+      `<old note>; tracked by derio-net/super-fr#<n>` (decision d4). The 16 rows whose old
+      note was `post-merge walk owed (gate backfill)` are left alone.
+
+      - acceptance-pipeline-rows (#1338) [da308981e]: reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the end-to-end toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap. Mechanics unit-pinned per-PR.
+      - ci-actions-dependabot-updates (#1339) [da308981e]: reclassified at the skipped split (spec 2026-10-11-debt-engine R7): dependabot.yml shape is unit-pinned; the first weekly Dependabot run is a post-merge observation still owed.
+      - ci-under-time-budget (#1340) [da308981e]: reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation is owed.
+      - debt-archive-pr-weekly (#1341) [da308981e]: Shipped in #1139: archive-pr unit- and integration-tested in CI; the real scheduled run on main is the post-merge Test Plan step 2.
+      - debt-weekly-issue-rename (#1381) [da308981e]: Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363 on main is the post-merge Test Plan step 1.
+      - exit-gates-collected-closeout (#1347) [1ace5ca85]: The collected close-out is unit-tested against a fake worktree and forge: the engine's per-batch steps, holds and one PR (test_triage_batch_closeout), the verb (test_triage_batch_closeout_cmd), and the driver's one-per-repo plan, shared-head attribution, ready-and-merge and single hand-back (test_triage_collected_closeout_drive). Live walk owed: one close-out over a real merged queue with a real housekeeping PR (Test Plan step 3). v6.0.0 was cut on 2026-10-31 via the release workflow version override (operator decision) with #1195 and #1217 gate:tester left held; this walk was deferred, not certified. A disposable two-batch rehearsal was started and paused unfinished; it is not evidence.
+      - exit-gates-release-gating (#1348) [c27211da7]: fr release status, release.py's RC/final decision (RC tag, pre-release, no fragment consumed; final once nothing waits), both RC spellings and RC-admitting floors are unit-tested against fake forges and temp git repos. Observed on super-fr itself: RC13-RC16 were cut as pre-releases consuming no fragment while #1195/#1217 waited (e.g. run 41007180324). Still owed: the held-gate RC then verified-gate final transition through the ordinary workflow, with installer channel checks (see docs/exit-gates-release-walk.md). v6.0.0 was cut on 2026-10-31 via the release workflow version override (operator decision) with #1195 and #1217 gate:tester left held; this walk was deferred, not certified. The final itself was the ungated --version path (run 41214190564, 13 fragments consumed), so it is not the gated transition.
+      - fr-goal-journal-handoff-complete (#1349) [da308981e]: walk-owed, not walked (p1-r2): the notes say the completeness bar was met live in the feature's own run, but name no dated evidence to record as a walk; render/check unit-pinned. Re-walk and record it with set-status --walk.
+      - fr-goal-main-session-cost (#1350) [da308981e]: reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both harnesses were walked live (PR #609, PR #679), but the row stays owed until #637 (Claude Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit binding until #636.
+      - fr-goal-subagent-per-phase (#1351) [da308981e]: walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch was demonstrated by the feature's own fr-goal run, but name no dated evidence to record as a walk; wiring unit-pinned. Re-walk and record it with set-status --walk.
+      - gitlab-selfhosted-host-targeting (#1352) [da308981e]: walk-owed, not walked (p1-r2): the notes record a live check from a checkout against a self-hosted GitLab (host redacted) but give no date to record a walk with; unit refs in CI. Re-walk and record it with set-status --walk.
+      - herdr-opencode-launch (#1353) [076151e5f]: RC10 unit coverage now checks OpenCode 2.1.4 default-variant normalization and fail-closed model mismatches. The actual RC10 fixture launch still failed during session confirmation and Herdr automatically closed its newly created tab; no managed launch pass is claimed, so a live walk remains owed. Startup-metadata unit replay now covers a narrowly fingerprinted incomplete frame to ready, finite timeout without submission, and draft/overlay/process/session/status refusals on repeated observations. Strict input admission is unchanged; the later diagnostic PASS is not a native launch or live-walk PASS. Status remains walk-owed. R1 deadline regressions additionally enforce rejection at/after expiry, no calls after expiry and remaining-time limits for each native startup observation; no live walk or status change.
+      - pages-acceptance-report-published (#1357) [f35dcfed0]: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+      - pages-deploy-survives-report-refusal (#1385) [4b74dd073]: Workflow shape unit-pinned and the placeholder script executed in the unit suite; a live deploy over a gate refusal has not been observed (it needs stale artifacts on main).
+      - pages-explainers-preserved (#1358) [f35dcfed0]: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+      - release-superseded-not-retried (#1360) [4abfd2aaa]: Superseded outcomes pinned by unit tests against a real bare remote (moved base, real non-fast-forward race, override exits non-zero with re-dispatch, never retests). Live walk owed on the first real merge race (Test Plan 2).
+      - triage-closed-recovery-live (#1364) [7e5ba73e5]: Disposable actual-client walk remains owed post-merge at Tester; the named instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release workflow version override (operator decision) with #1195 and #1217 gate:tester left held; this walk was deferred, not certified.
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-11-17-batch-acceptance-edits
+evidence: {}
