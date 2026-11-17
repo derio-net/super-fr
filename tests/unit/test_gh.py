@@ -314,6 +314,65 @@ class TestSwapIssueLabels:
             gh.swap_issue_labels(repo="o/r", number=42, add=["x"], remove=[])
 
 
+class TestSwapIssueLabelsUndefinedRemoval:
+    """R10 (gh#1406): a removal gh calls `'<label>' not found` is already the wanted state."""
+
+    @staticmethod
+    def _install(monkeypatch: pytest.MonkeyPatch, undefined: list[str]) -> list[list[str]]:
+        calls: list[list[str]] = []
+
+        def fake_run(args: list[str]) -> str:
+            calls.append(args)
+            for lbl in undefined:
+                if lbl in args:
+                    raise gh.GhError(
+                        "gh exited", stderr=f"failed to update: '{lbl}' not found\n", returncode=1
+                    )
+            return ""
+
+        monkeypatch.setattr(gh, "_run_gh", fake_run)
+        return calls
+
+    def test_an_undefined_removal_is_retried_without_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._install(monkeypatch, ["fr:in-progress"])
+        gh.swap_issue_labels(repo="o/r", number=1, add=["a"], remove=["fr:in-progress", "b"])
+        assert len(calls) == 2
+        assert "fr:in-progress" not in calls[1] and "b" in calls[1] and "a" in calls[1]
+
+    def test_two_undefined_removals_reported_one_at_a_time(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._install(monkeypatch, ["x", "y"])
+        gh.swap_issue_labels(repo="o/r", number=1, add=[], remove=["x", "y"])
+        assert len(calls) == 2  # y fails, then nothing is left to remove
+
+    def test_removing_only_undefined_labels_makes_no_further_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._install(monkeypatch, ["x"])
+        gh.swap_issue_labels(repo="o/r", number=1, add=[], remove=["x"])
+        assert len(calls) == 1
+
+    def test_an_undefined_add_still_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._install(monkeypatch, ["a"])
+        with pytest.raises(gh.GhError):
+            gh.swap_issue_labels(repo="o/r", number=1, add=["a"], remove=["b"])
+
+    def test_another_error_raises_without_a_retry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run(args: list[str]) -> str:
+            calls.append(args)
+            raise gh.GhError("HTTP 500", stderr="HTTP 500", returncode=1)
+
+        monkeypatch.setattr(gh, "_run_gh", fake_run)
+        with pytest.raises(gh.GhError):
+            gh.swap_issue_labels(repo="o/r", number=1, add=[], remove=["x"])
+        assert len(calls) == 1
+
+
 class TestListLabels:
     def test_returns_parsed_label_objects(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import json

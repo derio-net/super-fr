@@ -22,8 +22,7 @@ from fr.archive_followups import OWED_ISSUE_FIELDS, owned_owed_key
 from fr.artifacts.paths import KIND_DIRS
 from fr.gatebackfill import trackers
 from fr.gatebackfill.model import Manifest, PlanClose
-from fr.ghclient import GhClient, UnsupportedForgeOperation
-from fr.hostclient import FORGE_ERRORS
+from fr.ghclient import GhClient
 from fr.labels import FR_OWED
 
 if TYPE_CHECKING:
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
     from fr.gatebackfill.forge import BackfillForge
 
 OPEN_LIMIT = 500
-_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
 _LIST_FIELDS = f"{OWED_ISSUE_FIELDS},title"  # the tracked-only body restates the item's title
 _EVIDENCE_TREES = (Path(KIND_DIRS["acceptance"]), Path(KIND_DIRS["superpowers"]))
 
@@ -374,20 +372,24 @@ def close_gate_trackers(
     report = CloseReport(dry_run=dry_run)
     try:
         read = read if read is not None else read_trackers(client, repo)
-    except _FAILURES as exc:
+    except Exception as exc:  # noqa: BLE001 — a pass that already happened is never reversed (R12)
         report.errors.append(f"cannot list the open {FR_OWED.name} issues of {repo}: {exc}")
         return report
     me = read.me
     if not me:  # p3-r4: no identity to match, and a ghost's empty author would match it
         report.errors.append(f"the viewer's login on {repo} is empty: closing nothing")
         return report
-    reader = EvidenceReader(root) if root is not None else None
+    try:
+        reader = EvidenceReader(root) if root is not None else None
+    except Exception as exc:  # noqa: BLE001 — never raises: the pass already happened (R12)
+        report.errors.append(f"evidence not read: {type(exc).__name__}: {exc}")
+        return report
     run = _Pass(client, repo, pr, gate, notes, me, report, root, keep, dry_run, reader, read)
     for issue in read.issues:
         try:
             _one(run, issue)
-        except _FAILURES as exc:
-            report.errors.append(f"issue #{issue.get('number')}: {exc}")
+        except Exception as exc:  # noqa: BLE001 — one issue's failure, any kind, never aborts a pass
+            report.errors.append(f"issue #{issue.get('number')}: {type(exc).__name__}: {exc}")
     return report
 
 

@@ -291,6 +291,54 @@ def test_cancel_yes_still_acts_under_the_default_tracker(
     assert "fr:in-progress" not in gh.issues[(verbs.REPO, 577)].labels
 
 
+def test_cancel_converges_when_the_repo_has_no_in_progress_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R10 (gh#1406): the gh-level convergence lets the cancel event be written."""
+    from fr import gh as gh_mod
+
+    from tests.unit import test_triage_batch_verbs as verbs
+
+    gh, state = _cancel_env(tmp_path, monkeypatch, None)
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str]) -> str:
+        calls.append(args)
+        if "fr:in-progress" in args:
+            raise gh_mod.GhError("gh", stderr="'fr:in-progress' not found", returncode=1)
+        return ""
+
+    monkeypatch.setattr(gh_mod, "_run_gh", fake_run)
+    monkeypatch.setattr(
+        gh,
+        "edit_issue_labels",
+        lambda repo, number, *, add, remove: gh_mod.swap_issue_labels(
+            repo=repo, number=number, add=sorted(add), remove=sorted(remove)
+        ),
+    )
+    code, out = verbs._run(state, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert "cancel" in (state / "judgements.yaml").read_text("utf-8").split("events:")[-1]
+
+
+def test_cancel_dry_run_names_the_checkout_when_none_serves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R11 (gh#1406): from a clone of another repo the dry run says `--yes` would refuse."""
+    from tests.unit import test_triage_batch_verbs as verbs
+
+    gh, state = _cancel_env(tmp_path, monkeypatch, None)
+    monkeypatch.setattr(
+        triage_batch_cmd, "_checkout_refusal", lambda path, repo: "its origin is other/repo"
+    )
+    code, out = verbs._run(state, "cancel", "lifecycle")
+    assert code == 0, out
+    assert "--yes would be refused" in out and "its origin is other/repo" in out
+    assert "pass --checkout" in out and verbs.REPO in out
+    code, out = verbs._run(state, "cancel", "lifecycle", "--yes")
+    assert code == 2 and "its origin is other/repo" in out
+
+
 def _undispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *extra: str):
     from tests.unit import test_undispatch_cmd as undispatch_fixtures
 

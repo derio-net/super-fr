@@ -641,3 +641,64 @@ def test_p4_r11_an_adopted_issues_own_marker_does_not_block_itself(env: Env) -> 
     env.fake.issues[(REPO, 8)].body = f"x\n<!-- fr-owed:{DONE} -->"
     env.dry()
     assert env.plan()["closes"][0]["ref"] == f"{REPO}#8"
+
+
+# --- close_gate_trackers never raises (spec 2026-11-17-triage-intake R12, gh#1299) ----------
+
+
+def _gate_client(*numbers: int) -> FakeGhClient:
+    from fr.gatebackfill import trackers as tr
+
+    fake = FakeGhClient()
+    fake.comment_author = ME
+    for n in numbers:
+        fake.add_issue(
+            REPO, n, labels={"fr:owed"}, body=tr.tracker_body(f"row:r-{n}", "t", "tester", 41)
+        )
+    return fake
+
+
+def test_an_evidence_reader_that_cannot_be_built_is_recorded_not_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gatebackfill import close
+
+    def boom(root: Path) -> None:
+        raise OSError("no such tree")
+
+    monkeypatch.setattr(close, "EvidenceReader", boom)
+    report = close.close_gate_trackers(_gate_client(5), REPO, 41, "tester", "n", root=tmp_path)
+    assert any(e.startswith("evidence not read: OSError") for e in report.errors)
+    assert report.closed == []
+
+
+def test_one_issue_raising_anything_is_recorded_and_the_other_is_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr.gatebackfill import close
+
+    real = close._one
+
+    def one(run: Any, issue: dict[str, Any]) -> None:
+        if issue["number"] == 5:
+            raise ValueError("bad body")
+        real(run, issue)
+
+    monkeypatch.setattr(close, "_one", one)
+    report = close.close_gate_trackers(_gate_client(5, 6), REPO, 41, "tester", "n")
+    assert report.errors == ["issue #5: ValueError: bad body"]
+    assert report.closed == [6]
+
+
+def test_a_tracker_list_read_raising_runtime_error_is_recorded() -> None:
+    from fr.gatebackfill import close
+
+    fake = _gate_client(5)
+
+    def boom(*a: Any, **k: Any) -> Any:
+        raise RuntimeError("proxy refused")
+
+    fake.list_issues = boom  # type: ignore[method-assign]
+    report = close.close_gate_trackers(fake, REPO, 41, "tester", "n")
+    assert any("proxy refused" in e for e in report.errors)
+    assert report.closed == []

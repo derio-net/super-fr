@@ -1066,19 +1066,27 @@ CheckoutOpt = Annotated[
 ]
 
 
-def _open_checkout(path: Path | None, owner_repo: str) -> Checkout:
-    """The clone (§3.I), refused unless its origin is the batch's repo."""
+def _checkout_refusal(checkout_path: Path | None, owner_repo: str) -> str | None:
+    """Why `--yes` would refuse this clone (it must open and be the batch's repo), else None."""
     try:
-        checkout = make_checkout(path)
+        checkout = make_checkout(checkout_path)
         origin = checkout.origin_repo()
     except TriageError as exc:
-        _fail(str(exc))
+        return str(exc)
     if origin is None or origin.lower() != owner_repo.lower():
-        _fail(
+        return (
             f"--checkout {checkout.path}: its origin is {origin or 'not a forge repo'}, "
             f"not the batch's repo {owner_repo}"
         )
-    return checkout
+    return None
+
+
+def _open_checkout(path: Path | None, owner_repo: str) -> Checkout:
+    """The clone (§3.I), refused unless its origin is the batch's repo."""
+    reason = _checkout_refusal(path, owner_repo)
+    if reason is not None:
+        _fail(reason)
+    return make_checkout(path)
 
 
 def _tracking_gate(checkout_path: Path | None, owner_repo: str, *, yes: bool) -> None:
@@ -1087,14 +1095,21 @@ def _tracking_gate(checkout_path: Path | None, owner_repo: str, *, yes: bool) ->
     forge call; a dry run only warns. `merge` is not gated: it writes no issue.
     Strict: a malformed tracking block refuses too. With `--yes` the clone must
     open AND be the batch's repo (`_open_checkout`), on `--repair` as well, so
-    the declaration read is the target repo's and never another clone's."""
+    the declaration read is the target repo's and never another clone's. A dry
+    run warns when `--yes` would be refused for the clone (R11)."""
     if yes:
         checkout = _open_checkout(checkout_path, owner_repo)
     else:
-        try:
-            checkout = make_checkout(checkout_path)
-        except TriageError:
-            return  # a dry run needs no clone to warn
+        reason = _checkout_refusal(checkout_path, owner_repo)
+        if reason is not None:
+            console.print(
+                f"warning: --yes would be refused — {reason}; pass --checkout "
+                f"<path to a clone of {owner_repo}>",
+                markup=False,
+                soft_wrap=True,
+            )
+            return
+        checkout = make_checkout(checkout_path)
     from fr.settings import require_forge
 
     try:

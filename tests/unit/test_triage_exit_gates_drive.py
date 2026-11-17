@@ -355,6 +355,20 @@ def test_a_tracker_close_failure_leaves_the_gate_pass_a_success(
     assert "failed" not in line.split(";")[0]
 
 
+def test_a_tracker_close_oserror_completes_the_pass_and_prints_the_gate_pass_line(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R12 (gh#1299): an error outside the forge's family never aborts the driver's pass."""
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", True, (ISSUE,)),))
+    gworld.list_error = OSError("disk gone")  # type: ignore[assignment]
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    (line,) = _lines(out, "gate-pass")
+    assert "gate:tester -> gate:tester-passed" in line and "disk gone" in line
+
+
 # ------------------------------------------- the default branch's rows (gitseam)
 
 
