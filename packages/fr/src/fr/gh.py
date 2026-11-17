@@ -416,11 +416,10 @@ def swap_issue_labels(
     No-op if both lists are empty. Failure propagates as GhError, except a REMOVAL gh reports as
     `'<label>' not found` (the repo never defined it, so the issue cannot carry it): that is
     already the wanted end state, so it is dropped and the call retried, at most `len(remove)`
-    times. This leans on gh resolving every label before it mutates anything, so a refused call
-    changed nothing and the retry is not a repeat. A missing ADD label still fails.
+    times. gh is expected to resolve every label before it mutates anything; if it ever applied
+    part of a refused call first, the retry only repeats an add or a removal, both idempotent. A
+    missing ADD label still fails.
     """
-    import re
-
     remaining = list(remove)
     for _ in range(len(remove) + 1):
         if not add and not remaining:
@@ -434,11 +433,18 @@ def swap_issue_labels(
             _run_gh(args)
             return
         except GhError as exc:
-            m = re.search(r"'([^']+)' not found", f"{exc} {exc.stderr}")
-            if m is None or m.group(1) not in remaining or m.group(1) in add:
+            # Match each pending removal by its exact quoted name rather than parsing the
+            # name out of the message: a label holding an apostrophe still matches, and an
+            # error naming anything other than a pending removal (an ADD, or no label at
+            # all) re-raises.
+            text = f"{exc} {exc.stderr}"
+            gone = next(
+                (lbl for lbl in remaining if lbl not in add and f"'{lbl}' not found" in text),
+                None,
+            )
+            if gone is None:
                 raise
-            remaining.remove(m.group(1))
-    return
+            remaining.remove(gone)
 
 
 def is_issue_closed(*, repo: str, number: int) -> bool:

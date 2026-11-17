@@ -355,6 +355,13 @@ class TestSwapIssueLabelsUndefinedRemoval:
         gh.swap_issue_labels(repo="o/r", number=1, add=[], remove=["x"])
         assert len(calls) == 1
 
+    def test_an_undefined_removal_whose_name_holds_an_apostrophe_is_dropped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._install(monkeypatch, ["won't fix"])
+        gh.swap_issue_labels(repo="o/r", number=1, add=["a"], remove=["won't fix"])
+        assert len(calls) == 2 and "won't fix" not in calls[1]
+
     def test_an_undefined_add_still_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._install(monkeypatch, ["a"])
         with pytest.raises(gh.GhError):
