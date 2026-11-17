@@ -55,6 +55,12 @@ class Plan:
     # it archives to implemented/specs/ (2026-06-06 spec-path-repair).
     # None when meta.spec is unset, cross-repo, or unresolvable.
     spec_path: str | None = None
+    # A quiet or stealth plan whose product checkout could not be named (gh#1438): its
+    # feature's workspace is gone, or a stealth plan is read from neither the workspace
+    # nor the base clone. `repo_root` is then the toplevel HOLDING the plan (the `fr`
+    # worktree or tracking clone), so settings, the acceptance fold and repo config read
+    # from there are the placement's, not the product's. Always False otherwise.
+    checkout_unnamed: bool = False
 
     @property
     def prose_path(self) -> Path:
@@ -297,9 +303,15 @@ def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
             res = refs.resolve_spec_ref(meta.spec, repo_root)
             if res.path is not None:
                 spec_path = res.path.relative_to(repo_root).as_posix()
+    checkout_unnamed = False
     if off_product:
         assert layout is not None and repo_root is not None
-        repo_root = product_checkout_for(layout, repo_root) or repo_root
+        named = product_checkout_for(layout, repo_root)
+        if named is None:
+            checkout_unnamed = True
+            _say_checkout_unnamed(plan_dir, repo_root)
+        else:
+            repo_root = named
 
     return Plan(
         dir=plan_dir,
@@ -309,7 +321,36 @@ def parse(plan_dir: Path, *, enforce_fr_version: bool = True) -> Plan:
         prose=prose,
         phase_texts=phase_texts,
         spec_path=spec_path,
+        checkout_unnamed=checkout_unnamed,
     )
+
+
+_SAID_UNNAMED: set[Path] = set()
+"""The plans `_say_checkout_unnamed` already named in this process: said once each."""
+
+
+def _say_checkout_unnamed(plan_dir: Path, toplevel: Path) -> None:
+    """Tell the reader, once per plan per process, that a quiet or stealth plan is read
+    against the toplevel holding it because no product checkout could be named (gh#1438).
+    On stderr, so a command's output stays parseable."""
+    import sys
+
+    key = Path(plan_dir).resolve()
+    if key in _SAID_UNNAMED:
+        return
+    _SAID_UNNAMED.add(key)
+    print(
+        f"fr: no product checkout can be named for the plan {key.name} ({key}); its "
+        f"settings, acceptance fold and repo config are read from {toplevel}, which holds "
+        "it. Run from the feature's workspace (or set FR_REPO_ROOT to it) to read the "
+        "product's.",
+        file=sys.stderr,
+    )
+
+
+def clear_checkout_notices() -> None:
+    """Forget which plans were said to have no product checkout (tests)."""
+    _SAID_UNNAMED.clear()
 
 
 def parse_strict(plan_dir: Path) -> Plan:

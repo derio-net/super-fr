@@ -277,3 +277,33 @@ def test_a_code_push_records_its_head_in_the_feature_root(ws, recorder: Recorder
     assert _push(wt).exit_code == 0
     second = git(wt, "rev-parse", "HEAD").strip()
     assert git(origin, "show", "fr:features/feat__q/HEADS") == f"{head}\n{second}\n"
+
+
+def test_a_refused_push_leaves_no_unlanded_head_in_heads(ws, recorder: Recorder) -> None:
+    """gh#1433: the head is recorded on `fr` before the atomic push. When the remote
+    refuses the push, that record names a head that never landed, and the next `fr push`
+    would publish it. A refused push leaves local `fr` as it found it."""
+    wt, fr_root, origin = ws
+    froot = fr_root / "features" / "feat__q"
+    froot.mkdir(parents=True, exist_ok=True)
+    (froot / "OWNER").write_text("feat/q\n")
+    git(fr_root, "add", "-A")
+    git(fr_root, "commit", "-qm", "chore(fr): claim")
+    assert _push(wt).exit_code == 0  # the claim lands; nothing is pending on fr
+    first = git(wt, "rev-parse", "HEAD").strip()
+    before = git(fr_root, "rev-parse", "HEAD").strip()
+    hook = origin / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'refused by policy' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    _code_commit(wt)
+    head = git(wt, "rev-parse", "HEAD").strip()
+    result = _push(wt)
+    assert result.exit_code == 2, result.output
+    assert git(fr_root, "rev-parse", "HEAD").strip() == before
+    heads = froot / "HEADS"
+    assert not heads.exists() or head not in heads.read_text()
+    assert git(fr_root, "status", "--porcelain") == ""
+    hook.unlink()
+    assert _push(wt).exit_code == 0  # the retry records it, once, and it lands
+    assert git(origin, "show", "fr:features/feat__q/HEADS") == f"{first}\n{head}\n"
+    _no_force(recorder)

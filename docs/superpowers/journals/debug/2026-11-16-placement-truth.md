@@ -1,0 +1,47 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-16-placement-truth
+
+<!-- fr:journal kind=repro scope=debug id=repro-1438 created=2026-11-16T18:18:16+00:00 -->
+### repro-1438 · repro · Quiet/stealth plan with no nameable product checkout parses with repo_root = fr worktree, unmarked
+
+parser.py:302 'product_checkout_for(layout, repo_root) or repo_root'. Repro: a quiet plan whose workspace is gone (no FR_REPO_ROOT, cwd outside any workspace): Plan.repo_root is the fr worktree toplevel and nothing on Plan says the checkout could not be named. The candidate lookup (paths.py:170) re-runs space_for per recorded workspace on every parse.
+
+<!-- fr:journal kind=repro scope=debug id=repro-1433 created=2026-11-16T18:18:18+00:00 -->
+### repro-1433 · repro · A refused quiet fr push leaves the head it never pushed recorded in HEADS on local fr
+
+git_policy/product.py:105 _record_pushed_head commits HEADS on local fr, then atomic_push runs; when the remote refuses the push (e.g. a pre-receive hook on the feature branch), the record commit stays on local fr and the next fr push publishes it.
+
+<!-- fr:journal kind=hypothesis scope=debug id=hyp-one-cause created=2026-11-16T18:18:19+00:00 -->
+### hyp-one-cause · hypothesis · Both members share one root cause
+
+Batched as one root cause.
+
+<!-- fr:journal kind=ruled-out scope=debug id=ro-one-cause created=2026-11-16T18:18:21+00:00 -->
+### ro-one-cause · ruled-out · Not one cause: two independent mechanisms
+
+1438 is a read-side substitution in parser.parse; 1433 is a write ordering in push_product_branch. No shared code. Operator chose to fix both in this one PR (asked 2026-11-16).
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1438 created=2026-11-16T18:18:22+00:00 -->
+### rc-1438 · root-cause · parse substitutes the toplevel for an unnamed product checkout and records no sign of it
+
+The 'or repo_root' fallback is the only place the outcome None of product_checkout_for is consumed, and it discards it.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1433 created=2026-11-16T18:18:24+00:00 -->
+### rc-1433 · root-cause · The HEADS record is committed before the push and nothing undoes it on refusal
+
+It cannot move inside atomic_push's lock: commit_paths takes the same flock on its own handle, so nesting would self-deadlock. The record must be compensated after a refused push instead.
+
+<!-- fr:journal kind=finding scope=debug id=fix-1438 created=2026-11-16T21:30:25+00:00 state=fixed -->
+### fix-1438 · finding [fixed] · An unnamed product checkout is marked and said; the lookup is cached
+
+parser.parse sets Plan.checkout_unnamed and prints one stderr notice per plan per process when product_checkout_for names nothing; repo_root still falls back to the holding toplevel so the plan stays readable. product_checkout_for keeps named checkouts per (feature root, toplevel) and re-confirms with one space_for (misses not cached). Tests: test_placement_plan_paths.py::test_a_quiet_plan_with_no_nameable_checkout_is_marked_and_warned, ::test_the_product_checkout_lookup_is_cached_per_process (8 space_for calls before, 2 after).
+
+<!-- fr:journal kind=finding scope=debug id=fix-1433 created=2026-11-16T21:30:27+00:00 state=fixed -->
+### fix-1433 · finding [fixed] · A refused quiet push takes its HEADS record back off local fr
+
+Correction to rc-1433: the record CAN run under atomic_push's lock by committing with commit_paths(fr_root, ...), the same form _commit_groups uses under the lock; only the product-root seam takes the lock again. atomic_push now takes a record callback, runs it under the lock, and on any failure resets the record commit (git reset --keep HEAD~1) when it is still the tip, else refuses naming it. Never forced. Test: test_push_quiet.py::test_a_refused_push_leaves_no_unlanded_head_in_heads (pre-receive hook refuses, local fr unchanged, retry records once).
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-11-16T21:30:29+00:00 -->
+### review-1 · review · Self-review: no findings raised
+
+Reviewed the diff: the take-back runs only on a record this push committed; reset --keep leaves an unrelated dirty fr worktree intact or fails loud; a push that landed despite a client error would lose its record until the next fr push re-records it (HEAD unchanged), which is the safe direction. Full suite: 16279 passed, 9 failed under host load 22 (2h45m); the 5 named failures (test_isolation_agent_worktrees.py) pass alone (19/19); the other 4 names were not captured; CI is the gate.
