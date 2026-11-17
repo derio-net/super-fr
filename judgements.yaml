@@ -7726,6 +7726,22 @@ batches:
     at: '2026-11-15T07:31:46.835235Z'
     keys:
     - super-fr#1459
+- id: suite-trust
+  title: 'Test-suite trust: the worktree-lock concurrency flake and the scenario fixture that commits
+    into a live worktree'
+  ids:
+  - super-fr#1468
+  - super-fr#1463
+  rationale: 'Leftovers of suite-health. #1463''s test_two_concurrent_* flake failed CI on #1478, #1495,
+    #1502 and #1504 in two days; #1468''s scenario fixture committed into a live run worktree. Both are
+    test-isolation trust in tests/unit/test_hooks_worktree.py and tests/scenarios/.'
+  wave: 19
+  after:
+  - workspace-identity
+  - placement-truth
+  - release-truth
+  - acceptance-edits
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
