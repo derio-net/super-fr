@@ -138,7 +138,12 @@ rows:
       so the driver pass completes.
     origin:
     - spec:2026-11-17-triage-intake#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_closes.py#test_one_issue_raising_anything_is_recorded_and_the_other_is_closed
+      - super-fr:tests/unit/test_gatebackfill_closes.py#test_a_tracker_list_read_raising_runtime_error_is_recorded
+      - super-fr:tests/unit/test_gatebackfill_closes.py#test_an_evidence_reader_that_cannot_be_built_is_recorded_not_raised
+      - super-fr:tests/unit/test_triage_exit_gates_drive.py#test_a_tracker_close_oserror_completes_the_pass_and_prints_the_gate_pass_line
+    status: ci
+    notes: 'close_gate_trackers catches Exception and records Type: msg'
     verify: none
