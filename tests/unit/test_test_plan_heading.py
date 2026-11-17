@@ -462,3 +462,96 @@ def test_the_demotion_keywords_are_exactly_the_sections_fr_reads_by_keyword() ->
     }
     keywords = set(_KEYWORD_RE.pattern.split("(")[1].split(")")[0].split("|"))
     assert found - _NOT_A_DEMOTION_KEYWORD == keywords
+
+
+# --- super-fr#1390: a spec that is not UTF-8 is refused by name ---------------
+
+
+def _undecodable_spec(root) -> tuple:  # noqa: ANN001
+    d = root / "docs" / "superpowers" / "specs"
+    d.mkdir(parents=True, exist_ok=True)
+    spec = d / "2026-01-01-x-design.md"
+    good = _near_spec().encode()
+    data = good[:20] + b"\xff" + good[20:]
+    spec.write_bytes(data)
+    return spec, data, f"{spec} is not UTF-8 text (byte 0xff at offset 20)"
+
+
+def _no_codec_text(text: str) -> None:
+    assert "UnicodeDecodeError" not in text
+    assert "codec" not in text
+
+
+def test_a_non_utf8_spec_fails_the_migration_by_name_and_stays_byte_identical(tmp_path) -> None:  # noqa: ANN001
+    from fr.artifacts.runner import run_migrations
+
+    spec, data, reason = _undecodable_spec(tmp_path)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    failures = [f for f in report.failed if f.path == spec]
+    assert [f.error for f in failures] == [reason]
+    _no_codec_text(failures[0].error)
+    assert spec.read_bytes() == data
+
+
+def test_the_heading_repair_refuses_a_non_utf8_spec_by_name(tmp_path) -> None:  # noqa: ANN001
+    from fr.artifacts import NotUtf8Error
+    from fr.artifacts.registry import read_verbatim
+    from fr.artifacts.spec_test_plan_heading import (
+        SPEC_TEST_PLAN_HEADING_REPAIR as repair,  # noqa: N811
+    )
+
+    spec, data, reason = _undecodable_spec(tmp_path)
+
+    for call in (read_verbatim, repair.applies, repair.fn):
+        with pytest.raises(NotUtf8Error) as e:
+            call(spec)
+        assert str(e.value) == reason
+    assert spec.read_bytes() == data
+
+
+def test_the_gate_refuses_a_non_utf8_spec_naming_it_without_a_codec_error(
+    tmp_path,  # noqa: ANN001
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import typer
+    from fr.artifacts import trigger
+
+    spec, data, reason = _undecodable_spec(tmp_path)
+
+    with pytest.raises(typer.Exit) as e:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env={},
+            repo_root=tmp_path,
+            context="interactive",
+            commit=lambda root, report: None,
+        )
+
+    assert e.value.exit_code == 2
+    err = capsys.readouterr().err
+    assert reason in " ".join(err.split()) or reason in err
+    _no_codec_text(err)
+    assert spec.read_bytes() == data
+
+
+def test_describe_prints_a_not_utf8_reason_alone_and_others_with_their_type() -> None:
+    from fr.artifacts import NotUtf8Error
+    from fr.artifacts.runner import describe
+
+    assert describe(NotUtf8Error("p is not UTF-8 text (byte 0xff at offset 3)")) == (
+        "p is not UTF-8 text (byte 0xff at offset 3)"
+    )
+    assert describe(ValueError("boom")) == "ValueError: boom"
+
+
+def test_every_runner_failure_goes_through_describe() -> None:
+    from pathlib import Path
+
+    import fr.artifacts.runner as runner
+
+    source = Path(runner.__file__).read_text()
+    assert "type(e).__name__" in source.split("def describe", 1)[1].split("\ndef ", 1)[0]
+    assert source.count("type(e).__name__") == 1, "one formatter, describe()"

@@ -38,6 +38,7 @@ from fr.artifacts.runner import (
     plan_migrations,
     run_migrations,
 )
+from fr.artifacts.text import NotUtf8Error
 
 # Imported last and for their registration side effect; they import `runner`,
 # so they cannot come before it. EVERY registered migration is reached from
@@ -95,6 +96,7 @@ __all__ = [
     "MigrationChainError",
     "MigrationRegistry",
     "MigrationReport",
+    "NotUtf8Error",
     "PlannedAction",
     "Repair",
     "SchemaMigration",
