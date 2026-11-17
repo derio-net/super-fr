@@ -7703,6 +7703,8 @@ batches:
     - super-fr#1394
     - super-fr#1439
     - super-fr#1461
+  - kind: post_merge
+    at: '2026-11-17T17:59:45.950443Z'
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
@@ -8445,3 +8447,11 @@ closeouts:
   - "D\tdocs/superpowers/journals/debug/2026-11-17-batch-triage-collect.md"
   handed:
   - 45448904392db1e95e1ddd7a685161d42e0d7d4b
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-6
+  branch: chore/closeout-2026-11-17-6
+  at: '2026-11-17T17:59:50.749526Z'
+  runner: herdr
+  handle: w3H:p8
+  planned:
+  - acceptance-edits
