@@ -1,0 +1,77 @@
+schema_version: 12
+run: 2026-11-17-feat-batch-acceptance-edits
+step: spec-review
+outcome: done
+journal:
+  - kind: finding
+    id: s-r1
+    review_scope: in
+    title: "R5/R7 cannot hold: the spec kind's stamp read decodes the file before any repair predicate runs"
+    body: |
+      `read_verbatim` (registry.py:148) raises UnicodeDecodeError in `_chain_for` before `_applies` runs, so routing only the repairs changes nothing the operator sees. Route `read_verbatim` through the named decode and use one formatter at the runner's seven `type(e).__name__` sites.
+  - kind: finding
+    id: s-r2
+    review_scope: in
+    title: "R6 targets the matrix_anchors repair, which is not registered; the live non-UTF-8 matrix path is the retiring split hop"
+    body: |
+      matrix_anchors.py:123-126: not registered since the matrix kind retired. A non-UTF-8 matrix.yaml fails in the stamp read and the 5 -> 6 split hop (`conversions`, matrix_fragments.py:258/:270). Point R6 there and test through run_migrations.
+  - kind: finding
+    id: s-r3
+    review_scope: in
+    title: "The -design fragment repair trips R16's merged-row-edit check, which is keyed by fragment path"
+    body: |
+      amend.py:127-189: `merged_row_edits` iterates the default ref's fragments by path; after the rename every merged row of `<slug>-design.yaml` reads as removed, so check/deliver refuse, on consumer branches and in main's CI. The R16 check must read a merged `-design` fragment as its `<slug>.yaml` spelling.
+  - kind: finding
+    id: s-r4
+    review_scope: in
+    title: "Fragment repair: declare the merge target as a companion; removal staging already works"
+    body: |
+      Declare `<slug>.yaml` as a companion so the uncommitted-changes veto holds it (runner.py:564-595); the deleted `-design` path is the action's own path, which changed_paths includes and commit_paths stages (commit.py:997-1007, :1039): no new runner support.
+  - kind: finding
+    id: s-r5
+    review_scope: in
+    title: "The `origin_only` flag on AmendmentItem breaks every amendment and changes the record shape"
+    body: |
+      `model_dump(exclude_none=True)` would carry `origin_only=False` into the closed-world Amendment for every item, and a record entry could set it (a shape change). Fill from the row's own definition in its pending fragment instead; no model change.
+  - kind: finding
+    id: s-r6
+    review_scope: in
+    title: "Default-branch warning compares `main` with `origin/main`, so it never fires"
+    body: |
+      `default_ref_name`/`remote_default_ref` return `origin/main`; strip the remote prefix, read `fr.git.remote_default_ref` directly, and state the no-remote / GitRefusal case (no warning).
+  - kind: finding
+    id: s-r7
+    review_scope: in
+    title: "R8's shared check-ignore helper has no error contract"
+    body: |
+      The four sites differ on exit 128, missing git and output parsing (whitespace split, quoted non-ASCII). Specify the error contract, use -z, and pin each site's error behaviour in a test.
+  - kind: finding
+    id: s-r8
+    review_scope: in
+    title: "Spec-slug run ids collide with the later plan-slug id of the same feature"
+    body: |
+      A spec-only adoption named after the spec stem takes the id the plan's later adoption needs, and `--supersede` cannot match it (it keys on emitted.plan, adopt.py:879-898).
+  - kind: review
+    id: spec-review-1
+    title: "independent spec review: 8 findings"
+    body: |
+      findings: s-r1, s-r2, s-r3, s-r4, s-r5, s-r6, s-r7, s-r8 (all in scope). Decisions d1-d7 each honoured; no contradiction found. Every cited file:line verified by the reviewer; the orchestrator re-checked s-r1 (registry.py:148), s-r2 (matrix_anchors.py:123-126), s-r3 (amend.py:127-160) and s-r6 (git.py:181) before fixing.
+  - kind: lens
+    lens: errors
+    title: The change rewrites failure reporting (non-UTF-8 refusals, the runner's formatter) and the check-ignore helper's fail-toward behaviour at four sites
+  - kind: lens
+    lens: tests
+    title: Fold equality and the merged-row check need fixtures holding a merged -design fragment on a default ref, which unit fixtures easily skip
+resolves:
+  - {id: s-r1, state: fixed, body: "R5/R7 now cover the stamp read; design C routes read_verbatim through the named decode and adds one runner formatter for all seven sites."}
+  - {id: s-r2, state: fixed, body: "R6 now names the matrix stamp read and the retiring split hop (conversions included); design C routes those reads through the named decode."}
+  - {id: s-r3, state: fixed, body: "Added R17; design F keys merged_row_edits/outside_merged_row_edits by the one spelling, merging a tip's -design fragment by the repair's rule."}
+  - {id: s-r4, state: fixed, body: "Added R16 and the companions declaration; design F states removal staging needs no runner change and a test pins it."}
+  - {id: s-r5, state: fixed, body: "Design A now fills from the row's own pending definition; no model or shape change."}
+  - {id: s-r6, state: fixed, body: "R12 and design E strip the remote prefix, read fr.git.remote_default_ref directly, and warn nothing without a nameable default ref."}
+  - {id: s-r7, state: fixed, body: "R8 and design D give the error contract (-z, exit 0/1 answers, empty set / False otherwise) and pin each site's behaviour in a test."}
+  - {id: s-r8, state: fixed, body: "R9 and design E keep the branch-derived id for spec-only adoption, so it never takes a plan-slug id."}
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a2916c1c40191d9b3
