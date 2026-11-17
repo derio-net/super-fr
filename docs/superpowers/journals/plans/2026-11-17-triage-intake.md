@@ -373,3 +373,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1539.
 ### p2-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1540] · resolves p2-r3: _fetched_reader lets GitError escape and does not record the failed fetch, so a pass may retry it (phase 2)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1540.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved-2 created=2026-11-17T21:17:43+00:00 phase=3 state=open resolves=p3-r2 tracked_by=https://github.com/derio-net/super-fr/issues/1541 -->
+### p3-r2-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1541] · resolves p3-r2: The retry assumes gh resolves all labels before mutating; unverified without a live gh (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1541.
