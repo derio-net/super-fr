@@ -433,7 +433,9 @@ class FakeGhClient:
         `labels_missing` (merge-train-safety R4); kept out of `calls`, which
         the call-sequence assertions predate."""
         self.label_checks.append((repo, name))
-        return repo not in self.labels_missing
+        if repo in self.labels_missing:  # only what `ensure_labels` has made since
+            return name in self.repo_labels.get(repo, set())
+        return True
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         """`{name, bucket, state}` rows a test preloads in `required_checks`."""

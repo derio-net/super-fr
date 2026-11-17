@@ -38,6 +38,7 @@ from tests.unit.triage_board_fixtures import (
 class Labels:
     def __init__(self, *, exists: bool = False, unsupported: bool = False) -> None:
         self.exists, self.unsupported = exists, unsupported
+        self.created: set[str] = set()  # the labels `ensure_labels` made, so each is checked alone
         self.calls: list[str] = []
         self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
 
@@ -53,11 +54,11 @@ class Labels:
         self.calls.append(f"exists {repo} {name}")
         if self.unsupported:
             raise UnsupportedForgeOperation("label_exists", "gitlab")
-        return self.exists
+        return self.exists or name in self.created
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.calls.append(f"create {repo} {[getattr(x, 'name', x) for x in labels]}")
-        self.exists = True
+        self.created.update(getattr(x, "name", x) for x in labels)
 
 
 def test_p3_r2_labels_off_creates_no_label_and_says_so() -> None:
@@ -65,8 +66,10 @@ def test_p3_r2_labels_off_creates_no_label_and_says_so() -> None:
     client.files[".fr/settings.yaml"] = "forge:\n  labels: 'off'\n"
     ensure_approval_label(client, "o/r", said.append, seen=seen)
     assert client.calls == []
+    off = "forge.labels: off (disabled by repo setting)"
     assert said == [
-        "label approved-fr not ensured on o/r: forge.labels: off (disabled by repo setting)"
+        f"label approved-fr not ensured on o/r: {off}",
+        f"label ready-fr not ensured on o/r: {off}",
     ]
 
 
@@ -74,21 +77,27 @@ def test_a_missing_label_is_created_once_per_repo_and_said() -> None:
     client, said, seen = Labels(), [], set()  # type: ignore[var-annotated]
     ensure_approval_label(client, "o/r", said.append, seen=seen)
     ensure_approval_label(client, "o/r", said.append, seen=seen)
-    assert client.calls == ["exists o/r approved-fr", "create o/r ['approved-fr']"]
-    assert said == ["created label approved-fr on o/r"]
+    # `ready-fr` (triage-intake R8) is ensured beside `approved-fr`, once each per repo
+    assert client.calls == [
+        "exists o/r approved-fr",
+        "create o/r ['approved-fr']",
+        "exists o/r ready-fr",
+        "create o/r ['ready-fr']",
+    ]
+    assert said == ["created label approved-fr on o/r", "created label ready-fr on o/r"]
 
 
 def test_an_existing_label_is_silent() -> None:
     client, said = Labels(exists=True), []  # type: ignore[var-annotated]
     ensure_approval_label(client, "o/r", said.append, seen=set())
-    assert client.calls == ["exists o/r approved-fr"] and said == []
+    assert client.calls == ["exists o/r approved-fr", "exists o/r ready-fr"] and said == []
 
 
 def test_a_forge_that_cannot_check_labels_warns_and_never_fails() -> None:
     said: list[str] = []
     ensure_approval_label(Labels(unsupported=True), "o/r", said.append, seen=set())
-    (line,) = said
-    assert line.startswith("warning:") and "approved-fr" in line and "o/r" in line
+    assert len(said) == 2 and all(line.startswith("warning:") and "o/r" in line for line in said)
+    assert "approved-fr" in said[0] and "ready-fr" in said[1]
 
 
 def test_a_forge_error_warns_too() -> None:
@@ -121,7 +130,9 @@ def test_collect_creates_the_label_on_each_collected_repo(
     )
     assert result.exit_code == 0, result.output
     assert "create derio-net/super-fr ['approved-fr']" in labels.calls
+    assert "create derio-net/super-fr ['ready-fr']" in labels.calls
     assert "created label approved-fr on derio-net/super-fr" in result.output
+    assert "created label ready-fr on derio-net/super-fr" in result.output
 
 
 def _collected(fake: Any) -> Any:
@@ -147,7 +158,8 @@ def test_init_scaffold_creates_the_label_on_a_github_origin(
         app, ["init", "scaffold", "--repo", str(tmp_path), "--profile", "dev", "--purpose", "x"]
     )
     assert result.exit_code == 0, result.output
-    assert labels.calls[-1] == "create o/r ['approved-fr']"
+    assert "create o/r ['approved-fr']" in labels.calls
+    assert labels.calls[-1] == "create o/r ['ready-fr']"
 
 
 @pytest.mark.parametrize(

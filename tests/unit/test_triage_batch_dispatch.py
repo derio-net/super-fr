@@ -1310,8 +1310,9 @@ def test_dispatch_creates_the_missing_approval_label_once_and_says_so(
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     assert code == 0, out
     assert f"created label approved-fr on {REPO}" in out
-    assert gh.label_checks == [(REPO, "approved-fr")]
-    assert "approved-fr" in gh.repo_labels[REPO]
+    assert f"created label ready-fr on {REPO}" in out  # triage-intake R8
+    assert gh.label_checks == [(REPO, "approved-fr"), (REPO, "ready-fr")]
+    assert {"approved-fr", "ready-fr"} <= gh.repo_labels[REPO]
 
 
 def test_a_dispatch_preview_checks_no_label(

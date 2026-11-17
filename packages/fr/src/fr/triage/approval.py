@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from fr.labels import APPROVED_FR
+from fr.labels import APPROVED_FR, READY_FR
 from fr.triage.model import (
     ApprovalEvent,
     Batch,
@@ -242,9 +242,12 @@ def _labels_off(client: Any, repo: str) -> str | None:
 def ensure_approval_label(
     client: Any, repo: str, say: Callable[[str], None], *, seen: set[str]
 ) -> None:
-    """Create the `approved-fr` label on *repo* when it is missing, saying so (§A "Label
-    creation", R4). At most one check per repo per *seen* (a pass or a command). A
-    forge that cannot check or create labels is a warning, never a failure."""
+    """Create the operator labels on *repo* when they are missing, saying so: `approved-fr`
+    (§A "Label creation", R4) and `ready-fr`, which admits an outside author's issue
+    (spec 2026-11-17-triage-intake R8). Each is checked and created on its own, so one that
+    cannot be created never hides the other. At most one check per repo per *seen* (a pass or
+    a command). A forge that cannot check or create labels is a warning per label, never a
+    failure. fr only creates `ready-fr`; it never applies it."""
     if repo in seen:
         return
     seen.add(repo)
@@ -252,14 +255,16 @@ def ensure_approval_label(
     from fr.hostclient import FORGE_ERRORS
 
     soft: tuple[type[Exception], ...] = (UnsupportedForgeOperation, *FORGE_ERRORS)
-    if (off := _labels_off(client, repo)) is not None:
-        say(f"label {APPROVED_FR.name} not ensured on {repo}: {off}")
-        return
-    try:
-        if client.label_exists(repo, APPROVED_FR.name):
-            return
-        client.ensure_labels(repo, [APPROVED_FR])
-    except soft as exc:
-        say(f"warning: cannot ensure label {APPROVED_FR.name} on {repo}: {exc}")
-        return
-    say(f"created label {APPROVED_FR.name} on {repo}")
+    off = _labels_off(client, repo)
+    for label in (APPROVED_FR, READY_FR):
+        if off is not None:
+            say(f"label {label.name} not ensured on {repo}: {off}")
+            continue
+        try:
+            if client.label_exists(repo, label.name):
+                continue
+            client.ensure_labels(repo, [label])
+        except soft as exc:
+            say(f"warning: cannot ensure label {label.name} on {repo}: {exc}")
+            continue
+        say(f"created label {label.name} on {repo}")

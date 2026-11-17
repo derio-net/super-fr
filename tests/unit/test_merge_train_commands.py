@@ -122,4 +122,4 @@ def test_merge_creates_the_missing_label_under_yes_only(
     assert "created label" not in out and forge.created_labels == []
     code, out = _merge(tmp_path, "--yes")
     assert "created label approved-fr on derio-net/super-fr" in out
-    assert forge.created_labels == ["approved-fr"]
+    assert forge.created_labels == ["approved-fr", "ready-fr"]

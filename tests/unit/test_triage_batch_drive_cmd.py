@@ -67,7 +67,7 @@ class World:
         self.config: dict[str, Any] | None = None
         self.titles: dict[int, str] = {}
         self.outside: set[int] = set()  # issues by an outside author no operator admitted
-        self.labels_defined: set[str] = {"approved-fr"}
+        self.labels_defined: set[str] = {"approved-fr", "ready-fr"}
         self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
         self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
         self.skipped: list[Any] = []  # repos collect did not read
@@ -4548,10 +4548,12 @@ def test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it(
     world.labels_defined.clear()
     code, out = _drive(tmp_path, "--once", "--yes")
     assert f"created label approved-fr on {REPO}" in out
+    assert f"created label ready-fr on {REPO}" in out  # triage-intake R8: beside approved-fr
     assert world.calls.count("label_exists approved-fr") == 1
+    assert world.calls.count("label_exists ready-fr") == 1
     _drive(tmp_path, "--once", "--yes")
     assert world.calls.count("label_exists approved-fr") == 2  # one per pass
-    assert out.count("created label") == 1
+    assert out.count("created label") == 2
 
 
 def test_a_foreign_push_after_the_snapshot_is_stepped_over_not_a_stop(
