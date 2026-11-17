@@ -5306,7 +5306,7 @@ def test_archive_conflict_brief_enters_isolation_on_the_archive_branch() -> None
     text = archive_conflict_brief(
         batch, pr=201, head="sha-201", branch="chore/archive-p1", base="origin/main"
     )
-    assert text.startswith("Archive PR conflict on batch b1 ")
+    assert text.startswith("Archive PR conflict on batch b1: ")
     step1 = next(line for line in text.splitlines() if line.startswith("1. "))
     assert "`fr isolation up --branch chore/archive-p1`" in step1
     assert "git switch" not in text
