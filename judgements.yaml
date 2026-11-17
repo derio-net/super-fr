@@ -7865,6 +7865,12 @@ batches:
     runner: herdr
     handle: w3K:p4
     archive: chore/closeout-2026-11-17-4
+  - kind: closeout
+    at: '2026-11-17T15:19:17.957274Z'
+    runner: herdr
+    handle: w3K:p4
+    archive: chore/closeout-2026-11-17-4
+    archived: 1535
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -8367,6 +8373,7 @@ closeouts:
   planned:
   - suite-trust
   pr: 1535
+  merged: true
   head: 15e39336cc67fd4628503f629047c60413b651b1
   members:
   - suite-trust
