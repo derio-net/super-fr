@@ -7751,6 +7751,12 @@ batches:
     runner: herdr
     handle: w3K:p5
     archive: chore/closeout-2026-11-17-5
+  - kind: closeout_handback
+    at: '2026-11-17T15:30:37.153314Z'
+    item: derio-net/super-fr/run/closeout-2026-11-17-5
+    pr: 1536
+    head: 45448904392db1e95e1ddd7a685161d42e0d7d4b
+    reason: 1 failing check(s)
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
@@ -8405,3 +8411,5 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-17-batch-triage-collect.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-17-batch-triage-collect.md"
+  handed:
+  - 45448904392db1e95e1ddd7a685161d42e0d7d4b
