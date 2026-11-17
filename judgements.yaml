@@ -7624,6 +7624,12 @@ batches:
   - deliver-evidence
   - owed-archive
   - workspace-identity
+  events:
+  - kind: dispatch
+    at: '2026-11-17T08:57:19.002450Z'
+    runner: herdr
+    handle: w3H:p6
+    branch: feat/batch-acceptance-edits
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
