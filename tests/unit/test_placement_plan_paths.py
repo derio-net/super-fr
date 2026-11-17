@@ -16,7 +16,7 @@ from fr.cli import app
 from fr.isolation.hostworktree import HostWorktreeTarget
 from typer.testing import CliRunner
 
-from tests.unit.settings_repo import make_repo
+from tests.unit.settings_repo import git, make_repo
 from tests.unit.test_placement_quiet import QUIET, push_fr_branch
 
 FEATURE = "feat__q"
@@ -335,3 +335,74 @@ def test_parsing_a_quiet_plan_from_a_deleted_cwd_does_not_raise(
     monkeypatch.delenv("FR_REPO_ROOT", raising=False)
     plan = parse(plan_dir)  # the isolation states still name the workspace
     assert plan.repo_root == worktree.resolve()
+
+
+# --- gh#1438: an unnamed product checkout is said, never silently substituted ---------
+
+
+def test_a_quiet_plan_with_no_nameable_checkout_is_marked_and_warned(
+    quiet: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With the feature's workspace gone, `parse` can name no product checkout. It still
+    falls back to the `fr` worktree (the plan must stay readable), but the `Plan` says
+    so and the reader is told once, naming the plan."""
+    import shutil
+
+    from fr.parser import parse
+
+    worktree, feature = quiet
+    plan_dir = _create(worktree, tmp_path, SPEC)
+    monkeypatch.delenv("FR_REPO_ROOT", raising=False)
+    monkeypatch.chdir(worktree)
+    assert parse(plan_dir).checkout_unnamed is False
+    capsys.readouterr()
+    monkeypatch.chdir(tmp_path)
+    shutil.rmtree(worktree)
+    plan = parse(plan_dir)
+    fr_top = (Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr").resolve()
+    assert plan.repo_root == fr_top
+    assert plan.checkout_unnamed is True
+    assert plan.spec_file == feature / KIND_DIRS["spec"] / SPEC
+    err = " ".join(capsys.readouterr().err.split())
+    assert "no product checkout" in err and SLUG in err, err
+    parse(plan_dir)
+    assert "no product checkout" not in capsys.readouterr().err  # said once per process
+
+
+def test_the_product_checkout_lookup_is_cached_per_process(
+    quiet: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review of #1437: every parse asked `space_for` once per recorded workspace. A
+    checkout already named is re-confirmed with ONE `space_for`, not searched again."""
+    from fr.artifacts import paths
+    from fr.parser import parse
+
+    worktree, _ = quiet
+    plan_dir = _create(worktree, tmp_path, SPEC)
+    base = Path(git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir").strip())
+    for other in ("feat/a", "feat/b", "feat/c"):  # more recorded workspaces to search
+        HostWorktreeTarget(base.parent).up(profile=None, branch=other)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("FR_REPO_ROOT", raising=False)
+    layout = paths.plan_layout_root(plan_dir)
+    assert layout is not None
+    fr_top = Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr"
+    calls: list[Path] = []
+    real = paths.space_for
+
+    def counting(root, *a, **k):  # type: ignore[no-untyped-def]
+        calls.append(Path(root))
+        return real(root, *a, **k)
+
+    monkeypatch.setattr(paths, "space_for", counting)
+    paths.clear_checkout_cache()  # `fr plan create` already named it in this process
+    assert parse(plan_dir).repo_root == worktree.resolve()
+    searched = len(calls)
+    assert searched > 1, calls  # the uncached lookup searches the recorded workspaces
+    calls.clear()
+    assert paths.product_checkout_for(layout, fr_top) == worktree.resolve()
+    assert parse(plan_dir).repo_root == worktree.resolve()
+    assert len(calls) == 2 < 2 * searched, (searched, calls)  # one re-confirmation each
