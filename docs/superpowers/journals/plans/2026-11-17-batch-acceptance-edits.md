@@ -144,3 +144,50 @@ bb8b0e9bb: `_introductions` reads a tip `<slug>.yaml` and the `<slug>-design.yam
 ### p1-r3-resolved · finding [refuted] · resolves p1-r3: Restored notes read ".; tracked by" (double punctuation) (phase 1)
 
 Decision d4 restores the pre-sweep note byte-exact and appends `; tracked by …`; the old notes end in a period, so `.;` is the restored text plus the agreed join. Stripping the period would alter the text the restore exists to bring back.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-check-ignore-z-needs-stdin created=2026-11-17T14:03:04+00:00 phase=2 -->
+### p2-check-ignore-z-needs-stdin · discovery · git check-ignore -z only works with --stdin, so the set listing feeds paths on stdin (phase 2)
+
+The design (§D) says `check-ignore -z --`; git refuses it ("fatal: -z only makes
+sense with --stdin"). `fr.git.ignored_paths` runs `check-ignore -z --stdin` with the
+paths NUL-separated on stdin (output echoes each input as given), so `git_answer`
+gained an optional `stdin=` keyword. Same answers and exit codes as specified (R8).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-not-utf8-text-module created=2026-11-17T14:03:04+00:00 phase=2 -->
+### p2-not-utf8-text-module · discovery · NotUtf8Error and read_utf8 live in fr.artifacts.text; the gate's own exception lines use describe() too (phase 2)
+
+A sibling module with no imports, so registry.py and the repairs can share it without
+a cycle. Readers that replaced `Path.read_text()` (matrix_anchors, matrix_fragments)
+keep universal-newline reading (`translate_newlines=True`); the heading repair and
+read_verbatim keep bytes as they are. Besides the runner's seven sites, trigger.py's
+three "migration failed"/"cannot tell" lines also print `describe(e)`, so the gate's
+refusal never shows a codec message (R7).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-archival-test-explicit-run-id created=2026-11-17T14:03:04+00:00 phase=2 -->
+### p2-archival-test-explicit-run-id · discovery · The archival-by-emitted-plan test now names an explicit --run-id (phase 2)
+
+`test_archival_finds_the_adopted_run_by_emitted_plan_not_by_name` asserted the
+adopted id was branch-derived and unlike the plan slug. With #1219 an adopted plan's
+run IS named after the plan, so the test passes an explicit run id that shares
+nothing with the slug, keeping what it proves (archival keys on `emitted.plan`).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-phase-gates created=2026-11-17T14:03:04+00:00 phase=2 -->
+### p2-phase-gates · discovery · Phase 2 gates: targeted selections green; full suite left to CI (tests: ci) (phase 2)
+
+ruff format/check over packages/ and tests/, mypy over packages/fr/src, `fr docs check`
+(two pages' `reviewed` stamps bumped), `sync-readme.py --check`, `fr acceptance check
+--no-fetch` and `fr validate artifacts` all clean. Targeted selections: migration and
+heading files 274 passed/1 skipped; acceptance integrity + registry 214 passed; the
+four check-ignore sites' files 228 passed/1 skipped, acceptance init/refresh 51
+passed; adopt, supersede, lenses-inflight, historical evidence, trigger, gatebackfill
+196 passed plus the one archival test fixed and rerun (2 passed).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-not-utf8-must-stay-a-decode-error created=2026-11-17T14:03:04+00:00 phase=2 -->
+### p2-not-utf8-must-stay-a-decode-error · discovery · NotUtf8Error must subclass UnicodeDecodeError, or existing handlers let it escape (phase 2)
+
+CI (run 44094541563, shard 5) failed test_validate_artifacts.py::test_non_utf8_bytes_are_a_failure_naming_the_file: `fr validate artifacts` catches `UnicodeDecodeError` around the stamp read, which now decodes through `fr.artifacts.text`, and a `ValueError` subclass escaped it. ~40 readers across fr catch `UnicodeDecodeError`; the orchestrator made `NotUtf8Error` a `UnicodeDecodeError` subclass whose text is the named reason, so every handler keeps catching it (test_artifacts_text.py, red before).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-17T14:03:04+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+gates and docs stamps only: no code to clean
