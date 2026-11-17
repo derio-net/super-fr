@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-17-feat-batch-acceptance-edits
+captures:
+- host: h-a4fc5a26
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-17T09:30:08+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: fc61d7be-c481-42e8-b2b2-c991f2597c79
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 70
+        cache_write: 159621
+        cache_read: 4978075
+        output: 27263
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 11
+      other:
+        usd: null
+        turns: 8
+      paperwork:
+        usd: null
+        turns: 15
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 96245
+        cache_read: 136422
+        output: 628
+      brainstorm:
+        usd: null
+        turns: 31
+        input: 64
+        cache_write: 63376
+        cache_read: 4841653
+        output: 26635
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 96245
+          cache_read: 136422
+          output: 628
+        brainstorm:
+          usd: null
+          turns: 31
+          input: 64
+          cache_write: 63376
+          cache_read: 4841653
+          output: 26635

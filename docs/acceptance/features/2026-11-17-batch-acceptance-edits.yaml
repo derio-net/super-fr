@@ -1,0 +1,68 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-17-batch-acceptance-edits
+repo: derio-net/super-fr
+rows:
+  - id: acceptance-amend-origin-only-keeps-statement
+    capability: acceptance
+    acceptance: An origin-only `fr acceptance amend --op reword --origin` changes only
+      the row's origin, never restating a pending reword's statement in the row.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R1
+    - spec:2026-11-17-batch-acceptance-edits#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: fragment-design-spelling-repair
+    capability: acceptance
+    acceptance: '`fr migrate artifacts` renames a `<slug>-design.yaml` acceptance fragment
+      to `<slug>.yaml`, merging into an existing one and refusing by id when the two
+      disagree, without changing the effective matrix.'
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R13
+    - spec:2026-11-17-batch-acceptance-edits#R14
+    - spec:2026-11-17-batch-acceptance-edits#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: spec-repairs-name-undecodable-files
+    capability: migration
+    acceptance: A spec or matrix that is not UTF-8 text is refused by `fr migrate artifacts`
+      and the CLI-entry gate with a reason naming the file, the byte and its offset,
+      never a codec error, and is left untouched.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R5
+    - spec:2026-11-17-batch-acceptance-edits#R6
+    - spec:2026-11-17-batch-acceptance-edits#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: adopt-run-id-from-plan-slug
+    capability: run
+    acceptance: Adopting in-flight plans names each run after its plan, so `fr migrate
+      artifacts --yes --adopt` on one branch adopts every adoptable plan, one run each.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R9
+    - spec:2026-11-17-batch-acceptance-edits#R10
+    - spec:2026-11-17-batch-acceptance-edits#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: adopt-default-branch-warning
+    capability: run
+    acceptance: Adopting a run onto the repository's default branch warns once for that
+      run, naming the branch and `--branch`, and still adopts.
+    origin:
+    - spec:2026-11-17-batch-acceptance-edits#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
