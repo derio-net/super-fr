@@ -1,0 +1,48 @@
+schema_version: 12
+run: 2026-11-17-feat-batch-triage-intake
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: review
+    id: review-phase-3
+    phase: 3
+    title: "Phase 3 code review (R10-R12): no blocking defects; 1 in-scope, 2 out"
+    body: |
+      Independent read-only reviewer over 8f02d19..HEAD. Confirmed: a missing ADD is never swallowed, the retry is
+      bounded and idempotent, the REST 404 tolerance is untouched; the dry run and --yes share _checkout_refusal and
+      the dry run exits 0 writing nothing; close_gate_trackers catches Exception (not BaseException) at all three
+      sites, isolates each issue and records `issue #<n>: <Type>: <msg>`; _pass_gate reports the summary; nothing
+      imported close._FAILURES.
+  - kind: finding
+    id: p3-r1
+    phase: 3
+    review_scope: in
+    title: "swap_issue_labels' regex cannot match a label name holding an apostrophe, so #1406 stays unfixed for it"
+    body: "gh.py ~436. Fails safe (re-raises), but the fix did not cover such labels."
+  - kind: finding
+    id: p3-r2
+    phase: 3
+    review_scope: out
+    title: "The retry assumes gh resolves all labels before mutating; unverified without a live gh"
+    body: "A repeated add or removal is idempotent, so the retry is safe either way; only the docstring's claim was too strong."
+  - kind: finding
+    id: p3-r3
+    phase: 3
+    review_scope: out
+    title: "close_gate_trackers returns early on an EvidenceReader failure instead of recording per issue"
+    body: "Matches the 'not read' semantics; the reader is shared by every issue, so per-issue recording would repeat one error."
+resolves:
+  - id: p3-r1
+    state: fixed
+    body: "ba9de9d0a: each pending removal is matched by its exact quoted name (no name parsing); test test_an_undefined_removal_whose_name_holds_an_apostrophe_is_dropped was red first."
+  - id: p3-r2
+    state: out-of-scope
+    body: "gh's resolve-before-mutate order is gh's behaviour, not this change's; ba9de9d0a reworded the docstring to state that a partial apply would only repeat idempotent edits."
+  - id: p3-r3
+    state: refuted
+    body: "Not a defect: one shared reader failing means no issue can be judged; recording it once is the accurate report."
+evidence:
+  review: review-phase-3
+  reviewer: aa76fb71ae6490050
+  model: claude-sonnet-5-5
