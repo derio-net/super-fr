@@ -200,3 +200,8 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-17-batch-acceptance-edits-p1 created=2026-11-17T09:40:33+00:00 -->
 ### tier-2026-11-17-batch-acceptance-edits-p1 · decision · hard: phase 1 changes the merged-row check (R16 of repo-feature-settings) every fr acceptance check and deliver rely on
+
+<!-- fr:journal kind=decision scope=spec id=d8-restore-scope created=2026-11-17T12:44:18+00:00 narrows=derio-net/super-fr#1394 decided_by=operator -->
+### d8-restore-scope · decision · #1394 restores 12 of 17 rows: the 5 later walked keep their walk notes
+
+Recovery first read fragment row definitions, not the fold; 9 of the 17 rows were re-noted on 2026-11-14. The operator chose: splice the old text in before the tracker on the 4 walk-owed rows, keep the 5 walked rows' walk notes (their walk evidence supersedes the pre-sweep text). 8 bare rows restored by phase 1, 4 by the orchestrator.
