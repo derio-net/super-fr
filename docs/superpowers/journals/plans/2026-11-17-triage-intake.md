@@ -358,3 +358,8 @@ d5e6d1bd7: listed and viewed issues; red with withholding made a no-op.
 ### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: Driver/board rejected-parity test covers one outside author only
 
 629ccfe55: outside, pr_authors-trusted, ready-fr, maintainer and not-collected members.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved-2 created=2026-11-17T20:02:42+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved-2 · finding [fixed] · resolves l-docs-accuracy-r3: fr-triage SKILL.md step 3 said a first run writes judgements schema 11; the writer stamps 12
+
+efb833508: the skill names judgements schema 12; mirrors regenerated.
