@@ -197,3 +197,27 @@ def test_only_a_design_file_whose_feature_is_its_stem_applies(tmp_path: Path, na
     path = tmp_path / name
     path.write_text(_frag(f"{SLUG}-design", [_row("r")]))
     assert repair.applies(path) is (name == f"{SLUG}-design.yaml")
+
+
+def test_a_non_utf8_sibling_fails_the_repair_naming_that_sibling(tmp_path: Path) -> None:
+    """l-errors-r1: the sibling read at the fold goes through `read_utf8`, so the
+    failure names the file that is not UTF-8, never the -design file or the codec."""
+    design = _frag(f"{SLUG}-design", [_row("r1")])
+    root = _repo(tmp_path, {f"{SLUG}-design.yaml": design})
+    bad = root / FEATURES / "2026-01-02-beta.yaml"
+    bad.write_bytes(_frag("2026-01-02-beta", [_row("b1")]).encode() + b"# caf\xe9\n")
+    report = run_migrations(root, dry_run=False)
+    (failure,) = [f for f in report.failed if f.path.name == f"{SLUG}-design.yaml"]
+    assert f"{bad} is not UTF-8 text" in failure.error
+    assert "codec" not in failure.error
+    assert (root / FEATURES / f"{SLUG}-design.yaml").read_text() == design
+
+
+def test_a_non_utf8_design_file_fails_naming_itself(tmp_path: Path) -> None:
+    """l-errors-r1: `applies` does not mask a non-UTF-8 -design file as 'not mine'."""
+    path = tmp_path / f"{SLUG}-design.yaml"
+    path.write_bytes(_frag(f"{SLUG}-design", [_row("r1")]).encode() + b"# caf\xe9\n")
+    (repair,) = [r for r in MIGRATIONS.repairs("acceptance-fragment") if r.name == "design-name"]
+    with pytest.raises(UnicodeDecodeError) as info:
+        repair.applies(path)
+    assert str(info.value).startswith(f"{path} is not UTF-8 text")

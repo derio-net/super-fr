@@ -26,6 +26,7 @@ import yaml
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, Repair
+from fr.artifacts.text import read_utf8
 
 if TYPE_CHECKING:
     from fr.acceptance.fragment import Fragment
@@ -41,17 +42,18 @@ _FEATURE_RE = re.compile(r"^feature:[^\n]*$", re.MULTILINE)
 def _parse(path: Path) -> Fragment:
     from fr.acceptance.fragment import parse_fragment
 
-    return parse_fragment(path.read_text(encoding="utf-8"), source=path.name)
+    return parse_fragment(read_utf8(path, translate_newlines=True), source=path.name)
 
 
 def _slug(path: Path) -> str | None:
     """The slug *path* is the old spelling of: its name ends `-design.yaml` and its
     `feature:` key is its stem. A file that does not parse, or names another feature,
-    is the structure validator's to report, never this repair's."""
+    is the structure validator's to report, never this repair's. A `-design` file that
+    is not UTF-8 raises `NotUtf8Error` naming it: unknown state is not "not mine"."""
     if not path.name.endswith("-design.yaml") or not path.is_file():
         return None
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(read_utf8(path, translate_newlines=True))
     except yaml.YAMLError:
         return None
     feature = data.get("feature") if isinstance(data, dict) else None
@@ -109,7 +111,7 @@ def _fn(path: Path) -> list[Path]:
     if slug is None:  # the runner re-asks `applies` first; be safe anyway
         return []
     target = path.with_name(f"{slug}.yaml")
-    design_text = path.read_text(encoding="utf-8")
+    design_text = read_utf8(path, translate_newlines=True)
     design = parse_fragment(design_text, source=path.name)
     primary = _parse(target) if target.is_file() else None
     merged = merge_spellings(primary, design, slug)
@@ -118,7 +120,9 @@ def _fn(path: Path) -> list[Path]:
     def key(p: Path) -> str:
         return f"{p.parent.name}/{p.name}"
 
-    texts = {key(p): p.read_text(encoding="utf-8") for p in sorted(path.parent.glob("*.yaml"))}
+    texts = {
+        key(p): read_utf8(p, translate_newlines=True) for p in sorted(path.parent.glob("*.yaml"))
+    }
     after = {k: t for k, t in texts.items() if k not in (key(path), key(target))}
     after[key(target)] = new_text
     try:
