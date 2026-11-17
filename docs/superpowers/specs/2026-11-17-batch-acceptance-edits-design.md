@@ -130,8 +130,8 @@ text otherwise. Tests run through `run_migrations` and the gate's refusal.
 ### D. One `check-ignore` helper (R8)
 
 In `fr.git` (`packages/fr/src/fr/git.py`, beside `git_answer` at :113):
-`ignored_paths(root, paths) -> set[str]` runs `git check-ignore -z --` once through
-`git_answer`, splits on NUL, and returns an empty set on any exit but 0/1 and on
+`ignored_paths(root, paths) -> set[str]` runs `git check-ignore -z --stdin` once through
+`git_answer` (paths on stdin: git refuses `-z` with paths on the command line), splits on NUL, and returns an empty set on any exit but 0/1 and on
 `GitUnavailableError`; `is_ignored(root, path) -> bool` runs `check-ignore -q` and is
 False on any error, git missing included. `_committable`, `commit.py`'s
 `_without_ignored`, `scaffold.py:672-674` and `visual.py`'s `git_ignored` call them.
