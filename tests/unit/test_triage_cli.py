@@ -48,6 +48,9 @@ class _Forge:
     ) -> list[dict[str, Any]]:
         return []
 
+    def issue_associations(self, *, repo: str, state: str, limit: int) -> dict[int, str]:
+        return {}
+
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
         return [p for p in _load("super-fr-prs.json") if p.get("state") == "OPEN"]
 
@@ -127,7 +130,7 @@ def test_org_scope_reports_a_skipped_repo_verbatim_and_still_writes(
     assert "[no access] [/red]" in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["skipped"] == [{"repo": "example-org/beta", "reason": "[no access] [/red]"}]
-    assert facts["schema"] == 13
+    assert facts["schema"] == 14
 
 
 def test_pr_limit_widens_the_window_and_a_full_list_warns(

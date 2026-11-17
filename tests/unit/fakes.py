@@ -396,6 +396,9 @@ class FakeGhClient:
     def viewer_login(self) -> str:
         return self.comment_author
 
+    def issue_associations(self, repo: str, state: str, limit: int) -> dict[int, str]:
+        return {}
+
     def list_issues(
         self,
         repo: str,

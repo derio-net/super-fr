@@ -85,6 +85,9 @@ class _Forge(FakeForge):
         super().__init__(**kw)
         self.open_prs = open_prs
 
+    def issue_associations(self, *, repo: str, state: str, limit: int) -> dict[int, str]:
+        return {}
+
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_open_prs", {"repo": repo, "limit": limit}))
         return self.open_prs
@@ -92,8 +95,8 @@ class _Forge(FakeForge):
 
 def test_facts_are_written_at_the_current_schema() -> None:
     forge = _Forge(issues={REPO: []}, prs={REPO: []}, open_prs=[])
-    assert FACTS_SCHEMA == 13
-    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 13
+    assert FACTS_SCHEMA == 14
+    assert collect_facts(forge, SCOPE, now=NOW).to_json()["schema"] == 14
 
 
 def test_a_linked_open_pr_gains_files_head_oid_checks_and_merge_state_from_the_join() -> None:
@@ -456,7 +459,7 @@ def test_schema_5_facts_carry_mirrors_and_schema_4_files_still_read(tmp_path: Pa
         },
     )
     facts = collect_facts(forge, SCOPE, now=NOW)
-    assert facts.schema_ == FACTS_SCHEMA == 13
+    assert facts.schema_ == FACTS_SCHEMA == 14
     assert facts.config_for(REPO).mirrors == [["uv", "run", "sync.py"]]
     path = tmp_path / "facts.json"
     doc = facts.to_json()
@@ -557,7 +560,7 @@ def test_schema_6_facts_carry_the_restart_config_and_schema_5_files_still_read(
     config's full dump, so the stamp moves 5 -> 6 and 5 still loads."""
     from fr.triage.model import FACTS_READS, TriageConfig
 
-    assert FACTS_SCHEMA == 13 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+    assert FACTS_SCHEMA == 14 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
     default = TriageConfig()
     assert (default.post_merge_restart, default.idle_session_minutes) == ("none", 60)
     forge = _Forge(
@@ -601,7 +604,7 @@ def test_schema_8_facts_carry_merge_method_and_schema_7_files_still_read(
         file_bodies={(REPO, CONFIG_PATH, "HEAD"): _CONFIG + "merge_method: squash\n"},
     )
     facts = collect_facts(forge, SCOPE, now=NOW)
-    assert facts.schema_ == FACTS_SCHEMA == 13
+    assert facts.schema_ == FACTS_SCHEMA == 14
     assert facts.config_for(REPO).merge_method == "squash"
     path = tmp_path / "facts.json"
     doc = facts.to_json()
