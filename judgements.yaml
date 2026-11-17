@@ -7674,6 +7674,17 @@ batches:
     runner: herdr
     handle: w3H:p6
     branch: feat/batch-acceptance-edits
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+  - kind: red_handback
+    at: '2026-11-17T14:49:57.607609Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+    checks:
+    - 2 failing check(s)
+    delivered: session
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
@@ -7716,6 +7727,16 @@ batches:
     runner: herdr
     handle: w3K:p2
     branch: fix/batch-triage-collect
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1532
+    head: 6f6b897a71fa23cc44660f5a9f5493d5bff3ed29
+  - kind: update
+    at: '2026-11-17T14:50:27.601245Z'
+    pr: 1532
+    head_before: 6f6b897a71fa23cc44660f5a9f5493d5bff3ed29
+    head_after: e8931668ee4a3adc1aa04d72ab4f3216472fb9ad
+    base: 94a7c2442300b19478da094c97a3b03933a9cf80
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
@@ -7820,6 +7841,10 @@ batches:
     runner: herdr
     handle: w3K:p1
     branch: fix/batch-suite-trust
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1531
+    head: a32833144c0b21a29c914c0e3d480c0303a1116b
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
