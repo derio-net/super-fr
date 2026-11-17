@@ -7585,6 +7585,14 @@ batches:
     head_before: ce648b75888a499a763f0054aa4518b509638c87
     head_after: ec6fe1a2415fc741d3efa72263e624955c5f894a
     base: 6850c71d311fe01ae709f441b7f413970a964df1
+  - kind: claims_released
+    at: '2026-11-17T08:43:26.562737Z'
+    keys:
+    - super-fr#1201
+    - super-fr#1202
+    - super-fr#1290
+    - super-fr#1291
+    - super-fr#1393
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
