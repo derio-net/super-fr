@@ -55,9 +55,19 @@ rows:
     origin:
     - spec:2026-11-17-triage-intake#R5
     - spec:2026-11-17-triage-intake#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_nothing
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_edit_leaving_a_rejected_member_is_refused_and_removing_the_last_one_succeeds
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_refuses_a_rejected_member_before_any_forge_write_or_runner_call
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_rejected_batch_is_blocked_before_the_dependency_and_cap_checks
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_driver_and_the_board_fill_rejected_alike
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_board_plan_blocks_a_batch_with_an_untrusted_member
+    status: ci
+    notes: 'Unit tests: create/edit/dispatch exit 2 with no write, the edit that removes
+      the member succeeds, both snapshot builders fill rejected alike, the pure pass
+      blocks before the after and cap checks and dispatches once admitted.'
     verify: none
   - id: intake-brief-quotes-untrusted
     capability: triage intake trust
