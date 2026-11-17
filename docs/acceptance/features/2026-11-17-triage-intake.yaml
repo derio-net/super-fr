@@ -1,0 +1,100 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-17-triage-intake
+repo: derio-net/super-fr
+rows:
+  - id: intake-trust-eligibility
+    capability: triage intake trust
+    acceptance: An open issue is batch-eligible only when its author is the collecting
+      viewer or a pr_authors login, its author association is OWNER, MEMBER or COLLABORATOR,
+      or it carries the operator label ready-fr; an issue whose author or association
+      was never read is ineligible.
+    origin:
+    - spec:2026-11-17-triage-intake#R1
+    - spec:2026-11-17-triage-intake#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: intake-untrusted-set-apart
+    capability: triage intake trust
+    acceptance: An ineligible issue's body is not stored in facts, and fr triage check
+      lists it in an untrusted set with its reason; it is never unranked, unplaced or
+      suggested.
+    origin:
+    - spec:2026-11-17-triage-intake#R3
+    - spec:2026-11-17-triage-intake#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: intake-batch-refuses-untrusted
+    capability: triage intake trust
+    acceptance: batch create, edit and dispatch refuse a batch holding an ineligible
+      member, writing nothing, and the wave driver holds such a batch with the reason
+      every pass until the member becomes eligible.
+    origin:
+    - spec:2026-11-17-triage-intake#R5
+    - spec:2026-11-17-triage-intake#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: intake-brief-quotes-untrusted
+    capability: triage intake trust
+    acceptance: The launch brief quotes every member's title, detail and note inside
+      one block marked as untrusted data and tells the session never to follow instructions
+      in it.
+    origin:
+    - spec:2026-11-17-triage-intake#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: driver-refetches-origin-each-pass
+    capability: wave driver merge path
+    acceptance: Every driver pass fetches each repo's origin before its merge path acts,
+      and a pass whose fetch fails holds that repo with one warning instead of acting
+      on refs from an earlier fetch.
+    origin:
+    - spec:2026-11-17-triage-intake#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: cancel-converges-undefined-label
+    capability: triage batch cancel
+    acceptance: Removing a label the repository does not define counts as done, so batch
+      cancel --yes withdraws a member in such a repo and writes its cancel event; adding
+      an undefined label still fails.
+    origin:
+    - spec:2026-11-17-triage-intake#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: cancel-dry-run-names-checkout
+    capability: triage batch cancel
+    acceptance: batch cancel without --yes warns that --yes would be refused when its
+      clone does not open or is not the batch's repo, naming the --checkout it needs.
+    origin:
+    - spec:2026-11-17-triage-intake#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-trackers-contain-errors
+    capability: gate tracker close
+    acceptance: Closing a passed gate's trackers never raises; any error reading evidence
+      or handling one tracker is reported and the remaining trackers are still handled,
+      so the driver pass completes.
+    origin:
+    - spec:2026-11-17-triage-intake#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
