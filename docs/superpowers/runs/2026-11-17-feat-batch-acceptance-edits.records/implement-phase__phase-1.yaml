@@ -5,8 +5,8 @@ schema_version: 12
 run: 2026-11-17-feat-batch-acceptance-edits
 step: implement-phase
 item: phase/1
-outcome: blocked
-ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T6.S1]
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T6.S1]
 refactor:
   P1.T1: "smoke only: no code changed"
   P1.T2: "no fr.acceptance helper looks a row definition up by id; the new _own_statement is the only reader"
@@ -77,5 +77,9 @@ journal:
       the acceptance/fragment/fold/migration/amend selection (1872 passed before the cycle fix;
       the one uncollected file then passed with the new test files, 43 passed). The phase's
       suite evidence is owed on a quieter host or CI.
-resolves: []
-evidence: {}
+resolves:
+  - id: p1-r3-nine-rows-renoted
+    state: fixed
+    body: "Operator decision d8 (spec journal, answered by operator): R3 narrowed. The 8 bare rows were restored in this phase; the orchestrator spliced the old text in before the tracker on the 4 walk-owed rows (amendments c3a8024, 42f6788, 44e773e, d50a5ea); the 5 walked rows keep their walk notes. fr acceptance check --no-fetch clean."
+evidence:
+  tests: ci
