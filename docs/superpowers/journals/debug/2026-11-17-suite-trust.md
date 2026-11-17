@@ -25,3 +25,8 @@ Two root causes found where the batch assumed one; asked per the batch rules. Op
 ### f-1468-git-scope · finding [fixed] · Scenario harness and _common.sh drop the caller's git scope (gh#1468)
 
 tests/integration/test_scenarios.py's _env and its fixture `git init` now strip every variable `git rev-parse --local-env-vars` names; tests/scenarios/_common.sh unsets the same list. Pinned failing-first by tests/unit/test_scenario_git_isolation.py (859e851c2, red before c209d21fb, green after): a GIT_DIR naming a live linked worktree no longer moves its branch or adds feat/fixture.
+
+<!-- fr:journal kind=review scope=debug id=1891705b9bb2 created=2026-11-17T12:57:58+00:00 -->
+### 1891705b9bb2 · review · Self-review of c209d21fb: one residual raised, no defect in the change
+
+Raised: fr verification walk (packages/fr/src/fr/verification/walk.py, child env and fixture `git init`) also passes GIT_* through; _common.sh now makes its scenarios safe, but the walk's own `git init` is product code and is left for a follow-up issue (out of scope: this PR is tests-only). Full suite: 16301 passed, 9 failed in tests/unit/test_isolation_agent_worktrees.py on a run the host load stretched to 3h14m; that file passes 19/19 alone and the diff does not touch it. #1463: diagnostics only, no root cause; stays open.
