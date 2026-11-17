@@ -7619,6 +7619,12 @@ batches:
     runner: herdr
     handle: w3H:p5
     archive: chore/closeout-2026-11-17-2
+  - kind: closeout
+    at: '2026-11-17T09:10:21.855537Z'
+    runner: herdr
+    handle: w3H:p5
+    archive: chore/closeout-2026-11-17-2
+    archived: 1528
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
@@ -8259,6 +8265,7 @@ closeouts:
   planned:
   - release-truth
   pr: 1528
+  merged: true
   head: 28e049abf662293b1ce9512e8467cb8da3b2dbd4
   members:
   - release-truth
