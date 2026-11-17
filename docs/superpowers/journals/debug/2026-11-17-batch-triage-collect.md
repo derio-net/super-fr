@@ -20,3 +20,8 @@ scope_retire_command filters facts.issues to state == open. Dropping the filter 
 ### 4df37d0ec4f5 · repro · #1300: facts schema version spelled in three model.py places and many tests
 
 model.py: FACTS_SCHEMA Literal[13] = 13, FACTS_READS tuple, Facts.schema_ Literal[3..13] = Field(13). Tests assert == 13 and the full reads tuple in at least seven modules.
+
+<!-- fr:journal kind=hypothesis scope=debug id=db145d129a2d created=2026-11-17T09:03:19+00:00 -->
+### db145d129a2d · hypothesis · Four independent defects, not one root cause
+
+1268 is a policy choice pinned by a spec requirement; 1197 is a duplicated predicate; 1210 is missing data (closed-claim signers not collected); 1300 is a duplicated constant. 1210's fix needs a facts-schema bump (signers on StaleInProgress), which is when 1300 says to do its refactor.
