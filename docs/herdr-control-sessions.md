@@ -7,7 +7,7 @@ covers:
   - packages/fr-herdr/src/**
   - packages/fr/src/fr/triage/batch*.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
-reviewed: 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged
+reviewed: 2026-11-17 still true after batch triage-intake (the launch brief now quotes issue text; the session control it describes is unchanged); 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged
 ---
 
 # Herdr control sessions

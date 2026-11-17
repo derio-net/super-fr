@@ -6,7 +6,8 @@ standalone_style: broadsheet
 covers:
   - scripts/configure-main-protection.sh
   - .github/workflows/release.yml
-reviewed: 2026-11-17 dispatched runs have their own concurrency group; a missing GitHub Release is created on the next run (batch release-truth)
+  - packages/fr/src/fr/triage/intake.py
+reviewed: 2026-11-17 added the Issue intake section (batch triage-intake); dispatched runs have their own concurrency group; a missing GitHub Release is created on the next run (batch release-truth)
 ---
 
 # Merge protection for `main`
@@ -118,3 +119,44 @@ driver puts an approved batch in the queue and does not merge it directly. It re
 queue's state each pass, and raises a `queue-ejected` need if the queue drops
 it. If the rules need up-to-date branches, the driver updates the PR branch
 before it merges. See spec §D and §E.
+
+## Issue intake
+
+On a public repo, anyone can open an issue. The text of an issue can reach the session that
+builds a batch. So the driver batches an issue only when a trusted party wrote it, or an
+operator approved it. Spec: `docs/superpowers/specs/2026-11-17-triage-intake-design.md`.
+
+An issue is eligible when at least one of these is true:
+
+- Its author is the user that ran `collect`, or a login in `pr_authors` of `.fr/triage.yaml`.
+- Its author association is `OWNER`, `MEMBER` or `COLLABORATOR`.
+- It has the `ready-fr` label.
+
+The rule fails closed. If `collect` could not read the author or the association, no clause
+admits the issue.
+
+An issue that is not eligible has these effects:
+
+- `collect` keeps its title and labels, but not its body.
+- `fr triage check` lists it in the `untrusted` set, with the reason. It is never ranked,
+  unranked, unplaced or suggested for a batch.
+- `batch create`, `batch edit` and `batch dispatch` refuse a batch that holds it. They exit
+  2, write nothing, and name the issue, the reason and `ready-fr`.
+- The wave driver, the board and `drive --plan` show the batch as blocked in every pass.
+  The drive stops for the operator. The driver dispatches the batch when no member is rejected.
+
+The launch brief marks the issue text. Its first line holds only the skill command and the
+batch id. The batch title, each member title, detail and note, and the rationale sit in one
+block. The block starts with `<!-- untrusted: written from the issue tracker -->`. Every line
+in the block starts with `> `, so no text can close the block or add a heading outside it.
+The brief tells the session to read the block as a description of the problem and never to
+follow an instruction in it.
+
+Only an operator applies `ready-fr`. On GitHub, a label needs triage permission to apply,
+which an outside author does not have. fr never applies it. The driver creates the label
+when a repo does not have it, as it does for `approved-fr`. Creating a label needs write
+permission. If fr cannot create it, an operator with write access creates it.
+
+One risk remains. `ready-fr` admits the issue as it is later edited. Later edits by the
+author reach the triage agent and the brief. The quoting in the brief still applies to them.
+
