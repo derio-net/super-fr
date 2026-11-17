@@ -234,3 +234,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-17-triage-intake-p2 created=2026-11-17T09:21:40+00:00 -->
+### phase-split-2026-11-17-triage-intake-p2 · decision · ask: #1213 (R9), the driver's per-pass fetch, an independently reviewable driver change
