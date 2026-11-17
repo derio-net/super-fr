@@ -80,10 +80,13 @@ does no harm, because fr's gates accept either.
 A worker session (a batch dispatched through the `claude-cloud` runner) checks this
 first. It runs `fr --version`, then reads the `fr` line of `fr cloud doctor`. It runs the setup
 script again when `fr` is not there or is older than the latest release (as on a pre-warmed
-spare). A release candidate is older than its final, and a version `fr` cannot read is never current. Then it checks that it can run the batch's skill (`/fr-goal`, or `/fr-debugging` for
+spare). Then it checks that it can run the batch's skill (`/fr-goal`, or `/fr-debugging` for
 a debug batch). It reads the skill from the plugin's installed copy when the session did not
 load it. Then it checks that both agent types are dispatchable (a file under
 `.claude/agents/` is not proof).
+
+In the `fr` check, a release candidate is older than its final, and a version that `fr` cannot
+read is never current.
 
 When one of these checks fails, the worker ends its turn BLOCKED, with a `needs_action` that
 names what is not there. It is not re-homed: a new session from the same commit starts the

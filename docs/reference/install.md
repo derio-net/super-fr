@@ -56,7 +56,7 @@ An unknown version, or a tag from before channels existed, installs nothing and 
 installable ones.
 
 A channel switch also removes untracked files from the managed checkout, so the
-installer's preflight does not refuse them. Ignored files, such as a virtual environment, stay.
+installer's preflight does not stop on them. Ignored files, such as a virtual environment, stay.
 
 ## OpenCode (2.x only)
 

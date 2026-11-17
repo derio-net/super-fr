@@ -37,16 +37,15 @@ nothing and exits 0, because the push that moved `main` starts the Release run t
 releases. A push made with `[skip ci]` or with the `GITHUB_TOKEN` starts no run, so the
 daily cron picks that one up instead. It never retries.
 
-A rerun whose release commit already landed skips the push and only tags it. A tag
-with no GitHub Release (the create failed after the tag push) gets its Release on the
-next run. A run
+A rerun whose release commit already landed skips the push and only tags it. A run
 dispatched with an explicit `version` exits non-zero instead. It prints the
 `gh workflow run release.yml -f version=<X>` that dispatches it again. A refusal by the
-ruleset is never treated as superseded: it fails, and names the bypass actor.
+ruleset is never treated as superseded: it fails, and names the bypass actor. A tag
+that has no GitHub Release gets its Release on the next run.
 
-Push and cron runs share one concurrency group and run one at a time. A dispatched
-run has a group of its own, because GitHub keeps only one pending run per group and a
-later push run would replace a pending dispatch with no message. A dispatch can therefore run beside
+Push and cron runs share one concurrency group and run one at a time. GitHub keeps only
+one pending run per group. A later push run would replace a pending dispatched run, and
+nothing would say so. So a dispatched run has a group of its own, and it can run beside
 a push run. Only one of them can push, by the rule above. When both reach the tag, the
 run that finds the other's tag on the same commit, or its Release, is done.
 
