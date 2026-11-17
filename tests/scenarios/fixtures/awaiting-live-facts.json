@@ -17,7 +17,8 @@
       "state": "open",
       "title": "issue 1",
       "updated_at": null,
-      "url": "https://github.com/example-org/widgets/issues/1"
+      "url": "https://github.com/example-org/widgets/issues/1",
+      "author_association": "OWNER"
     },
     {
       "body": "",
@@ -33,7 +34,8 @@
       "state": "closed",
       "title": "issue 2",
       "updated_at": null,
-      "url": "https://github.com/example-org/widgets/issues/2"
+      "url": "https://github.com/example-org/widgets/issues/2",
+      "author_association": "OWNER"
     },
     {
       "body": "",
@@ -47,7 +49,8 @@
       "state": "open",
       "title": "issue 3",
       "updated_at": null,
-      "url": "https://github.com/example-org/widgets/issues/3"
+      "url": "https://github.com/example-org/widgets/issues/3",
+      "author_association": "OWNER"
     }
   ],
   "judged_prs": [],

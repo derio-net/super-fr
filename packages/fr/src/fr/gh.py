@@ -541,6 +541,9 @@ def list_issues(
 
     if (rest := _rest()) is not None:
         return _records(rest.list_issues(repo, state, limit, fields, labels))
+    # `authorAssociation` is a REST-only field (triage-intake R1): `gh issue list --json` does
+    # not offer it, so the CLI is never asked for it; collect reads it another way then.
+    cli_fields = ",".join(f for f in fields.split(",") if f != "authorAssociation")
     out = _run_gh(
         [
             "issue",
@@ -552,7 +555,7 @@ def list_issues(
             "--limit",
             str(limit),
             "--json",
-            fields,
+            cli_fields,
             *[a for label in labels or () for a in ("--label", label)],
         ]
     )

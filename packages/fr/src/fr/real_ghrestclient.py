@@ -638,16 +638,7 @@ class RealGhRestClient:
             limit=limit,
             keep=lambda i: "pull_request" not in i,
         )
-        records = [_issue_record(i) for i in raw]
-        # The association rides along whatever *fields* asks for: `gh issue list --json` has
-        # no such field, so no caller names it (triage-intake R1).
-        return [
-            {
-                **_project(r, fields or _gh.ISSUE_LIST_FIELDS),
-                "authorAssociation": r["authorAssociation"],
-            }
-            for r in records
-        ]
+        return [_project(_issue_record(i), fields or _gh.ISSUE_LIST_FIELDS) for i in raw]
 
     def issue_associations(self, repo: str, state: str, limit: int) -> dict[int, str]:
         raw = self._paged(

@@ -59,7 +59,9 @@ ISSUE_LIMIT = 1000
 PR_LIMIT = 200
 REPO_LIMIT = 200
 # `author` is who opened an issue: a debt digest counts only from a trusted one (facts 9).
-ISSUE_FIELDS = "number,title,labels,createdAt,updatedAt,url,body,author"
+# `authorAssociation` (facts 14, triage-intake R1) is REST's only: `fr.gh.list_issues` drops it
+# for the gh CLI, which has no such field, and `_with_associations` reads it another way.
+ISSUE_FIELDS = "number,title,labels,createdAt,updatedAt,url,body,author,authorAssociation"
 ORIGINS_ISSUE_LIST_FIELDS = (
     real_ghclient.ORIGINS_ISSUE_LIST_FIELDS
 )  # origins' own, wider issue fields

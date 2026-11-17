@@ -51,6 +51,7 @@ READS = frozenset(
         "repo_merge_methods",
         "list_repos",
         "list_issues",
+        "issue_associations",
         "list_prs",
         "list_open_prs",
         "list_merged_prs_by_label",

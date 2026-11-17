@@ -49,6 +49,7 @@ def _facts(*, closed: tuple[int, ...] = (), prs: list[PullRequest] | None = None
                 title=f"issue {n}",
                 state="closed" if n in closed else "open",
                 url=f"https://github.com/{REPO}/issues/{n}",
+                author_association="OWNER",  # intake admits a maintainer's issue
             )
             for n in (1, 2, 3, 4)
         ],

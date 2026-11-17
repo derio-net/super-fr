@@ -181,6 +181,7 @@ def _issue_model(repo: str, number: int) -> Issue:
         title=f"issue {number}",
         state="open",
         url=f"https://github.com/{repo}/issues/{number}",
+        author_association="OWNER",  # intake admits a maintainer's issue
     )
 
 
