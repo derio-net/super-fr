@@ -20,3 +20,8 @@ Hand trace of fr-worktree-create.sh/fr-worktree-remove.sh lock (mkdir, pid file,
 ### 9e08a8b57c98 · decision · Operator: fix #1468, instrument #1463 (stays open, Refs not Closes)
 
 Two root causes found where the batch assumed one; asked per the batch rules. Operator chose: one PR that fixes #1468 (strip the GIT_* scope vars in the scenario harness and _common.sh, failing test first) and adds failure diagnostics to the two lock tests so the next CI flake of #1463 shows the overlap. #1463 is referenced, not closed.
+
+<!-- fr:journal kind=finding scope=debug id=f-1468-git-scope created=2026-11-17T12:57:54+00:00 state=fixed -->
+### f-1468-git-scope · finding [fixed] · Scenario harness and _common.sh drop the caller's git scope (gh#1468)
+
+tests/integration/test_scenarios.py's _env and its fixture `git init` now strip every variable `git rev-parse --local-env-vars` names; tests/scenarios/_common.sh unsets the same list. Pinned failing-first by tests/unit/test_scenario_git_isolation.py (859e851c2, red before c209d21fb, green after): a GIT_DIR naming a live linked worktree no longer moves its branch or adds feat/fixture.
