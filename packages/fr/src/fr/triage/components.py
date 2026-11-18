@@ -476,6 +476,13 @@ def when(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
+def rendered_by(moment: datetime | None, command: str) -> str:
+    """The masthead's one render line (triage-pages-ux R5): `rendered <when> by <command>`,
+    or `rendered by <command>` with no moment. *command* is fr's own text, escaped here."""
+    when_ = "" if moment is None else f"{when(moment)} "
+    return f"<span>rendered {when_}by <code>{_esc(command)}</code></span>"
+
+
 def stamp_text(text: str) -> str:
     """A forge timestamp as `when` spells it; *text* itself (unescaped) when unreadable."""
     try:

@@ -41,7 +41,7 @@ from fr.triage.components import (
     collapsed,
     page,
     page_header,
-    when,
+    rendered_by,
 )
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.fragments import Entry, Resolved, splice
@@ -815,8 +815,8 @@ def render_origins(
         f"<span>{plural(len(facts.issues), 'issue')} filed</span>"
         f"<span>{len(missing.unclassified)} unclassified</span>"
         f"<span>collected {esc(facts.collected_at)}</span>"
-        + ("" if rendered_at is None else f"<span>rendered {when(rendered_at)}</span>")
-        + "<span>rendered by <code>fr triage origins render</code></span></div>"
+        + rendered_by(rendered_at, "fr triage origins render")
+        + "</div>"
         f'<ul class="notes">{note_items}</ul></header>\n'
         f"{page_header('origins', present)}\n" + "\n".join(body) + "\n"
         f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"

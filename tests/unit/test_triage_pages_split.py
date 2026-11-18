@@ -152,3 +152,39 @@ def test_each_footer_names_the_command_by_its_new_name(name: str) -> None:
     want = "fr triage batches" if name == "batches" else "fr triage backlog"
     assert want in footer
     assert "fr triage board" not in footer and "fr triage render" not in footer
+
+
+@pytest.mark.parametrize("name", ["origins", "architecture", "history"])
+def test_the_stamp_and_the_command_are_one_span(name: str) -> None:
+    """Review p1-r3: one "rendered <when> by <command>" span, not two "rendered" labels."""
+    page = RENDERERS[name](AT)
+    span = f"<span>rendered 2026-11-18 09:30 UTC by <code>fr triage {name} render</code></span>"
+    assert span in page
+    assert "<span>rendered by <code>" not in page
+
+
+@pytest.mark.parametrize("name", ["origins", "architecture", "history"])
+def test_with_no_stamp_the_page_keeps_its_rendered_by_label(name: str) -> None:
+    from fr.triage.architecture import GENERATED as A
+    from fr.triage.architecture import render_architecture
+    from fr.triage.history import GENERATED as H
+    from fr.triage.history import render_history
+    from fr.triage.origins import Origins, OriginsFacts, render_origins
+
+    from tests.unit.test_triage_architecture import _subsystems
+
+    f, jd = busy()
+    if name == "origins":
+        facts = OriginsFacts(
+            scope="example-org/widgets", since="2026-09-01", collected_at="2026-11-18T08:00:00Z",
+            issues=[],
+        )  # fmt: skip
+        page = render_origins(facts, Origins())
+    elif name == "architecture":
+        page = render_architecture(
+            f, jd, subsystems=_subsystems(), measured={},
+            resolved=Resolved(order=[Entry(g) for g in A]),
+        )  # fmt: skip
+    else:
+        page = render_history(f, jd, snapshots=[], resolved=Resolved(order=[Entry(g) for g in H]))
+    assert f"<span>rendered by <code>fr triage {name} render</code></span>" in page

@@ -37,7 +37,7 @@ from fr.triage.components import (
     GUTTER_CSS,
     TOKENS_CSS,
     page_header,
-    when,
+    rendered_by,
 )
 from fr.triage.errors import TriageError
 from fr.triage.fragments import Resolved, splice
@@ -373,8 +373,8 @@ def render_architecture(
         f"<title>{esc(title)}</title>\n{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
         f'<header class="mast"><h1>{esc(title)}</h1><div class="meta">'
         f"<span>collected {esc(facts.collected_at)}</span>"
-        + ("" if rendered_at is None else f"<span>rendered {when(rendered_at)}</span>")
-        + "<span>rendered by <code>fr triage architecture render</code></span></div>"
+        + rendered_by(rendered_at, "fr triage architecture render")
+        + "</div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('architecture', present)}\n"
         + "\n".join(body)

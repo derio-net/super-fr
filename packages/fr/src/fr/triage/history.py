@@ -25,6 +25,7 @@ from fr.triage.components import (
     TOKENS_CSS,
     page,
     page_header,
+    rendered_by,
     tabs,
     when,
 )
@@ -61,10 +62,6 @@ CSS = (
 
 def _stamp(moment: datetime) -> str:
     return when(moment)
-
-
-def _rendered(moment: datetime | None) -> str:
-    return "" if moment is None else f"<span>rendered {when(moment)}</span>"
 
 
 def _list(items: Sequence[str]) -> str:
@@ -191,8 +188,8 @@ def render_history(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{esc(title)}</title>\n{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
         f'<header class="mast"><h1>{esc(title)}</h1><div class="meta">'
-        f"<span>collected {esc(facts.collected_at)}</span>{_rendered(rendered_at)}"
-        "<span>rendered by <code>fr triage history render</code></span></div>"
+        f"<span>collected {esc(facts.collected_at)}</span>"
+        f"{rendered_by(rendered_at, 'fr triage history render')}</div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('history', present)}\n"
         + "\n".join(body)
