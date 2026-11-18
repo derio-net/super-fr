@@ -261,3 +261,218 @@ Fixture drives a test.
 ### p3-r6-resolved · finding [fixed] · resolves p3-r6: tea.loads/glab._loads dropped `what` from the HTML message (phase 3)
 
 `what` kept in the message.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · GitLab FR_DEBT_TOKEN guard leaked into acceptance-report and pages jobs
+
+Removed from both templates; goldens regenerated; test_the_gitlab_token_guard_is_on_the_debt_job_alone.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · 'pins everything the pipeline runs' was false on GitLab
+
+Pages list exactly what is pinned (actions, fr, uv on GitLab, tea, glab) and that python:3.12 is a movable tag.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · pages omitted that GitLab --refresh-ci only prints jobs to paste
+
+Sentence added to both pages, checked against refresh_ci.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: in scope) · 'each forge installs its own pinned CLI' was false for GitHub
+
+Reworded to Gitea and GitLab only.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r5 · finding [open] (reviewer: in scope) · install.md and plugin README omitted the Instructions-from header de-dup
+
+Both now say it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · GitLab MR and Pages jobs forced an api-scope token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · archive-pr sent the token to whatever host origin names
+
+_forge_host: declared host, SaaS domain, or the CI server's own host; any other origin is plain origin with one warning; tests for mirror, matching, declared and CI-server hosts.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · GitLab jobs piped an unpinned uv installer to sh while holding an api token
+
+UV_PIN (uv 0.13.7, per-arch SHA-256) installed from release tarballs; check-pinned-clis covers it; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r4 · finding [open] (reviewer: in scope) · tea login left the token in a persistent HOME
+
+XDG_CONFIG_HOME under runner.temp for the tea steps plus an always() tea logout; test.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · GitLab gate failed on every MR without the token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · duplicate Authorization header with a persisted checkout extraheader (GitHub refuses)
+
+Empty-value reset entry first, existing GIT_CONFIG_COUNT kept; real-HTTP test sees exactly one header.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · pages_visibility swallowed the named login-page error
+
+Re-raised; pages_allowed refusal names the cause; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · rules.ts silently yielded no rules on an unreadable dir or file, cached
+
+Warns once naming the dir/file, no caching of a failed load; a missing dir stays silent by design (in-tree plugin), commented; bun tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-18T18:42:22+00:00 state=open review_scope=out -->
+### l-errors-r5 · finding [open] (reviewer: out of scope) · tea fail-soft sites swallow the named login-page TeaError
+
+Predates this change: the tea fail-soft sites were not modified by R14's sites; filed as a follow-up.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · no test confined the GitLab guard to technical-debt
+
+Same test as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · R11 test restated the env formula; no real HTTP exchange
+
+test_git_really_sends_exactly_one_authorization_header over a local http.server.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · token precedence and empty-secret fall-through untested
+
+test_token_precedence.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · R10 warning wiring in check() untested
+
+test_acceptance_check_reports_an_older_pin_as_a_warning_and_exits_zero.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · bind accepted another session's info; failed lookup untested
+
+id check added; bun tests for throwing and mismatched lookups.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · _git secret redaction untested
+
+test_a_failing_git_never_prints_the_token.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r7 · finding [open] (reviewer: in scope) · de-dup relied on a hand-written OpenCode header
+
+Real format found in the installed opencode v2.3.0 binary (Instructions from: <path>, several files per part); cited in rules.ts and tested with that exact shape.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-18T18:42:22+00:00 -->
+### lens-review-1 · review · lens review: security, tests, errors, docs-accuracy — 21 findings (20 in scope, all fixed; 1 out)
+
+One reviewer per lens over the diff from cb6021281. Three lenses independently found the GitLab token guard leaked into every job (a p2-r6 fix regression locked in by goldens). All in-scope findings fixed with tests in 1bc484487..f019ebf7b; l-errors-r5 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: GitLab FR_DEBT_TOKEN guard leaked into acceptance-report and pages jobs
+
+Removed from both templates; goldens regenerated; test_the_gitlab_token_guard_is_on_the_debt_job_alone.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: 'pins everything the pipeline runs' was false on GitLab
+
+Pages list exactly what is pinned (actions, fr, uv on GitLab, tea, glab) and that python:3.12 is a movable tag.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: pages omitted that GitLab --refresh-ci only prints jobs to paste
+
+Sentence added to both pages, checked against refresh_ci.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r4 -->
+### l-docs-accuracy-r4-resolved · finding [fixed] · resolves l-docs-accuracy-r4: 'each forge installs its own pinned CLI' was false for GitHub
+
+Reworded to Gitea and GitLab only.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r5 -->
+### l-docs-accuracy-r5-resolved · finding [fixed] · resolves l-docs-accuracy-r5: install.md and plugin README omitted the Instructions-from header de-dup
+
+Both now say it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: GitLab MR and Pages jobs forced an api-scope token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: archive-pr sent the token to whatever host origin names
+
+_forge_host: declared host, SaaS domain, or the CI server's own host; any other origin is plain origin with one warning; tests for mirror, matching, declared and CI-server hosts.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: GitLab jobs piped an unpinned uv installer to sh while holding an api token
+
+UV_PIN (uv 0.13.7, per-arch SHA-256) installed from release tarballs; check-pinned-clis covers it; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r4 -->
+### l-security-r4-resolved · finding [fixed] · resolves l-security-r4: tea login left the token in a persistent HOME
+
+XDG_CONFIG_HOME under runner.temp for the tea steps plus an always() tea logout; test.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: GitLab gate failed on every MR without the token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: duplicate Authorization header with a persisted checkout extraheader (GitHub refuses)
+
+Empty-value reset entry first, existing GIT_CONFIG_COUNT kept; real-HTTP test sees exactly one header.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: pages_visibility swallowed the named login-page error
+
+Re-raised; pages_allowed refusal names the cause; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: rules.ts silently yielded no rules on an unreadable dir or file, cached
+
+Warns once naming the dir/file, no caching of a failed load; a missing dir stays silent by design (in-tree plugin), commented; bun tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-18T18:42:22+00:00 state=open resolves=l-errors-r5 out_of_scope=true -->
+### l-errors-r5-resolved · finding [out-of-scope] · resolves l-errors-r5: tea fail-soft sites swallow the named login-page TeaError
+
+Predates this change; R14 scopes the JSON reads, and these TeaError catch sites around api_json were already fail-soft. Filed as a follow-up at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: no test confined the GitLab guard to technical-debt
+
+Same test as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: R11 test restated the env formula; no real HTTP exchange
+
+test_git_really_sends_exactly_one_authorization_header over a local http.server.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: token precedence and empty-secret fall-through untested
+
+test_token_precedence.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: R10 warning wiring in check() untested
+
+test_acceptance_check_reports_an_older_pin_as_a_warning_and_exits_zero.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: bind accepted another session's info; failed lookup untested
+
+id check added; bun tests for throwing and mismatched lookups.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: _git secret redaction untested
+
+test_a_failing_git_never_prints_the_token.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r7 -->
+### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: de-dup relied on a hand-written OpenCode header
+
+Real format found in the installed opencode v2.3.0 binary (Instructions from: <path>, several files per part); cited in rules.ts and tested with that exact shape.
