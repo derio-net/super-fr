@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Row triage-cancelled-batch-terminal: a dispatched batch that was cancelled and had its
-# claims released (one with a wave, one without) is not shown as Running on board.html,
+# claims released (one with a wave, one without) is not shown as Running on batches.html,
 # and `fr triage check --json` lists no claim or release owed for its members. Facts are
 # fixtures/cancelled-terminal-facts.json (made by make_cancelled_terminal_facts.py); the
 # judgements are written here. Nothing reaches a forge or a runner (render-only board).
@@ -38,9 +38,9 @@ batches:
       - {kind: claims_released, at: "2026-10-01T12:01:00Z", keys: ["widgets#3", "widgets#4"]}
 YAML
 
-run_fr out triage board --repo example-org/widgets --dir "$state"
+run_fr out triage batches --repo example-org/widgets --dir "$state"
 require_exit 0 "$out"
-board="$(cat "$state/board.html")"
+board="$(cat "$state/batches.html")"
 for id in with-wave no-wave; do
   card="$(printf '%s' "$board" | tr '\n' ' ' | grep -o "<details class=\"card[^\"]*\" id=\"card-$id\".*" | sed 's#</details>.*##')"
   expect_grep "card-$id" "$card" "$id has a card on the board"
