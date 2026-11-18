@@ -10,3 +10,8 @@ Investigation found #1483, #1485, #1486 and #1488 are four separate defects in f
 ### repro-1483 · repro · #1483: a symlinked live plans root gets .gitkeep written through it
 
 docs/superpowers/plans -> ../elsewhere (an in-repo symlink), one plan under it. archive_plan_dir moves the plan, then _keep_live_root's mkdir/iterdir/os.open follow the link and create docs/elsewhere/.gitkeep; git add then fails 'beyond a symbolic link'. O_NOFOLLOW covers only the last component. (A link pointing outside the repo is refused earlier by the plan_dir.resolve() check.)
+
+<!-- fr:journal kind=repro scope=debug id=repro-1485 created=2026-11-18T13:10:01+00:00 -->
+### repro-1485 · repro · #1485: _existing_markers returns {} on any listing error or past 200 issues
+
+archive_followups._existing_markers lists 200 open issues; an error, a missing viewer or a listing past the cap all read as 'no existing issue', so file_open_ends files a duplicate follow-up. _existing_owed fails closed in all three cases (OwedLookup.reason). The repo has 168 open issues today, so the 200 cap is close to being reached.
