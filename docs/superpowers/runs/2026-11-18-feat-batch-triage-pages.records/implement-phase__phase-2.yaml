@@ -1,0 +1,61 @@
+schema_version: 12
+run: 2026-11-18-feat-batch-triage-pages
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2, P2.T5.S1, P2.T5.S2, P2.T6.S1, P2.T6.S2]
+refactor:
+  P2.T1: "collapsed() was replaced outright by fold() and the fold CSS split out of CHROME_CSS; nothing left to clean"
+  P2.T2: "fragment loading was folded into one load() helper shared by files and fold-group members while the group was added"
+  P2.T3: "inline() was rewritten once with a plain() helper for both bold and top level; no duplicate left"
+  P2.T4: "one KIND_FILTER_SCRIPT constant and one wave_table kinds helper; nothing to clean"
+  P2.T5: "wave_table gained one optional prs argument; History passes it, no duplicate cell code"
+  P2.T6: "browser check and suite only: no code"
+journal:
+  - kind: decision
+    id: p2-debt-fold-no-count
+    title: the Issues Debt fold shows no count (phase 2)
+    phase: 2
+    body: "The per-repo debt folds inside it carry the totals; a count of repos on the outer fold read as the debt badge and broke the visible-sum test's meaning."
+  - kind: decision
+    id: p2-next-up-reason-drops-wave
+    title: Next up's reason no longer names the wave or the dependencies (phase 2)
+    phase: 2
+    body: "NextRow.wave is its own linked tag and the deps tag links each dependency, so the reason keeps only the merge order, or 'the driver starts it next'. test_next_up_carries_tier_size_dependencies_and_the_reason now asserts the field."
+  - kind: discovery
+    id: p2-sections-are-folds-tests-read-elements
+    title: Backlog/Issues sections are folds, so tests read an element by id with depth counting (phase 2)
+    phase: 2
+    body: "Section ids moved onto the details element. tests/unit/triage_board_fixtures.element_by_id returns the whole element, nested same-tag elements counted; test_triage_board_views and test_triage_render use it."
+  - kind: discovery
+    id: p2-visual-rows-beyond-owed
+    title: History PR column and pipeline tabs were also captured but are not in this record's owed rows (phase 2)
+    phase: 2
+    body: "triage-history-pr-summary and triage-architecture-pipeline-tabs carry visual states. Shots exist in the scratch dir (architecture-pipeline-*, history-finished-waves-*) and show the PR column dash and ten dated tabs stepping with one panel visible; they are left out of visual: because the brief names three owed rows. Batches columns and Origins groups are phase 3's and were not touched."
+evidence: {tests: /Users/idermitzakis/.claude-tmp/p2-suite.log}
+visual:
+  - row: triage-pages-folds
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/backlog-page-light-1280.png, shows: [backlog-decisions-open]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/issues-page-light-1280.png, shows: [issues-lists-closed]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/history-closed-light-1280.png, shows: [history-timeline-closed]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/history-archived-notes-closed-light-1280.png, shows: [history-archived-notes]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/issues-open-fold-light-1280.png, shows: [open-fold]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/issues-close-fold-light-1280.png, shows: [close-fold]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/issues-hash-opens-fold-light-1280.png, shows: [hash-opens-fold]}
+  - row: triage-pages-links
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/next-up-wave-links-light-1280.png, shows: [next-up-wave-links]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/prose-issue-links-light-1280.png, shows: [prose-issue-links]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/backlog-wave-link-selects-tab-light-1280.png, shows: [wave-link-selects-tab]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/finished-wave-link-to-history-light-1280.png, shows: [finished-wave-link-to-history]}
+  - row: triage-backlog-issues-split
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/backlog-page-light-1280.png, shows: [backlog-page]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/issues-page-light-1280.png, shows: [issues-page]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/waves-all-kinds-light-1280.png, shows: [waves-all-kinds]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/kinds-toggle-several-light-1280.png, shows: [kinds-toggle-several]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/kinds-none-selected-light-1280.png, shows: [kinds-none-selected]}
