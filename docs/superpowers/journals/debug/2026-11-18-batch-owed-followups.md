@@ -30,3 +30,8 @@ _refuse_unclosed_owed normalizes each closing ref with normalize_issue_ref, whos
 ### rc-1483 · root-cause · #1483: _keep_live_root checks only the last path component for a link
 
 O_NOFOLLOW and the lstat of .gitkeep cover .gitkeep alone; live_root.mkdir, iterdir and the open path walk every component above it, so a symlinked plans root (or docs/superpowers) is followed.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1485 created=2026-11-18T13:34:10+00:00 -->
+### rc-1485 · root-cause · #1485: _existing_markers reads unknown as 'no duplicate'
+
+A failed listing, a listing at its 200 cap, and a missing viewer each returned {}, which file_open_ends reads as 'no existing issue'. _existing_owed was already made fail-closed for the same cases.
