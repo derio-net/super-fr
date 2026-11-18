@@ -50,3 +50,8 @@ _URL_REF matched any host and kept only the path, so a lookalike URL on another 
 ### d-unsupported-listing · decision · A forge that cannot list issues keeps R11's no-dedup fallback for open ends
 
 UnsupportedForgeOperation (glab, tea) is a known capability gap, not an unknown answer; refusing there would stop follow-up filing on those forges entirely. test_dedup_falls_back_to_none_when_the_forge_cannot_list keeps pinning it. Only failed, capped or viewer-less listings now fail closed.
+
+<!-- fr:journal kind=decision scope=debug id=d-unknown-is-default created=2026-11-18T13:34:26+00:00 -->
+### d-unknown-is-default · decision · R8 treats an unknown default-branch answer as the default branch
+
+New git.default_branch_answer returns True/False/None. _write_manual_owed previews and writes nothing unless the answer is a readable False. head_on_default_branch (R3's reader) is unchanged.
