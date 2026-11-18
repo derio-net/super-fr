@@ -25,6 +25,7 @@ docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-desi
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -32,8 +33,9 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
+from fr.forge_body import not_json_reason
 from fr.ghclient import HostRefusedError
 from fr.labels import LabelDef
 
@@ -260,13 +262,19 @@ def create_issue(
     return _run_glab(args, host=host)
 
 
+def _loads(out: str, what: str) -> Any:
+    """`json.loads` of a glab command's output, or GlabError naming the cause."""
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError as exc:
+        raise GlabError(not_json_reason(out) or f"unreadable {what}: {exc}") from exc
+
+
 def view_issue(repo: str, number: int, *, host: str | None = None) -> dict[str, object]:
     """Fetch an Issue's title, description, labels, state via `glab issue
     view --output json`."""
-    import json
-
     out = _run_glab(["issue", "view", str(number), "--repo", repo, "--output", "json"], host=host)
-    result: dict[str, object] = json.loads(out)
+    result: dict[str, object] = _loads(out, "`glab issue view` output")
     return result
 
 

@@ -1,0 +1,10 @@
+schema_version: 12
+run: 2026-11-18-feat-batch-consumer-delivery
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T2.S3, P3.T3.S1]
+refactor: {P3.T1: "fixtures and one small helper module, nothing to clean"}
+journal:
+  - {kind: decision, id: p3-loads-helper-per-module, phase: 3, title: "tea.loads and glab.loads fold every JSON read of CLI output", body: "Each module has one loads(out, what) raising its own error with not_json_reason(out) or the old message. issues_enabled and pages_visibility keep their documented fallback (None, UNKNOWN); pr_for_branch keeps None for non-HTML garbage but raises GlabError for a login page."}
+evidence: {tests: ci}
