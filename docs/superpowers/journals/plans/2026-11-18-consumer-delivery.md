@@ -98,3 +98,88 @@ token pick and env header live in one helper (_remote_auth); nothing left to cle
 ### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
 
 docs and acceptance bookkeeping, no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · acceptance-reports scenario now does a live ls-remote for the installed fr's tag; the release suite runs it at an untagged version (phase 2)
+
+scaffold.py init via tests/scenarios/acceptance-reports-derived-published.sh. Fixed: the scenario sets a scratch HOME whose .gitconfig redirects super-fr's URL (insteadOf) to a local bare repo with an annotated v<version> tag, and asserts the pinned sha; no product override added.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · the autouse conftest stub means the real default_ls_remote is never tested (phase 2)
+
+tests/conftest.py, pin.py. Fixed: unit tests drive the real default_ls_remote with subprocess.run patched (argv, no GIT_CONFIG_*, GIT_TERMINAL_PROMPT=0, timeout, FrPinError on non-zero exit and OSError).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Gitea tea login put the token on tea's command line (phase 2)
+
+DEBT_STEP_GITEA. Fixed: GITEA_SERVER_URL and GITEA_SERVER_TOKEN via env (tea 0.14.2 reads both, verified with tea login add --help), `tea login add --name fr-ci`; test asserts no token on the run line.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · CLI refusal test asserted only that the output contains 'v' (phase 2)
+
+test_acceptance_pin.py. Fixed: asserts the running version's tag and the nothing-was-written wording.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · refresh_ci and init resolved the pin before the foreign/paste/already-exists outcomes (phase 2)
+
+scaffold.py refresh_ci, init. Fixed: foreign check first; init resolves only when the workflow is missing; paste and rewrite/current still resolve (they render the install line), commented; tests for each outcome with a failing resolver.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · GitLab FR_DEBT_TOKEN check ran after three downloads (phase 2)
+
+DEBT_STEP_GITLAB. Fixed: first before_script line; test asserts the order.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · acceptance-matrix reference omitted --refresh-ci's refusal and the GH_TOKEN fallback (phase 2)
+
+docs/reference/acceptance-matrix.md. Fixed; fr docs check clean.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=out -->
+### p2-r8 · finding [open] (reviewer: out of scope) · Gitea matrix job checkout persists gitea.token for PR code (phase 2)
+
+Pre-existing in the Gitea matrix job; R12 names only the debt job.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-18T17:42:21+00:00 phase=2 -->
+### review-phase-2 · review · phase 2 review: 8 findings (7 in scope, all fixed; 1 out of scope) (phase 2)
+
+Independent reviewer verified every ACTION_PINS sha against its tag with git ls-remote, the pin's peeled-tag preference live, the byte-identical refusal, user-info stripping and token redaction. It raised p2-r1 (critical: release suite would fail at an untagged version) through p2-r7, all fixed with tests and pushed; p2-r8 is out of scope (pre-existing).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: acceptance-reports scenario now does a live ls-remote for the installed fr's tag; the release suite runs it at an untagged version (phase 2)
+
+Hermetic scenario via scoped HOME .gitconfig insteadOf to a local tagged bare repo.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: the autouse conftest stub means the real default_ls_remote is never tested (phase 2)
+
+Real default_ls_remote unit-tested with subprocess patched.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Gitea tea login put the token on tea's command line (phase 2)
+
+tea login reads URL and token from env.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: CLI refusal test asserted only that the output contains 'v' (phase 2)
+
+Exact tag and wording asserted.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: refresh_ci and init resolved the pin before the foreign/paste/already-exists outcomes (phase 2)
+
+Pin resolved only when used, still before any write.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: GitLab FR_DEBT_TOKEN check ran after three downloads (phase 2)
+
+Token check first in before_script.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: acceptance-matrix reference omitted --refresh-ci's refusal and the GH_TOKEN fallback (phase 2)
+
+Reference page updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=open resolves=p2-r8 out_of_scope=true -->
+### p2-r8-resolved · finding [out-of-scope] · resolves p2-r8: Gitea matrix job checkout persists gitea.token for PR code (phase 2)
+
+Predates this change: the Gitea matrix job's checkout was not touched by R8-R13, and R12 scopes credentials to the debt job. Filed at deliver as a follow-up.
