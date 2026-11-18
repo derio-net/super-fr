@@ -141,3 +141,31 @@ def test_head_on_default_branch_answers_false_without_a_default_ref(tmp_path: Pa
         ["git", "-C", str(root), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True
     )
     assert head_on_default_branch(root) is True
+
+
+def test_default_branch_answer_is_unknown_when_the_default_ref_cannot_be_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """super-fr#1486: `head_on_default_branch` folds "cannot tell" into "no", which is
+    safe only for a caller whose "no" does nothing. `default_branch_answer` keeps the
+    three answers apart, so a caller whose "no" writes can refuse on unknown."""
+    import fr.git
+    from fr.git import GitUnavailableError, default_branch_answer, pinned_head_on_default_branch
+
+    root = _git_repo(tmp_path, "main")
+    assert default_branch_answer(root) is None  # no remote: no default ref
+    subprocess.run(["git", "-C", str(root), "remote", "add", "origin", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True
+    )
+    assert default_branch_answer(root) is True
+    subprocess.run(["git", "-C", str(root), "switch", "-q", "-c", "feat/x"], check=True)
+    assert default_branch_answer(root) is False
+    with pinned_head_on_default_branch(root, True):
+        assert default_branch_answer(root) is True
+
+    def unavailable(_root: Path, _ref: str) -> bool:
+        raise GitUnavailableError("git: not found")
+
+    monkeypatch.setattr(fr.git, "on_default_branch", unavailable)
+    assert default_branch_answer(root) is None

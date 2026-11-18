@@ -404,6 +404,64 @@ def test_a_hold_on_the_default_branch_says_what_it_would_record_and_writes_nothi
     assert _writes(gh) == []
 
 
+def _porcelain(repo: Path) -> tuple[str, str]:
+    import subprocess
+
+    def out(*a: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), *a], check=True, capture_output=True, text=True
+        ).stdout
+
+    return out("status", "--porcelain"), out("diff", "--cached")
+
+
+def test_a_hold_whose_default_ref_cannot_be_read_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """super-fr#1486: with no readable default ref fr cannot tell whether HEAD is the
+    default branch, and R8's write is the unsafe side — it would stage an owed entry on
+    what may be `main`. Unknown previews, as on the default branch."""
+    import subprocess
+
+    repo = _manual_repo(tmp_path)  # HEAD is main
+    for ref in ("refs/remotes/origin/HEAD", "refs/remotes/origin/main"):
+        subprocess.run(["git", "-C", str(repo), "update-ref", "-d", ref], check=False)
+    before = _porcelain(repo)
+    gh = ListingGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in result.output
+    assert "cannot tell whether HEAD is the default branch" in result.output
+    assert _porcelain(repo) == before
+    assert not journal_path(repo, "plan", PLAN).exists()
+    assert _writes(gh) == []
+
+
+def test_a_hold_where_git_cannot_answer_is_a_preview_not_a_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """super-fr#1486: `GitUnavailableError` from the default-branch read used to escape
+    `_write_manual_owed`, which calls it outside its `try`."""
+    import fr.git
+    from fr.git import GitUnavailableError
+
+    repo = _manual_repo(tmp_path)
+    _off_default(repo)
+
+    def unavailable(_root: Path, _ref: str) -> bool:
+        raise GitUnavailableError("git: not found")
+
+    monkeypatch.setattr(fr.git, "on_default_branch", unavailable)
+    before = _porcelain(repo)
+    gh = ListingGh()
+    result = _invoke(monkeypatch, repo, gh, ["archive", "--all"])
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.output
+    assert result.exit_code == 0, result.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in result.output
+    assert _porcelain(repo) == before
+    assert not journal_path(repo, "plan", PLAN).exists()
+
+
 def _branch_with_manual_phase(tmp_path: Path) -> Path:
     """A merged branch whose plan holds an unticked `[manual]` phase; HEAD is left on
     the housekeeping branch `tb._squash_merge` stands in."""
