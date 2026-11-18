@@ -18,7 +18,7 @@ from __future__ import annotations
 import html
 import re
 import urllib.parse
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, NamedTuple
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from fr.triage.model import Facts
+    from fr.triage.origins import OriginsFacts
 
 LIGHT = {
     "ground": "#F4F5F2", "surface": "#FFFFFF", "ink": "#1B2021", "muted": "#5E6A66",
@@ -612,31 +613,52 @@ class Linker:
     to its own url: what `key_link` renders a key in a list from."""
 
     @classmethod
-    def from_facts(cls, facts: Facts) -> Linker:
+    def _of(cls, items: Iterable[tuple[str, int, str]], single: str | None) -> Linker:
+        """The Linker over *items*, each `(repo, number, url)` an input holds."""
         from fr.triage.model import issue_key
 
         urls: dict[str, str] = {}
         bases: dict[str, str] = {}
         keys: dict[str, str] = {}
-
-        def add(repo: str, number: int, url: str) -> None:
+        for repo, number, url in items:
             if not url.startswith("https://"):
-                return
+                continue
             urls.setdefault(f"{repo.lower()}#{number}", url)
             keys.setdefault(issue_key(repo, number), url)
             for marker in ("/issues/", "/pull/"):
                 if marker in url:
                     bases.setdefault(repo.lower(), url.split(marker, 1)[0])
                     break
-
-        for issue in facts.issues:
-            add(issue.repo, issue.number, issue.url)
-            for pr in issue.prs:
-                add(pr.repo, pr.number, pr.url)
-        for pr in (*facts.prs, *facts.batch_prs, *facts.judged_prs):
-            add(pr.repo, pr.number, pr.url)
-        single = facts.repos[0].lower() if facts.kind == "repo" and len(facts.repos) == 1 else None
         return cls(urls, bases, single, keys)
+
+    @classmethod
+    def from_facts(cls, facts: Facts) -> Linker:
+        def held() -> Iterator[tuple[str, int, str]]:
+            for issue in facts.issues:
+                yield issue.repo, issue.number, issue.url
+                for pr in issue.prs:
+                    yield pr.repo, pr.number, pr.url
+            for pr in (*facts.prs, *facts.batch_prs, *facts.judged_prs):
+                yield pr.repo, pr.number, pr.url
+
+        single = facts.repos[0].lower() if facts.kind == "repo" and len(facts.repos) == 1 else None
+        return cls._of(held(), single)
+
+    @classmethod
+    def from_origins(cls, facts: OriginsFacts) -> Linker:
+        """The Linker over `origins-facts.json`: its issues, their closing PRs and the PRs it
+        holds. The scope is one repo when it names a single `owner/repo`."""
+
+        def held() -> Iterator[tuple[str, int, str]]:
+            for issue in facts.issues:
+                yield issue.repo, issue.number, issue.url
+                for pr in issue.closing_prs:
+                    yield pr.repo, pr.number, pr.url
+            for merged in facts.prs:
+                yield merged.repo, merged.number, merged.url
+
+        single = facts.scope.lower() if "/" in facts.scope and "," not in facts.scope else None
+        return cls._of(held(), single)
 
     def key_link(self, key: str) -> str:
         """Judgement key *key* for a list: a link to the item's own url when the inputs hold

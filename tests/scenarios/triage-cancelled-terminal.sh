@@ -47,7 +47,7 @@ for id in with-wave no-wave; do
   expect_grep 'stage-cancelled' "$card" "$id reads as cancelled"
   refuse_grep 'session running' "$card" "$id is not described as running"
 done
-running="$(printf '%s' "$board" | tr '\n' ' ' | grep -o '<section class="col" data-column="running">.*' | sed 's#</section>.*##')"
+running="$(printf '%s' "$board" | tr '\n' ' ' | grep -o '<section class="col[^"]*" data-column="running">.*' | sed 's#</section>.*##')"
 expect_grep 'data-column="running"' "$running" "the Running column was found"
 refuse_grep 'card-with-wave|card-no-wave' "$running" "neither batch sits in the Running column"
 

@@ -40,10 +40,12 @@ from fr.triage.components import (
     PAGE_CSS,
     PAGE_SCRIPT,
     TOKENS_CSS,
+    Linker,
     fold,
     page,
     page_header,
     rendered_by,
+    stamp_text,
 )
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.fragments import Entry, Resolved, splice
@@ -171,8 +173,8 @@ def collect_origins(
 
     Closing PRs are the MERGED PRs whose closing references name the issue (a PR closed
     unmerged closed nothing). The same one PR list per repo gives `prs`: the PRs merged on
-    or after *since*, which the leaderboards show (R15). In org and group scope a repo that cannot be read is a
-    warning and the rest collect; in repo scope it is the error.
+    or after *since*, which the leaderboards show (R15). In org and group scope a repo that
+    cannot be read is a warning and the rest collect; in repo scope it is the error.
 
     Each list is one newest-first page. A window that page does not reach the start of
     is refused (`TriageError`), naming a `--since` the page does cover and the limit
@@ -535,22 +537,31 @@ svg.chart text { font-family: var(--mono); font-size: 10px; }
     + GUTTER_CSS
 )
 
-FILTER_SCRIPT = """
+# The state filter (R14): hides the rows of the other state in every group fold and rewrites
+# each fold's count to the rows shown. A constant: no page text reaches it.
+STATE_FILTER_SCRIPT = """
 (function () {
-  var bar = document.querySelector("[data-filter-bar]");
+  var bar = document.querySelector("[data-state-filter]");
   if (!bar) { return; }
-  var rows = Array.prototype.slice.call(document.querySelectorAll("tr[data-category]"));
-  var buttons = Array.prototype.slice.call(bar.querySelectorAll("button[data-filter]"));
-  buttons.forEach(function (b) {
-    b.addEventListener("click", function () {
-      var want = b.getAttribute("data-filter");
-      buttons.forEach(function (o) {
-        o.setAttribute("aria-pressed", o === b ? "true" : "false");
-      });
-      rows.forEach(function (r) {
-        r.hidden = want !== "all" && r.getAttribute("data-category") !== want;
-      });
+  var buttons = Array.prototype.slice.call(bar.querySelectorAll("button[data-state]"));
+  function apply(want) {
+    buttons.forEach(function (b) {
+      b.setAttribute("aria-pressed", b.dataset.state === want ? "true" : "false");
     });
+    Array.prototype.forEach.call(document.querySelectorAll("#issue-table details.fold"),
+      function (fold) {
+        var shown = 0;
+        Array.prototype.forEach.call(fold.querySelectorAll("tr[data-state]"), function (row) {
+          var show = want === "all" || row.dataset.state === want;
+          row.hidden = !show;
+          if (show) { shown += 1; }
+        });
+        var count = fold.querySelector("summary .count");
+        if (count) { count.textContent = String(shown); }
+      });
+  }
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { apply(b.dataset.state); });
   });
   bar.hidden = false;
 })();
@@ -567,13 +578,15 @@ def _hours(h: float | None) -> str:
     return DASH if h is None else f"{h:.1f} h"
 
 
-def _pr_link(pr: str | None) -> str:
+def _pr_link(pr: str | None, linker: Linker) -> str:
+    """A PR reference as a link when the Linker knows where it is (R11), else escaped text."""
     if not pr:
         return DASH
     m = _PR_REF.match(pr)
-    if not m:
+    href = linker.href(m.group(1), int(m.group(2))) if m else None
+    if href is None:
         return esc(pr)
-    return f'<a href="https://github.com/{esc(m.group(1))}/pull/{m.group(2)}">{esc(pr)}</a>'
+    return f'<a href="{esc(href)}" rel="noopener noreferrer">{esc(pr)}</a>'
 
 
 def _counts(facts: OriginsFacts, origins: Origins) -> str:
@@ -660,21 +673,45 @@ def _time_to_fix(facts: OriginsFacts, origins: Origins) -> str:
     )
 
 
-def _leaderboards(facts: OriginsFacts, origins: Origins) -> str:
+def _naming(facts: OriginsFacts, origins: Origins, category: str, linker: Linker) -> dict[str, str]:
+    """Per PR reference, a plain `details` of the *category* issues that name it, each linked."""
+    named: dict[str, list[OriginIssue]] = {}
+    for i in facts.issues:
+        o = origins.issues.get(i.key)
+        if o is not None and o.category == category and o.pr:
+            named.setdefault(o.pr, []).append(i)
+    return {
+        pr: f"<details><summary>{len(issues)}</summary><ul>"
+        + "".join(f"<li>{linker.key_link(i.key)} {esc(i.title)}</li>" for i in issues)
+        + "</ul></details>"
+        for pr, issues in named.items()
+    }
+
+
+def _leaderboards(facts: OriginsFacts, origins: Origins, linker: Linker) -> str:
+    collected = {f"{p.repo.lower()}#{p.number}": p for p in facts.prs}
     boards = []
     for cat in LEADERBOARDS:
         ranked, unnamed = leaderboard(facts, origins, cat)
-        body = "".join(
-            f'<tr data-pr="{esc(pr)}" data-n="{n}"><td>{_pr_link(pr)}</td>'
-            f'<td class="n">{n}</td></tr>'
-            for pr, n in ranked
-        )
+        issues = _naming(facts, origins, cat, linker)
+        rows = []
+        for pr, n in ranked:
+            merged = collected.get(pr.lower())
+            title = esc(merged.title) if merged else '<span class="lede">not collected</span>'
+            when = esc(stamp_text(merged.merged_at)) if merged else DASH
+            rows.append(
+                f'<tr data-pr="{esc(pr)}" data-n="{n}"><td>{_pr_link(pr, linker)}</td>'
+                f'<td class="wrap">{title}</td><td>{when}</td>'
+                f'<td class="wrap">{issues[pr]}</td></tr>'
+            )
+        body = "".join(rows)
         if not body:
-            body = f'<tr><td colspan="2">{DASH} no PR named</td></tr>'
+            body = f'<tr><td colspan="4">{DASH} no PR named</td></tr>'
         note = f'<p class="lede">{plural(unnamed, "issue")} named no PR.</p>' if unnamed else ""
         boards.append(
             f'<div data-board="{cat}"><h3>{cat}: PRs that produced them</h3>'
-            f'<div class="scroll"><table><thead><tr><th>PR</th><th class="n">Issues</th></tr>'
+            f'<div class="scroll"><table><thead><tr><th>PR</th><th class="wrap">Title</th>'
+            f'<th>Merged</th><th class="wrap">Issues</th></tr>'
             f"</thead><tbody>{body}</tbody></table></div>{note}</div>"
         )
     return (
@@ -701,60 +738,85 @@ def _original_link(issue: OriginIssue, target: str, held: Mapping[str, OriginIss
     return esc(target)
 
 
-def _related_pr(o: Origin | None) -> str:
+def _related_pr(o: Origin | None, linker: Linker) -> str:
     if o is None:
         return DASH
-    lines = [_pr_link(o.pr)] if o.pr or not (o.introduced_in or o.fixed_by) else []
+    lines = [_pr_link(o.pr, linker)] if o.pr or not (o.introduced_in or o.fixed_by) else []
     if o.introduced_in:
-        lines.append(f"introduced in {_pr_link(o.introduced_in)}")
+        lines.append(f"introduced in {_pr_link(o.introduced_in, linker)}")
     if o.fixed_by:
-        lines.append(f"fixed by {_pr_link(o.fixed_by)}")
+        lines.append(f"fixed by {_pr_link(o.fixed_by, linker)}")
     return "<br>".join(lines)
 
 
-def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
-    buttons = "".join(
-        f'<button type="button" class="btn" data-filter="{v}" aria-pressed="false">{v}</button>'
-        for v in ("all", *CATEGORIES, "unclassified")
-    ).replace('data-filter="all" aria-pressed="false"', 'data-filter="all" aria-pressed="true"')
-    rows = []
-    held = {i.key: i for i in facts.issues}
-    for i in facts.issues:
-        o = origins.issues.get(i.key)
-        cat = o.category if o else "unclassified"
-        cat_cell: str = cat
-        if o and o.duplicate_of:
-            cat_cell = f"{cat} of {_original_link(i, o.duplicate_of, held)}"
-        closed = (
-            f"closed {i.reason or DASH} in {_hours(i.hours_to_close)}"
-            if i.state == "closed"
-            else "open"
-        )
-        by = ", ".join(f"#{p.number}" for p in i.closing_prs)
-        detail = (
-            f"{esc(o.reason)}" + (f"<br><small>{esc(o.evidence)}</small>" if o.evidence else "")
-            if o
-            else DASH
-        )
-        rows.append(
-            f'<tr data-category="{cat}" data-key="{esc(i.key)}" id="origin-{esc(i.key)}">'
-            f'<td><a href="{esc(i.url) if i.url.startswith("https://") else "#"}">'
-            f'{esc(i.key)}</a></td><td class="wrap">{esc(i.title)}</td><td>{cat_cell}</td>'
-            f"<td>{o.source if o else DASH}</td>"
-            f'<td class="sev-{o.severity if o else "low"}">{o.severity if o else DASH}</td>'
-            f"<td>{_related_pr(o)}</td>"
-            f'<td>{closed}{f" by {esc(by)}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
-        )
-    body = (
-        f'<div class="bar" data-filter-bar hidden>{buttons}</div>'
-        '<div class="scroll"><table><thead><tr><th>Issue</th>'
-        '<th class="wrap">Title</th><th>Category</th><th>Source</th><th>Severity</th>'
-        '<th>Related PR</th><th>Ended</th><th class="wrap">Why</th></tr>'
-        f"</thead><tbody>{''.join(rows)}</tbody></table></div>"
+ISSUE_HEAD = (
+    '<thead><tr><th>Issue</th><th class="wrap">Title</th><th>Category</th><th>Source</th>'
+    '<th>Severity</th><th>Related PR</th><th>Ended</th><th class="wrap">Why</th></tr></thead>'
+)
+STATES = ("open", "closed", "all")
+
+
+def _issue_row(
+    i: OriginIssue, o: Origin | None, held: Mapping[str, OriginIssue], linker: Linker
+) -> str:
+    cat = o.category if o else "unclassified"
+    cat_cell: str = cat
+    if o and o.duplicate_of:
+        cat_cell = f"{cat} of {_original_link(i, o.duplicate_of, held)}"
+    closed = (
+        f"closed {i.reason or DASH} in {_hours(i.hours_to_close)}"
+        if i.state == "closed"
+        else "open"
+    )
+    by = ", ".join(f"#{p.number}" for p in i.closing_prs)
+    detail = (
+        f"{esc(o.reason)}" + (f"<br><small>{esc(o.evidence)}</small>" if o.evidence else "")
+        if o
+        else DASH
     )
     return (
-        f'<section id="issue-table">'
-        f"{fold('issue-table-fold', 'Every issue', len(rows), body)}</section>"
+        f'<tr data-category="{cat}" data-state="{i.state}" data-key="{esc(i.key)}" '
+        f'id="origin-{esc(i.key)}">'
+        f'<td><a href="{esc(i.url) if i.url.startswith("https://") else "#"}">'
+        f'{esc(i.key)}</a></td><td class="wrap">{esc(i.title)}</td><td>{cat_cell}</td>'
+        f"<td>{o.source if o else DASH}</td>"
+        f'<td class="sev-{o.severity if o else "low"}">{o.severity if o else DASH}</td>'
+        f"<td>{_related_pr(o, linker)}</td>"
+        f'<td>{closed}{f" by {esc(by)}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
+    )
+
+
+def _issue_table(facts: OriginsFacts, origins: Origins, linker: Linker) -> str:
+    """ "Every issue" (R14): a plain section holding the state filter and one closed fold per
+    origin group, in `CATEGORIES` order and then unclassified, each with its count."""
+    held = {i.key: i for i in facts.issues}
+    groups: dict[str, list[str]] = {c: [] for c in (*CATEGORIES, "unclassified")}
+    for i in facts.issues:
+        o = origins.issues.get(i.key)
+        groups[o.category if o else "unclassified"].append(_issue_row(i, o, held, linker))
+    buttons = "".join(
+        f'<button type="button" class="btn" data-state="{v}" '
+        f'aria-pressed="{"true" if v == "all" else "false"}">{v}</button>'
+        for v in STATES
+    )
+    folds = "".join(
+        fold(
+            f"issue-group-{cat}",
+            cat,
+            len(rows),
+            (
+                f'<div class="scroll"><table>{ISSUE_HEAD}'
+                f"<tbody>{''.join(rows)}</tbody></table></div>"
+                if rows
+                else '<p class="lede">No issue.</p>'
+            ),
+        )
+        for cat, rows in groups.items()
+    )
+    return (
+        '<section id="issue-table"><h2>Every issue</h2>'
+        f'<div class="bar" role="toolbar" aria-label="Show issues that are" '
+        f"data-state-filter hidden>{buttons}</div>{folds}</section>"
     )
 
 
@@ -822,14 +884,15 @@ def render_origins(
     order and no fragments."""
     titles = {b.id: b.title for b in judgements.batches} if judgements else {}
     missing = check_origins(facts, origins)
+    linker = Linker.from_origins(facts)
     resolved = resolved or Resolved(order=[Entry(g) for g in GENERATED])
     generated = {
         "origin-counts": lambda: _counts(facts, origins),
         "conclusion": lambda: _conclusion(facts, origins, titles),
         "filings-per-day": lambda: _chart(facts),
         "time-to-fix": lambda: _time_to_fix(facts, origins),
-        "leaderboards": lambda: _leaderboards(facts, origins),
-        "issues": lambda: _issue_table(facts, origins),
+        "leaderboards": lambda: _leaderboards(facts, origins, linker),
+        "issues": lambda: _issue_table(facts, origins, linker),
     }
     body = splice(resolved, generated)
     note_items = "".join(f"<li>{esc(w)}</li>" for w in [*facts.warnings, *notes])
@@ -846,5 +909,5 @@ def render_origins(
         + "</div>"
         f'<ul class="notes">{note_items}</ul></header>\n'
         f"{page_header('origins', present)}\n" + "\n".join(body) + "\n"
-        f"</main>\n<script>{FILTER_SCRIPT}{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{STATE_FILTER_SCRIPT}{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )

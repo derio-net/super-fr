@@ -159,7 +159,9 @@ SCRIPT = """
     try { return localStorage.getItem(colKey(col)); } catch (e) { return null; }
   }
   function remember(col, collapsed) {
-    try { localStorage.setItem(colKey(col), collapsed ? "1" : "0"); } catch (e) { /* unavailable */ }
+    try {
+      localStorage.setItem(colKey(col), collapsed ? "1" : "0");
+    } catch (e) { /* unavailable */ }
   }
   function setCollapsed(col, collapsed) {
     col.classList.toggle("collapsed", collapsed);
@@ -515,7 +517,8 @@ def render_board(
     if board.batch_count or board.gated_count:
         body = (
             '<div class="toolbar" role="toolbar" aria-label="Which waves to show">'
-            '<button type="button" class="chip" id="cutoff" aria-pressed="true">last 30 days</button>'
+            '<button type="button" class="chip" id="cutoff" aria-pressed="true">'
+            "last 30 days</button>"
             "</div>"
             '<div class="board">'
             + "".join(_column(c, scope_args) for c in board.columns)

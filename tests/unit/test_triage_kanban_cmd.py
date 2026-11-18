@@ -256,8 +256,9 @@ def test_board_with_no_batches_still_writes_a_page_that_says_so(tmp_path: Path) 
 
 def _column(page: str, key: str) -> str:
     """The markup of one rendered column section."""
-    start = page.index(f'<section class="col" data-column="{key}">')
-    return page[start : page.index("</section>", start)]
+    m = re.search(rf'<section class="col[^"]*" data-column="{key}">', page)
+    assert m
+    return page[m.start() : page.index("</section>", m.start())]
 
 
 def test_a_relative_dir_is_copied_as_an_absolute_path(

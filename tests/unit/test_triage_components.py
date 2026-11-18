@@ -249,6 +249,44 @@ def test_the_linker_is_built_from_every_item_the_inputs_hold() -> None:
     assert jd.batches
 
 
+def test_the_linker_is_built_from_the_issues_and_prs_origins_facts_hold() -> None:
+    from fr.triage.origins import ClosingPr, MergedPr, OriginIssue, OriginsFacts
+
+    issue = OriginIssue(
+        key="widgets#1", repo="example-org/widgets", number=1, title="t",
+        url="https://github.com/example-org/widgets/issues/1", created_at="2026-09-01T00:00:00Z",
+        state="closed",
+        closing_prs=[ClosingPr(repo="example-org/widgets", number=7, title="c",
+                               url="https://github.com/example-org/widgets/pull/7")],
+    )  # fmt: skip
+    bad = OriginIssue(
+        key="other#2", repo="x/other", number=2, title="t", url="http://insecure.test/other/2",
+        created_at="2026-09-01T00:00:00Z", state="open",
+    )  # fmt: skip
+    pr = MergedPr(repo="example-org/widgets", number=9, title="p",
+                  url="https://git.example.test/example-org/widgets/pull/9",
+                  merged_at="2026-09-02T00:00:00Z")  # fmt: skip
+    facts = OriginsFacts(
+        scope="example-org/widgets", since="2026-09-01", collected_at="2026-09-03T00:00:00Z",
+        issues=[issue, bad], prs=[pr],
+    )  # fmt: skip
+    linker = Linker.from_origins(facts)
+    assert linker.single == "example-org/widgets"
+    assert linker.href("example-org/widgets", 7) == "https://github.com/example-org/widgets/pull/7"
+    assert (
+        linker.href("example-org/widgets", 9)
+        == "https://git.example.test/example-org/widgets/pull/9"
+    )
+    assert (
+        linker.href("example-org/widgets", 50) == "https://github.com/example-org/widgets/issues/50"
+    )
+    assert linker.href("x/other", 2) is None  # an http url is never kept
+    # a group or an org scope is not a single repo
+    group = facts.model_copy(update={"scope": "a/b,c/d"})
+    assert Linker.from_origins(group).single is None
+    assert Linker.from_origins(facts.model_copy(update={"scope": "example-org"})).single is None
+
+
 # ------------------------------------------------ issue keys in lists link (review p2-r1)
 
 
