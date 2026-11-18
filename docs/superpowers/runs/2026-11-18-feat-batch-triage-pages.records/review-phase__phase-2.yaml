@@ -1,0 +1,67 @@
+schema_version: 12
+run: 2026-11-18-feat-batch-triage-pages
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: review
+    id: review-p2
+    phase: 2
+    title: "phase 2 review: 7 findings (6 in, 1 out), all fixed"
+    body: |
+      Independent reviewer (separate context, read-only) over spec R8, R9, R11-R13, R16, R17, plan phase 2 and diff 45f8e3ff3..613422f0b. Probed R11 with hostile prose (script tags, javascript: URLs, quote breaks, refs in code spans, non-github and look-alike bases): no XSS. Ran 330 targeted tests, ruff, mypy and fr docs check, all clean. Walked every state and interaction of the five visual rows in a real browser with its own fresh screenshots. Fixes: 700772602 (r1), f3aff71db (r2), 127ebf56f (r3), 84a27b7e9 (r4), 8163abda3 (r5), 7be908ff2 (r6), 4809de179 (r7). Full suite after the fixes: 16577 passed, 121 skipped (p2-suite2.log). The implementer wrote the phase's first commit before its tests (no red step), which is why r5 targeted test strength; the fixes were made test-first.
+  - {kind: finding, id: p2-r1, phase: 2, review_scope: in, title: "R11 incomplete: issue-key lists (wave Issues column, batch card members, pattern/feature ids) stayed plain text", body: "Raised by the phase 2 reviewer at render.py:1080, :807, :890."}
+  - {kind: finding, id: p2-r2, phase: 2, review_scope: in, title: "R12 incomplete: the wave table's Depends on batch ids were not linked to their cards", body: "Raised by the phase 2 reviewer at render.py:1083."}
+  - {kind: finding, id: p2-r3, phase: 2, review_scope: in, title: STAGE_FILTER_SCRIPT kept its own open-and-scroll reveal, duplicating FOLD_SCRIPT, body: "Raised by the phase 2 reviewer at render.py:345-357, against P2.T1.S2 and decision p1-stage-filter-script-whole."}
+  - {kind: finding, id: p2-r4, phase: 2, review_scope: in, title: "A test named for the finished-wave case asserted the unfinished one; the finished branch in Next up was unreachable", body: "Raised by the phase 2 reviewer at render.py:1012 and tests/unit/test_triage_board_views.py:851."}
+  - {kind: finding, id: p2-r5, phase: 2, review_scope: in, title: "Tab-hash, fold-reveal and kind-filter tests grepped the JS source, and the archived-notes test sliced the page: they would pass against broken behaviour", body: "Raised by the phase 2 reviewer at tests/unit/test_triage_components.py:104, :114, test_triage_board_views.py:913 and test_triage_history.py."}
+  - {kind: finding, id: p2-r6, phase: 2, review_scope: in, title: "_REF linked #n inside an escaped literal entity (&#12;)", body: "Raised by the phase 2 reviewer at components.py:591; cosmetic, not XSS."}
+  - {kind: finding, id: p2-r7, phase: 2, review_scope: out, title: Architecture's issue list built an href from i.url with no https-only check, body: "Raised by the phase 2 reviewer at architecture.py:238; predates this change."}
+resolves:
+  - {id: p2-r1, state: fixed, body: "700772602: Linker.key_link/key_links render known keys as https-only links in the wave Issues column (Backlog and History), batch card members, pattern and feature ids; test-first."}
+  - {id: p2-r2, state: fixed, body: "f3aff71db: Depends on links each batch id to backlog.html#batch-<id>; test seen failing first."}
+  - {id: p2-r3, state: fixed, body: "127ebf56f: the stage script only switches the target's stage and calls apply(); a test pins that open/scroll lives only in FOLD_SCRIPT."}
+  - {id: p2-r4, state: fixed, body: "84a27b7e9: the unreachable branch is removed (Next up lists only non-terminal batches); the test is renamed and asserts no History link."}
+  - {id: p2-r5, state: fixed, body: "8163abda3: the tests pin the structure the scripts act on (aria-controls targets exist, default tab selected, ids inside their details, toggles start pressed, data-kinds from the closed set, empty message hidden, archived-notes fold closed and holding all three fragments). Playwright is not a project dependency, so the scripts' behaviour is evidenced by the reviewer's browser walk recorded in visual below."}
+  - {id: p2-r6, state: fixed, body: "7be908ff2: _REF refuses a match preceded by &amp;; test added."}
+  - {id: p2-r7, state: fixed, body: "4809de179: Architecture issue links go through _safe_url (https only), with a javascript: test. Older code, fixed here because it is one line and the security lens covers it."}
+evidence:
+  review: review-p2
+  reviewer: a708c4f62d8761160
+  model: claude-opus-5-5
+visual:
+  - row: triage-pages-folds
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/backlog-page-light-1280.png, shows: [backlog-decisions-open]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/issues-page-light-1280.png, shows: [issues-lists-closed]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/history-closed-light-1280.png, shows: [history-timeline-closed, history-archived-notes]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/issues-open-fold-light-1280.png, shows: [open-fold]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/issues-close-fold-light-1280.png, shows: [close-fold]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/issues-hash-opens-fold-light-1280.png, shows: [hash-opens-fold]}
+  - row: triage-pages-links
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/next-up-wave-links-light-1280.png, shows: [next-up-wave-links]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/prose-issue-links-light-1280.png, shows: [prose-issue-links]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/backlog-wave-link-selects-tab-light-1280.png, shows: [wave-link-selects-tab]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/finished-wave-link-to-history-light-1280.png, shows: [finished-wave-link-to-history]}
+  - row: triage-backlog-issues-split
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/backlog-page-light-1280.png, shows: [backlog-page]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/issues-page-light-1280.png, shows: [issues-page]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/backlog-page-dark-1280.png, shows: [waves-all-kinds]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/kinds-toggle-several-light-1280.png, shows: [kinds-toggle-several]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/kinds-none-selected-light-1280.png, shows: [kinds-none-selected]}
+  - row: triage-history-pr-summary
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/history-pr-column-light-1280.png, shows: [finished-wave-pr-column]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/history-batch-without-pr-light-1280.png, shows: [batch-without-pr]}
+  - row: triage-architecture-pipeline-tabs
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/architecture-pipeline-latest-light-1280.png, shows: [one-graph-latest-tab]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/architecture-pipeline-first-light-1280.png, shows: [step-through-dated-tabs]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-review-shots/architecture-pipeline-second-light-1280.png, shows: [step-through-dated-tabs]}
