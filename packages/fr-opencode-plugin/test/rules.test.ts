@@ -1,6 +1,6 @@
 // The shipped rules, injected once per request (consumer-delivery R2).
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -67,11 +67,27 @@ describe("createRulesHandler", () => {
     expect(e2.system).toEqual([]);
     writeFileSync(join(dir, "ok.md"), "OK");
     writeFileSync(join(dir, "bad.md"), "BAD");
-    chmodSync(join(dir, "bad.md"), 0o000);
+    const readFile = (p: string): string => {
+      if (p.endsWith("bad.md")) throw new Error("EACCES");
+      return readFileSync(p, "utf8");
+    };
     const e3 = ev();
-    await createRulesHandler({ rulesDir: dir })(e3);
-    chmodSync(join(dir, "bad.md"), 0o644);
-    expect(texts(e3.system)).toContain("OK");
+    await createRulesHandler({ rulesDir: dir, readFile })(e3);
+    expect(texts(e3.system)).toEqual(["OK"]);
+  });
+
+  test("an instructions part naming the same rule file counts, even when its text differs (version skew)", async () => {
+    writeFileSync(join(dir, "fr-isolation-required.md"), "NEW TEXT\n");
+    const event = ev(["Instructions from: /repo/.opencode/instructions/fr-isolation-required.md\nOLD TEXT"]);
+    await createRulesHandler({ rulesDir: dir })(event);
+    expect(event.system).toHaveLength(1);
+  });
+
+  test("a header naming a different file with the same suffix does not count", async () => {
+    writeFileSync(join(dir, "required.md"), "ZQX-RULE\n");
+    const event = ev(["Instructions from: /repo/x/fr-isolation-required.md\nOTHER"]);
+    await createRulesHandler({ rulesDir: dir })(event);
+    expect(texts(event.system)).toContain("ZQX-RULE\n");
   });
 
   test("never throws on a non-array system or a failing fs", async () => {

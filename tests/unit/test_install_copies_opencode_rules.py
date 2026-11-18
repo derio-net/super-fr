@@ -11,6 +11,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "deliver-opencode-plugin.sh"
 INSTRUCTIONS = REPO_ROOT / ".opencode" / "instructions"
@@ -64,6 +66,20 @@ def test_a_missing_rule_file_refuses_and_writes_nothing(tmp_path: Path) -> None:
     result = _run("install", str(plugins), env_rules=["no-such-rule.md"])
     assert result.returncode != 0
     assert not (plugins / "fr-opencode-plugin").exists()
+
+
+@pytest.mark.parametrize("bad", ["*.md", "../escape.md", "sub/x.md", ".hidden.md", "no-suffix"])
+def test_a_malformed_rule_name_refuses_and_writes_nothing(tmp_path: Path, bad: str) -> None:
+    plugins = tmp_path / "plugins"
+    result = _run("install", str(plugins), env_rules=[bad])
+    assert result.returncode != 0
+    assert "refusing rule name" in result.stderr
+    assert not (plugins / "fr-opencode-plugin").exists()
+
+
+def test_install_sh_names_a_neutral_remedy_on_refusal() -> None:
+    install = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    assert "fix what that message names" in install
 
 
 def test_install_sh_passes_claude_rules_to_the_delivery() -> None:

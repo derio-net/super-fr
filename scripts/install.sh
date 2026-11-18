@@ -1015,14 +1015,15 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   # this step `fr harness parity` credits both to OpenCode users who never
   # received them. A failure here fails the install: an OpenCode user
   # without the gate is exactly the silent state this step exists to end.
-  # The delivery script refuses (an unparsable cli.json) before it writes a
+  # The delivery script refuses (an unparsable cli.json, a missing or malformed
+  # rule name) before it writes a
   # byte, so a failure here leaves no partial plugin behind; the message
   # below names what to fix.
   echo ""
   echo "Installing fr-opencode-plugin ($OPENCODE_PLUGINS_DIR)..."
   if ! FR_OPENCODE_RULES="${CLAUDE_RULES[*]}" bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install "$OPENCODE_PLUGINS_DIR"; then
     echo "ERROR: fr-opencode-plugin was NOT installed (nothing was written); see the message above," >&2
-    echo "       fix $(dirname "$OPENCODE_PLUGINS_DIR")/cli.json and re-run install.sh." >&2
+    echo "       fix what that message names (cli.json, or a missing rule file) and re-run install.sh." >&2
     exit 1
   fi
   echo "  Installed $OPENCODE_PLUGINS_DIR/fr-opencode-plugin/ (server plugin + tui/ status line)"

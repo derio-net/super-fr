@@ -124,7 +124,12 @@ case "$action" in
     [ -f "$segment" ] || { echo "deliver-opencode-plugin: no status-line segment at $segment" >&2; exit 1; }
     command -v jq >/dev/null 2>&1 || { echo "deliver-opencode-plugin: jq is required" >&2; exit 1; }
     validate_cli_json
-    for rule in ${FR_OPENCODE_RULES:-}; do
+    # One read into an array: no pathname expansion, and every name must be a
+    # plain `<name>.md` (no `/`, no `..`, no glob), checked before a byte moves.
+    rules=()
+    read -r -a rules <<<"${FR_OPENCODE_RULES:-}" || true
+    for rule in ${rules[@]+"${rules[@]}"}; do
+      [[ "$rule" =~ ^[A-Za-z0-9._-]+\.md$ && "$rule" != .* ]] || { echo "deliver-opencode-plugin: refusing rule name '$rule' (want <name>.md); nothing was written" >&2; exit 1; }
       [ -f "$instructions/$rule" ] || { echo "deliver-opencode-plugin: no rule file $instructions/$rule (run scripts/sync-opencode.py); nothing was written" >&2; exit 1; }
     done
     mkdir -p "$plugins"
@@ -133,9 +138,9 @@ case "$action" in
     cp "$src"/*.ts "$plugins/$name/"
     cp "$src"/tui/*.ts "$src"/tui/*.tsx "$plugins/$name/tui/"
     cp "$segment" "$plugins/$name/tui/"
-    if [ -n "${FR_OPENCODE_RULES:-}" ]; then
+    if [ "${#rules[@]}" -gt 0 ]; then
       mkdir -p "$plugins/$name/rules"
-      for rule in $FR_OPENCODE_RULES; do cp "$instructions/$rule" "$plugins/$name/rules/$rule"; done
+      for rule in "${rules[@]}"; do cp "$instructions/$rule" "$plugins/$name/rules/$rule"; done
     fi
     register
     ;;
