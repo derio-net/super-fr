@@ -40,3 +40,8 @@ A failed listing, a listing at its 200 cap, and a missing viewer each returned {
 ### rc-1486 · root-cause · #1486: head_on_default_branch has two answers for three states
 
 It folds 'cannot tell' into False. That is safe for R3 (off-default closes nothing) but not for R8, where off-default writes and stages. And on_default_branch raises GitUnavailableError, called outside _write_manual_owed's try.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1488 created=2026-11-18T13:34:18+00:00 -->
+### rc-1488 · root-cause · #1488: normalize_issue_ref drops the URL host
+
+_URL_REF matched any host and kept only the path, so a lookalike URL on another host normalised to this repo's issue and satisfied _refuse_unclosed_owed.
