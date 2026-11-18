@@ -70,3 +70,8 @@ MarkerLookup(found, reason); file_open_ends records the reason on every end and 
 ### f-1486 · finding [fixed] · #1486 fixed: unknown default ref previews; GitUnavailableError no longer escapes
 
 git.default_branch_answer; archive_cmd._write_manual_owed previews on None with a line saying why. Tests: test_git.py::test_default_branch_answer_is_unknown_when_the_default_ref_cannot_be_read, test_archive_owed.py::test_a_hold_whose_default_ref_cannot_be_read_writes_nothing, ::test_a_hold_where_git_cannot_answer_is_a_preview_not_a_crash.
+
+<!-- fr:journal kind=finding scope=debug id=f-1488 created=2026-11-18T13:34:41+00:00 state=fixed -->
+### f-1488 · finding [fixed] · #1488 fixed: an owed issue closes by URL only on the forge host
+
+normalize_issue_ref(..., host=) rejects a URL on another host ('' = unknown, rejects all); _refuse_unclosed_owed passes origin_hostname (the reading own_issue uses). Tests: test_pr_body_verification.py::test_a_url_on_another_host_does_not_normalise_when_the_host_is_given, test_deliver_closing_keywords.py::test_an_owed_issue_closed_by_url_must_be_on_the_forge_host.
