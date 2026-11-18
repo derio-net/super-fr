@@ -38,6 +38,7 @@ from tests.unit.triage_board_fixtures import (
 class Labels:
     def __init__(self, *, exists: bool = False, unsupported: bool = False) -> None:
         self.exists, self.unsupported = exists, unsupported
+        self.created: set[str] = set()  # the labels `ensure_labels` made, so each is checked alone
         self.calls: list[str] = []
         self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
 
@@ -53,11 +54,11 @@ class Labels:
         self.calls.append(f"exists {repo} {name}")
         if self.unsupported:
             raise UnsupportedForgeOperation("label_exists", "gitlab")
-        return self.exists
+        return self.exists or name in self.created
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.calls.append(f"create {repo} {[getattr(x, 'name', x) for x in labels]}")
-        self.exists = True
+        self.created.update(getattr(x, "name", x) for x in labels)
 
 
 def test_p3_r2_labels_off_creates_no_label_and_says_so() -> None:
@@ -65,8 +66,10 @@ def test_p3_r2_labels_off_creates_no_label_and_says_so() -> None:
     client.files[".fr/settings.yaml"] = "forge:\n  labels: 'off'\n"
     ensure_approval_label(client, "o/r", said.append, seen=seen)
     assert client.calls == []
+    off = "forge.labels: off (disabled by repo setting)"
     assert said == [
-        "label approved-fr not ensured on o/r: forge.labels: off (disabled by repo setting)"
+        f"label approved-fr not ensured on o/r: {off}",
+        f"label ready-fr not ensured on o/r: {off}",
     ]
 
 
@@ -74,21 +77,27 @@ def test_a_missing_label_is_created_once_per_repo_and_said() -> None:
     client, said, seen = Labels(), [], set()  # type: ignore[var-annotated]
     ensure_approval_label(client, "o/r", said.append, seen=seen)
     ensure_approval_label(client, "o/r", said.append, seen=seen)
-    assert client.calls == ["exists o/r approved-fr", "create o/r ['approved-fr']"]
-    assert said == ["created label approved-fr on o/r"]
+    # `ready-fr` (triage-intake R8) is ensured beside `approved-fr`, once each per repo
+    assert client.calls == [
+        "exists o/r approved-fr",
+        "create o/r ['approved-fr']",
+        "exists o/r ready-fr",
+        "create o/r ['ready-fr']",
+    ]
+    assert said == ["created label approved-fr on o/r", "created label ready-fr on o/r"]
 
 
 def test_an_existing_label_is_silent() -> None:
     client, said = Labels(exists=True), []  # type: ignore[var-annotated]
     ensure_approval_label(client, "o/r", said.append, seen=set())
-    assert client.calls == ["exists o/r approved-fr"] and said == []
+    assert client.calls == ["exists o/r approved-fr", "exists o/r ready-fr"] and said == []
 
 
 def test_a_forge_that_cannot_check_labels_warns_and_never_fails() -> None:
     said: list[str] = []
     ensure_approval_label(Labels(unsupported=True), "o/r", said.append, seen=set())
-    (line,) = said
-    assert line.startswith("warning:") and "approved-fr" in line and "o/r" in line
+    assert len(said) == 2 and all(line.startswith("warning:") and "o/r" in line for line in said)
+    assert "approved-fr" in said[0] and "ready-fr" in said[1]
 
 
 def test_a_forge_error_warns_too() -> None:
@@ -101,6 +110,37 @@ def test_a_forge_error_warns_too() -> None:
     said: list[str] = []
     ensure_approval_label(Refuses(), "o/r", said.append, seen=set())
     assert said[0].startswith("warning:")
+
+
+def test_a_failing_approved_label_ensure_still_creates_ready_fr_with_a_warning() -> None:
+    """One label that cannot be created never hides the other (triage-intake R8)."""
+    from fr.gh import GhError
+
+    class RefusesApproved(Labels):
+        def ensure_labels(self, repo: str, labels: list[Any]) -> None:
+            if any(getattr(x, "name", x) == "approved-fr" for x in labels):
+                raise GhError("HTTP 403", returncode=1)
+            super().ensure_labels(repo, labels)
+
+    client, said = RefusesApproved(), []  # type: ignore[var-annotated]
+    ensure_approval_label(client, "o/r", said.append, seen=set())
+    assert client.created == {"ready-fr"}
+    assert client.calls[-2:] == ["exists o/r ready-fr", "create o/r ['ready-fr']"]
+    assert len(said) == 2
+    assert said[0].startswith("warning: cannot ensure label approved-fr on o/r")
+    assert said[1] == "created label ready-fr on o/r"
+
+
+def test_an_unreadable_labels_policy_says_one_line_per_label_and_writes_nothing() -> None:
+    """`_labels_off`'s second branch: the settings file is unreadable, so the policy is
+    unknown and fr writes no label, one line for each of the two."""
+    client, said = Labels(), []  # type: ignore[var-annotated]
+    client.files[".fr/settings.yaml"] = "forge: [not, a, mapping\n"
+    ensure_approval_label(client, "o/r", said.append, seen=set())
+    assert client.calls == []
+    assert len(said) == 2
+    assert said[0].startswith("label approved-fr not ensured on o/r: ")
+    assert said[1].startswith("label ready-fr not ensured on o/r: ")
 
 
 def _collect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: Labels) -> Any:
@@ -172,7 +212,8 @@ def test_init_scaffold_creates_the_label_on_a_github_origin(
         app, ["init", "scaffold", "--repo", str(tmp_path), "--profile", "dev", "--purpose", "x"]
     )
     assert result.exit_code == 0, result.output
-    assert labels.calls[-1] == "create o/r ['approved-fr']"
+    assert "create o/r ['approved-fr']" in labels.calls
+    assert labels.calls[-1] == "create o/r ['ready-fr']"
 
 
 @pytest.mark.parametrize(

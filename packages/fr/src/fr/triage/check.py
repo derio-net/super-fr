@@ -43,6 +43,9 @@ Pure: facts and judgements in, sets out. The command only formats them.
   legacy) as a line of their own, and open `fr:owed` issues (debt-engine R14, R16). Like
   awaiting live they are never ranked, unranked, unplaced or without severity; each
   digest's figures are parsed from its body at check time;
+- **untrusted** — an open issue the intake rule finds ineligible (an outside author, no
+  `ready-fr` label; spec 2026-11-17-triage-intake R4), with its reason. It is never ranked,
+  unranked, unplaced or proposed in a batch, and the skill never judges it;
 - **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
   proposes as duplicates, with each flagged pair's reasons. A proposal, never a
   verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;
@@ -66,6 +69,7 @@ from fr.triage.batch import closeout_state, derive_batch_stage, is_open
 from fr.triage.claims import expired, from_issue_claim, holder, owed_claims
 from fr.triage.debt import is_marked, is_trusted_digest, issue_figures
 from fr.triage.dedupe import CandidateGroup, candidates
+from fr.triage.intake import issue_reason, untrusted_issues
 from fr.triage.model import (
     Batch,
     Facts,
@@ -196,6 +200,8 @@ class CheckResult:
     debt_digests: list[Issue] = field(default_factory=list)
     untrusted_digests: list[Issue] = field(default_factory=list)
     owed: list[Issue] = field(default_factory=list)
+    # Open issues intake finds ineligible, with the reason (triage-intake R4).
+    untrusted: list[tuple[Issue, str]] = field(default_factory=list)
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
@@ -233,6 +239,7 @@ class CheckResult:
             "debt_digests": [{**row(i), "figures": issue_figures(i)} for i in self.debt_digests],
             "untrusted_digests": [row(i) for i in self.untrusted_digests],
             "owed": [row(i) for i in self.owed],
+            "untrusted": [{**row(i), "reason": why} for i, why in self.untrusted],
             "duplicate_candidates": [
                 {
                     "keys": list(g.keys),
@@ -463,8 +470,13 @@ def is_owed(issue: Issue) -> bool:
 
 def is_set_apart(issue: Issue, facts: Facts) -> bool:
     """Whether `issue` is in a set of its own that is never ranked or proposed as work:
-    awaiting live, a debt digest or owed."""
-    return is_awaiting_live(issue) or is_debt_digest(issue, facts) or is_owed(issue)
+    awaiting live, a debt digest, owed, or an open issue intake finds untrusted."""
+    return (
+        is_awaiting_live(issue)
+        or is_debt_digest(issue, facts)
+        or is_owed(issue)
+        or (issue.state == "open" and issue_reason(issue, facts) is not None)
+    )
 
 
 def batch_awaits_live(batch: Batch, facts: Facts) -> bool:
@@ -579,6 +591,7 @@ def classify(
             i for i in facts.issues if is_marked(i) and not is_debt_digest(i, facts)
         ],
         owed=[i for i in facts.issues if is_owed(i)],
+        untrusted=untrusted_issues(facts),
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
         claims=(

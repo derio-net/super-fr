@@ -60,6 +60,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
@@ -150,6 +151,7 @@ def drive_snapshot(
         merged_at=merged_at,
         foreign={b.id: found for b in batches if (found := tuple(foreign_batch_prs(b, facts)))},
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
+        rejected=rejected_by_batch(batches, facts),
         approvals=fact_approvals(queue),
         queue_inferred=True,
         ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)

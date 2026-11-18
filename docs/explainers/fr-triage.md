@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-17 collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues; the page's BLOCKED-is-no-conflict and the facts schema 14 change no claim here. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -108,6 +108,9 @@ It always exits 0 and prints sets, not verdicts:
   set safe to act on without the forge;
 - **unreachable**: collect could not settle it (rate limit, lost access). Never prune on
   this;
+- **untrusted**: open issues whose author is an outside account that no operator admitted,
+  each with its reason. Collect does not store their body. You never judge, rank or batch
+  one. An operator admits one with the `ready-fr` label;
 - **stale dispatch**, **awaiting live**, **unplaced**, **duplicate candidates**: batches
   that went quiet, issues waiting on a post-merge walk, issues in no batch, and pairs the
   engine proposes as duplicates. A proposal is not a verdict: you judge every group.

@@ -66,7 +66,8 @@ class World:
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
         self.titles: dict[int, str] = {}
-        self.labels_defined: set[str] = {"approved-fr"}
+        self.outside: set[int] = set()  # issues by an outside author no operator admitted
+        self.labels_defined: set[str] = {"approved-fr", "ready-fr"}
         self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
         self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
         self.skipped: list[Any] = []  # repos collect did not read
@@ -110,6 +111,9 @@ class World:
                     url=f"https://github.com/{REPO}/issues/{i}",
                     prs=linked[i],
                     claims=self._claims(i) if s == "open" else [],
+                    # Intake admits a maintainer's issue (triage-intake R2).
+                    author="eve" if i in self.outside else None,
+                    author_association="NONE" if i in self.outside else "OWNER",
                 )
                 for i, s in self.issues.items()
             ],  # fmt: skip
@@ -2058,6 +2062,60 @@ def test_a_preflight_refusal_does_not_stop_a_merge_when_no_closeout_is_due(
     assert "HERDR_ENV" not in out
 
 
+def test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Triage-intake R6: blocked (counted), never dispatched, until `ready-fr` admits it."""
+    world.issues[1] = "open"
+    world.outside = {1}
+    _state(tmp_path, world, _batch("b1", 1))
+    for _ in range(2):
+        code, out = _drive(tmp_path, "--once", "--yes")
+        assert code == 3, out
+        (line,) = _lines(out, "blocked")
+        assert line.startswith("blocked b1: members intake does not admit: super-fr#1: author eve")
+        assert "ready-fr" in line
+        assert runner.dispatched == []
+    world.outside = set()
+    _state(tmp_path, world, _batch("b1", 1))
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
+    assert code == 0, out
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/batch-b1"]
+
+
+def test_the_driver_and_the_board_fill_rejected_alike(tmp_path: Path, world: World) -> None:
+    from fr.triage.views import drive_snapshot
+
+    # 1 outside author (rejected) · 2 a pr_authors login (trusted) · 3 `ready-fr` (admitted)
+    # · 4 no longer collected (rejected) · 5 a maintainer's (admitted)
+    world.issues.update({1: "open", 2: "open", 3: "open", 4: "open", 5: "open"})
+    world.outside = {1, 2, 3}
+    world.config = {"pr_authors": ["release-bot"]}
+    state = _state(tmp_path, world, *(_batch(f"b{n}", n) for n in (1, 2, 3, 4, 5)))
+    facts = world.facts()
+    by = {
+        2: {"author": "release-bot"},
+        3: {"labels": ["ready-fr"]},
+    }
+    facts = facts.model_copy(
+        update={
+            "issues": [
+                i.model_copy(update=by.get(i.number, {})) for i in facts.issues if i.number != 4
+            ]
+        }
+    )
+    jd = load_judgements(state / "judgements.yaml")
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), state, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    live = driver.snapshot(facts, jd, NOW).rejected
+    board = drive_snapshot(facts, jd).rejected
+    assert live == board
+    assert set(live) == {"b1", "b4"}  # b2 (pr_authors), b3 (ready-fr), b5 (OWNER) are admitted
+    assert "author eve" in live["b1"] and "not collected" in live["b4"]
+
+
 def _blocked_state(world: World, tmp_path: Path) -> None:
     world.issues.update({1: "open", 2: "open"})
     cancel = "      - {kind: cancel, at: 2026-10-01T11:00:00Z}\n"
@@ -2329,6 +2387,216 @@ def test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes(
     ], out
     assert "in flight 2, merged 0, pending 0, closing 0" in out
     assert out.count(f"held: {REPO} default branch unknown (") == 1, out
+
+
+def test_a_failed_fetch_holds_the_repo_for_that_pass_only_and_fetches_once_per_pass(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """triage-intake R9 (#1213): every pass fetches the repo's origin once, however many
+    readers ask. A pass whose fetch fails holds the repo with ONE warning for all its
+    merge-context uses and finishes; the next pass whose fetch works acts again."""
+    from fr.triage.gitseam import GitError
+
+    world.issues.update({1: "open", 2: "open"})
+    world.pr(101, "feat/batch-b1", [1])
+    world.pr(102, "feat/batch-b2", [2])
+    pending = [{"name": "test", "bucket": "pending"}]
+    world.checks.update({101: pending, 102: pending})  # ready only from pass 2 on
+    _state(
+        tmp_path, world,
+        _batch("b1", 1, events=_dispatch_event("b1")),
+        _batch("b2", 2, events=_dispatch_event("b2")),
+    )  # fmt: skip
+    broken = [False]
+    fetches: list[bool] = []
+
+    def _fetch() -> None:
+        fetches.append(broken[0])
+        if broken[0]:
+            raise GitError("could not read from remote repository")
+
+    monkeypatch.setattr(checkout, "fetch", _fetch)
+    seen: list[tuple[int, int, list[tuple[int, str, str]]]] = []
+    uses: list[tuple[int, str]] = []  # (passes napped so far, outcome of each merge_ctx use)
+    real_ctx = triage_batch_cmd._Driver.merge_ctx
+
+    def _spy(self: Any, facts: Any, repo: str) -> Any:
+        try:
+            ctx = real_ctx(self, facts, repo)
+        except triage_batch_cmd.DefaultBranchUnknown:
+            uses.append((len(seen), "held"))
+            raise
+        uses.append((len(seen), "ok"))
+        return ctx
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "merge_ctx", _spy)
+
+    def _nap(seconds: float) -> None:
+        seen.append((len(fetches), sum(fetches), list(world.merged)))
+        if len(seen) == 3:
+            raise _StopError
+        for n in (101, 102):  # green from pass 2 on
+            world.checks[n] = [{"name": "test", "bucket": "pass"}]
+        broken[0] = len(seen) == 1  # pass 2's fetch fails, pass 3's works
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert seen[0][2] == [] and seen[1][2] == []  # pending, then held: nothing merged
+    assert seen[1][1] >= 1  # pass 2's fetch was tried, and failed
+    assert len(seen[2][2]) >= 1, "the repo was not acted on again"
+    assert result.output.count(f"held: {REPO} default branch unknown (") == 1, result.output
+    # Pass 1: the merge context reuses the fetch a reader made first: one fetch in all.
+    assert seen[0][0] == 1, seen
+    # The hold is the MERGE CONTEXT's own verdict, re-checked each pass: pass 2's use
+    # re-fetched and was held, pass 3's was fine again (a context held
+    # or checked once for the driver's lifetime would not have followed the pass).
+    assert (1, "held") in uses and (2, "ok") in uses, uses
+
+
+def test_the_merge_context_follows_each_passs_config_without_a_second_methods_read(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: `method` and `version` are refreshed every use from the pass's
+    facts; the repo's allowed merge methods are read once, at the build."""
+    from fr.triage.model import TriageConfig
+
+    reads: list[str] = []
+
+    class _Client:
+        def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+            reads.append(repo)
+            return {"default": None, "allowed": ["squash", "merge"]}
+
+    class _Clone:
+        def __init__(self) -> None:
+            self.config: dict[str, Any] = {}
+            self.fetches = 0
+
+        def fetch(self) -> None:
+            self.fetches += 1
+
+        def default_branch(self) -> str:
+            return "main"
+
+        def show(self, ref: str, file: str) -> str | None:
+            return yaml.safe_dump(self.config)
+
+    clone = _Clone()
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: _Client())
+    monkeypatch.setattr(driver, "checkout", lambda repo: clone)
+    monkeypatch.setattr(driver, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(driver, "_base_rules", lambda facts, repo: BaseRules())
+
+    def _facts(cfg: dict[str, Any]) -> Any:
+        clone.config = cfg
+        return world.facts().model_copy(update={"config": {REPO: TriageConfig.model_validate(cfg)}})
+
+    version = {"source": {"file": "VERSION", "key": "v"}, "files": ["VERSION"], "set": "x"}
+    ctx = driver.merge_ctx(_facts({"merge_method": "squash"}), REPO)
+    assert (ctx.method, ctx.version) == ("squash", None) and clone.fetches == 1
+    driver.merge_ctx(_facts({"merge_method": "squash"}), REPO)
+    assert clone.fetches == 1  # checked once this pass
+    driver._fetched, driver._ctx_checked = set(), set()  # the next pass
+    ctx = driver.merge_ctx(_facts({"merge_method": "merge", "version": version}), REPO)
+    assert ctx.method == "merge" and ctx.version is not None
+    assert reads == [REPO] and clone.fetches == 2
+
+
+def _clone_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clone: Any) -> Any:
+    class _Client:
+        def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+            return {"default": None, "allowed": ["squash", "merge"]}
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: _Client())
+    monkeypatch.setattr(driver, "checkout", lambda repo: clone)
+    monkeypatch.setattr(driver, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(driver, "_base_rules", lambda facts, repo: BaseRules())
+    return driver
+
+
+def test_a_failing_fetch_holds_the_repo_and_a_second_use_does_not_fetch_again(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: within one pass a failing fetch holds the repo; a second
+    `merge_ctx` use re-raises the same `DefaultBranchUnknown` with no second fetch."""
+    from fr.triage.gitseam import GitError
+
+    class _Clone:
+        fetches = 0
+
+        def fetch(self) -> None:
+            self.fetches += 1
+            raise GitError("could not read from remote repository")
+
+    clone = _Clone()
+    driver = _clone_driver(tmp_path, monkeypatch, clone)
+    facts = world.facts()
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown) as first:
+        driver.merge_ctx(facts, REPO)
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown) as second:
+        driver.merge_ctx(facts, REPO)
+    assert second.value is first.value and clone.fetches == 1
+    assert REPO in driver._ctx_held and REPO not in driver._ctx_checked
+
+
+def test_a_stale_config_refuses_with_code_two_and_leaves_the_repo_unchecked(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: a config that moved on the default branch under the pass is a
+    `ForgeReadError` (code 2), and the repo is not recorded as checked."""
+    from fr.commands.triage_batch_cmd import ForgeReadError
+
+    class _Clone:
+        def fetch(self) -> None:
+            return None
+
+        def default_branch(self) -> str:
+            return "main"
+
+        def show(self, ref: str, file: str) -> str | None:
+            return yaml.safe_dump({"merge_method": "merge"})  # facts carry the default
+
+    driver = _clone_driver(tmp_path, monkeypatch, _Clone())
+    with pytest.raises(ForgeReadError) as err:
+        driver.merge_ctx(world.facts(), REPO)
+    assert err.value.code == 2
+    assert REPO not in driver._ctx_checked and REPO not in driver._ctx_held
+
+
+def test_a_held_repo_spends_no_close_out_hand_back(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-intake R9: `_closeout_hand_back` reaches its default branch through the hold."""
+    from types import SimpleNamespace
+
+    from fr.triage.batch_drive import Action
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+
+    def _unknown(facts: Any, repo: str) -> Any:
+        raise triage_batch_cmd.DefaultBranchUnknown(repo, RuntimeError("no remote"))
+
+    monkeypatch.setattr(driver, "merge_ctx", _unknown)
+    member = SimpleNamespace(events=[])
+    monkeypatch.setattr(triage_batch_cmd, "_find", lambda batches, bid: member)
+    monkeypatch.setattr(triage_batch_cmd, "closeout_event", lambda batch: None)
+    judgements = SimpleNamespace(batches=[member], closeouts=[])
+    action = Action(kind="closeout-handback", batch="b1", detail="d", items=("b1",), key="x", pr=9)
+    line, did = driver._closeout_hand_back(action, world.facts(), judgements, REPO)  # type: ignore[arg-type]
+    assert did is False and line.startswith("d; held: ") and "default branch unknown" in line
 
 
 def test_no_origin_head_and_unreachable_origin_warns_once(
@@ -4506,10 +4774,12 @@ def test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it(
     world.labels_defined.clear()
     code, out = _drive(tmp_path, "--once", "--yes")
     assert f"created label approved-fr on {REPO}" in out
+    assert f"created label ready-fr on {REPO}" in out  # triage-intake R8: beside approved-fr
     assert world.calls.count("label_exists approved-fr") == 1
+    assert world.calls.count("label_exists ready-fr") == 1
     _drive(tmp_path, "--once", "--yes")
     assert world.calls.count("label_exists approved-fr") == 2  # one per pass
-    assert out.count("created label") == 1
+    assert out.count("created label") == 2
 
 
 def test_a_foreign_push_after_the_snapshot_is_stepped_over_not_a_stop(
@@ -5262,7 +5532,7 @@ def test_archive_conflict_brief_enters_isolation_on_the_archive_branch() -> None
     text = archive_conflict_brief(
         batch, pr=201, head="sha-201", branch="chore/archive-p1", base="origin/main"
     )
-    assert text.startswith("Archive PR conflict on batch b1 ")
+    assert text.startswith("Archive PR conflict on batch b1: ")
     step1 = next(line for line in text.splitlines() if line.startswith("1. "))
     assert "`fr isolation up --branch chore/archive-p1`" in step1
     assert "git switch" not in text

@@ -181,3 +181,8 @@ class TestBoundedLabelNames:
         assert len(out) <= 50
         out2 = _bounded_label_name("plan:", "y" * 200)
         assert len(out2) == 50 and out2.startswith("plan:")
+
+
+def test_ready_fr_is_an_operator_label_distinct_from_approved_fr() -> None:
+    assert labels.READY_FR.name == "ready-fr"
+    assert labels.READY_FR.name != labels.APPROVED_FR.name

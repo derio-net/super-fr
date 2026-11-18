@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-17 batch release-truth, cloud-setup.md now says the doctor compares release candidates; nothing this page describes changed
+reviewed: 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -47,7 +47,9 @@ You set them with `fr triage batch create` and `fr triage batch edit` (`--wave N
 `--after ID`, the second repeatable). These verbs refuse a batch id that does not exist, a
 batch that names itself and a cycle, and leave the file as it was. If a batch's dependency
 ends up cancelled, abandoned or `partial`, the driver reports the batch as **blocked** and
-never dispatches it; that one needs you.
+never dispatches it; that one needs you. A batch is also blocked while one of its issues is
+from an outside author that no operator admitted. The `ready-fr` label on that issue lifts
+the block, and the next pass dispatches the batch.
 
 Use waves for "these are independent, start them together" and `after` for "this one edits
 what that one adds". A batch may have no wave. With no batch ids on the command line,

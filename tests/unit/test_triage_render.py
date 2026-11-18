@@ -752,6 +752,7 @@ def _dupe_state(
                     "title": title,
                     "state": state,
                     "url": f"https://github.com/{_REPO}/issues/{n}",
+                    "author_association": "OWNER",  # intake admits a maintainer's issue
                 }
                 for n, title, state in issues
             ],

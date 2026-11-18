@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-17 the release compares with the newest candidate main contains; a tag left without its GitHub Release gets one on the next run (batch release-truth)
+reviewed: 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake)
 ---
 
 ## What work cannot finish in the pull request?

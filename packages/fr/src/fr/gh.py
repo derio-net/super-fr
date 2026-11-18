@@ -413,16 +413,38 @@ def swap_issue_labels(
 ) -> None:
     """Add and remove labels on an Issue in a single gh call.
 
-    No-op if both lists are empty. Failure propagates as GhError.
+    No-op if both lists are empty. Failure propagates as GhError, except a REMOVAL gh reports as
+    `'<label>' not found` (the repo never defined it, so the issue cannot carry it): that is
+    already the wanted end state, so it is dropped and the call retried, at most `len(remove)`
+    times. gh is expected to resolve every label before it mutates anything; if it ever applied
+    part of a refused call first, the retry only repeats an add or a removal, both idempotent. A
+    missing ADD label still fails.
     """
-    if not add and not remove:
-        return
-    args = ["issue", "edit", str(number), "--repo", repo]
-    for lbl in add:
-        args.extend(["--add-label", lbl])
-    for lbl in remove:
-        args.extend(["--remove-label", lbl])
-    _run_gh(args)
+    remaining = list(remove)
+    for _ in range(len(remove) + 1):
+        if not add and not remaining:
+            return
+        args = ["issue", "edit", str(number), "--repo", repo]
+        for lbl in add:
+            args.extend(["--add-label", lbl])
+        for lbl in remaining:
+            args.extend(["--remove-label", lbl])
+        try:
+            _run_gh(args)
+            return
+        except GhError as exc:
+            # Match each pending removal by its exact quoted name rather than parsing the
+            # name out of the message: a label holding an apostrophe still matches, and an
+            # error naming anything other than a pending removal (an ADD, or no label at
+            # all) re-raises.
+            text = f"{exc} {exc.stderr}"
+            gone = next(
+                (lbl for lbl in remaining if lbl not in add and f"'{lbl}' not found" in text),
+                None,
+            )
+            if gone is None:
+                raise
+            remaining.remove(gone)
 
 
 def is_issue_closed(*, repo: str, number: int) -> bool:
@@ -541,6 +563,9 @@ def list_issues(
 
     if (rest := _rest()) is not None:
         return _records(rest.list_issues(repo, state, limit, fields, labels))
+    # `authorAssociation` is a REST-only field (triage-intake R1): `gh issue list --json` does
+    # not offer it, so the CLI is never asked for it; collect reads it another way then.
+    cli_fields = ",".join(f for f in fields.split(",") if f != "authorAssociation")
     out = _run_gh(
         [
             "issue",
@@ -552,12 +577,41 @@ def list_issues(
             "--limit",
             str(limit),
             "--json",
-            fields,
+            cli_fields,
             *[a for label in labels or () for a in ("--label", label)],
         ]
     )
     issues: list[dict[str, object]] = json.loads(out) if out else []
     return issues
+
+
+def issue_associations(*, repo: str, state: str, limit: int) -> dict[int, str]:
+    """Each issue's author association (`OWNER`, `MEMBER`, `NONE`, ...), by number.
+
+    ``gh issue list --json`` offers no association field, so this is one paginated
+    ``gh api`` read of the issues route; pull requests (which that route also lists) are
+    dropped, and at most *limit* issues are kept (spec 2026-11-17-triage-intake R1).
+    """
+    if (rest := _rest()) is not None:
+        return rest.issue_associations(repo, state, limit)
+    out = _run_gh(
+        [
+            *("api", "--paginate"),
+            *(
+                "--jq",
+                '.[] | select(has("pull_request") | not) | "\\(.number)\t\\(.author_association)"',
+            ),
+            f"repos/{repo}/issues?state={state}&per_page=100",
+        ]
+    )
+    found: dict[int, str] = {}
+    for line in out.splitlines():
+        number, _, association = line.partition("\t")
+        if number.isdigit() and association and association != "null":
+            found[int(number)] = association.upper()
+        if len(found) >= limit:
+            break
+    return found
 
 
 def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:

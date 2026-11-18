@@ -760,3 +760,22 @@ def test_an_export_conflict_need_holds_only_while_its_pr_is_open_at_the_stop_hea
     assert _rows(judgements({"widgets#1": j(1)}, [], schema=10)) == []  # nothing recorded
     shown = facts([issue(1)], prs=[pr(40, "fr-triage/export", state="MERGED", head_oid="sha-40")])
     assert _rows(_jd(), shown) == []  # the facts show it merged
+
+
+def test_the_board_plan_blocks_a_batch_with_an_untrusted_member() -> None:
+    """Triage-intake R6: `drive_snapshot` fills `rejected`, so the board and `drive --plan`
+    show the batch blocked, as the live pass does."""
+    from fr.triage.model import Facts as _Facts
+
+    f, jd = busy()
+    stages = drive_snapshot(f, jd).stages
+    proposed = next(b for b in jd.batches if stages[b.id] == "proposed" and b.after == [])
+    data = f.to_json()
+    member = next(
+        i for i in data["issues"] if f"{i['repo'].split('/')[1]}#{i['number']}" == proposed.ids[0]
+    )
+    member.update(author="eve", author_association="NONE", labels=[])
+    snap = drive_snapshot(_Facts.model_validate(data), jd)
+    assert set(snap.rejected) == {proposed.id}
+    plan = drive_pass(snap)
+    assert proposed.id in {a.batch for a in plan.actions if a.kind == "blocked"}

@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch
+reviewed: 2026-11-17 still true after batch triage-intake (the new ready-fr label is an operator label of triage, not a dispatch label); 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch
 ---
 
 # Dispatch labels and the per-repo plan profile
