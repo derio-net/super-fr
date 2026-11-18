@@ -461,7 +461,11 @@ class RealGlabClient(UnsupportedBatchOps):
                 and (urlparse(web_url).hostname or "").lower() == "gitlab.com"
             )
             return from_gitlab(raw, access_control=on_gitlab_com)
-        except (_glab.GlabError, ValueError, OSError):
+        except _glab.GlabError as exc:
+            if names_login_page(str(exc)):
+                raise  # a login page is named, not read as "unknown" (as issues_enabled)
+            return UNKNOWN
+        except (ValueError, OSError):
             return UNKNOWN
 
     @_hosted

@@ -89,18 +89,41 @@ RAISING: dict[str, Callable[[], Any]] = {
     "real_glabclient:read_file": lambda: RealGlabClient().read_file("o/r", "a.md"),
 }
 
-# Sites whose contract is a fallback value, so a login page is that value.
-# issues_enabled is not here: it re-raises a login page (see the test below).
-FALLBACK: dict[str, tuple[Callable[[], Any], Any]] = {
-    # acceptance/pages.py calls repo_visibility first on the same endpoint, and that
-    # call raises with the named cause, so UNKNOWN here never hides the login page.
-    "real_glabclient:pages_visibility": (
-        lambda: RealGlabClient().pages_visibility("o/r"),
-        UNKNOWN,
-    ),
-}
+# Sites whose contract is a fallback value, so a login page is that value. None today:
+# issues_enabled and pages_visibility read a fallback for other failures but re-raise a
+# login page (l-errors-r3), so the caller can name it.
+FALLBACK: dict[str, tuple[Callable[[], Any], Any]] = {}
 
 RAISING["real_glabclient:issues_enabled"] = lambda: RealGlabClient().issues_enabled("o/r")
+RAISING["real_glabclient:pages_visibility"] = lambda: RealGlabClient().pages_visibility("o/r")
+
+
+def test_pages_visibility_keeps_unknown_for_an_ordinary_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*_a: Any, **_k: Any) -> str:
+        raise _glab.GlabError("glab: HTTP 500")
+
+    monkeypatch.setattr(_glab, "_run_glab", fail)
+    assert RealGlabClient().pages_visibility("o/r") == UNKNOWN
+
+
+def test_a_login_page_on_the_pages_read_is_a_refusal_naming_the_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr.acceptance.pages import pages_allowed
+
+    class Client(RealGlabClient):
+        def repo_visibility(self, repo: str) -> str:
+            return "private"
+
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: "o/r")
+    allowed, reason = pages_allowed(Path.cwd(), Client())
+    assert allowed is False
+    assert "Pages visibility could not be read" in reason
+    assert CAUSE in reason
+
+
 SITES = {k for k in RAISING if "_401" not in k} | set(FALLBACK)
 
 
