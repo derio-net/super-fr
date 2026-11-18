@@ -450,7 +450,7 @@ def render_board(
         f"{page_header('batches', present)}\n{banner}\n"
         f"{_held(board.held)}\n"
         f"{body}\n"
-        f'<footer class="meta">{quota}Rendered by <code>fr triage board</code> from facts.json '
+        f'<footer class="meta">{quota}Rendered by <code>fr triage batches</code> from facts.json '
         "and judgements.yaml.</footer>\n"
         f"</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
     )

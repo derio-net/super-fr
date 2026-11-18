@@ -143,3 +143,12 @@ def test_every_page_states_when_it_was_rendered_beside_the_collected_time(name: 
     assert "rendered 2026-11-18 09:30 UTC" in mast
     assert "collected" in mast
     assert RENDERERS[name](AT) == page, "same inputs, same bytes"
+
+
+@pytest.mark.parametrize("name", ["backlog", "issues", "batches"])
+def test_each_footer_names_the_command_by_its_new_name(name: str) -> None:
+    """R1, R2: a page names the command that writes it by its one name."""
+    footer = RENDERERS[name](AT).rsplit("<footer", 1)[1]
+    want = "fr triage batches" if name == "batches" else "fr triage backlog"
+    assert want in footer
+    assert "fr triage board" not in footer and "fr triage render" not in footer
