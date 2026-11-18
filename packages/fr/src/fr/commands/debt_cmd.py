@@ -351,13 +351,48 @@ def _forge_host(root: Path, forge: str) -> str | None:
     return _SAAS_HOST.get(forge)
 
 
+def _ci_server_hosts() -> list[tuple[str, int | None]]:
+    """The `(hostname, port)` of the CI server this job runs on, when it runs in CI:
+    GitLab's `CI_SERVER_HOST` (with `CI_SERVER_PORT`), and the host of
+    `GITHUB_SERVER_URL` (GitHub and Gitea Actions) or `GITEA_SERVER_URL`. That server
+    is the forge, so its own host may receive the token even when `forge:` is not
+    declared (R12, R13)."""
+    import os
+    from urllib.parse import urlsplit
+
+    hosts: list[tuple[str, int | None]] = []
+    gl = os.environ.get("CI_SERVER_HOST", "").strip()
+    if gl:
+        port = os.environ.get("CI_SERVER_PORT", "").strip()
+        hosts.append((gl.lower(), int(port) if port.isdigit() else None))
+    for var in ("GITHUB_SERVER_URL", "GITEA_SERVER_URL"):
+        raw = os.environ.get(var, "").strip()
+        if not raw:
+            continue
+        try:
+            parts = urlsplit(raw)
+            if parts.hostname:
+                hosts.append((parts.hostname.lower(), parts.port))
+        except ValueError:
+            continue
+    return hosts
+
+
+def _is_ci_server(hostname: str, port: int | None) -> bool:
+    """Same hostname; the port is compared only when both sides name one."""
+    return any(
+        h == hostname.lower() and (p is None or port is None or p == port)
+        for h, p in _ci_server_hosts()
+    )
+
+
 def _remote_auth(root: Path) -> tuple[str, dict[str, str] | None, str]:
     """What the two remote git calls of `archive-pr` run against (R11): `(remote, env,
     token)`. With a token (FR_DEBT_TOKEN, else the forge's own variable) the remote is
     origin's URL with its user-info stripped and the credential rides in the environment
     as an `http.<url>.extraheader`, so it is in no argv and in no `.git/config`. Without
-    one, for a non-HTTP origin, or for an origin on a host other than the forge's, it is
-    plain `origin` and no environment."""
+    one, for a non-HTTP origin, or for an origin on neither the forge's host nor the host
+    of the CI server the job runs on, it is plain `origin` and no environment."""
     import base64
     import os
     import sys
@@ -376,7 +411,8 @@ def _remote_auth(root: Path) -> tuple[str, dict[str, str] | None, str]:
     if parts.scheme not in ("http", "https") or not parts.hostname:
         return "origin", None, ""
     expected = _forge_host(root, forge)
-    if expected is None or parts.hostname.lower() != expected.lower():
+    on_forge = expected is not None and parts.hostname.lower() == expected.lower()
+    if not on_forge and not _is_ci_server(parts.hostname, parts.port):
         print(
             f"warning: origin's host {_clean(parts.hostname)!r} is not the {forge} host "
             f"{_clean(expected or 'unknown')!r}; pushing without the token",

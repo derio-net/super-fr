@@ -55,7 +55,16 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     box = {"report": _report(("old-plan", 30), ("held-plan", 30), ("young-plan", 3), ("odd", None))}
     monkeypatch.setenv("FR_REPO_ROOT", str(work))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
-    for var in ("FR_DEBT_TOKEN", "GH_TOKEN", "GITLAB_TOKEN", "GITEA_TOKEN"):
+    for var in (
+        "FR_DEBT_TOKEN",
+        "GH_TOKEN",
+        "GITLAB_TOKEN",
+        "GITEA_TOKEN",
+        "CI_SERVER_HOST",
+        "CI_SERVER_PORT",
+        "GITHUB_SERVER_URL",
+        "GITEA_SERVER_URL",
+    ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(debt_cmd, "_client", lambda root: gh)
     monkeypatch.setattr(debt_cmd, "_compute", lambda root, c, slug, days: box["report"])
@@ -446,3 +455,72 @@ def test_git_really_sends_exactly_one_authorization_header(
         sent = " ".join(v for _, v in headers)
         assert "jobtok" not in sent
         assert base64.b64encode(b"gitlab-ci-token:jobtok").decode() not in sent
+
+
+# --- the CI server's own host may receive the token (R12, R13, undeclared forge) --------
+
+
+def _self_hosted(world: dict, monkeypatch: pytest.MonkeyPatch, forge: str, url: str) -> None:
+    from fr import _hosts
+
+    _no_rewrite(world)
+    _git(world["work"], "remote", "set-url", "origin", url)
+    monkeypatch.setattr(_hosts, "detect_backend", lambda root: forge)
+    monkeypatch.setenv(_FORGE_VAR[forge], "s3cret")
+
+
+_FORGE_VAR = {"gitlab": "GITLAB_TOKEN", "gitea": "GITEA_TOKEN"}
+
+
+def test_gitlab_ci_trusts_its_own_server_host(world: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    _self_hosted(world, monkeypatch, "gitlab", "https://gitlab-ci-token:x@git.example.com/g/p.git")
+    monkeypatch.setenv("CI_SERVER_HOST", "git.example.com")
+    remote, env, _ = debt_cmd._remote_auth(world["work"])
+    assert remote == "https://git.example.com/g/p.git"
+    assert env is not None and env["GIT_CONFIG_VALUE_1"] == _basic("oauth2", "s3cret")
+
+
+@pytest.mark.parametrize("var", ["GITHUB_SERVER_URL", "GITEA_SERVER_URL"])
+def test_gitea_actions_trusts_its_own_server_host(
+    world: dict, monkeypatch: pytest.MonkeyPatch, var: str
+) -> None:
+    _self_hosted(world, monkeypatch, "gitea", "https://git.example.com/o/r.git")
+    monkeypatch.setenv(var, "https://git.example.com")
+    _, env, _ = debt_cmd._remote_auth(world["work"])
+    assert env is not None and env["GIT_CONFIG_VALUE_1"] == _basic("oauth2", "s3cret")
+
+
+@pytest.mark.parametrize(
+    ("server", "origin"),
+    [
+        ("https://git.example.com", "https://other.example.org/o/r.git"),
+        ("https://git.example.com:3000", "https://git.example.com:4000/o/r.git"),
+    ],
+)
+def test_a_ci_server_on_another_host_or_port_is_not_trusted(
+    world: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    server: str,
+    origin: str,
+) -> None:
+    _self_hosted(world, monkeypatch, "gitea", origin)
+    monkeypatch.setenv("GITHUB_SERVER_URL", server)
+    assert debt_cmd._remote_auth(world["work"]) == ("origin", None, "")
+    assert capsys.readouterr().err.count("pushing without the token") == 1
+
+
+def test_a_port_on_one_side_only_still_matches(
+    world: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _self_hosted(world, monkeypatch, "gitea", "https://git.example.com:3000/o/r.git")
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://git.example.com")
+    assert debt_cmd._remote_auth(world["work"])[1] is not None
+
+
+def test_outside_ci_a_self_hosted_origin_stays_untrusted(
+    world: dict, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _self_hosted(world, monkeypatch, "gitlab", "https://git.example.com/g/p.git")
+    assert debt_cmd._remote_auth(world["work"]) == ("origin", None, "")
+    assert capsys.readouterr().err.count("pushing without the token") == 1

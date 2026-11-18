@@ -203,9 +203,11 @@ token in the process environment. The token is never in a command line or in `.g
 Without it, the command uses the forge's own variable: `GH_TOKEN`, `GITLAB_TOKEN` or
 `GITEA_TOKEN`.
 
-The command sends the token only when the host of `origin` is the forge host
-that fr found for the checkout. For a different host, such as a mirror, it pushes without
-the token and prints one warning. It also clears an `extraheader` that checkout kept in
+The command sends the token only to a host that it trusts. It trusts the forge host
+that fr found for the checkout. In CI, it also trusts the host of the CI server: GitLab's
+`CI_SERVER_HOST`, or the host of `GITHUB_SERVER_URL` (GitHub and Gitea) or
+`GITEA_SERVER_URL`. For a different host, such as a mirror, it pushes without the token and
+prints one warning. It also clears an `extraheader` that checkout kept in
 `.git/config`, so Git sends one `Authorization` header.
 
 - GitHub: checkout keeps no credential. `FR_DEBT_TOKEN` reaches the archive step only.
