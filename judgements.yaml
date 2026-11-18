@@ -8477,6 +8477,18 @@ batches:
   after:
   - consumer-delivery
   skill: debug
+- id: triage-hardening
+  title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
+    out of dedupe'
+  ids:
+  - super-fr#1539
+  - super-fr#1542
+  - super-fr#1545
+  rationale: triage-intake follow-ups plus the dedupe universe, in collect/intake/dedupe; waits on train-truth's
+    triage changes.
+  wave: 23
+  after:
+  - train-truth
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
