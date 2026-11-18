@@ -20,3 +20,8 @@ archive_followups._existing_markers lists 200 open issues; an error, a missing v
 ### repro-1486 · repro · #1486: unreadable default ref reads as off-default in _write_manual_owed; GitUnavailableError escapes
 
 head_on_default_branch returns False when remote_default_ref is None or a GitRefusal. That is the safe answer for R3 (resolve closes nothing), but for R8 (_write_manual_owed) 'off default' means 'write and stage an owed entry', which may land on main. on_default_branch raises GitUnavailableError, and archive_cmd._write_manual_owed calls head_on_default_branch outside its try, so it crashes the archive.
+
+<!-- fr:journal kind=repro scope=debug id=repro-1488 created=2026-11-18T13:10:04+00:00 -->
+### repro-1488 · repro · #1488: a foreign-host issue URL satisfies deliver's owed closing check
+
+_refuse_unclosed_owed normalizes each closing ref with normalize_issue_ref, whose _URL_REF accepts any host and keeps only the path. 'Closes https://evil.example/derio-net/super-fr/issues/9' normalizes to derio-net/super-fr#9, so deliver accepts the body, but GitHub does not close #9 when the PR merges.
