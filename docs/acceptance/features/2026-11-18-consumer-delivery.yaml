@@ -81,9 +81,13 @@ rows:
       disk or argv
     origin:
     - spec:2026-11-18-consumer-delivery#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_debt_jobs.py#test_github_debt_checkout_keeps_no_credential_and_the_token_is_on_archive_pr_alone
+      - super-fr:tests/unit/test_debt_archive_pr.py#test_remote_calls_carry_the_token_in_the_environment_only
+    status: ci
+    notes: token confined to the archive step; archive-pr authenticates by env header,
+      never argv or .git/config
     verify: none
   - id: debt-credentials-gitea-gitlab
     capability: The weekly debt job works on Gitea and GitLab
