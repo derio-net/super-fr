@@ -60,3 +60,8 @@ New git.default_branch_answer returns True/False/None. _write_manual_owed previe
 ### f-1483 · finding [fixed] · #1483 fixed: no write through a symlinked live root
 
 archive._symlinked_component lstat-walks each component from the repo root; a link warns and writes nothing. Test: test_archive_live_root.py::test_a_symlinked_live_root_is_not_written_through (failed before: docs/elsewhere/.gitkeep was created).
+
+<!-- fr:journal kind=finding scope=debug id=f-1485 created=2026-11-18T13:34:33+00:00 state=fixed -->
+### f-1485 · finding [fixed] · #1485 fixed: _existing_markers fails closed
+
+MarkerLookup(found, reason); file_open_ends records the reason on every end and files nothing. Cap is OPEN_ENDS_LIST_LIMIT=1000 (super-fr has ~170 open issues). Tests: test_archive_open_ends.py::test_an_unknown_dedup_answer_files_nothing[listing-fails|listing-capped|no-viewer], ::test_the_marker_listing_is_wide_enough_for_a_busy_repo.
