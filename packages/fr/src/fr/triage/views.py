@@ -593,9 +593,8 @@ def next_up(
 
     for bid in started:
         b = by_id[bid]
-        order = f"merge order {b.order}, " if b.order is not None else ""
-        deps = f"after {', '.join(b.after)} merged" if b.after else "no dependencies"
-        rows.append(row(b, f"{order}{deps}", False))
+        reason = f"merge order {b.order}" if b.order is not None else "the driver starts it next"
+        rows.append(row(b, reason, False))
 
     # The driver's own hold is the one rule (spec §F, R18): a batch that awaits a live
     # walk is no work, so it is neither started nor waiting.
