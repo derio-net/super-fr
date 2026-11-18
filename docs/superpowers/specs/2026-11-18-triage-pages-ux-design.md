@@ -320,3 +320,9 @@ gate: developer
   Architecture's git reads run at most once per finished wave.
 - **Browser storage** can be missing (private window). Every access is wrapped, and the
   default state is the one the page renders.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-18-triage-pages-ux | `derio-net/super-fr` | `2026-11-18-triage-pages-ux` | — |

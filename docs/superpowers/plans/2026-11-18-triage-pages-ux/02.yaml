@@ -1,0 +1,154 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Shared folds, links and tabs, used on Backlog, History and Architecture (R8,
+    R9, R11-R13, R16, R17)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-pages-folds
+  - triage-pages-links
+  - triage-backlog-issues-split
+  - triage-history-pr-summary
+  - triage-architecture-pipeline-tabs
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/history.py
+  - packages/fr/src/fr/triage/architecture.py
+  - packages/fr/src/fr/triage/fragments.py
+  - packages/fr/src/fr/triage/origins.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/commands/triage_*.py
+  - docs/triage/derio-net--super-fr/history/manifest.yaml
+  - docs/triage/derio-net--super-fr/architecture/manifest.yaml
+  - tests/**/*.py
+  - docs/explainers/fr-triage.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: One fold component and the shared page CSS/script (spec §D, §I; R8, R17)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in a new tests/unit/test_triage_components.py assert `fold(id, title, count, body, open_=True, heading="h2")` renders `<details id=… class="fold" open>` with the `<h2>` and `.count` inside `<summary>`, escapes the title, and is closed when `open_` is False; that `collapsed` no longer exists; that `PAGE_CSS` contains `TABS_CSS` and the fold CSS and `PAGE_SCRIPT` contains `TABS_SCRIPT` and `FOLD_SCRIPT`; and that every renderer's output contains both (parametrised over the six pages).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `fold`, `PAGE_CSS`, `FOLD_SCRIPT` (open every ancestor `details` of the hash target on load and `hashchange`, then scroll; it absorbs the reveal half of the old Backlog script) and `PAGE_SCRIPT` to components.py; move every `collapsed()` caller to `fold`; include `PAGE_CSS`/`PAGE_SCRIPT` in all six renderers. The pipeline fragment now shows as one graph with dated tabs.
+  - id: P2.T1.S3
+    text: |-
+      RED then GREEN: TABS_SCRIPT gains `fromHash()` (select the tab whose panel is, or holds, the hash target; on load and `hashchange`). Pin the markup contract it relies on (panel ids `<group>-panel-<key>`, `aria-controls`) in test_triage_components.py.
+- number: 2
+  title: Folds on Backlog, Issues and History (R9)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: assert the Backlog's five sections are open folds keeping their ids; the Issues sections, Debt included, closed folds; History's timeline a closed fold; and a history manifest entry `{fold: "Archived notes (2026-10-02)", entries: [a.html, b.html]}` renders one closed fold holding both fragments in order (tests/unit/test_triage_fragments.py for the parser, test_triage_history.py for the page). An unknown key in a fold group is refused naming the manifest.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement the sections as folds, teach `fragments.resolve_manifest` the fold group on every page, and change docs/triage/derio-net--super-fr/history/manifest.yaml to put closing-order.html, origins-2026-10-02.html and history-2026-10-02.html in that group.
+- number: 3
+  title: Forge links and wave links (spec §E; R11, R12)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in test_triage_components.py, `Linker.from_facts` over a fixture: a known issue/PR key links to its own url; `inline("see derio-net/super-fr#12 and #13", linker)` links both in a single-repo scope and only the qualified one in an org scope; an unknown number on a github.com base links `/issues/<n>`, on a non-GitHub base stays text; text inside backticks is not linked; `<script>` and `"` in the prose stay escaped and no href is built from prose characters.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: add `Linker`, `wave_href(key, finished)` and `batch_href(id)` to components.py; thread the linker through the `render.inline` callers on Backlog, Issues, History and Architecture.
+  - id: P2.T3.S3
+    text: |-
+      RED then GREEN: `views.NextRow` gains `wave: str | None`; Next up renders it as a linked tag (`backlog.html#wave-panel-<k>`, or History's tab when the wave is finished) and links its batch id and dependencies with `batch_href`; finished-wave mentions elsewhere on the Backlog link to History's tab. Tests in tests/unit/test_triage_board_views.py and test_triage_render.py.
+- number: 4
+  title: Waves kind filter (spec §F, R13)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: each wave-table row carries `data-kinds` (space-separated, `unkinded` for none); the Closing order kinds render as four `<button aria-pressed="true">` toggles in a `role="toolbar"`; each wave panel holds a hidden empty-selection message.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement the markup and the kind-filter script (hide a row when none of its kinds is pressed; show the panel's message when all its rows hide).
+- number: 5
+  title: History PR column (spec §I, R16)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: in test_triage_history.py a finished batch with a merged PR in the facts' batch_prs shows a PR cell with link, title and `stamp_text(merged_at)`; one with no PR shows an em dash; batch links point at backlog.html.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: `wave_table(..., prs=…)` using `fr.triage.batch.batch_pr`; History passes it.
+- number: 6
+  title: Browser check and suite
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Render every page from a fixture state into a git-ignored scratch dir and capture, per the linked rows' visual names, screenshots in light and dark at 1280px and 390px: folds open/closed and opened by a hash link, a wave link selecting the tab (and one to History), prose links, kind toggles with several on and none on, the History PR column, and the pipeline fragment as one graph stepping through its dated tabs. Open every shot; fill the record's visual section.
+  - id: P2.T6.S2
+    text: |-
+      Full suite into a host-visible log after the last code commit (`uv run pytest -q --no-cov -n auto > $TMPDIR/p2-suite.log 2>&1`); green; ruff and mypy clean.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
