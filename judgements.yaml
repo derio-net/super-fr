@@ -8449,6 +8449,19 @@ batches:
   rationale: Single placement defect; blocks stealth setup on self-hosted GitLab.
   wave: 22
   skill: debug
+- id: closeout-truth
+  title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
+    close the session'
+  ids:
+  - super-fr#1496
+  - super-fr#1497
+  - super-fr#1494
+  rationale: '#1496 leads to #1497''s unreleasable hold; #1494 is the same finish step. Same driver modules
+    as train-truth, so it waits.'
+  wave: 23
+  after:
+  - train-truth
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
