@@ -7454,6 +7454,13 @@ batches:
     run: 2026-11-15-feat-batch-owed-archive
     archive: chore/closeout-2026-11-16-4
     archived: 1505
+  - kind: claims_released
+    at: '2026-11-16T18:48:17.596218Z'
+    keys:
+    - super-fr#1400
+    - super-fr#1183
+    - super-fr#1301
+    - super-fr#1184
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -7475,6 +7482,54 @@ batches:
     runner: herdr
     handle: w3H:p3
     branch: fix/batch-workspace-identity
+  - kind: approval
+    at: '2026-11-17T08:01:38.503004Z'
+    pr: 1504
+    head: b4b38b1aa942de27b82370d367320a7b096b427e
+  - kind: update
+    at: '2026-11-17T08:02:06.564729Z'
+    pr: 1504
+    head_before: b4b38b1aa942de27b82370d367320a7b096b427e
+    head_after: cd348bae83b20f6451981b71872bb59f82de6abf
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: red_handback
+    at: '2026-11-17T08:16:44.119314Z'
+    pr: 1504
+    head: cd348bae83b20f6451981b71872bb59f82de6abf
+    checks:
+    - 2 failing check(s)
+    delivered: session
+  - kind: update
+    at: '2026-11-17T08:39:33.758896Z'
+    pr: 1504
+    head_before: cd348bae83b20f6451981b71872bb59f82de6abf
+    head_after: 0f72498a34bd152bc095d9d2396e9d6b7084ba0a
+    base: fa59d15df514104bc758d6a9d948ca4ce35904c8
+  - kind: claims_released
+    at: '2026-11-17T09:01:54.669599Z'
+    keys:
+    - super-fr#1166
+    - super-fr#1243
+    - super-fr#1419
+  - kind: post_merge
+    at: '2026-11-17T09:05:30.602035Z'
+  - kind: closeout
+    at: '2026-11-17T09:14:25.430708Z'
+    runner: herdr
+    handle: w3H:p7
+    archive: chore/closeout-2026-11-17-3
+  - kind: closeout
+    at: '2026-11-17T09:27:08.733807Z'
+    runner: herdr
+    handle: w3H:p7
+    archive: chore/closeout-2026-11-17-3
+    archived: 1530
+  - kind: claims_released
+    at: '2026-11-17T09:31:14.568087Z'
+    keys:
+    - super-fr#1419
+    - super-fr#1166
+    - super-fr#1243
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
@@ -7494,6 +7549,39 @@ batches:
     runner: herdr
     handle: w3H:p1
     branch: fix/batch-placement-truth
+  - kind: approval
+    at: '2026-11-17T08:15:45.622520Z'
+    pr: 1502
+    head: 6fc2f8993e0c7d801d08bff967fc71d72bbe3a32
+  - kind: update
+    at: '2026-11-17T08:16:33.638680Z'
+    pr: 1502
+    head_before: 6fc2f8993e0c7d801d08bff967fc71d72bbe3a32
+    head_after: 7deae04757c2ada3ee5aba280c49630fade4f7aa
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: claims_released
+    at: '2026-11-17T08:30:30.084058Z'
+    keys:
+    - super-fr#1433
+    - super-fr#1438
+  - kind: post_merge
+    at: '2026-11-17T08:37:23.914588Z'
+  - kind: closeout
+    at: '2026-11-17T08:38:09.004871Z'
+    runner: herdr
+    handle: w3H:p4
+    archive: chore/closeout-2026-11-17-1
+  - kind: closeout
+    at: '2026-11-17T08:51:29.058736Z'
+    runner: herdr
+    handle: w3H:p4
+    archive: chore/closeout-2026-11-17-1
+    archived: 1526
+  - kind: claims_released
+    at: '2026-11-17T09:01:54.669599Z'
+    keys:
+    - super-fr#1438
+    - super-fr#1433
 - id: release-truth
   title: Release robustness
   ids:
@@ -7517,6 +7605,51 @@ batches:
     runner: herdr
     handle: w3H:p2
     branch: fix/batch-release-truth
+  - kind: approval
+    at: '2026-11-17T08:12:07.652028Z'
+    pr: 1503
+    head: 41895ad79a096c3602bb4f5b5f984d7d120c3831
+  - kind: update
+    at: '2026-11-17T08:12:35.613132Z'
+    pr: 1503
+    head_before: 41895ad79a096c3602bb4f5b5f984d7d120c3831
+    head_after: ce648b75888a499a763f0054aa4518b509638c87
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: update
+    at: '2026-11-17T08:26:56.266835Z'
+    pr: 1503
+    head_before: ce648b75888a499a763f0054aa4518b509638c87
+    head_after: ec6fe1a2415fc741d3efa72263e624955c5f894a
+    base: 6850c71d311fe01ae709f441b7f413970a964df1
+  - kind: claims_released
+    at: '2026-11-17T08:43:26.562737Z'
+    keys:
+    - super-fr#1201
+    - super-fr#1202
+    - super-fr#1290
+    - super-fr#1291
+    - super-fr#1393
+  - kind: post_merge
+    at: '2026-11-17T08:49:45.315508Z'
+  - kind: closeout
+    at: '2026-11-17T08:56:23.530151Z'
+    runner: herdr
+    handle: w3H:p5
+    archive: chore/closeout-2026-11-17-2
+  - kind: closeout
+    at: '2026-11-17T09:10:21.855537Z'
+    runner: herdr
+    handle: w3H:p5
+    archive: chore/closeout-2026-11-17-2
+    archived: 1528
+  - kind: claims_released
+    at: '2026-11-17T09:13:53.480292Z'
+    keys:
+    - super-fr#1201
+    - super-fr#1290
+    - super-fr#1393
+    - super-fr#1291
+    - super-fr#1202
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
@@ -7535,6 +7668,56 @@ batches:
   - deliver-evidence
   - owed-archive
   - workspace-identity
+  events:
+  - kind: dispatch
+    at: '2026-11-17T08:57:19.002450Z'
+    runner: herdr
+    handle: w3H:p6
+    branch: feat/batch-acceptance-edits
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+  - kind: red_handback
+    at: '2026-11-17T14:49:57.607609Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+    checks:
+    - 2 failing check(s)
+    delivered: session
+  - kind: approval
+    at: '2026-11-17T15:37:32.342893Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+    voided_at: a5952ce0f686bde18358a4866c6d39fb6f1b5ed6
+  - kind: approval
+    at: '2026-11-17T17:48:26.320411Z'
+    pr: 1533
+    head: 09b466a9d85edcc823042a98495c9d0471fe6ed7
+  - kind: claims_released
+    at: '2026-11-17T17:52:41.261426Z'
+    keys:
+    - super-fr#1154
+    - super-fr#1219
+    - super-fr#1390
+    - super-fr#1394
+    - super-fr#1439
+    - super-fr#1461
+  - kind: post_merge
+    at: '2026-11-17T17:59:45.950443Z'
+  - kind: closeout
+    at: '2026-11-17T18:01:35.950626Z'
+    runner: herdr
+    handle: w3H:p8
+    run: 2026-11-17-feat-batch-acceptance-edits
+    archive: chore/closeout-2026-11-17-6
+  - kind: closeout
+    at: '2026-11-17T18:12:34.571722Z'
+    runner: herdr
+    handle: w3H:p8
+    run: 2026-11-17-feat-batch-acceptance-edits
+    archive: chore/closeout-2026-11-17-6
+    archived: 1537
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
@@ -7549,8 +7732,13 @@ batches:
   - workspace-identity
   - placement-truth
   - release-truth
-  - acceptance-edits
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-17T09:00:59.238632Z'
+    runner: herdr
+    handle: w3K:p3
+    branch: feat/batch-triage-intake
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
@@ -7565,8 +7753,56 @@ batches:
   - workspace-identity
   - placement-truth
   - release-truth
-  - acceptance-edits
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-17T09:00:04.084527Z'
+    runner: herdr
+    handle: w3K:p2
+    branch: fix/batch-triage-collect
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1532
+    head: 6f6b897a71fa23cc44660f5a9f5493d5bff3ed29
+  - kind: update
+    at: '2026-11-17T14:50:27.601245Z'
+    pr: 1532
+    head_before: 6f6b897a71fa23cc44660f5a9f5493d5bff3ed29
+    head_after: e8931668ee4a3adc1aa04d72ab4f3216472fb9ad
+    base: 94a7c2442300b19478da094c97a3b03933a9cf80
+  - kind: claims_released
+    at: '2026-11-17T15:08:53.118306Z'
+    keys:
+    - super-fr#1197
+    - super-fr#1210
+    - super-fr#1268
+    - super-fr#1300
+  - kind: post_merge
+    at: '2026-11-17T15:13:07.618288Z'
+  - kind: closeout
+    at: '2026-11-17T15:24:15.199161Z'
+    runner: herdr
+    handle: w3K:p5
+    archive: chore/closeout-2026-11-17-5
+  - kind: closeout_handback
+    at: '2026-11-17T15:30:37.153314Z'
+    item: derio-net/super-fr/run/closeout-2026-11-17-5
+    pr: 1536
+    head: 45448904392db1e95e1ddd7a685161d42e0d7d4b
+    reason: 1 failing check(s)
+  - kind: closeout
+    at: '2026-11-17T15:42:40.726966Z'
+    runner: herdr
+    handle: w3K:p5
+    archive: chore/closeout-2026-11-17-5
+    archived: 1536
+  - kind: claims_released
+    at: '2026-11-17T15:45:58.231855Z'
+    keys:
+    - super-fr#1268
+    - super-fr#1197
+    - super-fr#1210
+    - super-fr#1300
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
@@ -7650,6 +7886,53 @@ batches:
     at: '2026-11-15T07:31:46.835235Z'
     keys:
     - super-fr#1459
+- id: suite-trust
+  title: 'Test-suite trust: the worktree-lock concurrency flake and the scenario fixture that commits
+    into a live worktree'
+  ids:
+  - super-fr#1468
+  - super-fr#1463
+  rationale: 'Leftovers of suite-health. #1463''s test_two_concurrent_* flake failed CI on #1478, #1495,
+    #1502 and #1504 in two days; #1468''s scenario fixture committed into a live run worktree. Both are
+    test-isolation trust in tests/unit/test_hooks_worktree.py and tests/scenarios/.'
+  wave: 19
+  after:
+  - workspace-identity
+  - placement-truth
+  - release-truth
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-17T08:59:30.021417Z'
+    runner: herdr
+    handle: w3K:p1
+    branch: fix/batch-suite-trust
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1531
+    head: a32833144c0b21a29c914c0e3d480c0303a1116b
+  - kind: claims_released
+    at: '2026-11-17T14:54:07.978594Z'
+    keys:
+    - super-fr#1468
+  - kind: post_merge
+    at: '2026-11-17T15:03:50.465990Z'
+  - kind: closeout
+    at: '2026-11-17T15:05:23.369103Z'
+    runner: herdr
+    handle: w3K:p4
+    archive: chore/closeout-2026-11-17-4
+  - kind: closeout
+    at: '2026-11-17T15:19:17.957274Z'
+    runner: herdr
+    handle: w3K:p4
+    archive: chore/closeout-2026-11-17-4
+    archived: 1535
+  - kind: claims_released
+    at: '2026-11-17T15:23:19.369412Z'
+    keys:
+    - super-fr#1468
+    - super-fr#1463
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -7936,6 +8219,12 @@ exports:
   pr: 1475
   head: 3b0ab7a3c4d310305f5b099e4ef327423da6cf35
   merged: true
+- wave: '17'
+  repo: derio-net/super-fr
+  at: '2026-11-16T18:48:15.888956Z'
+  pr: 1506
+  head: d0b04966399706b4597c1ef3522e685a970f79ea
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -8089,3 +8378,117 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-owed-archive.yaml"
   - "D\tdocs/superpowers/specs/2026-11-15-owed-archive-side-effects-design.md"
   - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-owed-archive.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-1
+  branch: chore/closeout-2026-11-17-1
+  at: '2026-11-17T08:37:27.238739Z'
+  runner: herdr
+  handle: w3H:p4
+  planned:
+  - placement-truth
+  pr: 1526
+  merged: true
+  head: 8e5edea690057ca8cc60fc39cecc6d5117c89735
+  members:
+  - placement-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-placement-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-placement-truth.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-2
+  branch: chore/closeout-2026-11-17-2
+  at: '2026-11-17T08:55:41.412197Z'
+  runner: herdr
+  handle: w3H:p5
+  planned:
+  - release-truth
+  pr: 1528
+  merged: true
+  head: 28e049abf662293b1ce9512e8467cb8da3b2dbd4
+  members:
+  - release-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-batch-release-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-batch-release-truth.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-3
+  branch: chore/closeout-2026-11-17-3
+  at: '2026-11-17T09:13:43.561157Z'
+  runner: herdr
+  handle: w3H:p7
+  planned:
+  - workspace-identity
+  pr: 1530
+  merged: true
+  head: 4f618093fd01f616484eac2422c8113a0e38c25b
+  members:
+  - workspace-identity
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-workspace-identity.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-workspace-identity.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-4
+  branch: chore/closeout-2026-11-17-4
+  at: '2026-11-17T15:03:58.365073Z'
+  runner: herdr
+  handle: w3K:p4
+  planned:
+  - suite-trust
+  pr: 1535
+  merged: true
+  head: 15e39336cc67fd4628503f629047c60413b651b1
+  members:
+  - suite-trust
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-17-suite-trust.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-17-suite-trust.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-5
+  branch: chore/closeout-2026-11-17-5
+  at: '2026-11-17T15:23:05.037722Z'
+  runner: herdr
+  handle: w3K:p5
+  planned:
+  - triage-collect
+  pr: 1536
+  merged: true
+  head: 45448904392db1e95e1ddd7a685161d42e0d7d4b
+  members:
+  - triage-collect
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-17-batch-triage-collect.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-17-batch-triage-collect.md"
+  handed:
+  - 45448904392db1e95e1ddd7a685161d42e0d7d4b
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-6
+  branch: chore/closeout-2026-11-17-6
+  at: '2026-11-17T17:59:50.749526Z'
+  runner: herdr
+  handle: w3H:p8
+  planned:
+  - acceptance-edits
+  pr: 1537
+  merged: true
+  head: 570afa5b7a4a879c79658e4183feedaeb0d47b36
+  members:
+  - acceptance-edits
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-17-batch-acceptance-edits.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-17-batch-acceptance-edits.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-17-batch-acceptance-edits-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-17-batch-acceptance-edits.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-17-batch-acceptance-edits.md"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-17-batch-acceptance-edits-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-17-feat-batch-acceptance-edits.yaml"
