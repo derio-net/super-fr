@@ -183,3 +183,13 @@ Reference page updated.
 ### p2-r8-resolved · finding [out-of-scope] · resolves p2-r8: Gitea matrix job checkout persists gitea.token for PR code (phase 2)
 
 Predates this change: the Gitea matrix job's checkout was not touched by R8-R13, and R12 scopes credentials to the debt job. Filed at deliver as a follow-up.
+
+<!-- fr:journal kind=decision scope=plan id=p3-loads-helper-per-module created=2026-11-18T18:03:22+00:00 phase=3 -->
+### p3-loads-helper-per-module · decision · tea.loads and glab.loads fold every JSON read of CLI output (phase 3)
+
+Each module has one loads(out, what) raising its own error with not_json_reason(out) or the old message. issues_enabled and pages_visibility keep their documented fallback (None, UNKNOWN); pr_for_branch keeps None for non-HTML garbage but raises GlabError for a login page.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-18T18:03:22+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+fixtures and one small helper module, nothing to clean
