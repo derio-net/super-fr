@@ -30,9 +30,14 @@ rows:
     - spec:2026-11-18-consumer-delivery#R5
     - spec:2026-11-18-consumer-delivery#R6
     - spec:2026-11-18-consumer-delivery#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/bind.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/nag.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
+    status: ci
+    notes: nag, bind and claim run fr in the session's directory; unit-pinned, run by
+      CI's opencode-plugin-test job (bun test)
     verify: none
   - id: scaffold-pins-actions
     capability: Consumer CI runs only pinned third-party actions
