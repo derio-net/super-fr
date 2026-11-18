@@ -315,3 +315,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-18-triage-pages-ux-p3 created=2026-11-18T13:26:41+00:00 -->
 ### phase-split-2026-11-18-triage-pages-ux-p3 · decision · ask: the Batches and Origins pages (R10, R14, R15, R18), with the origins collect change
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-18-triage-pages-ux-p4 created=2026-11-18T13:26:52+00:00 -->
+### phase-split-2026-11-18-triage-pages-ux-p4 · decision · ask: the driver keeping pages current (R6, R7), a driver-path change reviewed on its own
