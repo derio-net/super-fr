@@ -16,9 +16,13 @@ rows:
     - spec:2026-11-18-consumer-delivery#R1
     - spec:2026-11-18-consumer-delivery#R2
     - spec:2026-11-18-consumer-delivery#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_rules.py#test_install_delivers_exactly_the_claude_rules
+      - super-fr:packages/fr-opencode-plugin/test/rules.test.ts
+    status: walk-owed
+    notes: delivery and injection unit-pinned; live OpenCode load owed post-merge (Test
+      Plan 1)
     verify: live
   - id: opencode-handlers-session-directory
     capability: OpenCode plugin handlers act in the session's repo
