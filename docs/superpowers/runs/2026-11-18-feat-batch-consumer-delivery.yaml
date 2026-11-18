@@ -3,7 +3,7 @@ run: 2026-11-18-feat-batch-consumer-delivery
 workflow: fr-goal@1
 branch: feat/batch-consumer-delivery
 started: '2026-11-18T11:45:18+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-18T18:03:34+00:00'
+    state: done
+    at: '2026-11-18T18:10:14+00:00'
     members:
     - implement-phase
     - review-phase
@@ -135,12 +135,19 @@ steps:
           tests: ci:65eb18dcce4132eeb1de29ef628f4262885417bf+59a3e50df47e64eee8272f635d0cd07de000fad4;tree=b68f28e29ac3de7a2371aebf90dc7ad8b5723b02a492a47db5502f4f173f9936
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-18T18:03:34+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 7f8e22d4-e680-471e-a613-b9c047f6ae3c
+          returned: '2026-11-18T18:10:14+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-3
+          reviewer: a1f1d4e490e4662e8
+          visual: none
+          findings: p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6
   journal-check:
     state: pending
   lens-review:

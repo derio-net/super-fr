@@ -193,3 +193,71 @@ Each module has one loads(out, what) raising its own error with not_json_reason(
 ### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
 
 fixtures and one small helper module, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · tea.api_result's non-2xx branch swallowed an HTML body and raised a bare HTTP 401 (phase 3)
+
+packages/fr/src/fr/tea.py:110-116. Fixed: raises `HTTP <status> with <reason>` for a login-page body; RAISING case tea:api_result_401.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · issues_enabled turned a login page into None, hiding the cause from fr init scaffold (phase 3)
+
+packages/fr/src/fr/real_glabclient.py:420-429. Fixed: re-raises a login-page GlabError (forge_body.names_login_page), None otherwise; test that the cause reaches the ServicesError.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · pages_visibility listed in SITES but its UNKNOWN fallback untested (phase 3)
+
+tests/unit/test_forge_sso_html.py:77. Fixed: FALLBACK entry pins UNKNOWN, with the reason (repo_visibility raises first on the same endpoint).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · guard test per function missed a raw json.loads in an already-listed function (phase 3)
+
+tests/unit/test_forge_sso_html.py:94-117. Fixed: flags every raw json.loads (FunctionDef, AsyncFunctionDef, module level) against a reasoned (module, function) allowlist; walker unit test proves a new raw call is caught.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · sso_login_redirect.txt fixture was unused (phase 3)
+
+tests/fixtures/forge/sso_login_redirect.txt. Fixed: drives test_a_302_fixture_header_block_names_the_proxy.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · tea.loads/glab._loads dropped `what` from the HTML message (phase 3)
+
+tea.py:130-135, glab.py:265-270. Fixed: `<what>: <reason>`; test_the_read_error_says_which_read_failed.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-18T18:10:12+00:00 phase=3 -->
+### review-phase-3 · review · phase 3 review: 6 findings, all in scope, all fixed (phase 3)
+
+Independent reviewer checked every json.loads site, HTML detection (no false positives), kept messages, real code paths and fixture privacy (RFC 2606 only). Raised p3-r1 (important, 4xx+HTML gap) and p3-r2..p3-r6 (minor); all fixed in 953a335bf with red-then-green tests (291 targeted tests pass, ruff and mypy clean).
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-1 created=2026-11-18T18:10:12+00:00 phase=3 lens=errors step=review-phase -->
+### lens-errors-1 · lens · adapter errors now carry the forward-auth cause; the deliberate swallow-to-fallback sites deserve a whole-feature look (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: tea.api_result's non-2xx branch swallowed an HTML body and raised a bare HTTP 401 (phase 3)
+
+Named cause on 4xx + HTML.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: issues_enabled turned a login page into None, hiding the cause from fr init scaffold (phase 3)
+
+Login-page error re-raised from issues_enabled.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: pages_visibility listed in SITES but its UNKNOWN fallback untested (phase 3)
+
+UNKNOWN fallback pinned.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: guard test per function missed a raw json.loads in an already-listed function (phase 3)
+
+Allowlist-based guard over every raw json.loads.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: sso_login_redirect.txt fixture was unused (phase 3)
+
+Fixture drives a test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: tea.loads/glab._loads dropped `what` from the HTML message (phase 3)
+
+`what` kept in the message.
