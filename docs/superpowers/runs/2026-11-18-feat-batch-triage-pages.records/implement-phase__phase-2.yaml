@@ -28,10 +28,10 @@ journal:
     phase: 2
     body: "Section ids moved onto the details element. tests/unit/triage_board_fixtures.element_by_id returns the whole element, nested same-tag elements counted; test_triage_board_views and test_triage_render use it."
   - kind: discovery
-    id: p2-visual-rows-beyond-owed
-    title: History PR column and pipeline tabs were also captured but are not in this record's owed rows (phase 2)
+    id: p2-visual-rows-history-architecture
+    title: this phase also owes the History PR and Architecture pipeline-tab rows (phase 2)
     phase: 2
-    body: "triage-history-pr-summary and triage-architecture-pipeline-tabs carry visual states. Shots exist in the scratch dir (architecture-pipeline-*, history-finished-waves-*) and show the PR column dash and ten dated tabs stepping with one panel visible; they are left out of visual: because the brief names three owed rows. Batches columns and Origins groups are phase 3's and were not touched."
+    body: "R16 and R17 are this phase's, so triage-history-pr-summary and triage-architecture-pipeline-tabs are owed here and covered below: the PR cell with link, title and merge date, the dash for a batch with no PR, the pipeline as one graph on its latest tab, and stepping through the dated tabs. Batches columns and Origins groups are phase 3's and were not touched."
 evidence: {tests: /Users/idermitzakis/.claude-tmp/p2-suite.log}
 visual:
   - row: triage-pages-folds
@@ -59,3 +59,14 @@ visual:
       - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/waves-all-kinds-light-1280.png, shows: [waves-all-kinds]}
       - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/kinds-toggle-several-light-1280.png, shows: [kinds-toggle-several]}
       - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/kinds-none-selected-light-1280.png, shows: [kinds-none-selected]}
+  - row: triage-history-pr-summary
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/history-pr-column-light-1280.png, shows: [finished-wave-pr-column]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/history-batch-without-pr-light-1280.png, shows: [batch-without-pr]}
+  - row: triage-architecture-pipeline-tabs
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/architecture-pipeline-latest-light-1280.png, shows: [one-graph-latest-tab]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/architecture-pipeline-first-light-1280.png, shows: [step-through-dated-tabs]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p2-visual/shots/architecture-pipeline-second-light-1280.png, shows: [step-through-dated-tabs]}
