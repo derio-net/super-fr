@@ -8397,6 +8397,20 @@ batches:
   order: 1
   wave: 22
   bump: minor
+- id: train-truth
+  title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
+    once'
+  ids:
+  - super-fr#1491
+  - super-fr#1492
+  - super-fr#1493
+  - super-fr#1540
+  - super-fr#1541
+  - super-fr#1543
+  rationale: 'All in the driver loop (batch_drive.py, triage_batch_cmd.py); #1492 and #1493 share the
+    draft non-member filter.'
+  wave: 22
+  bump: minor
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
