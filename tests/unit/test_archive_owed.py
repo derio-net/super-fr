@@ -421,11 +421,12 @@ def test_a_hold_whose_default_ref_cannot_be_read_writes_nothing(
     """super-fr#1486: with no readable default ref fr cannot tell whether HEAD is the
     default branch, and R8's write is the unsafe side — it would stage an owed entry on
     what may be `main`. Unknown previews, as on the default branch."""
-    import subprocess
+    import fr.git
 
     repo = _manual_repo(tmp_path)  # HEAD is main
-    for ref in ("refs/remotes/origin/HEAD", "refs/remotes/origin/main"):
-        subprocess.run(["git", "-C", str(repo), "update-ref", "-d", ref], check=False)
+    # The archive fetches origin, which would restore deleted remote refs: unreadable
+    # is answered where fr reads it.
+    monkeypatch.setattr(fr.git, "remote_default_ref", lambda _root: None)
     before = _porcelain(repo)
     gh = ListingGh()
     result = _invoke(monkeypatch, repo, gh, ["archive", "--all"])

@@ -289,28 +289,25 @@ def test_a_live_body_must_close_every_listed_owed_issue(
         assert out.exit_code == 0, out.output
 
 
-def _origin_github(root: Path, tmp_path: Path) -> None:
-    import subprocess
-
-    def git(*args: str) -> None:
-        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
-
-    url = "https://github.com/derio-net/super-fr.git"
-    git("config", "remote.origin.url", url)
-    git("config", f"url.{tmp_path / 'origin.git'}.insteadOf", url)
-
-
 @pytest.mark.parametrize(
     ("host", "ok"),
     [("github.com", True), ("evil.example", False), ("github.com.evil.example", False)],
 )
 def test_an_owed_issue_closed_by_url_must_be_on_the_forge_host(
-    tmp_path: Path, live: dict[str, str], discharged: dict[str, str], host: str, ok: bool
+    tmp_path: Path,
+    live: dict[str, str],
+    discharged: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    ok: bool,
 ) -> None:
     """super-fr#1488: a lookalike URL on another host normalised to the owed issue, so
     deliver accepted a body GitHub would not close it from."""
+    import fr._hosts
+
     root = _at_deliver(tmp_path)
-    _origin_github(root, tmp_path)
+    # the fixture's origin is a local bare; the forge host is what `own_issue` reads too
+    monkeypatch.setattr(fr._hosts, "origin_hostname", lambda _root: "github.com")
     url = f"https://{host}/derio-net/super-fr/issues/7"
     body = _rendered(root, live).replace(f"Closes {OWED_REF}", f"Closes {url}")
     live["body"] = body

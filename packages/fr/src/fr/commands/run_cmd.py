@@ -7237,10 +7237,13 @@ def _refuse_unclosed_owed(repo_root: Path, state: RunState, live: str, ref: str,
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
+    from fr._hosts import origin_hostname
+
     owner, _, rest = items[0].ref.partition("/")
     identity = (owner, rest.partition("#")[0])
+    host = origin_hostname(repo_root) or ""  # super-fr#1488: a URL closes only on the forge
     closed = {
-        pr_body.normalize_issue_ref(written, identity)
+        pr_body.normalize_issue_ref(written, identity, host=host)
         for _line, _keyword, written in pr_body.closing_refs(live, as_github=True)
     }
     missing = [i.ref for i in items if i.ref.lower() not in held and i.ref.lower() not in closed]

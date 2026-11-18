@@ -209,6 +209,7 @@ def test_select_refuses_a_qid_that_is_not_an_open_end(tmp_path: Path) -> None:
 import subprocess  # noqa: E402
 
 import pytest  # noqa: E402
+from fr.archive_followups import OPEN_ENDS_LIST_LIMIT  # noqa: E402
 from fr.commands import archive_cmd  # noqa: E402
 from fr.ghclient import UnsupportedForgeOperation  # noqa: E402
 
@@ -309,7 +310,7 @@ def test_issues_all_files_every_end_marks_it_and_defers_the_finding(
     assert f"<!-- fr:journal plan/{SLUG}/f1 -->" in made[0]["body"]
     assert "body of f1" in made[0]["body"]
     assert f"docs/superpowers/implemented/journals/plans/{SLUG}.md" in made[0]["body"]
-    assert gh.list_args == [(OWN, "open", 200, "number,url,body,author")]
+    assert gh.list_args == [(OWN, "open", OPEN_ENDS_LIST_LIMIT, "number,url,body,author")]
     assert _states(repo) == {
         "f1": "deferred",
         "f2": "deferred",
@@ -432,7 +433,7 @@ def test_an_unknown_dedup_answer_files_nothing(
     assert _created(gh) == []
     assert f"warning: could not file plan/{SLUG}/f1" in result.output
     assert why in result.output
-    assert _states(repo)["f1"] == "open" and _states(repo)["f2"] == "open"
+    assert _states(repo)["f1"] == "open" and _states(repo)["f2"] == "out-of-scope"
 
 
 def test_the_marker_listing_is_wide_enough_for_a_busy_repo(

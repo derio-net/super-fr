@@ -802,9 +802,15 @@ def _write_manual_owed(repo_root: Path, plan: Any, blockers: tuple[str, ...]) ->
     if not phases:
         return
     name = plan.dir.name
-    from fr.git import head_on_default_branch
+    from fr.git import default_branch_answer
 
-    if head_on_default_branch(repo_root):  # R8: no commit lands here, so nothing is written
+    on_default = default_branch_answer(repo_root)
+    if on_default is not False:  # R8: no commit lands here, so nothing is written
+        if on_default is None:  # super-fr#1486: unknown is the default branch's side
+            typer.echo(
+                "  fr cannot tell whether HEAD is the default branch (its default ref or "
+                "git cannot be read), so it records nothing"
+            )
         for line in af.manual_owed_preview(repo_root, name, phases):
             typer.echo(f"  would record owed: {line}")
         return

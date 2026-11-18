@@ -291,6 +291,29 @@ def head_on_default_branch(root: Path) -> bool:
     return on_default_branch(root, found)
 
 
+def default_branch_answer(root: Path) -> bool | None:
+    """Whether HEAD is the local branch of the remote's default ref, or None when fr
+    cannot tell: the default ref cannot be read (no remote, a refusal, no ref) or git
+    cannot run. A detached HEAD is a readable False. A checkout
+    `pinned_head_on_default_branch` names answers what it was pinned to.
+
+    `head_on_default_branch` folds None into False, which is safe only where "off the
+    default branch" does nothing (resolve closes no issue, R3). A caller whose "off"
+    writes (`fr archive` recording owed entries, R8) reads this and treats None as the
+    default branch (super-fr#1486)."""
+    if _PINNED_ON_DEFAULT:
+        pinned = _PINNED_ON_DEFAULT.get(Path(root).resolve())
+        if pinned is not None:
+            return pinned
+    try:
+        found = remote_default_ref(root)
+        if found is None or isinstance(found, GitRefusal):
+            return None
+        return on_default_branch(root, found)
+    except GitUnavailableError:
+        return None
+
+
 def safe_directory_args(root: Path) -> list[str]:
     """`-c safe.directory=<repo>` for the repository enclosing `root`, else [].
 
