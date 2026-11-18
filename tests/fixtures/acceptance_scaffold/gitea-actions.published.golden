@@ -69,6 +69,8 @@ jobs:
   # devcontainer scaffold reads). Its login token is FR_DEBT_TOKEN when the repo has that
   # secret, else the job's own `gitea.token`. Checkout keeps no credential: archive-pr
   # authenticates its pushes itself, from FR_DEBT_TOKEN or GITEA_TOKEN in its environment.
+  # tea 0.14.2 keeps its login in $XDG_CONFIG_HOME/tea, so the tea steps point it at the
+  # job's temp dir, never a runner's $HOME, and the last step logs out whatever happened.
   debt:
     if: gitea.event_name == 'schedule' || inputs.debt
     runs-on: ubuntu-latest
@@ -95,13 +97,22 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Log in to tea
         env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
           GITEA_SERVER_URL: ${{ gitea.server_url }}
           GITEA_SERVER_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
         run: tea login add --name fr-ci
       - name: Technical debt issue (weekly)
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
         env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
           GITEA_TOKEN: ${{ gitea.token }}
         run: fr debt archive-pr --yes
+      - name: Log out of tea
+        if: always()
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
+        run: tea logout fr-ci || true

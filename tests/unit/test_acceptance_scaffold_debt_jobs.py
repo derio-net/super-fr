@@ -3,6 +3,8 @@ carry each forge's credentials (spec 2026-11-18-consumer-delivery)."""
 
 from __future__ import annotations
 
+import re
+
 import yaml
 from fr.acceptance.pin import FrPin
 from fr.acceptance.scaffold import render_workflow
@@ -66,7 +68,7 @@ def test_gitlab_debt_job_installs_glab_then_requires_the_masked_variable() -> No
     assert check in before
     assert before.index(pin.assets["amd64"][1]) > before.index(check)
     assert job["before_script"][0].lstrip().startswith(check)  # first, before any install
-    assert before.index(check) < before.index("uv/install.sh")
+    assert before.index(check) < before.index("sha256sum -c")
     assert before.index(check) < before.index("uv tool install")
     assert "FR_DEBT_TOKEN" in before and "api scope" in before
     assert "exit 1" in before
@@ -83,3 +85,67 @@ def test_every_template_still_parses_with_every_job() -> None:
                 fr_pin=PIN,
             )
         )
+
+
+def _gitlab_jobs(*, debt: bool, pages: bool) -> dict[str, dict]:
+    doc = yaml.safe_load(render_workflow("gitlab-ci", debt=debt, pages=pages, fr_pin=PIN))
+    return {k: v for k, v in doc.items() if isinstance(v, dict) and "stage" in v}
+
+
+def _guarded(job: dict) -> bool:
+    return "FR_DEBT_TOKEN" in "\n".join(job.get("before_script", []))
+
+
+def test_the_gitlab_token_guard_is_on_the_debt_job_alone() -> None:
+    """R13: only `technical-debt` needs FR_DEBT_TOKEN; the report and Pages jobs never
+    stop over it (l-docs-accuracy-r1)."""
+    for pages in (False, True):
+        jobs = _gitlab_jobs(debt=False, pages=pages)
+        assert ("pages" in jobs) is pages
+        assert [n for n, j in jobs.items() if _guarded(j)] == []
+        jobs = _gitlab_jobs(debt=True, pages=pages)
+        assert [n for n, j in jobs.items() if _guarded(j)] == ["technical-debt"]
+
+
+def test_every_gitlab_job_installs_the_pinned_uv_and_pipes_nothing_to_a_shell() -> None:
+    """l-security-r3: no `curl … | sh`; the version and every sum come from UV_PIN."""
+    from fr.acceptance.scaffold import UV_PIN
+
+    jobs = _gitlab_jobs(debt=True, pages=True)
+    assert set(jobs) == {"acceptance-report", "pages", "technical-debt"}
+    for name, job in jobs.items():
+        before = "\n".join(job["before_script"])
+        assert not re.search(r"\|\s*(ba)?sh\b", before), name
+        assert "astral.sh" not in before, name
+        assert UV_PIN.version in before, name
+        for url, sha in UV_PIN.assets.values():
+            assert url in before and sha in before, name
+            assert f"/releases/download/{UV_PIN.version}/" in url
+        assert "sha256sum -c" in before, name
+        assert before.index("sha256sum -c") < before.index("uv tool install"), name
+
+
+def test_the_uv_pin_names_both_linux_architectures() -> None:
+    from fr.acceptance.scaffold import UV_PIN
+
+    assert UV_PIN.name == "uv"
+    assert set(UV_PIN.assets) == {"amd64", "arm64"}
+    assert UV_PIN.assets["amd64"][0].endswith("uv-x86_64-unknown-linux-gnu.tar.gz")
+    assert UV_PIN.assets["arm64"][0].endswith("uv-aarch64-unknown-linux-gnu.tar.gz")
+    for _url, sha in UV_PIN.assets.values():
+        assert len(sha) == 64 and all(c in "0123456789abcdef" for c in sha)
+
+
+def test_gitea_tea_steps_keep_their_config_out_of_home() -> None:
+    """l-security-r4: tea 0.14.2 writes its login under $XDG_CONFIG_HOME/tea; the steps
+    that log in or read the login point it at the job's temp dir, which the runner
+    removes, and a last always-step logs out."""
+    job = _job("gitea-actions", "debt")
+    scoped = "${{ runner.temp }}/fr-tea"
+    tea_steps = [s for s in job["steps"] if s.get("run", "").startswith(("tea ", "fr debt"))]
+    assert len(tea_steps) == 4  # login, debt issue, archive-pr, logout
+    for step in tea_steps:
+        assert step["env"]["XDG_CONFIG_HOME"] == scoped, step["name"]
+    last = job["steps"][-1]
+    assert last["if"] == "always()"
+    assert "tea logout fr-ci" in last["run"]

@@ -13,11 +13,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 
 from fr._hosts import HostBackend
 from fr.acceptance.fragment import FRAGMENTS_DIR
 from fr.acceptance.pin import FrPin
 from fr.artifacts.paths import KIND_DIRS
+from fr.isolation.scaffold import HostCliPin
 
 # Reports are derived, never committed (spec 2026-11-04 R20): `fr acceptance report`
 # writes these two, and init keeps git from ever tracking them.
@@ -295,10 +297,7 @@ acceptance-report:
     - if: $CI_PIPELINE_SOURCE == "web"
   before_script:
     - |
-      [ -n "$FR_DEBT_TOKEN" ] || {
-        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
+      @@UV_INSTALL@@
     - @@FR_INSTALL@@
   script:
     - git fetch origin "+refs/heads/$CI_DEFAULT_BRANCH:refs/remotes/origin/$CI_DEFAULT_BRANCH"
@@ -398,10 +397,7 @@ pages:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
     - |
-      [ -n "$FR_DEBT_TOKEN" ] || {
-        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
+      @@UV_INSTALL@@
     - @@FR_INSTALL@@
   script:
     - |
@@ -502,6 +498,8 @@ DEBT_STEP_GITEA = """\
   # devcontainer scaffold reads). Its login token is FR_DEBT_TOKEN when the repo has that
   # secret, else the job's own `gitea.token`. Checkout keeps no credential: archive-pr
   # authenticates its pushes itself, from FR_DEBT_TOKEN or GITEA_TOKEN in its environment.
+  # tea 0.14.2 keeps its login in $XDG_CONFIG_HOME/tea, so the tea steps point it at the
+  # job's temp dir, never a runner's $HOME, and the last step logs out whatever happened.
   debt:
     if: gitea.event_name == 'schedule' || inputs.debt
     runs-on: ubuntu-latest
@@ -519,16 +517,25 @@ DEBT_STEP_GITEA = """\
           @@TEA_INSTALL@@
       - name: Log in to tea
         env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
           GITEA_SERVER_URL: ${{ gitea.server_url }}
           GITEA_SERVER_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
         run: tea login add --name fr-ci
       - name: Technical debt issue (weekly)
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
         env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
           GITEA_TOKEN: ${{ gitea.token }}
         run: fr debt archive-pr --yes
+      - name: Log out of tea
+        if: always()
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
+        run: tea logout fr-ci || true
 """
 DEBT_STEP_GITLAB = """\
 
@@ -550,8 +557,8 @@ technical-debt:
     - |
       [ -n "$FR_DEBT_TOKEN" ] || {
         echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
+    - |
+      @@UV_INSTALL@@
     - @@FR_INSTALL@@
     - |
       @@GLAB_INSTALL@@
@@ -675,6 +682,7 @@ def render_workflow(
     )
     text = text.replace("@@FR_INSTALL@@", fr_pin.install_line())
     text = _fill_install(text, "@@TEA_INSTALL@@", "gitea")
+    text = _fill_lines(text, "@@UV_INSTALL@@", ci_uv_install())
     text = _fill_install(text, "@@GLAB_INSTALL@@", "gitlab")
     return _USES_PLACEHOLDER.sub(lambda m: _pinned_use(m.group(1), ci_type), text)
 
@@ -716,14 +724,66 @@ def ci_cli_install(forge: str) -> list[str]:
     return lines
 
 
+# The uv every GitLab job installs (l-security-r3): a GitLab job has no setup-uv action,
+# and piping astral.sh's installer to `sh` runs whatever that URL serves today. Same
+# shape as `fr.isolation.scaffold.HOST_CLI_PINS`; `scripts/check-pinned-clis.py` re-checks
+# it. uv 0.13.7 (released 2026-11-03); every sha256 is the release's own
+# `<asset>.sha256`, fetched 2026-11-18, never typed. The tarball holds
+# `uv-<triple>/uv`, so it is unpacked with --strip-components=1.
+_UV_BASE = "https://github.com/astral-sh/uv/releases/download/0.13.7"
+UV_PIN = HostCliPin(
+    name="uv",
+    version="0.13.7",
+    assets=MappingProxyType(
+        {
+            "amd64": (
+                f"{_UV_BASE}/uv-x86_64-unknown-linux-gnu.tar.gz",
+                "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83",
+            ),
+            "arm64": (
+                f"{_UV_BASE}/uv-aarch64-unknown-linux-gnu.tar.gz",
+                "71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc",
+            ),
+        }
+    ),
+    kind="tarball",
+    tarball_member="uv",
+)
+
+
+def ci_uv_install() -> list[str]:
+    """Shell lines installing `UV_PIN` into `$HOME/.local/bin` for a GitLab job,
+    checksum verified before anything is unpacked."""
+    pin = UV_PIN
+    dl = "/tmp/uv.tar.gz"
+    xdir = "/tmp/uv-x"
+    names = {"amd64": "x86_64|amd64", "arm64": "aarch64|arm64"}
+    lines = ['case "$(uname -m)" in']
+    for arch, (url, sha) in pin.assets.items():
+        lines.append(f"  {names[arch]}) url='{url}'; sha='{sha}';;")
+    lines += [
+        f'  *) echo "uv {pin.version}: unsupported architecture $(uname -m)" >&2; exit 1;;',
+        "esac",
+        f'curl -fsSL "$url" -o {dl}',
+        f'echo "$sha  {dl}" | sha256sum -c -',
+        f"rm -rf {xdir} && mkdir -p {xdir} && tar -xzf {dl} -C {xdir} --strip-components=1",
+        'mkdir -p "$HOME/.local/bin"',
+        f'install -m 755 {xdir}/uv {xdir}/uvx "$HOME/.local/bin/"',
+        'export PATH="$HOME/.local/bin:$PATH"',
+    ]
+    return lines
+
+
 def _fill_install(text: str, placeholder: str, forge: str) -> str:
     """Replace the placeholder line with the install lines at the placeholder's indent."""
     if placeholder not in text:
         return text
+    return _fill_lines(text, placeholder, ci_cli_install(forge))
+
+
+def _fill_lines(text: str, placeholder: str, lines: list[str]) -> str:
     pattern = re.compile(rf"^( *){re.escape(placeholder)}$", re.MULTILINE)
-    return pattern.sub(
-        lambda m: "\n".join(m.group(1) + line for line in ci_cli_install(forge)), text
-    )
+    return pattern.sub(lambda m: "\n".join(m.group(1) + line for line in lines), text)
 
 
 def _pinned_use(action: str, ci_type: str) -> str:
