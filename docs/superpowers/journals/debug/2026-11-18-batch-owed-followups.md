@@ -75,3 +75,8 @@ git.default_branch_answer; archive_cmd._write_manual_owed previews on None with 
 ### f-1488 · finding [fixed] · #1488 fixed: an owed issue closes by URL only on the forge host
 
 normalize_issue_ref(..., host=) rejects a URL on another host ('' = unknown, rejects all); _refuse_unclosed_owed passes origin_hostname (the reading own_issue uses). Tests: test_pr_body_verification.py::test_a_url_on_another_host_does_not_normalise_when_the_host_is_given, test_deliver_closing_keywords.py::test_an_owed_issue_closed_by_url_must_be_on_the_forge_host.
+
+<!-- fr:journal kind=discovery scope=debug id=disc-other-url-readers created=2026-11-18T13:34:44+00:00 -->
+### disc-other-url-readers · discovery · Other normalize_issue_ref callers still read any host
+
+premature_closes/_held_sets and record.apply._round_names_every_ref call it without host=. For premature_closes that only over-flags (conservative). For the round-names check a lookalike URL in a round's text could count as naming a narrowed ref; that is out of this batch's scope, so it is left as is and named here.
