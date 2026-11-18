@@ -94,6 +94,8 @@ def test_the_durable_set_is_the_specs() -> None:
     assert DURABLE_FILES == ("judgements.yaml", "origins.yaml", "subsystems.yaml")
     assert DURABLE_DIRS == (
         "board",
+        "backlog",
+        "issues",
         "origins",
         "architecture",
         "history",

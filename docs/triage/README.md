@@ -26,6 +26,9 @@ regenerated.
 Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json` and the
 rendered pages (`backlog.html`, `issues.html`, `batches.html`, `origins.html`,
 `architecture.html` and `history.html`). `fr triage state export|import` copies exactly the rest.
+That rest includes the Backlog's and Issues' fragment directories, `backlog/` and `issues/`,
+and the older `board/` they fall back to; the state ref `refs/heads/fr-triage/<scope-id>`
+carries the same directories.
 
 ### authored-src/
 

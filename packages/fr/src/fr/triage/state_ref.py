@@ -54,7 +54,9 @@ REF_FILES: tuple[str, ...] = (
     "judgements.yaml",
     "origins.yaml",
     "subsystems.yaml",
-    "board/",
+    "board/",  # the Backlog's and Issues' old fragment directory, still read as a fallback
+    "backlog/",
+    "issues/",
     "origins/",
     "architecture/",
     "history/",

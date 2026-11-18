@@ -120,6 +120,8 @@ def test_ref_files_is_the_one_list_and_names_the_durable_export_set() -> None:
         "origins.yaml",
         "subsystems.yaml",
         "board/",
+        "backlog/",
+        "issues/",
         "origins/",
         "architecture/",
         "history/",

@@ -88,7 +88,9 @@ R3. A render deletes its page's old-named file from the state directory (`triage
 `board.html`), so no stale copy stays there. Where `backlog/` is absent and `board/` exists,
 both the Backlog and the Issues page read `board/`, and each says so in a note on the page
 and on stderr. A section the other page owns is then skipped with the existing "now on the
-X page; skipped" note, so the operator's order and fragments carry over for both pages.
+X page; skipped" note, so the operator's order and fragments carry over for both pages. The state ref
+(`state_ref.REF_FILES`) and `fr triage state export|import` (`state_sync.DURABLE_DIRS`) carry
+`backlog/` and `issues/`, and `board/` while it is a fallback input.
 R4. The Backlog page holds the decisions: Since last report, Needs you now, Next up, Waves
 and Batches. A new Issues page holds the lists: possible duplicates, backlog by tier, ranked
 features, parked, awaiting live, closed but in progress, patterns, debt and PRs. Each page
