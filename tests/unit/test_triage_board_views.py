@@ -30,6 +30,7 @@ from tests.unit.triage_board_fixtures import (
     batch,
     busy,
     dispatch,
+    element_by_id,
     facts,
     healthy,
     issue,
@@ -40,9 +41,7 @@ from tests.unit.triage_board_fixtures import (
 
 
 def _section(page: str, sid: str) -> str:
-    m = re.search(rf'<section[^>]*id="{sid}".*?</section>', page, flags=re.S)
-    assert m, f"no section {sid}"
-    return m.group(0)
+    return element_by_id(page, sid)
 
 
 def _needs(page: str) -> list[tuple[str, str]]:
@@ -96,10 +95,9 @@ def test_the_issues_page_is_ordered_tiers_features_parked_patterns_then_prs() ->
     ("render_page", "sids"),
     [
         (render_issues, ("backlog-by-tier", "ranked-features", "parked", "patterns", "prs")),
-        (render_backlog, ("batches",)),
     ],
 )
-def test_below_the_waves_every_section_is_a_closed_fold_with_its_count(
+def test_the_issues_page_sections_are_closed_folds_with_their_count(
     render_page: Any, sids: tuple[str, ...]
 ) -> None:
     page = render_page(*_with_pattern())
@@ -108,6 +106,25 @@ def test_below_the_waves_every_section_is_a_closed_fold_with_its_count(
         assert m, sid
         assert "open" not in m.group(1), sid
         assert re.search(r'<span class="count">\d+</span>', m.group(2)), sid
+
+
+def test_the_backlog_sections_are_open_folds_keeping_their_ids_and_headings() -> None:
+    page = render_backlog(*_with_pattern())
+    for sid, title in (
+        ("since-last-report", "Since last report"),
+        ("needs-you-now", "Needs you now"),
+        ("next-up", "Next up"),
+        ("waves", "Waves"),
+        ("batches", "Batches"),
+    ):
+        assert re.search(
+            rf'<details id="{sid}" class="fold" open><summary><h2>{title}</h2>', page
+        ), sid
+
+
+def test_the_issues_debt_section_is_a_closed_fold_with_a_heading() -> None:
+    page = render_issues(*busy())
+    assert re.search(r'<details id="debt" class="fold"><summary><h2>Debt</h2>', page)
 
 
 def test_the_backlog_has_one_nested_fold_per_tier_and_unranked_with_the_filter_bar_inside() -> None:
@@ -329,7 +346,7 @@ def test_next_up_carries_tier_size_dependencies_and_the_reason() -> None:
     rows = {r.ref: r for r in next_up(f, jd, max_inflight=3)}
     first = rows["w1-first"]
     assert (first.tier, first.size, first.deps) == (2, "S", ())
-    assert "wave 1" in first.reason
+    assert first.wave == "1" and "wave" not in first.reason
     late = rows["w2-late"]
     assert late.waiting and late.deps == ("w1-first",)
     assert "w1-first" in late.reason
@@ -691,7 +708,8 @@ def test_a_wave_that_left_the_board_because_it_was_cancelled_is_named() -> None:
     )
     sect = _section(render_backlog(f, jd), "waves")
     assert "wave-tab-1" not in sect
-    assert "Wave 1 was cancelled" in sect and 'href="history.html"' in sect
+    assert "Wave 1</a> was cancelled" in sect and 'href="history.html"' in sect
+    assert 'href="history.html#history-wave-panel-1">Wave 1</a>' in sect  # R12: its History tab
 
 
 # ------------------------------------------------- phone width (gh#1001)
@@ -800,3 +818,102 @@ def test_the_board_plan_blocks_a_batch_with_an_untrusted_member() -> None:
     assert set(snap.rejected) == {proposed.id}
     plan = drive_pass(snap)
     assert proposed.id in {a.batch for a in plan.actions if a.kind == "blocked"}
+
+
+# --------------------------------------------------- wave and batch links (R12), prose (R11)
+
+
+def test_next_up_shows_the_wave_as_a_linked_field_and_links_batch_and_dependencies() -> None:
+    page = render_backlog(*busy())
+    sect = _section(page, "next-up")
+    row = re.search(r'<li class="next" data-next="batch" data-ref="e-next".*?</li>', sect, re.S)
+    assert row
+    assert 'href="backlog.html#batch-e-next"' in row.group(0)
+    assert '<span class="tag wave"><a href="backlog.html#wave-panel-3">wave 3</a></span>' in (
+        row.group(0)
+    )
+
+
+def test_a_waiting_batch_links_its_dependencies_to_their_cards() -> None:
+    f, jd = _free_batches()
+    sect = _section(render_backlog(f, jd), "next-up")
+    deps = re.findall(r'after <a href="(backlog\.html#batch-[^"]+)">', sect)
+    assert deps and "backlog.html#batch-w1-first" in deps
+
+
+def test_a_feature_row_has_no_wave_field() -> None:
+    page = render_backlog(*busy())
+    sect = _section(page, "next-up")
+    row = re.search(r'<li class="next" data-next="feature".*?</li>', sect, re.S)
+    assert row and 'class="tag wave"' not in row.group(0)
+
+
+def test_a_next_up_wave_that_is_finished_links_to_its_history_tab() -> None:
+    cancel = {"kind": "cancel", "at": "2026-10-01T12:00:00Z"}
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {"widgets#1": j(), "widgets#2": j()},
+        [
+            batch("a", [1], wave=1, events=[dispatch("a"), cancel]),
+            batch("b", [2], wave=1),
+        ],
+    )
+    rows = next_up(f, jd)
+    assert [r.wave for r in rows if r.ref == "b"] == ["1"]
+    sect = _section(render_backlog(f, jd), "next-up")
+    # wave 1 still holds a live batch, so it is not finished: its Backlog tab
+    assert 'href="backlog.html#wave-panel-1">wave 1</a>' in sect
+
+
+def test_reasons_and_rationale_link_forge_references_outside_code() -> None:
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {"widgets#1": j(), "widgets#2": j()},
+        [batch("a", [1], wave=1, rationale="fixes #2, see `#1` and example-org/widgets#1")],
+    )
+    sect = _section(render_backlog(f, jd), "waves")
+    assert 'href="https://github.com/example-org/widgets/issues/2"' in sect
+    assert "<code>#1</code>" in sect
+    assert sect.count('href="https://github.com/example-org/widgets/issues/1"') == 1
+
+
+# ------------------------------------------------------------ the kind filter (R13)
+
+
+def test_the_closing_order_kinds_are_pressed_toggles_in_a_toolbar() -> None:
+    sect = _section(render_backlog(*busy()), "closing-order")
+    assert 'role="toolbar"' in sect
+    buttons = re.findall(r"<button[^>]*>", sect)
+    assert len(buttons) == 4
+    assert all('aria-pressed="true"' in b and 'type="button"' in b for b in buttons)
+    assert [re.search(r'data-kind="([a-z]+)"', b).group(1) for b in buttons] == [  # type: ignore[union-attr]
+        "defect", "feature", "parked", "unkinded",
+    ]  # fmt: skip
+
+
+def test_each_wave_row_names_its_kinds_and_each_panel_holds_a_hidden_message() -> None:
+    f = facts([issue(n) for n in range(1, 4)])
+    jd = judgements(
+        {"widgets#1": j(kind="defect"), "widgets#2": j(kind="feature"), "widgets#3": j()},
+        [
+            batch("a", [1, 2], wave=1),
+            batch("b", [3], wave=1),
+        ],
+    )
+    sect = _section(render_backlog(f, jd), "waves")
+    kinds = dict(re.findall(r'<tr data-batch="([^"]+)" data-kinds="([^"]*)"', sect))
+    assert kinds == {"a": "defect feature", "b": "unkinded"}
+    panels = re.findall(r'<div role="tabpanel".*?</div></div>', sect, re.S)
+    assert panels and all(
+        '<p class="quiet kinds-empty" hidden>No batch of the selected kinds.</p>' in p
+        for p in panels
+    )
+
+
+def test_the_kind_filter_script_hides_rows_and_shows_the_message() -> None:
+    from fr.triage.render import KIND_FILTER_SCRIPT
+
+    page = render_backlog(*busy())
+    assert KIND_FILTER_SCRIPT in page and KIND_FILTER_SCRIPT not in render_issues(*busy())
+    assert "dataset.kinds" in KIND_FILTER_SCRIPT and "kinds-empty" in KIND_FILTER_SCRIPT
+    assert "aria-pressed" in KIND_FILTER_SCRIPT

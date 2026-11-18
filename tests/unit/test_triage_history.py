@@ -6,6 +6,7 @@ import json
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import yaml
 from fr.cli import app
@@ -28,9 +29,9 @@ CLOSEOUT = {
 }
 
 
-def _finished() -> tuple[Facts, Judgements]:
+def _finished(**kw: Any) -> tuple[Facts, Judgements]:
     """Waves 1 and 2 are finished; wave 3 is still live."""
-    f = facts([issue(n) for n in range(1, 5)])
+    f = facts([issue(n) for n in range(1, 5)], **kw)
     jd = judgements(
         {f"widgets#{n}": j() for n in range(1, 5)},
         [
@@ -196,3 +197,71 @@ def test_a_wave_whose_batches_were_all_cancelled_is_labelled_cancelled() -> None
     sect = page[page.index('id="finished-waves"') :]
     assert re.search(r'id="history-wave-tab-1"[^>]*>Wave 1 · cancelled</button>', sect)
     assert re.search(r'id="history-wave-tab-2"[^>]*>Wave 2</button>', sect)
+
+
+# ------------------------------------------------------- folds and the PR column (R9, R16)
+
+
+def test_the_timeline_is_a_closed_fold_with_its_count() -> None:
+    page = _page(*_finished(), snaps=3)
+    m = re.search(
+        r'<details id="snapshot-timeline" class="fold"([^>]*)><summary>(.*?)</summary>', page
+    )
+    assert m and "open" not in m.group(1)
+    assert "<h2>Snapshot timeline</h2>" in m.group(2) and '<span class="count">3</span>' in m.group(
+        2
+    )
+
+
+def test_archived_notes_fold_holds_the_three_fragments(tmp_path: Path) -> None:
+    from fr.triage.fragments import resolve_manifest
+
+    d = tmp_path / "history"
+    d.mkdir()
+    (d / "manifest.yaml").write_text(
+        "sections:\n  - timeline\n  - finished-waves\n  - fold: Archived notes (2026-10-02)\n"
+        "    entries: [x.html, y.html, z.html]\n",
+        encoding="utf-8",
+    )
+    for n in "xyz":
+        (d / f"{n}.html").write_text(f"<p>note {n}</p>", encoding="utf-8")
+    page = _page(*_finished(), resolved=resolve_manifest(d, GENERATED))
+    fold_html = page[page.index("Archived notes (2026-10-02)") :]
+    assert fold_html.index("note x") < fold_html.index("note y") < fold_html.index("note z")
+    assert '<span class="count">3</span>' in page
+
+
+def _with_prs() -> tuple[Facts, Judgements]:
+    from tests.unit.triage_board_fixtures import pr
+
+    merged = pr(
+        21, "feat/batch-a", state="MERGED", merged_at="2026-10-02T09:30:00Z",
+        created_at="2026-10-01T11:00:00Z", title="Ship <a>",
+    )  # fmt: skip
+    return _finished(batch_prs=[merged])
+
+
+def test_a_finished_batch_with_a_merged_pr_shows_link_title_and_merge_date() -> None:
+    page = _page(*_with_prs())
+    sect = page[page.index('id="finished-waves"') :]
+    row = re.search(r'<tr data-batch="a"[^>]*>.*?</tr>', sect, re.S)
+    assert row
+    cell = re.search(r'<td data-label="PR">(.*?)</td>', row.group(0), re.S)
+    assert cell
+    assert 'href="https://github.com/example-org/widgets/pull/21"' in cell.group(1)
+    assert "#21" in cell.group(1) and "Ship &lt;a&gt;" in cell.group(1)
+    assert "2026-10-02 09:30 UTC" in cell.group(1)
+
+
+def test_a_finished_batch_with_no_pr_shows_a_dash() -> None:
+    page = _page(*_with_prs())
+    sect = page[page.index('id="finished-waves"') :]
+    row = re.search(r'<tr data-batch="b"[^>]*>.*?</tr>', sect, re.S)
+    assert row and '<td data-label="PR">—</td>' in row.group(0)
+    assert "<th>PR</th>" in sect
+
+
+def test_the_backlog_wave_table_has_no_pr_column() -> None:
+    from fr.triage.render import render_backlog
+
+    assert "<th>PR</th>" not in render_backlog(*_finished())

@@ -553,9 +553,9 @@ def test_a_truncation_note_names_its_list_in_plain_words_and_its_remedy(
 
 
 def _board_waves(page: str) -> str:
-    m = re.search(r'<section[^>]*id="waves".*?</section>', page, flags=re.S)
-    assert m
-    return m.group(0)
+    from tests.unit.triage_board_fixtures import element_by_id
+
+    return element_by_id(page, "waves")
 
 
 _CANCEL = {"kind": "cancel", "at": "2026-10-02T10:00:00Z", "reason": "no longer wanted"}

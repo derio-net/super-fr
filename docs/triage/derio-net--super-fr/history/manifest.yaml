@@ -1,6 +1,8 @@
 sections:
   - timeline
   - finished-waves
-  - closing-order.html
-  - origins-2026-10-02.html
-  - history-2026-10-02.html
+  - fold: Archived notes (2026-10-02)
+    entries:
+      - closing-order.html
+      - origins-2026-10-02.html
+      - history-2026-10-02.html

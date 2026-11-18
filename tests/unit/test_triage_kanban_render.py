@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fr.triage import kanban_render
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS
+from fr.triage.components import GUTTER_CSS, PAGE_SCRIPT, TOKENS_CSS
 from fr.triage.kanban import Board, build_board
 from fr.triage.kanban_render import CSS, SCRIPT, render_board
 
@@ -239,8 +239,8 @@ def test_non_https_urls_are_not_linked() -> None:
 
 
 def test_the_script_element_is_the_module_constant() -> None:
-    assert _script(_page()) == SCRIPT
-    assert _script(_page(hostile=True)) == SCRIPT
+    assert _script(_page()) == SCRIPT + PAGE_SCRIPT
+    assert _script(_page(hostile=True)) == SCRIPT + PAGE_SCRIPT
 
 
 def test_refresh_reaches_the_script_as_a_body_attribute() -> None:

@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 from fr.triage.components import (
     CHROME_CSS,
     GUTTER_CSS,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     SKEW_CSS,
     TOKENS_CSS,
     page_header,
@@ -114,6 +116,7 @@ code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--gr
 @media (max-width: 720px) { .board { grid-template-columns: minmax(0, 1fr); } }
 """
     + CHROME_CSS
+    + PAGE_CSS
     + GUTTER_CSS
     + SKEW_CSS
 )
@@ -452,5 +455,5 @@ def render_board(
         f"{body}\n"
         f'<footer class="meta">{quota}Rendered by <code>fr triage batches</code> from facts.json '
         "and judgements.yaml.</footer>\n"
-        f"</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{SCRIPT}{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )

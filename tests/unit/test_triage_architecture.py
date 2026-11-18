@@ -255,7 +255,10 @@ def test_page_has_a_real_title_the_three_theme_blocks_and_the_gutter() -> None:
     assert re.search(
         r"max-width: 480px\) \{\s*main \{ padding-left: 16px; padding-right: 16px", page
     )
-    assert "<script>" not in page  # no tabs here any more, so no script
+    # the page carries the shared tab and fold script, so a fragment's tab set works (R17)
+    from fr.triage.components import PAGE_SCRIPT
+
+    assert PAGE_SCRIPT in page
 
 
 def test_the_sections_are_summary_cards_size_table_then_authored() -> None:

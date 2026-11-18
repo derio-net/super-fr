@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Callable, Sequence
+import urllib.parse
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -142,14 +144,24 @@ nav.pages a { color: var(--muted); text-decoration: none; padding: 2px 0;
 nav.pages a[aria-current="page"] { color: var(--ink); font-weight: 600;
   border-bottom-color: var(--accent); }
 .goal { margin: 8px 0 0; font-size: 1.05rem; color: var(--ink); }
+"""
+"""The page chrome every page's CSS includes: nav bar and goal sentence."""
+
+FOLD_CSS = """
 details.fold { margin-top: 20px; background: var(--surface); border: 1px solid var(--line);
   border-radius: 8px; padding: 0 14px; }
 details.fold > summary { cursor: pointer; padding: 10px 0; font-weight: 600; font-size: 1.05rem; }
 details.fold > summary .count { font: 500 .8rem var(--mono); color: var(--muted);
   border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; margin-left: 6px; }
 details.fold[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+
+details.fold > summary > h2, details.fold > summary > h3 { display: inline; margin: 0;
+  font-size: 1.05rem; font-weight: 600; }
+details.fold > summary > .count { margin-left: 8px; }
 """
-"""The page chrome every page's CSS includes: nav bar, goal sentence, collapsed sections."""
+"""The shared fold: a section-level `details` with a title and an optional count on its
+summary line (triage-pages-ux R8)."""
+
 
 BASE_CSS = """
 * { box-sizing: border-box; }
@@ -247,10 +259,15 @@ TABS_CSS = """
   border: 0; }
 """
 
+PAGE_CSS = TABS_CSS + FOLD_CSS
+"""What every page's CSS includes after its own: the tab and fold styles (R17), so a
+fragment's tab set or fold works on any page."""
+
 # Roving focus per the ARIA tabs pattern: arrows move and select, Home/End jump.
 # Panels are toggled with the `hidden` attribute; with this script absent none is hidden.
 TABS_SCRIPT = """
 (function () {
+  var groups = [];
   Array.prototype.forEach.call(document.querySelectorAll("[data-tabs]"), function (root) {
     var list = root.querySelector('[role="tablist"]');
     var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
@@ -266,6 +283,7 @@ TABS_SCRIPT = """
       });
       if (focus) { tabs[i].focus(); }
     }
+    groups.push({ panels: panels, select: select });
     tabs.forEach(function (t, i) {
       t.addEventListener("click", function () { select(i, false); });
       t.addEventListener("keydown", function (e) {
@@ -281,8 +299,59 @@ TABS_SCRIPT = """
     list.hidden = false;
     select(start < 0 ? 0 : start, false);
   });
+  // A URL hash that names a tab panel, or an element inside one, selects that panel's tab
+  // (an outer group first, so a nested one is reached), on load and on every hash change.
+  function fromHash() {
+    var id = "";
+    try { id = decodeURIComponent(location.hash.slice(1)); } catch (e) { return; }
+    var target = id ? document.getElementById(id) : null;
+    if (!target) { return; }
+    groups.forEach(function (g) {
+      g.panels.forEach(function (p, i) {
+        if (p && (p === target || p.contains(target))) { g.select(i, false); }
+      });
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    // A new hash fires `hashchange`; only a link to the hash already shown fires nothing.
+    if (a && a.hash && a.hash === location.hash && a.pathname === location.pathname) {
+      fromHash();
+    }
+  });
+  window.addEventListener("hashchange", fromHash);
+  fromHash();
 })();
 """
+
+# Opens every `details` around the element the URL hash names (a fold, a card, a row), then
+# scrolls to it, on load and on every hash change. A constant: no page text reaches it.
+FOLD_SCRIPT = """
+(function () {
+  function reveal() {
+    var id = "";
+    try { id = decodeURIComponent(location.hash.slice(1)); } catch (e) { return; }
+    var target = id ? document.getElementById(id) : null;
+    if (!target) { return; }
+    for (var n = target; n; n = n.parentElement) {
+      if (n.tagName === "DETAILS") { n.open = true; }
+    }
+    target.scrollIntoView();
+  }
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (a && a.hash && a.hash === location.hash && a.pathname === location.pathname) {
+      reveal();
+    }
+  });
+  window.addEventListener("hashchange", reveal);
+  reveal();
+})();
+"""
+
+PAGE_SCRIPT = TABS_SCRIPT + FOLD_SCRIPT
+"""What every page's `<script>` ends with (R17): tabs, then folds, so a hash link selects
+its tab before the fold script opens what is around it and scrolls."""
 
 
 def _esc(s: str) -> str:
@@ -456,13 +525,26 @@ def skew_banner(facts: Facts) -> str:
     )
 
 
-def collapsed(id_: str, title: str, count: int | None, body: str) -> str:
-    """A closed-by-default section: the title and, when known, an item count show on the
-    summary line. *title* is escaped here; *body* is the caller's and must be safe."""
+def fold(
+    id_: str,
+    title: str,
+    count: int | None,
+    body: str,
+    *,
+    open_: bool = False,
+    heading: str | None = None,
+) -> str:
+    """A section-level collapsible (triage-pages-ux R8): the title and, when known, an item
+    count show on the summary line. It starts open when *open_*. *heading* (`h2`, `h3`)
+    keeps the title a heading inside the summary, so the section stays a landmark and its
+    *id_* a link target. *title* is escaped here; *body* is the caller's and must be safe."""
+    if heading is not None and heading not in ("h2", "h3", "h4"):
+        raise ValueError(f"a fold heading is h2, h3 or h4, not {heading!r}")
+    label = _esc(title) if heading is None else f"<{heading}>{_esc(title)}</{heading}>"
     n = "" if count is None else f' <span class="count">{count}</span>'
     return (
-        f'<details id="{_esc(id_)}" class="fold"><summary>{_esc(title)}{n}</summary>'
-        f"{body}</details>"
+        f'<details id="{_esc(id_)}" class="fold"{" open" if open_ else ""}>'
+        f"<summary>{label}{n}</summary>{body}</details>"
     )
 
 
@@ -490,3 +572,85 @@ def stamp_text(text: str) -> str:
     except ValueError:
         return text
     return when(moment) if moment.tzinfo else text
+
+
+def wave_href(key: str, finished: bool) -> str:
+    """Where wave *key* is shown (triage-pages-ux R12): its tab on History when finished,
+    else its tab on the Backlog. The ids are `tabs()`'s: `<group>-panel-<key>`."""
+    frag = urllib.parse.quote(key, safe="-_.")
+    if finished:
+        return f"{page('history').file}#history-wave-panel-{frag}"
+    return f"{page('backlog').file}#wave-panel-{frag}"
+
+
+def batch_href(batch_id: str) -> str:
+    """Where batch *batch_id*'s card is: on the Backlog (R12)."""
+    return f"{page('backlog').file}#batch-{urllib.parse.quote(batch_id, safe='-_.')}"
+
+
+_REF = re.compile(r"(?<![\w/.&#-])(?:([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+)#|#)(\d{1,9})\b")
+"""`owner/repo#n` or a bare `#n`, in text that is already escaped. The lookbehind keeps it out
+of a longer word, a path, an entity (`&#x27;`) and another `#`."""
+
+
+@dataclass(frozen=True)
+class Linker:
+    """Where each PR or issue reference links (triage-pages-ux R11), built once per render
+    from the page's inputs. *urls* maps a lower-cased `owner/repo#n` the inputs hold to that
+    item's own url, *bases* each repo to its url base (the issue or PR url up to `/issues/`
+    or `/pull/`), and *single* is the one repo of a single-repo scope (a bare `#n` is there,
+    nowhere else). Only https urls from the inputs are kept: no href is ever built from
+    prose, only from one of these or from a github.com base plus a number."""
+
+    urls: Mapping[str, str]
+    bases: Mapping[str, str]
+    single: str | None = None
+
+    @classmethod
+    def from_facts(cls, facts: Facts) -> Linker:
+        urls: dict[str, str] = {}
+        bases: dict[str, str] = {}
+
+        def add(repo: str, number: int, url: str) -> None:
+            if not url.startswith("https://"):
+                return
+            urls.setdefault(f"{repo.lower()}#{number}", url)
+            for marker in ("/issues/", "/pull/"):
+                if marker in url:
+                    bases.setdefault(repo.lower(), url.split(marker, 1)[0])
+                    break
+
+        for issue in facts.issues:
+            add(issue.repo, issue.number, issue.url)
+            for pr in issue.prs:
+                add(pr.repo, pr.number, pr.url)
+        for pr in (*facts.prs, *facts.batch_prs, *facts.judged_prs):
+            add(pr.repo, pr.number, pr.url)
+        single = facts.repos[0].lower() if facts.kind == "repo" and len(facts.repos) == 1 else None
+        return cls(urls, bases, single)
+
+    def href(self, repo: str, number: int) -> str | None:
+        """The link for `repo#number` (unescaped), or None: the item's own url when the
+        inputs hold it, else `<base>/issues/<n>` on a github.com base (GitHub redirects a
+        PR there), else nothing."""
+        repo = repo.lower()
+        known = self.urls.get(f"{repo}#{number}")
+        if known is not None:
+            return known
+        base = self.bases.get(repo)
+        if base is not None and urllib.parse.urlsplit(base).hostname == "github.com":
+            return f"{base}/issues/{number}"
+        return None
+
+    def prose(self, escaped: str) -> str:
+        """*escaped* (text already HTML-escaped, outside any code span) with each reference
+        that has a link turned into one; every other character is returned as it was."""
+
+        def link(m: re.Match[str]) -> str:
+            repo = m.group(1) or self.single
+            href = None if repo is None else self.href(repo, int(m.group(2)))
+            if href is None:
+                return m.group(0)
+            return f'<a href="{_esc(href)}" rel="noopener noreferrer">{m.group(0)}</a>'
+
+        return _REF.sub(link, escaped)

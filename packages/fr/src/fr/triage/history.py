@@ -14,15 +14,17 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from fr.triage.batch import BATCH_STAGES
+from fr.triage.batch import BATCH_STAGES, batch_pr
 from fr.triage.components import (
     BASE_CSS,
     CHROME_CSS,
     GRID_CSS,
     GUTTER_CSS,
-    TABS_CSS,
-    TABS_SCRIPT,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     TOKENS_CSS,
+    Linker,
+    fold,
     page,
     page_header,
     rendered_by,
@@ -55,7 +57,7 @@ CSS = (
   border: 1px solid var(--line); }
 """
     + CHROME_CSS
-    + TABS_CSS
+    + PAGE_CSS
     + GUTTER_CSS
 )
 
@@ -122,11 +124,14 @@ def _snapshot_panel(snap: Snapshot, previous: Snapshot | None) -> str:
 
 
 def _timeline(snapshots: Sequence[tuple[datetime, Snapshot]]) -> str:
-    head = '<section id="snapshot-timeline"><h2>Snapshot timeline</h2>'
+    def section(body: str, count: int | None) -> str:
+        return fold("snapshot-timeline", "Snapshot timeline", count, body, heading="h2")
+
     if not snapshots:
-        return (
-            f'{head}<p class="quiet">No snapshots yet: `fr triage backlog` stores one each '
-            "time the board changes, and the timeline steps through them.</p></section>"
+        return section(
+            '<p class="quiet">No snapshots yet: `fr triage backlog` stores one each '
+            "time the board changes, and the timeline steps through them.</p>",
+            None,
         )
     panels = [
         (f"s{i}", _stamp(when), _snapshot_panel(snap, snapshots[i - 1][1] if i else None))
@@ -138,7 +143,7 @@ def _timeline(snapshots: Sequence[tuple[datetime, Snapshot]]) -> str:
             '<p class="lede">Only one snapshot is stored, so there is nothing to step '
             "through yet; the next render that changes the board adds a step.</p>"
         )
-    return f"{head}{note}{tabs('snapshot', 'Snapshots', panels, len(panels) - 1)}</section>"
+    return section(f"{note}{tabs('snapshot', 'Snapshots', panels, len(panels) - 1)}", len(panels))
 
 
 def _finished_waves(facts: Facts, judgements: Judgements) -> str:
@@ -150,13 +155,21 @@ def _finished_waves(facts: Facts, judgements: Judgements) -> str:
     if not grouped:
         return f'{head}<p class="quiet">No wave is finished yet.</p></section>'
     picked = preselected_wave(facts, judgements, among=done)
+    linker = Linker.from_facts(facts)
     keys = list(grouped)
     selected = keys.index(str(picked)) if picked is not None else len(keys) - 1
     panels = [
         (
             key,
             f"Wave {key} · cancelled" if key in cancelled else f"Wave {key}",
-            wave_table(batches, facts, judgements, page("backlog").file),
+            wave_table(
+                batches,
+                facts,
+                judgements,
+                page("backlog").file,
+                linker=linker,
+                prs={b.id: batch_pr(b, facts) for b in batches},
+            ),
         )
         for key, batches in grouped.items()
     ]
@@ -193,5 +206,5 @@ def render_history(
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('history', present)}\n"
         + "\n".join(body)
-        + f"\n</main>\n<script>{TABS_SCRIPT}</script>\n</body>\n</html>\n"
+        + f"\n</main>\n<script>{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )

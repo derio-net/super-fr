@@ -37,8 +37,10 @@ from fr.triage.collect import ORIGINS_ISSUE_LIST_FIELDS, REPO_LIMIT, Forge, pars
 from fr.triage.components import (
     CHROME_CSS,
     GUTTER_CSS,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     TOKENS_CSS,
-    collapsed,
+    fold,
     page,
     page_header,
     rendered_by,
@@ -505,6 +507,7 @@ svg.chart text { font-family: var(--mono); font-size: 10px; }
 .sev-low { color: var(--muted); }
 """
     + CHROME_CSS
+    + PAGE_CSS
     + GUTTER_CSS
 )
 
@@ -727,7 +730,7 @@ def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
     )
     return (
         f'<section id="issue-table">'
-        f"{collapsed('issue-table-fold', 'Every issue', len(rows), body)}</section>"
+        f"{fold('issue-table-fold', 'Every issue', len(rows), body)}</section>"
     )
 
 
@@ -819,5 +822,5 @@ def render_origins(
         + "</div>"
         f'<ul class="notes">{note_items}</ul></header>\n'
         f"{page_header('origins', present)}\n" + "\n".join(body) + "\n"
-        f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{FILTER_SCRIPT}{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )

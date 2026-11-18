@@ -120,7 +120,7 @@ def test_the_batches_fold_is_on_the_backlog_and_the_tiers_on_issues() -> None:
     backlog, issues = render_backlog(FACTS, JUDGEMENTS), render_issues(FACTS, JUDGEMENTS)
     assert '<section class="batches">' in backlog and '<section class="tier' not in backlog
     assert '<section class="tier' in issues and '<section class="batches">' not in issues
-    assert backlog.index('<details id="batches" class="fold">') > backlog.index('id="waves"')
+    assert backlog.index('<details id="batches" class="fold" open>') > backlog.index('id="waves"')
 
 
 def test_each_batch_card_shows_members_stage_version_and_pr() -> None:
@@ -204,7 +204,10 @@ def test_the_stage_filter_is_hidden_with_one_checked_box_per_stage_present() -> 
 
 def test_no_batches_means_no_filter_and_the_fold_script_ships_once() -> None:
     page = render_backlog(FACTS, JUDGEMENTS)
-    assert page.count("function reveal()") == 1
+    from fr.triage.components import FOLD_SCRIPT
+    from fr.triage.render import STAGE_FILTER_SCRIPT
+
+    assert page.count(STAGE_FILTER_SCRIPT) == 1 and page.count(FOLD_SCRIPT) == 1
     plain = Judgements.model_validate({"schema": 1, "tiers": [{"n": 1, "title": "Now"}]})
     assert "<fieldset" not in render_backlog(FACTS, plain)
 

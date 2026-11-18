@@ -35,6 +35,8 @@ from fr.triage.components import (
     BASE_CSS,
     CHROME_CSS,
     GUTTER_CSS,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     TOKENS_CSS,
     page_header,
     rendered_by,
@@ -169,6 +171,7 @@ article.subsystem ul { margin: 6px 0 0; padding-left: 18px; font-size: .85rem; }
 .bar-row .v { font-family: var(--mono); text-align: right; }
 """
     + CHROME_CSS
+    + PAGE_CSS
     + GUTTER_CSS
 )
 
@@ -378,5 +381,5 @@ def render_architecture(
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('architecture', present)}\n"
         + "\n".join(body)
-        + "\n</main>\n</body>\n</html>\n"
+        + f"\n</main>\n<script>{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )
