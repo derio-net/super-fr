@@ -333,14 +333,34 @@ _FORGE_TOKEN_ENV = {"github": "GH_TOKEN", "gitlab": "GITLAB_TOKEN", "gitea": "GI
 _FORGE_GIT_USER = {"github": "x-access-token", "gitlab": "oauth2", "gitea": "oauth2"}
 
 
+_SAAS_HOST = {"github": "github.com", "gitlab": "gitlab.com"}
+
+
+def _forge_host(root: Path, forge: str) -> str | None:
+    """The forge host fr resolved for this checkout, the only host a token may go to
+    (l-security-r2): a declared `forge.host`, else origin's own host when the forge TYPE
+    was declared (a self-hosted instance the operator named), else the backend's SaaS
+    domain. A type guessed from an unrecognised origin is no vouching for that origin."""
+    from fr.services.resolve import resolve_forge
+
+    svc = resolve_forge(root, lenient=True)
+    if svc.host and (
+        svc.host_source in ("declared", "legacy") or svc.source in ("declared", "legacy")
+    ):
+        return svc.host
+    return _SAAS_HOST.get(forge)
+
+
 def _remote_auth(root: Path) -> tuple[str, dict[str, str] | None, str]:
     """What the two remote git calls of `archive-pr` run against (R11): `(remote, env,
     token)`. With a token (FR_DEBT_TOKEN, else the forge's own variable) the remote is
     origin's URL with its user-info stripped and the credential rides in the environment
     as an `http.<url>.extraheader`, so it is in no argv and in no `.git/config`. Without
-    one, or for a non-HTTP origin, it is plain `origin` and no environment."""
+    one, for a non-HTTP origin, or for an origin on a host other than the forge's, it is
+    plain `origin` and no environment."""
     import base64
     import os
+    import sys
     from urllib.parse import urlsplit, urlunsplit
 
     from fr._hosts import detect_backend
@@ -355,15 +375,29 @@ def _remote_auth(root: Path) -> tuple[str, dict[str, str] | None, str]:
     parts = urlsplit(_git(root, "remote", "get-url", "origin"))
     if parts.scheme not in ("http", "https") or not parts.hostname:
         return "origin", None, ""
+    expected = _forge_host(root, forge)
+    if expected is None or parts.hostname.lower() != expected.lower():
+        print(
+            f"warning: origin's host {_clean(parts.hostname)!r} is not the {forge} host "
+            f"{_clean(expected or 'unknown')!r}; pushing without the token",
+            file=sys.stderr,
+        )
+        return "origin", None, ""
     host = parts.hostname if ":" not in parts.hostname else f"[{parts.hostname}]"
     netloc = host + (f":{parts.port}" if parts.port else "")
     url = urlunsplit((parts.scheme, netloc, parts.path, parts.query, ""))
     basic = base64.b64encode(f"{_FORGE_GIT_USER[forge]}:{token}".encode()).decode()
     env = dict(os.environ)
     n = int(env.get("GIT_CONFIG_COUNT", "0") or 0)
-    env["GIT_CONFIG_COUNT"] = str(n + 1)
-    env[f"GIT_CONFIG_KEY_{n}"] = f"http.{url}.extraheader"
-    env[f"GIT_CONFIG_VALUE_{n}"] = f"AUTHORIZATION: basic {basic}"
+    key = f"http.{url}.extraheader"
+    # The empty value first resets the multi-valued list: a header actions/checkout
+    # persisted in .git/config would otherwise ride along with ours, and GitHub refuses
+    # two Authorization headers ("Duplicate header", l-errors-r2).
+    env["GIT_CONFIG_COUNT"] = str(n + 2)
+    env[f"GIT_CONFIG_KEY_{n}"] = key
+    env[f"GIT_CONFIG_VALUE_{n}"] = ""
+    env[f"GIT_CONFIG_KEY_{n + 1}"] = key
+    env[f"GIT_CONFIG_VALUE_{n + 1}"] = f"AUTHORIZATION: basic {basic}"
     return url, env, token
 
 
