@@ -91,17 +91,10 @@ visual:
   - row: triage-pages-rendered-stamp
     script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/capture.py
     shots:
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/backlog-top-light-1280.png, shows: [backlog-stamp]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/backlog-top-dark-390.png, shows: [backlog-stamp]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/issues-top-light-1280.png, shows: [issues-stamp]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/batches-top-light-1280.png, shows: [batches-stamp]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/origins-top-light-1280.png, shows: [origins-stamp]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/architecture-top-light-1280.png, shows: [architecture-stamp]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/history-top-light-1280.png, shows: [history-stamp]}
-  - row: triage-backlog-issues-split
-    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/capture.py
-    shots:
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/backlog-full-light-1280.png, shows: [backlog-page, waves-all-kinds]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/issues-full-dark-390.png, shows: [issues-page]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/waves-light-1280.png, shows: [waves-all-kinds]}
-      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/waves-dark-390.png, shows: [waves-all-kinds]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots2/backlog-top-light-1280.png, shows: [backlog-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots2/backlog-top-dark-390.png, shows: [backlog-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots2/issues-top-light-1280.png, shows: [issues-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots2/batches-top-light-1280.png, shows: [batches-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots2/origins-top-light-1280.png, shows: [origins-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots2/architecture-top-light-1280.png, shows: [architecture-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots2/history-top-light-1280.png, shows: [history-stamp]}
