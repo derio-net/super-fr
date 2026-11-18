@@ -18,3 +18,8 @@ packages/fr-cncd/src/fr_cncd/runner.py build_ingest_payload: {p.name: p.read_tex
 
 <!-- fr:journal kind=decision scope=debug id=6d5ec886e0d4 created=2026-11-18T13:07:53+00:00 decided_by=operator -->
 ### 6d5ec886e0d4 · decision · Operator: fix both root causes in the one batch PR; a plan-folder symlink refuses the cncd dispatch
+
+<!-- fr:journal kind=root-cause scope=debug id=244b6f50f92a created=2026-11-18T13:09:09+00:00 -->
+### 244b6f50f92a · root-cause · #1499: tick reads a failed dedup lookup as an empty one; #1501: build_ingest_payload follows symlinks via is_file()/read_text()
+
+Two causes (operator accepted both in one PR). 1) fr_dispatch.tick sets existing=set() when runner.existing_dispatches raises, so every item looks new and is submitted again. 2) fr_cncd.runner.build_ingest_payload filters with Path.is_file() and reads with Path.read_text(); both follow symlinks, so a link in a plan folder sends its target's content to the cncd server.
