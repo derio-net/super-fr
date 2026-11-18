@@ -1,0 +1,25 @@
+schema_version: 12
+run: 2026-11-18-feat-batch-consumer-delivery
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - {kind: finding, id: p2-r1, phase: 2, review_scope: in, title: "acceptance-reports scenario now does a live ls-remote for the installed fr's tag; the release suite runs it at an untagged version", body: "scaffold.py init via tests/scenarios/acceptance-reports-derived-published.sh. Fixed: the scenario sets a scratch HOME whose .gitconfig redirects super-fr's URL (insteadOf) to a local bare repo with an annotated v<version> tag, and asserts the pinned sha; no product override added."}
+  - {kind: finding, id: p2-r2, phase: 2, review_scope: in, title: "the autouse conftest stub means the real default_ls_remote is never tested", body: "tests/conftest.py, pin.py. Fixed: unit tests drive the real default_ls_remote with subprocess.run patched (argv, no GIT_CONFIG_*, GIT_TERMINAL_PROMPT=0, timeout, FrPinError on non-zero exit and OSError)."}
+  - {kind: finding, id: p2-r3, phase: 2, review_scope: in, title: "Gitea tea login put the token on tea's command line", body: "DEBT_STEP_GITEA. Fixed: GITEA_SERVER_URL and GITEA_SERVER_TOKEN via env (tea 0.14.2 reads both, verified with tea login add --help), `tea login add --name fr-ci`; test asserts no token on the run line."}
+  - {kind: finding, id: p2-r4, phase: 2, review_scope: in, title: "CLI refusal test asserted only that the output contains 'v'", body: "test_acceptance_pin.py. Fixed: asserts the running version's tag and the nothing-was-written wording."}
+  - {kind: finding, id: p2-r5, phase: 2, review_scope: in, title: "refresh_ci and init resolved the pin before the foreign/paste/already-exists outcomes", body: "scaffold.py refresh_ci, init. Fixed: foreign check first; init resolves only when the workflow is missing; paste and rewrite/current still resolve (they render the install line), commented; tests for each outcome with a failing resolver."}
+  - {kind: finding, id: p2-r6, phase: 2, review_scope: in, title: "GitLab FR_DEBT_TOKEN check ran after three downloads", body: "DEBT_STEP_GITLAB. Fixed: first before_script line; test asserts the order."}
+  - {kind: finding, id: p2-r7, phase: 2, review_scope: in, title: "acceptance-matrix reference omitted --refresh-ci's refusal and the GH_TOKEN fallback", body: "docs/reference/acceptance-matrix.md. Fixed; fr docs check clean."}
+  - {kind: finding, id: p2-r8, phase: 2, review_scope: out, title: "Gitea matrix job checkout persists gitea.token for PR code", body: "Pre-existing in the Gitea matrix job; R12 names only the debt job."}
+  - {kind: review, id: review-phase-2, phase: 2, title: "phase 2 review: 8 findings (7 in scope, all fixed; 1 out of scope)", body: "Independent reviewer verified every ACTION_PINS sha against its tag with git ls-remote, the pin's peeled-tag preference live, the byte-identical refusal, user-info stripping and token redaction. It raised p2-r1 (critical: release suite would fail at an untagged version) through p2-r7, all fixed with tests and pushed; p2-r8 is out of scope (pre-existing)."}
+resolves:
+  - {id: p2-r1, state: fixed, body: "Hermetic scenario via scoped HOME .gitconfig insteadOf to a local tagged bare repo."}
+  - {id: p2-r2, state: fixed, body: "Real default_ls_remote unit-tested with subprocess patched."}
+  - {id: p2-r3, state: fixed, body: "tea login reads URL and token from env."}
+  - {id: p2-r4, state: fixed, body: "Exact tag and wording asserted."}
+  - {id: p2-r5, state: fixed, body: "Pin resolved only when used, still before any write."}
+  - {id: p2-r6, state: fixed, body: "Token check first in before_script."}
+  - {id: p2-r7, state: fixed, body: "Reference page updated."}
+  - {id: p2-r8, state: out-of-scope, body: "Predates this change: the Gitea matrix job's checkout was not touched by R8-R13, and R12 scopes credentials to the debt job. Filed at deliver as a follow-up."}
+evidence: {review: review-phase-2, reviewer: a34e4995a96f9c539, model: claude-opus-5-5}
