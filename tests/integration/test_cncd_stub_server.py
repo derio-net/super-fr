@@ -285,3 +285,35 @@ def test_tick_preflight_blocks_all_phases_without_cncd_url(
     assert result.skipped == 1
     assert any("CNCD_URL" in f for f in result.failures)
     assert "fr:synced" not in gh.issues[(repo, 7)].labels
+
+
+# ── plan-folder symlinks never reach the payload (super-fr#1501) ─────
+
+
+def test_a_symlink_in_the_plan_folder_refuses_the_dispatch(
+    stub_cncd: StubCncd, tmp_path: Path
+) -> None:
+    """`is_file()` and `read_text()` both follow links, so a link in the plan
+    folder used to ship whatever it pointed at — any file on the dispatching
+    host — to the cncd server. The dispatch is now refused, naming the link,
+    and no request is sent."""
+    import shutil
+
+    from fr.parser import parse
+    from fr_cncd import CncdRunner
+    from fr_cncd.runner import CncdError
+
+    secret = tmp_path / "outside" / "secret.txt"
+    secret.parent.mkdir()
+    secret.write_text("TOP-SECRET-OUTSIDE-CONTENT")
+    plan_dir = tmp_path / "plan"
+    shutil.copytree(MINIMAL, plan_dir)
+    (plan_dir / "notes.md").symlink_to(secret)
+
+    plan = parse(plan_dir)
+    runner = CncdRunner(base_url=stub_cncd.base_url)
+    item = _phase_item(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
+
+    with pytest.raises(CncdError, match=r"notes\.md.*symlink"):
+        runner.dispatch(item)
+    assert stub_cncd.requests == []
