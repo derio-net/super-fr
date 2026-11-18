@@ -1020,7 +1020,7 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   # below names what to fix.
   echo ""
   echo "Installing fr-opencode-plugin ($OPENCODE_PLUGINS_DIR)..."
-  if ! bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install "$OPENCODE_PLUGINS_DIR"; then
+  if ! FR_OPENCODE_RULES="${CLAUDE_RULES[*]}" bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install "$OPENCODE_PLUGINS_DIR"; then
     echo "ERROR: fr-opencode-plugin was NOT installed (nothing was written); see the message above," >&2
     echo "       fix $(dirname "$OPENCODE_PLUGINS_DIR")/cli.json and re-run install.sh." >&2
     exit 1
