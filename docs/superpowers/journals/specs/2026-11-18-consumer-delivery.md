@@ -254,3 +254,8 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-18-consumer-delivery-p3 created=2026-11-18T13:18:38+00:00 -->
 ### phase-split-2026-11-18-consumer-delivery-p3 · decision · ask: phase 3 serves its own ask (#1271, SSO login-page refusal)
+
+<!-- fr:journal kind=finding scope=spec id=s-r13-resolved-2 created=2026-11-18T18:43:17+00:00 state=open resolves=s-r13 tracked_by=https://github.com/derio-net/super-fr/issues/1552 -->
+### s-r13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1552] · resolves s-r13: The isolation gate and the pipeline sentinel also judge in the plugin's directory
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1552.
