@@ -312,3 +312,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-18-triage-pages-ux-p2 created=2026-11-18T13:26:32+00:00 -->
 ### phase-split-2026-11-18-triage-pages-ux-p2 · decision · ask: shared folds, links and tabs (R8, R9, R11-R13, R16, R17) are their own reviewable ask
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-18-triage-pages-ux-p3 created=2026-11-18T13:26:41+00:00 -->
+### phase-split-2026-11-18-triage-pages-ux-p3 · decision · ask: the Batches and Origins pages (R10, R14, R15, R18), with the origins collect change
