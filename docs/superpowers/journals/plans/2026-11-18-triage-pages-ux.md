@@ -121,3 +121,53 @@ e5455e365: spec R3, the skill (mirrors re-synced) and the README state the per-p
 ### p1-r3-resolved · finding [fixed] · resolves p1-r3: The Origins/Architecture/History mastheads showed "rendered <stamp>" right beside "rendered by fr triage … render" (phase 1)
 
 c7ad6a19f: components.rendered_by() gives one span 'rendered <stamp> by <code>…</code>', with the old label when no stamp; both forms pinned, test red before the fix.
+
+<!-- fr:journal kind=decision scope=plan id=p2-debt-fold-no-count created=2026-11-18T22:05:19+00:00 phase=2 -->
+### p2-debt-fold-no-count · decision · the Issues Debt fold shows no count (phase 2) (phase 2)
+
+The per-repo debt folds inside it carry the totals; a count of repos on the outer fold read as the debt badge and broke the visible-sum test's meaning.
+
+<!-- fr:journal kind=decision scope=plan id=p2-next-up-reason-drops-wave created=2026-11-18T22:05:19+00:00 phase=2 -->
+### p2-next-up-reason-drops-wave · decision · Next up's reason no longer names the wave or the dependencies (phase 2) (phase 2)
+
+NextRow.wave is its own linked tag and the deps tag links each dependency, so the reason keeps only the merge order, or 'the driver starts it next'. test_next_up_carries_tier_size_dependencies_and_the_reason now asserts the field.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-sections-are-folds-tests-read-elements created=2026-11-18T22:05:19+00:00 phase=2 -->
+### p2-sections-are-folds-tests-read-elements · discovery · Backlog/Issues sections are folds, so tests read an element by id with depth counting (phase 2) (phase 2)
+
+Section ids moved onto the details element. tests/unit/triage_board_fixtures.element_by_id returns the whole element, nested same-tag elements counted; test_triage_board_views and test_triage_render use it.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-visual-rows-history-architecture created=2026-11-18T22:05:19+00:00 phase=2 -->
+### p2-visual-rows-history-architecture · discovery · this phase also owes the History PR and Architecture pipeline-tab rows (phase 2) (phase 2)
+
+R16 and R17 are this phase's, so triage-history-pr-summary and triage-architecture-pipeline-tabs are owed here and covered below: the PR cell with link, title and merge date, the dash for a batch with no PR, the pipeline as one graph on its latest tab, and stepping through the dated tabs. Batches columns and Origins groups are phase 3's and were not touched.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-18T22:05:19+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+collapsed() was replaced outright by fold() and the fold CSS split out of CHROME_CSS; nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-18T22:05:19+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+fragment loading was folded into one load() helper shared by files and fold-group members while the group was added
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-18T22:05:19+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+inline() was rewritten once with a plain() helper for both bold and top level; no duplicate left
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-18T22:05:19+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+one KIND_FILTER_SCRIPT constant and one wave_table kinds helper; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-11-18T22:05:19+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+wave_table gained one optional prs argument; History passes it, no duplicate cell code
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t6 created=2026-11-18T22:05:19+00:00 phase=2 -->
+### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
+
+browser check and suite only: no code
