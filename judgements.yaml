@@ -8411,6 +8411,17 @@ batches:
     draft non-member filter.'
   wave: 22
   bump: minor
+- id: run-durability
+  title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
+  ids:
+  - super-fr#1500
+  - super-fr#1524
+  - super-fr#1511
+  - super-fr#1507
+  rationale: 'One write-path class (#1500, #1524 atomic; #1511 builds on #1500) plus the cli step''s unbounded
+    run in the same run_cmd surface.'
+  wave: 22
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
