@@ -7765,6 +7765,8 @@ batches:
     - super-fr#1252
     - super-fr#1299
     - super-fr#1406
+  - kind: post_merge
+    at: '2026-11-18T11:54:23.964848Z'
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
@@ -8530,3 +8532,11 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-17-feat-batch-acceptance-edits.yaml"
   - "D\tdocs/superpowers/specs/2026-11-17-batch-acceptance-edits-design.md"
   - "D\tdocs/superpowers/usage/2026-11-17-feat-batch-acceptance-edits.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-18-1
+  branch: chore/closeout-2026-11-18-1
+  at: '2026-11-18T11:54:26.953357Z'
+  runner: herdr
+  handle: w3K:p6
+  planned:
+  - triage-intake
