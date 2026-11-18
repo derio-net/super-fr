@@ -8194,6 +8194,13 @@ batches:
     run: 2026-11-17-feat-batch-triage-intake
     archive: chore/closeout-2026-11-18-1
     archived: 1546
+  - kind: claims_released
+    at: '2026-11-18T12:18:37.163188Z'
+    keys:
+    - super-fr#1252
+    - super-fr#1213
+    - super-fr#1406
+    - super-fr#1299
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
@@ -8818,6 +8825,11 @@ exports:
   pr: 1538
   head: b85870d4827d07eac39dacf2bb9906e6b620cdb6
   merged: true
+- wave: '19'
+  repo: derio-net/super-fr
+  at: '2026-11-18T12:18:35.710162Z'
+  pr: 1547
+  head: 4aeb5981887f24fbad3fe03145614181d576364b
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
