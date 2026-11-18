@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-19 Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -155,10 +155,13 @@ work.
 
 `fr triage batches` draws `batches.html`, a Kanban of every batch by lifecycle column. It has
 four "Needs you" lanes (developer, reviewer, tester, devops), which the board decides from
-the run's cursor and the merged PR's gate labels, never from a session's status. On a wide
-screen a column
-with no cards folds to a narrow strip with its title turned on its side, so the columns that
-hold cards get the room.
+the run's cursor and the merged PR's gate labels, never from a session's status. Every column
+has a button in its header that folds it and opens it again. A column with no cards starts
+folded, and on a wide screen a folded column is a narrow strip with its title turned on its
+side, so the columns that hold cards get the room. The page remembers each column in your
+browser, so the automatic reload keeps what you chose. A toggle, "last 30 days" by default,
+hides every wave whose batches are all finished and have had no event in the last 30 days;
+"all waves" shows them again, and the page remembers that choice too.
 
 Several scopes can work one repo, so a scope **claims** each issue it plans to act on with an
 `fr:claimed` label and a marker comment. Another scope's claim is hands-off. Taking one over
@@ -182,7 +185,12 @@ fr triage origins render  --repo example-org/example-repo
 
 `collect` writes `origins-facts.json`; you write `origins.yaml`, one classification per
 issue; `render` builds `origins.html`. Collect refuses a window wider than one page, and
-names a `--since` that the page does cover. The categories describe what the defect *is*, not who noticed it:
+names a `--since` that the page does cover. It also keeps the pull requests merged since
+that date, so the page can show each one's title and merge date. The "Every issue" section
+has a filter for open, closed or all issues and one fold for each category below, each with
+its count; the filter updates the counts. In the list of pull requests that left work
+behind, each row opens to the issues that name it. A pull request the file does not hold
+(merged before the window, or collected by an older fr) shows "not collected". The categories describe what the defect *is*, not who noticed it:
 
 - **latent**: always there, nothing changed it;
 - **regression**: a change broke something that worked, and you can name the pull request;
