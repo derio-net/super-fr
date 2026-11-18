@@ -1,0 +1,92 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-18-consumer-delivery
+repo: derio-net/super-fr
+rows:
+  - id: opencode-rules-delivered
+    capability: OpenCode consumers load the shipped rules
+    acceptance: After install.sh, an OpenCode session in any repo has every shipped
+      rule (the set installed for Claude Code) in its system prompt; a drift test fails
+      when the delivered set and the Claude Code set differ
+    origin:
+    - spec:2026-11-18-consumer-delivery#R1
+    - spec:2026-11-18-consumer-delivery#R2
+    - spec:2026-11-18-consumer-delivery#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: opencode-handlers-session-directory
+    capability: OpenCode plugin handlers act in the session's repo
+    acceptance: The acceptance nag, session bind and child claim run fr in the session's
+      own directory, falling back to the plugin's only when the session has none; detach
+      stays session-global
+    origin:
+    - spec:2026-11-18-consumer-delivery#R4
+    - spec:2026-11-18-consumer-delivery#R5
+    - spec:2026-11-18-consumer-delivery#R6
+    - spec:2026-11-18-consumer-delivery#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: scaffold-pins-actions
+    capability: Consumer CI runs only pinned third-party actions
+    acceptance: Every action in the scaffolded acceptance workflow is pinned to a commit
+      SHA with a readable version comment, matching super-fr's own CI pins
+    origin:
+    - spec:2026-11-18-consumer-delivery#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: scaffold-pins-fr
+    capability: Consumer CI runs a released fr
+    acceptance: The scaffolded workflow installs the released fr that wrote it, pinned
+      by commit SHA with its version tag; an unresolvable tag refuses and writes nothing;
+      fr acceptance check warns when the pin is older than the running fr
+    origin:
+    - spec:2026-11-18-consumer-delivery#R9
+    - spec:2026-11-18-consumer-delivery#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: debt-token-scope-github
+    capability: The debt job's push token is confined
+    acceptance: In the GitHub debt job no token persists in .git/config, FR_DEBT_TOKEN
+      reaches only the archive-PR step, and fr pushes with it without writing it to
+      disk or argv
+    origin:
+    - spec:2026-11-18-consumer-delivery#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: debt-credentials-gitea-gitlab
+    capability: The weekly debt job works on Gitea and GitLab
+    acceptance: The Gitea and GitLab debt jobs install their forge CLI and carry the
+      credentials both debt commands need; on GitLab a missing FR_DEBT_TOKEN fails the
+      job with a one-line remedy
+    origin:
+    - spec:2026-11-18-consumer-delivery#R12
+    - spec:2026-11-18-consumer-delivery#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: forge-sso-html-refusal
+    capability: A forge behind SSO gets a named refusal
+    acceptance: When a Gitea or GitLab API answers with an HTML login page, every fr
+      read names the SSO/forward-auth cause and the remedy instead of a JSON decode
+      error
+    origin:
+    - spec:2026-11-18-consumer-delivery#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
