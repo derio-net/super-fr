@@ -248,3 +248,6 @@ row_kinds:
 run_gate: tester
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-18-consumer-delivery-p2 created=2026-11-18T13:18:34+00:00 -->
+### phase-split-2026-11-18-consumer-delivery-p2 · decision · ask: phase 2 serves its own ask (#1308 + #1186, consumer CI scaffold pins and debt credentials)
