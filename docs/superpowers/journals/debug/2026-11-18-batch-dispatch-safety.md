@@ -15,3 +15,6 @@ packages/fr-cncd/src/fr_cncd/runner.py build_ingest_payload: {p.name: p.read_tex
 ### 3ee30c3d4daa · hypothesis · Two independent root causes, not one
 
 #1499 is a fail-open error policy in the generic tick (dedup lookup failure treated as 'nothing dispatched'). #1501 is an input-trust defect in the cncd adapter (filesystem reads follow links). Different packages, different code paths; fixing one does not touch the other. The batch rule requires stopping to ask before fixing either.
+
+<!-- fr:journal kind=decision scope=debug id=6d5ec886e0d4 created=2026-11-18T13:07:53+00:00 decided_by=operator -->
+### 6d5ec886e0d4 · decision · Operator: fix both root causes in the one batch PR; a plan-folder symlink refuses the cncd dispatch
