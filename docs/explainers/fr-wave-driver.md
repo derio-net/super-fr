@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -163,12 +163,13 @@ We built the driver around the few moments that are yours:
 - **Pass a gate.** A merged pull request holding `gate:tester` or `gate:devops` waits for you
   to walk it or pass it ([exit gates](fr-exit-gates.md)).
 - **Unblock.** A blocked batch, a conflict past its hand-backs, a failed `post_merge` and
-  failing CI on a batch each show under **Needs you now** on the board. The board gives one
+  failing CI on a batch each show under **Needs you now** on the Backlog page. It gives one
   row per item, each linking the pull request or issue.
 
-`fr triage board` writes that board, a Kanban of every batch by stage with four "Needs you"
-lanes (developer, reviewer, tester, devops). While a driver runs with `--yes` it re-renders on
-every pass.
+`fr triage batches` writes the Batches page, `batches.html`: a Kanban of every batch by stage
+with four "Needs you" lanes (developer, reviewer, tester, devops). While a driver runs with
+`--yes` it re-renders that page on every pass. (`fr triage board` is the old name of the
+command and still works.)
 
 ## Where does it run?
 

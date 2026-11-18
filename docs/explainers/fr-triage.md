@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -66,14 +66,16 @@ issues:
 `tier` is the priority group, `severity` is `low`, `med` or `high` (`check` lists a judged
 issue that has none), and `cx` is your size estimate of the fix: `XS`, `S`, `S-M`, `M` or `L`.
 
-Then draw the page:
+Then draw the pages:
 
 ```bash
-fr triage render --repo example-org/example-repo --open
+fr triage backlog --repo example-org/example-repo --open
 ```
 
-You get `triage.html`: what changed since the last report, what needs you right now, the
-driver's order for what is next, and the backlog by tier. When several judged issues share a
+You get two pages. `backlog.html` holds the decisions: what changed since the last report,
+what needs you right now, the driver's order for what is next, the waves and the batches.
+`issues.html` holds the lists: the backlog by tier, ranked features, parked issues, debt and
+open pull requests. (`fr triage render` is the old name of this command and still works.) When several judged issues share a
 subsystem, propose them as a batch:
 
 ```bash
@@ -91,7 +93,7 @@ owner for `--org`; `--repo A/B,C/D` is a group.
 |---|---|---|
 | `facts.json` | `fr triage collect` | forge data: issues, labels, PRs (it only reads the forge) |
 | `judgements.yaml` | **you**, plus the `batch` verbs | tiers, rankings, kinds, patterns, batches |
-| `triage.html`, `board.html` | `render`, `board` | the pages |
+| `backlog.html`, `issues.html`, `batches.html` | `backlog`, `batches` | the pages |
 
 Never write the facts yourself. fr does not commit the state by default; its durable copy
 is an orphan branch, `refs/heads/fr-triage/<scope-id>`, which fr fetches before reading and pushes after
@@ -151,7 +153,7 @@ train), closes out what has landed, and dispatches what may start. Merging a bat
 pull request needs the operator's `approved-fr` label. The driver never approves its own
 work.
 
-`fr triage board` draws `board.html`, a Kanban of every batch by lifecycle column. It has
+`fr triage batches` draws `batches.html`, a Kanban of every batch by lifecycle column. It has
 four "Needs you" lanes (developer, reviewer, tester, devops), which the board decides from
 the run's cursor and the merged PR's gate labels, never from a session's status. On a wide
 screen a column

@@ -105,7 +105,7 @@ or adds and why, derive it from the measured figures, and label every such figur
 exists to prevent. When the change ships, render again and put the measured figure beside the
 projection; keep both.
 
-Refresh the inputs first when you want a current page: `fr triage render` stores a snapshot, and
+Refresh the inputs first when you want a current page: `fr triage backlog` stores a snapshot, and
 `fr triage origins collect` plus the `fr-origins` skill provide the origins data. **Publishing
 stays yours**: fr writes a file in the scope's state directory (`fr triage scope show` names it);
 copy or host it wherever the operator publishes, after redacting any third-party identity it carries.

@@ -5,9 +5,9 @@
 `~/.cache/fr/triage/<scope>/` when run outside a clone; a scope with a state repo also keeps
 a durable copy on the orphan branch `refs/heads/fr-triage/<scope-id>`. Neither is reviewed, so this folder
 remains the reviewed copy for `derio-net/super-fr`: what is
-needed to regenerate the four triage pages (the backlog page `triage.html`, the
-defect-origins page, the architecture page and the history page), and the history that
-cannot be regenerated.
+needed to regenerate the triage pages (Backlog `backlog.html`, Issues `issues.html`, Batches
+`batches.html`, Origins, Architecture and History), and the history that cannot be
+regenerated.
 
 ## What is here
 
@@ -18,14 +18,14 @@ cannot be regenerated.
 | `judgements.yaml` | the `fr-triage` skill, plus the `batch` verbs | tiers, themes, batches and their events; the board and the subsystem cards read it |
 | `origins.yaml` | the `fr-origins` skill | one classification per issue since 2026-09-22; the 09-24 → 09-29 entries are the 2026-10-02 page's, imported |
 | `subsystems.yaml` | by hand | the architecture page's 15 subsystem cards: globs, `then_ref`, themes |
-| `<page>/manifest.yaml` | by hand | per page (`board/` for `triage.html`, `origins/`, `architecture/`, `history/`): the section order, generated sections and authored fragments interleaved |
+| `<page>/manifest.yaml` | by hand | per page (`backlog/`, `issues/`, `origins/`, `architecture/`, `history/`; an older `board/` is read by both Backlog and Issues while neither directory exists): the section order, generated sections and authored fragments interleaved |
 | `<page>/*.html` | `authored-src/build.py`, or by hand | the authored fragments a manifest lists; they travel with the state |
-| `snapshots/` | `fr triage render` | one per render; the backlog page's "Since last report" and the history page's timeline. Not reproducible |
+| `snapshots/` | `fr triage backlog` | one per render; the backlog page's "Since last report" and the history page's timeline. Not reproducible |
 | `authored-src/` | by hand | the sources of the built fragments (below) |
 
 Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json` and the
-rendered pages (`triage.html`, `origins.html`, `architecture.html`, `history.html`, and
-the batch Kanban `board.html`). `fr triage state export|import` copies exactly the rest.
+rendered pages (`backlog.html`, `issues.html`, `batches.html`, `origins.html`,
+`architecture.html` and `history.html`). `fr triage state export|import` copies exactly the rest.
 
 ### authored-src/
 
@@ -50,7 +50,7 @@ fr triage origins collect --repo derio-net/super-fr --since 2026-09-22
 fr triage check --repo derio-net/super-fr          # unranked: judge with the fr-triage skill
 fr triage origins check --repo derio-net/super-fr  # unclassified: the fr-origins skill
 python3 .fr/triage-state/derio-net--super-fr/authored-src/build.py   # the state directory
-fr triage render --repo derio-net/super-fr
+fr triage backlog --repo derio-net/super-fr
 fr triage origins render --repo derio-net/super-fr
 fr triage architecture render --repo derio-net/super-fr --now-ref origin/main
 fr triage history render --repo derio-net/super-fr

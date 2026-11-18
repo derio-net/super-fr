@@ -3,9 +3,55 @@ run: 2026-11-18-feat-batch-triage-pages
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T1.S2]
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T6.S1]
 refactor:
   P1.T1: "a smoke run and a change fragment: no code to clean"
-journal: []
+  P1.T3: "the commands were written on the registry helpers (fragment_dir, remove_legacy, moved_notes) from the start, so no duplicate was left to fold"
+  P1.T5: "one keyword per renderer, printed through components.when; history's own _stamp now delegates to it, nothing else to clean"
+  P1.T6: "docs and mirrors only: no code"
+journal:
+  - kind: decision
+    id: p1-rendered-at-optional
+    phase: 1
+    title: "rendered_at is an optional keyword on every render_*; None states no render time"
+    body: |
+      R5 says every page states its render time and the command passes the moment in. Every
+      command (backlog, batches, origins, architecture, history) passes `datetime.now(UTC)`;
+      the renderers default `rendered_at=None` (no stamp) so the ~150 existing direct render
+      calls in tests stay inputs-only. `render_board` already took a required `rendered_at`
+      and printed it through `components.when`, so it is unchanged.
+  - kind: decision
+    id: p1-stage-filter-script-whole
+    phase: 1
+    title: "FOLD_SCRIPT is renamed STAGE_FILTER_SCRIPT whole; its reveal half moves with the shared fold script (spec §D, phase 2)"
+    body: |
+      §B says the stage filter becomes `STAGE_FILTER_SCRIPT` and the reveal half becomes the
+      shared fold script of §D. Phase 1 owns no fold script, so the whole constant keeps its
+      behaviour under the new name and stays on the Backlog only. The Issues page carries
+      the filter-bar `SCRIPT` and `TABS_SCRIPT`; `SCRIPT` would throw on the Backlog, which
+      has no `#q` search box.
+  - kind: decision
+    id: p1-board-dir-fallback-shared
+    phase: 1
+    title: "with only board/ present, both pages read it, fragments included; remove_legacy deletes files, never board/"
+    body: |
+      `components.fragment_dir` returns the page's own directory when it exists, else its
+      legacy one (board/ for Backlog and Issues) with a note said on stderr and on the page.
+      A fragment a board/ manifest lists therefore shows on both pages, which is R3's "the
+      operator's order and fragments carry over for both pages". `remove_legacy` removes
+      only the old-named file (triage.html, board.html); the old directory stays an input.
+      The moved-section note is shared too: `fragments.moved_notes` names the page by its
+      registry title, used by Backlog, Issues, History and Architecture (whose MOVED maps
+      now hold page keys: waves and operator-actions map to `backlog`).
+  - kind: discovery
+    id: p1-tests-in-own-file
+    phase: 1
+    title: "the R4/R5 tests live in tests/unit/test_triage_pages_split.py, not test_triage_render.py"
+    body: |
+      The split and the per-renderer stamp test import every renderer; a separate module
+      keeps test_triage_render.py's captured-fixture tests apart. Existing callers of the
+      removed `render()` were migrated to the page that owns the section they assert on
+      (Issues for rows, tiers, PRs, debt, awaiting live, closed in progress; Backlog for
+      needs, next up, waves, batches, session notes, merge stops).
 resolves: []
 evidence: {}
