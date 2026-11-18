@@ -8442,6 +8442,13 @@ batches:
     pr_body.py.
   wave: 22
   skill: debug
+- id: stealth-gitlab
+  title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
+  ids:
+  - super-fr#1527
+  rationale: Single placement defect; blocks stealth setup on self-hosted GitLab.
+  wave: 22
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
