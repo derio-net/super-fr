@@ -15,3 +15,8 @@ docs/superpowers/plans -> ../elsewhere (an in-repo symlink), one plan under it. 
 ### repro-1485 · repro · #1485: _existing_markers returns {} on any listing error or past 200 issues
 
 archive_followups._existing_markers lists 200 open issues; an error, a missing viewer or a listing past the cap all read as 'no existing issue', so file_open_ends files a duplicate follow-up. _existing_owed fails closed in all three cases (OwedLookup.reason). The repo has 168 open issues today, so the 200 cap is close to being reached.
+
+<!-- fr:journal kind=repro scope=debug id=repro-1486 created=2026-11-18T13:10:02+00:00 -->
+### repro-1486 · repro · #1486: unreadable default ref reads as off-default in _write_manual_owed; GitUnavailableError escapes
+
+head_on_default_branch returns False when remote_default_ref is None or a GitRefusal. That is the safe answer for R3 (resolve closes nothing), but for R8 (_write_manual_owed) 'off default' means 'write and stage an owed entry', which may land on main. on_default_branch raises GitUnavailableError, and archive_cmd._write_manual_owed calls head_on_default_branch outside its try, so it crashes the archive.
