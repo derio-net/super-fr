@@ -65,3 +65,8 @@ archive._symlinked_component lstat-walks each component from the repo root; a li
 ### f-1485 · finding [fixed] · #1485 fixed: _existing_markers fails closed
 
 MarkerLookup(found, reason); file_open_ends records the reason on every end and files nothing. Cap is OPEN_ENDS_LIST_LIMIT=1000 (super-fr has ~170 open issues). Tests: test_archive_open_ends.py::test_an_unknown_dedup_answer_files_nothing[listing-fails|listing-capped|no-viewer], ::test_the_marker_listing_is_wide_enough_for_a_busy_repo.
+
+<!-- fr:journal kind=finding scope=debug id=f-1486 created=2026-11-18T13:34:37+00:00 state=fixed -->
+### f-1486 · finding [fixed] · #1486 fixed: unknown default ref previews; GitUnavailableError no longer escapes
+
+git.default_branch_answer; archive_cmd._write_manual_owed previews on None with a line saying why. Tests: test_git.py::test_default_branch_answer_is_unknown_when_the_default_ref_cannot_be_read, test_archive_owed.py::test_a_hold_whose_default_ref_cannot_be_read_writes_nothing, ::test_a_hold_where_git_cannot_answer_is_a_preview_not_a_crash.
