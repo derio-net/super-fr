@@ -5,3 +5,8 @@
 ### a368515f54ab · repro · #1499: a raising existing_dispatches degrades to an empty snapshot and tick submits anyway
 
 packages/fr-dispatch/src/fr_dispatch/__init__.py (dedup snapshot block): on exception, existing = set(); every item then looks undispatched and is submitted. Pinned as intended behaviour by tests/unit/test_tick_workitem.py::test_a_raising_existing_dispatches_degrades_to_an_empty_snapshot (asserts 1 dispatch).
+
+<!-- fr:journal kind=repro scope=debug id=19afb9cd6fd8 created=2026-11-18T12:15:43+00:00 -->
+### 19afb9cd6fd8 · repro · #1501: cncd build_ingest_payload follows plan-folder symlinks into the payload
+
+packages/fr-cncd/src/fr_cncd/runner.py build_ingest_payload: {p.name: p.read_text() for p in plan.dir.iterdir() if p.is_file()} — is_file() and read_text() both follow symlinks, so a symlink in the plan folder ships the target's content (any file on the dispatching host) to the cncd server.
