@@ -104,3 +104,208 @@ decider: operator (round 1)
 
 <!-- fr:journal kind=lens scope=spec id=lens-security-1 created=2026-11-18T13:11:24+00:00 lens=security step=brainstorm -->
 ### lens-security-1 · lens · R11 turns untrusted issue/judgement prose into links: the escaping and URL checks must hold
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · R15/Non-goals premise is false: facts.json does not hold PRs in every state
+
+facts.json keeps open, batch and judged PRs only (collect.py:888-910); the all-state list at collect.py:753 is used only to link. Most leaderboard PRs would read 'not in facts.json'.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · R7's wave-finished test cannot see a wave that finishes by archive
+
+finished_waves counts archived close-outs from judgements (batch_drive.py:1236); a snapshot stores only stages (snapshot.py:63), so the set never grows. Reuse the driver's self._unfinished transition (triage_batch_cmd.py:5306) and say what a restart does.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · R6 narrows Architecture re-rendering below what decision q1 grants
+
+Re-render on every collecting pass, re-measure only on the first pass and on a wave's finish, reusing the last measurement.
+
+<!-- fr:journal kind=finding scope=spec id=s4 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s4 · finding [open] (reviewer: in scope) · The write_* shape omits the driver's runner loader and ci_none; write_board does not have the claimed shape
+
+write_board takes scope_args/refresh/prefix/loader/ci_none (triage_kanban_cmd.py:390); the backlog reads sessions and local_ci_none (triage_cmd.py:1082).
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · No ## Test Plan section, and R13 has no Verification row
+
+test_plan is on but the spec has no ## Test Plan; R13 has no row.
+
+<!-- fr:journal kind=finding scope=spec id=s6 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s6 · finding [open] (reviewer: in scope) · R18's cutoff hides upcoming waves whose batches have no events
+
+A proposed batch has no events (model.py:1129), so a planned wave would be hidden by default.
+
+<!-- fr:journal kind=finding scope=spec id=s7 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s7 · finding [open] (reviewer: in scope) · R12 never links the wave named in Next up's reason, the brief's own example
+
+The wave is only in the reason string (views.py:596) printed through inline() (render.py:890).
+
+<!-- fr:journal kind=finding scope=spec id=s8 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s8 · finding [open] (reviewer: in scope) · Origins links are hard-wired to github.com, and the Linker's source on Origins is unstated
+
+_pr_link builds github.com URLs for any forge (origins.py:537-543).
+
+<!-- fr:journal kind=finding scope=spec id=s9 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s9 · finding [open] (reviewer: in scope) · The page-name tripwire would fail on constants §A does not move
+
+history/origins/architecture PAGE_FILE and dir constants plus docstrings/help naming triage.html/board.html are not listed.
+
+<!-- fr:journal kind=finding scope=spec id=s10 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s10 · finding [open] (reviewer: in scope) · The old board/ manifest fallback covers the Backlog but not Issues
+
+An old board/manifest.yaml orders sections R4 moves to Issues; and what does batches/ hold?
+
+<!-- fr:journal kind=finding scope=spec id=s11 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s11 · finding [open] (reviewer: in scope) · Two different FOLD_SCRIPTs, and the R9 fold lists disagree with R4
+
+One name for two scripts; debt listed as a decision section though R4 moves it to Issues; the Batches fold's start state unstated.
+
+<!-- fr:journal kind=finding scope=spec id=s12 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s12 · finding [open] (reviewer: in scope) · R17 adds the tab script to Architecture but not the tab CSS
+
+TABS_SCRIPT relies on TABS_CSS (components.py:186-203), which architecture/origins/board CSS lack.
+
+<!-- fr:journal kind=finding scope=spec id=s13 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s13 · finding [open] (reviewer: in scope) · Smaller codebase mismatches in Background and Design
+
+BOARD_DIR is in triage_cmd.py:104; batch_pr is fr.triage.batch.batch_pr; merged_at is a str (stamp_text, not when()); MOVED maps say 'board'.
+
+<!-- fr:journal kind=finding scope=spec id=s14 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s14 · finding [open] (reviewer: in scope) · R6 says every collecting pass, but the design renders only on --yes passes
+
+_write_board runs only on a --yes, non-essential-only pass (triage_batch_cmd.py:5354-5358).
+
+<!-- fr:journal kind=finding scope=spec id=s15 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s15 · finding [open] (reviewer: in scope) · R8 'every collapsible section' conflicts with the raw <details> the design keeps
+
+Per-PR issue lists and stage lists are not folds; Origins nesting unstated.
+
+<!-- fr:journal kind=finding scope=spec id=s16 created=2026-11-18T13:22:28+00:00 state=open review_scope=in -->
+### s16 · finding [open] (reviewer: in scope) · §J's doc list misses AGENTS.md
+
+AGENTS.md names triage.html as render's output.
+
+<!-- fr:journal kind=decision scope=spec id=q4-pr-detail-source-2 created=2026-11-18T13:22:28+00:00 -->
+### q4-pr-detail-source-2 · decision · PR titles come from origins collect (supersedes q4-pr-detail-source)
+
+Spec review (s1) showed facts.json keeps no merged PRs, so the earlier decision rested on a misreading. `fr triage origins collect` keeps the PRs merged in its window in origins-facts.json, which is what the operator's Q4 option said. decider: agent (spec review)
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-18T13:22:28+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · R8, R10, R12-R14 and R18 are client-side behaviour: unit tests must pin the markup contract each script relies on
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-18T13:22:28+00:00 -->
+### spec-review-1 · review · independent spec review: 16 findings (15 fixed, 1 refuted)
+
+Reviewer fr-spec-reviewer raised s1-s16, all tagged in scope. 15 fixed in the spec; s5 refuted (no post-merge row, so no Test Plan; R13 covered by triage-backlog-issues-split).
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: R15/Non-goals premise is false: facts.json does not hold PRs in every state
+
+R15 and the Non-goals now say origins collect keeps the PRs merged in its window in origins-facts.json (one merged-PR list read per repo), which is the mechanism the operator's Q4 option named; decision q4-pr-detail-source-2 supersedes q4-pr-detail-source.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: R7's wave-finished test cannot see a wave that finishes by archive
+
+R7 and §C use the driver's self._unfinished transition; the first page-writing pass of a drive stores a baseline snapshot when it differs from the latest one.
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: R6 narrows Architecture re-rendering below what decision q1 grants
+
+R6: Architecture re-renders on every page-writing pass and re-measures only on the first pass and on a wave's finish, reusing the drive's last measurement.
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s4 -->
+### s4-resolved · finding [fixed] · resolves s4: The write_* shape omits the driver's runner loader and ci_none; write_board does not have the claimed shape
+
+§C: write_backlog takes loader/prefix/ci_none with the command's defaults; write_architecture takes checkout and a prior measurement; write_board keeps its signature and gains now.
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved created=2026-11-18T13:22:28+00:00 state=refuted resolves=s5 -->
+### s5-resolved · finding [refuted] · resolves s5: No ## Test Plan section, and R13 has no Verification row
+
+fr-goal's contract (fr-brainstorming §1, fr-goal §1) keeps ## Test Plan for post-merge rows that no pre-merge strategy can exercise; this change deploys nothing and has none, so the section is correctly absent. R13 is covered: row triage-backlog-issues-split cites R4 and R13, and its Verification line names it.
+
+<!-- fr:journal kind=finding scope=spec id=s6-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s6 -->
+### s6-resolved · finding [fixed] · resolves s6: R18's cutoff hides upcoming waves whose batches have no events
+
+R18 and §G: a wave with any non-terminal batch always shows; data-active is empty for a batch with no event, and only all-terminal, eventless-in-30-days waves hide.
+
+<!-- fr:journal kind=finding scope=spec id=s7-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s7 -->
+### s7-resolved · finding [fixed] · resolves s7: R12 never links the wave named in Next up's reason, the brief's own example
+
+R12 and §E: views.NextRow gains a wave field rendered as its own linked tag.
+
+<!-- fr:journal kind=finding scope=spec id=s8-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s8 -->
+### s8-resolved · finding [fixed] · resolves s8: Origins links are hard-wired to github.com, and the Linker's source on Origins is unstated
+
+R11 names each page's inputs (origins-facts.json issues and PRs on Origins); §E routes _pr_link/_related_pr through the Linker and GitHub's /issues/<n> fallback applies only to a github.com base.
+
+<!-- fr:journal kind=finding scope=spec id=s9-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s9 -->
+### s9-resolved · finding [fixed] · resolves s9: The page-name tripwire would fail on constants §A does not move
+
+§A lists every constant that moves to the registry, and the tripwire scans docstrings and help text.
+
+<!-- fr:journal kind=finding scope=spec id=s10-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s10 -->
+### s10-resolved · finding [fixed] · resolves s10: The old board/ manifest fallback covers the Backlog but not Issues
+
+R3: both Backlog and Issues fall back to board/ with the same note; R1: Batches reads no manifest, so it has no fragment directory.
+
+<!-- fr:journal kind=finding scope=spec id=s11-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s11 -->
+### s11-resolved · finding [fixed] · resolves s11: Two different FOLD_SCRIPTs, and the R9 fold lists disagree with R4
+
+§B renames the stage filter STAGE_FILTER_SCRIPT; R9 puts Debt on Issues (closed) and opens the Backlog's Batches fold with the other decision sections; §D's id list says debt is on Issues.
+
+<!-- fr:journal kind=finding scope=spec id=s12-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s12 -->
+### s12-resolved · finding [fixed] · resolves s12: R17 adds the tab script to Architecture but not the tab CSS
+
+R17 and §I: every page includes components.PAGE_CSS (TABS_CSS plus fold CSS) and PAGE_SCRIPT.
+
+<!-- fr:journal kind=finding scope=spec id=s13-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s13 -->
+### s13-resolved · finding [fixed] · resolves s13: Smaller codebase mismatches in Background and Design
+
+Background and Design corrected: BOARD_DIR at triage_cmd.py:104, fr.triage.batch.batch_pr, stamp_text for merged_at, MOVED notes print the registry title.
+
+<!-- fr:journal kind=finding scope=spec id=s14-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s14 -->
+### s14-resolved · finding [fixed] · resolves s14: R6 says every collecting pass, but the design renders only on --yes passes
+
+R6 now says every --yes pass that writes the board; plan-mode passes re-render nothing.
+
+<!-- fr:journal kind=finding scope=spec id=s15-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s15 -->
+### s15-resolved · finding [fixed] · resolves s15: R8 'every collapsible section' conflicts with the raw <details> the design keeps
+
+R8 covers section-level collapsibles only; small in-row details stay plain; R14 makes 'Every issue' a plain section holding the filter and the group folds.
+
+<!-- fr:journal kind=finding scope=spec id=s16-resolved created=2026-11-18T13:22:28+00:00 state=fixed resolves=s16 -->
+### s16-resolved · finding [fixed] · resolves s16: §J's doc list misses AGENTS.md
+
+§J adds AGENTS.md.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-18T13:22:32+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  triage-architecture-pipeline-tabs: none
+  triage-backlog-issues-split: none
+  triage-batches-columns-cutoff: none
+  triage-history-pr-summary: none
+  triage-origins-groups-prs: none
+  triage-page-names: none
+  triage-pages-driver-refresh: none
+  triage-pages-folds: none
+  triage-pages-links: none
+  triage-pages-rendered-stamp: none
+row_kinds:
+  triage-architecture-pipeline-tabs: none
+  triage-backlog-issues-split: none
+  triage-batches-columns-cutoff: none
+  triage-history-pr-summary: none
+  triage-origins-groups-prs: none
+  triage-page-names: none
+  triage-pages-driver-refresh: none
+  triage-pages-folds: none
+  triage-pages-links: none
+  triage-pages-rendered-stamp: none
+run_gate: developer
+run_kind: candidate
+```
