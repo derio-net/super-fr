@@ -171,3 +171,78 @@ wave_table gained one optional prs argument; History passes it, no duplicate cel
 ### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
 
 browser check and suite only: no code
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-18T23:08:29+00:00 phase=2 -->
+### review-p2 · review · phase 2 review: 7 findings (6 in, 1 out), all fixed (phase 2)
+
+Independent reviewer (separate context, read-only) over spec R8, R9, R11-R13, R16, R17, plan phase 2 and diff 45f8e3ff3..613422f0b. Probed R11 with hostile prose (script tags, javascript: URLs, quote breaks, refs in code spans, non-github and look-alike bases): no XSS. Ran 330 targeted tests, ruff, mypy and fr docs check, all clean. Walked every state and interaction of the five visual rows in a real browser with its own fresh screenshots. Fixes: 700772602 (r1), f3aff71db (r2), 127ebf56f (r3), 84a27b7e9 (r4), 8163abda3 (r5), 7be908ff2 (r6), 4809de179 (r7). Full suite after the fixes: 16577 passed, 121 skipped (p2-suite2.log). The implementer wrote the phase's first commit before its tests (no red step), which is why r5 targeted test strength; the fixes were made test-first.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-18T23:08:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · R11 incomplete: issue-key lists (wave Issues column, batch card members, pattern/feature ids) stayed plain text (phase 2)
+
+Raised by the phase 2 reviewer at render.py:1080, :807, :890.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-18T23:08:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · R12 incomplete: the wave table's Depends on batch ids were not linked to their cards (phase 2)
+
+Raised by the phase 2 reviewer at render.py:1083.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-18T23:08:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · STAGE_FILTER_SCRIPT kept its own open-and-scroll reveal, duplicating FOLD_SCRIPT (phase 2)
+
+Raised by the phase 2 reviewer at render.py:345-357, against P2.T1.S2 and decision p1-stage-filter-script-whole.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-18T23:08:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · A test named for the finished-wave case asserted the unfinished one; the finished branch in Next up was unreachable (phase 2)
+
+Raised by the phase 2 reviewer at render.py:1012 and tests/unit/test_triage_board_views.py:851.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-18T23:08:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Tab-hash, fold-reveal and kind-filter tests grepped the JS source, and the archived-notes test sliced the page: they would pass against broken behaviour (phase 2)
+
+Raised by the phase 2 reviewer at tests/unit/test_triage_components.py:104, :114, test_triage_board_views.py:913 and test_triage_history.py.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-18T23:08:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · _REF linked #n inside an escaped literal entity (&#12;) (phase 2)
+
+Raised by the phase 2 reviewer at components.py:591; cosmetic, not XSS.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-18T23:08:29+00:00 phase=2 state=open review_scope=out -->
+### p2-r7 · finding [open] (reviewer: out of scope) · Architecture's issue list built an href from i.url with no https-only check (phase 2)
+
+Raised by the phase 2 reviewer at architecture.py:238; predates this change.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-18T23:08:29+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: R11 incomplete: issue-key lists (wave Issues column, batch card members, pattern/feature ids) stayed plain text (phase 2)
+
+700772602: Linker.key_link/key_links render known keys as https-only links in the wave Issues column (Backlog and History), batch card members, pattern and feature ids; test-first.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-18T23:08:29+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: R12 incomplete: the wave table's Depends on batch ids were not linked to their cards (phase 2)
+
+f3aff71db: Depends on links each batch id to backlog.html#batch-<id>; test seen failing first.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-18T23:08:29+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: STAGE_FILTER_SCRIPT kept its own open-and-scroll reveal, duplicating FOLD_SCRIPT (phase 2)
+
+127ebf56f: the stage script only switches the target's stage and calls apply(); a test pins that open/scroll lives only in FOLD_SCRIPT.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-18T23:08:29+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: A test named for the finished-wave case asserted the unfinished one; the finished branch in Next up was unreachable (phase 2)
+
+84a27b7e9: the unreachable branch is removed (Next up lists only non-terminal batches); the test is renamed and asserts no History link.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-18T23:08:29+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Tab-hash, fold-reveal and kind-filter tests grepped the JS source, and the archived-notes test sliced the page: they would pass against broken behaviour (phase 2)
+
+8163abda3: the tests pin the structure the scripts act on (aria-controls targets exist, default tab selected, ids inside their details, toggles start pressed, data-kinds from the closed set, empty message hidden, archived-notes fold closed and holding all three fragments). Playwright is not a project dependency, so the scripts' behaviour is evidenced by the reviewer's browser walk recorded in visual below.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-18T23:08:29+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: _REF linked #n inside an escaped literal entity (&#12;) (phase 2)
+
+7be908ff2: _REF refuses a match preceded by &amp;; test added.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-18T23:08:29+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: Architecture's issue list built an href from i.url with no https-only check (phase 2)
+
+4809de179: Architecture issue links go through _safe_url (https only), with a javascript: test. Older code, fixed here because it is one line and the security lens covers it.
