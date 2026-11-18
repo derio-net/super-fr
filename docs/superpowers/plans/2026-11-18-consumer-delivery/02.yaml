@@ -1,0 +1,152 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Consumer CI scaffold — SHA pins for actions and fr, staleness warning, debt-job
+    credentials (R8-R13)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - scaffold-pins-actions
+  - scaffold-pins-fr
+  - debt-token-scope-github
+  - debt-credentials-gitea-gitlab
+  tier: standard
+  files:
+  - packages/fr/src/fr/acceptance/scaffold.py
+  - packages/fr/src/fr/acceptance/check.py
+  - packages/fr/src/fr/acceptance/ci.py
+  - packages/fr/src/fr/acceptance/pin.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/commands/debt_cmd.py
+  - packages/fr/src/fr/debt/**
+  - packages/fr/src/fr/isolation/scaffold.py
+  - tests/**/*.py
+  - tests/fixtures/**
+  - docs/**
+  - docs/acceptance/features/2026-11-18-consumer-delivery.yaml
+  estimate_lines: 800
+tasks:
+- number: 1
+  title: Action pins table (R8)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: new tests/unit/test_acceptance_scaffold_pins.py — for every ci_type and every debt/pages/comment combination `render_workflow` accepts, every `uses:` line matches `uses: <owner>/<repo>@<40 hex> # v<semver>`; for the GitHub template each (action, sha, version) equals the pin of the same action in super-fr's own `.github/workflows/*.yml` (parse them; fail naming the action when they differ or super-fr's CI does not use it); the Gitea template keeps majors checkout v4 and setup-uv v5. Fails today (`@v7`, `@v5`).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `ACTION_PINS: dict[tuple[str, str], tuple[str, str]]` in scaffold.py, keyed (action, ci_type) -> (sha, version), and render every `uses:` through it (a placeholder per action, substituted in `_render_paths` or `render_workflow`). GitHub entries = super-fr's own CI pins (checkout 3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, setup-uv 1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0, upload-artifact cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, plus any other action the template uses — read .github/workflows/pages.yml for the pages actions). Gitea entries: resolve the latest v4 checkout and v5 setup-uv (and any other Gitea-template action) SHAs with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (peel annotated tags) and record `# v4.x.y`/`# v5.x.y`. Green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: update the existing scaffold tests that assert literal `@v7`/`@v5` strings (grep tests/ for `setup-uv@v5` and `checkout@v`) to the pinned form; run `uv run pytest -q --no-cov -n auto tests/unit -k "scaffold or acceptance_init"`: green.
+- number: 2
+  title: fr pinned to its release commit (R9)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests for a new `fr.acceptance.pin` module — `tag_for_version("8.1.5") == "v8.1.5"`, `tag_for_version("8.1.6rc2") == "v8.1.6-rc.2"`; `resolve_fr_pin(version, ls_remote=fake)` returns `FrPin(sha, tag)`, preferring the peeled `^{}` line of an annotated tag and accepting a lightweight tag's line; empty output or a failing ls_remote raises `FrPinError` naming the tag and the remedy. Rendered workflows (all three templates, every job incl. pages/comment/debt) carry `uv tool install "git+https://github.com/derio-net/super-fr@<sha>#subdirectory=packages/fr"  # v<version>` and no `@main`. `fr acceptance init` (with CI) and `init --refresh-ci` with a failing resolver exit 2 and leave the tree byte-identical (no .gitkeep, no rule file, no workflow); `init` on a `ci none` repo never calls the resolver. Fails today.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement `fr.acceptance.pin` (the default `ls_remote` runs `git ls-remote https://github.com/derio-net/super-fr refs/tags/<tag> refs/tags/<tag>^{}` with a timeout and no credential); `render_workflow(..., fr_pin: FrPin)` substitutes the install line in every template; scaffold.init resolves before its first write (before scaffold.py:858) and only when `has_ci`; `_refresh_ci` resolves before any rewrite; the command layer maps FrPinError to exit 2 with its message. Green, including test_acceptance_init*.py with an injected resolver (add a conftest/autouse fixture only if the existing tests would otherwise hit the network).
+- number: 3
+  title: Staleness warning in fr acceptance check (R10)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests — a repo whose scaffolded workflow (at the CI type's path, acceptance/ci.py SCAFFOLD_PATHS; `.gitlab-ci.yml` for GitLab) pins `# v8.0.0` while the running fr is newer prints one warning naming `fr acceptance init --refresh-ci` and exits as before; an equal or newer pin, an unpinned (@main) workflow and no workflow print no warning; an RC pin compares by PEP 440. Fails today.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: in acceptance/check.py read the `super-fr@<sha>#subdirectory=packages/fr"  # v<ver>` comment with one regex, compare with fr's version via packaging.version, and emit the warning through check's existing warning channel. Green. REFACTOR: share the regex/format with fr.acceptance.pin so render and read agree (one constant).
+- number: 4
+  title: archive-pr authenticates its git calls with an env-only header (R11)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: in tests/unit/test_debt_archive_pr.py — with FR_DEBT_TOKEN set (and separately with only GH_TOKEN / GITLAB_TOKEN / GITEA_TOKEN for the matching forge), both remote git calls `_push` makes (`ls-remote --heads` and `push --force-with-lease`) run against origin's URL with the user-info stripped (origin `https://gitlab-ci-token:jobtok@git.example.com/g/p.git` -> `https://git.example.com/g/p.git`), with env `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=http.<that url>.extraheader`, `GIT_CONFIG_VALUE_0=AUTHORIZATION: basic <b64(user:token)>` (user x-access-token on GitHub, oauth2 on GitLab/Gitea); no argv element contains the token; nothing is written to .git/config. With no token the calls are unchanged. Fails today.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement the token pick and the env-scoped auth in debt_cmd.py (`_push` and its ls-remote), taking the forge from the existing backend detection (fr._hosts / client_for). Keep `token_note`'s own_token meaning (FR_DEBT_TOKEN set). Green; run tests/unit/test_debt_*.py.
+- number: 5
+  title: Debt jobs — GitHub token scope, Gitea and GitLab credentials (R11-R13)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: tests on the rendered debt jobs — GitHub: checkout has `persist-credentials: false` and no `token:`; `FR_DEBT_TOKEN` appears only in the archive-pr step's env. Gitea: checkout `persist-credentials: false`; a step installs tea with the version and per-arch sha256 of isolation/scaffold.py's pin table (assert equality against that table, not a literal); `tea login add` gets its token via `env:` from `secrets.FR_DEBT_TOKEN || gitea.token` and its URL from `gitea.server_url`; archive-pr gets `FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}` and `GITEA_TOKEN: ${{ gitea.token }}`. GitLab: before_script installs glab from the same table (version + sha256 check), then exits 1 with one line naming the masked `FR_DEBT_TOKEN` variable and the `api` scope when it is empty, before either fr command; `variables:` has `GITLAB_TOKEN: $FR_DEBT_TOKEN` and `GITLAB_HOST: $CI_SERVER_HOST`. Every rendered workflow still parses as YAML. Fails today.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: edit DEBT_STEP_GITHUB / DEBT_STEP_GITEA / DEBT_STEP_GITLAB accordingly, rendering the tea/glab install snippets from isolation/scaffold.py's pin table (import it; do not copy versions). Run the GitLab token check as the shell line `[ -n "$FR_DEBT_TOKEN" ] || { echo "…"; exit 1; }`. Update the templates' header comments that describe the debt job's tokens. Green.
+  - id: P2.T5.S3
+    text: |-
+      REFACTOR: run `uv run pytest -q --no-cov -n auto tests/unit -k "scaffold or acceptance or debt"`; fix any literal-template assertions the edits broke by asserting the new shape.
+- number: 6
+  title: Docs and acceptance rows for phase 2
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Run `uv run fr docs check --base origin/main`; update every page covering scaffold.py / debt_cmd.py / acceptance check (pins, --refresh-ci to move them, the staleness warning, FR_DEBT_TOKEN on each forge, GitLab's required masked variable) or bump its `reviewed` stamp with a note. Re-run: clean.
+  - id: P2.T6.S2
+    text: |-
+      `uv run fr acceptance set-status`: scaffold-pins-actions, scaffold-pins-fr and debt-token-scope-github -> `ci` with `--level unit=super-fr:<test file>#<test name>` for the tests above and notes; debt-credentials-gitea-gitlab -> `walk-owed` with the rendered-job tests as level refs and notes "rendered jobs unit-pinned; real Gitea/GitLab runner owed post-merge (Test Plan 2)". `uv run fr acceptance check`: clean.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

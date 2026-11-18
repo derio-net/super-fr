@@ -298,3 +298,9 @@ Post-merge, operator-driven:
    it, then run a web pipeline with `DEBT=true` once with `FR_DEBT_TOKEN` unset (the job
    fails with the one-line remedy) and once with it set (issue upserted, branch pushed).
    (Row `debt-credentials-gitea-gitlab`.)
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-18-consumer-delivery | `derio-net/super-fr` | `2026-11-18-consumer-delivery` | — |
