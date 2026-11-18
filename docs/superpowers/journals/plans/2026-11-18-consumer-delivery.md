@@ -481,3 +481,8 @@ Real format found in the installed opencode v2.3.0 binary (Instructions from: <p
 ### p2-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1553] · resolves p2-r8: Gitea matrix job checkout persists gitea.token for PR code (phase 2)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1553.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved-2 created=2026-11-18T18:43:42+00:00 state=open resolves=l-errors-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1554 -->
+### l-errors-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1554] · resolves l-errors-r5: tea fail-soft sites swallow the named login-page TeaError
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1554.
