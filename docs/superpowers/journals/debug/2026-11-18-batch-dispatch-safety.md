@@ -28,3 +28,8 @@ Two causes (operator accepted both in one PR). 1) fr_dispatch.tick sets existing
 ### 4093a821b62c · finding [fixed] · Fixed both: tick returns early on a failed dedup lookup; cncd refuses a symlinked plan-folder entry
 
 fr_dispatch.tick: a raising existing_dispatches fails every item with 'dedup fetch failed' (metric reason dedup) and returns before any dispatch or stamp, like the preflight blocker. fr_cncd.runner._plan_folder_files: raises CncdError naming any symlink before reading; tick reports it as that item's backend_error. Pinned by tests/unit/test_tick_workitem.py::test_a_raising_existing_dispatches_submits_nothing_this_tick (replaces the test that pinned the fail-open) and tests/integration/test_cncd_stub_server.py::test_a_symlink_in_the_plan_folder_refuses_the_dispatch; both failed before the fix (commit 21b50d235).
+
+<!-- fr:journal kind=review scope=debug id=f19a115c74e9 created=2026-11-18T13:22:00+00:00 -->
+### f19a115c74e9 · review · Independent adversarial review: no defects in either fix
+
+Reviewer (separate context, read-only) found no path from a failed dedup lookup to a submit, and the early return matches the preflight-blocker shape (one failure and metric per item, one heartbeat, skipped=len(items)). Below-threshold notes, not fixed here: a runner that swallows its own lookup error and returns an empty set (possible in fr_herdr _list_tabs, unverified) still looks empty to tick; a check-then-read race and hardlinks need write access to the checkout; a symlinked plan dir itself is not checked. None is in this batch's scope.
