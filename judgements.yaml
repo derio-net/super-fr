@@ -8422,6 +8422,14 @@ batches:
     run in the same run_cmd surface.'
   wave: 22
   skill: debug
+- id: dispatch-safety
+  title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
+  ids:
+  - super-fr#1499
+  - super-fr#1501
+  rationale: Both in the dispatch path (fr_dispatch tick, fr_cncd runner), audit findings F01 and F04.
+  wave: 22
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
