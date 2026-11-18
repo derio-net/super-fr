@@ -85,3 +85,8 @@ premature_closes/_held_sets and record.apply._round_names_every_ref call it with
 ### r1-dry-run-pin · finding [fixed] · Review r1: --dry-run pinned the folded default-branch answer
 
 Independent review found _dry_run pinned head_on_default_branch(real_root) onto the scratch copy, so an unreadable default ref became False and the preview staged and filed an owed entry the real run no longer writes. Fixed in 98ff17c1b: the pin holds bool | None and _dry_run reads default_branch_answer. Tests: test_archive_owed.py::test_a_dry_run_whose_default_ref_cannot_be_read_matches_the_real_run, test_git.py::test_an_unknown_answer_can_be_pinned (both failed before).
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-11-18T14:03:05+00:00 -->
+### review-1 · review · Independent review: 1 finding (fixed), 1 note left as is
+
+A code reviewer read the diff against the four issues without the author's reasoning. It confirmed #1483, #1485 and #1488 close their defects, found no broken callers, and judged the tests real. Finding r1 (the dry-run pin, #1486) is fixed. Note, left as is: when the origin host is unknown, deliver's owed refusal does not say why a URL did not count; it still prints the exact 'Closes owner/repo#n' line to add.
