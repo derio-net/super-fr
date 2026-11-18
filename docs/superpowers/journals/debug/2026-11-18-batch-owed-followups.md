@@ -25,3 +25,8 @@ head_on_default_branch returns False when remote_default_ref is None or a GitRef
 ### repro-1488 · repro · #1488: a foreign-host issue URL satisfies deliver's owed closing check
 
 _refuse_unclosed_owed normalizes each closing ref with normalize_issue_ref, whose _URL_REF accepts any host and keeps only the path. 'Closes https://evil.example/derio-net/super-fr/issues/9' normalizes to derio-net/super-fr#9, so deliver accepts the body, but GitHub does not close #9 when the PR merges.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1483 created=2026-11-18T13:34:05+00:00 -->
+### rc-1483 · root-cause · #1483: _keep_live_root checks only the last path component for a link
+
+O_NOFOLLOW and the lstat of .gitkeep cover .gitkeep alone; live_root.mkdir, iterdir and the open path walk every component above it, so a symlinked plans root (or docs/superpowers) is followed.
