@@ -19,7 +19,7 @@ import html
 import re
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -605,16 +605,23 @@ class Linker:
     urls: Mapping[str, str]
     bases: Mapping[str, str]
     single: str | None = None
+    keys: Mapping[str, str] = field(default_factory=dict)
+    """Each issue or PR the inputs hold by its judgement key (`<repo-name>#<n>`, normalised)
+    to its own url: what `key_link` renders a key in a list from."""
 
     @classmethod
     def from_facts(cls, facts: Facts) -> Linker:
+        from fr.triage.model import issue_key
+
         urls: dict[str, str] = {}
         bases: dict[str, str] = {}
+        keys: dict[str, str] = {}
 
         def add(repo: str, number: int, url: str) -> None:
             if not url.startswith("https://"):
                 return
             urls.setdefault(f"{repo.lower()}#{number}", url)
+            keys.setdefault(issue_key(repo, number), url)
             for marker in ("/issues/", "/pull/"):
                 if marker in url:
                     bases.setdefault(repo.lower(), url.split(marker, 1)[0])
@@ -627,7 +634,21 @@ class Linker:
         for pr in (*facts.prs, *facts.batch_prs, *facts.judged_prs):
             add(pr.repo, pr.number, pr.url)
         single = facts.repos[0].lower() if facts.kind == "repo" and len(facts.repos) == 1 else None
-        return cls(urls, bases, single)
+        return cls(urls, bases, single, keys)
+
+    def key_link(self, key: str) -> str:
+        """Judgement key *key* for a list: a link to the item's own url when the inputs hold
+        it (an https url only), else the escaped key as text."""
+        from fr.triage.model import normalize_key
+
+        url = self.keys.get(normalize_key(key))
+        if url is None:
+            return _esc(key)
+        return f'<a href="{_esc(url)}" rel="noopener noreferrer">{_esc(key)}</a>'
+
+    def key_links(self, keys: Sequence[str]) -> str:
+        """`key_link` of each of *keys*, comma-separated."""
+        return ", ".join(self.key_link(k) for k in keys)
 
     def href(self, repo: str, number: int) -> str | None:
         """The link for `repo#number` (unescaped), or None: the item's own url when the

@@ -498,6 +498,11 @@ def inline(text: str, linker: Linker | None = None) -> str:
     return "".join(out)
 
 
+def _keys(ids: Sequence[str], linker: Linker | None) -> str:
+    """A list of judgement keys: each a link to its issue when *linker* knows it (R11)."""
+    return linker.key_links(ids) if linker is not None else esc(", ".join(ids))
+
+
 def _capitalise(s: str) -> str:
     return s[:1].upper() + s[1:]
 
@@ -804,7 +809,7 @@ def _batch_card(batch: Batch, facts: Facts, linker: Linker | None = None) -> str
     stage = derive_batch_stage(batch, facts)
     event = last_dispatch(batch)
     pr = find_batch_pr(batch, facts)
-    lines = [f'<p class="mono">{esc(", ".join(batch.ids))}</p>']
+    lines = [f'<p class="mono">{_keys(batch.ids, linker)}</p>']
     if batch.rationale:
         lines.append(f"<p>{inline(batch.rationale, linker)}</p>")
     if event and event.reserved_version:
@@ -887,7 +892,7 @@ def _patterns(judgements: Judgements, linker: Linker | None = None) -> str:
         return ""
     items = "".join(
         f"<article><h3>{esc(p.title)}</h3>"
-        f'<p class="mono">{esc(", ".join(p.ids))}</p><p>{inline(p.body, linker)}</p></article>'
+        f'<p class="mono">{_keys(p.ids, linker)}</p><p>{inline(p.body, linker)}</p></article>'
         for p in judgements.patterns
     )
     return fold(
@@ -1077,7 +1082,7 @@ def wave_table(
             ("", f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a>'),
             (' class="n"', f"{DASH if tier is None else tier}"),
             ("", esc(b.skill)),
-            (' class="mono"', esc(", ".join(b.ids))),
+            (' class="mono"', _keys(b.ids, linker)),
             ("", inline(b.rationale, linker)),
             ("", esc(size_of(b.ids, judgements.issues))),
             ("", esc(", ".join(b.after) or "-")),
@@ -1106,7 +1111,7 @@ def _features_table(judgements: Judgements, facts: Facts, linker: Linker | None 
     open_keys = {i.key for i in facts.issues if i.state == "open"}
     rows = "".join(
         f'<tr data-feature="{esc(f.title)}"><td>{f.rank}</td><td>{esc(f.title)}</td>'
-        f'<td class="mono">{esc(", ".join(f.ids))}</td><td>{inline(f.why, linker)}</td>'
+        f'<td class="mono">{_keys(f.ids, linker)}</td><td>{inline(f.why, linker)}</td>'
         f"<td>{inline(f.start, linker)}</td>"
         f"<td>{sum(1 for k in f.ids if k in open_keys)} open</td></tr>"
         for f in sorted(judgements.features, key=lambda f: (f.rank, f.title))

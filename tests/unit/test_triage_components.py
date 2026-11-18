@@ -31,7 +31,7 @@ from fr.triage.model import Facts
 from fr.triage.origins import Origins, OriginsFacts, render_origins
 from fr.triage.render import inline, render_backlog, render_issues
 
-from tests.unit.triage_board_fixtures import busy, facts, issue
+from tests.unit.triage_board_fixtures import busy, facts, issue, j, judgements
 
 AT = datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 
@@ -216,3 +216,56 @@ def test_the_linker_is_built_from_every_item_the_inputs_hold() -> None:
         linker.href("Example-Org/Widgets", 3) == "https://github.com/example-org/widgets/issues/3"
     )
     assert jd.batches
+
+
+# ------------------------------------------------ issue keys in lists link (review p2-r1)
+
+
+def test_a_known_key_renders_as_a_link_and_an_unknown_one_as_text() -> None:
+    _, linker = _linked()
+    assert linker.key_link("widgets#12") == (
+        '<a href="https://github.com/example-org/widgets/issues/12" '
+        'rel="noopener noreferrer">widgets#12</a>'
+    )
+    assert linker.key_link("widgets#99") == "widgets#99"
+    assert linker.key_links(["widgets#12", "widgets#99"]).count("<a ") == 1
+    assert linker.key_links([]) == ""
+
+
+def test_a_key_link_never_takes_a_non_https_url_and_escapes_the_text() -> None:
+    f = facts([issue(1, url="javascript:alert(1)")])
+    linker = Linker.from_facts(f)
+    assert linker.key_link("widgets#1") == "widgets#1"
+    assert "&lt;b&gt;" in linker.key_link("<b>")
+
+
+def test_the_lists_that_name_issues_link_them() -> None:
+    f, jd = busy()
+    waves = render_backlog(f, jd, rendered_at=AT)
+    href = 'href="https://github.com/example-org/widgets/issues/6"'
+    row = re.search(r'<tr data-batch="d-blocked".*?</tr>', waves, re.S)
+    assert row and href in row.group(0)  # the wave table's Issues column
+    card = re.search(r'<details class="batch" data-batch="e-next".*?</details>', waves, re.S)
+    assert card and 'issues/13"' in card.group(0)  # the batch card's members
+    issues = render_issues(f, jd, rendered_at=AT)
+    feature = re.search(r'<tr data-feature="First feature".*?</tr>', issues, re.S)
+    assert feature and ">widgets#11</a>" in feature.group(0)  # the feature's ids
+
+
+def test_a_pattern_lists_its_issues_as_links() -> None:
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {"widgets#1": j(), "widgets#2": j()},
+        patterns=[{"title": "P", "ids": ["widgets#1", "widgets#2"], "body": "b"}],
+    )
+    page = render_issues(f, jd, rendered_at=AT)
+    pat = re.search(r"<article><h3>P</h3>.*?</article>", page, re.S)
+    assert pat and pat.group(0).count('<a href="https://github.com/') == 2
+
+
+def test_the_history_wave_table_links_its_issues_too() -> None:
+    from tests.unit.test_triage_history import _finished, _page
+
+    page = _page(*_finished())
+    sect = page[page.index('id="finished-waves"') :]
+    assert 'href="https://github.com/example-org/widgets/issues/1"' in sect

@@ -874,7 +874,7 @@ def test_reasons_and_rationale_link_forge_references_outside_code() -> None:
     sect = _section(render_backlog(f, jd), "waves")
     assert 'href="https://github.com/example-org/widgets/issues/2"' in sect
     assert "<code>#1</code>" in sect
-    assert sect.count('href="https://github.com/example-org/widgets/issues/1"') == 1
+    assert sect.count(">example-org/widgets#1</a>") == 1  # the prose; `#1` is code
 
 
 # ------------------------------------------------------------ the kind filter (R13)
