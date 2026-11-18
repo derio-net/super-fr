@@ -7758,6 +7758,13 @@ batches:
     head_before: 7cddd28dd3ad0d6f141004cce5ff193c5988a98c
     head_after: 87ad909e84122f728ed22215d27e77d5094edce5
     base: 43d490ac32195a3add058bd37e5c024970c6f53f
+  - kind: claims_released
+    at: '2026-11-18T11:48:34.979001Z'
+    keys:
+    - super-fr#1213
+    - super-fr#1252
+    - super-fr#1299
+    - super-fr#1406
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
