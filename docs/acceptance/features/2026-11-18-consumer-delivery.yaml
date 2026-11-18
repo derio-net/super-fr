@@ -97,9 +97,13 @@ rows:
     origin:
     - spec:2026-11-18-consumer-delivery#R12
     - spec:2026-11-18-consumer-delivery#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_debt_jobs.py#test_gitea_debt_job_installs_the_pinned_tea_and_logs_in_through_env
+      - super-fr:tests/unit/test_acceptance_scaffold_debt_jobs.py#test_gitlab_debt_job_installs_glab_then_requires_the_masked_variable
+    status: walk-owed
+    notes: rendered jobs unit-pinned; real Gitea/GitLab runner owed post-merge (Test
+      Plan 2)
     verify: live
   - id: forge-sso-html-refusal
     capability: A forge behind SSO gets a named refusal
