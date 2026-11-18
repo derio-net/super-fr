@@ -85,9 +85,9 @@ directory), Origins, Architecture and History (unchanged).
 R2. `fr triage render` and `fr triage board` keep working as aliases of `fr triage backlog`
 and `fr triage batches`. Each prints one line naming the new command.
 R3. A render deletes its page's old-named file from the state directory (`triage.html`,
-`board.html`), so no stale copy stays there. Where `backlog/` is absent and `board/` exists,
-both the Backlog and the Issues page read `board/`, and each says so in a note on the page
-and on stderr. A section the other page owns is then skipped with the existing "now on the
+`board.html`), so no stale copy stays there. Each of the Backlog and the Issues page falls back
+to `board/` when its own directory (`backlog/`, `issues/`) is absent and `board/` exists, and
+says so in a note on the page and on stderr. A section the other page owns is then skipped with the existing "now on the
 X page; skipped" note, so the operator's order and fragments carry over for both pages. The state ref
 (`state_ref.REF_FILES`) and `fr triage state export|import` (`state_sync.DURABLE_DIRS`) carry
 `backlog/` and `issues/`, and `board/` while it is a fallback input.

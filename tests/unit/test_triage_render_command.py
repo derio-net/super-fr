@@ -329,3 +329,10 @@ def test_a_backlog_directory_wins_over_board(tmp_path: Path) -> None:
     assert "Backlog: no backlog/ directory" not in " ".join(out.split())
     ids = _section_ids((state / "backlog.html").read_text(encoding="utf-8"))
     assert ids.index("waves") < ids.index("since-last-report")
+    # the fallback is per page: Issues has no issues/ directory, so it still reads board/
+    flat = " ".join(out.split())
+    note = "Issues: no issues/ directory, so its manifest and fragments are read from board/"
+    assert note in flat
+    issues = (state / "issues.html").read_text(encoding="utf-8")
+    assert "Issues: no issues/ directory" in " ".join(issues.split())
+    assert "manifest names `since`, which is now on the Backlog page; skipped" in issues

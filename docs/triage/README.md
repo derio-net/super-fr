@@ -18,7 +18,7 @@ regenerated.
 | `judgements.yaml` | the `fr-triage` skill, plus the `batch` verbs | tiers, themes, batches and their events; the board and the subsystem cards read it |
 | `origins.yaml` | the `fr-origins` skill | one classification per issue since 2026-09-22; the 09-24 → 09-29 entries are the 2026-10-02 page's, imported |
 | `subsystems.yaml` | by hand | the architecture page's 15 subsystem cards: globs, `then_ref`, themes |
-| `<page>/manifest.yaml` | by hand | per page (`backlog/`, `issues/`, `origins/`, `architecture/`, `history/`; an older `board/` is read by both Backlog and Issues while neither directory exists): the section order, generated sections and authored fragments interleaved |
+| `<page>/manifest.yaml` | by hand | per page (`backlog/`, `issues/`, `origins/`, `architecture/`, `history/`; Backlog and Issues each read an older `board/` when their own directory is absent): the section order, generated sections and authored fragments interleaved |
 | `<page>/*.html` | `authored-src/build.py`, or by hand | the authored fragments a manifest lists; they travel with the state |
 | `snapshots/` | `fr triage backlog` | one per render; the backlog page's "Since last report" and the history page's timeline. Not reproducible |
 | `authored-src/` | by hand | the sources of the built fragments (below) |
