@@ -39,9 +39,12 @@ def test_gitea_debt_job_installs_the_pinned_tea_and_logs_in_through_env() -> Non
     for url, sha in pin.assets.values():
         assert url in install and sha in install
     login = _step(job, "Log in to tea")
-    assert login["env"]["TEA_TOKEN"] == "${{ secrets.FR_DEBT_TOKEN || gitea.token }}"
-    assert login["env"]["TEA_URL"] == "${{ gitea.server_url }}"
+    assert login["env"]["GITEA_SERVER_TOKEN"] == "${{ secrets.FR_DEBT_TOKEN || gitea.token }}"
+    assert login["env"]["GITEA_SERVER_URL"] == "${{ gitea.server_url }}"
     assert "${{" not in login["run"]
+    # tea 0.14.2 `login add` reads both from the environment: no token on the command line.
+    assert login["run"] == "tea login add --name fr-ci"
+    assert "--token" not in login["run"] and "TOKEN" not in login["run"]
     archive = _step(job, "Archive sweep PR")["env"]
     assert archive["FR_DEBT_TOKEN"] == "${{ secrets.FR_DEBT_TOKEN }}"
     assert archive["GITEA_TOKEN"] == "${{ gitea.token }}"
@@ -61,7 +64,10 @@ def test_gitlab_debt_job_installs_glab_then_requires_the_masked_variable() -> No
         assert url in before and sha in before
     check = '[ -n "$FR_DEBT_TOKEN" ] || {'
     assert check in before
-    assert before.index(pin.assets["amd64"][1]) < before.index(check)
+    assert before.index(pin.assets["amd64"][1]) > before.index(check)
+    assert job["before_script"][0].lstrip().startswith(check)  # first, before any install
+    assert before.index(check) < before.index("uv/install.sh")
+    assert before.index(check) < before.index("uv tool install")
     assert "FR_DEBT_TOKEN" in before and "api scope" in before
     assert "exit 1" in before
 

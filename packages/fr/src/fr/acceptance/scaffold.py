@@ -294,6 +294,9 @@ acceptance-report:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
   before_script:
+    - |
+      [ -n "$FR_DEBT_TOKEN" ] || {
+        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - @@FR_INSTALL@@
@@ -394,6 +397,9 @@ pages:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
+    - |
+      [ -n "$FR_DEBT_TOKEN" ] || {
+        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - @@FR_INSTALL@@
@@ -513,9 +519,9 @@ DEBT_STEP_GITEA = """\
           @@TEA_INSTALL@@
       - name: Log in to tea
         env:
-          TEA_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
-          TEA_URL: ${{ gitea.server_url }}
-        run: tea login add --name ci --url "$TEA_URL" --token "$TEA_TOKEN"
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_SERVER_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
+        run: tea login add --name fr-ci
       - name: Technical debt issue (weekly)
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
@@ -541,14 +547,14 @@ technical-debt:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
   before_script:
+    - |
+      [ -n "$FR_DEBT_TOKEN" ] || {
+        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - @@FR_INSTALL@@
     - |
       @@GLAB_INSTALL@@
-    - |
-      [ -n "$FR_DEBT_TOKEN" ] || {
-        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
   script:
     - fr debt issue --yes
     - fr debt archive-pr --yes
@@ -880,19 +886,26 @@ def refresh_ci(
     if not path.is_file():
         return RefreshOutcome("missing", rel)
     current = path.read_text()
-    # Resolved before anything is rewritten: a failure leaves the tree as it was (R9).
-    fresh = render_workflow(
-        ci_type, debt=debt, pages=pages, comment=comment, fr_pin=fr_pin or _resolve_pin()
-    )
+    # A file that is not fr's is refused before the pin is read (p2-r5): the read is for
+    # a rewrite, or for the job GitLab prints, and a foreign file gets neither. Each
+    # branch then resolves before anything is written, so a failure leaves the tree as
+    # it was (R9).
     if ci_type == "gitlab-ci":
         if not re.search(r"^acceptance-report:\s*$", current, re.MULTILINE):
             return RefreshOutcome("foreign", rel)
+        # The printed job carries the install line, so paste resolves the pin too.
+        fresh = render_workflow(
+            ci_type, debt=debt, pages=pages, comment=comment, fr_pin=fr_pin or _resolve_pin()
+        )
         job = fresh[fresh.index("acceptance-report:") :]
         return RefreshOutcome("paste", rel, job)
     if not re.search(
         r"^name:\s*acceptance-report\s*$", current, re.MULTILINE
     ) or not _FR_STEP.search(current):
         return RefreshOutcome("foreign", rel)
+    fresh = render_workflow(
+        ci_type, debt=debt, pages=pages, comment=comment, fr_pin=fr_pin or _resolve_pin()
+    )
     if current == fresh:
         return RefreshOutcome("current", rel)
     path.write_text(fresh)
@@ -992,7 +1005,8 @@ def init(
     has_ci = ci_type != "none"
     # The fr the pipeline installs is resolved before the first write (R9): a failure
     # raises FrPinError and the tree is untouched. A repo with no CI needs none.
-    if has_ci and fr_pin is None:
+    # Only when the workflow file will be written: an existing one is left alone (p2-r5).
+    if has_ci and fr_pin is None and not (root / SCAFFOLD_PATHS[ci_type]).exists():
         fr_pin = _resolve_pin()
     # The weekly debt issue is filed through the ci platform's own tracker CLI,
     # so it is kept only when the tracker is that platform (#774 §3.E), and only
@@ -1016,9 +1030,12 @@ def init(
     )
     plan = publish_plan(root, ci_type, pages_decision) if has_ci else PublishPlan()
     if has_ci:
+        # Rendered only when it will be written: rendering reads the pin (p2-r5).
         write_if_missing(
             scaffold_path,
-            render_workflow(
+            ""
+            if (root / scaffold_path).exists()
+            else render_workflow(
                 ci_type, debt=debt, pages=plan.pages, comment=plan.comment, fr_pin=fr_pin
             ),
         )

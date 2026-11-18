@@ -620,11 +620,13 @@ def pytest_report_header(config: pytest.Config) -> str | None:
 def _fr_release_pin_never_hits_the_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """The scaffolded pipelines pin fr to its release tag, read with `git ls-remote`
     (R9). No test reaches the network: the default reader answers every tag with one
-    fixed commit; a test of the failure path replaces it again."""
+    fixed commit; a test of the failure path replaces it again. The real reader is kept
+    on the stub as `.real`, and `test_acceptance_pin.py`'s argv/env/timeout test runs it
+    with `subprocess.run` replaced (p2-r2)."""
     from fr.acceptance import pin
 
-    monkeypatch.setattr(
-        pin,
-        "default_ls_remote",
-        lambda tag: f"0123456789abcdef0123456789abcdef01234567\trefs/tags/{tag}\n",
-    )
+    def stub(tag: str) -> str:
+        return f"0123456789abcdef0123456789abcdef01234567\trefs/tags/{tag}\n"
+
+    stub.real = pin.default_ls_remote  # type: ignore[attr-defined]
+    monkeypatch.setattr(pin, "default_ls_remote", stub)

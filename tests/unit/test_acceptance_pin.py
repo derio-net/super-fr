@@ -125,8 +125,104 @@ def test_the_command_exits_2_and_writes_nothing_when_the_pin_fails(
     before = _tree(tmp_path)
     res = CliRunner().invoke(app, ["acceptance", "init", "--with-ci"])
     assert res.exit_code == 2, res.output
-    assert "v" in res.output
+    import fr
+
+    flat = " ".join(res.output.split())  # rich wraps long lines
+    assert f"tag {tag_for_version(fr.__version__)}" in flat
+    assert flat.endswith("nothing was written")
     assert _tree(tmp_path) == before
+
+
+def test_the_real_reader_asks_git_for_the_tag_and_its_peeled_form_without_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p2-r2: the autouse fixture stubs the reader everywhere; this runs the real one."""
+    import subprocess
+
+    real = pin_mod.default_ls_remote.real  # type: ignore[attr-defined]
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "url.x.insteadOf")
+    seen: dict = {}
+
+    def run(argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        seen["argv"], seen["kw"] = argv, kw
+        return subprocess.CompletedProcess(argv, 0, stdout="out\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert real("v8.1.5") == "out\n"
+    assert seen["argv"] == [
+        "git",
+        "ls-remote",
+        pin_mod.FR_REPO_URL,
+        "refs/tags/v8.1.5",
+        "refs/tags/v8.1.5^{}",
+    ]
+    env = seen["kw"]["env"]
+    assert not [k for k in env if k.startswith("GIT_CONFIG_")]
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+    assert seen["kw"]["timeout"]
+
+
+@pytest.mark.parametrize("failure", ["exit", "oserror"])
+def test_the_real_reader_raises_frpinerror_on_failure(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    import subprocess
+
+    real = pin_mod.default_ls_remote.real  # type: ignore[attr-defined]
+
+    def run(argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        if failure == "oserror":
+            raise OSError("no git")
+        return subprocess.CompletedProcess(argv, 128, stdout="", stderr="fatal: nope")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(FrPinError):
+        real("v8.1.5")
+
+
+def test_init_with_an_existing_workflow_never_resolves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r5: the pin is read only when the workflow will be written."""
+    from fr.acceptance.ci import SCAFFOLD_PATHS
+
+    wf = tmp_path / SCAFFOLD_PATHS["github-actions"]
+    wf.parent.mkdir(parents=True)
+    wf.write_text("name: mine\n")
+    calls = _failing(monkeypatch)
+    out = init(tmp_path, "o", "r", "github", ci_type="github-actions", tracking_type="github")
+    assert calls == [] and SCAFFOLD_PATHS["github-actions"] in out.skipped
+    assert wf.read_text() == "name: mine\n"
+
+
+@pytest.mark.parametrize("ci", ["github-actions", "gitea-actions", "gitlab-ci"])
+def test_refresh_of_a_foreign_file_is_foreign_and_never_resolves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ci: str
+) -> None:
+    from fr.acceptance.ci import SCAFFOLD_PATHS
+
+    wf = tmp_path / SCAFFOLD_PATHS[ci]
+    wf.parent.mkdir(parents=True, exist_ok=True)
+    wf.write_text("name: someone-else\n")
+    calls = _failing(monkeypatch)
+    out = refresh_ci(tmp_path, ci, debt=True)
+    assert out.status == "foreign" and calls == []
+
+
+def test_gitlab_refresh_resolves_for_the_pasted_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Paste prints the install line, so it needs the pin (and fails closed without it)."""
+    from fr.acceptance.ci import SCAFFOLD_PATHS
+
+    wf = tmp_path / SCAFFOLD_PATHS["gitlab-ci"]
+    wf.write_text("acceptance-report:\n  script: x\n")
+    out = refresh_ci(tmp_path, "gitlab-ci", debt=True)
+    assert out.status == "paste" and "uv tool install" in out.text
+    _failing(monkeypatch)
+    with pytest.raises(FrPinError):
+        refresh_ci(tmp_path, "gitlab-ci", debt=True)
 
 
 # --- R10: the staleness warning ------------------------------------------------------
