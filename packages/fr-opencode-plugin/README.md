@@ -200,3 +200,16 @@ Direct paths, nested path arguments, relative paths, symlink targets, and
 in CI. The shell gate's behaviour is pinned to the bash script by the captured
 verdict table (14 deny / 18 allow rows), and `bun test` fails if either engine
 diverges from it.
+
+## Shipped rules
+
+OpenCode does not read `~/.claude/rules/`, so `install.sh` delivers the shipped
+rules (its `CLAUDE_RULES` list, copied from the generated
+`.opencode/instructions/`) into `<plugins>/fr-opencode-plugin/rules/`. `src/rules.ts`
+appends each as a system part on the `context` hook, once per request: a rule is
+skipped when any existing system part already contains its text (a part kept from
+an earlier request, another loaded copy of the plugin, or `opencode.json`'s
+`instructions`). The in-tree plugin has no `rules/` directory and injects nothing.
+
+The acceptance nag, session bind and child claim run `fr` in the session's own
+directory (its `location.directory`), falling back to the plugin's directory.
