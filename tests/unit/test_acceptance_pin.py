@@ -272,3 +272,32 @@ def test_an_rc_pin_compares_by_pep_440(tmp_path: Path) -> None:
     assert stale_pin_warning(tmp_path, "8.1.6") is not None
     assert stale_pin_warning(tmp_path, "8.1.6rc2") is not None
     assert stale_pin_warning(tmp_path, "8.1.6rc1") is None
+
+
+def test_acceptance_check_reports_an_older_pin_as_a_warning_and_exits_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-tests-r4: through `check()` and the CLI, R10's message is a warning, never an
+    error, and the gate still passes."""
+    import fr
+    from fr.acceptance.check import check
+    from fr.acceptance.fold import effective
+    from fr.cli import app
+
+    from tests.unit.acceptance_helpers import make_repo, row
+
+    root = make_repo(tmp_path, row())
+    _pinned_repo(root, "github-actions", "v1.0.0")
+    monkeypatch.setattr(fr, "__version__", "8.1.5")
+    folded = effective(root)
+    result = check(folded.matrix, root, retired=folded.retired)
+    stale = [w for w in result.warnings if "--refresh-ci" in w]
+    assert len(stale) == 1 and "v1.0.0" in stale[0]
+    assert not any("--refresh-ci" in e for e in result.errors)
+    assert result.errors == []
+
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
+    out = CliRunner().invoke(app, ["acceptance", "check", "--no-fetch"])
+    assert out.exit_code == 0, out.output
+    warning = [ln for ln in out.output.splitlines() if "--refresh-ci" in ln]
+    assert len(warning) == 1 and warning[0].startswith("::warning ")
