@@ -476,3 +476,8 @@ test_a_failing_git_never_prints_the_token.
 ### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: de-dup relied on a hand-written OpenCode header
 
 Real format found in the installed opencode v2.3.0 binary (Instructions from: <path>, several files per part); cited in rules.ts and tested with that exact shape.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved-2 created=2026-11-18T18:43:29+00:00 phase=2 state=open resolves=p2-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1553 -->
+### p2-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1553] · resolves p2-r8: Gitea matrix job checkout persists gitea.token for PR code (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1553.
