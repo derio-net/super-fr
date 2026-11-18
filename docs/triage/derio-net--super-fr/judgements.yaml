@@ -1,5 +1,5 @@
 schema: 12
-ranked_at: 2026-11-15
+ranked_at: 2026-11-18
 tiers:
 - n: 1
   title: Work can be lost
@@ -3199,6 +3199,8 @@ issues:
     detail: 'Still live: `.github/workflows/release.yml:78-80` sets `concurrency: group: release, cancel-in-progress: false`. GitHub keeps one pending run per group, so a push run that queues behind a pending `workflow_dispatch --version` run silently drops it.'
     note: 'Possible fix: a separate group for `workflow_dispatch`, or the run id in the group name. Batch with super-fr#1393 and super-fr#1238.'
   super-fr#1286:
+    distinct_from:
+    - super-fr#1512
     tier: 4
     theme: ci
     cx: M
@@ -3402,6 +3404,418 @@ issues:
     verified: true
     detail: 'Decision recorded: drop VibeKanban (its only deployment retired 2026-11-13). Removes `packages/fr-vk/` (16 modules), ~78 test and fixture files (117 `.test_durations` entries), the `super-fr-dispatch` VK wording and the `fr-runner` skill''s VK operations.'
     note: 'Touches packaging, install.sh, tests and skill mirrors, so it conflicts with most batches: run it as its own wave. It also shrinks the suite, which helps #1428.'
+  super-fr#1544:
+    tier: 4
+    theme: triage-pages
+    cx: L
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Operator request. History is generated (`fr triage history render`, `triage/history.py`) but
+      only re-rendered by hand: the driver refreshes `board.html` alone, so `history.html`, `triage.html`,
+      `origins.html` and `architecture.html` date from 2026-11-14 and History''s finished waves stop at
+      wave 12. Snapshots are stored only by `fr triage render` (16 kept).'
+    note: Operator priority 2026-11-18. Keep-or-retire History and the Backlog split are operator decisions
+      for the question round.
+  super-fr#1545:
+    tier: 4
+    theme: triage-dedupe
+    cx: S
+    severity: low
+    kind: defect
+    verified: true
+    detail: '`dedupe.candidates` (`triage/dedupe.py`) takes every open issue minus `duplicate_of` ones,
+      so `fr:owed` trackers with template titles pair on title alone; they cannot be cleared without ranking
+      them.'
+    note: 'Clears the ten-tracker candidate group (#1187 … #1336).'
+  super-fr#1491:
+    tier: 3
+    theme: triage-drive
+    cx: M
+    severity: high
+    kind: defect
+    verified: true
+    detail: 'Still live: a refused state-ref push exits 2 and nothing restarts the loop. Recurred four times
+      on 2026-11-17; a host supervisor script restarts it today.'
+    note: 'Pairs with #1216 (writer race).'
+  super-fr#1492:
+    tier: 2
+    theme: triage-drive
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: `batch_drive.py:1632` (and :1533) skips an unapproved draft as a non-member before
+      the failing-checks path, so red CI on a delivered draft is never handed back.'
+    note: 'Same filter as #1493.'
+  super-fr#1493:
+    tier: 4
+    theme: triage-drive
+    cx: S-M
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Still live: no proactive conflict check for batch PRs; `conflicting()` is used only for collected
+      close-outs (`batch_drive.py:1138`).'
+    note: 'Shares #1492''s non-member filter.'
+  super-fr#1540:
+    tier: 4
+    theme: triage-drive
+    cx: XS
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Still live: `triage_batch_cmd.py:4822-4829` lets `checkout.fetch()` raise and adds the repo
+      to `_fetched` only on success, so a pass retries a failed fetch.'
+  super-fr#1541:
+    tier: 4
+    theme: triage-drive
+    cx: XS
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Partial: `gh.py:414-421`''s docstring is already hedged; the gh label-resolution assumption
+      is still unverified live. Idempotent either way.'
+  super-fr#1543:
+    tier: 4
+    theme: triage-drive
+    cx: S
+    severity: low
+    kind: feature
+    verified: true
+    detail: 'Still live: the `--checkout` tracking gate (`triage_batch_cmd.py:944-956`) applies to a batch
+      never dispatched.'
+  super-fr#1494:
+    distinct_from:
+    - super-fr#1496
+    - super-fr#1497
+    tier: 4
+    theme: triage-closeout
+    cx: S
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Still live: the finish step (`batch_drive.py:2031-2042`) closes the batch session and `closeout_item_id`,
+      never the collected close-out session; observed again for waves 18 and 19.'
+  super-fr#1496:
+    distinct_from:
+    - super-fr#1497
+    tier: 3
+    theme: triage-closeout
+    cx: M
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: on resume `closeout_owed` skips batches already holding a close-out event, so `--branch`
+      re-recording says nothing to close out (`triage_batch_cmd.py:3165-3183`).'
+    note: 'Leads to #1497''s unreleasable hold.'
+  super-fr#1497:
+    tier: 3
+    theme: triage-closeout
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: `_collected_step` returns `closeout-needs-review` whenever review reasons exist
+      and never checks for an approval (`batch_drive.py` ~1152).'
+  super-fr#1500:
+    tier: 1
+    theme: run-durability
+    cx: S
+    severity: high
+    kind: defect
+    verified: true
+    detail: 'Still live: `save_run_state` (`run/model.py:600`) uses plain `write_text`; a failed save truncates
+      the last valid cursor.'
+  super-fr#1511:
+    tier: 1
+    theme: run-durability
+    cx: M
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: no lock or compare-before-write on the cursor (`run/model.py:600`); two `fr run`
+      commands can lose an update.'
+    note: 'Lands after #1500 (same write path).'
+  super-fr#1524:
+    tier: 1
+    theme: run-durability
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: `plan_ops.py` has 14 `write_text` calls and no `write_text_atomic`.'
+  super-fr#1507:
+    tier: 3
+    theme: run-durability
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: a `kind: cli` step runs `subprocess.run(shell=True)` with no timeout and stores
+      its whole stdout in the cursor (`run_cmd.py:6498-6503`, :1069).'
+  super-fr#1499:
+    tier: 2
+    theme: dispatch
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: a failed dedup fetch becomes `existing = set()` (`fr_dispatch/__init__.py:516-518`),
+      so tick submits without dedup.'
+  super-fr#1501:
+    tier: 2
+    theme: dispatch
+    cx: S
+    severity: high
+    kind: defect
+    verified: true
+    detail: 'Still live: `fr_cncd/runner.py:86` reads every plan-folder file with `read_text`, following
+      symlinks, so outside content reaches the dispatch payload.'
+  super-fr#1483:
+    tier: 4
+    theme: archive
+    cx: S
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Still live: `O_NOFOLLOW` covers only `.gitkeep`; a symlinked live root is followed (`archive.py:484-497`).'
+  super-fr#1485:
+    tier: 4
+    theme: archive
+    cx: XS
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Still live: `_existing_markers` (`archive_followups.py:206`) caps at 200 and returns `{}` on
+      any error, unlike the fail-closed owed list.'
+  super-fr#1486:
+    tier: 2
+    theme: archive
+    cx: S
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Still live: an unreadable default ref reads as off-default (`git.py:277-291`) and `archive_cmd.py:807`
+      calls it outside the try.'
+  super-fr#1488:
+    tier: 2
+    theme: owed
+    cx: XS
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Still live: `_URL_REF` (`record/pr_body.py:297`) matches any host and `normalize_issue_ref`
+      drops it.'
+  super-fr#1527:
+    tier: 3
+    theme: placement
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: for a tracking repo with no checkout, `_forge_visibility` uses `backend_for_url`
+      (`placement/stealth.py:588-589`), which cannot place a self-hosted GitLab bare clone URL, so stealth
+      setup fails closed.'
+  super-fr#1509:
+    tier: 2
+    theme: hooks
+    cx: S
+    severity: high
+    kind: defect
+    verified: true
+    detail: 'Still live: `fr-isolation-required.sh:26,37` calls bare `jq` under `set -eu` before the decision;
+      its own comment admits the fail-open.'
+  super-fr#1484:
+    tier: 2
+    theme: hooks
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: `fr-isolation-decision.sh:103` runs the JSON parser `-c` without `-P`/`-I`, and
+      resolves `python3`/`jq` via `command -v` (:61).'
+  super-fr#1481:
+    tier: 2
+    theme: hooks
+    cx: S
+    severity: low
+    kind: defect
+    verified: true
+    detail: 'Still live: bare `bash` (`tui/segment.ts:47`) and `gh` (`push.ts:35`) spawns, and `command
+      -v jq` gates in five hooks.'
+    note: 'Same class as #1429; overlaps #1509/#1484 on jq.'
+  super-fr#1508:
+    tier: 3
+    theme: install
+    cx: M
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: `install.sh:879,901` run `uv tool install --force` with no lock or constraints;
+      `npm install -g @devcontainers/cli` (:1080) is unversioned.'
+  super-fr#1510:
+    tier: 4
+    theme: install
+    cx: XS
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: `bun.lock` pins glob 13.0.5/10.5.0 and minimatch 10.2.5/9.0.9 (:294, :360, :532,
+      :560).'
+  super-fr#1539:
+    tier: 4
+    theme: triage-intake
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Still live: `_withhold_untrusted_bodies` (`triage/collect.py:553-566`) clears only `body`;
+      titles of ineligible issues still reach facts and check.'
+  super-fr#1542:
+    tier: 4
+    theme: triage-intake
+    cx: S
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Still live: `ready-fr` admission (`triage/intake.py:8-10`) is not pinned to content; the author
+      can edit after the label.'
+  super-fr#1522:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Behaviour change from the #1318 review that needs its own spec; #1318''s lane is set aside.'
+  super-fr#1489:
+    tier: 4
+    theme: devops-gate
+    cx: L
+    severity: med
+    kind: parked
+    verified: false
+    detail: Brainstorm input for a self-operating DevOps gate; it starts with the operator's brainstorm,
+      not a batch.
+  super-fr#1476:
+    tier: 4
+    theme: ci
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: Bot-managed CI-budget issue; it auto-closes when ci.yml is back under budget. Track via the
+      suite-speed work, not a batch.
+  super-fr#1534:
+    tier: 4
+    theme: acceptance
+    cx: XS
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Record of an operator decision (restore scope of #1394); nothing left to do.'
+  super-fr#1512:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1513:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1514:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1515:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1516:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+    distinct_from:
+    - super-fr#1520
+  super-fr#1517:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1518:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1519:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1520:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1521:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
+  super-fr#1523:
+    tier: 4
+    theme: run-contracts
+    cx: M
+    severity: low
+    kind: parked
+    verified: false
+    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
+      it.'
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -7454,6 +7868,13 @@ batches:
     run: 2026-11-15-feat-batch-owed-archive
     archive: chore/closeout-2026-11-16-4
     archived: 1505
+  - kind: claims_released
+    at: '2026-11-16T18:48:17.596218Z'
+    keys:
+    - super-fr#1400
+    - super-fr#1183
+    - super-fr#1301
+    - super-fr#1184
 - id: workspace-identity
   title: Workspace identity
   ids:
@@ -7475,6 +7896,54 @@ batches:
     runner: herdr
     handle: w3H:p3
     branch: fix/batch-workspace-identity
+  - kind: approval
+    at: '2026-11-17T08:01:38.503004Z'
+    pr: 1504
+    head: b4b38b1aa942de27b82370d367320a7b096b427e
+  - kind: update
+    at: '2026-11-17T08:02:06.564729Z'
+    pr: 1504
+    head_before: b4b38b1aa942de27b82370d367320a7b096b427e
+    head_after: cd348bae83b20f6451981b71872bb59f82de6abf
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: red_handback
+    at: '2026-11-17T08:16:44.119314Z'
+    pr: 1504
+    head: cd348bae83b20f6451981b71872bb59f82de6abf
+    checks:
+    - 2 failing check(s)
+    delivered: session
+  - kind: update
+    at: '2026-11-17T08:39:33.758896Z'
+    pr: 1504
+    head_before: cd348bae83b20f6451981b71872bb59f82de6abf
+    head_after: 0f72498a34bd152bc095d9d2396e9d6b7084ba0a
+    base: fa59d15df514104bc758d6a9d948ca4ce35904c8
+  - kind: claims_released
+    at: '2026-11-17T09:01:54.669599Z'
+    keys:
+    - super-fr#1166
+    - super-fr#1243
+    - super-fr#1419
+  - kind: post_merge
+    at: '2026-11-17T09:05:30.602035Z'
+  - kind: closeout
+    at: '2026-11-17T09:14:25.430708Z'
+    runner: herdr
+    handle: w3H:p7
+    archive: chore/closeout-2026-11-17-3
+  - kind: closeout
+    at: '2026-11-17T09:27:08.733807Z'
+    runner: herdr
+    handle: w3H:p7
+    archive: chore/closeout-2026-11-17-3
+    archived: 1530
+  - kind: claims_released
+    at: '2026-11-17T09:31:14.568087Z'
+    keys:
+    - super-fr#1419
+    - super-fr#1166
+    - super-fr#1243
 - id: placement-truth
   title: Quiet and stealth placement never fall back or record unlanded heads
   ids:
@@ -7494,6 +7963,39 @@ batches:
     runner: herdr
     handle: w3H:p1
     branch: fix/batch-placement-truth
+  - kind: approval
+    at: '2026-11-17T08:15:45.622520Z'
+    pr: 1502
+    head: 6fc2f8993e0c7d801d08bff967fc71d72bbe3a32
+  - kind: update
+    at: '2026-11-17T08:16:33.638680Z'
+    pr: 1502
+    head_before: 6fc2f8993e0c7d801d08bff967fc71d72bbe3a32
+    head_after: 7deae04757c2ada3ee5aba280c49630fade4f7aa
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: claims_released
+    at: '2026-11-17T08:30:30.084058Z'
+    keys:
+    - super-fr#1433
+    - super-fr#1438
+  - kind: post_merge
+    at: '2026-11-17T08:37:23.914588Z'
+  - kind: closeout
+    at: '2026-11-17T08:38:09.004871Z'
+    runner: herdr
+    handle: w3H:p4
+    archive: chore/closeout-2026-11-17-1
+  - kind: closeout
+    at: '2026-11-17T08:51:29.058736Z'
+    runner: herdr
+    handle: w3H:p4
+    archive: chore/closeout-2026-11-17-1
+    archived: 1526
+  - kind: claims_released
+    at: '2026-11-17T09:01:54.669599Z'
+    keys:
+    - super-fr#1438
+    - super-fr#1433
 - id: release-truth
   title: Release robustness
   ids:
@@ -7517,6 +8019,51 @@ batches:
     runner: herdr
     handle: w3H:p2
     branch: fix/batch-release-truth
+  - kind: approval
+    at: '2026-11-17T08:12:07.652028Z'
+    pr: 1503
+    head: 41895ad79a096c3602bb4f5b5f984d7d120c3831
+  - kind: update
+    at: '2026-11-17T08:12:35.613132Z'
+    pr: 1503
+    head_before: 41895ad79a096c3602bb4f5b5f984d7d120c3831
+    head_after: ce648b75888a499a763f0054aa4518b509638c87
+    base: 66c9cb81cf8be80a0a26a3187c54a592efd90a64
+  - kind: update
+    at: '2026-11-17T08:26:56.266835Z'
+    pr: 1503
+    head_before: ce648b75888a499a763f0054aa4518b509638c87
+    head_after: ec6fe1a2415fc741d3efa72263e624955c5f894a
+    base: 6850c71d311fe01ae709f441b7f413970a964df1
+  - kind: claims_released
+    at: '2026-11-17T08:43:26.562737Z'
+    keys:
+    - super-fr#1201
+    - super-fr#1202
+    - super-fr#1290
+    - super-fr#1291
+    - super-fr#1393
+  - kind: post_merge
+    at: '2026-11-17T08:49:45.315508Z'
+  - kind: closeout
+    at: '2026-11-17T08:56:23.530151Z'
+    runner: herdr
+    handle: w3H:p5
+    archive: chore/closeout-2026-11-17-2
+  - kind: closeout
+    at: '2026-11-17T09:10:21.855537Z'
+    runner: herdr
+    handle: w3H:p5
+    archive: chore/closeout-2026-11-17-2
+    archived: 1528
+  - kind: claims_released
+    at: '2026-11-17T09:13:53.480292Z'
+    keys:
+    - super-fr#1201
+    - super-fr#1290
+    - super-fr#1393
+    - super-fr#1291
+    - super-fr#1202
 - id: acceptance-edits
   title: Acceptance edits and artifact adoption
   ids:
@@ -7535,6 +8082,65 @@ batches:
   - deliver-evidence
   - owed-archive
   - workspace-identity
+  events:
+  - kind: dispatch
+    at: '2026-11-17T08:57:19.002450Z'
+    runner: herdr
+    handle: w3H:p6
+    branch: feat/batch-acceptance-edits
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+  - kind: red_handback
+    at: '2026-11-17T14:49:57.607609Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+    checks:
+    - 2 failing check(s)
+    delivered: session
+  - kind: approval
+    at: '2026-11-17T15:37:32.342893Z'
+    pr: 1533
+    head: 8355c13ddd0b737685332266c1cc8b5fc4e08fd7
+    voided_at: a5952ce0f686bde18358a4866c6d39fb6f1b5ed6
+  - kind: approval
+    at: '2026-11-17T17:48:26.320411Z'
+    pr: 1533
+    head: 09b466a9d85edcc823042a98495c9d0471fe6ed7
+  - kind: claims_released
+    at: '2026-11-17T17:52:41.261426Z'
+    keys:
+    - super-fr#1154
+    - super-fr#1219
+    - super-fr#1390
+    - super-fr#1394
+    - super-fr#1439
+    - super-fr#1461
+  - kind: post_merge
+    at: '2026-11-17T17:59:45.950443Z'
+  - kind: closeout
+    at: '2026-11-17T18:01:35.950626Z'
+    runner: herdr
+    handle: w3H:p8
+    run: 2026-11-17-feat-batch-acceptance-edits
+    archive: chore/closeout-2026-11-17-6
+  - kind: closeout
+    at: '2026-11-17T18:12:34.571722Z'
+    runner: herdr
+    handle: w3H:p8
+    run: 2026-11-17-feat-batch-acceptance-edits
+    archive: chore/closeout-2026-11-17-6
+    archived: 1537
+  - kind: claims_released
+    at: '2026-11-17T18:16:07.695989Z'
+    keys:
+    - super-fr#1439
+    - super-fr#1394
+    - super-fr#1390
+    - super-fr#1154
+    - super-fr#1219
+    - super-fr#1461
 - id: triage-intake
   title: Triage intake trust and driver correctness
   ids:
@@ -7549,8 +8155,45 @@ batches:
   - workspace-identity
   - placement-truth
   - release-truth
-  - acceptance-edits
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-17T09:00:59.238632Z'
+    runner: herdr
+    handle: w3K:p3
+    branch: feat/batch-triage-intake
+  - kind: approval
+    at: '2026-11-18T11:35:00.588933Z'
+    pr: 1529
+    head: 7cddd28dd3ad0d6f141004cce5ff193c5988a98c
+  - kind: update
+    at: '2026-11-18T11:35:14.274733Z'
+    pr: 1529
+    head_before: 7cddd28dd3ad0d6f141004cce5ff193c5988a98c
+    head_after: 87ad909e84122f728ed22215d27e77d5094edce5
+    base: 43d490ac32195a3add058bd37e5c024970c6f53f
+  - kind: claims_released
+    at: '2026-11-18T11:48:34.979001Z'
+    keys:
+    - super-fr#1213
+    - super-fr#1252
+    - super-fr#1299
+    - super-fr#1406
+  - kind: post_merge
+    at: '2026-11-18T11:54:23.964848Z'
+  - kind: closeout
+    at: '2026-11-18T11:55:16.047624Z'
+    runner: herdr
+    handle: w3K:p6
+    run: 2026-11-17-feat-batch-triage-intake
+    archive: chore/closeout-2026-11-18-1
+  - kind: closeout
+    at: '2026-11-18T12:13:34.274142Z'
+    runner: herdr
+    handle: w3K:p6
+    run: 2026-11-17-feat-batch-triage-intake
+    archive: chore/closeout-2026-11-18-1
+    archived: 1546
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
@@ -7565,8 +8208,56 @@ batches:
   - workspace-identity
   - placement-truth
   - release-truth
-  - acceptance-edits
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-17T09:00:04.084527Z'
+    runner: herdr
+    handle: w3K:p2
+    branch: fix/batch-triage-collect
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1532
+    head: 6f6b897a71fa23cc44660f5a9f5493d5bff3ed29
+  - kind: update
+    at: '2026-11-17T14:50:27.601245Z'
+    pr: 1532
+    head_before: 6f6b897a71fa23cc44660f5a9f5493d5bff3ed29
+    head_after: e8931668ee4a3adc1aa04d72ab4f3216472fb9ad
+    base: 94a7c2442300b19478da094c97a3b03933a9cf80
+  - kind: claims_released
+    at: '2026-11-17T15:08:53.118306Z'
+    keys:
+    - super-fr#1197
+    - super-fr#1210
+    - super-fr#1268
+    - super-fr#1300
+  - kind: post_merge
+    at: '2026-11-17T15:13:07.618288Z'
+  - kind: closeout
+    at: '2026-11-17T15:24:15.199161Z'
+    runner: herdr
+    handle: w3K:p5
+    archive: chore/closeout-2026-11-17-5
+  - kind: closeout_handback
+    at: '2026-11-17T15:30:37.153314Z'
+    item: derio-net/super-fr/run/closeout-2026-11-17-5
+    pr: 1536
+    head: 45448904392db1e95e1ddd7a685161d42e0d7d4b
+    reason: 1 failing check(s)
+  - kind: closeout
+    at: '2026-11-17T15:42:40.726966Z'
+    runner: herdr
+    handle: w3K:p5
+    archive: chore/closeout-2026-11-17-5
+    archived: 1536
+  - kind: claims_released
+    at: '2026-11-17T15:45:58.231855Z'
+    keys:
+    - super-fr#1268
+    - super-fr#1197
+    - super-fr#1210
+    - super-fr#1300
 - id: consumer-delivery
   title: 'Consumer delivery: OpenCode rules and scaffolds'
   ids:
@@ -7584,6 +8275,12 @@ batches:
   - triage-intake
   - triage-collect
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-18T11:44:16.251002Z'
+    runner: herdr
+    handle: w3N:p1
+    branch: feat/batch-consumer-delivery
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -7650,6 +8347,173 @@ batches:
     at: '2026-11-15T07:31:46.835235Z'
     keys:
     - super-fr#1459
+- id: suite-trust
+  title: 'Test-suite trust: the worktree-lock concurrency flake and the scenario fixture that commits
+    into a live worktree'
+  ids:
+  - super-fr#1468
+  - super-fr#1463
+  rationale: 'Leftovers of suite-health. #1463''s test_two_concurrent_* flake failed CI on #1478, #1495,
+    #1502 and #1504 in two days; #1468''s scenario fixture committed into a live run worktree. Both are
+    test-isolation trust in tests/unit/test_hooks_worktree.py and tests/scenarios/.'
+  wave: 19
+  after:
+  - workspace-identity
+  - placement-truth
+  - release-truth
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-17T08:59:30.021417Z'
+    runner: herdr
+    handle: w3K:p1
+    branch: fix/batch-suite-trust
+  - kind: approval
+    at: '2026-11-17T14:49:36.805492Z'
+    pr: 1531
+    head: a32833144c0b21a29c914c0e3d480c0303a1116b
+  - kind: claims_released
+    at: '2026-11-17T14:54:07.978594Z'
+    keys:
+    - super-fr#1468
+  - kind: post_merge
+    at: '2026-11-17T15:03:50.465990Z'
+  - kind: closeout
+    at: '2026-11-17T15:05:23.369103Z'
+    runner: herdr
+    handle: w3K:p4
+    archive: chore/closeout-2026-11-17-4
+  - kind: closeout
+    at: '2026-11-17T15:19:17.957274Z'
+    runner: herdr
+    handle: w3K:p4
+    archive: chore/closeout-2026-11-17-4
+    archived: 1535
+  - kind: claims_released
+    at: '2026-11-17T15:23:19.369412Z'
+    keys:
+    - super-fr#1468
+    - super-fr#1463
+- id: triage-pages
+  title: 'Triage pages UX: one name per page, collapsible sections, cross-links, filters, pages that stay
+    current'
+  ids:
+  - super-fr#1544
+  rationale: Operator priority 2026-11-18. One issue, many page surfaces; keep-or-retire History and the
+    Backlog split are operator decisions for the question round.
+  order: 1
+  wave: 22
+  bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-18T12:13:38.900662Z'
+    runner: herdr
+    handle: w3P:p1
+    branch: feat/batch-triage-pages
+- id: train-truth
+  title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
+    once'
+  ids:
+  - super-fr#1491
+  - super-fr#1492
+  - super-fr#1493
+  - super-fr#1540
+  - super-fr#1541
+  - super-fr#1543
+  rationale: 'All in the driver loop (batch_drive.py, triage_batch_cmd.py); #1492 and #1493 share the
+    draft non-member filter.'
+  wave: 22
+  bump: minor
+- id: run-durability
+  title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
+  ids:
+  - super-fr#1500
+  - super-fr#1524
+  - super-fr#1511
+  - super-fr#1507
+  rationale: 'One write-path class (#1500, #1524 atomic; #1511 builds on #1500) plus the cli step''s unbounded
+    run in the same run_cmd surface.'
+  wave: 22
+  skill: debug
+- id: dispatch-safety
+  title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
+  ids:
+  - super-fr#1499
+  - super-fr#1501
+  rationale: Both in the dispatch path (fr_dispatch tick, fr_cncd runner), audit findings F01 and F04.
+  wave: 22
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-18T12:14:03.091152Z'
+    runner: herdr
+    handle: w3P:p2
+    branch: fix/batch-dispatch-safety
+- id: owed-followups
+  title: 'Archive and owed follow-ups: symlinked live root, fail-closed marker read, unreadable default
+    ref, host-pinned issue refs'
+  ids:
+  - super-fr#1483
+  - super-fr#1485
+  - super-fr#1486
+  - super-fr#1488
+  rationale: Leftovers of owed-archive and guard-trust in archive.py, archive_followups.py, git.py and
+    pr_body.py.
+  wave: 22
+  skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-18T12:14:32.868605Z'
+    runner: herdr
+    handle: w3P:p3
+    branch: fix/batch-owed-followups
+- id: stealth-gitlab
+  title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
+  ids:
+  - super-fr#1527
+  rationale: Single placement defect; blocks stealth setup on self-hosted GitLab.
+  wave: 22
+  skill: debug
+- id: closeout-truth
+  title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
+    close the session'
+  ids:
+  - super-fr#1496
+  - super-fr#1497
+  - super-fr#1494
+  rationale: '#1496 leads to #1497''s unreleasable hold; #1494 is the same finish step. Same driver modules
+    as train-truth, so it waits.'
+  wave: 23
+  after:
+  - train-truth
+  skill: debug
+- id: hook-hardening
+  title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
+    installs'
+  ids:
+  - super-fr#1509
+  - super-fr#1484
+  - super-fr#1481
+  - super-fr#1508
+  - super-fr#1510
+  rationale: Audit findings F06, F07, F09 and guard-trust leftovers on the hook parser, plugin spawns
+    and install.sh; consumer-delivery touches install.sh and the OpenCode plugin.
+  wave: 23
+  after:
+  - consumer-delivery
+  skill: debug
+- id: triage-hardening
+  title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
+    out of dedupe'
+  ids:
+  - super-fr#1539
+  - super-fr#1542
+  - super-fr#1545
+  rationale: triage-intake follow-ups plus the dedupe universe, in collect/intake/dedupe; waits on train-truth's
+    triage changes.
+  wave: 23
+  after:
+  - train-truth
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -7863,6 +8727,12 @@ features:
   - super-fr#1468
   why: 'Leftovers of suite-health: a lock double-hold CI sees and nobody reproduces, and a scenario fixture that commits into a live worktree.'
   start: '/fr-debugging super-fr#1468 then super-fr#1463'
+- rank: 23
+  title: Triage pages UX
+  ids:
+  - super-fr#1544
+  why: 'Operator priority 2026-11-18: the pages are long, unlinked and silently stale.'
+  start: /fr-goal super-fr#1544
 exports:
 - wave: '1'
   repo: derio-net/super-fr
@@ -7935,6 +8805,18 @@ exports:
   at: '2026-11-15T11:27:29.470592Z'
   pr: 1475
   head: 3b0ab7a3c4d310305f5b099e4ef327423da6cf35
+  merged: true
+- wave: '17'
+  repo: derio-net/super-fr
+  at: '2026-11-16T18:48:15.888956Z'
+  pr: 1506
+  head: d0b04966399706b4597c1ef3522e685a970f79ea
+  merged: true
+- wave: '18'
+  repo: derio-net/super-fr
+  at: '2026-11-17T18:16:03.437067Z'
+  pr: 1538
+  head: b85870d4827d07eac39dacf2bb9906e6b620cdb6
   merged: true
 closeouts:
 - repo: derio-net/super-fr
@@ -8089,3 +8971,151 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-15-feat-batch-owed-archive.yaml"
   - "D\tdocs/superpowers/specs/2026-11-15-owed-archive-side-effects-design.md"
   - "D\tdocs/superpowers/usage/2026-11-15-feat-batch-owed-archive.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-1
+  branch: chore/closeout-2026-11-17-1
+  at: '2026-11-17T08:37:27.238739Z'
+  runner: herdr
+  handle: w3H:p4
+  planned:
+  - placement-truth
+  pr: 1526
+  merged: true
+  head: 8e5edea690057ca8cc60fc39cecc6d5117c89735
+  members:
+  - placement-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-placement-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-placement-truth.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-2
+  branch: chore/closeout-2026-11-17-2
+  at: '2026-11-17T08:55:41.412197Z'
+  runner: herdr
+  handle: w3H:p5
+  planned:
+  - release-truth
+  pr: 1528
+  merged: true
+  head: 28e049abf662293b1ce9512e8467cb8da3b2dbd4
+  members:
+  - release-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-batch-release-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-batch-release-truth.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-3
+  branch: chore/closeout-2026-11-17-3
+  at: '2026-11-17T09:13:43.561157Z'
+  runner: herdr
+  handle: w3H:p7
+  planned:
+  - workspace-identity
+  pr: 1530
+  merged: true
+  head: 4f618093fd01f616484eac2422c8113a0e38c25b
+  members:
+  - workspace-identity
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-16-workspace-identity.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-16-workspace-identity.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-4
+  branch: chore/closeout-2026-11-17-4
+  at: '2026-11-17T15:03:58.365073Z'
+  runner: herdr
+  handle: w3K:p4
+  planned:
+  - suite-trust
+  pr: 1535
+  merged: true
+  head: 15e39336cc67fd4628503f629047c60413b651b1
+  members:
+  - suite-trust
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-17-suite-trust.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-17-suite-trust.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-5
+  branch: chore/closeout-2026-11-17-5
+  at: '2026-11-17T15:23:05.037722Z'
+  runner: herdr
+  handle: w3K:p5
+  planned:
+  - triage-collect
+  pr: 1536
+  merged: true
+  head: 45448904392db1e95e1ddd7a685161d42e0d7d4b
+  members:
+  - triage-collect
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-17-batch-triage-collect.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-17-batch-triage-collect.md"
+  handed:
+  - 45448904392db1e95e1ddd7a685161d42e0d7d4b
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-17-6
+  branch: chore/closeout-2026-11-17-6
+  at: '2026-11-17T17:59:50.749526Z'
+  runner: herdr
+  handle: w3H:p8
+  planned:
+  - acceptance-edits
+  pr: 1537
+  merged: true
+  head: 570afa5b7a4a879c79658e4183feedaeb0d47b36
+  members:
+  - acceptance-edits
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-17-batch-acceptance-edits.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-17-batch-acceptance-edits.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-batch-acceptance-edits/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-17-batch-acceptance-edits-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-17-batch-acceptance-edits.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-17-batch-acceptance-edits.md"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-batch-acceptance-edits/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-17-feat-batch-acceptance-edits.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-17-batch-acceptance-edits-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-17-feat-batch-acceptance-edits.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-18-1
+  branch: chore/closeout-2026-11-18-1
+  at: '2026-11-18T11:54:26.953357Z'
+  runner: herdr
+  handle: w3K:p6
+  planned:
+  - triage-intake
+  pr: 1546
+  merged: true
+  head: a1cdc4d576b1bf5469631d327e7acd3bd3ae3486
+  members:
+  - triage-intake
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-17-triage-intake.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-17-triage-intake.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-triage-intake/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-triage-intake/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-triage-intake/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-triage-intake/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-17-triage-intake/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-17-feat-batch-triage-intake.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-17-triage-intake-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-17-feat-batch-triage-intake.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-17-triage-intake.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-17-triage-intake.md"
+  - "D\tdocs/superpowers/plans/2026-11-17-triage-intake/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-triage-intake/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-triage-intake/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-triage-intake/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-17-triage-intake/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-17-feat-batch-triage-intake.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-17-triage-intake-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-17-feat-batch-triage-intake.yaml"

@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/gatebackfill/**
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-15 still true, only fr gate pass --yes changed, it exits 1 on a failed tracker close (batch gate-truth)
+reviewed: 2026-11-17 a tracker close reports every error kind and never raises (batch triage-intake)
 ---
 
 # `fr gate backfill` — bring old owed work into the gate lanes
@@ -55,7 +55,8 @@ It never closes an issue that fr did not file. It lists an adopted issue with a
 that discharges the key itself (the same one that the backfill printed). Without `--yes` it lists
 what it would close.
 
-A failure to list or close is reported, and it never reverses the pass. A PR can already carry
+A failure to list or close is reported, whatever its kind, and it never reverses the pass or
+stops the driver. A PR can already carry
 `gate:<g>-passed` and no `gate:<g>`. Then a re-run of `fr gate pass` prints "gate <g>
 already passed on #<pr>; closing its trackers" and does only the close. But it does this only when
 fr passed the gate. The PR must carry an `fr:gate-pass <g>` comment by the same account. If not,

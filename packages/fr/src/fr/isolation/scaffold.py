@@ -25,6 +25,7 @@ from typing import Any, Literal
 import yaml
 
 from fr._hosts import HostBackend
+from fr.git import is_ignored
 from fr.git_policy.templates import fr_message
 from fr.isolation.types import (
     IsolationError,
@@ -669,9 +670,9 @@ def _commit_profile(
     paths += [
         rel
         for rel in (str(AGENTS_DIR / f"{name}.md") for name in AGENT_NAMES)
-        if (repo_root / rel).exists() and _git(repo_root, "check-ignore", "-q", rel).returncode != 0
+        if (repo_root / rel).exists() and not is_ignored(repo_root, rel)
     ]
-    if _git(repo_root, "check-ignore", "-q", f".devcontainer/{profile}").returncode == 0:
+    if is_ignored(repo_root, f".devcontainer/{profile}"):
         print(
             f"warning: .devcontainer is git-ignored — profile {profile!r} written "
             "but not committed; `fr isolation up` won't see it.",

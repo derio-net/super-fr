@@ -5740,7 +5740,12 @@ def adopt_cmd(
         None, "--branch", help="Branch this run operates on (default: the checked-out one)."
     ),
     run_id: str | None = typer.Option(
-        None, "--run-id", help="Override the derived run id (default: date + sanitized branch)."
+        None,
+        "--run-id",
+        help=(
+            "Override the run id (default: the plan folder's name; a spec with no plan: "
+            "date + sanitized branch)."
+        ),
     ),
     workflow: str | None = typer.Option(
         None, "--workflow", help="Shape to adopt against (default: fr-goal)."
@@ -5769,6 +5774,10 @@ def adopt_cmd(
     phases complete, all complete, a PR already open — and lands the cursor on
     the step that state implies, recording the emitted spec and plan so
     archival keys on them afterwards.
+
+    The run is named after the plan folder unless `--run-id` names it (a spec
+    with no plan: date + branch). It records the checked-out branch unless
+    `--branch` names one, and says so when that is the default branch.
 
     Explicit by design. `fr migrate artifacts` *reports* which plans could be
     adopted, and adopts only with `--adopt`; nothing creates a run as a side

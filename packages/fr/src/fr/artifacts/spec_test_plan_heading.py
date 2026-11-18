@@ -33,6 +33,7 @@ from pathlib import Path
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, Repair
+from fr.artifacts.text import read_utf8
 from fr.spec import FENCE_RE, TEST_PLAN_HEADING, TestPlanHeading, find_test_plan_heading
 
 REPAIR_NAME = "test-plan-heading"
@@ -77,11 +78,11 @@ def _renamable(text: str) -> TestPlanHeading | None:
 
 
 def _applies(path: Path) -> bool:
-    return _renamable(path.read_text()) is not None
+    return _renamable(read_utf8(path)) is not None
 
 
 def _fn(path: Path) -> None:
-    text = path.read_bytes().decode("utf-8")  # no newline translation: CRLF stays CRLF
+    text = read_utf8(path)  # no newline translation: CRLF stays CRLF
     heading = _renamable(text)
     if heading is None:
         return

@@ -38,6 +38,7 @@ from fr.artifacts.runner import (
     plan_migrations,
     run_migrations,
 )
+from fr.artifacts.text import NotUtf8Error
 
 # Imported last and for their registration side effect; they import `runner`,
 # so they cannot come before it. EVERY registered migration is reached from
@@ -80,6 +81,7 @@ from fr.artifacts import journal_op as _journal_op  # noqa: F401  (isort: skip)
 from fr.artifacts import journal_lens as _journal_lens  # noqa: F401  (isort: skip)
 from fr.artifacts import ops_none as _ops_none  # noqa: F401  (isort: skip)
 from fr.artifacts import spec_test_plan_heading as _spec_test_plan_heading  # noqa: F401  (isort: skip)
+from fr.artifacts import fragment_design_name as _fragment_design_name  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",
@@ -94,6 +96,7 @@ __all__ = [
     "MigrationChainError",
     "MigrationRegistry",
     "MigrationReport",
+    "NotUtf8Error",
     "PlannedAction",
     "Repair",
     "SchemaMigration",

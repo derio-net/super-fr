@@ -38,7 +38,7 @@ covers:
   - packages/fr/src/fr/commands/gate_cmd.py
   - packages/fr/src/fr/triage/batch_drive.py
   - scripts/release.py
-reviewed: 2026-11-17 still true after batch release-truth (the RC comparison point, the missing-Release retry); 2026-11-16 still true; fr-goal learned that a discharged owed issue closes at merge. 2026-11-15 still true after batch gate-truth (gate pass exit code, ledger reads archived runs)
+reviewed: 2026-11-17 still true after batch triage-intake (an outside author's issue is set apart and a batch holding one is blocked); 2026-11-17 still true after batch release-truth (the RC comparison point, the missing-Release retry); 2026-11-16 still true; fr-goal learned that a discharged owed issue closes at merge. 2026-11-15 still true after batch gate-truth (gate pass exit code, ledger reads archived runs)
 writing_standard: none
 ---
 

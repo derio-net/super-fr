@@ -59,6 +59,7 @@ from fr.artifacts.structure import (
     validate_spec,
     validate_usage,
 )
+from fr.artifacts.text import read_utf8
 
 PRE_FRAMEWORK_VERSION = 1
 """What an artifact with no stamp reads as (spec §3.A)."""
@@ -146,7 +147,7 @@ def read_verbatim(path: Path) -> tuple[str, str]:
     Splitting the BOM off explicitly lets every reader parse clean text and
     every writer put the mark back exactly where it was.
     """
-    text = path.read_bytes().decode("utf-8")
+    text = read_utf8(path)
     if text.startswith(_BOM):
         return _BOM, text[len(_BOM) :]
     return "", text

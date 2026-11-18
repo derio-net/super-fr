@@ -59,6 +59,7 @@ def _facts(visibility: dict[str, str] | None = None) -> Facts:
             title=f"issue {n}",
             state="open",
             url=f"https://github.com/{repo}/issues/{n}",
+            author_association="OWNER",  # intake admits a maintainer's issue
         )
 
     return Facts(

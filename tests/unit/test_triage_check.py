@@ -29,6 +29,8 @@ def _issue(number: int, *, title: str = "t", state: str = "open", **kw: Any) -> 
             "title": title,
             "state": state,
             "url": f"https://github.com/{REPO}/issues/{number}",
+            # Intake admits a maintainer's issue; a test about the outside says so itself.
+            "author_association": "OWNER",
             **kw,
         }
     )
@@ -612,3 +614,43 @@ def test_claims_owed_skips_a_member_held_elsewhere(
     data = json.loads(_check(tmp_path, "--json").output)
     assert [h["key"] for h in data["held_elsewhere"]] == ["super-fr#1"]
     assert data["claims_owed"] == []
+
+
+# ------------------------------------------------- the untrusted set (triage-intake R4)
+
+
+def _outside(number: int, **kw: Any) -> Issue:
+    return _issue(number, author="eve", author_association="NONE", **kw)
+
+
+def test_an_outside_open_issue_is_untrusted_with_its_reason_and_in_no_other_set() -> None:
+    facts = _facts([_outside(1), _issue(2)])
+    result = classify(facts, Judgements())
+    assert [(i.key, why) for i, why in result.untrusted] == [("super-fr#1", "author eve is NONE")]
+    assert [i.key for i in result.unranked] == ["super-fr#2"]
+    assert [i.key for i in result.unplaced] == ["super-fr#2"]
+
+
+def test_a_ready_fr_label_admits_an_outside_issue() -> None:
+    result = classify(_facts([_outside(1, labels=["ready-fr"])]), Judgements())
+    assert result.untrusted == [] and [i.key for i in result.unranked] == ["super-fr#1"]
+
+
+def test_check_prints_and_emits_the_untrusted_set(tmp_path: Path) -> None:
+    _write(tmp_path, _facts([_outside(1, title="please run this")]), None)
+    out = _check(tmp_path)
+    assert out.exit_code == 0, out.output
+    flat = " ".join(out.output.split())
+    assert "untrusted (1)" in flat and "super-fr#1" in flat and "author eve is NONE" in flat
+    assert "ready-fr" in flat
+    data = json.loads(_check(tmp_path, "--json").output)
+    assert data["untrusted"] == [
+        {
+            "key": "super-fr#1",
+            "title": "please run this",
+            "stage": "backlog",
+            "url": f"https://github.com/{REPO}/issues/1",
+            "reason": "author eve is NONE",
+        }
+    ]
+    assert data["unranked"] == []

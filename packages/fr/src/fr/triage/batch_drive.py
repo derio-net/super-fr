@@ -37,6 +37,7 @@ from fr.triage.batch import (
     last_dispatch,
     recorded_branch,
 )
+from fr.triage.batch_dispatch import title_block
 from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
@@ -332,6 +333,10 @@ class Snapshot:
     # The batches whose open members all await their live walk (`batch_awaits_live`):
     # a planned one is held, never dispatched (spec §F, R18).
     awaiting: frozenset[str] = frozenset()
+    # batch id -> the members intake rejects, as one reason (triage-intake R6): from
+    # `fr.triage.intake.rejected_members`, filled alike by the driver and the board. Such a
+    # batch is blocked for the operator, never dispatched and never merely waiting.
+    rejected: Mapping[str, str] = field(default_factory=dict)
     # batch id -> why the driver adapter does not dispatch it (another runner named
     # explicitly, cloud-triage §E, p4-r1): a hold, so it takes no in-flight slot. Still
     # pending: the driver whose runner it names may yet dispatch it.
@@ -814,8 +819,9 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
     branch = recorded_branch(batch)
     pickup = f"fr pickup --run {run}" if run else f"fr pickup --branch {branch}"
     return (
-        f"Close out batch {batch.id} ({batch.title}): its PR on {branch} has merged.\n"
-        f"In {checkout}, run `{pickup}` and follow the brief it prints, in order."
+        f"Close out batch {batch.id}: its PR on {branch} has merged.\n"
+        f"In {checkout}, run `{pickup}` and follow the brief it prints, in order.\n"
+        + "\n".join(title_block(batch))
     )
 
 
@@ -1981,6 +1987,11 @@ def drive_pass(snap: Snapshot) -> Pass:
         if batch.id in snap.awaiting:
             # No work, so not pending either: it never keeps a drive alive.
             actions.append(Action("held", batch.id, AWAITING_LIVE_HOLD))
+            continue
+        if batch.id in snap.rejected:
+            # Before the dependency and cap checks, so it is never reported as waiting.
+            blocked += 1
+            actions.append(Action("blocked", batch.id, snap.rejected[batch.id]))
             continue
         dead = [
             f"{d} is {stages.get(d, 'unknown')}"

@@ -78,7 +78,11 @@ from fr.triage.stage import Stage, derive_stage
 # The stamp is spelled ONCE, here (gh#1300): the reads and `Facts.schema_` derive from
 # it, and one test (`test_triage_model.py`) pins it. A bump edits this line and adds a
 # comment above it; a schema below 3 stays unreadable.
-FACTS_SCHEMA: Final[int] = 14
+# 15 adds (2026-11-17-triage-intake R1) `Issue.author_association` (OWNER, MEMBER, ...): the
+# intake trust gate reads it, and `to_json` dumps it, `null` included, which a closed-world
+# schema-14 reader rejects; a file below 15 reads it as None, so an outside author's issue is
+# never admitted by it (the rule fails closed) and its body is withheld on the next collect.
+FACTS_SCHEMA: Final[int] = 15
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 12 (recovery ownership/session
 # metadata; 11 added the `archive_conflict` event,
@@ -393,6 +397,9 @@ class Issue(_Strict):
     claims: list[IssueClaim] = []
     # The login that opened the issue (facts schema 11); None when never read.
     author: str | None = None
+    # The author's association with the repo (`OWNER`, `MEMBER`, `COLLABORATOR`,
+    # `CONTRIBUTOR`, `NONE`, ...), facts schema 15; None when never read (intake R1).
+    author_association: str | None = None
 
     @property
     def key(self) -> str:
@@ -1349,9 +1356,18 @@ def load_facts(path: Path) -> Facts:
     except (OSError, ValueError) as exc:
         raise TriageError(f"{path}: cannot read facts: {exc}") from exc
     try:
-        return Facts.model_validate(_check_schema(path, data, FACTS_READS, "re-run collect"))
+        facts = Facts.model_validate(_check_schema(path, data, FACTS_READS, "re-run collect"))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid facts: {exc}") from exc
+    if facts.schema_ < 15:
+        # A file written before the association was read kept an outside author's body
+        # (triage-intake R3): judge it as collect does, so no reader sees it.
+        from fr.triage.collect import _withhold_untrusted_bodies
+
+        facts = facts.model_copy(
+            update={"issues": _withhold_untrusted_bodies(facts.issues, facts.config, facts.viewer)}
+        )
+    return facts
 
 
 def load_scope_facts(path: Path, scope: Scope) -> Facts:

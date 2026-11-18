@@ -141,7 +141,10 @@ def artifacts_cmd(
     adopt: bool = typer.Option(
         False,
         "--adopt",
-        help="Also give every in-flight plan with no run a cursor (`fr run adopt`).",
+        help=(
+            "Also give every in-flight plan with no run a cursor (`fr run adopt`), "
+            "each named after its plan folder."
+        ),
     ),
 ) -> None:
     """Bring every live artifact up to the version this fr writes.

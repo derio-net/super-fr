@@ -167,6 +167,25 @@ def test_a_batch_the_cap_holds_says_so_and_names_the_occupants() -> None:
     assert got.summary.in_flight == 0 and got.summary.pending == 2
 
 
+def test_a_rejected_batch_is_blocked_before_the_dependency_and_cap_checks() -> None:
+    """Triage-intake R6: counted, never merely waiting, and the drive is not done."""
+    others = [_dispatched(f"o{n}", n) for n in range(1, 5)]
+    batches = [*others, _batch("waits", 5, after=["o1"]), _batch("free", 6)]
+    stages = {**{b.id: "dispatched" for b in others}, "waits": "proposed", "free": "proposed"}
+    why = "members intake does not admit: x#5: author eve is NONE"
+    got = drive_pass(_snap(batches, stages, rejected={"waits": why, "free": why}))
+    assert sorted(_kinds(got.actions)) == [("blocked", "free"), ("blocked", "waits")]
+    assert all(a.detail == why for a in got.actions)
+    assert got.summary.blocked == 2 and got.summary.pending == 0
+    assert not got.summary.done
+
+
+def test_a_batch_with_no_rejected_member_dispatches() -> None:
+    batches = [_batch("free", 6)]
+    got = drive_pass(_snap(batches, {"free": "proposed"}, rejected={}))
+    assert _kinds(got.actions) == [("dispatch", "free")]
+
+
 def test_a_batch_waiting_on_an_unmerged_dependency_is_skipped() -> None:
     batches = [_dispatched("base", 1), _batch("child", 2, after=["base"]), _batch("free", 3)]
     stages = {"base": "dispatched", "child": "proposed", "free": "proposed"}

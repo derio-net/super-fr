@@ -107,8 +107,10 @@ def test_a_marker_by_anyone_else_is_ignored_and_listed_apart() -> None:
 
     assert [i.key for i in r.debt_digests] == ["widgets#2", "widgets#3"]
     assert [i.key for i in r.untrusted_digests] == ["widgets#1", "widgets#4"]
-    # an untrusted marker stays an ordinary issue: it is not hidden from ranking
-    assert [i.key for i in r.unranked] == ["widgets#1", "widgets#4"]
+    # an untrusted marker is an outside author's issue too: set apart by the intake rule
+    # (triage-intake R4), so it is never ranked either
+    assert [i.key for i, _ in r.untrusted] == ["widgets#1", "widgets#4"]
+    assert r.unranked == []
     assert [u["key"] for u in r.to_json()["untrusted_digests"]] == ["widgets#1", "widgets#4"]
 
 

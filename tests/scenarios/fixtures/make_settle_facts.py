@@ -23,7 +23,15 @@ DEAD = "s-dddddddd"
 
 
 def _issue(n: int, state: str, **kw: object) -> Issue:
-    return Issue(repo=REPO, number=n, title=f"issue {n}", state=state, url=f"{URL}/{n}", **kw)  # type: ignore[arg-type]
+    return Issue(
+        repo=REPO,
+        number=n,
+        title=f"issue {n}",
+        state=state,
+        url=f"{URL}/{n}",
+        author_association="OWNER",
+        **kw,
+    )  # type: ignore[arg-type]
 
 
 def _facts(**kw: object) -> Facts:

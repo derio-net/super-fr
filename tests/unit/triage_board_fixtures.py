@@ -42,6 +42,8 @@ def issue(number: int, **kw: Any) -> dict[str, Any]:
         "state": kw.pop("state", "open"),
         "url": f"{URL}/issues/{number}",
         "created_at": "2026-09-20T09:00:00Z",
+        # Intake admits a maintainer's issue; a test about the outside says so itself.
+        "author_association": "OWNER",
         **kw,
     }
 

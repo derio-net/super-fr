@@ -45,6 +45,7 @@ from fr.artifacts.matrix_strategies import UnconvertibleMatrixError
 from fr.artifacts.matrix_verify import UnreadableMatrixError
 from fr.artifacts.paths import KIND_DIRS, below, kind_dir, space_for
 from fr.artifacts.runner import MIGRATIONS, SchemaMigration
+from fr.artifacts.text import read_utf8
 
 MIGRATION_NAME = "acceptance-fragments"
 
@@ -255,7 +256,9 @@ def _companions(path: Path) -> list[Path]:
 
     root = _root(path)
     try:
-        written = [root / rel for rel in split_texts(path.read_text(), root)]
+        written = [
+            root / rel for rel in split_texts(read_utf8(path, translate_newlines=True), root)
+        ]
     except Exception:
         written = sorted(below(root, "acceptance-fragment").glob("*.yaml"))
     return [*written, *_deleted(path)]
@@ -267,7 +270,7 @@ def split_matrix(path: Path) -> list[Path]:
     deleted (the runner records *path* itself as removed)."""
     root = _root(path)
     try:
-        text = path.read_text()
+        text = read_utf8(path, translate_newlines=True)
     except OSError as e:
         raise UnreadableMatrixError(f"{path}: cannot read: {e}") from e
     try:

@@ -44,6 +44,7 @@ def _issue(number: int, *, prs: list[PullRequest] = (), labels: list[str] = ()) 
         labels=list(labels),
         url=f"https://github.com/{REPO}/issues/{number}",
         prs=list(prs),
+        author_association="OWNER",  # intake admits a maintainer's issue
     )
 
 

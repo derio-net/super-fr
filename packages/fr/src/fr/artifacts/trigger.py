@@ -79,6 +79,7 @@ from fr.artifacts.runner import (
     FailedAction,
     MigrationRegistry,
     MigrationReport,
+    describe,
     inspection_failures,
 )
 from fr.isolation.marker import valid_workspace
@@ -544,7 +545,7 @@ def ensure_artifacts_current(
             emit,
             [
                 f"fr: cannot tell whether the artifacts in {root} are current.",
-                f"  {type(e).__name__}: {e}",
+                f"  {describe(e)}",
                 "  Refusing rather than running over a tree of unknown state.",
                 f"  Inspect with `fr migrate artifacts` (dry-run), or set "
                 f"{SKIP_ENV_VAR}=1 to bypass this check.",
@@ -741,7 +742,7 @@ def _migrate_in_place(
             raise _refuse(
                 emit,
                 [
-                    f"fr: artifact migration failed: {type(e).__name__}: {e}",
+                    f"fr: artifact migration failed: {describe(e)}",
                     f"  Nothing was committed. Run `fr migrate artifacts` to inspect, or set "
                     f"{SKIP_ENV_VAR}=1 to bypass this check.",
                 ],
@@ -793,7 +794,7 @@ def _migrate_and_commit(
         raise _refuse(
             emit,
             [
-                f"fr: artifact migration failed: {type(e).__name__}: {e}",
+                f"fr: artifact migration failed: {describe(e)}",
                 f"  Nothing was committed. Run `fr migrate artifacts` to inspect, or set "
                 f"{SKIP_ENV_VAR}=1 to bypass this check.",
             ],

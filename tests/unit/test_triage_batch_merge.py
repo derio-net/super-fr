@@ -56,7 +56,7 @@ class MergeForge:
         self.method_reads = 0
         self.readied: list[int] = []
         self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
-        self.labels_defined: set[str] = {"approved-fr"}
+        self.labels_defined: set[str] = {"approved-fr", "ready-fr"}
         self.created_labels: list[str] = []
         self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
 

@@ -49,6 +49,9 @@ class _Forge:
     ) -> list[dict[str, Any]]:
         return []
 
+    def issue_associations(self, *, repo: str, state: str, limit: int) -> dict[int, str]:
+        return {}
+
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
         return [p for p in _load("super-fr-prs.json") if p.get("state") == "OPEN"]
 

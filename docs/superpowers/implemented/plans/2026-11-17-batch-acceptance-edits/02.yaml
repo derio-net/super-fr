@@ -1,0 +1,130 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Artifacts and runs — named non-UTF-8 refusals, check-ignore helper, plan-slug
+    adoption (#1390,
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - spec-repairs-name-undecodable-files
+  - adopt-run-id-from-plan-slug
+  - adopt-default-branch-warning
+  tier: standard
+  files:
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/runner.py
+  - packages/fr/src/fr/artifacts/atomic.py
+  - packages/fr/src/fr/artifacts/spec_test_plan_heading.py
+  - packages/fr/src/fr/artifacts/matrix_anchors.py
+  - packages/fr/src/fr/artifacts/matrix_fragments.py
+  - packages/fr/src/fr/artifacts/commit.py
+  - packages/fr/src/fr/artifacts/*.py
+  - packages/fr/src/fr/git.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/migrate_cmd.py
+  - packages/fr/src/fr/isolation/scaffold.py
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/run/adopt.py
+  - tests/unit/test_test_plan_heading.py
+  - tests/unit/test_migration_matrix_fragments.py
+  - tests/unit/test_migration_runner.py
+  - tests/unit/test_migration_trigger.py
+  - tests/unit/test_git_ignore_helper.py
+  - tests/unit/test_run_adopt.py
+  - tests/unit/test_run_adopt_supersede.py
+  - tests/unit/test_run_evidence_visual.py
+  - tests/unit/test_init_scaffold.py
+  - docs/**/*.md
+  estimate_lines: 480
+tasks:
+- number: 1
+  title: Undecodable artifacts are refused by name (R5–R7)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests (in tests/unit/test_test_plan_heading.py and tests/unit/test_migration_matrix_fragments.py) writing a spec and a v5 matrix.yaml containing byte 0xff: `run_migrations` / `fr migrate artifacts` and the CLI-entry gate's refusal name `<path> is not UTF-8 text (byte 0xff at offset <n>)` and contain no `UnicodeDecodeError`/`codec`; the file is byte-identical; the gate still refuses. Run; they fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `NotUtf8Error(ValueError)` and a `decode_utf8(data, path)` that raises it (message from the codec error's `start`) in fr.artifacts (atomic.py or a sibling); route `read_verbatim` (registry.py:148), the heading repair's `_applies`/`_fn`, `matrix_anchors.conversions`/`_fn` and matrix_fragments' reads (:258, :270) through it. Add `describe(e)` in runner.py (message alone for NotUtf8Error, `f"{type(e).__name__}: {e}"` otherwise) and use it at all seven sites. Tests pass.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: grep runner.py for any remaining `type(e).__name__` formatting and the repairs for raw `read_text()` of their own artifact; rerun the migration test files.
+- number: 2
+  title: One check-ignore helper (R8)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: new tests/unit/test_git_ignore_helper.py: `ignored_paths` over a fixture repo returns ignored paths including one with a space and one non-ASCII name, returns an empty set on a non-repo dir (exit 128) and when git is missing (monkeypatched resolution); `is_ignored` True/False and False on error. Plus one test per call site pinning today's error behaviour (`_committable`, `commit.py`'s ignore filter, scaffold's two probes, visual's `git_ignored`). Run; helper tests fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add `ignored_paths(root, paths)` (`check-ignore -z --` through `git_answer`, NUL split, exit 0/1 answers, empty set otherwise or on GitUnavailableError) and `is_ignored(root, path)` (`-q`, False on any error) to fr/git.py; switch the four sites to them. triage/gitseam.py unchanged. Tests pass.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: drop helpers or imports the four sites no longer need; `grep -rn check-ignore packages/fr/src` shows only fr/git.py and triage/gitseam.py.
+- number: 3
+  title: Adopted runs are named after their plan, with a default-branch warning (R9–R12)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in tests/unit/test_run_adopt.py: (a) `adopt_run` on a plan with no --run-id names the run after the plan folder; (b) a spec-only adoption keeps `<date>-<branch>`; (c) explicit --run-id wins and an existing id still refuses; (d) on a fixture with origin/HEAD → main and HEAD on main, notes hold one warning naming `main` and `--branch`; on another branch, and with no remote, none. In the migrate tests: `fr migrate artifacts --yes --adopt` with three adoptable plans on one branch adopts all three, and a following dry run offers none. In test_run_adopt_supersede.py: supersede of a run with a branch-derived id moves to the plan-slug id with its usage file. Run; they fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: in run/adopt.py, `rid = validate_run_id(run_id) if run_id else (validate_run_id(<plan folder name>) if plan_rel else derive_run_id(resolved_branch))`; add the warning via `fr.git.remote_default_ref` (strip `<remote>/`; None, GitRefusal or GitUnavailableError → no warning) appended to `notes`. Update the module docstring (:35) and `fr run adopt`'s/`--adopt`'s help text. Tests pass.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: keep the id choice in one small function with a docstring naming #1219; rerun the adopt and migrate test files.
+- number: 4
+  title: Docs currency and phase suite
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Run `uv run fr docs check` and `uv run python scripts/sync-readme.py --check`; fix each finding (page text or `reviewed` stamp, regenerated tables). Run ruff format/check and mypy over packages/fr/src, then the full suite last into a host-visible log outside the repo, after the last code commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-17T14:03:04+00:00'
+      note: null
+  completion:
+    at: '2026-11-17T14:03:04+00:00'
+    note: null
+    observed_prs: []

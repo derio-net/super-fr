@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
+reviewed: 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
 ---
 
 # The acceptance matrix
@@ -48,6 +48,8 @@ A row that is still pending on your branch has no history yet. Thus you can corr
 mistyped origin in place with `fr acceptance amend --id <row> --op reword --origin
 spec:<slug>#R<n> --why "<reason>"`. This command rewrites the row. If the corrected origin
 names another spec, the command also moves the row to the fragment of that spec. The
+command changes only the origin: the row keeps its own statement, also when a pending
+reword amendment of the row exists. The
 origins of a merged row are history: for such a row, `--origin` stops with an error.
 
 Rows cite fr's own artifacts **logically**: `spec:<slug>#R<n>` for a spec requirement,
@@ -71,6 +73,22 @@ The migration names the row and leaves every file as it was.
 To continue, put that row back as the fragments hold it, or delete it from `matrix.yaml`.
 Then run `fr migrate artifacts --yes`, and then apply your change again with
 `fr acceptance set-status`.
+
+Earlier fr versions named a fragment `<slug>-design.yaml`, with `feature: <slug>-design`.
+`fr migrate artifacts --yes` renames such a fragment to `<slug>.yaml` and sets its
+`feature:` key to `<slug>`. If `<slug>.yaml` exists, the migration merges the two files.
+The rows and amendments of `<slug>.yaml` come first. An entry that the two files hold
+identically stays once.
+
+A row that the two files hold *differently* stops the migration.
+The migration names the row and leaves both files as they were. The migration also stops
+if the matrix after it is not the matrix before it. To continue, make the two files hold
+that row the same way, or remove it from one of them. Then run `fr migrate artifacts --yes`.
+
+Until the branch that ran the repair merges, the default branch still holds
+`<slug>-design.yaml`. While your branch holds `<slug>.yaml` and not the `-design` file,
+`fr acceptance check` and `deliver` read the default branch's file as `<slug>.yaml`. So
+the rename is not an in-place edit of a merged row.
 
 A repo can turn the matrix off with `artifacts.acceptance: off` in `.fr/settings.yaml`
 (`fr settings show`). fr then writes no rows, reports or matrix CI. `fr acceptance add` and

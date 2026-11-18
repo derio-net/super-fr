@@ -108,6 +108,7 @@ def world(tmp_path: Path, me: str, monkeypatch: pytest.MonkeyPatch) -> tuple[Pat
                 url=f"https://github.com/{REPO}/issues/{n}",
                 labels=["fr:claimed"] if claimed else [],
                 claims=claims,  # type: ignore[arg-type]
+                author_association="OWNER",  # intake admits a maintainer's issue
             )
         )
     facts = Facts(

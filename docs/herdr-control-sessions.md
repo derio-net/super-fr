@@ -7,7 +7,7 @@ covers:
   - packages/fr-herdr/src/**
   - packages/fr/src/fr/triage/batch*.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
-reviewed: 2026-11-16 still true; gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed
+reviewed: 2026-11-17 gate names, runner session status and triage timestamp parsing now have one definition each, no behaviour or help text changed; still true after batch triage-intake (the launch brief now quotes issue text; the session control it describes is unchanged); 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged
 ---
 
 # Herdr control sessions

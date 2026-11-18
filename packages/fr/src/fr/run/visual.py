@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
-import subprocess
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +22,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fr.acceptance.model import Matrix, Row
 from fr.artifacts.paths import emitted_path
+from fr.git import is_ignored
 from fr.record.model import VisualEvidence
 from fr.run.telemetry import parse_timestamp
 
@@ -240,18 +240,8 @@ def _shot_problems(
 
 
 def git_ignored(repo_root: Path) -> Callable[[Path], bool]:
-    """`is_ignored` for `check_visual`: `git check-ignore -q` in `repo_root`."""
-
-    def ignored(path: Path) -> bool:
-        proc = subprocess.run(
-            ["git", "check-ignore", "-q", "--", str(path)],
-            cwd=repo_root,
-            capture_output=True,
-            check=False,
-        )
-        return proc.returncode == 0
-
-    return ignored
+    """`is_ignored` for `check_visual`: `fr.git.is_ignored` in `repo_root`."""
+    return lambda path: is_ignored(repo_root, path)
 
 
 class VisualRefusedError(Exception):

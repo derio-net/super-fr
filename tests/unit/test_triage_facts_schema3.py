@@ -85,6 +85,9 @@ class _Forge(FakeForge):
         super().__init__(**kw)
         self.open_prs = open_prs
 
+    def issue_associations(self, *, repo: str, state: str, limit: int) -> dict[int, str]:
+        return {}
+
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_open_prs", {"repo": repo, "limit": limit}))
         return self.open_prs

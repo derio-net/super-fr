@@ -24,6 +24,7 @@ def facts() -> Facts:
             number=n,
             title=f"member {n}",
             state="open",
+            author_association="OWNER",
             url=f"https://github.com/{REPO}/issues/{n}",
         )
         for n in (1, 2, 3, 4)

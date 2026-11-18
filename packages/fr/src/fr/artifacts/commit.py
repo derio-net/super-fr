@@ -52,6 +52,7 @@ from fr.git import (
     GitRefusal,
     GitUnavailableError,
     git_argv,
+    ignored_paths,
     remote_default_ref,
     remote_name,
 )
@@ -501,13 +502,7 @@ def _without_ignored(repo_root: Path, paths: Sequence[Path]) -> tuple[Path, ...]
     """
     if not paths:
         return ()
-    try:
-        done = _git(repo_root, "check-ignore", "--", *(str(p) for p in paths))
-    except GitUnavailableError:
-        return tuple(paths)
-    if done.returncode != 0:
-        return tuple(paths)
-    ignored = set(done.stdout.splitlines())
+    ignored = ignored_paths(repo_root, [str(p) for p in paths])
     return tuple(p for p in paths if str(p) not in ignored)
 
 

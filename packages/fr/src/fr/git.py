@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,13 +111,13 @@ class GitRefusal:
 
 
 def git_answer(
-    root: Path, *args: str, timeout: float = GIT_TIMEOUT_SECONDS
+    root: Path, *args: str, timeout: float = GIT_TIMEOUT_SECONDS, stdin: str | None = None
 ) -> subprocess.CompletedProcess[str]:
     """One git call, C-locale, prompt-free, time-boxed.
 
     Raises `GitUnavailableError` when git could not be RUN or did not finish;
     a non-zero exit is returned normally, because "this ref does not exist" is
-    an answer.
+    an answer. *stdin*, when given, is written to git's stdin.
     """
     try:
         return subprocess.run(
@@ -127,6 +127,7 @@ def git_answer(
             text=True,
             timeout=timeout,
             env={**os.environ, **_GIT_ENV},
+            input=stdin,
         )
     except FileNotFoundError as e:
         raise GitUnavailableError("git is not installed or not on PATH") from e
@@ -137,6 +138,39 @@ def git_answer(
         ) from e
     except OSError as e:
         raise GitUnavailableError(f"could not run git: {e}") from e
+
+
+def ignored_paths(root: Path, paths: Iterable[str]) -> set[str]:
+    """The *paths* git's ignore rules exclude in *root*, each spelled as given.
+
+    The one set listing (super-fr#1154, spec `2026-11-17-batch-acceptance-edits`
+    R8). The paths go NUL-separated on stdin and come back NUL-separated
+    (`check-ignore -z --stdin`; git refuses `-z` without `--stdin`), so a path
+    with spaces or non-ASCII bytes matches its input. Exit 0 and 1 are answers;
+    any other exit, and a git that cannot run, give an empty set, so a caller
+    that drops ignored paths drops nothing when git cannot say.
+    """
+    listed = list(paths)
+    if not listed:
+        return set()
+    try:
+        done = git_answer(
+            root, "check-ignore", "-z", "--stdin", stdin="".join(f"{p}\0" for p in listed)
+        )
+    except GitUnavailableError:
+        return set()
+    if done.returncode not in (0, 1):
+        return set()
+    return {p for p in done.stdout.split("\0") if p}
+
+
+def is_ignored(root: Path, path: str | Path) -> bool:
+    """Whether git ignores *path* in *root*; False on any error, git missing included."""
+    try:
+        done = git_answer(root, "check-ignore", "-q", "--", str(path))
+    except GitUnavailableError:
+        return False
+    return done.returncode == 0
 
 
 def ref_exists(root: Path, ref: str) -> bool:

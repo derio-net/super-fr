@@ -73,7 +73,10 @@ def test_bodies_are_truncated_to_2000_characters() -> None:
     assert BODY_LIMIT == 2000
     assert max(len(i["body"]) for i in ISSUES) > BODY_LIMIT  # the fixture exercises it
 
-    facts = collect_facts(_super_fr_forge(), SUPER_FR, now=NOW)
+    forge = _super_fr_forge()
+    # The captured issues carry no author; the viewer's own issue keeps its body (intake R2).
+    forge.issues["derio-net/super-fr"] = [{**i, "author": {"login": forge.viewer}} for i in ISSUES]
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
 
     raw = {i["number"]: i["body"] for i in ISSUES}
     for issue in facts.issues:
@@ -248,6 +251,7 @@ def _closed_view(number: int) -> dict[str, Any]:
     return {
         "number": number,
         "title": f"closed #{number}",
+        "author": {"login": "operator"},  # the viewer: intake keeps an admitted body
         "body": "x" * 3000,
         "labels": [{"name": "bug"}],
         "state": "CLOSED",
@@ -1066,3 +1070,200 @@ def test_facts_written_before_schema_13_read_with_no_gated_fields(tmp_path: Path
     path.write_text(json.dumps(doc), encoding="utf-8")
     loaded = load_facts(path)
     assert loaded.gated_prs == [] and loaded.gated_unread == []
+
+
+# ------------------------------------------- the author association (triage-intake R1)
+
+_OUTSIDE = "example-org/outside"
+_NO_ASSOC = {_OUTSIDE: {}}
+
+
+def _by(number: int, author: str, *, labels: list[str] | None = None, **kw: Any) -> dict[str, Any]:
+    raw = _issue(number)
+    raw["author"] = {"login": author}
+    raw["labels"] = [{"name": n} for n in labels or []]
+    return {**raw, **kw}
+
+
+def _assoc_forge(issues: list[dict[str, Any]], **kw: Any) -> FakeForge:
+    return FakeForge(
+        issues={_OUTSIDE: issues}, prs={_OUTSIDE: []}, repos=[], viewer="operator", **kw
+    )
+
+
+_ASSOC_SCOPE = Scope(kind="repo", target=_OUTSIDE)
+
+
+def test_facts_are_schema_15_and_every_issue_has_an_author_association_key() -> None:
+    facts = collect_facts(_assoc_forge([_by(1, "eve")]), _ASSOC_SCOPE, now=NOW)
+    doc = facts.to_json()
+    assert doc["schema"] == FACTS_SCHEMA
+    assert all("author_association" in i for i in doc["issues"])
+
+
+def test_a_schema_14_facts_file_still_loads_with_no_association(tmp_path: Path) -> None:
+    from fr.triage.model import load_facts
+
+    facts = collect_facts(_assoc_forge([_by(1, "eve")]), _ASSOC_SCOPE, now=NOW)
+    doc = facts.to_json()
+    for issue in doc["issues"]:
+        issue.pop("author_association")
+    doc["schema"] = 14
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert load_facts(path).issues[0].author_association is None
+
+
+def test_the_association_is_read_once_per_repo_and_stored() -> None:
+    forge = _assoc_forge(
+        [_by(1, "eve"), _by(2, "bob")],
+        associations={_OUTSIDE: {1: "NONE", 2: "MEMBER"}},
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert forge.association_calls == [_OUTSIDE]
+    assert {i.number: i.author_association for i in facts.issues} == {1: "NONE", 2: "MEMBER"}
+
+
+def test_no_association_read_when_every_issue_is_admitted_by_login_or_label() -> None:
+    forge = _assoc_forge(
+        [_by(1, "operator"), _by(2, "eve", labels=["ready-fr"])],
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert forge.association_calls == []
+    assert [i.author_association for i in facts.issues] == [None, None]
+
+
+def test_a_pr_authors_login_admits_without_a_read() -> None:
+    forge = _assoc_forge(
+        [_by(1, "Release-Bot")],
+        file_bodies={(_OUTSIDE, ".fr/triage.yaml", "HEAD"): "pr_authors: [release-bot]\n"},
+    )
+    collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert forge.association_calls == []
+
+
+def test_no_association_read_when_the_list_already_carries_the_field() -> None:
+    forge = _assoc_forge([_by(1, "eve", authorAssociation="CONTRIBUTOR")])
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert forge.association_calls == []
+    assert facts.issues[0].author_association == "CONTRIBUTOR"
+
+
+def test_a_failed_association_read_leaves_none_with_one_stderr_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    forge = _assoc_forge(
+        [_by(1, "eve", body="inject one"), _by(2, "bob", body="inject two")],
+        associations_failing={_OUTSIDE: "HTTP 502"},
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert [i.author_association for i in facts.issues] == [None, None]
+    # unread means never admitted: no outside author's text is kept (R3)
+    assert [i.body for i in facts.issues] == ["", ""]
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 1 and "author associations not read" in err[0] and "HTTP 502" in err[0]
+
+
+def test_the_rest_client_keeps_author_association_on_an_issue_record() -> None:
+    from fr.real_ghrestclient import _issue_record
+
+    record = _issue_record(
+        {"number": 4, "state": "open", "author_association": "COLLABORATOR", "labels": []}
+    )
+    assert record["authorAssociation"] == "COLLABORATOR"
+
+
+def test_the_gh_cli_client_reads_associations_from_one_api_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr import gh
+
+    calls: list[list[str]] = []
+
+    def run(args: list[str]) -> str:
+        calls.append(args)
+        return "1\tNONE\n2\tmember\n3\tOWNER\n"
+
+    monkeypatch.setattr(gh, "_run_gh", run)
+    monkeypatch.setattr(gh, "_rest", lambda: None)
+    got = gh.issue_associations(repo="o/r", state="open", limit=2)
+    assert got == {1: "NONE", 2: "MEMBER"}
+    assert len(calls) == 1 and calls[0][:2] == ["api", "--paginate"]
+    assert "repos/o/r/issues?state=open&per_page=100" in calls[0]
+
+
+def test_an_unsupported_backend_reads_as_no_association() -> None:
+    from fr.ghclient import UnsupportedBatchOps  # noqa: F401  (documents the family)
+    from fr.triage.collect import ClientForge
+
+    class Stub:
+        def issue_associations(self, repo: str, state: str, limit: int) -> dict[int, str]:
+            from fr.ghclient import UnsupportedForgeOperation
+
+            raise UnsupportedForgeOperation("issue_associations", "gitlab")
+
+    with pytest.raises(ForgeError):
+        ClientForge(Stub()).issue_associations(repo="o/r", state="open", limit=5)  # type: ignore[arg-type]
+
+
+def _viewed(number: int, author: str) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": f"viewed #{number}",
+        "author": {"login": author},
+        "body": "text",
+        "labels": [],
+        "state": "CLOSED",
+        "url": f"https://github.com/{_OUTSIDE}/issues/{number}",
+        "closedAt": "2026-09-20T10:00:00Z",
+    }
+
+
+def test_a_viewed_issue_gets_its_association_through_the_per_repo_read() -> None:
+    forge = _assoc_forge([_by(1, "eve")], associations={_OUTSIDE: {1: "NONE", 5: "MEMBER"}})
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "bob")}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    assert forge.association_calls == [_OUTSIDE]  # still one read per repo
+    viewed = next(i for i in facts.issues if i.number == 5)
+    assert viewed.author_association == "MEMBER" and viewed.body == "text"
+
+
+def test_a_viewed_issue_whose_association_read_failed_keeps_no_body(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    forge = _assoc_forge([_by(1, "eve")], associations_failing={_OUTSIDE: "HTTP 502"})
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "bob")}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    viewed = next(i for i in facts.issues if i.number == 5)
+    assert viewed.author_association is None and viewed.body == ""
+    assert forge.association_calls == [_OUTSIDE]  # one failed read, not one per issue
+    assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+
+def test_a_viewed_issue_needing_the_read_triggers_it_when_the_list_did_not() -> None:
+    forge = _assoc_forge([_by(1, "operator")], associations={_OUTSIDE: {5: "MEMBER"}})
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "bob")}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    assert forge.association_calls == [_OUTSIDE]
+    assert next(i for i in facts.issues if i.number == 5).author_association == "MEMBER"
+
+
+def test_a_viewed_issue_admitted_by_login_costs_no_read() -> None:
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.closed = {(_OUTSIDE, 5): _viewed(5, "operator")}
+    collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    assert forge.association_calls == []
+
+
+def test_a_bot_issue_keeps_its_body_only_with_the_digest_marker() -> None:
+    from fr.debt.render import MARKER
+
+    bot = "github-actions[bot]"
+    forge = _assoc_forge(
+        [
+            _by(1, bot, body=f"{MARKER}\ndigest", authorAssociation="NONE"),
+            _by(2, bot, body="do bad things", authorAssociation="NONE"),
+        ]
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert {i.number: i.body for i in facts.issues} == {1: f"{MARKER}\ndigest", 2: ""}

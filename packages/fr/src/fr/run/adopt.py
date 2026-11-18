@@ -32,10 +32,11 @@ Three things this module deliberately does NOT do:
    discover new git-tracked files.
 
 **Why an adopted run records its emitted spec and plan.** Archival keys on
-`emitted.plan` (2026-08-14 spec §4.B): a run id is `<date>-<flattened-branch>`
-and a plan slug is authored independently, so a name-keyed match silently never
-fires. A run adopted without those recordings would be a run that never
-archives with its plan.
+`emitted.plan` (2026-08-14 spec §4.B): an adopted plan's run is named after its
+plan folder (super-fr#1219), but `fr run start`'s is `<date>-<flattened-branch>`,
+`--run-id` can name it anything, and a plan slug is authored independently, so a
+name-keyed match silently never fires. A run adopted without those recordings
+would be a run that never archives with its plan.
 """
 
 from __future__ import annotations
@@ -822,6 +823,54 @@ def _check_pr_repo(pr_url: str, target_repo: str) -> None:
         )
 
 
+def _adopted_run_id(run_id: str | None, plan_rel: str | None, branch: str) -> str:
+    """The id an adopted run takes (super-fr#1219, spec
+    `2026-11-17-batch-acceptance-edits` R9, R11).
+
+    An explicit `--run-id` wins. Otherwise a plan's run is named after the plan
+    folder (already `YYYY-MM-DD-<slug>`), so N plans adopted on one branch get N
+    ids; the old `<date>-<branch>` id gave them one, and every plan after the
+    first was refused. A spec with no plan keeps `<date>-<branch>`: its stem would
+    be the id its plan's later adoption needs. Every id passes `validate_run_id`,
+    the gate `fr run start` applies (review r5-b1) to what becomes a path segment.
+    """
+    if run_id:
+        return validate_run_id(run_id)
+    if plan_rel is not None:
+        return validate_run_id(Path(plan_rel).name)
+    # Imported here, not at module scope: `fr.commands.run_cmd` imports this
+    # module for the `fr run adopt` command, so a top-level import is a cycle.
+    # The derivation must stay identical to `fr run start`'s.
+    from fr.commands.run_cmd import derive_run_id
+
+    return derive_run_id(branch)
+
+
+def _default_branch_warning(repo_root: Path, branch: str) -> str | None:
+    """One note when the adopted run records the repository's default branch
+    (spec `2026-11-17-batch-acceptance-edits` R12), else `None`.
+
+    The default is the remote default ref with its remote prefix removed
+    (`origin/main` -> `main`). No remote, a ref fr cannot name, or a git that
+    cannot answer mean no warning: adoption still adopts either way.
+    """
+    from fr.git import GitRefusal, GitUnavailableError, remote_default_ref
+
+    try:
+        ref = remote_default_ref(repo_root)
+    except GitUnavailableError:
+        return None
+    if ref is None or isinstance(ref, GitRefusal) or "/" not in ref:
+        return None
+    if ref.split("/", 1)[1] != branch:
+        return None
+    return (
+        f"the run records `{branch}`, this repository's default branch; if the work "
+        "belongs on a feature branch, adopt it again with `--branch <b>` "
+        "(`fr run adopt <target> --supersede --branch <b>`)."
+    )
+
+
 def adopt_run(
     repo_root: Path,
     target: Path,
@@ -908,17 +957,8 @@ def adopt_run(
         pr_state=pr_state if pr_state is not None else default_pr_state(repo_root),
     )
 
-    # Imported here, not at module scope: `fr.commands.run_cmd` imports this
-    # module for the `fr run adopt` command, so a top-level import is a cycle.
-    # Same seam-not-copy reasoning as `fr.run.workspace._select_target` — the
-    # run-id derivation must stay identical to `fr run start`'s.
-    from fr.commands.run_cmd import derive_run_id
-
     try:
-        # Same gate `fr run start` applies (review r5-b1): `--run-id` is
-        # operator input and becomes a path segment. `derive_run_id`'s output
-        # always passes, so this only fires on an explicit override.
-        rid = validate_run_id(run_id) if run_id else derive_run_id(resolved_branch)
+        rid = _adopted_run_id(run_id, plan_rel, resolved_branch)
     except RunStateError as e:
         raise AdoptError(str(e)) from e
     path = run_path(repo_root, rid)
@@ -932,6 +972,9 @@ def adopt_run(
 
     if notes is not None:
         notes.extend(adoption.notes)
+        warning = _default_branch_warning(repo_root, resolved_branch)
+        if warning is not None:
+            notes.append(warning)
 
     journal, visual_phases = _review_inputs(repo_root, plan_rel, adoption, notes)
     started = _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
