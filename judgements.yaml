@@ -8429,6 +8429,7 @@ batches:
   - super-fr#1543
   rationale: 'All in the driver loop (batch_drive.py, triage_batch_cmd.py); #1492 and #1493 share the
     draft non-member filter.'
+  order: 2
   wave: 22
   bump: minor
 - id: run-durability
