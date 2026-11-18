@@ -73,7 +73,8 @@ in the TUI.
 
 OpenCode does not read `~/.claude/rules/`. So the installer also copies the shipped rules into
 a `rules/` folder in the plugin directory. The plugin adds each rule to the system prompt of a
-request. It adds a rule only when the prompt does not hold its text yet. The acceptance
+request. It adds a rule only when the prompt does not hold its text yet. It also skips a
+rule when a part's `Instructions from:` header names the same rule file. The acceptance
 nag, the session binding and the child claim run `fr` in the session's own directory, not in the
 directory the plugin loaded from.
 

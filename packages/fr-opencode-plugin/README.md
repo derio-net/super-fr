@@ -209,7 +209,12 @@ rules (its `CLAUDE_RULES` list, copied from the generated
 appends each as a system part on the `context` hook, once per request: a rule is
 skipped when any existing system part already contains its text (a part kept from
 an earlier request, another loaded copy of the plugin, or `opencode.json`'s
-`instructions`). The in-tree plugin has no `rules/` directory and injects nothing.
+`instructions`), or when a part's `Instructions from: <path>` header (OpenCode's
+own instructions format) names the same rule file, so a mirror whose text differs
+still yields one copy. The in-tree plugin has no `rules/` directory and injects
+nothing, silently. A `rules/` directory that exists but cannot be listed, or a
+rule file that cannot be read, prints one stderr line naming it and is retried on
+the next request.
 
 The acceptance nag, session bind and child claim run `fr` in the session's own
 directory (its `location.directory`), falling back to the plugin's directory.

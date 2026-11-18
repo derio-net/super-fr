@@ -177,13 +177,22 @@ scenario. The [verification strategies guide](../verification-strategies.md) cov
 
 ## Pins in the scaffolded CI
 
-`fr acceptance init` pins everything that the pipeline runs. Each action is a full commit
-SHA with a `# vX.Y.Z` comment. The `fr` install line names the commit of the release tag
-of the `fr` that wrote it, not `main`. `init` reads that commit with `git ls-remote`. If
-the read fails, `init` exits 2 and writes nothing.
+`fr acceptance init` pins these items in the pipeline:
+
+- Each action is a full commit SHA with a `# vX.Y.Z` comment.
+- The `fr` install line names the commit of the release tag of the `fr` that wrote it,
+  not `main`.
+- On GitLab, each job downloads one uv release and checks its recorded SHA-256. On GitHub
+  and Gitea, the pinned `setup-uv` action installs uv.
+- The debt job installs `tea` (Gitea) or `glab` (GitLab) at one version, with a recorded
+  SHA-256.
+
+The GitLab job image `python:3.12` is a tag, and a tag can move. `init` reads the `fr`
+commit with `git ls-remote`. If the read fails, `init` exits 2 and writes nothing.
 
 To move the pins, run `fr acceptance init --refresh-ci`. If the read of the tag fails, it
-also exits 2 and writes nothing. `fr acceptance check` warns when
+also exits 2 and writes nothing. On GitLab, `--refresh-ci` prints the jobs to paste over the
+old ones. It never rewrites `.gitlab-ci.yml`. `fr acceptance check` warns when
 the pinned `fr` is older than the running one. The warning never fails the check.
 
 ## Credentials of the weekly debt job
@@ -194,10 +203,16 @@ token in the process environment. The token is never in a command line or in `.g
 Without it, the command uses the forge's own variable: `GH_TOKEN`, `GITLAB_TOKEN` or
 `GITEA_TOKEN`.
 
+The command sends the token only when the host of `origin` is the forge host
+that fr found for the checkout. For a different host, such as a mirror, it pushes without
+the token and prints one warning. It also clears an `extraheader` that checkout kept in
+`.git/config`, so Git sends one `Authorization` header.
+
 - GitHub: checkout keeps no credential. `FR_DEBT_TOKEN` reaches the archive step only.
   When `FR_DEBT_TOKEN` is unset, the archive step uses `GH_TOKEN`, which is the job's own
   token.
 - Gitea: the job installs a pinned `tea` and logs in with `FR_DEBT_TOKEN`, or with the
-  job's own token when that secret is unset.
+  job's own token when that secret is unset. `tea` keeps the login in the job's temporary
+  folder, and the last step logs out.
 - GitLab: the job installs a pinned `glab`. It stops with one line when the masked CI/CD
   variable `FR_DEBT_TOKEN` (scope `api`) is not set.

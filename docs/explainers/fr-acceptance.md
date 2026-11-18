@@ -257,14 +257,19 @@ long-merged plans.
 
 The scaffolded workflow runs code with your repo's tokens, so it pins what it runs. Every
 action is a commit SHA with a version comment. The `fr` it installs is the commit of the
-release tag of the `fr` that wrote the file, not `main`. A moving branch could change what
-your CI runs between two runs. A commit cannot. To move the pins, run
-`fr acceptance init --refresh-ci`. `fr acceptance check` warns when the pin is older than
-the `fr` you run, and never fails because of it.
+release tag of the `fr` that wrote the file, not `main`. On GitLab, each job also installs
+one uv release and checks its SHA-256. The debt job pins its `tea` and `glab` the same
+way. The pins leave one thing open: the GitLab job image `python:3.12` is a tag, and a tag
+can move.
+
+A moving branch could change what your CI runs between two runs. A commit cannot. To move
+the pins, run `fr acceptance init --refresh-ci`. On GitLab, `--refresh-ci` prints the jobs to
+paste over the old ones. It never rewrites `.gitlab-ci.yml`. `fr acceptance check` warns
+when the pin is older than the `fr` you run, and never fails because of it.
 
 The weekly debt job needs a token that can push and open a pull request. Name it
-`FR_DEBT_TOKEN`. Each forge's job installs its own pinned CLI. On GitLab, the job stops with
-one line when that masked variable is missing.
+`FR_DEBT_TOKEN`. On Gitea and GitLab, the debt job installs its own pinned CLI. On GitLab,
+only the debt job stops, with one line, when that masked variable is missing.
 
 ## What can the matrix not do?
 
