@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-18-feat-batch-triage-pages
+captures:
+- host: h-14ac0aa7
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-18T13:11:26+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: bd72e033-22c2-4336-9bd1-eb0cee343bb7
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 78
+        cache_write: 185403
+        cache_read: 6161222
+        output: 33371
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 24
+      other:
+        usd: null
+        turns: 7
+      paperwork:
+        usd: null
+        turns: 6
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 8
+        cache_write: 96371
+        cache_read: 261406
+        output: 832
+      brainstorm:
+        usd: null
+        turns: 34
+        input: 70
+        cache_write: 89032
+        cache_read: 5899816
+        output: 32539
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 8
+          cache_write: 96371
+          cache_read: 261406
+          output: 832
+        brainstorm:
+          usd: null
+          turns: 34
+          input: 70
+          cache_write: 89032
+          cache_read: 5899816
+          output: 32539

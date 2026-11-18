@@ -1,0 +1,181 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-18-triage-pages-ux
+repo: derio-net/super-fr
+rows:
+  - id: triage-page-names
+    capability: triage pages
+    acceptance: Each triage page's nav title, file, command and fragment directory share
+      one name (backlog, issues, batches, origins, architecture, history); `fr triage
+      render`/`board` still work as aliases and a render removes the old-named file
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R1
+    - spec:2026-11-18-triage-pages-ux#R2
+    - spec:2026-11-18-triage-pages-ux#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-pages-rendered-stamp
+    capability: triage pages
+    acceptance: Every triage page states when it was rendered, beside when its facts
+      were collected
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - backlog-stamp
+      - issues-stamp
+      - batches-stamp
+      - origins-stamp
+      - architecture-stamp
+      - history-stamp
+  - id: triage-pages-driver-refresh
+    capability: triage pages
+    acceptance: While the wave driver runs, each pass that collected re-renders every
+      page whose inputs are on disk, and a snapshot is stored when a wave finishes
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R6
+    - spec:2026-11-18-triage-pages-ux#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-pages-folds
+    capability: triage pages
+    acceptance: Collapsible sections on every page use one shared fold component; a
+      link into a folded section opens it
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R8
+    - spec:2026-11-18-triage-pages-ux#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - backlog-decisions-open
+      - issues-lists-closed
+      - history-timeline-closed
+      - history-archived-notes
+      interactions:
+      - open-fold
+      - close-fold
+      - hash-opens-fold
+  - id: triage-pages-links
+    capability: triage pages
+    acceptance: Every PR and issue reference links to the forge, and a wave reference
+      jumps to that wave's tab on the page that holds it
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R11
+    - spec:2026-11-18-triage-pages-ux#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - next-up-wave-links
+      - prose-issue-links
+      interactions:
+      - wave-link-selects-tab
+      - finished-wave-link-to-history
+  - id: triage-backlog-issues-split
+    capability: triage pages
+    acceptance: The Backlog holds the decisions and a separate Issues page holds the
+      lists; the Waves section filters by several issue kinds at once
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R4
+    - spec:2026-11-18-triage-pages-ux#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - backlog-page
+      - issues-page
+      - waves-all-kinds
+      interactions:
+      - kinds-toggle-several
+      - kinds-none-selected
+  - id: triage-batches-columns-cutoff
+    capability: triage pages
+    acceptance: On the Batches page every column collapses and expands and keeps that
+      across refresh, and a wave cutoff shows only the waves active in the last 30 days
+      by default
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R10
+    - spec:2026-11-18-triage-pages-ux#R18
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - empty-column-collapsed
+      - cutoff-on
+      - cutoff-off
+      interactions:
+      - collapse-column
+      - expand-empty-column
+      - state-survives-reload
+      - toggle-cutoff
+  - id: triage-origins-groups-prs
+    capability: triage pages
+    acceptance: Origins shows each origin group as a fold with a state filter (open,
+      closed, all), and each PR with its title, merge date and the issues naming it
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R14
+    - spec:2026-11-18-triage-pages-ux#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - origin-groups-folded
+      - pr-detail
+      - pr-not-in-facts
+      interactions:
+      - state-filter-open
+      - state-filter-closed
+      - state-filter-all
+  - id: triage-history-pr-summary
+    capability: triage pages
+    acceptance: History's finished waves show each batch's PR with its title and merge
+      date, and its timeline and dated notes fold
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R16
+    - spec:2026-11-18-triage-pages-ux#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - finished-wave-pr-column
+      - batch-without-pr
+  - id: triage-architecture-pipeline-tabs
+    capability: triage pages
+    acceptance: Architecture's pipeline diagram reads as one graph with dated tabs above
+      it, stepping through the dates in order
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R17
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - one-graph-latest-tab
+      interactions:
+      - step-through-dated-tabs
