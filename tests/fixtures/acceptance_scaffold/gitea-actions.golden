@@ -95,9 +95,9 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Log in to tea
         env:
-          TEA_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
-          TEA_URL: ${{ gitea.server_url }}
-        run: tea login add --name ci --url "$TEA_URL" --token "$TEA_TOKEN"
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_SERVER_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
+        run: tea login add --name fr-ci
       - name: Technical debt issue (weekly)
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)

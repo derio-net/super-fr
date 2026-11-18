@@ -26,6 +26,9 @@ acceptance-report:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
   before_script:
+    - |
+      [ -n "$FR_DEBT_TOKEN" ] || {
+        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
@@ -54,6 +57,9 @@ technical-debt:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
   before_script:
+    - |
+      [ -n "$FR_DEBT_TOKEN" ] || {
+        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
@@ -69,9 +75,6 @@ technical-debt:
       rm -rf /tmp/glab-x && mkdir -p /tmp/glab-x && tar -xzf /tmp/glab.dl -C /tmp/glab-x
       install -m 755 /tmp/glab-x/bin/glab "$HOME/.local/bin/glab"
       export PATH="$HOME/.local/bin:$PATH"
-    - |
-      [ -n "$FR_DEBT_TOKEN" ] || {
-        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
   script:
     - fr debt issue --yes
     - fr debt archive-pr --yes
