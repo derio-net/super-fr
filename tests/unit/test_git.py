@@ -169,3 +169,23 @@ def test_default_branch_answer_is_unknown_when_the_default_ref_cannot_be_read(
 
     monkeypatch.setattr(fr.git, "on_default_branch", unavailable)
     assert default_branch_answer(root) is None
+
+
+def test_an_unknown_answer_can_be_pinned(tmp_path: Path) -> None:
+    """`--dry-run` pins the real checkout's three-way answer onto its scratch copy, so
+    "cannot tell" must survive the pin; the folding reader still reads it as False."""
+    from fr.git import default_branch_answer, head_on_default_branch, pinned_head_on_default_branch
+
+    root = _git_repo(tmp_path, "main")
+    subprocess.run(["git", "-C", str(root), "remote", "add", "origin", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True
+    )
+    assert default_branch_answer(root) is True
+    with pinned_head_on_default_branch(root, None):
+        assert default_branch_answer(root) is None
+        assert head_on_default_branch(root) is False
+        with pinned_head_on_default_branch(root, True):
+            assert default_branch_answer(root) is True
+        assert default_branch_answer(root) is None
+    assert default_branch_answer(root) is True

@@ -438,6 +438,25 @@ def test_a_hold_whose_default_ref_cannot_be_read_writes_nothing(
     assert _writes(gh) == []
 
 
+def test_a_dry_run_whose_default_ref_cannot_be_read_matches_the_real_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """super-fr#1486, review: `--dry-run` pins the real checkout's answer onto its
+    scratch copy. Pinned through the folding reader, "cannot tell" became False and the
+    preview staged an owed entry the real run does not write."""
+    import fr.git
+
+    repo = _manual_repo(tmp_path)
+    monkeypatch.setattr(fr.git, "remote_default_ref", lambda _root: None)
+    before = _porcelain(repo)
+    result = _invoke(monkeypatch, repo, ListingGh(), ["archive", "--all", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "cannot tell whether HEAD is the default branch" in result.output
+    assert f"would record owed: plan:{PLAN}#p2 — " in result.output
+    assert "journals/plans" not in result.output  # the preview stages no journal
+    assert _porcelain(repo) == before
+
+
 def test_a_hold_where_git_cannot_answer_is_a_preview_not_a_crash(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
