@@ -65,9 +65,14 @@ rows:
     origin:
     - spec:2026-11-18-consumer-delivery#R9
     - spec:2026-11-18-consumer-delivery#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_pin.py#test_every_job_installs_the_pinned_commit_never_main
+      - super-fr:tests/unit/test_acceptance_pin.py#test_init_with_ci_and_a_failing_resolver_writes_nothing
+      - super-fr:tests/unit/test_acceptance_pin.py#test_an_older_pin_warns_once_naming_the_remedy
+    status: ci
+    notes: fr pinned to its release commit; failing resolver exits 2 with the tree untouched;
+      stale pin warns
     verify: none
   - id: debt-token-scope-github
     capability: The debt job's push token is confined
