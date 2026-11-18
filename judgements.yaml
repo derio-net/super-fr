@@ -8462,6 +8462,21 @@ batches:
   after:
   - train-truth
   skill: debug
+- id: hook-hardening
+  title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
+    installs'
+  ids:
+  - super-fr#1509
+  - super-fr#1484
+  - super-fr#1481
+  - super-fr#1508
+  - super-fr#1510
+  rationale: Audit findings F06, F07, F09 and guard-trust leftovers on the hook parser, plugin spawns
+    and install.sh; consumer-delivery touches install.sh and the OpenCode plugin.
+  wave: 23
+  after:
+  - consumer-delivery
+  skill: debug
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
