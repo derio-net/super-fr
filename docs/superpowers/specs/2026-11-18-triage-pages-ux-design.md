@@ -262,7 +262,8 @@ gate: developer
 - triage-backlog-issues-split: none — CI unit tests plus fr-goal's browser checks at review and deliver
 - triage-batches-columns-cutoff: none — CI unit tests plus fr-goal's browser checks at review and deliver
 - triage-origins-groups-prs: none — CI unit tests plus fr-goal's browser checks at review and deliver
-- triage-history-architecture-tabs: none — CI unit tests plus fr-goal's browser checks at review and deliver
+- triage-history-pr-summary: none — CI unit tests plus fr-goal's browser checks at review and deliver
+- triage-architecture-pipeline-tabs: none — CI unit tests plus fr-goal's browser checks at review and deliver
 
 ## Risks
 
