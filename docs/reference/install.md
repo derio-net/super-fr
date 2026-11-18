@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-17 a channel switch removes untracked files from the managed checkout (batch release-truth)
+reviewed: 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
 ---
 
 # Install super-fr
@@ -70,6 +70,12 @@ it stops a base-repo shell command, and it judges the whole command line. It sto
 a branch whose PR already merged. It pins the `fr` binary for the shell. It nags once per
 session about open acceptance debt. It nudges an idle run forward, and draws an fr status line
 in the TUI.
+
+OpenCode does not read `~/.claude/rules/`. So the installer also copies the shipped rules into
+the plugin directory, in a `rules/` folder, and the plugin adds each rule to the system prompt
+of a request. It adds a rule only when the prompt does not hold its text yet. The acceptance
+nag, the session binding and the child claim run `fr` in the session's own directory, not in the
+directory the plugin loaded from.
 
 OpenCode 1.x is not supported. `fr` reports a 1.x session as one that it cannot read, and
 tells you to upgrade.
