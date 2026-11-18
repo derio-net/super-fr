@@ -64,5 +64,44 @@ journal:
       triage.html/board.html, and the nav scenario expected no Issues entry. They now use
       `fr triage backlog|batches`, the new files and the six-page nav. The page-name tripwire
       covers only the Python modules, so a later rename should grep tests/scenarios/ too.
+  - kind: discovery
+    id: p1-kinds-filter-owed-by-phase-2
+    phase: 1
+    title: "the triage-backlog-issues-split interactions kinds-toggle-several and kinds-none-selected are owed by phase 2 (R13)"
+    body: |
+      The row declares two interactions on the Waves kind filter (R13), which phase 2 builds:
+      in phase 1 the Waves section has kind counts and no toggle. Phase 1's shots cover the
+      states backlog-page, issues-page and waves-all-kinds (the Waves section as it renders
+      now, every kind shown). No shot names the two interactions, because no page can show
+      them yet, so `fr.run.visual` will refuse this row until phase 2 captures them.
+  - kind: finding
+    id: p1-batches-footer-old-command
+    phase: 1
+    review_scope: in
+    state: fixed
+    title: "the Batches page footer still said fr triage board"
+    body: |
+      Found by opening the screenshots: kanban_render.py's footer named `fr triage board`,
+      and the drive_lock.py and snapshot.py docstrings named the old commands. Fixed in
+      "fix(triage): the Batches footer names fr triage batches", with a footer test per
+      Backlog, Issues and Batches in tests/unit/test_triage_pages_split.py.
 resolves: []
-evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p1-suite.log}
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p1-suite2.log}
+visual:
+  - row: triage-pages-rendered-stamp
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/backlog-top-light-1280.png, shows: [backlog-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/backlog-top-dark-390.png, shows: [backlog-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/issues-top-light-1280.png, shows: [issues-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/batches-top-light-1280.png, shows: [batches-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/origins-top-light-1280.png, shows: [origins-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/architecture-top-light-1280.png, shows: [architecture-stamp]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/history-top-light-1280.png, shows: [history-stamp]}
+  - row: triage-backlog-issues-split
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/backlog-full-light-1280.png, shows: [backlog-page, waves-all-kinds]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/issues-full-dark-390.png, shows: [issues-page]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/waves-light-1280.png, shows: [waves-all-kinds]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p1-visual/shots/waves-dark-390.png, shows: [waves-all-kinds]}
