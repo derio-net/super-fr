@@ -8,7 +8,6 @@ phase:
   acceptance:
   - triage-page-names
   - triage-pages-rendered-stamp
-  - triage-backlog-issues-split
   skeleton: true
   tier: standard
   files:
