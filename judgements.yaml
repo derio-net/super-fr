@@ -8187,6 +8187,13 @@ batches:
     handle: w3K:p6
     run: 2026-11-17-feat-batch-triage-intake
     archive: chore/closeout-2026-11-18-1
+  - kind: closeout
+    at: '2026-11-18T12:13:34.274142Z'
+    runner: herdr
+    handle: w3K:p6
+    run: 2026-11-17-feat-batch-triage-intake
+    archive: chore/closeout-2026-11-18-1
+    archived: 1546
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
@@ -8397,6 +8404,12 @@ batches:
   order: 1
   wave: 22
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-18T12:13:38.900662Z'
+    runner: herdr
+    handle: w3P:p1
+    branch: feat/batch-triage-pages
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -8430,6 +8443,12 @@ batches:
   rationale: Both in the dispatch path (fr_dispatch tick, fr_cncd runner), audit findings F01 and F04.
   wave: 22
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-18T12:14:03.091152Z'
+    runner: herdr
+    handle: w3P:p2
+    branch: fix/batch-dispatch-safety
 - id: owed-followups
   title: 'Archive and owed follow-ups: symlinked live root, fail-closed marker read, unreadable default
     ref, host-pinned issue refs'
@@ -8442,6 +8461,12 @@ batches:
     pr_body.py.
   wave: 22
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-18T12:14:32.868605Z'
+    runner: herdr
+    handle: w3P:p3
+    branch: fix/batch-owed-followups
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
@@ -9069,6 +9094,7 @@ closeouts:
   planned:
   - triage-intake
   pr: 1546
+  merged: true
   head: a1cdc4d576b1bf5469631d327e7acd3bd3ae3486
   members:
   - triage-intake
