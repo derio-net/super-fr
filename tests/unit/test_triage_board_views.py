@@ -848,7 +848,7 @@ def test_a_feature_row_has_no_wave_field() -> None:
     assert row and 'class="tag wave"' not in row.group(0)
 
 
-def test_a_next_up_wave_that_is_finished_links_to_its_history_tab() -> None:
+def test_next_up_wave_links_go_to_the_backlog_tab_since_only_live_batches_are_listed() -> None:
     cancel = {"kind": "cancel", "at": "2026-10-01T12:00:00Z"}
     f = facts([issue(1), issue(2)])
     jd = judgements(
@@ -861,7 +861,8 @@ def test_a_next_up_wave_that_is_finished_links_to_its_history_tab() -> None:
     rows = next_up(f, jd)
     assert [r.wave for r in rows if r.ref == "b"] == ["1"]
     sect = _section(render_backlog(f, jd), "next-up")
-    # wave 1 still holds a live batch, so it is not finished: its Backlog tab
+    # a batch Next up lists is not terminal, so its wave is never finished: never a History link
+    assert "history.html" not in sect
     assert 'href="backlog.html#wave-panel-1">wave 1</a>' in sect
 
 

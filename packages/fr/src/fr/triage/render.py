@@ -997,7 +997,6 @@ def _next_section(facts: Facts, judgements: Judgements, linker: Linker | None = 
 
     if not rows:
         return section('<p class="quiet">Nothing is waiting to start.</p>', None)
-    done = finished_waves(judgements.batches, batch_stages(facts, judgements))
     items = []
     for r in rows:
         tier = f"tier {r.tier}" if r.tier is not None else "no tier"
@@ -1011,7 +1010,7 @@ def _next_section(facts: Facts, judgements: Judgements, linker: Linker | None = 
         if r.kind == "batch":
             name = f'<a href="{batch_href(r.ref)}">{name}</a>'
         wave = (
-            f'<span class="tag wave"><a href="{wave_href(r.wave, r.wave in done)}">'
+            f'<span class="tag wave"><a href="{wave_href(r.wave, False)}">'
             f"wave {esc(r.wave)}</a></span>"
             if r.wave is not None
             else ""
