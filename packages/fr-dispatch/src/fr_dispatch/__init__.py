@@ -511,11 +511,24 @@ def tick(
         # passed explicitly: an adapter that inverts board state into ids
         # needs them, and reading them out of a `preflight`-set attribute
         # instead would make the call ORDER load-bearing and silent.
+        #
+        # A FAILED lookup is not an empty one (super-fr#1499): reading it as
+        # "nothing dispatched yet" re-submitted every item the backend already
+        # held. Fail each item for this tick instead and submit nothing; the
+        # next tick retries the lookup.
         try:
             existing = runner.existing_dispatches(items)
         except Exception as e:  # noqa: BLE001
-            failures.append(f"dedup fetch failed: {e}")
-            existing = set()
+            for item in items:
+                failures.append(f"{item.id}: dedup fetch failed: {e}")
+                m.push_failure_total(reason="dedup")
+            m.push_heartbeat()
+            return TickResult(
+                synced=0,
+                errors=len(failures),
+                skipped=len(items),
+                failures=tuple(failures),
+            )
 
         for item in items:
             try:

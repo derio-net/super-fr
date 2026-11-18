@@ -314,6 +314,6 @@ def test_a_symlink_in_the_plan_folder_refuses_the_dispatch(
     runner = CncdRunner(base_url=stub_cncd.base_url)
     item = _phase_item(plan, plan.phases[0], "agentic-stoa/cnc-demo", 42)
 
-    with pytest.raises(CncdError, match=r"notes\.md.*symlink"):
+    with pytest.raises(CncdError, match=r"symlink \(notes\.md\)"):
         runner.dispatch(item)
     assert stub_cncd.requests == []
