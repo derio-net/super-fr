@@ -114,8 +114,9 @@ rows:
     - spec:2026-11-18-consumer-delivery#R14
     levels:
       unit:
-      - super-fr:tests/unit/test_forge_sso_html.py#test_every_json_read_is_in_the_list
       - super-fr:tests/unit/test_forge_sso_html.py#test_a_login_page_is_named
+      - super-fr:tests/unit/test_forge_sso_html.py#test_no_raw_json_loads_outside_the_allowlist
     status: ci
-    notes: every tea/glab JSON read names an SSO login page, fixture-pinned
+    notes: every tea/glab JSON read names an SSO login page, fixture-pinned; the guard
+      flags any raw json.loads outside a reasoned allowlist
     verify: none
