@@ -7839,6 +7839,12 @@ batches:
   - triage-intake
   - triage-collect
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-18T11:44:16.251002Z'
+    runner: herdr
+    handle: w3N:p1
+    branch: feat/batch-consumer-delivery
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
