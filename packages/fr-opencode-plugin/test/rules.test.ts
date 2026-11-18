@@ -72,7 +72,7 @@ describe("createRulesHandler", () => {
       return readFileSync(p, "utf8");
     };
     const e3 = ev();
-    await createRulesHandler({ rulesDir: dir, readFile })(e3);
+    await createRulesHandler({ rulesDir: dir, readFile, warn: () => {} })(e3);
     expect(texts(e3.system)).toEqual(["OK"]);
   });
 
@@ -100,6 +100,101 @@ describe("createRulesHandler", () => {
       readdir: () => {
         throw new Error("boom");
       },
+      warn: () => {},
     })(ev());
+  });
+
+  describe("load failures (l-errors-r4)", () => {
+    const enoent = () => {
+      const e = new Error("ENOENT: no such file or directory") as Error & { code: string };
+      e.code = "ENOENT";
+      throw e;
+    };
+
+    test("a missing rules dir is silent: the in-tree plugin's designed state", async () => {
+      const lines: string[] = [];
+      await createRulesHandler({ rulesDir: join(dir, "nope"), warn: (l) => lines.push(l) })(ev());
+      await createRulesHandler({ rulesDir: dir, readdir: enoent, warn: (l) => lines.push(l) })(ev());
+      expect(lines).toEqual([]);
+    });
+
+    test("a listing that fails for another reason warns once per request, naming the dir, and is retried", async () => {
+      const lines: string[] = [];
+      let calls = 0;
+      const readdir = (d: string): string[] => {
+        calls += 1;
+        if (calls === 1) {
+          const e = new Error("EACCES: permission denied") as Error & { code: string };
+          e.code = "EACCES";
+          throw e;
+        }
+        return ["a.md"];
+      };
+      writeFileSync(join(dir, "a.md"), "RULE A\n");
+      const handler = createRulesHandler({ rulesDir: dir, readdir, warn: (l) => lines.push(l) });
+      const e1 = ev();
+      await handler(e1);
+      expect(e1.system).toEqual([]);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain(dir);
+      expect(lines[0]).toContain("EACCES");
+      const e2 = ev();
+      await handler(e2);
+      expect(texts(e2.system)).toEqual(["RULE A\n"]);
+      expect(lines).toHaveLength(1);
+    });
+
+    test("an unreadable rule file warns naming the file, and the load is not cached", async () => {
+      writeFileSync(join(dir, "ok.md"), "OK");
+      writeFileSync(join(dir, "bad.md"), "BAD");
+      const lines: string[] = [];
+      let fail = true;
+      const readFile = (p: string): string => {
+        if (fail && p.endsWith("bad.md")) throw new Error("EIO");
+        return readFileSync(p, "utf8");
+      };
+      const handler = createRulesHandler({ rulesDir: dir, readFile, warn: (l) => lines.push(l) });
+      const e1 = ev();
+      await handler(e1);
+      expect(texts(e1.system)).toEqual(["OK"]);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain(join(dir, "bad.md"));
+      fail = false;
+      const e2 = ev();
+      await handler(e2);
+      expect(texts(e2.system)).toEqual(["BAD", "OK"]);
+    });
+
+    test("the default warning goes to stderr", async () => {
+      const seen: unknown[] = [];
+      const orig = console.error;
+      console.error = (...a: unknown[]) => void seen.push(a.join(" "));
+      try {
+        await createRulesHandler({
+          rulesDir: dir,
+          readdir: () => {
+            throw new Error("boom");
+          },
+        })(ev());
+      } finally {
+        console.error = orig;
+      }
+      expect(seen).toHaveLength(1);
+      expect(String(seen[0])).toContain(dir);
+    });
+  });
+
+  test("OpenCode's own instructions part (v2.3.0 format, several files in one part) counts", async () => {
+    // The exact renderer in the opencode v2.3.0 binary:
+    //   `Instructions from: ${path}\n${content}`, joined by "\n\n".
+    writeFileSync(join(dir, "fr-plan-override.md"), "NEW PLAN TEXT\n");
+    writeFileSync(join(dir, "docs-currency.md"), "DOCS RULE\n");
+    const part = [
+      "Instructions from: /home/u/repo/AGENTS.md\n# agents",
+      "Instructions from: /home/u/repo/.opencode/instructions/fr-plan-override.md\nOLD PLAN TEXT",
+    ].join("\n\n");
+    const event = ev([{ type: "text", text: part }]);
+    await createRulesHandler({ rulesDir: dir })(event);
+    expect(texts(event.system)).toEqual([part, "DOCS RULE\n"]);
   });
 });

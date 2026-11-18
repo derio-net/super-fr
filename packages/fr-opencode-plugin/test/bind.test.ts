@@ -123,6 +123,40 @@ describe("bind", () => {
     expect(calls).toEqual([{ cwd: root }]);
   });
 
+  test("a throwing lookup binds from the plugin directory (l-tests-r5)", async () => {
+    const calls: { cwd: string }[] = [];
+    const handler = createBindHandler({
+      session: {
+        get: async () => {
+          throw new Error("lookup failed");
+        },
+      },
+      directory: root,
+      runFr: async (_args, cwd) => {
+        calls.push({ cwd });
+        return { code: 0, stdout: "" };
+      },
+    });
+    await handler({ tool: "shell", sessionID: "ses_1", status: "completed", input: { command: "fr isolation up" } });
+    expect(calls).toEqual([{ cwd: root }]);
+  });
+
+  test("an answer for another session id is not this session's: plugin directory, and not a child (l-tests-r5)", async () => {
+    const calls: { cwd: string }[] = [];
+    const handler = createBindHandler({
+      session: {
+        get: async () => ({ id: "ses_other", parentID: "ses_p", location: { directory: join(root, "elsewhere") } }),
+      },
+      directory: root,
+      runFr: async (_args, cwd) => {
+        calls.push({ cwd });
+        return { code: 0, stdout: "" };
+      },
+    });
+    await handler({ tool: "shell", sessionID: "ses_1", status: "completed", input: { command: "fr isolation up" } });
+    expect(calls).toEqual([{ cwd: root }]);
+  });
+
   test("a command that cannot bind makes no session lookup", async () => {
     let lookups = 0;
     const handler = createBindHandler({

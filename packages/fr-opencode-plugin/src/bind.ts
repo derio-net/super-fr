@@ -92,8 +92,8 @@ export function bindArgs(command: string, cwd: string, sessionID: string, home =
 }
 
 /** The session's info, unless it is a child (undefined for a child). A failed
- * lookup is not a child: the bash hook skips only on agent_id, so the caller
- * falls back to the plugin directory. */
+ * lookup, or an answer whose `id` is not this session's, is not a child: the bash
+ * hook skips only on agent_id, so the caller falls back to the plugin directory. */
 async function parentInfo(session: unknown, id: string): Promise<{ child: boolean; info?: SessionInfo }> {
   try {
     const get = (session as { get?: unknown } | null | undefined)?.get;
@@ -103,6 +103,9 @@ async function parentInfo(session: unknown, id: string): Promise<{ child: boolea
       | null
       | undefined;
     if (!info || typeof info !== "object") return { child: false };
+    // An answer about another session (nag's check): not this one's directory, and no
+    // evidence it is a child. Bind from the plugin directory.
+    if (info.id !== id) return { child: false };
     if (typeof info.parentID === "string" && info.parentID !== "") return { child: true };
     return { child: false, info };
   } catch {
