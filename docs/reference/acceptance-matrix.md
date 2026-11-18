@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
+reviewed: 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
 ---
 
 # The acceptance matrix
@@ -174,3 +174,27 @@ The per-PR gate is `.github/workflows/acceptance-report.yml`. On a weekly schedu
 runs `fr debt issue`, which keeps one "Technical debt" issue up to date. Its Acceptance
 section lists the rows still owed. Rows can also name a verification strategy and a walk
 scenario. The [verification strategies guide](../verification-strategies.md) covers them.
+
+## Pins in the scaffolded CI
+
+`fr acceptance init` pins everything that the pipeline runs. Each action is a full commit
+SHA with a `# vX.Y.Z` comment. The `fr` install line names the commit of the release tag
+of the `fr` that wrote it, not `main`. `init` reads that commit with `git ls-remote`. If
+the read fails, `init` exits 2 and writes nothing.
+
+To move the pins, run `fr acceptance init --refresh-ci`. `fr acceptance check` warns when
+the pinned `fr` is older than the running one. The warning never fails the check.
+
+## Credentials of the weekly debt job
+
+The debt job needs a token that can push a branch and open a pull request. Set the secret
+or variable `FR_DEBT_TOKEN`. `fr debt archive-pr` uses it for its Git calls. It passes the
+token in the process environment. The token is never in a command line or in `.git/config`.
+Without it, the command uses the forge's own variable: `GH_TOKEN`, `GITLAB_TOKEN` or
+`GITEA_TOKEN`.
+
+- GitHub: checkout keeps no credential. `FR_DEBT_TOKEN` reaches the archive step only.
+- Gitea: the job installs a pinned `tea` and logs in with `FR_DEBT_TOKEN`, or with the
+  job's own token when that secret is unset.
+- GitLab: the job installs a pinned `glab`. It stops with one line when the masked CI/CD
+  variable `FR_DEBT_TOKEN` (scope `api`) is not set.

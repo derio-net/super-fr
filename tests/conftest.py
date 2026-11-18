@@ -614,3 +614,17 @@ def pytest_report_header(config: pytest.Config) -> str | None:
     if n is None:
         return None
     return f"-n auto: {n} workers ({PYTEST_WORKERS_ENV} overrides; tests/conftest.py)"
+
+
+@pytest.fixture(autouse=True)
+def _fr_release_pin_never_hits_the_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The scaffolded pipelines pin fr to its release tag, read with `git ls-remote`
+    (R9). No test reaches the network: the default reader answers every tag with one
+    fixed commit; a test of the failure path replaces it again."""
+    from fr.acceptance import pin
+
+    monkeypatch.setattr(
+        pin,
+        "default_ls_remote",
+        lambda tag: f"0123456789abcdef0123456789abcdef01234567\trefs/tags/{tag}\n",
+    )

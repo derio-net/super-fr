@@ -55,7 +55,8 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     box = {"report": _report(("old-plan", 30), ("held-plan", 30), ("young-plan", 3), ("odd", None))}
     monkeypatch.setenv("FR_REPO_ROOT", str(work))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
-    monkeypatch.delenv("FR_DEBT_TOKEN", raising=False)
+    for var in ("FR_DEBT_TOKEN", "GH_TOKEN", "GITLAB_TOKEN", "GITEA_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(debt_cmd, "_client", lambda root: gh)
     monkeypatch.setattr(debt_cmd, "_compute", lambda root, c, slug, days: box["report"])
     monkeypatch.setattr(
@@ -201,3 +202,81 @@ def test_a_failed_archive_never_publishes_its_stderr_in_the_pr_body(
     assert "SECRET" not in r.output
     for pr in _calls(world["gh"], "create_pr"):
         assert "SECRET" not in pr["body"] and "x-access-token" not in pr["body"]
+
+
+# --- R11: the two remote git calls authenticate through the environment alone ----------
+
+
+class _Spy:
+    """Records every `git` subprocess `_git` starts: its argv and its env."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.calls: list[tuple[list[str], dict | None]] = []
+        real = subprocess.run
+
+        def run(argv: list[str], *a: object, **kw: object) -> object:
+            self.calls.append((list(argv), kw.get("env")))  # type: ignore[arg-type]
+            return real(argv, *a, **kw)  # type: ignore[call-overload]
+
+        monkeypatch.setattr(subprocess, "run", run)
+
+    def remote(self) -> list[tuple[list[str], dict | None]]:
+        return [c for c in self.calls if {"ls-remote", "push"} & set(c[0])]
+
+
+def _basic(user: str, token: str) -> str:
+    import base64
+
+    return "AUTHORIZATION: basic " + base64.b64encode(f"{user}:{token}".encode()).decode()
+
+
+@pytest.mark.parametrize(
+    ("var", "forge", "user", "host"),
+    [
+        ("FR_DEBT_TOKEN", "github", "x-access-token", "github.com"),
+        ("GH_TOKEN", "github", "x-access-token", "github.com"),
+        ("GITLAB_TOKEN", "gitlab", "oauth2", "git.example.com"),
+        ("GITEA_TOKEN", "gitea", "oauth2", "gitea.example.com"),
+    ],
+)
+def test_remote_calls_carry_the_token_in_the_environment_only(
+    world: dict, monkeypatch: pytest.MonkeyPatch, var: str, forge: str, user: str, host: str
+) -> None:
+    from fr import _hosts
+
+    work = world["work"]
+    path = "/g/p.git"
+    _git(work, "remote", "set-url", "origin", f"https://gitlab-ci-token:jobtok@{host}{path}")
+    monkeypatch.setattr(_hosts, "detect_backend", lambda root: forge)
+    monkeypatch.setenv(var, "s3cret")
+    stripped = f"https://{host}{path}"
+    _git(work, "config", f"url.{world['bare']}.insteadOf", stripped)
+    spy = _Spy(monkeypatch)
+    from fr.debt import sweep as sw
+
+    _git(work, "checkout", "-q", "-b", sw.BRANCH)
+    debt_cmd._push(work)
+    calls = spy.remote()
+    assert len(calls) == 2
+    for argv, env in calls:
+        assert stripped in argv
+        assert not any("s3cret" in a or "jobtok" in a for a in argv)
+        assert env is not None
+        assert env["GIT_CONFIG_COUNT"] == "1"
+        assert env["GIT_CONFIG_KEY_0"] == f"http.{stripped}.extraheader"
+        assert env["GIT_CONFIG_VALUE_0"] == _basic(user, "s3cret")
+    assert "s3cret" not in (work / ".git" / "config").read_text()
+
+
+def test_without_a_token_the_remote_calls_are_unchanged(
+    world: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.debt import sweep as sw
+
+    work = world["work"]
+    _git(work, "checkout", "-q", "-b", sw.BRANCH)
+    spy = _Spy(monkeypatch)
+    debt_cmd._push(work)
+    for argv, env in spy.remote():
+        assert "origin" in argv
+        assert env is None

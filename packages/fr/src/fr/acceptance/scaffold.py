@@ -16,6 +16,7 @@ from pathlib import Path
 
 from fr._hosts import HostBackend
 from fr.acceptance.fragment import FRAGMENTS_DIR
+from fr.acceptance.pin import FrPin
 from fr.artifacts.paths import KIND_DIRS
 
 # Reports are derived, never committed (spec 2026-11-04 R20): `fr acceptance report`
@@ -148,13 +149,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: @@USES:actions/checkout@@
         with:
           fetch-depth: 0 # check judges merged rows against the default branch's history
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: @@USES:astral-sh/setup-uv@@
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: @@FR_INSTALL@@
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
       - name: Write Actions summary (branch / PR / main)
@@ -165,7 +166,7 @@ jobs:
           REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: fr acceptance report --link-mode github --ref "$REF"
       - name: Upload report artifact
-        uses: actions/upload-artifact@v7
+        uses: @@USES:actions/upload-artifact@@
         with:
           name: acceptance-report
           path: @@ACC_REPORT@@
@@ -233,12 +234,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: @@USES:actions/checkout@@
         with:
           fetch-depth: 0 # check judges merged rows against the default branch's history
-      - uses: astral-sh/setup-uv@v5
+      - uses: @@USES:astral-sh/setup-uv@@
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: @@FR_INSTALL@@
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
       - name: Write Actions summary (branch / PR / main)
@@ -249,7 +250,7 @@ jobs:
           REF: ${{ gitea.sha }}
         run: fr acceptance report --link-mode github --ref "$REF"
       - name: Upload report artifact
-        uses: actions/upload-artifact@v4
+        uses: @@USES:actions/upload-artifact@@
         with:
           name: acceptance-report
           path: @@ACC_REPORT@@
@@ -295,7 +296,7 @@ acceptance-report:
   before_script:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
-    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+    - @@FR_INSTALL@@
   script:
     - git fetch origin "+refs/heads/$CI_DEFAULT_BRANCH:refs/remotes/origin/$CI_DEFAULT_BRANCH"
     - fr acceptance check
@@ -339,13 +340,13 @@ PAGES_STEP_GITHUB = """\
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: @@USES:actions/checkout@@
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: @@USES:astral-sh/setup-uv@@
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: @@FR_INSTALL@@
       - name: Re-check that Pages is no wider than the repo
         id: visibility
         env:
@@ -366,15 +367,15 @@ PAGES_STEP_GITHUB = """\
         run: |
           mkdir -p _site
           fr acceptance report --link-mode github --ref "$GITHUB_SHA" --out _site/index.html
-      - uses: actions/configure-pages@v6
+      - uses: @@USES:actions/configure-pages@@
         if: steps.visibility.outputs.allowed == 'true'
-      - uses: actions/upload-pages-artifact@v5
+      - uses: @@USES:actions/upload-pages-artifact@@
         if: steps.visibility.outputs.allowed == 'true'
         with:
           path: _site
       - id: deploy
         if: steps.visibility.outputs.allowed == 'true'
-        uses: actions/deploy-pages@v5
+        uses: @@USES:actions/deploy-pages@@
 """
 PAGES_STEP_GITLAB = """\
 
@@ -395,7 +396,7 @@ pages:
   before_script:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
-    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+    - @@FR_INSTALL@@
   script:
     - |
       fr acceptance pages-check || {
@@ -426,13 +427,13 @@ COMMENT_STEP_GITHUB = """\
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: @@USES:actions/checkout@@
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: @@USES:astral-sh/setup-uv@@
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: @@FR_INSTALL@@
       - name: Upsert the report comment
         env:
           GH_TOKEN: ${{ github.token }}
@@ -459,9 +460,10 @@ DEBT_COMMENT = {
 }
 DEBT_STEP_GITHUB = """\
 
-  # The debt job holds the write permissions and the dedicated token; the matrix
-  # job above (which runs this repo's code on every PR) holds neither. It does not
-  # `needs:` the matrix, so a week with failing rows still updates the issue.
+  # The debt job holds the write permissions; the matrix job above (which runs this
+  # repo's code on every PR) holds neither. The dedicated token FR_DEBT_TOKEN reaches
+  # the archive-pr step alone: checkout keeps no credential, so no other step can push.
+  # It does not `needs:` the matrix, so a week with failing rows still updates the issue.
   debt:
     if: github.event_name == 'schedule' || inputs.debt
     runs-on: ubuntu-latest
@@ -471,13 +473,13 @@ DEBT_STEP_GITHUB = """\
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: @@USES:actions/checkout@@
         with:
           fetch-depth: 0
-          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
-      - uses: astral-sh/setup-uv@v5
+          persist-credentials: false
+      - uses: @@USES:astral-sh/setup-uv@@
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: @@FR_INSTALL@@
       - name: Technical debt issue (weekly)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -490,39 +492,63 @@ DEBT_STEP_GITHUB = """\
 """
 DEBT_STEP_GITEA = """\
 
+  # The debt job files issues through `tea`, pinned and checksummed (the same table the
+  # devcontainer scaffold reads). Its login token is FR_DEBT_TOKEN when the repo has that
+  # secret, else the job's own `gitea.token`. Checkout keeps no credential: archive-pr
+  # authenticates its pushes itself, from FR_DEBT_TOKEN or GITEA_TOKEN in its environment.
   debt:
     if: gitea.event_name == 'schedule' || inputs.debt
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: @@USES:actions/checkout@@
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
+          persist-credentials: false
+      - uses: @@USES:astral-sh/setup-uv@@
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: @@FR_INSTALL@@
+      - name: Install tea
+        run: |
+          @@TEA_INSTALL@@
+      - name: Log in to tea
+        env:
+          TEA_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
+          TEA_URL: ${{ gitea.server_url }}
+        run: tea login add --name ci --url "$TEA_URL" --token "$TEA_TOKEN"
       - name: Technical debt issue (weekly)
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
         env:
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+          GITEA_TOKEN: ${{ gitea.token }}
         run: fr debt archive-pr --yes
 """
 DEBT_STEP_GITLAB = """\
 
 # Its own job, so a failing `fr acceptance check` above never skips the debt run.
+# It needs a masked CI/CD variable FR_DEBT_TOKEN with the `api` scope: the job's own
+# token cannot file issues or merge requests through `glab`, so the job stops with one
+# line naming the variable when it is unset.
 technical-debt:
   stage: acceptance
   image: python:3.12
   variables:
     GIT_DEPTH: "0"
+    GITLAB_TOKEN: $FR_DEBT_TOKEN
+    GITLAB_HOST: $CI_SERVER_HOST
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
   before_script:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
-    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+    - @@FR_INSTALL@@
+    - |
+      @@GLAB_INSTALL@@
+    - |
+      [ -n "$FR_DEBT_TOKEN" ] || {
+        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
   script:
     - fr debt issue --yes
     - fr debt archive-pr --yes
@@ -532,6 +558,52 @@ DEBT_STEP = {
     "gitea-actions": DEBT_STEP_GITEA,
     "gitlab-ci": DEBT_STEP_GITLAB,
 }
+
+
+# Every action a scaffolded workflow runs is pinned by commit SHA with a `# vX.Y.Z` comment
+# (spec 2026-11-18-consumer-delivery R8): a tag is a movable pointer, and the workflow
+# runs with the consumer's tokens. GitHub entries equal the pins of super-fr's own CI
+# (`tests/unit/test_acceptance_scaffold_pins.py` reads `.github/workflows/`); the Gitea
+# entries stay on the majors Gitea's act_runner has been run with (checkout v4, setup-uv v5).
+ACTION_PINS: dict[tuple[str, str], tuple[str, str]] = {
+    ("actions/checkout", "github-actions"): (
+        "3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "v7.0.1",
+    ),
+    ("astral-sh/setup-uv", "github-actions"): (
+        "1c37ad07a6a961277cf70c0d37d6f313000f5884",
+        "v10.3.0",
+    ),
+    ("actions/upload-artifact", "github-actions"): (
+        "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+        "v7.0.2",
+    ),
+    ("actions/configure-pages", "github-actions"): (
+        "45bfe0192ca1faeb007ade9deae92b16b8254a0d",
+        "v6.0.0",
+    ),
+    ("actions/upload-pages-artifact", "github-actions"): (
+        "fc324d3547104276b827a68afc52ff2a11cc49c9",
+        "v5.0.0",
+    ),
+    ("actions/deploy-pages", "github-actions"): (
+        "368f82528645a54fb793d4d04e342629a3f51346",
+        "v5.0.1",
+    ),
+    ("actions/checkout", "gitea-actions"): (
+        "11d5960a326750d5838078e36cf38b85af677262",
+        "v4.4.0",
+    ),
+    ("astral-sh/setup-uv", "gitea-actions"): (
+        "d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86",
+        "v5.4.2",
+    ),
+    ("actions/upload-artifact", "gitea-actions"): (
+        "ea165f8d65b6e75b540449e92b4886f43607fa02",
+        "v4.6.2",
+    ),
+}
+_USES_PLACEHOLDER = re.compile(r"@@USES:([^@]+)@@")
 
 
 def _render_paths(template: str) -> str:
@@ -562,21 +634,95 @@ _DISPATCH_DEBT = (
 )
 
 
-def render_workflow(ci_type: str, *, debt: bool, pages: bool = False, comment: bool = False) -> str:
+def _resolve_pin() -> FrPin:
+    """The release commit of the running fr (R9). Read through the module so a test
+    that replaces `fr.acceptance.pin.default_ls_remote` never meets the network."""
+    import fr
+    from fr.acceptance import pin as pin_mod
+
+    return pin_mod.resolve_fr_pin(fr.__version__, ls_remote=pin_mod.default_ls_remote)
+
+
+def render_workflow(
+    ci_type: str,
+    *,
+    debt: bool,
+    pages: bool = False,
+    comment: bool = False,
+    fr_pin: FrPin | None = None,
+) -> str:
     """The scaffolded pipeline for `ci_type`, with or without the debt job (and
     the `debt` dispatch input only it reads), the Pages job and the PR report-comment
     job. The write permissions and the dedicated token live on the debt job alone; the
-    comment job holds `pull-requests: write` alone."""
+    comment job holds `pull-requests: write` alone. Every action and the fr install are
+    pinned by commit (R8, R9); `fr_pin` None resolves the running fr's release."""
+    fr_pin = fr_pin or _resolve_pin()
     text = WORKFLOW_TEMPLATES[ci_type]
     if debt and ci_type != "gitlab-ci":
         text = text.replace(_DISPATCH, _DISPATCH_DEBT)
-    return (
+    text = (
         text.replace("@@DEBT_PERMS@@", "")
         .replace("@@DEBT_COMMENT@@", DEBT_COMMENT[ci_type] if debt else "")
         .replace("@@COMMENT_STEP@@", COMMENT_STEP.get(ci_type, "") if comment else "")
         .replace("@@PAGES_STEP@@", PAGES_STEP.get(ci_type, "") if pages else "")
         .replace("@@DEBT_STEP@@", DEBT_STEP[ci_type] if debt else "")
     )
+    text = text.replace("@@FR_INSTALL@@", fr_pin.install_line())
+    text = _fill_install(text, "@@TEA_INSTALL@@", "gitea")
+    text = _fill_install(text, "@@GLAB_INSTALL@@", "gitlab")
+    return _USES_PLACEHOLDER.sub(lambda m: _pinned_use(m.group(1), ci_type), text)
+
+
+def ci_cli_install(forge: str) -> list[str]:
+    """Shell lines installing the pinned `tea` (gitea) or `glab` (gitlab) of
+    `fr.isolation.scaffold.HOST_CLI_PINS` for a CI job: the version and every
+    architecture's URL and sha256 come from that table, never from a copy. Installed under
+    `$HOME/.local/bin` (a CI job has no `sudo`), checksum verified before it runs. Gitea
+    steps do not share a shell, so the directory goes on `$GITHUB_PATH` for the later ones."""
+    from fr.isolation.scaffold import HOST_CLI_PINS
+
+    pin = HOST_CLI_PINS[forge]
+    dl = f"/tmp/{pin.name}.dl"
+    names = {"amd64": "x86_64|amd64", "arm64": "aarch64|arm64"}
+    lines = ['case "$(uname -m)" in']
+    for arch, (url, sha) in pin.assets.items():
+        lines.append(f"  {names[arch]}) url='{url}'; sha='{sha}';;")
+    lines += [
+        f'  *) echo "{pin.name} {pin.version}: unsupported architecture $(uname -m)" >&2; exit 1;;',
+        "esac",
+        f'curl -fsSL "$url" -o {dl}',
+        f'echo "$sha  {dl}" | sha256sum -c -',
+        'mkdir -p "$HOME/.local/bin"',
+    ]
+    if pin.kind == "tarball":
+        xdir = f"/tmp/{pin.name}-x"
+        lines += [
+            f"rm -rf {xdir} && mkdir -p {xdir} && tar -xzf {dl} -C {xdir}",
+            f'install -m 755 {xdir}/{pin.tarball_member} "$HOME/.local/bin/{pin.name}"',
+        ]
+    else:
+        lines.append(f'install -m 755 {dl} "$HOME/.local/bin/{pin.name}"')
+    lines.append(
+        'echo "$HOME/.local/bin" >> "$GITHUB_PATH"'
+        if forge == "gitea"
+        else 'export PATH="$HOME/.local/bin:$PATH"'
+    )
+    return lines
+
+
+def _fill_install(text: str, placeholder: str, forge: str) -> str:
+    """Replace the placeholder line with the install lines at the placeholder's indent."""
+    if placeholder not in text:
+        return text
+    pattern = re.compile(rf"^( *){re.escape(placeholder)}$", re.MULTILINE)
+    return pattern.sub(
+        lambda m: "\n".join(m.group(1) + line for line in ci_cli_install(forge)), text
+    )
+
+
+def _pinned_use(action: str, ci_type: str) -> str:
+    sha, version = ACTION_PINS[(action, ci_type)]
+    return f"{action}@{sha} # {version}"
 
 
 @dataclass(frozen=True)
@@ -718,6 +864,7 @@ def refresh_ci(
     debt: bool,
     pages: bool = False,
     comment: bool = False,
+    fr_pin: FrPin | None = None,
 ) -> RefreshOutcome:
     """Bring an fr-scaffolded pipeline up to the current scaffold (R13).
 
@@ -733,7 +880,10 @@ def refresh_ci(
     if not path.is_file():
         return RefreshOutcome("missing", rel)
     current = path.read_text()
-    fresh = render_workflow(ci_type, debt=debt, pages=pages, comment=comment)
+    # Resolved before anything is rewritten: a failure leaves the tree as it was (R9).
+    fresh = render_workflow(
+        ci_type, debt=debt, pages=pages, comment=comment, fr_pin=fr_pin or _resolve_pin()
+    )
     if ci_type == "gitlab-ci":
         if not re.search(r"^acceptance-report:\s*$", current, re.MULTILINE):
             return RefreshOutcome("foreign", rel)
@@ -808,6 +958,7 @@ def init(
     tracking_type: str | None = None,
     no_ci_reason: str | None = None,
     pages_decision: tuple[bool, str] | None = None,
+    fr_pin: FrPin | None = None,
 ) -> InitOutcome:
     """`ci_type`/`tracking_type` are the resolved services (`fr.services`);
     left None (a caller with no declaration) the pipeline follows `backend`
@@ -839,6 +990,10 @@ def init(
         ci_type = own if with_ci or ci_config(root, backend) is not None else "none"
         tracking_type = backend if tracking_type is None else tracking_type
     has_ci = ci_type != "none"
+    # The fr the pipeline installs is resolved before the first write (R9): a failure
+    # raises FrPinError and the tree is untouched. A repo with no CI needs none.
+    if has_ci and fr_pin is None:
+        fr_pin = _resolve_pin()
     # The weekly debt issue is filed through the ci platform's own tracker CLI,
     # so it is kept only when the tracker is that platform (#774 §3.E), and only
     # while forge issues are on (R9).
@@ -863,7 +1018,9 @@ def init(
     if has_ci:
         write_if_missing(
             scaffold_path,
-            render_workflow(ci_type, debt=debt, pages=plan.pages, comment=plan.comment),
+            render_workflow(
+                ci_type, debt=debt, pages=plan.pages, comment=plan.comment, fr_pin=fr_pin
+            ),
         )
         notices.extend(plan.notices)
         if debt_off is not None:

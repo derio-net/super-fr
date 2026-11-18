@@ -304,15 +304,67 @@ REFUSAL_REMEDIES = (
 )
 
 
-def _git(root: Path, *args: str, check: bool = True) -> str:
+def _git(
+    root: Path,
+    *args: str,
+    check: bool = True,
+    env: dict[str, str] | None = None,
+    secret: str = "",
+) -> str:
     import subprocess
 
     done = subprocess.run(
-        ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
+        ["git", "-C", str(root), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
     )
     if check and done.returncode != 0:
-        raise RuntimeError(f"git {args[0]} failed: {(done.stderr or done.stdout).strip()}")
+        said = (done.stderr or done.stdout).strip()
+        if secret:
+            said = said.replace(secret, "***")
+        raise RuntimeError(f"git {args[0]} failed: {said}")
     return done.stdout.strip()
+
+
+# Each forge's own token variable, and the user name its token authenticates as over HTTPS.
+_FORGE_TOKEN_ENV = {"github": "GH_TOKEN", "gitlab": "GITLAB_TOKEN", "gitea": "GITEA_TOKEN"}
+_FORGE_GIT_USER = {"github": "x-access-token", "gitlab": "oauth2", "gitea": "oauth2"}
+
+
+def _remote_auth(root: Path) -> tuple[str, dict[str, str] | None, str]:
+    """What the two remote git calls of `archive-pr` run against (R11): `(remote, env,
+    token)`. With a token (FR_DEBT_TOKEN, else the forge's own variable) the remote is
+    origin's URL with its user-info stripped and the credential rides in the environment
+    as an `http.<url>.extraheader`, so it is in no argv and in no `.git/config`. Without
+    one, or for a non-HTTP origin, it is plain `origin` and no environment."""
+    import base64
+    import os
+    from urllib.parse import urlsplit, urlunsplit
+
+    from fr._hosts import detect_backend
+
+    forge = detect_backend(root)
+    token = (
+        os.environ.get("FR_DEBT_TOKEN", "").strip()
+        or os.environ.get(_FORGE_TOKEN_ENV[forge], "").strip()
+    )
+    if not token:
+        return "origin", None, ""
+    parts = urlsplit(_git(root, "remote", "get-url", "origin"))
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return "origin", None, ""
+    host = parts.hostname if ":" not in parts.hostname else f"[{parts.hostname}]"
+    netloc = host + (f":{parts.port}" if parts.port else "")
+    url = urlunsplit((parts.scheme, netloc, parts.path, parts.query, ""))
+    basic = base64.b64encode(f"{_FORGE_GIT_USER[forge]}:{token}".encode()).decode()
+    env = dict(os.environ)
+    n = int(env.get("GIT_CONFIG_COUNT", "0") or 0)
+    env["GIT_CONFIG_COUNT"] = str(n + 1)
+    env[f"GIT_CONFIG_KEY_{n}"] = f"http.{url}.extraheader"
+    env[f"GIT_CONFIG_VALUE_{n}"] = f"AUTHORIZATION: basic {basic}"
+    return url, env, token
 
 
 def _held(root: Path, name: str) -> list[str]:
@@ -511,9 +563,18 @@ def _push(root: Path) -> None:
     from fr.debt import sweep as sw
 
     ref = f"refs/heads/{sw.BRANCH}"
-    held = _git(root, "ls-remote", "--heads", "origin", ref)
+    remote, env, token = _remote_auth(root)
+    held = _git(root, "ls-remote", "--heads", remote, ref, env=env, secret=token)
     expect = held.split()[0] if held else ""
-    _git(root, "push", f"--force-with-lease={ref}:{expect}", "origin", f"{sw.BRANCH}:{ref}")
+    _git(
+        root,
+        "push",
+        f"--force-with-lease={ref}:{expect}",
+        remote,
+        f"{sw.BRANCH}:{ref}",
+        env=env,
+        secret=token,
+    )
 
 
 def _open_or_refresh(
