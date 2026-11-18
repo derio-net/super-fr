@@ -7748,6 +7748,16 @@ batches:
     runner: herdr
     handle: w3K:p3
     branch: feat/batch-triage-intake
+  - kind: approval
+    at: '2026-11-18T11:35:00.588933Z'
+    pr: 1529
+    head: 7cddd28dd3ad0d6f141004cce5ff193c5988a98c
+  - kind: update
+    at: '2026-11-18T11:35:14.274733Z'
+    pr: 1529
+    head_before: 7cddd28dd3ad0d6f141004cce5ff193c5988a98c
+    head_after: 87ad909e84122f728ed22215d27e77d5094edce5
+    base: 43d490ac32195a3add058bd37e5c024970c6f53f
 - id: triage-collect
   title: Triage collect and settle correctness
   ids:
