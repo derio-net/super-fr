@@ -623,3 +623,21 @@ def test_architecture_render_writes_its_page_atomically(
     (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
     assert _run(state, checkout).exit_code == 0
     assert state / "architecture.html" in written
+
+
+def test_this_repos_architecture_manifest_resolves_with_the_decomposition_fragment() -> None:
+    """Spec 2026-11-16-architecture-review-sweep R13: the repo's own architecture page
+    names no missing file, every fragment it names is valid, and the decomposition
+    fragment sits directly after the pipeline fragment."""
+    from fr.triage.fragments import resolve_manifest, validate_fragment
+
+    page = (
+        Path(__file__).resolve().parents[2] / "docs" / "triage" / "derio-net--super-fr"
+    ) / "architecture"
+    resolved = resolve_manifest(page, GENERATED, MOVED)
+    assert resolved.missing == []
+    for name, text in resolved.fragments.items():
+        validate_fragment(name, text)
+    assert "decomposition.html" in resolved.fragments
+    names = [entry.name for entry in resolved.order]
+    assert names[names.index("pipeline.html") + 1] == "decomposition.html"

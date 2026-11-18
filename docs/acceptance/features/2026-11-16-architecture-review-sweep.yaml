@@ -1,0 +1,111 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-16-architecture-review-sweep
+repo: derio-net/super-fr
+rows:
+  - id: import-guard-reads-syntax-tree
+    capability: package boundary guard
+    acceptance: The package-boundary guard reports a sibling-package import in any import
+      form (several names on one line, aliased, from-import, nested in a function or
+      try), and fails a soft point that imports fr_dispatch at module level
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_import_direction.py#test_import_nodes_read_every_spelling
+      - super-fr:tests/unit/test_import_direction.py#test_soft_point_violations_fire_on_planted_sources
+    status: ci
+    notes: Phase 1 rewrote the guard to read the syntax tree; planted sources in every
+      import spelling and planted soft points are reported in CI.
+    verify: none
+  - id: gate-annotations-follow-vocabulary
+    capability: exit gates
+    acceptance: The triage gate remap, the plan step gate tag and the strategy manifest's
+      gate field accept exactly the gates fr.gates defines, and a value added to one
+      side only fails CI
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gate_vocabulary.py#test_annotations_derive_from_the_vocabulary
+      - super-fr:tests/unit/test_gate_vocabulary.py#test_tag_patterns_match_exactly_the_post_merge_gates
+      - super-fr:tests/unit/test_gate_vocabulary.py#test_a_divergent_literal_is_reported
+    status: ci
+    notes: Phase 1 derived the annotations and both tag patterns from fr.gates; CI compares
+      each to the vocabulary and reports a planted divergent literal and a one-sided
+      pattern.
+    verify: none
+  - id: session-status-one-vocabulary
+    capability: runner session status
+    acceptance: The dispatch protocol, the triage board and the cloud adapter hold the
+      same session statuses with the adapter's state mapping unchanged, and every acceptance
+      status has a report label
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_import_direction.py#test_cloud_status_is_the_protocol_type
+      - super-fr:tests/unit/test_import_direction.py#test_board_status_equals_session_status
+      - super-fr:tests/unit/test_acceptance_status_labels.py#test_every_status_has_a_label_and_no_label_is_orphaned
+    status: ci
+    notes: Phase 1 made the cloud adapter's FrStatus the protocol's SessionStatus; CI
+      checks the alias in source, the board's values and STATUS_LABEL coverage.
+    verify: none
+  - id: triage-timestamps-one-reader
+    capability: fr triage
+    acceptance: Triage reads an aware timestamp through one function that returns nothing
+      for a missing, empty, malformed or naive value and keeps the offset of an aware
+      one, and no second function with the same body exists in the source
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_timestamps.py#test_unreadable_or_naive_is_none
+      - super-fr:tests/unit/test_triage_timestamps.py#test_a_renamed_copy_is_reported
+      - super-fr:tests/unit/test_triage_timestamps.py#test_only_the_owner_holds_that_body
+    status: ci
+    notes: Phase 1 replaced four identical readers with fr.triage.timestamps.parse_aware;
+      CI pins its results and the copy scan reports planted verbatim and renamed copies
+      and finds none in the source.
+    verify: none
+  - id: hotspot-modules-cannot-grow
+    capability: module size budget
+    acceptance: Each of the five largest modules fails CI when it grows past its recorded
+      line budget, and a budget more than 50 lines above its module fails too, so a
+      budget follows its module down
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_module_budget.py#test_budget_problem_fires_on_planted_numbers
+      - super-fr:tests/unit/test_tripwire_module_budget.py#test_module_is_within_its_budget
+    status: ci
+    notes: Phase 1 added the line-budget tripwire; CI fails on planted over-budget and
+      slack-budget numbers and passes for the five modules as committed.
+    verify: none
+  - id: architecture-page-shows-decomposition
+    capability: fr triage architecture
+    acceptance: Every authored fragment this repo's architecture manifest names, the
+      decomposition fragment among them, exists and is a valid fragment
+    origin:
+    - spec:2026-11-16-architecture-review-sweep#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_architecture.py#test_this_repos_architecture_manifest_resolves_with_the_decomposition_fragment
+    status: ci
+    notes: 'CI test resolves this repo''s architecture manifest: no missing file, every
+      fragment valid, decomposition.html directly after pipeline.html'
+    verify: none
+amendments:
+  - row: hotspot-modules-cannot-grow
+    op: reword
+    base: 0
+    acceptance: Each of the five largest modules fails CI when it grows past its recorded
+      line budget, and a budget more than 400 lines above its module fails too, so an
+      extraction lowers the budget
+    why: 'Spec review sr-6: the lower bound moved from 50 to 400 lines and budgets start
+      with headroom'

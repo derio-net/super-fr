@@ -13,7 +13,6 @@ import fnmatch
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
 from itertools import permutations
 from pathlib import Path
 from typing import Literal
@@ -46,6 +45,7 @@ from fr.triage.model import (
     trusted_logins,
     withdrawn_marker,
 )
+from fr.triage.timestamps import parse_aware
 
 BatchStage = Literal[
     "proposed", "cancelled", "dispatched", "pr-open", "merged", "partial", "abandoned"
@@ -219,17 +219,6 @@ def _members(batch: Batch, facts: Facts) -> list[Issue]:
     return [found[k] for k in batch.ids if k in found]
 
 
-def _parse_time(stamp: str | None) -> datetime | None:
-    """An aware datetime from a forge timestamp; None when absent or unreadable."""
-    if not stamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
 def of_dispatch(pr: PullRequest, event: DispatchEvent) -> bool:
     """Whether *pr* can belong to the dispatch *event* (review r2p-f1).
 
@@ -238,7 +227,7 @@ def of_dispatch(pr: PullRequest, event: DispatchEvent) -> bool:
     is unknown (facts collected before `createdAt` was read) is kept: it cannot
     be shown to predate the dispatch.
     """
-    created = _parse_time(pr.created_at)
+    created = parse_aware(pr.created_at)
     return created is None or created >= event.at
 
 

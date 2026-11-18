@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Literal
 import yaml
 
 from fr import refs
+from fr.gates import TAG_ALTERNATION, PostMergeGate
 from fr.parser import _PHASE_FILE_RE, PlanSchemaError, parse
 from fr.render import plan_locally_complete
 from fr.types import PhaseDoc
@@ -561,8 +562,8 @@ FENCE_RE = re.compile(r"^\s*(```|~~~)")
 """A line that opens or closes a code fence: anchored, so a fence mid-prose never does."""
 
 
-StepGate = Literal["devops", "tester"]
-_TAG_RE = re.compile(r"^\[(devops|tester)\]\s+(\S.*)$")
+StepGate = PostMergeGate
+_TAG_RE = re.compile(rf"^\[({TAG_ALTERNATION})\]\s+(\S.*)$")
 """A step's gate tag (spec 2026-10-22-fr-ops R12): exactly `[devops]` or `[tester]`
 leading the item, then whitespace. A checkbox or a Markdown link is not one."""
 
