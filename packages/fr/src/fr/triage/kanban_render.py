@@ -103,13 +103,21 @@ button.jump { font: inherit; font-size: .78rem; color: var(--accent); background
 code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--ground);
   border: 1px solid var(--line); border-radius: 4px; white-space: pre-wrap;
   overflow-wrap: break-word; user-select: all; }
-/* A column with no card collapses to a strip in the wide layout (gh#1417). The selector reads
-   the cards themselves, so the markup carries no second statement of "empty". */
+/* A column's header carries its toggle (R10). `.collapsed` is the column's own state: an empty
+   column starts with it, a viewer can set or clear it on any column, and the script keeps it
+   per scope. In the wide layout a collapsed column is a strip with its title turned on its side
+   (gh#1417); in the narrow layouts it only hides its cards. */
+button.coltoggle { font: inherit; color: inherit; background: transparent; border: 0; padding: 0;
+  cursor: pointer; text-align: left; font-weight: 600; }
+button.coltoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.coltoggle::before { content: "\\25BE\\00a0"; color: var(--muted); }
+.col.collapsed button.coltoggle::before { content: "\\25B8\\00a0"; }
+.col.collapsed .col-body { display: none; }
 @media (min-width: 1101px) {
   .board { display: flex; }
   .col { flex: 1 1 0; }
-  .col:not(:has(.card)) { flex: 0 0 2.4rem; padding: 10px 6px; }
-  .col:not(:has(.card)) h2 { writing-mode: vertical-rl; transform: rotate(180deg);
+  .col.collapsed { flex: 0 0 2.4rem; padding: 10px 6px; }
+  .col.collapsed h2 { writing-mode: vertical-rl; transform: rotate(180deg);
     margin: 0 auto; gap: 8px; white-space: nowrap; justify-content: flex-start; }
 }
 @media (max-width: 1100px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -138,6 +146,31 @@ SCRIPT = """
     var open = cards().filter(function (c) { return c.open; }).map(function (c) { return c.id; });
     write({ open: open, y: window.scrollY });
   }
+  var scope = document.body.dataset.scope || "";
+  function colKey(col) { return "fr-triage:" + scope + ":col:" + col.dataset.column; }
+  function remembered(col) {
+    try { return localStorage.getItem(colKey(col)); } catch (e) { return null; }
+  }
+  function remember(col, collapsed) {
+    try { localStorage.setItem(colKey(col), collapsed ? "1" : "0"); } catch (e) { /* unavailable */ }
+  }
+  function setCollapsed(col, collapsed) {
+    col.classList.toggle("collapsed", collapsed);
+    var toggle = col.querySelector("button.coltoggle");
+    if (toggle) { toggle.setAttribute("aria-expanded", collapsed ? "false" : "true"); }
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("section.col"), function (col) {
+    var was = remembered(col);
+    if (was === "1" || was === "0") { setCollapsed(col, was === "1"); }
+    var toggle = col.querySelector("button.coltoggle");
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        var collapsed = !col.classList.contains("collapsed");
+        setCollapsed(col, collapsed);
+        remember(col, collapsed);
+      });
+    }
+  });
   var saved = read();
   (saved.open || []).forEach(function (id) {
     var card = document.getElementById(id);
@@ -395,10 +428,15 @@ def _gated_card(g: GatedCard) -> str:
 def _column(column: ColumnView, scope_args: Sequence[str]) -> str:
     cards = "".join(_card(c, scope_args) for c in column.cards)
     cards += "".join(_gated_card(g) for g in column.gated)
+    count = len(column.cards) + len(column.gated)
+    collapsed = count == 0
+    key = esc(column.key)
     return (
-        f'<section class="col" data-column="{esc(column.key)}">'
-        f'<h2>{esc(column.title)} <span class="count">{len(column.cards) + len(column.gated)}'
-        f"</span></h2>{cards}</section>"
+        f'<section class="col{" collapsed" if collapsed else ""}" data-column="{key}">'
+        f'<h2><button type="button" class="coltoggle" '
+        f'aria-expanded="{"false" if collapsed else "true"}" aria-controls="col-{key}">'
+        f'{esc(column.title)}</button> <span class="count">{count}</span></h2>'
+        f'<div class="col-body" id="col-{key}">{cards}</div></section>'
     )
 
 
@@ -446,7 +484,7 @@ def render_board(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Batches · {esc(board.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n"
-        f'<body data-refresh="{max(0, int(refresh))}">\n<main>\n'
+        f'<body data-refresh="{max(0, int(refresh))}" data-scope="{esc(board.scope)}">\n<main>\n'
         f"<header><h1>Batches</h1>"
         f'<p class="meta">{esc(board.scope)} · rendered {_when(rendered_at)} · '
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"

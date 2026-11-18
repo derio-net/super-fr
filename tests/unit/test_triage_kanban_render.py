@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 import re
 import shlex
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -58,7 +59,9 @@ def test_a_board_with_no_batches_says_so() -> None:
 
 def test_seven_columns_with_their_counts_in_order() -> None:
     page = _page()
-    heads = re.findall(r'<h2>(\w[\w ·]*) <span class="count">(\d+)</span></h2>', page)
+    heads = re.findall(
+        r'<h2><button[^>]*>(\w[\w ·]*)</button> <span class="count">(\d+)</span></h2>', page
+    )
     # The fixture's partial batch is owed its close-out: Partial, not Done (gh#985).
     assert heads == [
         ("Proposed", "2"), ("Waiting", "2"), ("Running", "3"),
@@ -80,8 +83,8 @@ def test_a_column_holds_a_card_element_exactly_when_its_count_is_not_zero() -> N
     # must mean "count 0" for every column, batch cards and gated cards alike.
     page = _page()
     cols = re.findall(
-        r'<section class="col" data-column="([^"]+)"><h2>[^<]* <span class="count">(\d+)</span>'
-        r"</h2>(.*?)</section>",
+        r'<section class="col[^"]*" data-column="([^"]+)"><h2><button[^>]*>[^<]*</button> '
+        r'<span class="count">(\d+)</span></h2>(.*?)</section>',
         page,
         re.S,
     )
@@ -91,16 +94,68 @@ def test_a_column_holds_a_card_element_exactly_when_its_count_is_not_zero() -> N
     assert {count == "0" for _, count, _ in cols} == {True, False}
 
 
-def test_the_wide_layout_collapses_empty_columns_to_a_rotated_strip() -> None:
+def test_the_wide_layout_collapses_a_collapsed_column_to_a_rotated_strip() -> None:
     m = re.search(r"@media \(min-width: 1101px\) \{(.*?)\n\}", CSS, re.S)
     assert m, "the collapse is scoped to the wide layout"
     wide = m.group(1)
     assert ".board { display: flex; }" in wide
-    assert ".col:not(:has(.card)) { flex: 0 0 " in wide
+    # The state is the column's own class, not a reading of its cards: a viewer can collapse
+    # a column that holds cards and expand one that holds none (R10).
+    assert ".col.collapsed { flex: 0 0 " in wide
+    assert ":has(" not in wide
     # Reads bottom to top: a -90 degree turn of the title.
     assert "writing-mode: vertical-rl" in wide and "rotate(180deg)" in wide
     # The narrow layouts keep the grid, where a strip would waste a row.
     assert "max-width: 1100px" in CSS and "max-width: 720px" in CSS
+
+
+def _columns(page: str) -> list[tuple[str, str, str, str]]:
+    """(key, classes, h2, body) of every column section."""
+    return re.findall(
+        r'<section class="col([^"]*)" data-column="([^"]+)">(<h2>.*?</h2>)(.*?)</section>',
+        page,
+        re.S,
+    )  # type: ignore[return-value]
+
+
+def test_every_column_header_holds_a_toggle_that_says_whether_it_is_expanded() -> None:
+    cols = _columns(_page())
+    assert len(cols) == 11
+    for classes, key, h2, body in cols:
+        button = re.search(r"<button([^>]*)>", h2)
+        assert button, key
+        attrs = button.group(1)
+        empty = re.search(r'class="card[ "]', body) is None
+        assert 'type="button"' in attrs
+        assert f'aria-expanded="{"false" if empty else "true"}"' in attrs, key
+        assert ("collapsed" in classes.split()) == empty, key
+        # The toggle names the region it controls, and that region holds the cards.
+        controls = re.search(r'aria-controls="([^"]+)"', attrs)
+        assert controls and f'id="{controls.group(1)}"' in body, key
+    assert {"collapsed" in c.split() for c, *_ in cols} == {True, False}
+
+
+def test_a_gated_only_column_starts_expanded() -> None:
+    page = _page()
+    for classes, key, h2, body in _columns(page):
+        if "data-gated-pr" in body:
+            assert "collapsed" not in classes.split(), key
+
+
+def test_the_body_names_the_scope_the_column_state_is_kept_under() -> None:
+    page = _page()
+    assert f'data-scope="{html.escape(_board()[0].scope)}"' in page
+    assert 'data-scope="x&quot;y&lt;"' in render_board(
+        replace(_board()[0], scope='x"y<'), scope_args=SCOPE, rendered_at=AT, refresh=0, notes=[]
+    )
+
+
+def test_the_script_remembers_each_column_under_a_scope_key_and_guards_every_access() -> None:
+    assert '"fr-triage:" + ' in SCRIPT and '":col:"' in SCRIPT
+    # Every localStorage read or write sits inside a try block.
+    for m in re.finditer(r"localStorage\.(getItem|setItem)", SCRIPT):
+        before = SCRIPT[: m.start()]
+        assert before.rfind("try {") > before.rfind("}"), m.group(0)
 
 
 def test_every_card_is_a_details_element_with_its_id() -> None:
@@ -244,8 +299,8 @@ def test_the_script_element_is_the_module_constant() -> None:
 
 
 def test_refresh_reaches_the_script_as_a_body_attribute() -> None:
-    assert '<body data-refresh="30">' in _page()
-    assert '<body data-refresh="0">' in _page(refresh=0)
+    assert re.search(r'<body data-refresh="30"[ >]', _page())
+    assert re.search(r'<body data-refresh="0"[ >]', _page(refresh=0))
     assert "dataset.refresh" in SCRIPT
 
 
