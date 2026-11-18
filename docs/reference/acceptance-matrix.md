@@ -182,7 +182,8 @@ SHA with a `# vX.Y.Z` comment. The `fr` install line names the commit of the rel
 of the `fr` that wrote it, not `main`. `init` reads that commit with `git ls-remote`. If
 the read fails, `init` exits 2 and writes nothing.
 
-To move the pins, run `fr acceptance init --refresh-ci`. `fr acceptance check` warns when
+To move the pins, run `fr acceptance init --refresh-ci`. If the read of the tag fails, it
+also exits 2 and writes nothing. `fr acceptance check` warns when
 the pinned `fr` is older than the running one. The warning never fails the check.
 
 ## Credentials of the weekly debt job
@@ -194,6 +195,8 @@ Without it, the command uses the forge's own variable: `GH_TOKEN`, `GITLAB_TOKEN
 `GITEA_TOKEN`.
 
 - GitHub: checkout keeps no credential. `FR_DEBT_TOKEN` reaches the archive step only.
+  When `FR_DEBT_TOKEN` is unset, the archive step uses `GH_TOKEN`, which is the job's own
+  token.
 - Gitea: the job installs a pinned `tea` and logs in with `FR_DEBT_TOKEN`, or with the
   job's own token when that secret is unset.
 - GitLab: the job installs a pinned `glab`. It stops with one line when the masked CI/CD
