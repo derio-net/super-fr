@@ -113,7 +113,9 @@ def api_result(result: subprocess.CompletedProcess[str]) -> Any:
             if isinstance(body, dict) and body.get("message"):
                 detail = f": {body['message']}"
         except json.JSONDecodeError:
-            pass
+            reason = not_json_reason(result.stdout or "", stderr)
+            if reason:
+                raise TeaError(f"HTTP {status} with {reason}", stderr=stderr) from None
         raise TeaError(f"HTTP {status}{detail}", stderr=stderr)
     out = (result.stdout or "").strip()
     try:
@@ -132,7 +134,8 @@ def loads(out: str, what: str) -> Any:
     try:
         return json.loads(out)
     except json.JSONDecodeError as exc:
-        raise TeaError(not_json_reason(out) or f"unreadable {what}: {exc}") from exc
+        reason = not_json_reason(out)
+        raise TeaError(f"{what}: {reason}" if reason else f"unreadable {what}: {exc}") from exc
 
 
 def api_json(path: str, *, cwd: Path | None = None, run: CommandRunner | None = None) -> Any:

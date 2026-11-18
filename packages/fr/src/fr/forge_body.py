@@ -17,3 +17,8 @@ def not_json_reason(out: str, stderr: str = "") -> str | None:
     if (out or "").lstrip().startswith("<") or "text/html" in (stderr or "").lower():
         return _REASON
     return None
+
+
+def names_login_page(message: str) -> bool:
+    """True when *message* already carries `not_json_reason`'s named cause."""
+    return _REASON in message

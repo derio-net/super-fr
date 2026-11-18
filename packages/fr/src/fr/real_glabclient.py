@@ -35,7 +35,7 @@ from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 from urllib.parse import quote, urlparse
 
 from fr import glab as _glab
-from fr.forge_body import not_json_reason
+from fr.forge_body import names_login_page, not_json_reason
 from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body, run_cli
 from fr.labels import LabelDef
 
@@ -424,7 +424,11 @@ class RealGlabClient(UnsupportedBatchOps):
             return None
         try:
             raw = _glab._loads(self._api(f"projects/{quote(repo, safe='')}"), "project output")
-        except (_glab.GlabError, ValueError, OSError):
+        except _glab.GlabError as exc:
+            if names_login_page(str(exc)):
+                raise  # a login page is named, not read as "unknown"
+            return None
+        except (ValueError, OSError):
             return None
         value = raw.get("issues_enabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None

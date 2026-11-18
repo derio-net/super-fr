@@ -13,11 +13,17 @@ from typing import Any
 import pytest
 from fr import glab as _glab
 from fr import tea as _tea
+from fr.acceptance.pages import UNKNOWN
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "forge"
 HTML = (FIXTURES / "sso_login_page.html").read_text()
+REDIRECT = "".join(
+    ln + "\n"
+    for ln in (FIXTURES / "sso_login_redirect.txt").read_text().splitlines()
+    if not ln.startswith("#")
+)
 SRC = Path(_tea.__file__).parent
 MODULES = ("tea", "glab", "real_teaclient", "real_glabclient")
 CAUSE = "SSO or forward-auth login page"
@@ -40,6 +46,19 @@ def _api_200(*_a: Any, **_k: Any) -> Any:
     return _tea.api_result(done)
 
 
+def _api_401() -> Any:
+    done = subprocess.CompletedProcess(
+        [], 0, stdout=HTML, stderr="HTTP/2 401 Unauthorized\ncontent-type: text/html\n"
+    )
+    return _tea.api_result(done)
+
+
+def _api_302_fixture() -> Any:
+    # The captured-shape header block is tea's stderr for a redirect.
+    done = subprocess.CompletedProcess([], 0, stdout="", stderr=REDIRECT)
+    return _tea.api_result(done)
+
+
 def _glab_pr_for_branch() -> Any:
     def run(*_a: Any, **_k: Any) -> Any:
         return subprocess.CompletedProcess([], 0, stdout=HTML, stderr="")
@@ -50,6 +69,7 @@ def _glab_pr_for_branch() -> Any:
 # site (module:function) -> callable that must raise naming the cause.
 RAISING: dict[str, Callable[[], Any]] = {
     "tea:api_result": _api_200,
+    "tea:api_result_401": _api_401,
     "tea:view_issue": lambda: _tea.view_issue("o/r", 1),
     "glab:view_issue": lambda: _glab.view_issue("o/r", 1),
     "real_teaclient:pr_body": lambda: RealTeaClient().pr_body("1", cwd=Path.cwd()),
@@ -70,11 +90,18 @@ RAISING: dict[str, Callable[[], Any]] = {
 }
 
 # Sites whose contract is a fallback value, so a login page is that value.
+# issues_enabled is not here: it re-raises a login page (see the test below).
 FALLBACK: dict[str, tuple[Callable[[], Any], Any]] = {
-    "real_glabclient:issues_enabled": (lambda: RealGlabClient().issues_enabled("o/r"), None),
+    # acceptance/pages.py calls repo_visibility first on the same endpoint, and that
+    # call raises with the named cause, so UNKNOWN here never hides the login page.
+    "real_glabclient:pages_visibility": (
+        lambda: RealGlabClient().pages_visibility("o/r"),
+        UNKNOWN,
+    ),
 }
 
-SITES = set(RAISING) | set(FALLBACK) | {"real_glabclient:pages_visibility"}
+RAISING["real_glabclient:issues_enabled"] = lambda: RealGlabClient().issues_enabled("o/r")
+SITES = {k for k in RAISING if "_401" not in k} | set(FALLBACK)
 
 
 @pytest.mark.parametrize("site", sorted(RAISING))
@@ -90,28 +117,100 @@ def test_a_fallback_site_keeps_its_value(site: str) -> None:
     assert call() == expected
 
 
-def _loads_sites() -> set[str]:
+def test_a_login_page_reaches_the_services_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.services.init import issues_enabled_for
+    from fr.services.model import ServicesError
+
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: "o/r")
+    with pytest.raises(ServicesError) as info:
+        issues_enabled_for(Path.cwd(), "gitlab", "git.example.com")
+    assert CAUSE in str(info.value)
+
+
+def test_a_302_fixture_header_block_names_the_proxy() -> None:
+    with pytest.raises(_tea.TeaError) as info:
+        _api_302_fixture()
+    assert "auth.example.com/login" in str(info.value)
+    assert "forward-auth" in str(info.value)
+
+
+def test_the_read_error_says_which_read_failed() -> None:
+    with pytest.raises(_tea.TeaError, match=r"^`tea issues` output: .*" + CAUSE):
+        _tea.loads(HTML, "`tea issues` output")
+    with pytest.raises(_glab.GlabError, match=r"^`glab x` output: .*" + CAUSE):
+        _glab._loads(HTML, "`glab x` output")
+
+
+# (module, function) -> why a raw json.loads is allowed there.
+RAW_ALLOWED: dict[tuple[str, str], str] = {
+    ("tea", "loads"): "the wrapper itself",
+    ("glab", "_loads"): "the wrapper itself",
+    ("tea", "api_result"): "reads the body and names HTML via not_json_reason",
+    ("real_glabclient", "pr_for_branch"): "catches the decode error and names HTML itself",
+}
+
+
+def raw_json_loads(source: str, mod: str) -> set[tuple[str, str]]:
+    """Every (module, function) holding a raw `json.loads` call; module level is `<module>`."""
+    found: set[tuple[str, str]] = set()
+
+    def walk(node: ast.AST, scope: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                walk(child, child.name)
+                continue
+            if (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr == "loads"
+                and isinstance(child.func.value, ast.Name)
+                and child.func.value.id == "json"
+            ):
+                found.add((mod, scope))
+            walk(child, scope)
+
+    walk(ast.parse(source), "<module>")
+    return found
+
+
+def test_no_raw_json_loads_outside_the_allowlist() -> None:
+    found: set[tuple[str, str]] = set()
+    for mod in MODULES:
+        found |= raw_json_loads((SRC / f"{mod}.py").read_text(), mod)
+    assert found == set(RAW_ALLOWED)
+
+
+def test_the_walker_catches_a_new_raw_call_in_a_listed_function() -> None:
+    src = (
+        "import json\n"
+        "def api_result(x):\n    json.loads(x)\n    json.loads(x)\n"
+        "async def g(x):\n    json.loads(x)\n"
+        "json.loads('1')\n"
+    )
+    got = raw_json_loads(src, "tea")
+    assert got == {("tea", "api_result"), ("tea", "g"), ("tea", "<module>")}
+    assert ("tea", "h") not in RAW_ALLOWED
+
+
+def _wrapped_sites() -> set[str]:
     found: set[str] = set()
     for mod in MODULES:
         tree = ast.parse((SRC / f"{mod}.py").read_text())
         for fn in ast.walk(tree):
-            if not isinstance(fn, ast.FunctionDef):
+            if not isinstance(fn, ast.FunctionDef) or fn.name in ("loads", "_loads"):
                 continue
             for node in ast.walk(fn):
-                if not isinstance(node, ast.Call) or fn.name in ("loads", "_loads"):
-                    continue
-                f = node.func
-                attr = (
+                f = node.func if isinstance(node, ast.Call) else None
+                if (
                     isinstance(f, ast.Attribute)
                     and f.attr in ("loads", "_loads")
                     and isinstance(f.value, ast.Name)
-                    and f.value.id in ("json", "_tea", "_glab")
-                )
-                bare = isinstance(f, ast.Name) and f.id in ("loads", "_loads")
-                if attr or bare:
+                    and f.value.id in ("_tea", "_glab")
+                ) or (isinstance(f, ast.Name) and f.id in ("loads", "_loads")):
                     found.add(f"{mod}:{fn.name}")
     return found
 
 
-def test_every_json_read_is_in_the_list() -> None:
-    assert _loads_sites() == SITES
+def test_every_wrapped_json_read_is_in_the_list() -> None:
+    raw_sites = {"tea:api_result", "real_glabclient:pr_for_branch"}  # raw reads, in RAW_ALLOWED
+    assert _wrapped_sites() == SITES - raw_sites

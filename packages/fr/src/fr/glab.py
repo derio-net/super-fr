@@ -267,7 +267,8 @@ def _loads(out: str, what: str) -> Any:
     try:
         return json.loads(out)
     except json.JSONDecodeError as exc:
-        raise GlabError(not_json_reason(out) or f"unreadable {what}: {exc}") from exc
+        reason = not_json_reason(out)
+        raise GlabError(f"{what}: {reason}" if reason else f"unreadable {what}: {exc}") from exc
 
 
 def view_issue(repo: str, number: int, *, host: str | None = None) -> dict[str, object]:
