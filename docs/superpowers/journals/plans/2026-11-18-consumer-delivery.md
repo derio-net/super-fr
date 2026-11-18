@@ -68,3 +68,33 @@ Header-name de-dup in rules.ts with tests.
 ### p1-r4-resolved · finding [fixed] · resolves p1-r4: Unreadable-file test passes as root and does not prove the skip (phase 1)
 
 readFile seam; exact assertion.
+
+<!-- fr:journal kind=decision scope=plan id=p2-render-resolves-pin-by-default created=2026-11-18T17:01:33+00:00 phase=2 -->
+### p2-render-resolves-pin-by-default · decision · render_workflow/init/refresh_ci resolve the running fr's release pin when none is passed (phase 2)
+
+Callers (the command layer, tests) may pass fr_pin; otherwise the module resolves through fr.acceptance.pin.default_ls_remote. An autouse conftest fixture replaces that reader so no test reaches the network. Golden tests pass an explicit pin so releases do not move them.
+
+<!-- fr:journal kind=decision scope=plan id=p2-ci-cli-install-no-sudo created=2026-11-18T17:01:33+00:00 phase=2 -->
+### p2-ci-cli-install-no-sudo · decision · CI installs of tea and glab go to $HOME/.local/bin, not /usr/local/bin via sudo (phase 2)
+
+A CI job has no sudo. The snippet reads version, URLs and sha256 from isolation/scaffold.py's HOST_CLI_PINS; Gitea adds the directory to GITHUB_PATH because its steps do not share a shell.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-gitea-pins-lightweight-tags created=2026-11-18T17:01:33+00:00 phase=2 -->
+### p2-gitea-pins-lightweight-tags · discovery · Gitea pins: checkout v4.4.0, setup-uv v5.4.2, upload-artifact v4.6.2 are lightweight tags (phase 2)
+
+git ls-remote shows no peeled line for them, so the tag line is the commit SHA.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-18T17:01:33+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+pin module is new and small; render and read share one INSTALL_LINE/PIN_RE already (done in T3), nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-18T17:01:33+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+token pick and env header live in one helper (_remote_auth); nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t6 created=2026-11-18T17:01:33+00:00 phase=2 -->
+### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
+
+docs and acceptance bookkeeping, no code to clean
