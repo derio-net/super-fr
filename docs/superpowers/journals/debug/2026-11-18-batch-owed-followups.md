@@ -45,3 +45,8 @@ It folds 'cannot tell' into False. That is safe for R3 (off-default closes nothi
 ### rc-1488 · root-cause · #1488: normalize_issue_ref drops the URL host
 
 _URL_REF matched any host and kept only the path, so a lookalike URL on another host normalised to this repo's issue and satisfied _refuse_unclosed_owed.
+
+<!-- fr:journal kind=decision scope=debug id=d-unsupported-listing created=2026-11-18T13:34:22+00:00 -->
+### d-unsupported-listing · decision · A forge that cannot list issues keeps R11's no-dedup fallback for open ends
+
+UnsupportedForgeOperation (glab, tea) is a known capability gap, not an unknown answer; refusing there would stop follow-up filing on those forges entirely. test_dedup_falls_back_to_none_when_the_forge_cannot_list keeps pinning it. Only failed, capped or viewer-less listings now fail closed.
