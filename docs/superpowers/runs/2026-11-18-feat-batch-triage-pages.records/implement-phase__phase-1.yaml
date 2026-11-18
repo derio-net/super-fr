@@ -3,7 +3,7 @@ run: 2026-11-18-feat-batch-triage-pages
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T6.S1]
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T6.S1, P1.T6.S2]
 refactor:
   P1.T1: "a smoke run and a change fragment: no code to clean"
   P1.T3: "the commands were written on the registry helpers (fragment_dir, remove_legacy, moved_notes) from the start, so no duplicate was left to fold"
@@ -53,5 +53,16 @@ journal:
       removed `render()` were migrated to the page that owns the section they assert on
       (Issues for rows, tiers, PRs, debt, awaiting live, closed in progress; Backlog for
       needs, next up, waves, batches, session notes, merge stops).
+  - kind: discovery
+    id: p1-scenarios-name-the-pages
+    phase: 1
+    title: "the shell scenarios under tests/scenarios/ also named the old pages and commands"
+    body: |
+      The first full suite failed five `tests/integration/test_scenarios.py` cases
+      (triage-nav-pages, triage-config-skew, triage-cancelled-terminal, merge-train-label-gate,
+      merge-train-red-recovery): their scripts ran `fr triage render|board` and read
+      triage.html/board.html, and the nav scenario expected no Issues entry. They now use
+      `fr triage backlog|batches`, the new files and the six-page nav. The page-name tripwire
+      covers only the Python modules, so a later rename should grep tests/scenarios/ too.
 resolves: []
-evidence: {}
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/p1-suite.log}
