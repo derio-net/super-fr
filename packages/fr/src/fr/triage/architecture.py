@@ -45,7 +45,7 @@ from fr.triage.errors import TriageError
 from fr.triage.fragments import Resolved, splice
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.model import Facts, Issue, Judgements
-from fr.triage.render import FONTS, esc, plural
+from fr.triage.render import FONTS, _safe_url, esc, plural
 
 DASH = "—"
 OTHER = "Other"
@@ -213,6 +213,12 @@ def _bar(label: str, m: Measure | None, scale: int) -> str:
     )
 
 
+def _issue_ref(issue: Issue) -> str:
+    """An issue's key, a link only when its url is https (the same rule as the Backlog's)."""
+    url = _safe_url(issue.url)
+    return f'<a href="{url}">{esc(issue.key)}</a>' if url else esc(issue.key)
+
+
 def _subsystems(
     facts: Facts,
     judgements: Judgements,
@@ -235,9 +241,7 @@ def _subsystems(
             body += _bar("then", ms.then if ms else None, scale)
             body += _bar("now", ms.now if ms else None, scale)
         items = "".join(
-            f'<li data-issue="{esc(i.key)}"><a href="{esc(i.url)}">{esc(i.key)}</a> '
-            f"{esc(i.title)}</li>"
-            for i in issues
+            f'<li data-issue="{esc(i.key)}">{_issue_ref(i)} {esc(i.title)}</li>' for i in issues
         )
         cards.append(
             f'<article class="subsystem" id="subsystem-{esc(_slug(name))}" '

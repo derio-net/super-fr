@@ -626,3 +626,18 @@ def test_architecture_render_writes_its_page_atomically(
     (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
     assert _run(state, checkout).exit_code == 0
     assert state / "architecture.html" in written
+
+
+def test_a_subsystem_card_links_an_issue_only_through_an_https_url() -> None:
+    from tests.unit.triage_board_fixtures import facts, issue, j, judgements
+
+    f = facts([issue(1, url="javascript:alert(1)"), issue(2)])
+    jd = judgements({"widgets#1": j(), "widgets#2": j()})
+    page = render_architecture(
+        f, jd, subsystems=Subsystems(), measured={}, resolved=Resolved(order=[Entry("subsystems")])
+    )
+    assert "javascript:" not in page
+    item = re.search(r'<li data-issue="widgets#1">(.*?)</li>', page)
+    assert item and "<a " not in item.group(1) and "widgets#1" in item.group(1)
+    other = re.search(r'<li data-issue="widgets#2">(.*?)</li>', page)
+    assert other and 'href="https://github.com/example-org/widgets/issues/2"' in other.group(1)
