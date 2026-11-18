@@ -212,13 +212,18 @@ def test_no_batches_means_no_filter_and_the_fold_script_ships_once() -> None:
     assert "<fieldset" not in render_backlog(FACTS, plain)
 
 
-def test_the_fold_script_toggles_by_stage_and_opens_every_ancestor_then_scrolls() -> None:
+def test_the_stage_script_only_checks_the_targets_stage_and_leaves_opening_to_the_fold_script() -> (
+    None
+):
+    from fr.triage.components import FOLD_SCRIPT
     from fr.triage.render import STAGE_FILTER_SCRIPT
 
     assert "dataset.stage" in STAGE_FILTER_SCRIPT and ".hidden" in STAGE_FILTER_SCRIPT
     assert "hashchange" in STAGE_FILTER_SCRIPT and "location.hash" in STAGE_FILTER_SCRIPT
-    assert 'tagName === "DETAILS"' in STAGE_FILTER_SCRIPT and "parentElement" in STAGE_FILTER_SCRIPT
-    assert "scrollIntoView" in STAGE_FILTER_SCRIPT
+    # opening every ancestor and scrolling are the shared fold script's job, once (p2-r3)
+    for duplicated in ('tagName === "DETAILS"', "parentElement", "scrollIntoView"):
+        assert duplicated not in STAGE_FILTER_SCRIPT
+        assert duplicated in FOLD_SCRIPT
 
 
 def test_an_empty_filter_says_so_and_the_merge_order_follows_it() -> None:

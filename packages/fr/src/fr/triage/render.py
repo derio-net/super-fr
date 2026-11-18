@@ -316,8 +316,8 @@ SCRIPT = """
 })();
 """
 
-# The Batches section's script (R5): toggles cards by `data-stage`, and opens the card a
-# `#batch-<id>` link names with every `details` around it, then scrolls to it. A constant.
+# The Batches section's script (R5): toggles cards by `data-stage`, and switches a card's stage on
+# when a `#batch-<id>` link names it (the fold script opens and scrolls). A constant.
 STAGE_FILTER_SCRIPT = """
 (function () {
   var boxes = Array.prototype.slice.call(document.querySelectorAll("input[data-stage-filter]"));
@@ -342,25 +342,22 @@ STAGE_FILTER_SCRIPT = """
     if (plan) { plan.hidden = !anyStep; }
     if (empty) { empty.hidden = any || !cards.length; }
   }
+  // A hash naming a card of a stage that is switched off switches that stage on, so the card
+  // is there for the fold script, which opens what is around it and scrolls (review p2-r3).
   function reveal() {
     var id = "";
     try { id = decodeURIComponent(location.hash.slice(1)); } catch (e) { return; }
     var target = id ? document.getElementById(id) : null;
-    if (!target) { return; }
+    if (!target || !target.dataset.stage) { return; }
     boxes.forEach(function (b) {
       if (target.dataset.stage === b.value) { b.checked = true; }
     });
     apply();
-    for (var n = target; n; n = n.parentElement) {
-      if (n.tagName === "DETAILS") { n.open = true; }
-    }
-    target.scrollIntoView();
   }
   boxes.forEach(function (b) { b.addEventListener("change", apply); });
   document.addEventListener("click", function (e) {
     var a = e.target.closest ? e.target.closest('a[href*="#batch-"]') : null;
-    // A new hash fires `hashchange`, which reveals; only a link to the hash already shown
-    // fires nothing, so the click covers that case alone (review p2-r4).
+    // only a link to the hash already shown fires no `hashchange`
     if (a && a.hash === location.hash && a.pathname === location.pathname) { reveal(); }
   });
   window.addEventListener("hashchange", reveal);
