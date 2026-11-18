@@ -1085,7 +1085,10 @@ def wave_table(
             (' class="mono"', _keys(b.ids, linker)),
             ("", inline(b.rationale, linker)),
             ("", esc(size_of(b.ids, judgements.issues))),
-            ("", esc(", ".join(b.after) or "-")),
+            (
+                "",
+                ", ".join(f'<a href="{batch_href(d)}">{esc(d)}</a>' for d in b.after) or "-",
+            ),
             ("", f'<span class="pill bstage-{stage}">{stage}</span>'),
         ]
         if prs is not None:

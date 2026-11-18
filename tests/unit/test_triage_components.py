@@ -269,3 +269,17 @@ def test_the_history_wave_table_links_its_issues_too() -> None:
     page = _page(*_finished())
     sect = page[page.index('id="finished-waves"') :]
     assert 'href="https://github.com/example-org/widgets/issues/1"' in sect
+
+
+# ------------------------------------------- Depends on links to the cards (review p2-r2)
+
+
+def test_a_wave_tables_depends_on_links_each_batch_to_its_card() -> None:
+    f, jd = busy()
+    page = render_backlog(f, jd, rendered_at=AT)
+    row = re.search(r'<tr data-batch="d-blocked".*?</tr>', page, re.S)
+    assert row
+    cell = re.search(r'data-label="Depends on">(.*?)</td>', row.group(0), re.S)
+    assert cell and cell.group(1) == '<a href="backlog.html#batch-z-cancelled">z-cancelled</a>'
+    none = re.search(r'<tr data-batch="e-next".*?</tr>', page, re.S)
+    assert none and 'data-label="Depends on">-</td>' in none.group(0)
