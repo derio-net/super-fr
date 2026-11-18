@@ -102,19 +102,50 @@ def test_the_batches_page_includes_the_page_css_and_script() -> None:
 
 
 def test_tabs_markup_has_the_ids_the_hash_script_relies_on() -> None:
-    h = tabs("wave", "Waves", [("2", "Wave 2", "<p>x</p>"), ("none", "No wave", "")], 0)
+    h = tabs("wave", "Waves", [("2", "Wave 2", "<p>x</p>"), ("none", "No wave", "")], 1)
     for key in ("2", "none"):
         assert f'id="wave-panel-{key}"' in h
         assert f'aria-controls="wave-panel-{key}"' in h
         assert f'id="wave-tab-{key}"' in h
-    assert 'role="tabpanel"' in h and 'role="tab"' in h
-    assert "fromHash" in TABS_SCRIPT and "hashchange" in TABS_SCRIPT
+    # the default tab is the selected one and the only one in the tab order
+    assert re.search(r'id="wave-tab-none"[^>]*aria-selected="true"[^>]*tabindex="0"', h)
+    assert re.search(r'id="wave-tab-2"[^>]*aria-selected="false"[^>]*tabindex="-1"', h)
+    # with scripts off every panel shows and the tab row does not
+    assert '<div role="tablist" aria-label="Waves" hidden>' in h
+    assert h.count("hidden") == 1
 
 
-def test_the_hash_step_selects_the_panel_an_element_is_inside() -> None:
-    # the script walks every group's panels: `p === target || p.contains(target)`
-    assert "p.contains(target)" in TABS_SCRIPT
-    assert "location.hash" in FOLD_SCRIPT and "n.open = true" in FOLD_SCRIPT
+def test_every_tab_of_a_rendered_page_controls_a_panel_a_hash_can_name() -> None:
+    from tests.unit.triage_board_fixtures import id_ancestors
+
+    for name, page in _every_page().items():
+        ids = id_ancestors(page)
+        for target in re.findall(r'role="tab"[^>]*aria-controls="([^"]+)"', page):
+            assert target in ids, (name, target)
+    backlog = _every_page()["backlog"]
+    ids = id_ancestors(backlog)
+    assert "wave-panel-1" in ids and "wave-tab-1" in ids
+    # a link to a panel (backlog.html#wave-panel-<k>) names an element that exists
+    for href in re.findall(r'href="backlog\.html#(wave-panel-[^"]+)"', backlog):
+        assert href in ids, href
+
+
+def test_the_fold_targets_a_hash_can_reach_sit_inside_their_details() -> None:
+    from tests.unit.triage_board_fixtures import id_ancestors
+
+    page = _every_page()["backlog"]
+    ids = id_ancestors(page)
+    folds = [i for i, chain in ids.items() if i in {
+        "since-last-report", "needs-you-now", "next-up", "waves", "batches"
+    }]  # fmt: skip
+    assert len(folds) == 5
+    for card in re.findall(r'<details class="batch"[^>]*\bid="(batch-[^"]+)"', page):
+        assert ("details", "batches") in ids[card], card  # a card link opens the Batches fold
+    for panel in re.findall(r'role="tabpanel" id="(wave-panel-[^"]+)"', page):
+        assert ("details", "waves") in ids[panel], panel  # a wave link opens the Waves fold
+    issues = id_ancestors(render_issues(*busy(), rendered_at=AT))
+    for row in [i for i in issues if i.startswith("backlog-tier-")]:
+        assert ("details", "backlog-by-tier") in issues[row], row
 
 
 # --------------------------------------------------------------------- the Linker

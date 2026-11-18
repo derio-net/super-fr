@@ -911,10 +911,18 @@ def test_each_wave_row_names_its_kinds_and_each_panel_holds_a_hidden_message() -
     )
 
 
-def test_the_kind_filter_script_hides_rows_and_shows_the_message() -> None:
+def test_the_kind_filter_has_the_structure_its_script_acts_on() -> None:
     from fr.triage.render import KIND_FILTER_SCRIPT
 
     page = render_backlog(*busy())
     assert KIND_FILTER_SCRIPT in page and KIND_FILTER_SCRIPT not in render_issues(*busy())
-    assert "dataset.kinds" in KIND_FILTER_SCRIPT and "kinds-empty" in KIND_FILTER_SCRIPT
-    assert "aria-pressed" in KIND_FILTER_SCRIPT
+    waves = _section(page, "waves")
+    closed = {"defect", "feature", "parked", "unkinded"}
+    kinds = re.findall(r'<tr data-batch="[^"]+" data-kinds="([^"]*)"', waves)
+    assert kinds and all(set(k.split(" ")) <= closed and k for k in kinds)
+    toolbar = _section(page, "closing-order")
+    assert re.findall(r'aria-pressed="([a-z]+)"', toolbar) == ["true"] * 4
+    # every panel the script looks in holds rows and its message, hidden to start with
+    panels = re.findall(r'<div role="tabpanel".*?<p class="quiet kinds-empty"([^>]*)>', waves, re.S)
+    assert panels and all(" hidden" in p for p in panels)
+    assert waves.count("<tr data-batch=") == len(kinds)

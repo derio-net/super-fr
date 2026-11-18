@@ -201,3 +201,33 @@ def element_by_id(page: str, sid: str) -> str:
             return page[m.start() : m.start() + t.end() + len(">")]
         pos = t.end()
     raise AssertionError(f"element {sid} never closes ({pos})")
+
+
+def id_ancestors(page: str) -> dict[str, tuple[tuple[str, str | None], ...]]:
+    """Every id on *page* with the chain of elements around it, outermost first, each as
+    `(tag, id or None)`: what a hash link's script walks (`details` to open, a `tabpanel` to
+    select). Void elements open nothing."""
+    from html.parser import HTMLParser
+
+    void = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "wbr"}
+
+    class P(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stack: list[tuple[str, str | None]] = []
+            self.found: dict[str, tuple[tuple[str, str | None], ...]] = {}
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            ident = dict(attrs).get("id")
+            if ident:
+                self.found[ident] = tuple(self.stack)
+            if tag not in void:
+                self.stack.append((tag, ident))
+
+        def handle_endtag(self, tag: str) -> None:
+            while self.stack and self.stack.pop()[0] != tag:
+                pass
+
+    p = P()
+    p.feed(page)
+    return p.found

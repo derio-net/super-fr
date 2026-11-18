@@ -213,8 +213,10 @@ def test_the_timeline_is_a_closed_fold_with_its_count() -> None:
     )
 
 
-def test_archived_notes_fold_holds_the_three_fragments(tmp_path: Path) -> None:
+def test_archived_notes_fold_is_closed_and_holds_the_three_fragments(tmp_path: Path) -> None:
     from fr.triage.fragments import resolve_manifest
+
+    from tests.unit.triage_board_fixtures import element_by_id
 
     d = tmp_path / "history"
     d.mkdir()
@@ -226,9 +228,14 @@ def test_archived_notes_fold_holds_the_three_fragments(tmp_path: Path) -> None:
     for n in "xyz":
         (d / f"{n}.html").write_text(f"<p>note {n}</p>", encoding="utf-8")
     page = _page(*_finished(), resolved=resolve_manifest(d, GENERATED))
-    fold_html = page[page.index("Archived notes (2026-10-02)") :]
-    assert fold_html.index("note x") < fold_html.index("note y") < fold_html.index("note z")
-    assert '<span class="count">3</span>' in page
+    fold_id = re.search(r'<details id="(fragment-archived-notes[^"]*)" class="fold"([^>]*)>', page)
+    assert fold_id and "open" not in fold_id.group(2)  # closed to start with
+    fold = element_by_id(page, fold_id.group(1))
+    assert "Archived notes (2026-10-02)" in fold and '<span class="count">3</span>' in fold
+    assert fold.index("note x") < fold.index("note y") < fold.index("note z")
+    # nothing of the three lies outside its fold
+    assert page.count("note x") == page.count("note y") == page.count("note z") == 1
+    assert fold.count('data-fragment="') == page.count('data-fragment="') == 3
 
 
 def _with_prs() -> tuple[Facts, Judgements]:
