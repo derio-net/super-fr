@@ -72,8 +72,8 @@ session about open acceptance debt. It nudges an idle run forward, and draws an 
 in the TUI.
 
 OpenCode does not read `~/.claude/rules/`. So the installer also copies the shipped rules into
-the plugin directory, in a `rules/` folder, and the plugin adds each rule to the system prompt
-of a request. It adds a rule only when the prompt does not hold its text yet. The acceptance
+a `rules/` folder in the plugin directory. The plugin adds each rule to the system prompt of a
+request. It adds a rule only when the prompt does not hold its text yet. The acceptance
 nag, the session binding and the child claim run `fr` in the session's own directory, not in the
 directory the plugin loaded from.
 
