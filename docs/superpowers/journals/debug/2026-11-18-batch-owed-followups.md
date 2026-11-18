@@ -35,3 +35,8 @@ O_NOFOLLOW and the lstat of .gitkeep cover .gitkeep alone; live_root.mkdir, iter
 ### rc-1485 · root-cause · #1485: _existing_markers reads unknown as 'no duplicate'
 
 A failed listing, a listing at its 200 cap, and a missing viewer each returned {}, which file_open_ends reads as 'no existing issue'. _existing_owed was already made fail-closed for the same cases.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1486 created=2026-11-18T13:34:14+00:00 -->
+### rc-1486 · root-cause · #1486: head_on_default_branch has two answers for three states
+
+It folds 'cannot tell' into False. That is safe for R3 (off-default closes nothing) but not for R8, where off-default writes and stages. And on_default_branch raises GitUnavailableError, called outside _write_manual_owed's try.
