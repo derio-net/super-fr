@@ -86,3 +86,38 @@ one keyword per renderer, printed through components.when; history's own _stamp 
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 docs and mirrors only: no code
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-11-18T20:58:14+00:00 phase=1 -->
+### review-p1 · review · phase 1 review: 3 findings, all in scope, all fixed (phase 1)
+
+Independent reviewer (separate context, read-only) over the spec's R1-R5, plan phase 1 and diff 8a84988c3..48e8c5409. Ran sync-opencode/sync-hermes/sync-readme --check, fr docs check, ruff and mypy on the touched files, and 301 targeted tests, all green. It grepped for the old names, and took its own fresh screenshots of all six pages' stamps (light/dark, 1280/390). Fixes in 5f6faf052 (p1-r1), e5455e365 (p1-r2) and c7ad6a19f (p1-r3). Full suite after the fixes: 16520 passed, 121 skipped (p1-suite3.log).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-18T20:58:14+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · backlog/ and issues/ fragment dirs missing from state_ref.REF_FILES and state_sync.DURABLE_DIRS, so authored Backlog/Issues fragments were never exported or synced (phase 1)
+
+Raised by the phase 1 reviewer at packages/fr/src/fr/triage/state_ref.py:53-69 and state_sync.py:54.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-18T20:58:14+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · The board/ fallback rule disagreed three ways: spec R3, the code and the skill/README; the case with backlog/ present and issues/ absent was untested (phase 1)
+
+Raised by the phase 1 reviewer at components.py:336 against spec R3, fr-triage SKILL.md:15 and docs/triage/README.md:21.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-18T20:58:14+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · The Origins/Architecture/History mastheads showed "rendered <stamp>" right beside "rendered by fr triage … render" (phase 1)
+
+Raised by the phase 1 reviewer at origins.py:818, architecture.py:376 and history.py:194.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-18T20:58:14+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: backlog/ and issues/ fragment dirs missing from state_ref.REF_FILES and state_sync.DURABLE_DIRS, so authored Backlog/Issues fragments were never exported or synced (phase 1)
+
+5f6faf052: REF_FILES and DURABLE_DIRS carry backlog/ and issues/ (board/ kept as fallback input); pins, the docs/triage README and spec R3 updated.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-18T20:58:14+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: The board/ fallback rule disagreed three ways: spec R3, the code and the skill/README; the case with backlog/ present and issues/ absent was untested (phase 1)
+
+e5455e365: spec R3, the skill (mirrors re-synced) and the README state the per-page rule the code already had; the test now asserts that Issues reads board/ when backlog/ alone exists.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-18T20:58:14+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: The Origins/Architecture/History mastheads showed "rendered <stamp>" right beside "rendered by fr triage … render" (phase 1)
+
+c7ad6a19f: components.rendered_by() gives one span 'rendered <stamp> by <code>…</code>', with the old label when no stamp; both forms pinned, test red before the fix.
