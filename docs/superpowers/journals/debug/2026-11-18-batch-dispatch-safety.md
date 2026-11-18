@@ -10,3 +10,8 @@ packages/fr-dispatch/src/fr_dispatch/__init__.py (dedup snapshot block): on exce
 ### 19afb9cd6fd8 · repro · #1501: cncd build_ingest_payload follows plan-folder symlinks into the payload
 
 packages/fr-cncd/src/fr_cncd/runner.py build_ingest_payload: {p.name: p.read_text() for p in plan.dir.iterdir() if p.is_file()} — is_file() and read_text() both follow symlinks, so a symlink in the plan folder ships the target's content (any file on the dispatching host) to the cncd server.
+
+<!-- fr:journal kind=hypothesis scope=debug id=3ee30c3d4daa created=2026-11-18T12:15:45+00:00 -->
+### 3ee30c3d4daa · hypothesis · Two independent root causes, not one
+
+#1499 is a fail-open error policy in the generic tick (dedup lookup failure treated as 'nothing dispatched'). #1501 is an input-trust defect in the cncd adapter (filesystem reads follow links). Different packages, different code paths; fixing one does not touch the other. The batch rule requires stopping to ask before fixing either.
