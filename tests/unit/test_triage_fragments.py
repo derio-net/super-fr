@@ -11,9 +11,10 @@ from fr.triage.errors import TriageError
 from fr.triage.fragments import Entry, Resolved, resolve_manifest, splice
 
 
-def test_pages_registry_lists_the_five_pages() -> None:
+def test_pages_registry_lists_the_six_pages() -> None:
     assert tuple(p.key for p in PAGES) == (
         "backlog",
+        "issues",
         "batches",
         "origins",
         "architecture",
@@ -21,14 +22,16 @@ def test_pages_registry_lists_the_five_pages() -> None:
     )
     assert tuple(p.title for p in PAGES) == (
         "Backlog",
+        "Issues",
         "Batches",
         "Origins",
         "Architecture",
         "History",
     )
     assert tuple(p.file for p in PAGES) == (
-        "triage.html",
-        "board.html",
+        "backlog.html",
+        "issues.html",
+        "batches.html",
         "origins.html",
         "architecture.html",
         "history.html",

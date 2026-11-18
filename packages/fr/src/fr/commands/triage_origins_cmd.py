@@ -1,7 +1,7 @@
 """`fr triage origins collect|check|render` (spec 2026-10-02-wave-driver, R10).
 
 The same scope options as every `fr triage` verb; all state lives in the scope's
-triage state directory (`origins-facts.json`, `origins.yaml`, `origins.html`), so
+triage state directory (`origins-facts.json`, `origins.yaml` and the Origins page), so
 `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success (and always for
 `check`); 2 usage (scope, `--since`), a forge failure, a missing `origins-facts.json`
 (the message names the collect command) or an unreadable state file.
@@ -29,7 +29,7 @@ from fr.commands.triage_cmd import (
     resolve_state_dir,
     triage_app,
 )
-from fr.triage.components import pages_present, refresh_navs
+from fr.triage.components import fragment_dir, page, pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.model import Judgements, Scope, load_judgements
@@ -38,8 +38,6 @@ from fr.triage.origins import (
     FACTS_FILE,
     GENERATED,
     ISSUE_LIMIT,
-    ORIGINS_DIR,
-    PAGE_FILE,
     PR_LIMIT,
     Origins,
     OriginsFacts,
@@ -166,17 +164,18 @@ def render_command(
     workspace: WorkspaceOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the page in a browser."),
 ) -> None:
-    """Write origins.html from origins-facts.json, origins.yaml and (for links) judgements.yaml,
+    """Write the Origins page from origins-facts.json, origins.yaml and (for links) judgements.yaml,
     with the fragments `origins/manifest.yaml` places among the sections."""
     scope = triage_cmd._scope(repo, org)
     target, facts, origins = _load(scope, dir_override, workspace)
     judgements = _judgements(target)
     try:
-        resolved = resolve_manifest(target / ORIGINS_DIR, GENERATED)
+        folder, _ = fragment_dir(target, "origins")
+        resolved = resolve_manifest(folder, GENERATED)
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
-    notes = [f"manifest entry {name} has no file in {ORIGINS_DIR}/" for name in resolved.missing]
+    notes = [f"manifest entry {name} has no file in {folder.name}/" for name in resolved.missing]
     if resolved.appended:
         notes.append(
             f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
@@ -184,10 +183,19 @@ def render_command(
         )
     for note in notes:
         err_console.print(f"[yellow]warning:[/yellow] {escape(note)}", soft_wrap=True)
-    out = target / PAGE_FILE
+    out = target / page("origins").file
     present = pages_present(target, "origins")
     write_text_atomic(
-        out, render_origins(facts, origins, judgements, resolved, notes, present=present)
+        out,
+        render_origins(
+            facts,
+            origins,
+            judgements,
+            resolved,
+            notes,
+            present=present,
+            rendered_at=datetime.now(UTC),
+        ),  # fmt: skip
     )
     refresh_navs(target, "origins", warn=triage_cmd.warn_nav)
     console.print(

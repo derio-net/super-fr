@@ -2,7 +2,7 @@
 
 The page answers "How did we get here?": the snapshot timeline (stepping through the stored
 snapshots shows what the board showed then), then the **finished waves** as tabs (the
-board's own wave table, its batch links pointing at `triage.html`), then the authored
+Backlog's own wave table, its batch links pointing at the Backlog), then the authored
 fragments `history/manifest.yaml` places among them. A wave is finished when every batch in
 it is terminal (`batch_drive.finished_waves`, the one predicate); a finished wave shows here
 and not on the board.
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fr.triage.batch import BATCH_STAGES
 from fr.triage.components import (
@@ -23,8 +23,10 @@ from fr.triage.components import (
     TABS_CSS,
     TABS_SCRIPT,
     TOKENS_CSS,
+    page,
     page_header,
     tabs,
+    when,
 )
 from fr.triage.fragments import Resolved, splice
 from fr.triage.model import Facts, Judgements
@@ -33,12 +35,8 @@ from fr.triage.snapshot import Snapshot, diff_snapshots
 from fr.triage.views import batch_stages, cancelled_waves, finished_waves, preselected_wave, waves
 
 DASH = "—"
-PAGE_FILE = "history.html"
-HISTORY_DIR = "history"
-BOARD_FILE = "triage.html"
-
 GENERATED = ("timeline", "finished-waves")
-MOVED = {"waves": "board"}  # a section an old manifest may name that the board owns
+MOVED = {"waves": "backlog"}  # a section an old manifest may name that the Backlog owns
 
 CSS = (
     TOKENS_CSS
@@ -61,8 +59,12 @@ CSS = (
 )
 
 
-def _stamp(when: datetime) -> str:
-    return when.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+def _stamp(moment: datetime) -> str:
+    return when(moment)
+
+
+def _rendered(moment: datetime | None) -> str:
+    return "" if moment is None else f"<span>rendered {when(moment)}</span>"
 
 
 def _list(items: Sequence[str]) -> str:
@@ -126,7 +128,7 @@ def _timeline(snapshots: Sequence[tuple[datetime, Snapshot]]) -> str:
     head = '<section id="snapshot-timeline"><h2>Snapshot timeline</h2>'
     if not snapshots:
         return (
-            f'{head}<p class="quiet">No snapshots yet: `fr triage render` stores one each '
+            f'{head}<p class="quiet">No snapshots yet: `fr triage backlog` stores one each '
             "time the board changes, and the timeline steps through them.</p></section>"
         )
     panels = [
@@ -157,7 +159,7 @@ def _finished_waves(facts: Facts, judgements: Judgements) -> str:
         (
             key,
             f"Wave {key} · cancelled" if key in cancelled else f"Wave {key}",
-            wave_table(batches, facts, judgements, BOARD_FILE),
+            wave_table(batches, facts, judgements, page("backlog").file),
         )
         for key, batches in grouped.items()
     ]
@@ -172,9 +174,11 @@ def render_history(
     resolved: Resolved,
     notes: Sequence[str] = (),
     present: Sequence[str] = ("history",),
+    rendered_at: datetime | None = None,
 ) -> str:
     """The page: same inputs, same bytes. The timeline, the finished waves and the authored
-    fragments in the order *resolved* (the manifest) gives."""
+    fragments in the order *resolved* (the manifest) gives; *rendered_at* is the moment the
+    masthead states (triage-pages-ux R5)."""
     generated = {
         "timeline": lambda: _timeline(snapshots),
         "finished-waves": lambda: _finished_waves(facts, judgements),
@@ -187,7 +191,7 @@ def render_history(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{esc(title)}</title>\n{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
         f'<header class="mast"><h1>{esc(title)}</h1><div class="meta">'
-        f"<span>collected {esc(facts.collected_at)}</span>"
+        f"<span>collected {esc(facts.collected_at)}</span>{_rendered(rendered_at)}"
         "<span>rendered by <code>fr triage history render</code></span></div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('history', present)}\n"

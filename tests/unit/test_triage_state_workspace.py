@@ -164,8 +164,8 @@ def test_the_import_copies_only_the_durable_files(tmp_path: Path, home: Path) ->
         "lease.yaml": "l\n",
         "board/manifest.yaml": "fragments: []\n",
         "drive.lock": '{"pid": 1}\n',
-        "triage.html": "<html></html>\n",
-        "board.html": "<html></html>\n",
+        "backlog.html": "<html></html>\n",
+        "batches.html": "<html></html>\n",
         "merge/b1/.git": "gitdir: /elsewhere\n",
         "merge/b1/src.py": "x = 1\n",
     }
@@ -272,7 +272,7 @@ def test_a_watch_in_one_clone_sees_a_drive_from_another(tmp_path: Path, home: Pa
     lock.write_text(json.dumps({"pid": os.getpid(), "started": "x"}))
 
     result = CliRunner().invoke(
-        app, ["triage", "board", "--repo", SCOPE.target, "--workspace", str(wt), "--watch"]
+        app, ["triage", "batches", "--repo", SCOPE.target, "--workspace", str(wt), "--watch"]
     )
 
     assert result.exit_code == 2, result.output

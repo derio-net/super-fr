@@ -31,7 +31,7 @@ from pathlib import Path
 
 import yaml
 
-from fr.triage.components import collapsed
+from fr.triage.components import collapsed, page
 from fr.triage.errors import TriageError
 
 MANIFEST_FILE = "manifest.yaml"
@@ -226,6 +226,15 @@ def resolve_manifest(
         appended=appended,
         moved=moved_here,
     )
+
+
+def moved_notes(resolved: Resolved) -> list[str]:
+    """One note per manifest entry naming a section another page owns now, naming that
+    page by its registry title (triage-pages-ux R4)."""
+    return [
+        f"manifest names `{name}`, which is now on the {page(key).title} page; skipped"
+        for name, key in resolved.moved.items()
+    ]
 
 
 def _fragment(entry: Entry, text: str, used_ids: set[str]) -> str:

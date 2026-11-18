@@ -5413,7 +5413,7 @@ class _Driver:
                 _say(f"restart failed {pane}: {reason}")
 
     def _write_board(self) -> None:
-        """Render `board.html` from what this pass left on disk (R11). A board that cannot
+        """Render the Batches page from what this pass left on disk (R11). A board that cannot
         be written is one warning per distinct cause and never changes the pass."""
         try:
             out, _ = triage_kanban_cmd.write_board(

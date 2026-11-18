@@ -45,32 +45,77 @@ FONT_TOKENS = (
 )
 
 
+class Legacy(NamedTuple):
+    """What a page was called before it had one name (spec 2026-11-18-triage-pages-ux R3):
+    its old file, removed by a render, and its old fragment directory, read when the new
+    one is absent. Either may be None."""
+
+    file: str | None
+    dir: str | None
+
+
 class Page(NamedTuple):
     key: str
     file: str
     title: str
     goal: str
+    dir: str | None = None
+    """The page's fragment directory (`<state>/<dir>/manifest.yaml`); None for a page that
+    reads no manifest."""
+    legacy: Legacy | None = None
 
 
 PAGES = (
-    Page("backlog", "triage.html", "Backlog", "What do I do next?"),
-    Page("batches", "board.html", "Batches", "What is running, and what needs me?"),
+    Page(
+        "backlog",
+        "backlog.html",
+        "Backlog",
+        "What do I do next?",
+        "backlog",
+        Legacy("triage.html", "board"),
+    ),
+    Page(
+        "issues",
+        "issues.html",
+        "Issues",
+        "What is open, and how is it ranked?",
+        "issues",
+        Legacy(None, "board"),
+    ),
+    Page(
+        "batches",
+        "batches.html",
+        "Batches",
+        "What is running, and what needs me?",
+        None,
+        Legacy("board.html", None),
+    ),
     Page(
         "origins",
         "origins.html",
         "Origins",
         "Where do defects come from, and what process change stops them?",
+        "origins",
     ),
     Page(
         "architecture",
         "architecture.html",
         "Architecture",
         "What is the system, and where does it hurt?",
+        "architecture",
     ),
-    Page("history", "history.html", "History", "How did we get here?"),
+    Page("history", "history.html", "History", "How did we get here?", "history"),
 )
-"""The five pages the triage engine writes, in nav order: one goal each (spec §A). This is
-the registry (board-truth R9): a page is shown in a nav only when it is present."""
+"""The six pages the triage engine writes, in nav order: one goal each (spec §A). This is
+the registry (board-truth R9): a page is shown in a nav only when it is present, and every
+file, directory and title a page is known by is read from here (triage-pages-ux R1)."""
+
+_BY_KEY = {p.key: p for p in PAGES}
+
+
+def page(key: str) -> Page:
+    """The registry entry for *key*; a KeyError for a key no page has."""
+    return _BY_KEY[key]
 
 
 def _vars(tokens: dict[str, str]) -> str:
@@ -270,11 +315,45 @@ def tabs(group: str, label: str, panels: Sequence[tuple[str, str, str]], selecte
     )
 
 
-def pages_present(state_dir: Path, current: str) -> tuple[str, ...]:
+def pages_present(state_dir: Path, current: str, *also: str) -> tuple[str, ...]:
     """The keys of the pages present in *state_dir* (R9): those whose file exists there,
-    plus *current*, the page being rendered. Nothing else decides it, so every page a nav
-    links has a file once the render finishes. Registry order."""
-    return tuple(p.key for p in PAGES if p.key == current or (state_dir / p.file).is_file())
+    plus *current* and *also*, the pages being rendered. Nothing else decides it, so every
+    page a nav links has a file once the render finishes. Registry order."""
+    writing = {current, *also}
+    return tuple(p.key for p in PAGES if p.key in writing or (state_dir / p.file).is_file())
+
+
+def fragment_dir(state_dir: Path, key: str) -> tuple[Path, str | None]:
+    """The directory page *key* reads its manifest and fragments from, and a note when it
+    is the page's old one (triage-pages-ux R3): the page's own directory when it exists,
+    else its legacy directory when that exists, else its own (absent: the default order).
+    A page with no fragment directory raises ValueError."""
+    entry = page(key)
+    if entry.dir is None:
+        raise ValueError(f"the {entry.title} page reads no manifest")
+    own = state_dir / entry.dir
+    old = entry.legacy.dir if entry.legacy else None
+    if own.is_dir() or old is None or not (state_dir / old).is_dir():
+        return own, None
+    note = (
+        f"{entry.title}: no {entry.dir}/ directory, so its manifest and fragments are read "
+        f"from {old}/; copy them to {entry.dir}/ to keep them once {old}/ is gone"
+    )
+    return state_dir / old, note
+
+
+def remove_legacy(state_dir: Path, key: str) -> Path | None:
+    """Delete page *key*'s old-named file from *state_dir* (triage-pages-ux R3), so no
+    stale copy stays beside the page; the path removed, or None when there was none. A
+    file that cannot be removed raises OSError, which the caller reports."""
+    entry = page(key)
+    if entry.legacy is None or entry.legacy.file is None:
+        return None
+    old = state_dir / entry.legacy.file
+    if not old.is_file():
+        return None
+    old.unlink()
+    return old
 
 
 NAV_BLOCK = re.compile(r'<nav class="pages"[^\n>]*>[^\n]*?</nav>')
@@ -298,7 +377,7 @@ def page_header(current: str, present: Sequence[str]) -> str:
     """The nav bar linking the *present* pages, *current* marked `aria-current="page"`,
     then the goal sentence of *current* (spec §A). Every renderer calls it after its
     masthead."""
-    goal = next(p.goal for p in PAGES if p.key == current)
+    goal = page(current).goal
     return f'{nav_html(current, present)}<p class="goal">{_esc(goal)}</p>'
 
 
@@ -322,10 +401,10 @@ def refresh_navs(state_dir: Path, current: str, warn: Callable[[str], None] | No
     from fr.artifacts.atomic import write_text_atomic
 
     present = pages_present(state_dir, current)
-    for page in PAGES:
-        if page.key == current or page.key not in present:
+    for other in PAGES:
+        if other.key == current or other.key not in present:
             continue
-        path = state_dir / page.file
+        path = state_dir / other.file
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
@@ -336,7 +415,7 @@ def refresh_navs(state_dir: Path, current: str, warn: Callable[[str], None] | No
             if warn:
                 warn(f"{path}: no nav block found; left as it was")
             continue
-        nav = nav_html(page.key, present)
+        nav = nav_html(other.key, present)
         new = NAV_BLOCK.sub(lambda _m: nav, text)
         if new == text:
             continue
@@ -385,6 +464,11 @@ def collapsed(id_: str, title: str, count: int | None, body: str) -> str:
         f'<details id="{_esc(id_)}" class="fold"><summary>{_esc(title)}{n}</summary>'
         f"{body}</details>"
     )
+
+
+Moment = datetime
+"""The type of a render's moment, for a module that must not import a clock module itself
+(render.py, whose clock-freedom a test checks structurally)."""
 
 
 def when(moment: datetime) -> str:

@@ -2,7 +2,7 @@
 
 The same scope options as every `fr triage` verb. It reads the scope's state directory
 (`facts.json`, `judgements.yaml`, `snapshots/`, `history/manifest.yaml` and the fragments
-it names) and writes only `history.html` beside them, so `triage` stays in
+it names) and writes only the History page beside them, so `triage` stays in
 `READ_ONLY_COMMANDS`. Exit codes: 0 success (a manifest entry with no file is reported, and
 shown on the page, but is not a failure); 2 usage, a missing `facts.json` (the message names
 the collect command), an unreadable state file, or a malformed fragment (nothing is written).
@@ -11,6 +11,7 @@ the collect command), an unreadable state file, or a malformed fragment (nothing
 from __future__ import annotations
 
 import webbrowser
+from datetime import UTC, datetime
 
 import typer
 from rich.markup import escape
@@ -26,10 +27,10 @@ from fr.commands.triage_cmd import (
     err_console,
     triage_app,
 )
-from fr.triage.components import pages_present, refresh_navs
+from fr.triage.components import fragment_dir, page, pages_present, refresh_navs
 from fr.triage.errors import TriageError
-from fr.triage.fragments import resolve_manifest
-from fr.triage.history import GENERATED, HISTORY_DIR, MOVED, PAGE_FILE, render_history
+from fr.triage.fragments import moved_notes, resolve_manifest
+from fr.triage.history import GENERATED, MOVED, render_history
 from fr.triage.snapshot import stored_snapshots
 from fr.triage.views import batch_stages, finished_waves
 
@@ -49,18 +50,18 @@ def render_command(
     workspace: WorkspaceOpt = None,
     open_: bool = typer.Option(False, "--open", help="Open the page in a browser."),
 ) -> None:
-    """Write history.html: the snapshot timeline, the finished waves as tabs, then the
+    """Write the History page: the snapshot timeline, the finished waves as tabs, then the
     authored fragments `history/manifest.yaml` places among them."""
     scope = triage_cmd._scope(repo, org)
     target, facts, judgements = triage_cmd._load_state(scope, dir_override, workspace)
     try:
-        resolved = resolve_manifest(target / HISTORY_DIR, GENERATED, MOVED)
+        folder, _ = fragment_dir(target, "history")
+        resolved = resolve_manifest(folder, GENERATED, MOVED)
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
-    notes = [f"manifest entry {name} has no file in {HISTORY_DIR}/" for name in resolved.missing]
-    for name, page in resolved.moved.items():
-        notes.append(f"manifest names `{name}`, which is now on the {page} page; skipped")
+    notes = [f"manifest entry {name} has no file in {folder.name}/" for name in resolved.missing]
+    notes += moved_notes(resolved)
     if resolved.appended:
         notes.append(
             f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
@@ -68,7 +69,7 @@ def render_command(
         )
     for note in notes:
         err_console.print(f"[yellow]warning:[/yellow] {escape(note)}", soft_wrap=True)
-    out = target / PAGE_FILE
+    out = target / page("history").file
     write_text_atomic(
         out,
         render_history(
@@ -78,6 +79,7 @@ def render_command(
             resolved=resolved,
             notes=notes,
             present=pages_present(target, "history"),
+            rendered_at=datetime.now(UTC),
         ),
     )
     refresh_navs(target, "history", warn=triage_cmd.warn_nav)

@@ -2,8 +2,8 @@
 
 The same scope options as every `fr triage` verb. It reads the scope's state directory
 (`facts.json`, `judgements.yaml`, `subsystems.yaml`, `architecture/manifest.yaml` and the
-fragments it names) and the git checkout it measures, and writes only `architecture.html`
-beside them, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success (a manifest
+fragments it names) and the git checkout it measures, and writes only the Architecture
+page beside them, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success (a manifest
 entry with no file is reported, and shown on the page, but is not a failure); 2 usage, a
 missing `facts.json` (the message names the collect command), an unreadable state file, or
 a malformed fragment (nothing is written).
@@ -12,6 +12,7 @@ a malformed fragment (nothing is written).
 from __future__ import annotations
 
 import webbrowser
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -30,19 +31,17 @@ from fr.commands.triage_cmd import (
     triage_app,
 )
 from fr.triage.architecture import (
-    ARCHITECTURE_DIR,
     GENERATED,
     MOVED,
-    PAGE_FILE,
     SUBSYSTEMS_FILE,
     Measured,
     load_subsystems,
     measure_subsystems,
     render_architecture,
 )
-from fr.triage.components import pages_present, refresh_navs
+from fr.triage.components import fragment_dir, page, pages_present, refresh_navs
 from fr.triage.errors import TriageError
-from fr.triage.fragments import resolve_manifest
+from fr.triage.fragments import moved_notes, resolve_manifest
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.render import plural
 
@@ -78,7 +77,7 @@ def render_command(
     ] = "HEAD",
     open_: bool = typer.Option(False, "--open", help="Open the page in a browser."),
 ) -> None:
-    """Write architecture.html: the summary, subsystem cards and size table, with the
+    """Write the Architecture page: the summary, subsystem cards and size table, with the
     authored fragments `architecture/manifest.yaml` places among them.
 
     Line counts are measured with `git ls-tree` and `git grep` at each subsystem's
@@ -89,7 +88,8 @@ def render_command(
     target, facts, judgements = triage_cmd._load_state(scope, dir_override, workspace)
     try:
         subsystems = load_subsystems(target / SUBSYSTEMS_FILE)
-        resolved = resolve_manifest(target / ARCHITECTURE_DIR, GENERATED, MOVED)
+        folder, _ = fragment_dir(target, "architecture")
+        resolved = resolve_manifest(folder, GENERATED, MOVED)
     except TriageError as exc:
         raise _fail(str(exc)) from exc
 
@@ -100,11 +100,8 @@ def render_command(
         except GitError as exc:
             _warn(f"not measured: {exc}")
 
-    notes = [
-        f"manifest entry {name} has no file in {ARCHITECTURE_DIR}/" for name in resolved.missing
-    ]
-    for name, page in resolved.moved.items():
-        notes.append(f"manifest names `{name}`, which is now on the {page} page; skipped")
+    notes = [f"manifest entry {name} has no file in {folder.name}/" for name in resolved.missing]
+    notes += moved_notes(resolved)
     if resolved.appended:
         notes.append(
             f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
@@ -112,7 +109,7 @@ def render_command(
         )
     for note in notes:
         _warn(note)
-    out = target / PAGE_FILE
+    out = target / page("architecture").file
     write_text_atomic(
         out,
         render_architecture(
@@ -123,6 +120,7 @@ def render_command(
             resolved=resolved,
             notes=notes,
             present=pages_present(target, "architecture"),
+            rendered_at=datetime.now(UTC),
         ),
     )
     refresh_navs(target, "architecture", warn=triage_cmd.warn_nav)

@@ -273,7 +273,7 @@ def test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch(
     concl = _section(page, "conclusion")
     assert "Feature work lands half-done" in concl
     assert "Require a follow-up checklist before merge" in concl
-    assert 'href="triage.html#batch-finish-widgets"' in concl
+    assert 'href="backlog.html#batch-finish-widgets"' in concl
     # a batch the judgements do not hold is shown as unresolved, never dropped
     assert re.search(r'class="unresolved"[^>]*>[^<]*ghost-batch', concl)
     # a cause with no batch says so
@@ -871,11 +871,11 @@ def test_origins_render_refreshes_the_nav_of_a_sibling_page(
 ) -> None:
     from fr.triage.components import nav_html
 
-    (tmp_path / "triage.html").write_text(
+    (tmp_path / "backlog.html").write_text(
         f"<html>{nav_html('backlog', ('backlog',))}</html>\n", encoding="utf-8"
     )
     _page(monkeypatch, tmp_path)
-    sibling = (tmp_path / "triage.html").read_text(encoding="utf-8")
+    sibling = (tmp_path / "backlog.html").read_text(encoding="utf-8")
     assert 'href="origins.html"' in sibling
 
 

@@ -17,7 +17,7 @@ from fr.triage.kanban import COLUMN_TITLES
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "plugins" / "super-fr" / "skills" / "fr-triage" / "SKILL.md"
 
-BOARD_LINE_MARKER = "`fr triage board` writes `board.html`"
+BOARD_LINE_MARKER = "`fr triage batches` writes `batches.html`"
 """Content that identifies the board paragraph; its lead may be renamed."""
 
 COUNT_PHRASE = re.compile(
@@ -73,7 +73,7 @@ def test_the_board_command_docstring_states_no_column_count() -> None:
     fn = next(
         n
         for n in ast.walk(ast.parse(src))
-        if isinstance(n, ast.FunctionDef) and n.name == "board_command"
+        if isinstance(n, ast.FunctionDef) and n.name == "batches_command"
     )
     doc = ast.get_docstring(fn) or ""
     assert COUNT_PHRASE.search(doc) is None

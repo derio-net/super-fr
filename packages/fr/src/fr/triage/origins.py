@@ -10,7 +10,7 @@ The same engine-and-skill split as the rest of `fr triage`:
   `causes:` whose `batches:` the page's conclusion links to the triage batches that
   address them.
 - **check** names the issues with no classification, and classifications for issues the
-  facts do not hold (never pruned). **render** writes `origins.html` on the shared page
+  facts do not hold (never pruned). **render** writes the Origins page on the shared page
   components (`fr.triage.components`).
 
 A figure the inputs do not support is an em dash, never a zero. Pure render: no clock,
@@ -34,7 +34,15 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from fr.triage.collect import ORIGINS_ISSUE_LIST_FIELDS, REPO_LIMIT, Forge, parse_prs, scope_repos
-from fr.triage.components import CHROME_CSS, GUTTER_CSS, TOKENS_CSS, collapsed, page_header
+from fr.triage.components import (
+    CHROME_CSS,
+    GUTTER_CSS,
+    TOKENS_CSS,
+    collapsed,
+    page,
+    page_header,
+    when,
+)
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.fragments import Entry, Resolved, splice
 from fr.triage.model import KEY_RE, Judgements, Scope, issue_key, normalize_key
@@ -50,8 +58,6 @@ LEADERBOARDS: tuple[Category, ...] = ("new-feature", "leftover")
 
 FACTS_FILE = "origins-facts.json"
 CLASSIFICATION_FILE = "origins.yaml"
-PAGE_FILE = "origins.html"
-ORIGINS_DIR = "origins"
 # The generated sections, in the order R7 gives; fragments interleave where the manifest says.
 GENERATED = (
     "origin-counts",
@@ -728,7 +734,8 @@ def _issue_table(facts: OriginsFacts, origins: Origins) -> str:
 def _batch_ref(batch_id: str, titles: Mapping[str, str]) -> str:
     if batch_id in titles:
         frag = urllib.parse.quote(f"batch-{batch_id}", safe="-_.")
-        return f'<a href="triage.html#{frag}">{esc(batch_id)}</a> {esc(titles[batch_id])}'
+        href = f"{page('backlog').file}#{frag}"
+        return f'<a href="{href}">{esc(batch_id)}</a> {esc(titles[batch_id])}'
     return (
         f'<span class="unresolved" title="no such batch in judgements.yaml">'
         f"{esc(batch_id)}</span> (unresolved: no such batch in judgements.yaml)"
@@ -780,6 +787,8 @@ def render_origins(
     resolved: Resolved | None = None,
     notes: Sequence[str] = (),
     present: Sequence[str] = ("origins",),
+    *,
+    rendered_at: datetime | None = None,
 ) -> str:
     """The defect-origins page: same inputs, same bytes. The generated sections (R7) and the
     authored fragments in the order *resolved* (the manifest) gives; with none, the default
@@ -806,7 +815,8 @@ def render_origins(
         f"<span>{plural(len(facts.issues), 'issue')} filed</span>"
         f"<span>{len(missing.unclassified)} unclassified</span>"
         f"<span>collected {esc(facts.collected_at)}</span>"
-        "<span>rendered by <code>fr triage origins render</code></span></div>"
+        + ("" if rendered_at is None else f"<span>rendered {when(rendered_at)}</span>")
+        + "<span>rendered by <code>fr triage origins render</code></span></div>"
         f'<ul class="notes">{note_items}</ul></header>\n'
         f"{page_header('origins', present)}\n" + "\n".join(body) + "\n"
         f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"

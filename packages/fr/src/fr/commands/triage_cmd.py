@@ -4,7 +4,8 @@
 directory (the workspace's `.fr/triage-state/<scope>/`, or `~/.cache/fr/triage/<scope>/`
 outside a clone; `--dir` names one outright). `check` reports the
 four sets (unranked, settled, orphaned, unreachable) and always exits 0.
-`render` writes `triage.html`, and `--open` hands it to `webbrowser`.
+`backlog` writes the Backlog and Issues pages (`render` is its old name), and `--open`
+hands the Backlog to `webbrowser`.
 The `batch` sub-app's verbs live in `fr.commands.triage_batch_cmd` (spec
 2026-09-25-triage-batches). The engine lives in `fr.triage`; this module only
 parses flags and does I/O.
@@ -15,7 +16,7 @@ it never reads or writes a registered artifact (spec §3.F′).
 Exit codes: 0 success (skipped repos and truncation warnings are reported,
 not failed); 2 usage (not exactly one of --repo/--org), an unreadable
 judgements.yaml, a forge failure in repo scope, or an org scope in which
-no repo could be read (review r-p2-empty); for check/render, a missing
+no repo could be read (review r-p2-empty); for check/backlog, a missing
 facts.json (the message names the collect command) or an unreadable state file.
 """
 
@@ -50,9 +51,9 @@ from fr.triage.collect import (
     Forge,
     collect_facts_counted,
 )
-from fr.triage.components import pages_present, refresh_navs
+from fr.triage.components import fragment_dir, page, pages_present, refresh_navs, remove_legacy
 from fr.triage.errors import TriageError
-from fr.triage.fragments import resolve_manifest
+from fr.triage.fragments import moved_notes, resolve_manifest
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import (
     Batch,
@@ -71,7 +72,15 @@ from fr.triage.model import (
 from fr.triage.pacing import Pacer
 from fr.triage.probe import PassPlan, Prober, judgements_digest
 from fr.triage.quota import is_rate_limited
-from fr.triage.render import GENERATED, plural, render
+from fr.triage.render import (
+    BACKLOG_GENERATED,
+    BACKLOG_MOVED,
+    ISSUES_GENERATED,
+    ISSUES_MOVED,
+    plural,
+    render_backlog,
+    render_issues,
+)
 from fr.triage.scope_config import load_durable, mirror_state_repo, scope_id, write_durable
 from fr.triage.snapshot import (
     acceptance_rows,
@@ -100,8 +109,6 @@ def warn_nav(message: str) -> None:
     _NAV_WARNED.add(message)
     err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
 
-
-BOARD_DIR = "board"  # `<state>/board/manifest.yaml`: the board's authored fragments
 
 triage_app = typer.Typer(
     name="triage",
@@ -1025,26 +1032,54 @@ def print_claim_sets(sets: ClaimSets) -> None:
         console.print(f"  {escape(o.key)}  batch {escape(o.batch)}", soft_wrap=True)
 
 
-@triage_app.command("render")
-def render_command(
+MatrixOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--matrix",
+        help="Checkout whose acceptance fragments to track (default: this checkout).",
+    ),
+]
+OpenBacklogOpt = Annotated[bool, typer.Option("--open", help="Open the Backlog in a browser.")]
+
+
+def _say_warning(text: str) -> None:
+    err_console.print(f"[yellow]warning:[/yellow] {escape(text)}", soft_wrap=True)
+
+
+def _page_manifest(
+    target_dir: Path, key: str, generated: tuple[str, ...], moved: dict[str, str]
+) -> tuple[Any, list[str]]:
+    """Page *key*'s resolved manifest and its page notes (R3, R4): the fragment-directory
+    fallback and each section another page owns, each also said on stderr, plus a warning
+    per manifest entry with no file. A broken manifest exits 2."""
+    folder, fallback = fragment_dir(target_dir, key)
+    try:
+        resolved = resolve_manifest(folder, generated, moved)
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+    for name in resolved.missing:
+        _say_warning(f"manifest entry {name} has no file in {folder.name}/")
+    notes = [fallback] if fallback else []
+    for note in [*notes, *(f"{page(key).title}: {m}" for m in moved_notes(resolved))]:
+        _say_warning(note)
+    return resolved, notes
+
+
+@triage_app.command("backlog")
+def backlog_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
-    open_: bool = typer.Option(False, "--open", help="Open the board in a browser."),
-    matrix: Annotated[
-        Path | None,
-        typer.Option(
-            "--matrix",
-            help="Checkout whose acceptance fragments to track (default: this checkout).",
-        ),
-    ] = None,
+    open_: OpenBacklogOpt = False,
+    matrix: MatrixOpt = None,
 ) -> None:
-    """Write triage.html from facts.json and judgements.yaml.
+    """Write the Backlog and Issues pages from facts.json and judgements.yaml.
 
     Also stores a snapshot of what the board shows under `snapshots/` in the state
     directory (the latest 30 are kept; one identical to the latest is not stored); the
-    board's "Since last report" is the diff against the last DIFFERENT readable one.
+    Backlog's "Since last report" is the diff against the last DIFFERENT readable one.
     The effective acceptance matrix is read only for a single repo whose checkout you
     are in, or from the checkout --matrix names.
     """
@@ -1064,28 +1099,37 @@ def render_command(
         matrix_path = matrix_for_scope(scope.target if scope.kind == "repo" else None, Path.cwd())
     snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix_path))
     since = diff_snapshots(previous_snapshot(target_dir, snap), snap)
-    try:
-        resolved = resolve_manifest(target_dir / BOARD_DIR, GENERATED)
-    except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
-        raise typer.Exit(code=2) from exc
-    for name in resolved.missing:
-        err_console.print(
-            f"[yellow]warning:[/yellow] manifest entry {escape(name)} has no file in {BOARD_DIR}/",
-            soft_wrap=True,
-        )
-    out = target_dir / "triage.html"
+    backlog_resolved, backlog_notes = _page_manifest(
+        target_dir, "backlog", BACKLOG_GENERATED, BACKLOG_MOVED
+    )
+    issues_resolved, issues_notes = _page_manifest(
+        target_dir, "issues", ISSUES_GENERATED, ISSUES_MOVED
+    )
     from fr.commands.triage_kanban_cmd import local_ci_none, read_sessions  # it imports this
 
     # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
     # runner that cannot say leaves Needs you now as it was.
     noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
-    page = render(
-        facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
-        session_notes=noted, ci_none=local_ci_none(facts), stops=load_stops(target_dir),
-        present=pages_present(target_dir, "backlog"),
+    rendered_at = datetime.now(UTC)
+    present = pages_present(target_dir, "backlog", "issues")
+    out = target_dir / page("backlog").file
+    backlog = render_backlog(
+        facts, judgements, since, backlog_resolved,
+        board=(target_dir / page("batches").file).is_file(), session_notes=noted,
+        ci_none=local_ci_none(facts), stops=load_stops(target_dir), present=present,
+        notes=backlog_notes, rendered_at=rendered_at,
     )  # fmt: skip
-    write_text_atomic(out, page)
+    issues = render_issues(
+        facts, judgements, since, issues_resolved, present=present, notes=issues_notes,
+        rendered_at=rendered_at,
+    )  # fmt: skip
+    write_text_atomic(out, backlog)
+    write_text_atomic(target_dir / page("issues").file, issues)
+    for key in ("backlog", "issues"):
+        try:
+            remove_legacy(target_dir, key)
+        except OSError as exc:
+            _say_warning(f"the {page(key).title} page's old file was not removed: {exc}")
     refresh_navs(target_dir, "backlog", warn=warn_nav)
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".
@@ -1097,10 +1141,29 @@ def render_command(
             warn=lambda m: err_console.print(f"warning: {escape(m)}", soft_wrap=True),
         )
     console.print(
-        f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
+        f"wrote {out} and {page('issues').file} ({plural(len(facts.issues), 'issue')})",
+        markup=False,
+        soft_wrap=True,
     )
     if open_:
         webbrowser.open(out.resolve().as_uri())
+
+
+@triage_app.command("render", hidden=True)
+def render_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+    open_: OpenBacklogOpt = False,
+    matrix: MatrixOpt = None,
+) -> None:
+    """The old name of `fr triage backlog` (R2): says so, then runs it."""
+    err_console.print("fr triage render is now fr triage backlog", markup=False, soft_wrap=True)
+    backlog_command(
+        repo=repo, org=org, dir_override=dir_override, workspace=workspace, open_=open_,
+        matrix=matrix,
+    )  # fmt: skip
 
 
 # The batch verbs live in `triage_batch_cmd` (spec 2026-09-25-triage-batches

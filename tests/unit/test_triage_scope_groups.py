@@ -226,9 +226,9 @@ def test_check_and_render_run_over_a_two_repo_group(tmp_path: Path) -> None:
     _group_state(tmp_path)
     check = CliRunner().invoke(app, ["triage", "check", "--repo", GROUP, "--dir", str(tmp_path)])
     assert check.exit_code == 0, check.output
-    render = CliRunner().invoke(app, ["triage", "render", "--repo", GROUP, "--dir", str(tmp_path)])
+    render = CliRunner().invoke(app, ["triage", "backlog", "--repo", GROUP, "--dir", str(tmp_path)])
     assert render.exit_code == 0, render.output
-    html = (tmp_path / "triage.html").read_text(encoding="utf-8")
+    html = (tmp_path / "backlog.html").read_text(encoding="utf-8")
     assert "group scope" in html and "alpha" in html and "beta" in html
 
 

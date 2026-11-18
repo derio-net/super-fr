@@ -96,7 +96,7 @@ EVERY = {
 }
 NEVER = {
     "facts.json": b"{}\n",
-    "board.html": b"<html></html>\n",
+    "batches.html": b"<html></html>\n",
     "origins.html": b"<html></html>\n",
     "scope.yaml": b"claim_expiry_hours: 24\n",
     "origins-facts.json": b"{}\n",

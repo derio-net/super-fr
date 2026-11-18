@@ -293,10 +293,10 @@ def _render(tmp_path: Path) -> str:
     from typer.testing import CliRunner
 
     result = CliRunner().invoke(
-        app, ["triage", "render", "--repo", "example-org/widgets", "--dir", str(tmp_path)]
+        app, ["triage", "backlog", "--repo", "example-org/widgets", "--dir", str(tmp_path)]
     )
     assert result.exit_code == 0, result.output
-    return (tmp_path / "triage.html").read_text(encoding="utf-8")
+    return (tmp_path / "backlog.html").read_text(encoding="utf-8")
 
 
 def test_every_render_stores_a_snapshot_and_the_second_diffs_against_the_first(

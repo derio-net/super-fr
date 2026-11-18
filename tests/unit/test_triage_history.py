@@ -88,7 +88,7 @@ def test_finished_waves_are_tabs_with_the_highest_finished_selected() -> None:
 def test_batch_links_point_at_the_board() -> None:
     page = _page(*_finished())
     sect = page[page.index('id="finished-waves"') :]
-    assert 'href="triage.html#batch-a"' in sect and 'href="triage.html#batch-b"' in sect
+    assert 'href="backlog.html#batch-a"' in sect and 'href="backlog.html#batch-b"' in sect
     assert 'href="#batch-' not in sect
 
 
@@ -168,7 +168,7 @@ def test_the_command_reads_the_history_manifest(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     page = (state / "history.html").read_text(encoding="utf-8")
     assert "<p>WHY</p>" in page and "gone.html" in page
-    assert "`waves`, which is now on the board page" in page
+    assert "`waves`, which is now on the Backlog page" in page
 
 
 def test_the_command_refuses_a_malformed_fragment_and_writes_nothing(tmp_path: Path) -> None:

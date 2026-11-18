@@ -84,13 +84,13 @@ def test_the_figures_carry_local_debt_through_parse_figures() -> None:
 
 
 def test_the_board_counts_local_debt() -> None:
-    from fr.triage.render import render
+    from fr.triage.render import render_issues
 
     from tests.unit.triage_board_fixtures import facts, judgements
     from tests.unit.triage_debt_fixtures import digest, figures
 
     fig = figures(acceptance={"ci": 4, "local": 3}, acceptance_local_debt=2)
-    page = render(facts([digest(1, fig)]), judgements({}), None)
+    page = render_issues(facts([digest(1, fig)]), judgements({}), None)
     sect = page[page.index('id="debt"') :]
     assert "local debt 2" in sect
     assert "local 3" in sect  # listed beside walked and manual

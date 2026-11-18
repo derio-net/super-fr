@@ -25,6 +25,7 @@ import fnmatch
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -36,6 +37,7 @@ from fr.triage.components import (
     GUTTER_CSS,
     TOKENS_CSS,
     page_header,
+    when,
 )
 from fr.triage.errors import TriageError
 from fr.triage.fragments import Resolved, splice
@@ -45,8 +47,6 @@ from fr.triage.render import FONTS, esc, plural
 
 DASH = "—"
 OTHER = "Other"
-PAGE_FILE = "architecture.html"
-ARCHITECTURE_DIR = "architecture"
 SUBSYSTEMS_FILE = "subsystems.yaml"
 
 # The generated sections, in the default order; fragments interleave where the manifest says.
@@ -54,8 +54,8 @@ GENERATED = ("summary", "subsystems", "size-table")
 
 # Sections an older manifest may still name that another page owns now (R6).
 MOVED = {
-    "waves": "board",
-    "operator-actions": "board",
+    "waves": "backlog",
+    "operator-actions": "backlog",
     "filings-per-day": "origins",
     "origin-counts": "origins",
     "timeline": "history",
@@ -354,9 +354,11 @@ def render_architecture(
     resolved: Resolved,
     notes: Sequence[str] = (),
     present: Sequence[str] = ("architecture",),
+    rendered_at: datetime | None = None,
 ) -> str:
     """The page: same inputs, same bytes. The generated sections and the authored fragments
-    in the order *resolved* (the manifest) gives, a fragment exactly where it is listed."""
+    in the order *resolved* (the manifest) gives, a fragment exactly where it is listed;
+    *rendered_at* is the moment the masthead states (triage-pages-ux R5)."""
     generated = {
         "summary": lambda: _summary(facts, judgements, subsystems, measured),
         "subsystems": lambda: _subsystems(facts, judgements, subsystems, measured),
@@ -371,7 +373,8 @@ def render_architecture(
         f"<title>{esc(title)}</title>\n{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
         f'<header class="mast"><h1>{esc(title)}</h1><div class="meta">'
         f"<span>collected {esc(facts.collected_at)}</span>"
-        "<span>rendered by <code>fr triage architecture render</code></span></div>"
+        + ("" if rendered_at is None else f"<span>rendered {when(rendered_at)}</span>")
+        + "<span>rendered by <code>fr triage architecture render</code></span></div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('architecture', present)}\n"
         + "\n".join(body)

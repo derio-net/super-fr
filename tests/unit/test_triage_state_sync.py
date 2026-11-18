@@ -41,7 +41,7 @@ def _state(root: Path) -> Path:
         "subsystems.yaml": "subsystems: []\n",
         "facts.json": "{}\n",
         "origins-facts.json": "{}\n",
-        "triage.html": "<html></html>\n",
+        "backlog.html": "<html></html>\n",
         "history.html": "<html></html>\n",
         "drive.lock": "123\n",
         "board/manifest.yaml": "sections: []\n",

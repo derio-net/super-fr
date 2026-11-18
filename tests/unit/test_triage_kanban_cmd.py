@@ -80,7 +80,7 @@ def _loaded(tmp_path: Path) -> tuple[Any, Any]:
 
 def _board(tmp_path: Path, *args: str) -> tuple[int, str]:
     result = CliRunner().invoke(
-        app, ["triage", "board", "--repo", REPO, "--dir", str(tmp_path), *args]
+        app, ["triage", "batches", "--repo", REPO, "--dir", str(tmp_path), *args]
     )
     return result.exit_code, result.output
 
@@ -239,8 +239,8 @@ def test_board_writes_board_html_and_prints_its_path(
     _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "working"}))
     code, out = _board(tmp_path)
     assert code == 0, out
-    page = (tmp_path / "board.html").read_text(encoding="utf-8")
-    assert str(tmp_path / "board.html") in out.replace("\n", "")
+    page = (tmp_path / "batches.html").read_text(encoding="utf-8")
+    assert str(tmp_path / "batches.html") in out.replace("\n", "")
     assert 'id="card-b1"' in page and "working" in page
     assert "(1 batch)" in out.replace("\n", "")
 
@@ -251,7 +251,7 @@ def test_board_with_no_batches_still_writes_a_page_that_says_so(tmp_path: Path) 
     _state(tmp_path, world)
     code, out = _board(tmp_path)
     assert code == 0, out
-    assert "No batches" in (tmp_path / "board.html").read_text(encoding="utf-8")
+    assert "No batches" in (tmp_path / "batches.html").read_text(encoding="utf-8")
 
 
 def _column(page: str, key: str) -> str:
@@ -276,9 +276,9 @@ def test_a_relative_dir_is_copied_as_an_absolute_path(
 def test_refresh_zero_turns_the_reload_off_and_default_is_thirty(tmp_path: Path) -> None:
     _setup(tmp_path)
     _board(tmp_path, "--refresh", "0")
-    assert 'data-refresh="0"' in (tmp_path / "board.html").read_text(encoding="utf-8")
+    assert 'data-refresh="0"' in (tmp_path / "batches.html").read_text(encoding="utf-8")
     _board(tmp_path)
-    assert 'data-refresh="30"' in (tmp_path / "board.html").read_text(encoding="utf-8")
+    assert 'data-refresh="30"' in (tmp_path / "batches.html").read_text(encoding="utf-8")
 
 
 def test_a_negative_refresh_is_refused(tmp_path: Path) -> None:
@@ -291,7 +291,7 @@ def test_an_unloadable_runner_never_fails_the_board_and_shows_a_page_note(tmp_pa
     _setup(tmp_path, _dispatch_event("b1").replace("runner: fake", "runner: no-such-runner"))
     code, out = _board(tmp_path)
     assert code == 0 and "error:" not in out
-    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    page = (tmp_path / "batches.html").read_text(encoding="utf-8")
     assert "no-such-runner" in page
     assert '<span class="pill status-unknown">' in _column(page, "running")
 
@@ -302,7 +302,7 @@ def test_the_copied_command_carries_dir_only_when_given(
     _setup(tmp_path, _dispatch_event("b1"))
     _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "idle"}))
     _board(tmp_path)  # this test passes --dir
-    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    page = (tmp_path / "batches.html").read_text(encoding="utf-8")
     assert re.search(r'data-command="fr triage batch focus b1 --repo [^"]*--dir ', page)
     facts, judgements = _loaded(tmp_path)
     path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=30)
@@ -315,7 +315,7 @@ def test_write_board_is_atomic_and_reloads_judgements_from_disk(
     _setup(tmp_path)
     _use(monkeypatch, _Inspector())
     path, cards = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
-    assert path == tmp_path / "board.html" and cards == 1
+    assert path == tmp_path / "batches.html" and cards == 1
     assert 'id="card-b1"' in _column(path.read_text(encoding="utf-8"), "proposed")
     _setup(tmp_path, _dispatch_event("b1"))  # judgements change on disk
     write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
@@ -385,7 +385,7 @@ def test_watch_collects_then_writes_every_interval_until_interrupted(
     assert code == 0, out
     assert w.calls == ["collect", "write"] * 3
     assert w.sleeps == [60, 60, 60]  # the default interval
-    assert (tmp_path / "board.html").exists()
+    assert (tmp_path / "batches.html").exists()
 
 
 def test_watch_takes_the_interval_and_refuses_less_than_one(
@@ -552,6 +552,30 @@ def test_write_board_shows_what_another_scope_holds(
     assert "Held elsewhere" in path.read_text(encoding="utf-8")
 
 
+def test_fr_triage_batches_writes_batches_html_and_removes_board_html(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage-pages-ux R1, R3: one name, and no stale copy under the old one."""
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    (tmp_path / "board.html").write_text("stale", encoding="utf-8")
+    result = CliRunner().invoke(app, ["triage", "batches", "--repo", REPO, "--dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "batches.html").is_file() and not (tmp_path / "board.html").exists()
+    assert "is now" not in result.output
+
+
+def test_fr_triage_board_is_an_alias_that_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    result = CliRunner().invoke(app, ["triage", "board", "--repo", REPO, "--dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "fr triage board is now fr triage batches" in result.output
+    assert (tmp_path / "batches.html").is_file()
+
+
 # ------------------------------------------------------------ publishing (R14)
 
 
@@ -567,7 +591,7 @@ def test_publish_board_substitutes_board_name_and_scope_id_and_runs_no_shell(
 ) -> None:
     argv, out = _recorder(tmp_path)
     config = ScopeConfig(publish=[*argv, "{board}", "{name}", "{scope_id}", "a;b $HOME `x`"])
-    board = tmp_path / "board.html"
+    board = tmp_path / "batches.html"
     assert publish_board(SCOPE, config, board) is None
     got = out.read_text(encoding="utf-8").split("\n")
     assert got == [str(board), "super-fr batches", scope_config.scope_id(SCOPE), "a;b $HOME `x`"]
@@ -618,7 +642,7 @@ def test_board_publish_publishes_after_the_render_with_the_default_name(
     code, said = _board(tmp_path, "--publish")
     assert code == 0, said
     name, board = out.read_text(encoding="utf-8").rstrip("\n").split("|")
-    assert name == "super-fr batches" and Path(board).name == "board.html"
+    assert name == "super-fr batches" and Path(board).name == "batches.html"
 
 
 def test_board_without_publish_never_runs_the_command(
@@ -684,7 +708,7 @@ def test_publish_runs_in_the_state_dir_with_the_operators_environment(
     )
     monkeypatch.setenv("FR_P3_PROBE", "from-parent")
     config = ScopeConfig(publish=[sys.executable, "-c", code, str(out)])
-    assert publish_board(SCOPE, config, state / "board.html") is None
+    assert publish_board(SCOPE, config, state / "batches.html") is None
     cwd, probe = out.read_text(encoding="utf-8").split("\n")
     assert Path(cwd).resolve() == state.resolve()
     assert probe == "from-parent"
@@ -735,7 +759,7 @@ def test_rendered_board_html_carries_the_closed_set_note(
     _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "working"}))
     code, out = _board(tmp_path)
     assert code == 0, out
-    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    page = (tmp_path / "batches.html").read_text(encoding="utf-8")
     assert "closed issue still labelled" in page
     assert "fr triage claim sync" in page and "fr triage batch drive" in page
     assert "fr triage clean-labels" in page and "--yes" in page
@@ -749,5 +773,5 @@ def test_rendered_board_html_has_no_closed_set_note_when_only_held_entries_exist
     _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "working"}))
     code, out = _board(tmp_path)
     assert code == 0, out
-    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    page = (tmp_path / "batches.html").read_text(encoding="utf-8")
     assert "closed issue still labelled" not in page

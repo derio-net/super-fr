@@ -38,12 +38,14 @@ from fr.triage.components import (
     TABS_SCRIPT,
     TOKENS_CSS,
     collapsed,
+    page,
     page_header,
     skew_banner,
     tabs,
+    when,
 )
 from fr.triage.debt import digest_for, issue_figures, untrusted_for
-from fr.triage.fragments import Entry, Resolved, splice
+from fr.triage.fragments import Entry, Resolved, moved_notes, splice
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
 from fr.triage.model import issue_key
@@ -65,6 +67,7 @@ from fr.triage.views import (
 
 if TYPE_CHECKING:
     from fr.triage.batch import MergeStep
+    from fr.triage.components import Moment
     from fr.triage.dedupe import CandidateGroup
     from fr.triage.model import (
         Batch,
@@ -304,9 +307,9 @@ SCRIPT = """
 })();
 """
 
-# The Batches fold's script (R5): toggles cards by `data-stage`, and opens the card a
+# The Batches section's script (R5): toggles cards by `data-stage`, and opens the card a
 # `#batch-<id>` link names with every `details` around it, then scrolls to it. A constant.
-FOLD_SCRIPT = """
+STAGE_FILTER_SCRIPT = """
 (function () {
   var boxes = Array.prototype.slice.call(document.querySelectorAll("input[data-stage-filter]"));
   var cards = Array.prototype.slice.call(document.querySelectorAll("details.batch"));
@@ -375,13 +378,23 @@ FILTER_BAR = """<div class="bar" role="toolbar" aria-label="Filter and sort">
 <button class="chip" type="button" data-filter="conflicts" aria-pressed="false">conflicts</button>
 </div>"""
 
-GENERATED = (
-    "since", "needs", "next-up", "waves", "possible-duplicates", "backlog", "features", "parked",
-    "patterns", "debt", "prs", "batches",
+BACKLOG_GENERATED = ("since", "needs", "next-up", "waves", "batches")
+"""The Backlog's generated sections, the decisions, in default order (triage-pages-ux R4).
+The masthead and nav sit outside the manifest, always first; the stage filter belongs to
+`batches`."""
+
+ISSUES_GENERATED = (
+    "possible-duplicates", "backlog", "features", "parked", "awaiting-live",
+    "closed-in-progress", "patterns", "debt", "prs",
 )  # fmt: skip
-"""The board's generated sections, in default order (spec 2026-10-05-triage-pages-goal §C).
-The masthead and nav sit outside the manifest, always first; `FILTER_BAR` belongs to
-`backlog` and the stage filter to `batches`."""
+"""The Issues page's generated sections, the lists, in default order (R4); `FILTER_BAR`
+belongs to `backlog`."""
+
+BACKLOG_MOVED = dict.fromkeys(ISSUES_GENERATED, "issues")
+"""The sections a Backlog manifest may name that the Issues page owns (page keys)."""
+
+ISSUES_MOVED = dict.fromkeys(BACKLOG_GENERATED, "backlog")
+"""The sections an Issues manifest may name that the Backlog owns (page keys)."""
 
 UNRANKED_TITLE = "Unranked — not yet triaged"
 UNRANKED_DESC = (
@@ -662,7 +675,18 @@ def _prs_section(
     return collapsed("prs", "PRs", len(prs), inner)
 
 
-def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
+def _masthead(
+    facts: Facts,
+    judgements: Judgements,
+    result: CheckResult,
+    *,
+    title: str,
+    notes: Sequence[str] = (),
+    rendered_at: Moment | None = None,
+) -> str:
+    """The masthead both Backlog and Issues open with. *notes* are escaped here, after the
+    facts' own; *rendered_at* is the render's moment (R5), passed in so a render stays a
+    pure function of its inputs; None states no render time."""
     open_n = sum(1 for i in facts.issues if i.state == "open")
     in_flight = sum(1 for i in facts.issues if i.stage in IN_FLIGHT)
     ranked = judgements.ranked_at.isoformat() if judgements.ranked_at else "never"
@@ -673,21 +697,23 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
         ("settled", len(result.settled) + len(result.settled_prs)),
         (noun(len(facts.collected), "repo"), len(facts.collected)),
     ]
-    notes = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
-    notes += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
-    notes += [
+    lines = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
+    lines += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
+    lines += [
         f"Orphaned judgement {esc(k)}: it names no repo this collect read"
         " (a typo or a renamed repo)."
         for k in result.orphaned
     ]
+    lines += [esc(n) for n in notes]
     notes_html = (
-        '<ul class="notes">' + "".join(f"<li>{n}</li>" for n in notes) + "</ul>" if notes else ""
+        '<ul class="notes">' + "".join(f"<li>{n}</li>" for n in lines) + "</ul>" if lines else ""
     )
+    stamp = "" if rendered_at is None else f"<span>rendered {when(rendered_at)}</span>"
     return (
         '<header class="mast">'
-        f"<h1>Backlog triage · {esc(facts.scope)}</h1>"
+        f"<h1>{esc(title)} · {esc(facts.scope)}</h1>"
         '<div class="meta">'
-        f'<span>collected <span class="mono">{esc(facts.collected_at)}</span></span>'
+        f'<span>collected <span class="mono">{esc(facts.collected_at)}</span></span>{stamp}'
         f'<span>ranked <span class="mono">{esc(ranked)}</span></span>'
         f"<span>{esc(facts.kind)} scope</span></div>"
         '<div class="counts">'
@@ -739,7 +765,7 @@ def _merge_step(step: MergeStep) -> str:
 
 def _stage_filter(judgements: Judgements, facts: Facts) -> str:
     """One checkbox per derived batch stage present, all on. Rendered `hidden`:
-    `FOLD_SCRIPT` shows it, so without JavaScript there is no control that does nothing."""
+    `STAGE_FILTER_SCRIPT` shows it, so without JavaScript there is no control that does nothing."""
     present = {derive_batch_stage(b, facts) for b in judgements.batches}
     boxes = "".join(
         f'<label><input type="checkbox" data-stage-filter value="{s}" checked> {s}</label>'
@@ -765,8 +791,8 @@ def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> st
         else ""
     )
     link = (
-        '<p class="tier-desc"><a href="board.html">Open the Batches page</a> '
-        "(<code>fr triage board</code>): the same batches as a Kanban, with session status.</p>"
+        f'<p class="tier-desc"><a href="{page("batches").file}">Open the Batches page</a> '
+        "(<code>fr triage batches</code>): the same batches as a Kanban, with session status.</p>"
         if board
         else ""
     )
@@ -997,7 +1023,8 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
     if done and not any(k != UNWAVED for k in grouped):
         body = (
             '<p class="quiet">Every wave is finished: see '
-            '<a href="history.html">the history page</a>.</p>' + (body if grouped else "")
+            f'<a href="{page("history").file}">the History page</a>.</p>'
+            + (body if grouped else "")
         )
     if cancelled := sorted(cancelled_waves(judgements.batches, stages), key=int):
         # gh#1000: a wave of cancelled batches is finished and leaves the tabs; say so.
@@ -1005,8 +1032,8 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         verb = "was" if len(cancelled) == 1 else "were"
         body += (
             f'<p class="quiet">{names} {verb} cancelled: every batch in it was cancelled '
-            'or abandoned, so it left the board; see <a href="history.html">the history '
-            "page</a>.</p>"
+            f'or abandoned, so it left the board; see <a href="{page("history").file}">the '
+            "History page</a>.</p>"
         )
     return f"{head}{body}</section>"
 
@@ -1151,29 +1178,25 @@ def _closed_in_progress(entries: Sequence[StaleInProgress]) -> str:
     return collapsed("closed-in-progress", "Closed but in progress", len(entries), inner)
 
 
-def render(
+@dataclass(frozen=True)
+class _Sections:
+    """Every generated section of Backlog and Issues, as lazy builders over one shared
+    load and one classification, plus that classification for the masthead."""
+
+    result: CheckResult
+    builders: dict[str, Callable[[], str]]
+
+
+def _sections(
     facts: Facts,
     judgements: Judgements,
-    since: SnapshotDiff | None = None,
-    resolved: Resolved | None = None,
+    since: SnapshotDiff | None,
     *,
-    board: bool = False,
-    session_notes: Mapping[str, str] | None = None,
-    ci_none: Collection[str] = (),
-    present: Sequence[str] = ("backlog",),
-    stops: Mapping[str, MergeStop] | None = None,
-) -> str:
-    """The board for *facts* and *judgements*: same inputs, same bytes.
-
-    *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
-    there is none, and the page says so. *resolved* is the board manifest
-    (`<state>/board/manifest.yaml`, `fragments.resolve_manifest`): it orders the generated
-    sections and places authored fragments among them; None is the default order. *board*
-    links the sibling `board.html` (the batch Kanban, `fr triage board`) from the Batches
-    section; the caller says whether one exists. *session_notes* are blocked sessions'
-    notes by item id (cloud-triage R15), listed under Needs you now. *stops* are the
-    driver's recorded merge stops: a conflicting export PR's is listed too (merge-truth R12).
-    """
+    board: bool,
+    session_notes: Mapping[str, str] | None,
+    ci_none: Collection[str],
+    stops: Mapping[str, MergeStop] | None,
+) -> _Sections:
     show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
     patterns_by_key: dict[str, list[str]] = {}
@@ -1233,40 +1256,123 @@ def render(
             sev = f"sev-{min(pos + 1, SEVERITIES)}"
             title = f"Tier {tier.n} · {tier.title}"
             folds.append(_section(str(tier.n), sev, title, inline(tier.description), rows))
-        tiers = collapsed("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
-        return (
-            tiers
-            + _awaiting_live(result.awaiting_live, row, judgements)
-            + _closed_in_progress(result.closed_in_progress)
-        )
+        return collapsed("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
         "needs": lambda: _needs_section(facts, judgements, session_notes, ci_none, stops),
         "next-up": lambda: _next_section(facts, judgements),
         "waves": lambda: _waves_section(facts, judgements),
+        "batches": lambda: _batches(judgements, facts, board=board),
         "possible-duplicates": lambda: _possible_duplicates(result.candidates, by_key),
         "backlog": backlog,
         "features": lambda: _features_table(judgements, facts),
         "parked": lambda: _parked(facts, judgements),
-        "debt": lambda: _debt_panel(facts, since),
+        "awaiting-live": lambda: _awaiting_live(result.awaiting_live, row, judgements),
+        "closed-in-progress": lambda: _closed_in_progress(result.closed_in_progress),
         "patterns": lambda: _patterns(judgements),
+        "debt": lambda: _debt_panel(facts, since),
         "prs": lambda: _prs_section(facts.prs, judgements, 1, facts.collected_at),
-        "batches": lambda: _batches(judgements, facts, board=board),
     }
-    resolved = resolved or Resolved(order=[Entry(g) for g in GENERATED])
-    sections = [s for s in splice(resolved, builders) if s]
+    return _Sections(result, builders)
+
+
+def _page(
+    key: str,
+    facts: Facts,
+    judgements: Judgements,
+    sections: _Sections,
+    resolved: Resolved,
+    *,
+    notes: Sequence[str],
+    present: Sequence[str],
+    rendered_at: Moment | None,
+    script: str,
+) -> str:
+    owned = BACKLOG_GENERATED if key == "backlog" else ISSUES_GENERATED
+    body = [s for s in splice(resolved, {n: sections.builders[n] for n in owned}) if s]
+    title = "Backlog triage" if key == "backlog" else page(key).title
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
+        f"<title>{esc(title)} · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements, result)}\n{page_header('backlog', present)}\n"
-        f"{skew_banner(facts)}\n"
-        + "\n".join(sections)
-        + "\n<footer>Rendered by <code>fr triage render</code> from facts.json and "
+        + _masthead(
+            facts,
+            judgements,
+            sections.result,
+            title=title,
+            notes=[*notes, *moved_notes(resolved)],
+            rendered_at=rendered_at,
+        )
+        + f"\n{page_header(key, present)}\n{skew_banner(facts)}\n"
+        + "\n".join(body)
+        + "\n<footer>Rendered by <code>fr triage backlog</code> from facts.json and "
         "judgements.yaml. Stages are derived from the forge; re-run "
         "<code>fr triage collect</code> to refresh.</footer>\n"
-        f"</main>\n<script>{SCRIPT}{TABS_SCRIPT}{FOLD_SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{script}</script>\n</body>\n</html>\n"
     )
+
+
+def render_backlog(
+    facts: Facts,
+    judgements: Judgements,
+    since: SnapshotDiff | None = None,
+    resolved: Resolved | None = None,
+    *,
+    board: bool = False,
+    session_notes: Mapping[str, str] | None = None,
+    ci_none: Collection[str] = (),
+    present: Sequence[str] = ("backlog",),
+    stops: Mapping[str, MergeStop] | None = None,
+    notes: Sequence[str] = (),
+    rendered_at: Moment | None = None,
+) -> str:
+    """The Backlog, the decisions (triage-pages-ux R4): same inputs, same bytes.
+
+    *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
+    there is none, and the page says so. *resolved* is the page's manifest
+    (`fragments.resolve_manifest` over `BACKLOG_GENERATED` and `BACKLOG_MOVED`): it orders
+    the generated sections and places authored fragments among them; None is the default
+    order, and a section it names that the Issues page owns is a page note. *board* links
+    the Batches page (`fr triage batches`) from the Batches section; the caller says
+    whether one exists. *session_notes* are blocked sessions' notes by item id
+    (cloud-triage R15), listed under Needs you now. *stops* are the driver's recorded merge
+    stops: a conflicting export PR's is listed too (merge-truth R12). *notes* are the
+    command's own page notes (a fragment-directory fallback, R3). *rendered_at* is the
+    moment the masthead states (R5).
+    """
+    sections = _sections(
+        facts, judgements, since, board=board, session_notes=session_notes, ci_none=ci_none,
+        stops=stops,
+    )  # fmt: skip
+    return _page(
+        "backlog", facts, judgements, sections,
+        resolved or Resolved(order=[Entry(g) for g in BACKLOG_GENERATED]),
+        notes=notes, present=present, rendered_at=rendered_at,
+        script=TABS_SCRIPT + STAGE_FILTER_SCRIPT,
+    )  # fmt: skip
+
+
+def render_issues(
+    facts: Facts,
+    judgements: Judgements,
+    since: SnapshotDiff | None = None,
+    resolved: Resolved | None = None,
+    *,
+    present: Sequence[str] = ("issues",),
+    notes: Sequence[str] = (),
+    rendered_at: Moment | None = None,
+) -> str:
+    """The Issues page, the lists (triage-pages-ux R4): same inputs, same bytes. *since*
+    feeds the Debt panel's moves; *resolved*, *present*, *notes* and *rendered_at* are as
+    for `render_backlog`, over `ISSUES_GENERATED` and `ISSUES_MOVED`."""
+    sections = _sections(
+        facts, judgements, since, board=False, session_notes=None, ci_none=(), stops=None
+    )
+    return _page(
+        "issues", facts, judgements, sections,
+        resolved or Resolved(order=[Entry(g) for g in ISSUES_GENERATED]),
+        notes=notes, present=present, rendered_at=rendered_at, script=SCRIPT + TABS_SCRIPT,
+    )  # fmt: skip
