@@ -106,11 +106,22 @@ class OriginIssue(_Strict):
     hours_to_close: float | None = None
 
 
+class MergedPr(_Strict):
+    """A PR merged on or after the window's start (R15): what a leaderboard row shows."""
+
+    repo: str
+    number: int
+    title: str
+    url: str
+    merged_at: str
+
+
 class OriginsFacts(_Strict):
     scope: str
     since: str
     collected_at: str
     issues: list[OriginIssue]
+    prs: list[MergedPr] = []  # a file an earlier fr wrote has none: "not collected"
     warnings: list[str] = []
 
 
@@ -159,7 +170,8 @@ def collect_origins(
     """The issues created on or after *since* in *scope*, with how each one ended.
 
     Closing PRs are the MERGED PRs whose closing references name the issue (a PR closed
-    unmerged closed nothing). In org and group scope a repo that cannot be read is a
+    unmerged closed nothing). The same one PR list per repo gives `prs`: the PRs merged on
+    or after *since*, which the leaderboards show (R15). In org and group scope a repo that cannot be read is a
     warning and the rest collect; in repo scope it is the error.
 
     Each list is one newest-first page. A window that page does not reach the start of
@@ -170,6 +182,7 @@ def collect_origins(
     repos, truncations = scope_repos(forge, scope, repo_limit=repo_limit)
     cutoff = datetime(since.year, since.month, since.day, tzinfo=UTC)
     out: list[OriginIssue] = []
+    merged: list[MergedPr] = []
     short: list[tuple[str, str, int, date]] = []  # (list, its flag, limit, oldest day read)
     warnings: list[str] = [
         f"{t.target}: repo list hit its limit ({t.limit}); repos may be missing"
@@ -196,6 +209,16 @@ def collect_origins(
         for pr, refs in parse_prs(repo, raw_prs):
             if pr.state != "MERGED":
                 continue
+            if pr.merged_at and _parse_time(pr.merged_at) >= cutoff:
+                merged.append(
+                    MergedPr(
+                        repo=repo,
+                        number=pr.number,
+                        title=pr.title,
+                        url=pr.url,
+                        merged_at=pr.merged_at,
+                    )
+                )
             for ref_owner, ref_name, number in refs:
                 if (ref_owner, ref_name) == (owner, name):
                     closing.setdefault(number, []).append(
@@ -232,6 +255,7 @@ def collect_origins(
         since=since.isoformat(),
         collected_at=now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         issues=out,
+        prs=sorted(merged, key=lambda p: (p.repo.lower(), p.number)),
         warnings=warnings,
     )
 

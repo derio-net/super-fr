@@ -21,6 +21,7 @@ from tests.unit.triage_origins_fixtures import (
     SINCE,
     OriginsForge,
     classification_yaml,
+    raw_pr,
 )
 
 CAUSES = """causes:
@@ -117,6 +118,53 @@ def test_collect_needs_a_valid_since(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     r = _run(monkeypatch, "collect", tmp_path, "--since", "last tuesday")
     assert r.exit_code == 2
     assert not (tmp_path / "origins-facts.json").exists()
+
+
+def test_a_facts_file_with_no_prs_key_loads_as_no_prs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import load_origins_facts
+
+    _collect(monkeypatch, tmp_path)
+    path = tmp_path / "origins-facts.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["prs"]  # a file an earlier fr wrote
+    path.write_text(json.dumps(data), encoding="utf-8")
+    facts = load_origins_facts(path)
+    assert facts.prs == [] and len(facts.issues) == 15
+
+
+def test_collect_keeps_the_prs_merged_in_the_window_with_one_list_read_per_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    forge = OriginsForge()
+    # merged before --since: dropped; closed unmerged (303): never a merged PR
+    forge.prs.append({**raw_pr(300, True, []), "mergedAt": "2026-08-31T23:59:59Z"})
+    r = _run(monkeypatch, "collect", tmp_path, "--since", SINCE, forge=forge)
+    assert r.exit_code == 0, r.output
+    facts = json.loads((tmp_path / "origins-facts.json").read_text(encoding="utf-8"))
+    assert facts["prs"] == [
+        {
+            "repo": REPO,
+            "number": n,
+            "title": f"Widget change {n}",
+            "url": f"https://github.com/{REPO}/pull/{n}",
+            "merged_at": "2026-09-01T01:00:00Z",
+        }
+        for n in (301, 302)
+    ]
+    assert [c for c in forge.calls if c[0] == "list_prs"] == [("list_prs", "all")]
+
+
+def test_each_repo_of_a_group_keeps_its_own_merged_prs() -> None:
+    from fr.triage.model import Scope
+
+    forge = _ManyForge(["example-org/alpha", "example-org/beta"])
+    facts = _collect_scope(forge, Scope.group(["example-org/alpha", "example-org/beta"]))
+    assert [(p.repo, p.title, p.merged_at) for p in facts.prs] == [
+        ("example-org/alpha", "fix alpha", "2026-09-02T09:00:00Z"),
+        ("example-org/beta", "fix beta", "2026-09-02T09:00:00Z"),
+    ]
 
 
 # ------------------------------------------------------------------- check
