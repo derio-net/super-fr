@@ -80,3 +80,8 @@ normalize_issue_ref(..., host=) rejects a URL on another host ('' = unknown, rej
 ### disc-other-url-readers · discovery · Other normalize_issue_ref callers still read any host
 
 premature_closes/_held_sets and record.apply._round_names_every_ref call it without host=. For premature_closes that only over-flags (conservative). For the round-names check a lookalike URL in a round's text could count as naming a narrowed ref; that is out of this batch's scope, so it is left as is and named here.
+
+<!-- fr:journal kind=finding scope=debug id=r1-dry-run-pin created=2026-11-18T14:02:54+00:00 state=fixed -->
+### r1-dry-run-pin · finding [fixed] · Review r1: --dry-run pinned the folded default-branch answer
+
+Independent review found _dry_run pinned head_on_default_branch(real_root) onto the scratch copy, so an unreadable default ref became False and the preview staged and filed an owed entry the real run no longer writes. Fixed in 98ff17c1b: the pin holds bool | None and _dry_run reads default_branch_answer. Tests: test_archive_owed.py::test_a_dry_run_whose_default_ref_cannot_be_read_matches_the_real_run, test_git.py::test_an_unknown_answer_can_be_pinned (both failed before).
