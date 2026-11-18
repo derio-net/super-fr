@@ -55,3 +55,8 @@ UnsupportedForgeOperation (glab, tea) is a known capability gap, not an unknown 
 ### d-unknown-is-default · decision · R8 treats an unknown default-branch answer as the default branch
 
 New git.default_branch_answer returns True/False/None. _write_manual_owed previews and writes nothing unless the answer is a readable False. head_on_default_branch (R3's reader) is unchanged.
+
+<!-- fr:journal kind=finding scope=debug id=f-1483 created=2026-11-18T13:34:30+00:00 state=fixed -->
+### f-1483 · finding [fixed] · #1483 fixed: no write through a symlinked live root
+
+archive._symlinked_component lstat-walks each component from the repo root; a link warns and writes nothing. Test: test_archive_live_root.py::test_a_symlinked_live_root_is_not_written_through (failed before: docs/elsewhere/.gitkeep was created).
