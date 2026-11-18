@@ -283,3 +283,12 @@ def test_a_wave_tables_depends_on_links_each_batch_to_its_card() -> None:
     assert cell and cell.group(1) == '<a href="backlog.html#batch-z-cancelled">z-cancelled</a>'
     none = re.search(r'<tr data-batch="e-next".*?</tr>', page, re.S)
     assert none and 'data-label="Depends on">-</td>' in none.group(0)
+
+
+def test_an_escaped_literal_entity_is_not_a_reference() -> None:
+    _, linker = _linked()
+    out = inline("a literal &#12; and &#x27; text", linker)
+    assert "<a " not in out
+    assert "&amp;#12;" in out
+    # the reference next to it still links
+    assert inline("&#12; but #12", linker).count("<a ") == 1

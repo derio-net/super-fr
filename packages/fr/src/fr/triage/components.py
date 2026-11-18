@@ -588,7 +588,9 @@ def batch_href(batch_id: str) -> str:
     return f"{page('backlog').file}#batch-{urllib.parse.quote(batch_id, safe='-_.')}"
 
 
-_REF = re.compile(r"(?<![\w/.&#-])(?:([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+)#|#)(\d{1,9})\b")
+_REF = re.compile(
+    r"(?<!&amp;)(?<![\w/.&#-])(?:([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+)#|#)(\d{1,9})\b"
+)
 """`owner/repo#n` or a bare `#n`, in text that is already escaped. The lookbehind keeps it out
 of a longer word, a path, an entity (`&#x27;`) and another `#`."""
 
