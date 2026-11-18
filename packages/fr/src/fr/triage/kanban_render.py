@@ -107,6 +107,13 @@ code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--gr
    column starts with it, a viewer can set or clear it on any column, and the script keeps it
    per scope. In the wide layout a collapsed column is a strip with its title turned on its side
    (gh#1417); in the narrow layouts it only hides its cards. */
+.toolbar { display: flex; gap: 8px; margin-top: 16px; }
+button.chip { font: inherit; font-size: .82rem; color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; cursor: pointer; }
+button.chip[aria-pressed="true"] { color: var(--surface); background: var(--accent);
+  border-color: var(--accent); }
+button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card[hidden] { display: none; }
 button.coltoggle { font: inherit; color: inherit; background: transparent; border: 0; padding: 0;
   cursor: pointer; text-align: left; font-weight: 600; }
 button.coltoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -171,6 +178,52 @@ SCRIPT = """
       });
     }
   });
+  // The wave cutoff (R18). The rule is `kanban.cutoff_hidden_waves`: a wave whose cards are all
+  // terminal, none with an event in the 30 days before `body[data-rendered]`, is hidden.
+  var cutoff = document.getElementById("cutoff");
+  var cutoffKey = "fr-triage:" + scope + ":cutoff";
+  function cutoffWas() {
+    try { return localStorage.getItem(cutoffKey); } catch (e) { return null; }
+  }
+  function cutoffRemember(on) {
+    try { localStorage.setItem(cutoffKey, on ? "1" : "0"); } catch (e) { /* unavailable */ }
+  }
+  function quietWaves() {
+    var since = Date.parse(document.body.dataset.rendered || "") - 30 * 86400000;
+    var quiet = {};
+    if (isNaN(since)) { return quiet; }
+    cards().forEach(function (c) {
+      var wave = c.dataset.wave;
+      if (!wave) { return; }
+      var at = c.dataset.active ? Date.parse(c.dataset.active) : NaN;
+      var settled = c.dataset.terminal === "1" && (isNaN(at) || at < since);
+      quiet[wave] = (wave in quiet ? quiet[wave] : true) && settled;
+    });
+    return quiet;
+  }
+  function applyCutoff() {
+    var on = !cutoff || cutoff.getAttribute("aria-pressed") === "true";
+    var quiet = on ? quietWaves() : {};
+    cards().forEach(function (c) { c.hidden = Boolean(c.dataset.wave && quiet[c.dataset.wave]); });
+    Array.prototype.forEach.call(document.querySelectorAll("section.col"), function (col) {
+      var count = col.querySelector(".count");
+      if (count) { count.textContent = String(col.querySelectorAll(".card:not([hidden])").length); }
+    });
+    if (cutoff) { cutoff.textContent = on ? "last 30 days" : "all waves"; }
+  }
+  if (cutoff) {
+    var chosen = cutoffWas();
+    if (chosen === "1" || chosen === "0") {
+      cutoff.setAttribute("aria-pressed", chosen === "1" ? "true" : "false");
+    }
+    cutoff.addEventListener("click", function () {
+      var on = cutoff.getAttribute("aria-pressed") !== "true";
+      cutoff.setAttribute("aria-pressed", on ? "true" : "false");
+      cutoffRemember(on);
+      applyCutoff();
+    });
+    applyCutoff();
+  }
   var saved = read();
   (saved.open || []).forEach(function (id) {
     var card = document.getElementById(id);
@@ -386,7 +439,10 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
         f'<span class="hint">{esc(card.hint)}</span></summary>'
     )
     return (
-        f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}">'
+        f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}" '
+        f'data-wave="{"" if card.wave is None else card.wave}" '
+        f'data-terminal="{"1" if card.terminal else "0"}" '
+        f'data-active="{"" if card.active_at is None else esc(card.active_at.isoformat())}">'
         f"{summary}{_body(card, scope_args)}</details>"
     )
 
@@ -458,6 +514,9 @@ def render_board(
     commands carry; *refresh* is the reload interval in seconds, 0 for none."""
     if board.batch_count or board.gated_count:
         body = (
+            '<div class="toolbar" role="toolbar" aria-label="Which waves to show">'
+            '<button type="button" class="chip" id="cutoff" aria-pressed="true">last 30 days</button>'
+            "</div>"
             '<div class="board">'
             + "".join(_column(c, scope_args) for c in board.columns)
             + "</div>"
@@ -484,7 +543,8 @@ def render_board(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Batches · {esc(board.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n"
-        f'<body data-refresh="{max(0, int(refresh))}" data-scope="{esc(board.scope)}">\n<main>\n'
+        f'<body data-refresh="{max(0, int(refresh))}" data-scope="{esc(board.scope)}" '
+        f'data-rendered="{esc(rendered_at.isoformat())}">\n<main>\n'
         f"<header><h1>Batches</h1>"
         f'<p class="meta">{esc(board.scope)} · rendered {_when(rendered_at)} · '
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"

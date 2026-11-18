@@ -11,9 +11,9 @@ what it would do (`drive_pass` over `drive_snapshot`) and falls back per column.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from fr.triage.batch import (
@@ -338,6 +338,36 @@ class Card:
         if self.closeout_status in (None, "absent", "unknown"):
             return "batch"
         return "closeout"
+
+    @property
+    def terminal(self) -> bool:
+        """Merged and archived, cancelled or abandoned: the Done column (R18)."""
+        return self.column == "done"
+
+    @property
+    def active_at(self) -> datetime | None:
+        """When the batch's latest event happened; None when it has none."""
+        return max((e.at for e in self.events), default=None)
+
+
+def cutoff_hidden_waves(
+    cards: Iterable[Card], rendered_at: datetime, days: int = 30
+) -> frozenset[str]:
+    """The waves the Batches page's cutoff hides (R18): every batch of the wave is terminal
+    and none had an event on or after *days* before *rendered_at*. A wave with any other
+    batch shows, and a card with no wave is never part of one. The page's script applies
+    this same rule in the browser, from each card's `data-wave`, `data-terminal` and
+    `data-active` and the body's `data-rendered`."""
+    since = rendered_at - timedelta(days=days)
+    quiet: dict[str, bool] = {}
+    for card in cards:
+        if card.wave is None:
+            continue
+        key = str(card.wave)
+        active = card.active_at
+        settled = card.terminal and (active is None or active < since)
+        quiet[key] = quiet.get(key, True) and settled
+    return frozenset(k for k, ok in quiet.items() if ok)
 
 
 @dataclass(frozen=True)

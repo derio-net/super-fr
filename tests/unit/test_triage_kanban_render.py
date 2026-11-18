@@ -14,7 +14,7 @@ from pathlib import Path
 
 from fr.triage import kanban_render
 from fr.triage.components import GUTTER_CSS, PAGE_SCRIPT, TOKENS_CSS
-from fr.triage.kanban import Board, build_board
+from fr.triage.kanban import Board, Card, EventRow, build_board, cutoff_hidden_waves
 from fr.triage.kanban_render import CSS, SCRIPT, render_board
 
 from tests.unit.triage_board_fixtures import batch, facts, issue, j, judgements
@@ -156,6 +156,109 @@ def test_the_script_remembers_each_column_under_a_scope_key_and_guards_every_acc
     for m in re.finditer(r"localStorage\.(getItem|setItem)", SCRIPT):
         before = SCRIPT[: m.start()]
         assert before.rfind("try {") > before.rfind("}"), m.group(0)
+
+
+# ------------------------------------------------------------- the wave cutoff (R18)
+
+
+def _cards() -> list[Card]:
+    board, _ = _board()
+    return [c for col in board.columns for c in col.cards]
+
+
+def _as(card: Card, wave: int | None, column: str, *events: str) -> Card:
+    return replace(
+        card,
+        wave=wave,
+        column=column,  # type: ignore[arg-type]
+        events=tuple(EventRow("dispatch", datetime.fromisoformat(e), "") for e in events),
+    )
+
+
+def test_every_card_carries_its_wave_terminal_state_and_latest_event() -> None:
+    board, _ = _board()
+    page = render_board(board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=[])
+    seen = {}
+    for card in (c for col in board.columns for c in col.cards):
+        attrs = dict(
+            re.findall(r'data-(wave|terminal|active)="([^"]*)"', _card(page, card.batch.id))
+        )
+        assert set(attrs) == {"wave", "terminal", "active"}, card.batch.id
+        assert attrs["wave"] == ("" if card.wave is None else str(card.wave))
+        assert attrs["terminal"] == ("1" if card.column == "done" else "0")
+        latest = max((e.at for e in card.events), default=None)
+        assert attrs["active"] == ("" if latest is None else latest.isoformat())
+        seen[card.batch.id] = attrs
+    assert {a["terminal"] for a in seen.values()} == {"0", "1"}
+    assert "" in {a["active"] for a in seen.values()}
+    assert any(a["active"] for a in seen.values())
+
+
+def test_the_body_carries_the_render_time_the_cutoff_counts_back_from() -> None:
+    assert f'data-rendered="{AT.isoformat()}"' in _page()
+
+
+def test_the_cutoff_toggle_is_a_pressed_toolbar_button_by_default() -> None:
+    page = _page()
+    bar = re.search(r'<div class="toolbar" role="toolbar"[^>]*>(.*?)</div>', page, re.S)
+    assert bar
+    button = re.search(r"<button([^>]*)>([^<]*)</button>", bar.group(1))
+    assert button
+    assert 'aria-pressed="true"' in button.group(1) and 'id="cutoff"' in button.group(1)
+    assert button.group(2) == "last 30 days"
+    # A board with nothing on it has nothing to cut off.
+    board = build_board(facts([]), judgements({}), {})
+    empty = render_board(board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=[])
+    assert 'id="cutoff"' not in empty
+
+
+def test_a_wave_of_only_terminal_batches_with_no_recent_event_is_hidden() -> None:
+    base = _cards()
+    old = "2026-08-01T09:00:00+00:00"
+    cards = [_as(base[0], 1, "done", old), _as(base[1], 1, "done")]
+    assert cutoff_hidden_waves(cards, AT) == frozenset({"1"})
+
+
+def test_a_recent_event_in_any_card_keeps_the_wave_shown() -> None:
+    base = _cards()
+    cards = [
+        _as(base[0], 1, "done", "2026-08-01T09:00:00+00:00"),
+        _as(base[1], 1, "done", "2026-09-20T09:00:00+00:00"),  # 15 days before AT
+    ]
+    assert cutoff_hidden_waves(cards, AT) == frozenset()
+
+
+def test_the_cutoff_is_thirty_days_before_the_render_and_days_is_a_parameter() -> None:
+    base = _cards()
+    cards = [_as(base[0], 1, "done", "2026-09-05T21:30:00+00:00")]  # exactly 30 days
+    assert cutoff_hidden_waves(cards, AT) == frozenset()
+    assert cutoff_hidden_waves(cards, AT, days=29) == frozenset({"1"})
+    assert cutoff_hidden_waves([_as(base[0], 1, "done", "2026-09-05T21:29:59+00:00")], AT) == {"1"}
+
+
+def test_a_wave_with_a_batch_that_is_not_terminal_always_shows() -> None:
+    base = _cards()
+    cards = [_as(base[0], 2, "done"), _as(base[1], 2, "proposed")]  # proposed, eventless
+    assert cutoff_hidden_waves(cards, AT) == frozenset()
+
+
+def test_cards_with_no_wave_are_never_hidden() -> None:
+    base = _cards()
+    assert cutoff_hidden_waves([_as(base[0], None, "done")], AT) == frozenset()
+
+
+def test_each_wave_is_judged_on_its_own_cards() -> None:
+    base = _cards()
+    cards = [
+        _as(base[0], 1, "done"),
+        _as(base[1], 2, "running", "2026-08-01T09:00:00+00:00"),
+        _as(base[2], 3, "done", "2026-10-01T09:00:00+00:00"),
+    ]
+    assert cutoff_hidden_waves(cards, AT) == frozenset({"1"})
+
+
+def test_the_script_keeps_the_cutoff_choice_like_the_column_state() -> None:
+    assert re.search(r'"fr-triage:" \+ scope \+ ":cutoff"', SCRIPT)
 
 
 def test_every_card_is_a_details_element_with_its_id() -> None:
