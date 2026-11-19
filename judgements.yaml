@@ -9059,6 +9059,14 @@ batches:
     at: '2026-11-19T22:28:43.014985Z'
     pr: 1573
     head: 8c4ff18058d54ad3127b6ef1b25eb0890d6f2bcc
+  - kind: claims_released
+    at: '2026-11-19T22:34:14.986585Z'
+    keys:
+    - super-fr#1481
+    - super-fr#1484
+    - super-fr#1508
+    - super-fr#1509
+    - super-fr#1510
 - id: triage-hardening
   title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
     out of dedupe'
