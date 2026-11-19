@@ -3,7 +3,7 @@
 # both plugin manifests; the version-sync CI job checks the set.
 [project]
 name = "super-fr-workspace"
-version = "8.3.0rc3"
+version = "8.3.0rc4"
 description = "super-fr workspace root (fr / fr-dispatch / fr-cncd / fr-herdr / fr-claude-cloud)"
 requires-python = ">=3.11"
 dependencies = ["fr", "fr-dispatch", "fr-cncd", "fr-herdr", "fr-claude-cloud"]
@@ -35,6 +35,7 @@ dev = [
     "types-pyyaml>=6.0.12.20260408",
     "pytest-xdist>=3.8.0",
     "pytest-split>=0.11.0",
+    "markdown>=3.5",
 ]
 
 [tool.ruff]

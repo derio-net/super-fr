@@ -197,6 +197,7 @@ body.landing .site-bar a:hover{color:var(--text);text-decoration-color:var(--acc
 @media (max-width:720px){
   html{font-size:16px}
   .wrap{padding:0 1.15rem}
+  body.landing .site-bar{padding-left:1.15rem;padding-right:1.15rem}
   .hero{padding:2.8rem 0 2.5rem}
   .act{padding:3rem 0 1rem}
   .act .wrap::before{margin-bottom:2rem}

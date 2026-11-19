@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/cloud.py
   - packages/fr/src/fr/commands/cloud_cmd.py
-reviewed: 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
 ---
 
 # fr in a Claude Code cloud session
