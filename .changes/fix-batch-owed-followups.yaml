@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr archive no longer writes the live plans root's .gitkeep through a symlink, files no open-end follow-up when it cannot tell whether one already exists, and records no owed entry when it cannot tell whether HEAD is the default branch; deliver's owed closing check counts an issue URL only on the repo's own forge host"
