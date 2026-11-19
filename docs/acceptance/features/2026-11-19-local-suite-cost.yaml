@@ -79,7 +79,11 @@ rows:
     - spec:2026-11-19-local-suite-cost#R9
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: 'Manual phase 4 of this run (operator: configure-main-protection --stage
+      bypass, an app-pushed release, then --stage require); tracked by derio-net/super-fr#1580,
+      verified live post-merge.'
+    issues:
+    - derio-net/super-fr#1580
   - id: template-fixture-copies-independent
     capability: Test fixtures
     acceptance: A started-run or isolated-workspace template is built once per test
