@@ -110,7 +110,11 @@ rows:
     - spec:2026-11-19-batch-docs-wording#R7
     - spec:2026-11-19-batch-docs-wording#R8
     - spec:2026-11-19-batch-docs-wording#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_triage_skill_schema.py#test_the_triage_skill_states_the_judgements_schema_the_engine_writes
+      - super-fr:tests/unit/test_fr_triage_skill_schema.py#test_the_acceptance_skill_does_not_say_a_live_row_nags_whatever_its_status
+      - super-fr:tests/unit/test_fr_triage_skill_schema.py#test_the_progress_skill_does_not_group_status_with_the_yes_commands
+    status: ci
+    notes: 'R7-R9: skill prose asserted and the schema number pinned to the engine'
     verify: none
