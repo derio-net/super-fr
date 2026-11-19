@@ -14,15 +14,87 @@ worktree links (`git worktree repair`) and its own `.fr-isolation` toplevel.
 
 from __future__ import annotations
 
+import contextlib
+import inspect
 import json
 import os
 import shutil
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
-__all__ = ["FixtureTemplates", "current", "home_sandbox", "install"]
+import pytest
+from _pytest.monkeypatch import notset
+
+__all__ = [
+    "FixtureTemplates",
+    "current",
+    "forget_baseline",
+    "home_sandbox",
+    "install",
+    "note_baseline",
+]
+
+_BASELINE: tuple[pytest.MonkeyPatch, int, int] | None = None
+"""The running test's `monkeypatch` and how many of its patches the AUTOUSE fixtures made
+(`note_baseline`, called by `tests/conftest.py` once they have all run)."""
+
+
+def note_baseline(mp: pytest.MonkeyPatch) -> None:
+    global _BASELINE
+    _BASELINE = (mp, len(mp._setattr), len(mp._setitem))  # type: ignore[attr-defined]
+
+
+def forget_baseline() -> None:
+    global _BASELINE
+    _BASELINE = None
+
+
+def _current(obj: object, name: str) -> object:
+    return vars(obj).get(name, notset) if inspect.isclass(obj) else getattr(obj, name, notset)
+
+
+def _put(obj: object, name: str, value: object) -> None:
+    if value is notset:
+        with contextlib.suppress(AttributeError):
+            delattr(obj, name)
+    else:
+        setattr(obj, name, value)
+
+
+@contextlib.contextmanager
+def _without_the_tests_own_patches() -> Iterator[None]:
+    """A template is built in the first test that asks for one, which may already have patched
+    `fr` (a fake label sync, a fake forge) or the environment. Those patches belong to that test:
+    were they built in, every later copy would carry them. So the patches made AFTER the
+    autouse fixtures ran are taken off for the build and put back after, which leaves what the
+    autouse fixtures set up (the sandbox, the forge and migration stubs) in force."""
+    if _BASELINE is None:
+        yield
+        return
+    mp, n_attr, n_item = _BASELINE
+    attrs = list(mp._setattr[n_attr:])  # type: ignore[attr-defined]
+    items = list(mp._setitem[n_item:])  # type: ignore[attr-defined]
+    held_attrs = [(obj, name, _current(obj, name)) for obj, name, _ in attrs]
+    held_items = [(d, key, d.get(key, notset)) for d, key, _ in items]
+    for obj, name, old in reversed(attrs):
+        _put(obj, name, old)
+    for dic, key, old in reversed(items):
+        if old is notset:
+            dic.pop(key, None)
+        else:
+            dic[key] = old
+    try:
+        yield
+    finally:
+        for dic, key, value in held_items:
+            if value is notset:
+                dic.pop(key, None)
+            else:
+                dic[key] = value
+        for obj, name, value in held_attrs:
+            _put(obj, name, value)
 
 
 def home_sandbox(
@@ -91,16 +163,17 @@ class FixtureTemplates:
             self._count += 1  # a template may build another (deliver on started_run)
             template = self.root / f"t{self._count}"
             template.mkdir(parents=True)
-            old = {k: os.environ.get(k) for k in self.env}
-            os.environ.update(self.env)
-            try:
-                payload = build(template)
-            finally:
-                for k, v in old.items():
-                    if v is None:
-                        os.environ.pop(k, None)
-                    else:
-                        os.environ[k] = v
+            with _without_the_tests_own_patches():
+                old = {k: os.environ.get(k) for k in self.env}
+                os.environ.update(self.env)
+                try:
+                    payload = build(template)
+                finally:
+                    for k, v in old.items():
+                        if v is None:
+                            os.environ.pop(k, None)
+                        else:
+                            os.environ[k] = v
             self._built[key] = (template, payload)
         return self._built[key]
 

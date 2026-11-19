@@ -8,7 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.fixture_templates import FixtureTemplates, home_sandbox
+from tests.unit.fixture_templates import (
+    FixtureTemplates,
+    forget_baseline,
+    home_sandbox,
+    note_baseline,
+)
 from tests.unit.fixture_templates import install as install_templates
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -257,6 +262,21 @@ def _home_off_the_operators_machine(
     home = tmp_path_factory.mktemp("home")
     for key, value in home_sandbox(home, OPERATOR_GIT_IDENTITY, OPERATOR_HOME).items():
         monkeypatch.setenv(key, value)
+
+
+@pytest.fixture(autouse=True)
+def _template_baseline(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    """Marks the patches the autouse fixtures made, so a template built inside a test leaves out
+    the patches that test made itself (`tests/unit/fixture_templates.py`). It asks for every other
+    autouse fixture first, by looking them up rather than naming them, so a new one is covered."""
+    for name in request.session._fixturemanager._getautousenames(request.node):  # type: ignore[attr-defined]
+        if name != "_template_baseline":
+            request.getfixturevalue(name)
+    note_baseline(monkeypatch)
+    yield
+    forget_baseline()
 
 
 @pytest.fixture(scope="session", autouse=True)

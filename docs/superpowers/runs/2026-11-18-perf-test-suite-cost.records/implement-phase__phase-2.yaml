@@ -171,15 +171,6 @@ journal:
     (the `fixture_templates` fixture did not exist) and then GREEN. The nested-template defect was found
     by `test_forge_quiet_pr_body` and pinned afterwards by a test written for it.
   phase: 2
-- kind: discovery
-  id: p2-env-for-the-build
-  title: A template builds under the first test's environment with only HOME, GIT_CONFIG_GLOBAL and the
-    uv paths replaced
-  body: The factory is session-scoped but builds lazily, inside the first test that needs a template,
-    so the build sees every other autouse variable (migration gate, CI context, terminal width). Only
-    the sandbox variables come from `home_sandbox(...)` of the factory's own home. A test that monkeypatches
-    the environment before its first `started_run` could leak into a template; none does.
-  phase: 2
 - kind: decision
   id: p2-d-no-case-removed
   title: No case was merged or removed in this phase
@@ -188,6 +179,48 @@ journal:
     run in place rather than lose its count of the brainstorm sync (no other test in the file asserts
     it). `fr acceptance check` is run at the end.
   phase: 2
+- kind: decision
+  id: p2-d-build-without-the-tests-patches
+  phase: 2
+  title: A template is built with the asking test's own patches taken off (only the autouse fixtures'
+    stay)
+  body: 'The factory builds lazily inside the first test that asks, and that test may already have patched
+    fr (a fake label sync, a fake forge) or the environment: built in, every later copy in the worker
+    would carry them. `_template_baseline` (autouse) asks for every other autouse fixture, found by lookup
+    rather than named, then marks how many monkeypatch entries they made; `_without_the_tests_own_patches`
+    undoes every entry after that mark for the build and puts it back. Pinned by `test_a_template_is_built_without_the_patches_of_the_test_that_asked_for_it`,
+    which also checks an autouse variable stays in force. HOME, GIT_CONFIG_GLOBAL and the uv paths then
+    come from the factory''s own sandbox home. The mechanism reads pytest''s private `MonkeyPatch._setattr/_setitem`
+    (pytest 9.0.3 here); that test fails loudly if a pytest upgrade moves them.'
+- kind: discovery
+  id: p2-flake-exit-label
+  phase: 2
+  title: Two exit-label tests failed once with no pr-body.md, at host load about 180; not reproduced
+  body: 'A 3-worker run of record_apply, exit_label_sync_points, deliver_pr_body and the template tests
+    failed `test_p2_r6_...` and `test_p2_r3_...` at `_ready_deliver` (the first refused deliver left no
+    pr-body.md, so deliver refused before rendering). Not reproduced since: the same four files passed
+    3 times under -n 3 (63, 71 and 71 tests at load 30-100, the last two with forge_quiet_pr_body added)
+    and serially in both file orders, with and without the patch guard above (24 and 40 passed). I could
+    not establish the cause. The leading suspect is a git call timing out under the load (phase 1''s `git_answer`
+    carries a time limit); the template build was cleared by the serial runs. `_ready_deliver` now asserts
+    the render exists and prints the first refusal, so a recurrence names its reason.'
+- kind: discovery
+  id: p2-m-total
+  phase: 2
+  title: 'Phase 2 totals over the twelve files: 3881 s before, 3193 s after (-18%), load-confounded; CPU
+    and starts are the firmer figures'
+  body: 'Wall seconds, first baseline vs final run, the two big files as samples (run_cli 13 ids, scenarios
+    8 ids): run_cli 158.9/153.0, scenarios 69.7/124.5 (unchanged code, load only), question_rounds 335.6/152.3,
+    record_review_fixes 249.3/62.4, release_script 740.0/1276.6 (host load 75 at its end), install_sh
+    370.7/375.2, record_apply 261.1/76.7, exit_label 554.4/419.9, deliver_pr_body 384.5/132.3, forge_quiet
+    243.1/111.4, gate_cmd 236.2/108.5, gatebackfill 277.7/199.8: sum 3881.2 -> 3192.6. Without scenarios
+    (no remedy) and release_script (load-dominated) the sum is 3071.5 -> 1791.5 (-42%). Firmer figures:
+    gate_cmd CPU 80.8 s -> 21.0 s; templated run_cli sample CPU 62.9 -> 32.0 s; subprocess starts down
+    56-78% in the six started_run/deliver files, 13% in gatebackfill_closes, 10% in release_script, six
+    of 58 installs saved in install_sh. All twelve files pass after the change (the two samples, and test_run_cli
+    in full: 288 passed). Whole-suite cost and tiering are phase 3''s. `fr acceptance check` reports 64
+    errors, none naming a test of these files (rows from specs newer than this branch''s base, and 81
+    refs into these files resolve): no level ref lost its test, and no test was removed.'
 resolves: []
 evidence:
   tests: ci

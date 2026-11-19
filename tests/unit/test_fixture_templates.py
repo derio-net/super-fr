@@ -116,3 +116,33 @@ def test_a_template_may_be_built_from_another_template(tmp_path, fixture_templat
 
     assert fixture_templates.copy("nested-outer", outer, tmp_path / "c") == "outer"
     assert (tmp_path / "c" / "in" / "inner.txt").read_text() == "i"
+
+
+class _Probe:
+    value = "real"
+
+
+def test_a_template_is_built_without_the_patches_of_the_test_that_asked_for_it(
+    tmp_path, fixture_templates, monkeypatch
+):
+    """`test_exit_label_sync_points` patched the label sync before its first `deliver` template was
+    built, and the template (and so every later copy) carried the fake's answers."""
+    monkeypatch.setattr(_Probe, "value", "patched by this test")
+    monkeypatch.setenv("TEMPLATE_PROBE_ENV", "patched by this test")
+    monkeypatch.setitem(os.environ, "TEMPLATE_PROBE_ITEM", "x")
+    seen: dict[str, str | None] = {}
+
+    def build(directory: Path) -> None:
+        seen["attr"] = _Probe.value
+        seen["env"] = os.environ.get("TEMPLATE_PROBE_ENV")
+        seen["item"] = os.environ.get("TEMPLATE_PROBE_ITEM")
+        seen["autouse"] = os.environ.get("FR_HOST_ID")  # an autouse fixture's, kept
+
+    fixture_templates.copy("patch-probe", build, tmp_path / "c")
+
+    assert seen["attr"] == "real" and seen["env"] is None and seen["item"] is None
+    assert seen["autouse"] == "feedfacefeedface"
+    # and the test's own patches are back afterwards
+    assert _Probe.value == "patched by this test"
+    assert os.environ["TEMPLATE_PROBE_ENV"] == "patched by this test"
+    assert os.environ["TEMPLATE_PROBE_ITEM"] == "x"

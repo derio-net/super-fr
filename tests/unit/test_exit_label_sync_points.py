@@ -152,7 +152,8 @@ _body_text = {"v": ""}
 def _ready_deliver(tmp_path: Path, live: None) -> Path:
     root = _at_deliver(tmp_path)
     _body_text["v"] = "x"
-    _deliver(root)  # renders pr-body.md (refused: the live body lacks the sections)
+    _rec, first = _deliver(root)  # renders pr-body.md (refused: the live body lacks the sections)
+    assert _body(root).is_file(), first.output
     _body_text["v"] = _body(root).read_text()
     return root
 
