@@ -7465,6 +7465,10 @@ batches:
     same board and skill.'
   wave: 11
   bump: minor
+  events:
+  - kind: cancel
+    at: '2026-11-19T09:40:29.487957Z'
+    reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
 - id: batch-finish-labels
   title: 'A finished batch cleans up after itself: drop fr:in-progress at release, and batch merge skips
     only the held batch'
