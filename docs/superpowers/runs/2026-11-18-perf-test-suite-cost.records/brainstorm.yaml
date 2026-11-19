@@ -1,0 +1,151 @@
+schema_version: 12
+run: 2026-11-18-perf-test-suite-cost
+step: brainstorm
+outcome: done
+questions:
+  rounds: 2
+  trigger: design-risk
+  reason: Round 1's evidence-model choice decided which sub-decisions exist (phase behaviour, fast-tier
+    contents, local-log policy) and the scenario answer needed checking against CI's addopts override.
+journal:
+- kind: discovery
+  input: true
+  id: operator-brief
+  title: 'Operator brief and issue #1555, verbatim'
+  body: "Operator goal (as typed): derio-net/super-fr#1555 — investigate and fix the cost of the local\
+    \ full suite (15,182 tests, ~5.2 worker-hours per .test_durations; on 2026-11-18 three wave-22 batch\
+    \ sessions each sat 4.5 h+ on a local full suite). Two tracks, both in the issue: (1) profile the\
+    \ heaviest test files and make them lighter (shared fixtures, in-process CLI calls, a separate scenario\
+    \ tier, dropping redundant cases), with measured savings per file; (2) design a sound scoped local\
+    \ run for deliver's tests evidence, with CI's full suite staying the merge gate. Track 2 changes a\
+    \ gate, so it is an operator decision for your question round. Note: this host is loaded by the wave-22\
+    \ batch sessions right now, so profile per file (pytest --durations on single files), not by running\
+    \ the whole suite repeatedly.\n\nIssue #1555 — The local full suite costs ~5 worker-hours: make heavy\
+    \ tests lighter and design a scoped local run with CI as the full gate\n\n## Problem\n\nThe local\
+    \ full suite has become the slowest step of every fr-goal and fr-debugging run. `deliver` needs a\
+    \ fresh full-suite log as `tests` evidence. CI runs the same suite again in 7 shards on every PR,\
+    \ so the local run only stops a red push, and it costs hours.\n\nMeasured from the committed `.test_durations`\
+    \ (refreshed 2026-11-15):\n\n- **15,182 tests, 18,855 worker-seconds (about 5.2 worker-hours).** AGENTS.md\
+    \ still says \"~150 s vs ~870 s on a 12-core host\". That figure is long out of date.\n- With 12 free\
+    \ workers, a full run takes about 26 minutes. On a loaded host, `-n auto` starts only 2 workers (the\
+    \ gh#1225 rule), so one run takes about **2.6 hours with nothing else running**.\n- Observed 2026-11-18:\
+    \ three batch sessions (wave 22) each ran a full suite at the same time on one host. Each suite took\
+    \ **more than 4.5 hours**, and every batch stayed in flight for the whole time. One session also left\
+    \ an orphaned duplicate suite running in its worktree. Nothing noticed, and that duplicate doubled\
+    \ the load.\n- **The cost sits in a small part of the suite.** The 3,193 tests that take over 1 s\
+    \ account for 89% of the time, and the slowest 1% account for 28%. The slowest files:\n\n  | File\
+    \ | Seconds |\n  |---|---|\n  | `tests/unit/test_run_cli.py` | 1368 |\n  | `tests/integration/test_scenarios.py`\
+    \ | 1263 |\n  | `tests/unit/test_run_question_rounds.py` | 463 |\n  | `tests/unit/test_record_review_fixes.py`\
+    \ | 450 |\n  | `tests/unit/test_release_script.py` | 449 |\n  | `tests/integration/test_install_sh.py`\
+    \ | 445 |\n  | `tests/unit/test_record_apply.py` | 436 |\n  | `tests/unit/test_exit_label_sync_points.py`\
+    \ | 397 |\n  | `tests/unit/test_deliver_pr_body.py` | 367 |\n  | `tests/unit/test_forge_quiet_pr_body.py`\
+    \ | 354 |\n  | `tests/unit/test_gate_cmd.py` | 332 |\n  | `tests/unit/test_gatebackfill_closes.py`\
+    \ | 325 |\n\n  Most of these start `fr` as a subprocess, or build git repositories and install trees\
+    \ in each test.\n\n## What this issue asks for\n\nAn investigation that ends in a decision with numbers.\
+    \ Two tracks:\n\n1. **Make the heavy tests lighter.** Profile the top files: how much of each test's\
+    \ time is setup (git init, commits, install trees, subprocess start-up) and how much is the assertion\
+    \ itself. For each file, propose a remedy and estimate its saving, for example:\n   - build a fixture\
+    \ once per module or session and copy it;\n   - call the CLI in-process instead of starting a subprocess;\n\
+    \   - move the end-to-end scenarios to a tier of their own;\n   - remove duplicate or redundant parametrized\
+    \ cases.\n2. **A scoped local run, with CI as the full gate.** Selecting tests from the import graph\
+    \ is unsound here, because many tests reach the code by starting `fr` as a subprocess, and no import\
+    \ graph sees that link. Design a sound scoped run, for example the touched packages' tests plus a\
+    \ fixed smoke set. Also design how `deliver`'s `tests` evidence accepts it while CI's full suite stays\
+    \ the merge gate. This changes a gate, so it needs a spec and the operator's decision.\n\nAlso: update\
+    \ the outdated timing in AGENTS.md, and refresh `.test_durations`.\n\n## Related\n\n- #1340: `ci.yml`\
+    \ under 4 minutes of wall clock. That covers CI, not the local run.\n- #1238: the release's staged\
+    \ suite.\n- #1225, #1292, #1296, #1223: earlier fixes for symptoms of load.\n"
+- kind: decision
+  id: q1-tests-evidence
+  title: 'Track 2: CI is the suite evidence'
+  body: 'Operator chose: the repo declares `tests: ci` as its default; deliver cites CI''s full suite;
+    local phase runs are a fast advisory tier, never evidence (over a new `tests: scoped` log and a coverage-map
+    selection). decider: operator.'
+- kind: decision
+  id: q2-required-ci
+  title: ci-ok becomes required on main in a back-loaded manual phase
+  body: 'Operator chose: a [manual] last phase runs configure-main-protection.sh --stage bypass then --stage
+    require (over keeping it a checklist line or filing a follow-up). decider: operator.'
+- kind: decision
+  id: q3-scenario-tier
+  title: Scenarios get their own tier, CI runs it
+  body: 'Operator chose: a `scenario` marker deselected by default locally; CI runs it; test_install_sh.py
+    joins the tier. decider: operator.'
+- kind: decision
+  id: q4-git-memo
+  title: Per-invocation git answer cache in fr is allowed
+  body: 'Operator chose: memoize read-only default-remote/ref, git-dir and toplevel answers per invocation,
+    never stale after fr''s own writes; ships with a change fragment (over test-side fixes only). decider:
+    operator.'
+- kind: decision
+  id: q5-pruning
+  title: Merge cases only when the claim survives
+  body: 'Operator chose: template fixtures, and cases merged only when another test asserts the same claim
+    on the same path; each journaled with its covering test; no acceptance level ref loses its test. decider:
+    operator.'
+- kind: decision
+  id: q6-verify-gate
+  title: candidate strategy, developer gate
+  body: 'Operator chose: the shape''s candidate walk, gate developer (over gate tester). decider: operator.'
+- kind: decision
+  id: q7-ci-shards
+  title: Scenarios stay in CI's shards
+  body: 'Round 2, from the finding that CI overrides addopts (ci.yml:87/142): operator chose to keep scenarios
+    in the balanced shards rather than a ~1263 s job of their own. decider: operator.'
+- kind: decision
+  id: q8-phase-tests
+  title: Phases run the fast tier; only deliver cites CI
+  body: 'Round 2, from the executor''s existing tests: ci mode: operator chose no CI wait per phase; phases
+    return tests_log: none with the fast tier''s summary; deliver owes tests: ci. decider: operator.'
+- kind: decision
+  id: q9-fast-tier
+  title: Fast tier = changed + import-touched + smoke
+  body: 'Round 2: operator chose a --fr-scope conftest option selecting changed test files, files importing
+    touched modules and a smoke set, scenarios excluded, honest about being partial. decider: operator.'
+- kind: decision
+  id: q10-local-logs
+  title: Accept full local logs, refuse marked advisory ones
+  body: 'Round 2, from the finding that nothing marks a log partial: operator chose that the fast tier
+    prints `fr-scope: advisory — not deliver evidence` and fr refuses any tests log carrying it; a local
+    full log stays valid. decider: operator.'
+resolves: []
+acceptance:
+- id: git-answers-cached-per-invocation
+  capability: fr git access
+  acceptance: Within one fr invocation, fr asks git each default-remote, default-branch, git-dir and toplevel
+    question at most once per repository state, and an fr git write in that invocation never leaves a
+    stale answer
+  origin:
+  - spec:2026-11-19-local-suite-cost#R1
+  status: not-implemented
+- id: scenario-tier-deselected-locally
+  capability: Test tiers
+  acceptance: A default local pytest run deselects the scenario tier, while CI's shards and the release's
+    staged suite still run every test, scenarios included
+  origin:
+  - spec:2026-11-19-local-suite-cost#R5
+  status: not-implemented
+- id: fast-tier-advisory-and-refused
+  capability: Test tiers
+  acceptance: '`--fr-scope <base>` runs changed, import-touched and smoke tests, prints the advisory marker
+    line, and fr refuses any tests log carrying that line at deliver and at a phase unit'
+  origin:
+  - spec:2026-11-19-local-suite-cost#R6
+  - spec:2026-11-19-local-suite-cost#R7
+  status: not-implemented
+- id: repo-declares-ci-tests-evidence
+  capability: Delivery evidence
+  acceptance: 'A repo whose .fr/ci.yaml declares `tests: ci` gets deliver and implement-phase briefs naming
+    CI as the suite evidence and the fast tier as the phase''s local run'
+  origin:
+  - spec:2026-11-19-local-suite-cost#R8
+  status: not-implemented
+- id: ci-ok-required-on-main
+  capability: Merge protection
+  acceptance: main refuses a merge whose ci-ok check is not green
+  origin:
+  - spec:2026-11-19-local-suite-cost#R9
+  status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-11-19-local-suite-cost-design.md
+evidence: {}
