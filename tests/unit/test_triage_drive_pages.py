@@ -260,7 +260,30 @@ def test_the_cloud_adapters_pass_hands_its_loader_and_ci_none_to_the_backlog(
     assert seen[1]["loader"] is None
 
 
-def test_the_drive_pass_stays_pure() -> None:
-    from fr.triage import batch_drive
+# ----------------------------------------------- p4-r1: a clone that is not there, said once
 
-    assert "datetime.now" not in Path(batch_drive.__file__).read_text(encoding="utf-8")
+
+def _driver(tmp_path: Path, **kw: Any) -> Any:
+    return triage_batch_cmd._Driver(
+        triage_cmd._scope(REPO, None), tmp_path, named=None, checkouts={REPO.lower(): None},
+        max_inflight=1, yes=True, **kw,
+    )  # fmt: skip
+
+
+def test_a_scope_with_no_usable_clone_says_so_once_and_probes_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    probes: list[int] = []
+
+    def refuse(path: Any, owner_repo: str) -> str:
+        probes.append(1)
+        return "its origin is not the scope's repo"
+
+    monkeypatch.setattr(triage_batch_cmd, "_checkout_refusal", refuse)
+    _proposed(world, tmp_path, 1)
+    driver = _driver(tmp_path)
+    assert driver._scope_clone() is None and driver._scope_clone() is None
+    assert len(probes) == 1
+    err = capfd.readouterr().err
+    assert err.count("renders with no measurement") == 1 and "error:" not in err

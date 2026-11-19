@@ -3827,6 +3827,8 @@ class _Driver:
         # drive's pages remember between passes
         self.page_failures: dict[str, set[str]] = {}
         self._measured: dict[str, Any] | None = None  # architecture's last measurement
+        self._clone_probed = False  # the pages' clone was looked for (R6)
+        self._pages_clone: Checkout | None = None
         self._baselined = False  # the drive's first snapshot decision was made (R7)
         self._wave_owed = False  # a wave finished since the pages were last written (R7)
         self.workspace_prefix = workspace_prefix
@@ -5466,13 +5468,25 @@ class _Driver:
 
     def _scope_clone(self) -> Checkout | None:
         """The clone of a single-repo scope's repo this driver holds; None for any other
-        scope, or when it cannot be opened (the pages then render with no measurement)."""
+        scope, or when it is not usable (the pages then render with no measurement). The
+        probe runs once per driver and its miss is said once, in a warning, never an error."""
         if self.scope.kind != "repo":
             return None
-        try:
-            return self.checkout(self.scope.target)
-        except Exception:  # noqa: BLE001 - a view never fails the pass on its clone
-            return None
+        if not self._clone_probed:
+            self._clone_probed = True
+            repo = self.scope.target
+            try:
+                why = _checkout_refusal(self.path_of(repo), repo)
+                if why is None:
+                    self._pages_clone = self.checkout(repo)
+            except Exception as exc:  # noqa: BLE001 - a view never fails the pass on its clone
+                why = triage_kanban_cmd.one_line(exc)
+            if why is not None:
+                self._report_once(
+                    f"clone\0pages\0{why}",
+                    f"no usable clone of {repo} ({why}); Architecture renders with no measurement",
+                )
+        return self._pages_clone
 
     def _write_pages(self, wave_finished: bool) -> None:
         """Re-render, after the board, every page whose inputs are on disk, in registry order
