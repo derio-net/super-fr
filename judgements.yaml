@@ -8798,6 +8798,10 @@ batches:
     head_before: 643719ac47415f16084afb2ad6f6503b0a23ca2b
     head_after: 274981aa3ad20c9eb57ef38d43f3473299b49e2b
     base: 382c1f3108db12e71af850025c0e5545691f7f90
+  - kind: claims_released
+    at: '2026-11-19T19:39:26.151045Z'
+    keys:
+    - super-fr#1527
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
