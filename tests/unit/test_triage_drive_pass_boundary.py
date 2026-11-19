@@ -20,6 +20,7 @@ from fr.commands import triage_batch_cmd
 from fr.forgeapi import ForgeApiError
 from fr.ghclient import UnsupportedForgeOperation
 from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
+from fr.triage.driver_record import load_ledger, load_record
 from fr.triage.errors import ConfigError, TriageError
 from fr.triage.gitseam import GitError
 from fr.triage.lease import Lease, LeaseExpired, LeaseHeld
@@ -225,6 +226,8 @@ def test_a_persistent_failure_is_reported_once_and_backs_off_to_its_cap(
     assert _loop(StubDriver(tmp_path), interval=60) == triage_batch_cmd.LoopEnd(0)
     assert sleeps == [60, 120, 240, 480, 900, 900, 900, 900]
     assert capsys.readouterr().err.count("the remote said no") == 1
+    entry = load_ledger(tmp_path).causes["push-refused"]
+    assert (entry.kind, entry.count, entry.exception) == ("transient", 8, "StateRefPushRefused")
 
 
 def test_the_backoff_cap_is_the_interval_when_that_is_longer(
@@ -258,6 +261,12 @@ def test_ten_failed_passes_in_a_row_stop_as_a_refusal_with_the_last_cause(
     assert "git:fetch" in err
     assert "fr triage drive failures --file --yes" in err
     assert driver.boards == 1
+    ledger = load_ledger(tmp_path).causes
+    assert ledger["triage:TriageError"].count == 9
+    assert ledger["git:fetch"].kind == "refusal"
+    record = load_record(tmp_path)
+    assert record is not None and record.last_refusal is not None
+    assert record.last_refusal.cause == "git:fetch"
 
 
 @pytest.mark.parametrize(
@@ -276,6 +285,11 @@ def test_a_refusal_stops_the_loop_on_the_first_pass(
     assert str(exc) in " ".join(err.split())
     assert "fr triage drive failures --file --yes" in err
     assert driver.boards == 1
+    cause = classify(exc).cause
+    assert load_ledger(tmp_path).causes[cause].kind == "refusal"
+    record = load_record(tmp_path)
+    assert record is not None and record.last_refusal is not None
+    assert (record.last_refusal.cause, record.last_refusal.message) == (cause, str(exc))
 
 
 def test_a_renewal_that_fails_inside_wait_out_is_classified_not_a_traceback(
