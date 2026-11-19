@@ -126,8 +126,11 @@ R15. The bar's text starts at the left edge of the content below it, on article 
 
 ### Site build and pages (R11–R13)
 
-- R11: re-indent each list item's continuation and fence to the 4 spaces Python-Markdown
-  needs, and put a blank line before step 4 of the backfill list. Only whitespace changes.
+- R11: Python-Markdown never reads a fence inside a list item, at any indent (checked at
+  2, 3 and 4 spaces with markdown 3.11 and the pinned renderer; journal
+  `p2-fence-in-list-not-read`). So each of the four examples becomes an indented code block
+  (8 spaces, no fence) inside its list item, and step 4 of the backfill list gets a blank
+  line before it. The examples' text does not change.
 - R12: one counting rule. Count the fences in the page's own source file (opening lines
   of three or more backticks at any indent, paired by `_FENCE`, `build-site.py:312`), and
   count the `<pre>` blocks the renderer produced for the article body, excluding any
@@ -171,7 +174,7 @@ and `docs/reference/plan-model.md` (plan_cmd.py), `docs/explainers/fr-progress.m
 scripts/site/**, the explainers-currency rule). The R6 help rewrites touch further
 `commands/*.py` modules; the check names their pages. The new R12 refusal is described
 where the build's rules live: docs-currency.md's "Write a page that builds" list (a fence
-inside a list item is indented 4 spaces) and the build-failure list in
+inside a list item is an 8-space indented code block, never a fence) and the build-failure list in
 `.claude/rules/explainers-currency.md`.
 
 ## Verification
