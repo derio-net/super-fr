@@ -20,7 +20,7 @@ import pytest
 import yaml
 from fr.cli import app
 from fr.triage.model import Facts, Judgements, load_facts, load_judgements
-from fr.triage.render import inline, render
+from fr.triage.render import inline, render_backlog, render_issues
 from typer.testing import CliRunner
 
 from tests.unit.triage_fixtures import NOW, SUPER_FR, _super_fr_forge, forbidden_imports
@@ -101,7 +101,7 @@ def _section_of(page: str, key: str) -> str:
 def test_an_unranked_issue_renders_in_the_first_tier_labelled_not_yet_triaged(
     tmp_path: Path,
 ) -> None:
-    page = render(*_state(tmp_path))
+    page = render_issues(*_state(tmp_path))
 
     assert _sections(page)[0] == "unranked"
     assert _section_of(page, "super-fr#535") == "unranked"
@@ -113,7 +113,7 @@ def test_an_unranked_issue_renders_in_the_first_tier_labelled_not_yet_triaged(
 def test_a_judged_issue_renders_in_its_own_tier_with_its_data_attributes(
     tmp_path: Path,
 ) -> None:
-    page = render(*_state(tmp_path))
+    page = render_issues(*_state(tmp_path))
 
     assert _sections(page) == ["unranked", "1", "2"]
     assert _section_of(page, "super-fr#529") == "1"
@@ -126,7 +126,7 @@ def test_a_judged_issue_renders_in_its_own_tier_with_its_data_attributes(
 def test_stage_comes_from_the_model_not_from_facts_json(tmp_path: Path) -> None:
     """r-p2-render-model: stage is derived, never on disk — yet every row carries it."""
     facts, judgements = _state(tmp_path)
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     assert '"stage"' not in (tmp_path / "facts.json").read_text(encoding="utf-8")
     for issue in facts.issues:
@@ -136,7 +136,7 @@ def test_stage_comes_from_the_model_not_from_facts_json(tmp_path: Path) -> None:
 
 
 def test_hostile_facts_render_inert_and_never_inside_a_script(tmp_path: Path) -> None:
-    page = render(*_state(tmp_path, hostile=True))
+    page = render_issues(*_state(tmp_path, hostile=True))
 
     assert "<script>alert(1)" not in page
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
@@ -166,7 +166,7 @@ def test_two_renders_are_byte_identical_whatever_the_clock_says(
 
         monkeypatch.setattr(_dt, "datetime", Frozen)
         monkeypatch.setattr("time.time", lambda: moment.timestamp())
-        return render(facts, judgements)
+        return render_issues(facts, judgements)
 
     first = at(_dt.datetime(2020, 1, 1, tzinfo=_dt.UTC))
     second = at(_dt.datetime(2031, 6, 30, 23, 59, tzinfo=_dt.UTC))
@@ -183,7 +183,7 @@ def _clock_imports(path: Path) -> list[str]:
 
 def test_render_reads_no_clock() -> None:
     """The structural half of determinism: render.py imports neither clock."""
-    assert _clock_imports(Path(render.__code__.co_filename)) == []
+    assert _clock_imports(Path(render_backlog.__code__.co_filename)) == []
 
 
 @pytest.mark.parametrize(
@@ -217,14 +217,14 @@ def test_the_clock_check_does_not_flag_lookalikes(tmp_path: Path, source: str) -
 
 def test_the_page_carries_collected_at_and_ranked_at(tmp_path: Path) -> None:
     facts, judgements = _state(tmp_path)
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     assert facts.collected_at in page
     assert "2026-09-19" in page and "ranked" in page
 
 
 def test_the_page_is_self_contained_and_themed(tmp_path: Path) -> None:
-    page = render(*_state(tmp_path))
+    page = render_issues(*_state(tmp_path))
 
     assert "--accent: #2F6F5E" in page
     assert "@media (prefers-color-scheme: dark)" in page
@@ -238,17 +238,21 @@ def test_the_page_is_self_contained_and_themed(tmp_path: Path) -> None:
 
 def _render_cmd(tmp_path: Path, *extra: str) -> Any:
     return CliRunner().invoke(
-        app, ["triage", "render", "--repo", "derio-net/super-fr", "--dir", str(tmp_path), *extra]
+        app, ["triage", "backlog", "--repo", "derio-net/super-fr", "--dir", str(tmp_path), *extra]
     )
 
 
-def test_render_writes_triage_html_and_exits_0(tmp_path: Path) -> None:
+def test_backlog_writes_backlog_html_and_exits_0(tmp_path: Path) -> None:
     facts, judgements = _state(tmp_path)
     result = _render_cmd(tmp_path)
 
     assert result.exit_code == 0, result.output
-    out = tmp_path / "triage.html"
-    assert out.read_text(encoding="utf-8") == render(facts, judgements)
+    stamp = re.compile(r"<span>rendered [^<]*</span>")
+    pages = ("backlog", "issues")
+    for name, render_page in (("backlog", render_backlog), ("issues", render_issues)):
+        written = (tmp_path / f"{name}.html").read_text(encoding="utf-8")
+        assert stamp.search(written), "the command passes the render time in (R5)"
+        assert stamp.sub("", written) == render_page(facts, judgements, present=pages)
 
 
 def test_render_open_hands_the_file_uri_to_webbrowser_once(
@@ -260,7 +264,7 @@ def test_render_open_hands_the_file_uri_to_webbrowser_once(
     result = _render_cmd(tmp_path, "--open")
 
     assert result.exit_code == 0, result.output
-    assert opened == [(tmp_path / "triage.html").resolve().as_uri()]
+    assert opened == [(tmp_path / "backlog.html").resolve().as_uri()]
 
 
 def test_render_without_judgements_renders_everything_unranked(tmp_path: Path) -> None:
@@ -269,7 +273,7 @@ def test_render_without_judgements_renders_everything_unranked(tmp_path: Path) -
     result = _render_cmd(tmp_path)
 
     assert result.exit_code == 0, result.output
-    page = (tmp_path / "triage.html").read_text(encoding="utf-8")
+    page = (tmp_path / "issues.html").read_text(encoding="utf-8")
     assert _sections(page) == ["unranked"]
     assert _section_of(page, "super-fr#529") == "unranked"
 
@@ -279,7 +283,7 @@ def test_render_without_facts_names_the_collect_command(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "fr triage collect --repo derio-net/super-fr" in result.output
-    assert not (tmp_path / "triage.html").exists()
+    assert not (tmp_path / "backlog.html").exists()
 
 
 # ------------------------------------------- review r-p3-row-overclaims
@@ -343,7 +347,7 @@ def test_a_title_cannot_break_out_of_the_data_search_attribute(tmp_path: Path) -
 
     facts, judgements = _state_with(tmp_path, facts_edit=edit)
     key = facts.issues[0].key
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     assert '" onmouseover="' not in page
     assert "x&quot; onmouseover=&quot;alert(1)" in _row(page, key)
@@ -367,7 +371,7 @@ def test_a_non_https_url_produces_no_href(tmp_path: Path, url: str) -> None:
 
     facts, judgements = _state_with(tmp_path, facts_edit=edit)
     issue = next(i for i in facts.issues if i.prs)
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     block = _row_block(page, issue.key)
     assert "href=" not in block
@@ -430,7 +434,7 @@ def test_hostile_text_in_every_context_renders_escaped(
         facts_edit=lambda d: holder.setdefault("facts", d),
         judgements_edit=lambda d: edit(holder["facts"], d),
     )
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     assert PAYLOAD_RAW not in page
     assert PAYLOAD_ESCAPED in page
@@ -441,7 +445,7 @@ def test_hostile_pattern_ids_render_escaped_even_past_the_loader(tmp_path: Path)
     """The loader refuses a non-key id (r-p2-pattern-ids); the renderer does not rely on it."""
     facts, judgements = _state(tmp_path)
     pattern = judgements.patterns[0].model_copy(update={"ids": ["super-fr#529", PAYLOAD]})
-    page = render(facts, judgements.model_copy(update={"patterns": [pattern]}))
+    page = render_issues(facts, judgements.model_copy(update={"patterns": [pattern]}))
 
     assert PAYLOAD_RAW not in page
     assert PAYLOAD_ESCAPED in page
@@ -460,7 +464,7 @@ def test_render_classifies_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         return real(facts, judgements)
 
     monkeypatch.setattr(mod, "classify", counting)
-    render(*_state(tmp_path))
+    render_issues(*_state(tmp_path))
 
     assert len(calls) == 1
 
@@ -504,14 +508,14 @@ def _with_repos(n: int) -> Callable[[dict[str, Any]], None]:
 
 
 def test_one_collected_repo_is_one_repo_not_one_repos(tmp_path: Path) -> None:
-    page = render(*_state_with(tmp_path, facts_edit=_with_repos(1)))
+    page = render_issues(*_state_with(tmp_path, facts_edit=_with_repos(1)))
 
     assert '<span class="count"><b>1</b> repo</span>' in page
     assert "1</b> repos" not in page
 
 
 def test_two_collected_repos_are_repos(tmp_path: Path) -> None:
-    page = render(*_state_with(tmp_path, facts_edit=_with_repos(2)))
+    page = render_issues(*_state_with(tmp_path, facts_edit=_with_repos(2)))
 
     assert '<span class="count"><b>2</b> repos</span>' in page
 
@@ -534,7 +538,7 @@ def _warned(source: str, target: str) -> Callable[[dict[str, Any]], None]:
 def test_a_truncation_note_names_its_list_in_plain_words_and_its_remedy(
     tmp_path: Path, source: str, target: str, words: str, fix: str
 ) -> None:
-    page = render(*_state_with(tmp_path, facts_edit=_warned(source, target)))
+    page = render_issues(*_state_with(tmp_path, facts_edit=_warned(source, target)))
     notes = re.search(r'<ul class="notes">(.*?)</ul>', page, flags=re.S)
 
     assert notes is not None
@@ -549,9 +553,9 @@ def test_a_truncation_note_names_its_list_in_plain_words_and_its_remedy(
 
 
 def _board_waves(page: str) -> str:
-    m = re.search(r'<section[^>]*id="waves".*?</section>', page, flags=re.S)
-    assert m
-    return m.group(0)
+    from tests.unit.triage_board_fixtures import element_by_id
+
+    return element_by_id(page, "waves")
 
 
 _CANCEL = {"kind": "cancel", "at": "2026-10-02T10:00:00Z", "reason": "no longer wanted"}
@@ -582,8 +586,8 @@ def _waved(*waves: tuple[int, list[dict[str, Any]]]) -> tuple[Facts, Judgements]
 def test_the_board_carries_its_nav_and_goal() -> None:
     from tests.unit.triage_board_fixtures import busy
 
-    page = render(*busy(), present=("backlog", "batches", "origins", "history"))
-    assert re.search(r'<a [^>]*href="triage.html"[^>]*aria-current="page"', page)
+    page = render_backlog(*busy(), present=("backlog", "batches", "origins", "history"))
+    assert re.search(r'<a [^>]*href="backlog.html"[^>]*aria-current="page"', page)
     assert 'class="goal">What do I do next?<' in page
     assert (
         page.index("</header>") < page.index('class="pages"') < page.index('id="since-last-report"')
@@ -593,7 +597,7 @@ def test_the_board_carries_its_nav_and_goal() -> None:
 
 def test_a_finished_wave_is_not_a_board_tab_and_the_selected_tab_exists() -> None:
     f, jd = _waved((1, [_CANCEL]), (2, [_CLOSEOUT]), (3, []))
-    sect = _board_waves(render(f, jd))
+    sect = _board_waves(render_backlog(f, jd))
     keys = re.findall(r'role="tab"[^>]*data-key="([^"]*)"', sect)
     assert keys == ["3"]
     assert re.search(r'data-key="3"[^>]*>', sect) and 'aria-selected="true"' in sect
@@ -603,7 +607,7 @@ def test_the_preselected_tab_is_always_present_when_the_top_wave_is_finished() -
     # the highest wave (3) is finished; an earlier one (1) still has live work (the
     # `keys.index` ValueError regression: preselection must be among the unfinished waves)
     f, jd = _waved((1, []), (3, [_CANCEL]))
-    sect = _board_waves(render(f, jd))
+    sect = _board_waves(render_backlog(f, jd))
     tab = re.search(r'<button[^>]*id="wave-tab-1"[^>]*>', sect)
     assert tab and 'aria-selected="true"' in tab.group(0)
     assert "wave-tab-3" not in sect
@@ -611,7 +615,7 @@ def test_the_preselected_tab_is_always_present_when_the_top_wave_is_finished() -
 
 def test_when_every_wave_is_finished_the_board_says_so_and_links_history() -> None:
     f, jd = _waved((1, [_CANCEL]), (2, [_CLOSEOUT]))
-    sect = _board_waves(render(f, jd))
+    sect = _board_waves(render_backlog(f, jd))
     assert "Every wave is finished" in sect
     assert 'href="history.html"' in sect
     assert 'role="tab"' not in sect
@@ -619,18 +623,18 @@ def test_when_every_wave_is_finished_the_board_says_so_and_links_history() -> No
 
 def test_a_board_fragment_survives_a_render(tmp_path: Path) -> None:
     from fr.triage.fragments import resolve_manifest
-    from fr.triage.render import GENERATED
+    from fr.triage.render import BACKLOG_GENERATED
 
     from tests.unit.triage_board_fixtures import busy
 
-    board = tmp_path / "board"
+    board = tmp_path / "backlog"
     board.mkdir()
     (board / "note.html").write_text("<p>operator note</p>", encoding="utf-8")
     (board / "manifest.yaml").write_text(
         yaml.safe_dump({"sections": ["since", "note.html", "needs"]}), encoding="utf-8"
     )
-    resolved = resolve_manifest(board, GENERATED)
-    page = render(*busy(), resolved=resolved)
+    resolved = resolve_manifest(board, BACKLOG_GENERATED)
+    page = render_backlog(*busy(), resolved=resolved)
     assert page.index('id="since-last-report"') < page.index("operator note")
     assert page.index("operator note") < page.index('id="needs-you-now"')
     # a generated section the manifest omits is still shown, after its entries
@@ -648,7 +652,8 @@ def test_the_render_command_reads_the_board_manifest(tmp_path: Path) -> None:
         yaml.safe_dump({"sections": ["n.html"]}), encoding="utf-8"
     )
     _render(state)
-    assert "<p>kept</p>" in (state / "triage.html").read_text(encoding="utf-8")
+    assert "<p>kept</p>" in (state / "backlog.html").read_text(encoding="utf-8")
+    assert "<p>kept</p>" in (state / "issues.html").read_text(encoding="utf-8")
 
 
 # ------------------------------- severity and duplicates on the board (triage-pages-goal R11)
@@ -671,7 +676,7 @@ def _row_of(page: str, key: str) -> str:
 
 
 def test_backlog_rows_show_a_severity_pill_or_a_dash() -> None:
-    page = render(*_sev_board(widgets_3={"severity": "high"}))
+    page = render_issues(*_sev_board(widgets_3={"severity": "high"}))
     assert 'data-severity="high"' in _row_of(page, "widgets#3")
     plain = _row_of(page, "widgets#4")
     assert 'data-severity=""' in plain and "—" in plain
@@ -689,7 +694,7 @@ def test_a_next_up_row_shows_the_most_severe_member_severity() -> None:
     jd2 = Judgements.model_validate(data)
     row = next(r for r in next_up(f, jd2) if r.ref == "e-next")
     assert row.severity == "high"
-    page = render(f, jd2)
+    page = render_backlog(f, jd2)
     m = re.search(r'<li class="next" data-next="batch" data-ref="e-next".*?</li>', page, re.S)
     assert m and 'data-severity="high"' in m.group(0)
     low = next(r for r in next_up(*_sev_board(widgets_13={"severity": "low"})) if r.ref == "e-next")
@@ -700,7 +705,7 @@ def test_a_next_up_row_shows_the_most_severe_member_severity() -> None:
 
 def test_a_duplicate_leaves_the_tier_sections_and_is_listed_under_parked() -> None:
     f, jd = _sev_board(widgets_6={"duplicate_of": "widgets#7"})
-    page = render(f, jd)
+    page = render_issues(f, jd)
     start = page.index('id="backlog-by-tier"')
     backlog = page[start : page.index('id="parked"')]
     assert 'data-key="widgets#6"' not in backlog
@@ -711,7 +716,7 @@ def test_a_duplicate_leaves_the_tier_sections_and_is_listed_under_parked() -> No
 
 
 def test_a_duplicate_of_an_unknown_issue_is_plain_text_under_parked() -> None:
-    page = render(*_sev_board(widgets_6={"duplicate_of": "widgets#99"}))
+    page = render_issues(*_sev_board(widgets_6={"duplicate_of": "widgets#99"}))
     parked = re.search(r'<details[^>]*id="parked".*?</details>', page, re.S)
     assert parked
     text = parked.group(0)
@@ -725,9 +730,9 @@ def test_the_batches_section_links_the_board_only_when_asked() -> None:
     from tests.unit.triage_board_fixtures import busy
 
     facts, judgements = busy()
-    assert 'href="board.html"' in render(facts, judgements, board=True)
-    assert "board.html" not in render(facts, judgements)
-    assert "board.html" not in render(facts, judgements, board=False)
+    assert 'href="batches.html"' in render_backlog(facts, judgements, board=True)
+    assert 'href="batches.html"' not in render_backlog(facts, judgements)
+    assert 'href="batches.html"' not in render_backlog(facts, judgements, board=False)
 
 
 # ------------------------------------------- duplicates on the board (triage-dedupe R8, R9)
@@ -789,7 +794,7 @@ def test_an_open_duplicate_nests_in_its_originals_row_with_the_close_command() -
         [(3, "the original", "open"), (9, "the dupe", "open")],
         {3: {}, 9: {"duplicate_of": "super-fr#3"}},
     )
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     assert not _has_row(page, "super-fr#9")
     original = _row_html(page, "super-fr#3")
@@ -804,7 +809,7 @@ def test_two_duplicates_read_plural() -> None:
         [(3, "o", "open"), (8, "d1", "open"), (9, "d2", "open")],
         {3: {}, 8: {"duplicate_of": "super-fr#3"}, 9: {"duplicate_of": "super-fr#3"}},
     )
-    original = _row_html(render(facts, judgements), "super-fr#3")
+    original = _row_html(render_issues(facts, judgements), "super-fr#3")
 
     assert "+2 duplicates" in original
     assert _CMD.format(n=8) in original and _CMD.format(n=9) in original
@@ -814,7 +819,7 @@ def test_a_closed_duplicate_of_an_open_original_nests_tagged_closed_with_no_comm
     facts, judgements = _dupe_state(
         [(3, "o", "open"), (9, "d", "closed")], {3: {}, 9: {"duplicate_of": "super-fr#3"}}
     )
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
     original = _row_html(page, "super-fr#3")
 
     assert not _has_row(page, "super-fr#9")
@@ -832,7 +837,7 @@ def test_a_duplicate_whose_original_is_not_open_is_listed_under_parked(
     """Off the tiers like every duplicate (triage-pages-goal R11), not nested: there is no
     open original row to nest it in."""
     facts, judgements = _dupe_state(issues, {9: {"duplicate_of": "super-fr#3"}})
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     assert not _has_row(page, "super-fr#9")
     parked = re.search(r'<details id="parked".*?</details>', page, re.S)
@@ -846,7 +851,7 @@ def test_possible_duplicates_lists_each_group_escaped_before_the_backlog() -> No
         [(1, "deliver gate refuses <X>", "open"), (2, "deliver gate refuses <X> again", "open")],
         {},
     )
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     m = re.search(r'<details id="possible-duplicates".*?</details>', page, re.S)
     assert m is not None
@@ -862,7 +867,7 @@ def test_a_large_candidate_group_lists_ten_pairs_then_a_count() -> None:
     facts, judgements = _dupe_state(
         [(n, "deliver gate refuses X", "open") for n in range(1, 7)], {}
     )
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     m = re.search(r'<details id="possible-duplicates".*?</details>', page, re.S)
     assert m is not None
@@ -872,7 +877,7 @@ def test_a_large_candidate_group_lists_ten_pairs_then_a_count() -> None:
 
 def test_possible_duplicates_says_so_when_there_are_none() -> None:
     facts, judgements = _dupe_state([(1, "alpha", "open"), (2, "wholly other", "open")], {})
-    page = render(facts, judgements)
+    page = render_issues(facts, judgements)
 
     assert 'id="possible-duplicates"' in page
     assert "No candidate duplicates among the open issues." in page
@@ -883,4 +888,4 @@ def test_the_board_with_duplicates_is_deterministic() -> None:
         [(3, "o", "open"), (9, "d", "open"), (1, "x y z", "open"), (2, "x y z again", "open")],
         {3: {}, 9: {"duplicate_of": "super-fr#3"}},
     )
-    assert render(facts, judgements) == render(facts, judgements)
+    assert render_issues(facts, judgements) == render_issues(facts, judgements)

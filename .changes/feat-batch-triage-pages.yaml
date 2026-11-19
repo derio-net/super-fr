@@ -1,0 +1,2 @@
+bump: minor
+summary: "triage pages: one name per page (backlog.html, issues.html, batches.html; `fr triage backlog`/`batches`, old names kept as aliases), folds, forge and wave links, filters, and the driver keeps every page current — a publish command naming board.html must now name batches.html"

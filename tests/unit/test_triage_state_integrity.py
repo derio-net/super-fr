@@ -208,14 +208,17 @@ def test_a_full_pr_page_still_inside_the_window_is_refused() -> None:
         _origins(forge)
 
 
-def test_a_full_page_that_reaches_past_the_window_is_complete_and_says_nothing() -> None:
+def test_a_full_page_that_reaches_past_the_window_is_complete_for_its_issues() -> None:
     forge = _CappedForge(
         _issues("2026-09-09T10:00:00Z", "2026-09-05T10:00:00Z", "2026-08-20T10:00:00Z"),
         _prs("2026-09-09T10:00:00Z", "2026-09-06T10:00:00Z", "2026-08-01T10:00:00Z"),
     )
     facts = _origins(forge)
     assert [i.number for i in facts.issues] == [1, 2]
-    assert facts.warnings == []
+    # Nothing is missing from the issues or their closing PRs. The one warning is the merged-PR
+    # list's (R15): the PR list is ordered by creation, so a PR created before the page's
+    # oldest but merged in the window could lie beyond it.
+    assert len(facts.warnings) == 1 and "PR list" in facts.warnings[0]
 
 
 def test_a_refused_origins_collect_writes_nothing(

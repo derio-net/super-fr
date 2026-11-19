@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/usage/**
   - packages/fr/src/fr/commands/usage_cmd.py
   - packages/fr/src/fr/triage/architecture.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged; 2026-11-18 still true; the architecture page reads its file and directory from the triage page registry and states its render time (triage-pages-ux phase 1). 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 ## Why not compute the numbers yourself?

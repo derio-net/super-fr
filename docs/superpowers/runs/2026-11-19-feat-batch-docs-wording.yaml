@@ -1,4 +1,4 @@
-schema_version: 11
+schema_version: 12
 run: 2026-11-19-feat-batch-docs-wording
 workflow: fr-goal@1
 branch: feat/batch-docs-wording

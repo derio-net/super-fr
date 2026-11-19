@@ -1,0 +1,2 @@
+bump: minor
+summary: Record a run's merge target before lens review and use it consistently for review, delivery evidence, and draft PR creation.

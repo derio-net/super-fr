@@ -156,7 +156,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     lowercased; `--dir` overrides; a scope with a state repo is synced with
     `refs/heads/fr-triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
     cloud-triage spec): `facts.json` (collect), `judgements.yaml` (the
-    agent's, shape in spec §3.D), `triage.html` (render). It is never
+    agent's, shape in spec §3.D), the pages (`fr triage backlog` writes Backlog
+    and Issues, `batches` the Batches page; one name each, read from
+    `components.PAGES`, spec 2026-11-18-triage-pages-ux). It is never
     committed by default, so it is NOT an artifact kind. This repo keeps a
     durable copy of its own scope's inputs and history (judgements, origins,
     subsystems, snapshots, the architecture fragments' sources) in

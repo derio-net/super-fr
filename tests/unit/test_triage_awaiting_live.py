@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fr.cli import app
 from fr.triage.check import classify
-from fr.triage.render import render
+from fr.triage.render import render_issues
 from fr.triage.views import needs_you, next_up, preselected_wave
 from typer.testing import CliRunner
 
@@ -111,7 +111,7 @@ def test_an_awaiting_live_feature_member_is_not_next_up() -> None:
 def test_the_board_shows_them_in_one_collapsed_group_and_nowhere_else() -> None:
     f, jd = _state()
 
-    page = render(f, jd)
+    page = render_issues(f, jd)
 
     group = re.search(
         r'<details id="awaiting-live" class="fold">.*?</section></details>', page, re.S
@@ -235,7 +235,7 @@ def test_a_parked_or_duplicate_awaiting_live_issue_is_not_listed_under_parked() 
         }
     )
 
-    page = render(f, jd)
+    page = render_issues(f, jd)
 
     parked = re.search(r'<details id="parked".*?</details>', page, re.S)
     assert parked is not None

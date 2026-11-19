@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fr.triage.render import render
+from fr.triage.render import render_issues
 from fr.triage.snapshot import (
     Snapshot,
     diff_snapshots,
@@ -19,7 +19,7 @@ from tests.unit.triage_debt_fixtures import LEGACY, body, digest, figures
 
 
 def _page(issues, since=None):
-    return render(facts(issues), judgements({}), since)
+    return render_issues(facts(issues), judgements({}), since)
 
 
 def test_one_collapsed_section_with_status_categories_and_owed() -> None:
@@ -49,7 +49,7 @@ def test_trend_against_the_previous_snapshot() -> None:
     a = take_snapshot(old, judgements({}), acceptance=None)
     b = take_snapshot(new, judgements({}), acceptance=None)
 
-    page = render(new, judgements({}), diff_snapshots(a, b))
+    page = render_issues(new, judgements({}), diff_snapshots(a, b))
 
     assert "not-implemented 28 → 30" in page
 
@@ -74,7 +74,7 @@ def test_hostile_text_is_escaped() -> None:
         ]
     )
 
-    page = render(f, judgements({}))
+    page = render_issues(f, judgements({}))
 
     assert "<img onerror" not in page
     assert "<script>alert(1)" not in page
@@ -91,7 +91,7 @@ def test_snapshot_v2_stores_debt_and_v1_reads_as_no_trend(tmp_path: Path) -> Non
     d = diff_snapshots(v1, snap)
 
     assert d is not None and d.debt_before is None
-    page = render(f, judgements({}), d)
+    page = render_issues(f, judgements({}), d)
     assert "predates" in page  # the panel notes the split when the previous snapshot is schema 1
 
 
@@ -110,7 +110,7 @@ def test_skipped_to_new_statuses_is_noted() -> None:
     a = take_snapshot(old, judgements({}), acceptance=None)
     b = take_snapshot(new, judgements({}), acceptance=None)
 
-    page = render(new, judgements({}), diff_snapshots(a, b))
+    page = render_issues(new, judgements({}), diff_snapshots(a, b))
 
     assert "status split" in page
     assert "walk-owed 0 → 5" in page
@@ -165,7 +165,7 @@ def test_the_badge_is_each_repos_own_total_and_agrees_with_fr_debt() -> None:
     )
     f = facts([one, two], repos=["example-org/widgets", "example-org/gadgets"])
 
-    page = render(f, judgements({}))
+    page = render_issues(f, judgements({}))
 
     w = _panel(page).split('id="debt-example-org-gadgets"')
     assert f'<span class="count">{report.debt_total()}</span>' in w[0]
@@ -248,6 +248,6 @@ def test_schema_8_facts_without_authors_render_a_digest_as_untrusted() -> None:
         del i["author"]
     old = Facts.model_validate(json.loads(json.dumps(raw)))
 
-    sect = _panel(render(old, judgements({})))
+    sect = _panel(render_issues(old, judgements({})))
 
     assert "untrusted digest ignored (#1)" in sect and "999" not in sect

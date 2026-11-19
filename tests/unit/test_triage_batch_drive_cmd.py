@@ -1445,7 +1445,7 @@ def test_plan_mode_never_marks_a_draft_archive_ready(
 
 
 def _page(tmp_path: Path) -> str:
-    return (tmp_path / "board.html").read_text(encoding="utf-8")
+    return (tmp_path / "batches.html").read_text(encoding="utf-8")
 
 
 def test_an_acting_once_pass_writes_the_board_and_shows_its_own_dispatch(
@@ -1490,7 +1490,7 @@ def test_the_board_copies_the_drives_repo_and_dir_only_when_given(
 
     def _spy(scope: Any, target: Path, *, scope_args: Any, **kw: Any) -> Any:
         seen.append(list(scope_args))
-        return target / "board.html", 0
+        return target / "batches.html", 0
 
     monkeypatch.setattr(triage_kanban_cmd, "write_board", _spy)
     monkeypatch.setattr(triage_batch_cmd, "resolve_state_dir", lambda scope, override, ws: tmp_path)
@@ -3018,7 +3018,7 @@ def test_a_stopped_merge_is_recorded_for_the_board_and_cleared_when_it_lands(
     _drive(tmp_path, "--once", "--yes")
     stop = load_stops(tmp_path)["b1"]
     assert (stop.head, stop.reason) == ("sha-101", "PR #101: conflicts with origin/main: a.py")
-    assert "needs you: merge stopped: PR #101" in (tmp_path / "board.html").read_text("utf-8")
+    assert "needs you: merge stopped: PR #101" in (tmp_path / "batches.html").read_text("utf-8")
     del train.script[101]
     _drive(tmp_path, "--once", "--yes")
     assert "b1" not in load_stops(tmp_path)

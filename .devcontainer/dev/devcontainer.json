@@ -1,6 +1,8 @@
 {
   "name": "super-fr \u2014 dev",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}

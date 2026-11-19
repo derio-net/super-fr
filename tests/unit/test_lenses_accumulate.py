@@ -39,6 +39,36 @@ def _set(root: Path):
     return lens_set_for(root, spec_slug=SPEC, plan_slug=PLAN)
 
 
+def test_run_reviews_its_explicit_target_even_when_default_history_is_unrelated(
+    tmp_path: Path,
+) -> None:
+    from types import SimpleNamespace
+
+    root = lens_repo(tmp_path)
+    git(root, "switch", "-q", "--orphan", "management")
+    (root / ".fr").mkdir(exist_ok=True)
+    (root / ".fr" / "lenses.yaml").write_text(AUTH_RULE)
+    (root / "management.txt").write_text("independent history\n")
+    commit_all(root, "management base")
+    base = git(root, "rev-parse", "HEAD").strip()
+    git(root, "push", "-q", "origin", "management")
+    git(root, "switch", "-q", "-c", "chore/change-management")
+    (root / ".fr" / "lenses.yaml").write_text("disable: [security]\n")
+    _touch_auth(root)
+
+    try:
+        got = lens_set(root, SimpleNamespace(steps={}, base_branch="management"))
+    except LensError as error:
+        pytest.fail(f"the explicit merge target must be reviewed, not unrelated default: {error}")
+
+    assert got.merge_base == base
+    assert got.ids == ("security",), "the target's rule cannot be disabled by the feature"
+    assert "src/auth/x.py" in got.changed
+    assert (
+        git(root, "symbolic-ref", "refs/remotes/origin/HEAD").strip() == "refs/remotes/origin/main"
+    )
+
+
 def test_an_empty_journal_and_no_rule_is_an_empty_set(tmp_path: Path) -> None:
     root = lens_repo(tmp_path)
     got = _set(root)

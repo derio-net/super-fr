@@ -6,6 +6,7 @@ import json
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import yaml
 from fr.cli import app
@@ -28,9 +29,9 @@ CLOSEOUT = {
 }
 
 
-def _finished() -> tuple[Facts, Judgements]:
+def _finished(**kw: Any) -> tuple[Facts, Judgements]:
     """Waves 1 and 2 are finished; wave 3 is still live."""
-    f = facts([issue(n) for n in range(1, 5)])
+    f = facts([issue(n) for n in range(1, 5)], **kw)
     jd = judgements(
         {f"widgets#{n}": j() for n in range(1, 5)},
         [
@@ -88,7 +89,7 @@ def test_finished_waves_are_tabs_with_the_highest_finished_selected() -> None:
 def test_batch_links_point_at_the_board() -> None:
     page = _page(*_finished())
     sect = page[page.index('id="finished-waves"') :]
-    assert 'href="triage.html#batch-a"' in sect and 'href="triage.html#batch-b"' in sect
+    assert 'href="backlog.html#batch-a"' in sect and 'href="backlog.html#batch-b"' in sect
     assert 'href="#batch-' not in sect
 
 
@@ -168,7 +169,7 @@ def test_the_command_reads_the_history_manifest(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     page = (state / "history.html").read_text(encoding="utf-8")
     assert "<p>WHY</p>" in page and "gone.html" in page
-    assert "`waves`, which is now on the board page" in page
+    assert "`waves`, which is now on the Backlog page" in page
 
 
 def test_the_command_refuses_a_malformed_fragment_and_writes_nothing(tmp_path: Path) -> None:
@@ -196,3 +197,78 @@ def test_a_wave_whose_batches_were_all_cancelled_is_labelled_cancelled() -> None
     sect = page[page.index('id="finished-waves"') :]
     assert re.search(r'id="history-wave-tab-1"[^>]*>Wave 1 · cancelled</button>', sect)
     assert re.search(r'id="history-wave-tab-2"[^>]*>Wave 2</button>', sect)
+
+
+# ------------------------------------------------------- folds and the PR column (R9, R16)
+
+
+def test_the_timeline_is_a_closed_fold_with_its_count() -> None:
+    page = _page(*_finished(), snaps=3)
+    m = re.search(
+        r'<details id="snapshot-timeline" class="fold"([^>]*)><summary>(.*?)</summary>', page
+    )
+    assert m and "open" not in m.group(1)
+    assert "<h2>Snapshot timeline</h2>" in m.group(2) and '<span class="count">3</span>' in m.group(
+        2
+    )
+
+
+def test_archived_notes_fold_is_closed_and_holds_the_three_fragments(tmp_path: Path) -> None:
+    from fr.triage.fragments import resolve_manifest
+
+    from tests.unit.triage_board_fixtures import element_by_id
+
+    d = tmp_path / "history"
+    d.mkdir()
+    (d / "manifest.yaml").write_text(
+        "sections:\n  - timeline\n  - finished-waves\n  - fold: Archived notes (2026-10-02)\n"
+        "    entries: [x.html, y.html, z.html]\n",
+        encoding="utf-8",
+    )
+    for n in "xyz":
+        (d / f"{n}.html").write_text(f"<p>note {n}</p>", encoding="utf-8")
+    page = _page(*_finished(), resolved=resolve_manifest(d, GENERATED))
+    fold_id = re.search(r'<details id="(fragment-archived-notes[^"]*)" class="fold"([^>]*)>', page)
+    assert fold_id and "open" not in fold_id.group(2)  # closed to start with
+    fold = element_by_id(page, fold_id.group(1))
+    assert "Archived notes (2026-10-02)" in fold and '<span class="count">3</span>' in fold
+    assert fold.index("note x") < fold.index("note y") < fold.index("note z")
+    # nothing of the three lies outside its fold
+    assert page.count("note x") == page.count("note y") == page.count("note z") == 1
+    assert fold.count('data-fragment="') == page.count('data-fragment="') == 3
+
+
+def _with_prs() -> tuple[Facts, Judgements]:
+    from tests.unit.triage_board_fixtures import pr
+
+    merged = pr(
+        21, "feat/batch-a", state="MERGED", merged_at="2026-10-02T09:30:00Z",
+        created_at="2026-10-01T11:00:00Z", title="Ship <a>",
+    )  # fmt: skip
+    return _finished(batch_prs=[merged])
+
+
+def test_a_finished_batch_with_a_merged_pr_shows_link_title_and_merge_date() -> None:
+    page = _page(*_with_prs())
+    sect = page[page.index('id="finished-waves"') :]
+    row = re.search(r'<tr data-batch="a"[^>]*>.*?</tr>', sect, re.S)
+    assert row
+    cell = re.search(r'<td data-label="PR">(.*?)</td>', row.group(0), re.S)
+    assert cell
+    assert 'href="https://github.com/example-org/widgets/pull/21"' in cell.group(1)
+    assert "#21" in cell.group(1) and "Ship &lt;a&gt;" in cell.group(1)
+    assert "2026-10-02 09:30 UTC" in cell.group(1)
+
+
+def test_a_finished_batch_with_no_pr_shows_a_dash() -> None:
+    page = _page(*_with_prs())
+    sect = page[page.index('id="finished-waves"') :]
+    row = re.search(r'<tr data-batch="b"[^>]*>.*?</tr>', sect, re.S)
+    assert row and '<td data-label="PR">—</td>' in row.group(0)
+    assert "<th>PR</th>" in sect
+
+
+def test_the_backlog_wave_table_has_no_pr_column() -> None:
+    from fr.triage.render import render_backlog
+
+    assert "<th>PR</th>" not in render_backlog(*_finished())

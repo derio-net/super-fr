@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-18 the consumer-delivery phase 2 changes no command or help text; 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
+reviewed: 2026-11-18 the consumer-delivery phase 2 changes no command or help text; 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd; 2026-11-18 fr triage backlog and fr triage batches replace render and board, which stay as hidden aliases (triage-pages-ux phase 1); the consumer-delivery phase 2 changes no command or help text. 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
 ---
 
 # The fr command line
@@ -154,6 +154,7 @@ one artifact kind.
   - `fr run start`: Start a run: resolve the shape, ensure isolation, write run state in it.
   - `fr run reshape`: Move a drifted cursor onto the shape's current step list.
   - `fr run adopt`: Give in-flight work a run cursor, inferred from artifacts that exist.
+  - `fr run target`: Record the merge target before lens review, preserving the existing run.
   - `fr run status`: Print the cursor, every step's state, who is holding each dispatched unit, since when, and whether it has returned.
   - `fr run cost`: Print what a run cost, per step and per model, from its usage file (`docs/superpowers/usage/<run>.yaml`, then `implemented/usage/`).
   - `fr run advance`: Advance the cursor by one step.
@@ -168,8 +169,8 @@ one artifact kind.
   - `fr triage collect`: Read the forge and write facts.json for the scope.
   - `fr triage check`: Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced, duplicate candidates, duplicates, awaiting live and more.
   - `fr triage clean-labels`: Remove `fr:in-progress` and `fr:claimed` from closed issues that still carry them.
-  - `fr triage render`: Write triage.html from facts.json and judgements.yaml.
-  - `fr triage board`: Write board.html: one card per batch in its lifecycle column (`fr.triage.kanban.COLUMN_TITLES`), with live session status and a jump command.
+  - `fr triage backlog`: Write the Backlog and Issues pages from facts.json and judgements.yaml.
+  - `fr triage batches`: Write the Batches page: one card per batch in its lifecycle column (`fr.triage.kanban.COLUMN_TITLES`), with live session status and a jump command.
   - `fr triage batch`: Batches: groups of judged issues delivered as one run.
     - `fr triage batch focus`: Switch the terminal to a batch's live session, through the runner that dispatched it.
     - `fr triage batch list`: Print one line per batch in judgements.yaml, or "no batches".
@@ -184,7 +185,7 @@ one artifact kind.
     - `fr triage batch closeout`: Close out every landed, ungated batch in ONE housekeeping PR.
     - `fr triage batch drive`: Drive batches to completion: merge what is ready, close out what merged, dispatch what may start (wave order, then merge order, then id).
   - `fr triage architecture`: The architecture page: measured sections plus authored fragments.
-    - `fr triage architecture render`: Write architecture.html: the summary, subsystem cards and size table, with the authored fragments `architecture/manifest.yaml` places among them.
+    - `fr triage architecture render`: Write the Architecture page: the summary, subsystem cards and size table, with the authored fragments `architecture/manifest.yaml` places among them.
   - `fr triage scope`: This triage scope's identity and config.
     - `fr triage scope show`: Print the scope's name, id, state directory and scope config.
     - `fr triage scope retire`: Release every claim another scope holds in this scope's facts, in one pass: the operator's way to retire a scope that stopped.
@@ -200,11 +201,11 @@ one artifact kind.
     - `fr triage drive pass`: One pass of the cloud driver.
     - `fr triage drive record`: Apply the agent's recorded results to the scope's state, then push the state ref.
   - `fr triage history`: The history page: the snapshot timeline and the finished waves.
-    - `fr triage history render`: Write history.html: the snapshot timeline, the finished waves as tabs, then the authored fragments `history/manifest.yaml` places among them.
+    - `fr triage history render`: Write the History page: the snapshot timeline, the finished waves as tabs, then the authored fragments `history/manifest.yaml` places among them.
   - `fr triage origins`: Defect origins: collect issues filed since a date, classify them, render the page.
     - `fr triage origins collect`: Read the issues created since a date and write origins-facts.json.
     - `fr triage origins check`: List issues with no classification, and classifications for issues not in the facts.
-    - `fr triage origins render`: Write origins.html from origins-facts.json, origins.yaml and (for links) judgements.yaml, with the fragments `origins/manifest.yaml` places among the sections.
+    - `fr triage origins render`: Write the Origins page from origins-facts.json, origins.yaml and (for links) judgements.yaml, with the fragments `origins/manifest.yaml` places among the sections.
   - `fr triage state`: Copy a scope's durable state (judgements, origins, manifests, fragments, snapshots) to a repo directory and back, or push and fetch its state ref.
     - `fr triage state export`: Copy the scope's durable state to <dir>/<scope>/.
     - `fr triage state push`: Push the scope's state to its ref, refs/heads/fr-triage/<scope-id>.

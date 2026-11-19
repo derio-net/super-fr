@@ -1,4 +1,4 @@
-"""`fr triage board` and `fr triage batch focus` — the board's only contact with
+"""`fr triage batches` and `fr triage batch focus` — the board's only contact with
 `fr_dispatch` (spec 2026-10-05-triage-batch-board §E; R1, R7, R8).
 
 This module is `fr`'s third sanctioned soft point into `fr_dispatch`
@@ -59,7 +59,14 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.check import clearing_rule
-from fr.triage.components import pages_present, refresh_navs, skew_banner, strip_nav
+from fr.triage.components import (
+    page,
+    pages_present,
+    refresh_navs,
+    remove_legacy,
+    skew_banner,
+    strip_nav,
+)
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
@@ -79,7 +86,6 @@ if TYPE_CHECKING:
 
     from fr.triage.model import Batch
 
-BOARD_FILE = "board.html"
 DEFAULT_REFRESH = 30
 DEFAULT_WATCH_INTERVAL = 60
 _STATUSES = frozenset(get_args(BoardStatus))
@@ -378,7 +384,7 @@ def in_progress_note(facts: Facts, scope_args: Sequence[str]) -> str | None:
 def gated_notes(facts: Facts) -> list[str]:
     """What the Tester/DevOps columns cannot say by being empty (gate-backfill R13): the
     repos whose gate-labelled PRs were never read, and the gate-labelled lists that may be
-    cut short. Both print on board.html, so neither passes for "nothing is held"."""
+    cut short. Both print on the Batches page, so neither passes for "nothing is held"."""
     notes = [n.text for n in gated_unread_needs(facts)]
     for w in facts.warnings:
         if w.source == "gated-prs":
@@ -396,14 +402,17 @@ def write_board(
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
     loader: Callable[[str], Runner] | None = None,
     ci_none: Collection[str] | None = None,
+    now: datetime | None = None,
 ) -> tuple[Path, int]:
-    """Render `board.html` into the state directory *target* from the facts and judgements
-    on disk now, with live session statuses. Returns the path written and its card count."""
+    """Render the Batches page into the state directory *target* from the facts and
+    judgements on disk now, with live session statuses, and remove the page's old-named
+    file (triage-pages-ux R3). *now* is the render time and the idle clock (the wall clock when
+    None). Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target, None)
     reads = read_sessions(judgements, facts, prefix=prefix, target=target, loader=loader)
     statuses, notes = reads.statuses, reads.notes
-    rendered_at = datetime.now(UTC)
-    # The wall clock: session status is read live above, so idle minutes must be real.
+    rendered_at = now or datetime.now(UTC)
+    # The wall clock by default: session status is read live above, so idle minutes are real.
     try:
         me: str | None = scope_id(facts.scope)
     except TriageError as exc:  # the board is a view: say what it cannot show, never refuse
@@ -417,7 +426,7 @@ def write_board(
         notes=reads.session_notes,
         ci_none=local_ci_none(facts) if ci_none is None else ci_none,
     )  # fmt: skip
-    page = render_board(
+    html = render_board(
         board,
         scope_args=scope_args,
         rendered_at=rendered_at,
@@ -427,8 +436,12 @@ def write_board(
         banner=skew_banner(facts),
         present=pages_present(target, "batches"),
     )
-    out = target / BOARD_FILE
-    write_text_atomic(out, page)
+    out = target / page("batches").file
+    write_text_atomic(out, html)
+    try:
+        remove_legacy(target, "batches")
+    except OSError as exc:
+        warn_nav(f"the Batches page's old file was not removed: {exc}")
     refresh_navs(target, "batches", warn=warn_nav)
     return out, len(judgements.batches)
 
@@ -586,7 +599,7 @@ def _watch(
             else:
                 recovered("collect")
                 pacer.clean()
-            if quiet and (target / BOARD_FILE).exists():
+            if quiet and (target / page("batches").file).exists():
                 _sleep(_until(pace.until, interval) if pace.essential else interval)
                 continue  # nothing was read: the board on disk is still the facts' (R17)
             try:
@@ -612,7 +625,63 @@ def _watch(
         console.print("stopped", markup=False)
 
 
-@triage_app.command("board")
+@triage_app.command("batches")
+def batches_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+    refresh: Annotated[
+        int,
+        typer.Option("--refresh", min=0, help="Reload the page every N seconds (0: never)."),
+    ] = DEFAULT_REFRESH,
+    open_: Annotated[bool, typer.Option("--open", help="Open the board in a browser.")] = False,
+    watch: Annotated[
+        bool,
+        typer.Option(
+            "--watch", help="Re-collect and re-render every --interval seconds until interrupted."
+        ),
+    ] = False,
+    interval: Annotated[
+        int, typer.Option("--interval", min=1, help="Seconds between --watch iterations.")
+    ] = DEFAULT_WATCH_INTERVAL,
+    publish_: Annotated[
+        bool,
+        typer.Option(
+            "--publish",
+            help="After each render, run the scope's `publish` command from scope.yaml.",
+        ),
+    ] = False,
+    quota_floor: QuotaFloorOpt = None,
+) -> None:
+    """Write the Batches page: one card per batch in its lifecycle column
+    (`fr.triage.kanban.COLUMN_TITLES`), with live session
+    status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
+    scope = _scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    args = scope_args(repo, org, dir_override, workspace)
+    if watch:
+        _watch(
+            scope,
+            target,
+            args,
+            refresh,
+            interval,
+            open_,
+            publish_,
+            lock_dir=drive_lock_dir(scope, dir_override),
+            quota_floor=quota_floor,
+        )
+        return
+    out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
+    console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)
+    if publish_:
+        publish(scope, target, out, set())
+    if open_:
+        webbrowser.open(out.resolve().as_uri())
+
+
+@triage_app.command("board", hidden=True)
 def board_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
@@ -641,28 +710,9 @@ def board_command(
     ] = False,
     quota_floor: QuotaFloorOpt = None,
 ) -> None:
-    """Write board.html: one card per batch in its lifecycle column
-    (`fr.triage.kanban.COLUMN_TITLES`), with live session
-    status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
-    scope = _scope(repo, org)
-    target = resolve_state_dir(scope, dir_override, workspace)
-    args = scope_args(repo, org, dir_override, workspace)
-    if watch:
-        _watch(
-            scope,
-            target,
-            args,
-            refresh,
-            interval,
-            open_,
-            publish_,
-            lock_dir=drive_lock_dir(scope, dir_override),
-            quota_floor=quota_floor,
-        )
-        return
-    out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
-    console.print(f"wrote {out} ({plural(cards, 'batch')})", markup=False, soft_wrap=True)
-    if publish_:
-        publish(scope, target, out, set())
-    if open_:
-        webbrowser.open(out.resolve().as_uri())
+    """The old name of `fr triage batches` (triage-pages-ux R2): says so, then runs it."""
+    err_console.print("fr triage board is now fr triage batches", markup=False, soft_wrap=True)
+    batches_command(
+        repo=repo, org=org, dir_override=dir_override, workspace=workspace, refresh=refresh,
+        open_=open_, watch=watch, interval=interval, publish_=publish_, quota_floor=quota_floor,
+    )  # fmt: skip

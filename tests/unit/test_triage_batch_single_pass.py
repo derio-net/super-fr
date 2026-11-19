@@ -144,7 +144,7 @@ def test_the_refusal_releases_the_lease_the_pass_took_and_writes_no_board(
     assert "fr triage batch drive" in " ".join(result.output.split())
     assert load_lease(state) is None, "the lease was released before the refusal"
     assert not runners.dispatched_any() and world.merged == []
-    assert not (state / "board.html").exists()
+    assert not (state / "batches.html").exists()
     assert "lease.yaml" not in _git(remote, "ls-tree", "--name-only", _ref(remote))
 
 

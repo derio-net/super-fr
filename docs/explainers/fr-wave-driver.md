@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -163,12 +163,42 @@ We built the driver around the few moments that are yours:
 - **Pass a gate.** A merged pull request holding `gate:tester` or `gate:devops` waits for you
   to walk it or pass it ([exit gates](fr-exit-gates.md)).
 - **Unblock.** A blocked batch, a conflict past its hand-backs, a failed `post_merge` and
-  failing CI on a batch each show under **Needs you now** on the board. The board gives one
+  failing CI on a batch each show under **Needs you now** on the Backlog page. It gives one
   row per item, each linking the pull request or issue.
 
-`fr triage board` writes that board, a Kanban of every batch by stage with four "Needs you"
-lanes (developer, reviewer, tester, devops). While a driver runs with `--yes` it re-renders on
-every pass.
+`fr triage batches` writes the Batches page, `batches.html`: a Kanban of every batch by stage
+with four "Needs you" lanes (developer, reviewer, tester, devops). While a driver runs with
+`--yes` it re-renders that page on every pass. (`fr triage board` is the old name of the
+command and still works.)
+
+The driver keeps the other pages current too. After the Batches page, each pass that
+collected re-renders the Backlog, the Issues page and History. It also
+renders Origins when `origins-facts.json` exists, and Architecture when `subsystems.yaml`
+exists. Each page states when it was rendered. A pass that only plans (no `--yes`), one that
+stands quiet because nothing changed, and an essential-only one (the quota is low) render no
+page. A page that cannot be written gives one warning for each distinct cause, and the pass
+goes on.
+
+Architecture counts lines with git, so the driver measures only on the first pass of a
+process that writes pages (a restart, or each wake of the cloud driver) and on a pass in
+which a wave finished. Within a process, every other pass reuses that measurement. When the
+scope's repo has no usable clone, Architecture renders with no measurement and the driver
+says so once. It never shows a remembered one.
+
+The driver also stores a snapshot, the record that the Backlog's "Since last report" and the
+History timeline read. It stores one on the first page-writing pass of a scope that has no
+page memory yet, when the board differs from the last stored snapshot. After that it stores
+one each time a wave finishes, and at no other time.
+
+The driver keeps a small memory in the scope's state directory, in `drive-pages.json`: the
+waves that were unfinished at its last page-writing pass, and whether a snapshot is still
+owed. It holds no line counts. It travels in the state ref, so the rules are the same for the
+host driver and for the cloud driver, which starts a new process on every wake. A wave that
+finishes while no driver runs, or on a pass that writes no page, is snapshotted by the next
+pass that writes pages. If the Backlog write fails on that pass, the snapshot stays owed
+until a write succeeds. A file that is not exactly in that shape counts as no memory.
+A snapshot taken by hand with `fr triage backlog` still
+happens whenever the board changed.
 
 ## Where does it run?
 
