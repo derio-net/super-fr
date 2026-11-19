@@ -48,11 +48,11 @@ describe("readSegment", () => {
   });
   test("inside a repo runs the shared segment script with --cwd", async () => {
     const s = stub("none\nbranch: main\nno fr-isolation\n");
-    expect(await readSegment("/w/repo/sub", "/s.sh", { run: s.run, exists: repo })).toBe(
+    expect(await readSegment("/w/repo/sub", "/s.sh", { run: s.run, exists: repo, resolve: () => "/abs/bash" })).toBe(
       "main \u00b7 no fr-isolation"
     );
     expect(s.calls).toEqual([
-      { cmd: "bash", args: ["/s.sh", "--format", "plain", "--cwd", "/w/repo/sub"] },
+      { cmd: "/abs/bash", args: ["/s.sh", "--format", "plain", "--cwd", "/w/repo/sub"] },
     ]);
   });
   test("a failed or timed-out script is em-dashes, never a throw", async () => {

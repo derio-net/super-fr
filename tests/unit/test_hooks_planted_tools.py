@@ -146,6 +146,36 @@ def test_the_edit_gate_refuses_when_no_json_parser_resolves(world: dict) -> None
     assert "no JSON parser" in out["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def _broken_python(world: dict) -> str:
+    """A python3 that resolves but cannot run: a pyenv shim with no version, the CLT stub."""
+    path = world["tmp"] / "broken" / "python3"
+    _exe(path, "#!/bin/sh\nexit 127\n")
+    return str(path)
+
+
+def test_a_python3_that_cannot_run_and_no_jq_still_denies(world: dict) -> None:
+    env = _env(
+        world,
+        str(world["no_jq"]),
+        FR_JQ_CANDIDATES="/nonexistent/jq",
+        FR_PYTHON_CANDIDATES=_broken_python(world),
+    )
+    res = _run("fr-isolation-required.sh", _edit(world), world["tmp"], env)
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_a_python3_that_cannot_run_falls_through_to_jq(world: dict) -> None:
+    # Not a lockout: with jq present the gate still decides, and allows what it allows.
+    env = _env(world, str(world["with_jq"]), FR_PYTHON_CANDIDATES=_broken_python(world))
+    payload = {"tool_name": "Edit", "tool_input": {"file_path": str(world["tmp"] / "x.txt")}}
+    res = _run("fr-isolation-required.sh", payload, world["tmp"], env)
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == ""
+    res = _run("fr-isolation-required.sh", _edit(world), world["tmp"], env)
+    assert json.loads(res.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_the_edit_gate_still_allows_an_edit_outside_any_repo_without_jq(world: dict) -> None:
     env = _env(world, str(world["no_jq"]), FR_JQ_CANDIDATES="/nonexistent/jq")
     payload = {"tool_name": "Edit", "tool_input": {"file_path": str(world["tmp"] / "x.txt")}}
@@ -193,8 +223,7 @@ def test_the_json_parser_never_imports_from_the_hook_cwd(world: dict, script: st
     # `python3 -c` puts the cwd on sys.path; `-I` does not. A json.py there is the
     # `json` an un-isolated parser imports.
     (world["repo"] / "json.py").write_text(
-        f"open({str(world['mark'])!r}, 'a').write('json.py imported\\n')\n"
-        "raise SystemExit(0)\n"
+        f"open({str(world['mark'])!r}, 'a').write('json.py imported\\n')\nraise SystemExit(0)\n"
     )
     tool = "write_file" if script.startswith("hermes") else "Edit"
     key = "path" if script.startswith("hermes") else "file_path"
@@ -218,7 +247,7 @@ def test_no_hook_script_runs_a_bare_jq_or_gh() -> None:
     offenders = []
     for script in _scripts():
         for n, line in enumerate(script.read_text().splitlines(), 1):
-            code = line.split("#", 1)[0] if not line.lstrip().startswith("#") else ""
+            code = "" if line.lstrip().startswith("#") else re.sub(r"\s#.*$", "", line)
             if _BARE.search(code) or _COMMAND_V.search(code):
                 offenders.append(f"{script.relative_to(HOOKS_DIR)}:{n}: {line.strip()}")
     assert offenders == [], "run fr_jq / fr_gh, never a bare name:\n" + "\n".join(offenders)

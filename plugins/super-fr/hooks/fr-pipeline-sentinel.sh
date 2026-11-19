@@ -26,11 +26,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 input=$(cat)
 
-tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty')
+tool_name=$(printf '%s' "$input" | fr_jq -r '.tool_name // empty')
 [ "$tool_name" = "Skill" ] || exit 0
 
 # Field name is not formally documented for Skill; read the likely spellings.
-skill=$(printf '%s' "$input" | jq -r \
+skill=$(printf '%s' "$input" | fr_jq -r \
   '.tool_input.skill_name // .tool_input.skill // .tool_input.name // empty')
 
 case "$skill" in
@@ -39,8 +39,8 @@ case "$skill" in
   *) exit 0 ;;
 esac
 
-cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
-session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
+cwd=$(printf '%s' "$input" | fr_jq -r '.cwd // empty')
+session_id=$(printf '%s' "$input" | fr_jq -r '.session_id // empty')
 [ -n "$cwd" ] && [ -n "$session_id" ] || exit 0
 
 # Pipeline skills only matter inside a repo; a non-git cwd is a no-op.
@@ -67,7 +67,7 @@ find "$dir" -name '*.json' -type f -mmin +2880 2>/dev/null | while IFS= read -r 
   while IFS= read -r ws; do
     if [ -n "$ws" ] && [ -d "$HOME/.cache/fr/$ws" ]; then keep=1; break; fi
   done <<EOF_GC
-$(jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
+$(fr_jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
          | select(type == "string")' "$old" 2>/dev/null || true)
 EOF_GC
   [ "$keep" -eq 1 ] || rm -f "$old" 2>/dev/null || true
@@ -101,13 +101,13 @@ trap 'fr_sentinel_unlock "$sentinel"' EXIT
 # Only `attach` ever ADDS an entry; this writer can only keep or drop them.
 carried="[]"
 if [ -f "$sentinel" ]; then
-  prev_root=$(jq -r '.repo_root // empty' "$sentinel" 2>/dev/null || true)
+  prev_root=$(fr_jq -r '.repo_root // empty' "$sentinel" 2>/dev/null || true)
   if [ "$prev_root" = "$repo_root" ]; then
     while IFS= read -r ws; do
       [ -n "$ws" ] && [ -d "$HOME/.cache/fr/$ws" ] || continue
-      carried=$(printf '%s' "$carried" | jq -c --arg w "$ws" '. + [$w]')
+      carried=$(printf '%s' "$carried" | fr_jq -c --arg w "$ws" '. + [$w]')
     done <<EOF_WS
-$(jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
+$(fr_jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
          | select(type == "string")' "$sentinel" 2>/dev/null || true)
 EOF_WS
   fi
@@ -116,7 +116,7 @@ fi
 # tmp + mv: the guard reads this file on every Bash call, and a half-written
 # sentinel parses as no repo_root — an unguarded command.
 tmp="$sentinel.tmp.$$"
-jq -n \
+fr_jq -n \
   --arg repo_root "$repo_root" \
   --arg skill "$skill" \
   --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

@@ -19,6 +19,7 @@
 import { statSync } from "node:fs";
 import { sentinelPath } from "./sentinel";
 import { run, type RunAnswer } from "./spawn";
+import { resolveTool } from "./tools";
 
 // The bash hook's ERE, verbatim but for [[:alnum:]]/[[:space:]] spelled out.
 // grep matches it against EVERY line of the command, so this does too.
@@ -32,7 +33,19 @@ const GH_TIMEOUT_MS = 20_000;
 
 export type PrStateReader = (cwd: string) => Promise<RunAnswer>;
 
-const defaultReader: PrStateReader = (cwd) => run("gh", ["pr", "view", "--json", "state"], { cwd, timeoutMs: GH_TIMEOUT_MS });
+/** `gh pr view --json state` in `cwd`, through the resolved gh (super-fr#1481): no
+ * trusted gh is no answer, and the guard fails open on no answer, as on any gh error. */
+export function readPrState(
+  cwd: string,
+  resolve: () => string | null = () => resolveTool("gh"),
+  runner: typeof run = run
+): Promise<RunAnswer> {
+  const gh = resolve();
+  if (gh === null) return Promise.resolve({ code: null, stdout: "" });
+  return runner(gh, ["pr", "view", "--json", "state"], { cwd, timeoutMs: GH_TIMEOUT_MS });
+}
+
+const defaultReader: PrStateReader = (cwd) => readPrState(cwd);
 
 export function isGitPush(command: string): boolean {
   return command.split("\n").some((line) => GIT_PUSH.test(line));

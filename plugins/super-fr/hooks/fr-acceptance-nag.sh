@@ -12,21 +12,23 @@
 
 set -eu
 
-command -v jq >/dev/null 2>&1 || exit 0
-
-input=$(cat)
-cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
-[ -n "$cwd" ] && [ -d "$cwd" ] || exit 0
-
-# `fr` and `git` are the ones the decision library trusts (review p6-r2, super-fr#1429):
-# an absolute FR_HARNESS_FR path, else the first ABSOLUTE PATH entry holding an
-# executable `fr` (likewise `git`, through `fr_git`), never a relative entry (`.`, `bin`),
-# which would run a file the repo being opened planted. Every `fr` below is that exact
-# path. The library is sourced for this and for the placement checks.
+# `fr`, `git` and `jq` are the ones the decision library trusts (review p6-r2,
+# super-fr#1429, #1481): an absolute FR_HARNESS_FR path, else the first ABSOLUTE PATH
+# entry holding an executable `fr` (likewise `git` through `fr_git`, `jq` through
+# `fr_jq`), never a relative entry (`.`, `bin`), which would run a file the repo being
+# opened planted. Every `fr` below is that exact path. The library is sourced for this
+# and for the placement checks.
 lib="$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 [ -r "$lib" ] || exit 0
 # shellcheck source=lib/fr-isolation-decision.sh
 . "$lib"
+
+fr_jq_resolve || exit 0
+
+input=$(cat)
+cwd=$(printf '%s' "$input" | fr_jq -r '.cwd // empty')
+[ -n "$cwd" ] && [ -d "$cwd" ] || exit 0
+
 repo_root=$(fr_git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 if ! fr_fr_resolve; then
   # A `fr` reachable only through a relative or empty PATH entry is never run (super-fr#1429).
@@ -64,15 +66,15 @@ set -- "$acceptance_dir"/features/*.yaml
 # Repo setting `artifacts.acceptance: off` (spec 2026-11-04-repo-feature-settings R6): say
 # so in one line instead of the debt nag. Fail-open like every other precondition.
 if settings=$(cd "$repo_root" && "$fr" settings show --json 2>/dev/null); then
-  if [ "$(printf '%s' "$settings" | jq -r '.["artifacts.acceptance"].value // empty' 2>/dev/null)" = "off" ]; then
+  if [ "$(printf '%s' "$settings" | fr_jq -r '.["artifacts.acceptance"].value // empty' 2>/dev/null)" = "off" ]; then
     message="acceptance disabled by repo setting"
-    event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty')
+    event=$(printf '%s' "$input" | fr_jq -r '.hook_event_name // empty')
     if [ "$event" = "pre_llm_call" ]; then
-      first_turn=$(printf '%s' "$input" | jq -r '.extra.is_first_turn // false')
+      first_turn=$(printf '%s' "$input" | fr_jq -r '.extra.is_first_turn // false')
       [ "$first_turn" = "true" ] || exit 0
-      jq -n --arg context "$message" '{context: $context}'
+      fr_jq -n --arg context "$message" '{context: $context}'
     elif [ "$event" = "on_session_start" ]; then
-      jq -n --arg context "$message" '{context: $context}'
+      fr_jq -n --arg context "$message" '{context: $context}'
     else
       printf '%s\n' "$message"
     fi
@@ -119,14 +121,14 @@ elif [ -n "$notice" ]; then
 else
   message=$debt
 fi
-event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty')
+event=$(printf '%s' "$input" | fr_jq -r '.hook_event_name // empty')
 if [ "$event" = "pre_llm_call" ]; then
-  first_turn=$(printf '%s' "$input" | jq -r '.extra.is_first_turn // false')
+  first_turn=$(printf '%s' "$input" | fr_jq -r '.extra.is_first_turn // false')
   [ "$first_turn" = "true" ] || exit 0
-  jq -n --arg context "$message" '{context: $context}'
+  fr_jq -n --arg context "$message" '{context: $context}'
 elif [ "$event" = "on_session_start" ]; then
   # Forward-compatible with a Hermes release that consumes lifecycle context.
-  jq -n --arg context "$message" '{context: $context}'
+  fr_jq -n --arg context "$message" '{context: $context}'
 else
   printf '%s\n' "$message"
 fi

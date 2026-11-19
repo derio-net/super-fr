@@ -33,7 +33,7 @@ case "$1 $2" in
   printf '%s\n' "$UV_STUB_TOOLDIR"
   ;;
 "tool install")
-  [ "${3:-}" != "--help" ] || exit 0
+  [ "${3:-}" != "--help" ] || exec "$REAL_UV" "$@"
   printf '%s\n' '--- install' >> "$UV_STUB_LOG"
   for a in "$@"; do printf '%s\n' "$a" >> "$UV_STUB_LOG"; done
   mkdir -p "$UV_STUB_TOOLDIR/fr/bin"

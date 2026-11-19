@@ -66,7 +66,7 @@ fi
 
 # From here on every exit is FAIL-OPEN: each remaining condition is a genuine
 # ambiguity about the PR's state, not a broken guard.
-command -v gh >/dev/null 2>&1 || exit 0
+fr_gh_resolve || exit 0
 
 cwd=$(printf '%s' "$input" | fr_json_field cwd) || exit 0
 case "$cwd" in __HOOK_PARSE_ERROR__ | '') exit 0 ;; esac
@@ -76,7 +76,7 @@ rtop=$(_fr_toplevel_of "$cwd") || exit 0
 _fr_is_enabled "$rtop" || exit 0
 
 # Current branch's PR state (checked-out branch — the near-universal push case).
-pr_json=$(cd "$cwd" 2>/dev/null && gh pr view --json state 2>/dev/null) || exit 0
+pr_json=$(cd "$cwd" 2>/dev/null && fr_gh pr view --json state 2>/dev/null) || exit 0
 [ -n "$pr_json" ] || exit 0
 state=$(printf '%s' "$pr_json" | fr_json_field state) || exit 0
 case "$state" in __HOOK_PARSE_ERROR__) exit 0 ;; esac

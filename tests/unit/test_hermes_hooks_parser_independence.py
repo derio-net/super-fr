@@ -161,8 +161,9 @@ def test_isolation_hooks_do_not_invoke_gh() -> None:
 
 def test_push_guard_is_the_only_gh_consumer() -> None:
     body = PUSH_GUARD.read_text()
-    assert "gh pr view --json state" in body
-    assert "command -v gh" in body
+    # Resolved through the library, never a bare `gh` (super-fr#1481).
+    assert "fr_gh pr view --json state" in body
+    assert "fr_gh_resolve" in body
 
 
 # --- 2. the hooks work with no jq on PATH ----------------------------------
