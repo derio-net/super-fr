@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from fr.run.model import load_run_state
 
+from tests.unit import fixture_templates
 from tests.unit.record_support import (
     RUN,
     commit_all,
@@ -24,6 +25,13 @@ PR = "https://github.com/derio-net/super-fr/pull/1"
 
 
 def _at_deliver(tmp_path: Path) -> Path:
+    """A run whose `deliver` step is briefed: an independent copy of the worker's
+    template (spec 2026-11-19-local-suite-cost §3.B), built once by `_build_at_deliver`."""
+    fixture_templates.current().copy("at_deliver", _build_at_deliver, tmp_path)
+    return tmp_path / "workspace"
+
+
+def _build_at_deliver(tmp_path: Path) -> None:
     root = started_run(tmp_path)
     impl = implement_record(
         journal=[
@@ -63,7 +71,6 @@ def _at_deliver(tmp_path: Path) -> Path:
     account_seeded_row(root)
     commit_all(root, "at deliver")
     (root / "suite.log").write_text("n passed\n")
-    return root
 
 
 def account_seeded_row(root: Path) -> None:

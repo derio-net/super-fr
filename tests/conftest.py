@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from tests.unit.fixture_templates import FixtureTemplates, home_sandbox
+from tests.unit.fixture_templates import install as install_templates
+
 REPO_ROOT = Path(__file__).parent.parent
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 OPERATOR_HOME = Path(os.environ.get("HOME") or Path.home())
@@ -252,29 +255,26 @@ def _home_off_the_operators_machine(
     a `uv run` child neither re-downloads nor loses its interpreter.
     Pinned by `tests/unit/test_suite_home_sandbox.py`."""
     home = tmp_path_factory.mktemp("home")
-    monkeypatch.setenv("HOME", str(home))
-    gitconfig = home / ".gitconfig"
-    sections: dict[str, list[str]] = {}
-    for key, value in OPERATOR_GIT_IDENTITY.items():
-        section, name = key.split(".", 1)
-        quoted = value.replace("\\", "\\\\").replace('"', '\\"')
-        sections.setdefault(section, []).append(f'\t{name} = "{quoted}"')
-    gitconfig.write_text(
-        "".join(f"[{section}]\n" + "\n".join(lines) + "\n" for section, lines in sections.items()),
-        encoding="utf-8",
+    for key, value in home_sandbox(home, OPERATOR_GIT_IDENTITY, OPERATOR_HOME).items():
+        monkeypatch.setenv(key, value)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def fixture_templates(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[FixtureTemplates]:
+    """The worker's copyable repository templates (spec 2026-11-19-local-suite-cost §3.B).
+    Built lazily, on first use, under its OWN sandbox home (the same `home_sandbox` the
+    per-test fixture above uses) and handed out as independent copies. See
+    `tests/unit/fixture_templates.py`. Pinned by `tests/unit/test_fixture_templates.py`."""
+    home = tmp_path_factory.mktemp("template-home")
+    factory = FixtureTemplates(
+        tmp_path_factory.mktemp("templates"),
+        home_sandbox(home, OPERATOR_GIT_IDENTITY, OPERATOR_HOME),
     )
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
-    lent = {
-        "UV_CACHE_DIR": Path(os.environ.get("XDG_CACHE_HOME") or OPERATOR_HOME / ".cache") / "uv",
-        "UV_PYTHON_INSTALL_DIR": Path(
-            os.environ.get("XDG_DATA_HOME") or OPERATOR_HOME / ".local" / "share"
-        )
-        / "uv"
-        / "python",
-    }
-    for key, path in lent.items():
-        if key not in os.environ and path.exists():
-            monkeypatch.setenv(key, str(path))
+    install_templates(factory)
+    yield factory
+    install_templates(None)
 
 
 @pytest.fixture(autouse=True)

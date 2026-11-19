@@ -70,8 +70,17 @@ def _repo(tmp_path: Path, branch: str = "b") -> Path:
     into a bare directory is exactly the forgery the check exists to refuse, so
     the fixture has to be the real thing.
     """
-    import subprocess
+    from tests.unit import fixture_templates
 
+    fixture_templates.current().copy(
+        f"run_cli:{branch}", lambda directory: _build_repo(directory, branch), tmp_path
+    )
+    return tmp_path / "workspace"
+
+
+def _build_repo(tmp_path: Path, branch: str) -> None:
+    """The template `_repo` copies: built once per branch and worker, under the
+    template factory's sandbox (spec 2026-11-19-local-suite-cost §3.B)."""
     base = tmp_path / "base"
     base.mkdir(parents=True, exist_ok=True)
 
@@ -99,7 +108,6 @@ def _repo(tmp_path: Path, branch: str = "b") -> Path:
             }
         )
     )
-    return workspace
 
 
 def _write_shape(shipped: Path, name: str, text: str) -> None:
