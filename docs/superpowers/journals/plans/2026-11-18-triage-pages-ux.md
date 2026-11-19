@@ -586,3 +586,8 @@ Predates this change (the old triage.html had it; the split carried it over); fi
 ### l-security-r3-resolved-2 · finding [deferred → derio-net/super-fr#1556] · resolves l-security-r3: The carried snapshots hold issue keys the privacy guard never reads
 
 Predates this change; filed as derio-net/super-fr#1556.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved-2 created=2026-11-19T06:36:30+00:00 state=open resolves=l-tests-r7 tracked_by=derio-net/super-fr#1557 -->
+### l-tests-r7-resolved-2 · finding [deferred → derio-net/super-fr#1557] · resolves l-tests-r7: The Issues page filter script throws when its filter bar is absent
+
+Predates this change (carried over from triage.html); filed as derio-net/super-fr#1557.
