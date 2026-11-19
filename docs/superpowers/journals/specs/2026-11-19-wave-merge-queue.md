@@ -360,3 +360,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p2 created=2026-11-19T22:27:41+00:00 decided_by=agent -->
 ### phase-split-2026-11-19-wave-merge-queue-p2 · decision · ask: the pure planner (wave choice, slots, landing prefix, ejection, drain) is its own reviewable ask (R2, R3, R8, R9, R13, R14, R30, R31, R36)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p3 created=2026-11-19T22:27:45+00:00 decided_by=agent -->
+### phase-split-2026-11-19-wave-merge-queue-p3 · decision · ask: git and forge execution of builds and landings (R4-R7, R10, R11, R20, R33-R35)
