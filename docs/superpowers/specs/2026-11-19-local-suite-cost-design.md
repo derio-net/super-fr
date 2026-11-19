@@ -130,7 +130,12 @@ Tests:
 - A unit test shows that an include or reftable repository is never cached.
 - A unit test calls the helpers outside a scope and shows git starts every time.
 - A call-count test pins the effect: the §2 test's git subprocesses fall from the
-  measured 926 to at most 500.
+  measured 926 to at most 604 (593 measured after the cache landed, plus 2%
+  headroom). An earlier draft of this spec estimated 500. That estimate was wrong:
+  it counted `rev-parse --verify <ref>^{commit}` calls from call sites outside R1
+  as coming from these two helpers. With one scope per command, the 19 `fr` calls
+  still cost a few starts each for these questions, and the rest come from the
+  lookups that §4 leaves out of scope (review finding p1-r1).
 
 ### 3.B Template fixtures (R2)
 
