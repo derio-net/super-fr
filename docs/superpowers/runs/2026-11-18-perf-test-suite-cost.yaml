@@ -52,10 +52,23 @@ steps:
     stdout: "[warn] orphan phase-split decision phase-split-2026-11-19-local-suite-cost-p4\
       \ \nnames no agentic phase; it waives nothing.\n"
   implement:
-    state: pending
+    state: running
+    at: '2026-11-19T09:20:24+00:00'
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/4:
+        state: manual
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-11-19T09:20:24+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: d2814f1b-87a4-4558-bbe3-e21fd24f245b
   journal-check:
     state: pending
   lens-review:
