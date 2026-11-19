@@ -366,3 +366,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p4 created=2026-11-19T22:27:48+00:00 decided_by=agent -->
 ### phase-split-2026-11-19-wave-merge-queue-p4 · decision · ask: the hold handshake with the release (R17-R19, R27)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p5 created=2026-11-19T22:27:52+00:00 decided_by=agent -->
+### phase-split-2026-11-19-wave-merge-queue-p5 · decision · ask: one merge path, other merges as entries and the old train removed (R22, R23, R32)
