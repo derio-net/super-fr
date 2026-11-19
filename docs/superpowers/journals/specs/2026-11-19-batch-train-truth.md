@@ -285,3 +285,8 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-batch-train-truth-p1 created=2026-11-19T11:08:21+00:00 -->
+### tier-2026-11-19-batch-train-truth-p1 · decision · hard: phase 1 rewrites the error path every driver caller (host loop, cloud pass, --once) relies on
+
+Reclassifies ~30 _fail sites and the loop boundary; a misclassification either kills the loop or retries a refusal.
