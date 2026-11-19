@@ -20,3 +20,8 @@ save_run_state and all 14 plan_ops.py writes go through write_text_atomic (temp 
 ### f-lost-update · finding [fixed] · A save that would lose another command's cursor update refuses (#1511)
 
 run/model.py records the sha256 of the cursor bytes each command read or wrote. save_run_state compares the file on disk with that record, under a flock on the runs directory, and raises RunStateConflictError when it changed or was removed; fr run exits 2 and writes nothing, fr pr create reports the opened PR it could not record. The record is cleared at each CLI entry, so one command saving twice is fine. A long-held per-command lock was rejected: resolve_in_process re-enters within one process, and flock belongs to the open file description. Commit 0d242ad63.
+
+<!-- fr:journal kind=finding scope=debug id=f-cli-bound created=2026-11-19T21:12:03+00:00 state=fixed -->
+### f-cli-bound · finding [fixed] · A cli step is bounded in time and in stored output (#1507)
+
+The cli executor runs the shell in its own session with a timeout (FR_CLI_STEP_TIMEOUT, default 600 s, 0 for none; a malformed value exits 2 and runs nothing). On timeout os.killpg kills the whole group (killing only the shell left 'sleep 30 | cat' holding the pipe open) and the step fails with exit 124. The cursor stores the last 16 KiB of stdout under a 'truncated' header. Commit fdcf46fb6.
