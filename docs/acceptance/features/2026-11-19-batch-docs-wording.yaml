@@ -78,9 +78,12 @@ rows:
       intact.
     origin:
     - spec:2026-11-19-batch-docs-wording#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_the_pages_marker_fills_only_when_it_stands_on_a_line_of_its_own
+      - super-fr:tests/unit/test_build_site.py#test_a_marker_only_inside_inline_code_leaves_the_text_unchanged
+    status: ci
+    notes: 'R13: fill_pages fills only an own-line marker'
     verify: none
   - id: site-top-bar-phone-layout
     capability: published-docs
