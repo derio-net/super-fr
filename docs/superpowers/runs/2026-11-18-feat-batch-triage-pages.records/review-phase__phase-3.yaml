@@ -1,0 +1,94 @@
+schema_version: 12
+run: 2026-11-18-feat-batch-triage-pages
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: review
+    id: review-p3
+    phase: 3
+    title: "Phase 3 review: Batches columns and cutoff, Origins groups, filter and merged PRs"
+    body: |
+      Independent review of da54b59dc..73ce5d5a1 against R10, R14, R15, R18, design D/G/H, plan 03.yaml
+      and the three visual rows, with the reviewer's own browser walk (26 shots, light/dark 1280, light 390,
+      a legacy origins file with no prs, storage blocked). Holds: column toggles with aria-expanded and
+      remembered state; storage try/catch; the cutoff hides only terminal waves idle past 30 days; Origins
+      groups folded in CATEGORIES order with counts, the state filter's counts, a hash opening only its fold;
+      merged PRs kept from the one PR read, "not collected" for a missing one; escaping and https-only hrefs;
+      reuse of fold, Linker, stamp_text, PAGE_SCRIPT; docs accurate. Five findings, all in scope, all fixed.
+  - kind: finding
+    id: p3-r1
+    phase: 3
+    review_scope: in
+    title: "Column-toggle and cutoff browser logic tested only by searching script text"
+    body: cutoff_hidden_waves was a Python copy no render path called; the JS date rule could drift with tests green.
+  - kind: finding
+    id: p3-r2
+    phase: 3
+    review_scope: in
+    title: "Card.terminal narrower than R18's merged, archived, cancelled or abandoned"
+    body: column == "done" left a merged batch that never archived visible past the cutoff indefinitely.
+  - kind: finding
+    id: p3-r3
+    phase: 3
+    review_scope: in
+    title: "origins collect silently drops a PR created before --since but merged inside the window"
+    body: The PR list is creation-ordered; a long-lived PR beyond the page is lost with no warning.
+  - kind: finding
+    id: p3-r4
+    phase: 3
+    review_scope: in
+    title: "Origins Ended cell renders closing PRs as bare #n text"
+    body: Linker.from_origins holds their URLs; R11 says every PR reference links to the forge.
+  - kind: finding
+    id: p3-r5
+    phase: 3
+    review_scope: in
+    title: "State filter leaves a header-only table when it hides every row of a group"
+    body: A group empty at render shows "No issue."; the filtered-empty state should match.
+resolves:
+  - {id: p3-r1, state: fixed, body: "f23c85d65: render marks cards of hidden waves with data-cutoff-hidden from cutoff_hidden_waves; the script only applies the marker. Tests pin the boundary and the selectors the script reads."}
+  - {id: p3-r2, state: fixed, body: "cbbf53400: Card.terminal reads the engine's stage and close-out state: merged, cancelled, abandoned or archived. One test per terminal kind."}
+  - {id: p3-r3, state: fixed, body: "29cc2550d (+2bc8e717a): a full PR list warns, naming the repo, that an older PR merged in the window may show not collected; documented in fr-triage.md."}
+  - {id: p3-r4, state: fixed, body: "6ff3c2399: closing PRs in the Ended cell link through the Linker, https only."}
+  - {id: p3-r5, state: fixed, body: "6070901a6: each group carries a hidden No issue. row the state filter shows when no row is visible."}
+evidence:
+  review: review-p3
+  reviewer: a42854f6751cad912
+  model: claude-opus-5-5
+visual:
+  - row: triage-batches-columns-cutoff
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/review_capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-cutoff-on-light-1280.png, shows: [empty-column-collapsed, cutoff-on]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-cutoff-off-light-1280.png, shows: [cutoff-off, toggle-cutoff]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-cutoff-on-dark-1280.png, shows: [empty-column-collapsed, cutoff-on, dark]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-cutoff-off-dark-1280.png, shows: [cutoff-off, toggle-cutoff, dark]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-cutoff-on-light-390.png, shows: [empty-column-collapsed, cutoff-on, phone]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-cutoff-off-light-390.png, shows: [cutoff-off, phone]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-collapse-and-expand-light-1280.png, shows: [collapse-column, expand-empty-column]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-after-reload-light-1280.png, shows: [state-survives-reload]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/batches-storage-blocked-light-1280.png, shows: [storage-blocked, collapse-column, cutoff-off]}
+  - row: triage-origins-groups-prs
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/review_capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-groups-folded-light-1280.png, shows: [origin-groups-folded]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-groups-folded-dark-1280.png, shows: [origin-groups-folded, dark]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-groups-folded-light-390.png, shows: [origin-groups-folded, phone]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-pr-detail-light-1280.png, shows: [pr-detail, pr-not-in-facts]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-pr-detail-dark-1280.png, shows: [pr-detail, pr-not-in-facts, dark]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-pr-detail-light-390.png, shows: [pr-detail, phone]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-state-filter-open-light-1280.png, shows: [state-filter-open]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-state-filter-closed-light-1280.png, shows: [state-filter-closed]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-state-filter-all-light-1280.png, shows: [state-filter-all]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-legacy-no-prs-light-1280.png, shows: [pr-not-in-facts, legacy-file-without-prs]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/origins-hash-opens-fold-light-1280.png, shows: [hash-opens-fold, origin-groups-folded]}
+  - row: triage-pages-folds
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/review_capture.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/backlog-decisions-open-light-1280.png, shows: [backlog-decisions-open]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/issues-lists-closed-light-1280.png, shows: [issues-lists-closed, close-fold]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/issues-open-fold-light-1280.png, shows: [open-fold]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/issues-hash-opens-fold-light-1280.png, shows: [hash-opens-fold]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/history-timeline-closed-light-1280.png, shows: [history-timeline-closed]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/bd72e033-22c2-4336-9bd1-eb0cee343bb7/scratchpad/p3-review-shots/out/shots/history-archived-notes-open-light-1280.png, shows: [history-archived-notes, open-fold]}
