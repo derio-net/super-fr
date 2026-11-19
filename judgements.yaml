@@ -8701,6 +8701,8 @@ batches:
     - super-fr#1485
     - super-fr#1486
     - super-fr#1488
+  - kind: post_merge
+    at: '2026-11-19T12:13:24.289554Z'
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
