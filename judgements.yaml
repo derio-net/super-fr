@@ -8553,6 +8553,12 @@ batches:
     handle: w3P:p8
     run: 2026-11-18-feat-batch-triage-pages
     archive: chore/closeout-2026-11-19-3
+  - kind: closeout_handback
+    at: '2026-11-19T11:48:11.362485Z'
+    item: derio-net/super-fr/run/closeout-2026-11-19-3
+    pr: 1567
+    head: 93acf9e02f7e2d9366e14855059b912724a2f028
+    reason: 1 failing check(s)
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -8678,6 +8684,16 @@ batches:
     pr: 1551
     head: 96fe52fa01b3d838e6ddf158489ad377de195d07
     voided_at: eb84ee6a85ede77015a52ef01e93d4f4d463ad64
+  - kind: approval
+    at: '2026-11-19T11:46:31.811587Z'
+    pr: 1551
+    head: eb84ee6a85ede77015a52ef01e93d4f4d463ad64
+  - kind: update
+    at: '2026-11-19T11:48:02.808056Z'
+    pr: 1551
+    head_before: eb84ee6a85ede77015a52ef01e93d4f4d463ad64
+    head_after: d8b0fad58b4005923fd5f11703d03ba4f57d1078
+    base: f1b70d9791ef3671fe709146acffe0ebf12ccce7
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
@@ -9449,3 +9465,5 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-18-feat-batch-triage-pages.yaml"
   - "D\tdocs/superpowers/specs/2026-11-18-triage-pages-ux-design.md"
   - "D\tdocs/superpowers/usage/2026-11-18-feat-batch-triage-pages.yaml"
+  handed:
+  - 93acf9e02f7e2d9366e14855059b912724a2f028
