@@ -239,3 +239,9 @@ resident-orchestrator drive is its own future work.
 - #1216 (one scope-owned writer for drive and page refresh): `StateRefConflict` stays a refusal.
 - launchd/systemd units: the supervisor is session-bound by design.
 - Converting module-level helpers' `_fail` into typed errors: R4 classifies them at the boundary.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-19-batch-train-truth | `derio-net/super-fr` | `2026-11-19-batch-train-truth` | — |

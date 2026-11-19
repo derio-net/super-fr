@@ -1,0 +1,92 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Label-swap retry, cancel without a clone, and the docs (R20, R21, R24)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - swap-labels-retry-converges
+  - cancel-undispatched-no-checkout
+  tier: standard
+  files:
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_gh*.py
+  - tests/unit/test_triage_batch_cancel*.py
+  - tests/unit/test_triage_batch_commands.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - docs/explainers/fr-wave-driver.md
+  - docs/explainers/fr-triage.md
+  - docs/reference/cli.md
+  - README.md
+  estimate_lines: 350
+tasks:
+- number: 1
+  title: swap_issue_labels is assumption-free (R20)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: a unit test (beside the existing swap_issue_labels tests) whose fake `_run_gh` records a label set, applies the add, then raises `GhError` with `'<label>' not found` for a removal: after the retry the issue holds exactly the wanted labels and the retry ran at most len(remove) times.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: reword the docstring (gh.py ~:415-421) to say correctness does not depend on whether gh resolves every label before mutating, because a repeated add or removal is idempotent. Test green.
+- number: 2
+  title: Cancel a never-dispatched batch with no clone (R21)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: CLI test — `fr triage batch cancel <id> --yes` with no `--checkout` on a batch with a wave and claims but no `dispatch` event: exit 0, no label removal or comment on the fake client, claims released, cancel event written; a dispatched batch with no `--checkout` still refuses as today.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: in batch cancel (triage_batch_cmd.py ~:920) compute `dispatched`; when false `withdraws = []` and skip `_tracking_gate`, keep claim release. Tests green.
+- number: 3
+  title: Docs (R24)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-triage/SKILL.md's driver section and docs/explainers/fr-wave-driver.md (and fr-triage.md where it describes drive exits): the pass boundary (transient vs refusal, backoff, 10-pass stop), `drive --supervise` and its session-bound lifetime, `fr triage drive status|failures|log`, the failure ledger and the improvement loop, and the early red/conflict hand-backs of draft PRs. Bump each page's `reviewed` stamp.
+  - id: P4.T3.S2
+    text: |-
+      Run `uv run --no-project python scripts/sync-opencode.py`, `uv run --no-project python scripts/sync-hermes.py` and `uv run --no-project python scripts/sync-readme.py` (regenerating README tables and docs/reference/cli.md); then `uv run fr docs check` and the sync tripwires (`uv run pytest -q --no-cov tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_tripwire_readme_sync.py tests/unit/test_tripwire_skill_tool_neutrality.py`) green.
+  - id: P4.T3.S3
+    text: |-
+      Run the full suite `uv run pytest -q --no-cov -n auto` into a host-visible log after the last code commit; ruff and mypy clean.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

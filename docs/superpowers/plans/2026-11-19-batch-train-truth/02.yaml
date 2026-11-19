@@ -1,0 +1,111 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The session-bound supervisor, drive status and the activity log (R11-R14,
+    R22, R23)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - drive-session-supervisor
+  - drive-activity-log
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/supervise.py
+  - packages/fr/src/fr/triage/drive_log.py
+  - packages/fr/src/fr/triage/driver_record.py
+  - packages/fr/src/fr/triage/render*.py
+  - packages/fr/src/fr/triage/board*.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - tests/unit/test_triage_supervise.py
+  - tests/integration/test_triage_supervise_process.py
+  - tests/unit/test_triage_drive_log.py
+  - tests/unit/test_triage_driver_status.py
+  - tests/unit/test_triage_batch_board.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Restart policy (R11, R13)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_supervise.py — `restart_decision`: exits 0, 2, 3 and a child's clean stop after SIGINT/SIGTERM/SIGHUP are `stop` with that code; exit 1 or death by SIGKILL is `restart` with delays 5, 10, 20 … capped at 300 s; a sixth restart within 30 min is `crash-loop` (exit 2); restarts older than 30 min fall out of the window.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/triage/supervise.py, pure `restart_decision(history, now, end)`. Test green.
+- number: 2
+  title: The supervisor process and its lifetime (R11-R13)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/integration/test_triage_supervise_process.py with a tiny fake driver script (a python child that writes its pid to a file and sleeps, exiting as told by a control file): (a) SIGKILL the child -> a new child pid within the backoff bound, and a `crash:SIGKILL` ledger entry; (b) the child exits 2 -> the supervisor exits 2, no restart; (c) kill the supervisor's parent (run it under an intermediate python parent that exits) -> supervisor and child are both gone within 15 s; (d) SIGTERM the supervisor -> child gets SIGTERM, both exit; (e) a child that ignores SIGTERM is SIGKILLed after the grace (a shortened grace injected for the test); (f) the supervisor is in its caller's process group (`os.getpgid`). Bounded waits with polling, no fixed sleeps longer than the bound.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: `Supervisor.run` — `subprocess.Popen(fr_argv(*args, '--supervised-by', str(os.getpid())))` with no `start_new_session`, ppid poll every second, SIGHUP/SIGINT/SIGTERM forward-then-escalate, restart per `restart_decision`, ledger + `driver.yaml` updated (supervisor pid, restarts, last crash). `drive --supervise` (refused with `--once` or without `--yes`, exit 2) builds args less `--supervise`, takes neither `drive.lock` nor the lease. Hidden `--supervised-by <pid>`: the driver records `supervised` and checks `os.getppid()` between passes and inside the module-level `_sleep`/`wait_out`, stopping cleanly (lease released, exit 0) on a mismatch. Tests green.
+- number: 3
+  title: '`fr triage drive status` (R14)'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_triage_driver_status.py — with a lease + driver.yaml for this host and a live pid: exit 0 and a block naming pid, supervised/supervisor pid, restarts, last pass, last refusal; a dead pid or no lease: exit 3; another host's lease: not probed, reported as held elsewhere.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: `status` on `drive_app`, read-only (`os.kill(pid, 0)` only when the lease's host id is this host's). Test green.
+- number: 4
+  title: The activity log and the board panel (R22, R23)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests/unit/test_triage_drive_log.py — `DriveLog.append` writes `<ISO UTC> <kind> <line>`; a write that would pass 5 MB (injected small limit) rotates to drive.log.1 keeping one previous; `tail(n)` across the rotation boundary returns the newest n; `follow()` (driven by a fake clock/poller) yields lines appended after a rotation; a looping driver's `_emit` prints AND appends, plan mode and `--once` append nothing; the supervisor's restart line lands in the same file.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/triage/drive_log.py; route the loop's `_say` and failure reports through `_emit(kind, line)`; `log [-n N] [-f]` on `drive_app`. Test green.
+  - id: P2.T4.S3
+    text: |-
+      RED->GREEN: test_triage_batch_board.py — the rendered board.html has an Activity panel listing the newest 50 entries newest first (HTML-escaped), and `no driver has run` with no log; style with `components.py` tokens and wrap at phone width. Run the board suites and ruff/mypy clean.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

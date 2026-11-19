@@ -1,0 +1,142 @@
+schema_version: 2
+phase:
+  number: 1
+  title: The pass boundary, the driver record and the failure ledger (R1-R10)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - drive-pass-boundary
+  - drive-failure-ledger
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/drive_errors.py
+  - packages/fr/src/fr/triage/driver_record.py
+  - packages/fr/src/fr/triage/state_ref.py
+  - packages/fr/src/fr/triage/lease.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - tests/unit/test_tripwire_drive_pass_boundary.py
+  - tests/unit/test_triage_drive_pass_boundary.py
+  - tests/unit/test_triage_driver_failures.py
+  - tests/unit/test_triage_batch_drive*.py
+  - tests/unit/test_triage_driver_pass.py
+  - tests/unit/test_triage_drive_visibility_retry.py
+  - .changes/feat-batch-train-truth.yaml
+  - docs/acceptance/features/2026-11-19-batch-train-truth.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Smoke and change fragment
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      On the unchanged tree run `uv run pytest -q --no-cov -n auto tests/unit/test_triage_batch_drive.py tests/unit/test_triage_batch_drive_disruption.py tests/unit/test_triage_drive_visibility_retry.py tests/unit/test_triage_driver_pass.py`; all green (a red is a discovery, not fixed here).
+  - id: P1.T1.S2
+    text: |-
+      Add `.changes/feat-batch-train-truth.yaml` with `bump: minor` and summary `triage drive: a looping driver survives its own transient failures, records and files every refusal by cause, runs session-bound under --supervise with a live activity log (fr triage drive status|failures|log), and hands red or conflicting draft batch PRs back before approval`. Commit; `uv run fr push`.
+- number: 2
+  title: The failure vocabulary and classifier (R2-R4)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_drive_pass_boundary.py::test_classify_* — `classify(StateRefConflict(..))`, `LeaseHeld`, `LeaseExpired`, `UnsupportedForgeOperation`, the privacy refusal and a strict-config `TriageError` subclass are `DriverRefusal` (code 2, a stable cause, a resume line; `LeaseExpired`'s resume is `fr triage lease take --yes`); `StateRefPushRefused` is transient cause `push-refused`; `GitError` is `git:<op>`; a plain `TriageError` is `triage:<Class>`; `ValueError` is `unexpected:ValueError`; a click `Exit(2)` raised inside a function `dispatch_batch` is a refusal cause `exit:dispatch_batch`, `Exit(1)` transient code 1. Causes never contain the message text. Fails: module missing.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: new packages/fr/src/fr/triage/drive_errors.py with `DriverRefusal(cause, message, resume, code=2)`, `TransientPassFailure(cause, message, code=2, original)` and `classify(exc)`; the click `Exit` function name is the innermost traceback frame whose module starts with `fr.`. Test green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: one table maps refusal classes to (cause, resume); no isinstance chain elsewhere. Re-run.
+- number: 3
+  title: Remove `_fail` from the pass; the loop's one boundary (R1, R3, R5-R7)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_tripwire_drive_pass_boundary.py — `ast`-parse packages/fr/src/fr/commands/triage_batch_cmd.py and fail on a `_fail(` call or `raise typer.Exit` inside `class _Driver`, `one_pass`, `_host_loop` or `wait_out`, naming each line. Fails today (about 30 sites).
+  - id: P1.T3.S2
+    text: |-
+      RED: test_triage_drive_pass_boundary.py — with the existing drive fakes (see test_triage_batch_drive_disruption.py's harness): (a) a fake state remote refusing the first `push_now` (`StateRefPushRefused`) mid-loop: the loop continues, the next pass pushes the same commits, no event duplicated, a later clean finish exits 0; (b) a persistent refusal: one report line per cause, sleeps of interval, 2x, 4x … capped at max(900, interval) (assert on the fake `_sleep` calls, never wall clock), state never discarded; (c) 10 failed passes in a row stop with exit 2 and the last cause; (d) `StateRefConflict` and `LeaseHeld` exit 2 on the first pass; (e) a `take_lease` failure inside `wait_out` is classified, not a traceback; (f) `--once` exits with the carried code (2 for a refusal and a push refusal, 1 for a failed dispatch); (g) a pass whose `dispatch_batch` `_fail`s with code 2 stops as `exit:dispatch_batch`.
+  - id: P1.T3.S3
+    text: |-
+      GREEN: in `_Driver` replace every `_fail` with `raise DriverRefusal(...)` (the R2 classes), `raise TransientPassFailure(..., code=1)` where the site used code=1, or let the original propagate; `save_pass` lets `StateRefPushRefused` propagate and raises `StateRefConflict` as a refusal; `take_lease` raises `LeaseHeld`/`LeaseExpired` as refusals. `_host_loop` wraps its whole iteration in one try, classifies, reports once per cause (`_report_read_failure`'s memory), backs off, and returns `LoopEnd(code, restart_to)` for every deliberate end; `batch_drive_command` turns `LoopEnd` into `typer.Exit`/the gh#998 restart, keeping its lease rule (code 2 keeps the lease). Tripwire and boundary tests green; the S1 suites still green.
+  - id: P1.T3.S4
+    text: |-
+      RED->GREEN: tests/unit/test_triage_driver_pass.py — `fr triage drive pass` with a pass raising a refusal, a push refusal and an unexpected exception writes its outbox and exits with the carried code (2, 2, 2); implement the same classification in `drive_pass_command` (triage_drive_cmd.py ~:581) beside its rate-limit branch.
+- number: 4
+  title: The driver record, the ledger and the stopped-driver need (R8, R9)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_triage_driver_failures.py — `driver_record.record_failure(state_dir, kind, cause, message, now, fr_version)` appends/increments `driver-failures.yaml` (`schema: 1`, causes with kind, count, first, last, message, fr_version, issue, filed_count); `record_refusal` writes `driver.yaml`'s `last_refusal`; both writes are atomic; neither file is in `state_ref.REF_FILES`. `views.needs_you` yields a `driver-stopped` need (reason, resume, `fr triage drive failures --file --yes`) when `last_refusal.at` is newer than the lease's `last_pass`, and none otherwise.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: new packages/fr/src/fr/triage/driver_record.py (models, atomic writes via `write_text_atomic`); the loop handler records every transient and refusal, renders the board once before a refusal's exit 2, and prints the failures command; `state_ref`'s docstring names both files as host-local; `views.needs_you` adds the need. Tests green; the boundary tests assert a ledger entry per failure.
+- number: 5
+  title: '`fr triage drive failures [--file --yes]` (R10)'
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: test_triage_driver_failures.py::test_failures_* with a fake GhClient — listing sorts by count; `--file --yes` on a single-repo scope files one issue per cause with label `fr:driver-failure` and marker `<!-- fr-driver-failure:<cause> -->`, body with cause, kind, counts, dates, fr version and exception class and NOT the message text; a second run with a grown count comments on the open issue; a closed issue and a recurrence file a new issue naming the closed one; a scope with a state repo targets it; an org scope with none refuses (exit 2); `forge.issues: off` / `tracking: none` on the target files nothing and says so; without `--yes` it prints the plan only.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: add `failures` to `drive_app` (triage_drive_cmd.py :64), forge writes only through the target's GhClient adapter, label created lazily, issue recorded in the ledger. Tests green; `uv run ruff check packages/ tests/` and the mypy command from AGENTS.md clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
