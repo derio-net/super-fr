@@ -93,9 +93,15 @@ rows:
     origin:
     - spec:2026-11-19-batch-docs-wording#R14
     - spec:2026-11-19-batch-docs-wording#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_the_bar_reads_as_two_rows_on_a_phone
+      - super-fr:tests/unit/test_build_site.py#test_the_landing_bar_takes_the_wrap_gutter_on_a_phone
+      - super-fr:tests/unit/test_build_site.py#test_the_article_bar_follows_the_broadsheet_column
+    status: ci
+    notes: 'R14-R15: bar.css 480px rule (name row, nowrap link row) and landing.css
+      720px gutter, pinned by CSS-reading tests; phone/desktop layout walked by screenshots
+      at implement'
     verify: none
     visual:
       states:
