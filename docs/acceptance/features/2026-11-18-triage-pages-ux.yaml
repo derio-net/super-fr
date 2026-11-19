@@ -175,9 +175,15 @@ rows:
     origin:
     - spec:2026-11-18-triage-pages-ux#R14
     - spec:2026-11-18-triage-pages-ux#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_origins.py#test_every_issue_is_a_plain_section_with_a_state_filter_and_a_closed_fold_per_group
+      - super-fr:tests/unit/test_triage_origins.py#test_a_collected_pr_shows_its_link_title_merge_date_and_the_issues_naming_it
+      - super-fr:tests/unit/test_triage_origins.py#test_a_file_with_no_prs_renders_every_leaderboard_pr_as_not_collected
+      - super-fr:tests/unit/test_triage_origins.py#test_collect_keeps_the_prs_merged_in_the_window_with_one_list_read_per_repo
+    status: ci
+    notes: Origin group folds, state filter and merged-PR detail with not-collected
+      fallback.
     verify: none
     visual:
       states:
