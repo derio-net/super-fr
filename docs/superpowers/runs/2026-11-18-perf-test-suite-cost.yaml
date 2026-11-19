@@ -53,7 +53,7 @@ steps:
       \ \nnames no agentic phase; it waives nothing.\n"
   implement:
     state: running
-    at: '2026-11-19T10:39:41+00:00'
+    at: '2026-11-19T14:34:12+00:00'
     members:
     - implement-phase
     - review-phase
@@ -107,6 +107,13 @@ steps:
         evidence:
           tests: ci:b45e98d0ff016ed1b6ffd8ef9bcca3768a865bd8+9c6e8760f9d8c3ba8de083b2452a8264c26ec63c;tree=f9051cd27cb583bc6b998995b718a6a27e2767edfc632a9522a469e37d0db501
           visual: none
+      phase/2/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-11-19T14:34:12+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d2814f1b-87a4-4558-bbe3-e21fd24f245b
   journal-check:
     state: pending
   lens-review:
