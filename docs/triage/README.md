@@ -20,12 +20,13 @@ regenerated.
 | `subsystems.yaml` | by hand | the architecture page's 15 subsystem cards: globs, `then_ref`, themes |
 | `<page>/manifest.yaml` | by hand | per page (`backlog/`, `issues/`, `origins/`, `architecture/`, `history/`; Backlog and Issues each read an older `board/` when their own directory is absent): the section order, generated sections and authored fragments interleaved |
 | `<page>/*.html` | `authored-src/build.py`, or by hand | the authored fragments a manifest lists; they travel with the state |
-| `snapshots/` | `fr triage backlog`, and the driver | one per change the board shows when `fr triage backlog` runs by hand; from the driver, one on its first page-writing pass (when the board differs from the latest) and one each time a wave finishes. The backlog page's "Since last report" and the history page's timeline. Not reproducible |
+| `drive-pages.json` | the driver | the unfinished waves, an owed snapshot and Architecture's last measurement, so a restarted or re-homed driver carries on. Travels in the state ref; not exported |
+| `snapshots/` | `fr triage backlog`, and the driver | one per change the board shows when `fr triage backlog` runs by hand; from the driver, one on its first page-writing pass when it has no `drive-pages.json` (and the board differs from the latest) and one each time a wave finishes. The backlog page's "Since last report" and the history page's timeline. Not reproducible |
 | `authored-src/` | by hand | the sources of the built fragments (below) |
 
 Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json` and the
 rendered pages (`backlog.html`, `issues.html`, `batches.html`, `origins.html`,
-`architecture.html` and `history.html`). `fr triage state export|import` copies exactly the rest.
+`architecture.html` and `history.html`). `fr triage state export|import` copies exactly the rest, except `drive-pages.json`, which only the state ref carries.
 That rest includes the Backlog's and Issues' fragment directories, `backlog/` and `issues/`,
 and the older `board/` they fall back to; the state ref `refs/heads/fr-triage/<scope-id>`
 carries the same directories.
@@ -64,7 +65,8 @@ While `fr triage batch drive --yes` runs, each pass that collected re-renders th
 History pages after the Batches page (Origins when `origins-facts.json` exists, Architecture
 when `subsystems.yaml` exists), so the commands above are for a state the driver is not
 running on. Architecture re-measures only on the driver's first such pass and when a wave
-finishes.
+finishes. The driver remembers what it did in `drive-pages.json`, for the host and the cloud
+driver alike.
 
 The state directory stays the working copy because `fr triage batch drive` writes `judgements.yaml`
 on every pass. `.fr/triage.yaml` sets `export: {path: docs/triage}`, so the driver exports

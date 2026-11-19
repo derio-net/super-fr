@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-19 the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-19 the driver's page memory (drive-pages.json) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -180,12 +180,22 @@ page. A page that cannot be written gives one warning for each distinct cause, a
 goes on.
 
 Architecture counts lines with git, so the driver measures only on its first page-writing
-pass and on a pass in which a wave finished. Every other pass reuses that measurement.
+pass and on a pass in which a wave finished. Every other pass reuses that measurement. When
+the scope's repo has no usable clone, Architecture renders with no measurement, and the
+driver says so once.
 
 The driver also stores a snapshot, the record that the Backlog's "Since last report" and the
-History timeline read. It stores one on the first page-writing pass of a drive, when the
-board differs from the last stored snapshot. After that it stores one each time a wave
-finishes, and at no other time. A snapshot taken by hand with `fr triage backlog` still
+History timeline read. It stores one on the first page-writing pass of a scope that has no
+page memory yet, when the board differs from the last stored snapshot. After that it stores
+one each time a wave finishes, and at no other time.
+
+The driver keeps that memory in the scope's state directory, in `drive-pages.json`: the
+waves that were unfinished at its last page-writing pass, whether a snapshot is still owed,
+and the last measurement. It travels in the state ref, so the rules are the same for the host
+driver and for the cloud driver, which starts a new process on every wake. A wave that
+finishes while no driver runs, or on a pass that writes no page, is snapshotted by the next
+pass that writes pages. If the Backlog write fails on that pass, the snapshot stays owed
+until a write succeeds. A snapshot taken by hand with `fr triage backlog` still
 happens whenever the board changed.
 
 ## Where does it run?
