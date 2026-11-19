@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-17 still true; scaffold asks git check-ignore through fr.git.is_ignored (batch-acceptance-edits). 2026-11-16 up refuses a branch whose slug another workspace holds; a resume keeps the recorded mode; scaffold names secrets after the repo
+reviewed: 2026-11-19 the edit gate reads its payload with a resolved, isolated parser and refuses without one (batch hook-hardening). 2026-11-17 still true; scaffold asks git check-ignore through fr.git.is_ignored (batch-acceptance-edits). 2026-11-16 up refuses a branch whose slug another workspace holds; a resume keeps the recorded mode; scaffold names secrets after the repo
 ---
 
 ## What are the two boundaries and the bridge?
@@ -152,6 +152,10 @@ it only from an `fr` in an absolute PATH entry, never one a relative entry could
 the repo. A missing, failing, slow or garbled `fr` can therefore only fail to add a "yes",
 never turn one into a "no", so the gate is never weaker for lack of the binary. The OpenCode
 plugin and the Hermes hook make the same decision (one shared definition each).
+
+The hook reads the tool call itself with python3 or jq, found the same way, and runs python3
+isolated, so a file in the repo cannot stand in for either one. If neither can run, the hook
+refuses the edit. It does not let the edit through.
 
 Only a marker that clears every step allows the edit, with one structural exception. Under
 quiet and stealth, fr keeps a feature's spec, plan and journals outside the workspace: in the

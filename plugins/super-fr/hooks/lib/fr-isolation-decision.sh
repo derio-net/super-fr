@@ -50,20 +50,78 @@ FR_JSON_BIN=""
 : "${FR_PYTHON_CANDIDATES:=python3 /usr/bin/python3 /usr/local/bin/python3 /bin/python3}"
 : "${FR_JQ_CANDIDATES:=jq ${HOME:-/nonexistent}/.local/bin/jq /usr/local/bin/jq /usr/bin/jq /opt/homebrew/bin/jq}"
 
+# fr_which <name>: echo the first executable regular file <name> in an ABSOLUTE PATH
+# entry, or return 1. Not `command -v`: that honours a RELATIVE entry (`.`, `bin`, an
+# empty one), i.e. a file in whatever directory the hook runs from, possibly one an
+# agent wrote in the base clone (super-fr#1484). Same walk as fr_git_resolve and
+# fr_fr_resolve below, and as the OpenCode plugin's src/tools.ts.
+fr_which() {
+  _fr_wrest="${PATH:-}:"
+  while [ -n "$_fr_wrest" ]; do
+    _fr_wdir=${_fr_wrest%%:*}
+    _fr_wrest=${_fr_wrest#*:}
+    case "$_fr_wdir" in /*) ;; *) continue ;; esac
+    if [ -f "$_fr_wdir/$1" ] && [ -x "$_fr_wdir/$1" ]; then
+      printf '%s\n' "$_fr_wdir/$1"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# _fr_first_candidate <list>: echo the first usable entry of a candidate list (bare
+# names through fr_which, absolute paths probed directly), or return 1.
+_fr_first_candidate() {
+  # Word-splitting the candidate list is intentional.
+  # shellcheck disable=SC2086
+  for _fr_c in $1; do
+    case "$_fr_c" in
+      /*) if [ -f "$_fr_c" ] && [ -x "$_fr_c" ]; then printf '%s\n' "$_fr_c"; return 0; fi ;;
+      *) if fr_which "$_fr_c"; then return 0; fi ;;
+    esac
+  done
+  return 1
+}
+
 # Probe one candidate; on success set FR_JSON_BIN and return 0.
 _fr_try_parser() {
-  case "$1" in
-    /*)
-      [ -x "$1" ] || return 1
-      FR_JSON_BIN="$1"
-      ;;
-    *)
-      _fr_res=$(command -v "$1" 2>/dev/null) || return 1
-      [ -n "$_fr_res" ] || return 1
-      FR_JSON_BIN="$_fr_res"
-      ;;
-  esac
+  _fr_res=$(_fr_first_candidate "$1") || return 1
+  FR_JSON_BIN="$_fr_res"
   return 0
+}
+
+# --- jq and gh, for the hooks that script them ------------------------------
+#
+# Several hooks use jq filters no fr_json_field call can express, and the push guard
+# asks gh for a PR's state. They run the binaries resolved here, never a bare name
+# (super-fr#1481): `fr_jq` / `fr_gh` return 127, as a missing command would, when
+# nothing resolves, so each hook keeps its own "tool missing" posture, and
+# tests/unit/test_hooks_planted_tools.py fails on a bare `jq`/`gh` in any hook.
+
+FR_JQ_BIN=""
+FR_GH_BIN=""
+: "${FR_GH_CANDIDATES:=gh /usr/local/bin/gh /usr/bin/gh /opt/homebrew/bin/gh}"
+
+# returns 0 -> FR_JQ_BIN set; 1 -> no jq
+fr_jq_resolve() {
+  [ -n "$FR_JQ_BIN" ] && return 0
+  FR_JQ_BIN=$(_fr_first_candidate "$FR_JQ_CANDIDATES") || { FR_JQ_BIN=""; return 1; }
+}
+
+# returns 0 -> FR_GH_BIN set; 1 -> no gh
+fr_gh_resolve() {
+  [ -n "$FR_GH_BIN" ] && return 0
+  FR_GH_BIN=$(_fr_first_candidate "$FR_GH_CANDIDATES") || { FR_GH_BIN=""; return 1; }
+}
+
+fr_jq() {
+  fr_jq_resolve || return 127
+  "$FR_JQ_BIN" "$@"
+}
+
+fr_gh() {
+  fr_gh_resolve || return 127
+  "$FR_GH_BIN" "$@"
 }
 
 # Resolve a JSON parser once. Sets FR_JSON_KIND/FR_JSON_BIN.
@@ -75,7 +133,10 @@ fr_json_resolve() {
   # Word-splitting the candidate lists is intentional.
   # shellcheck disable=SC2086
   for _fr_cand in $FR_PYTHON_CANDIDATES; do
-    if _fr_try_parser "$_fr_cand"; then
+    # A python3 that resolves but cannot run (a pyenv shim with no version for this
+    # cwd, the Xcode CLT stub) is skipped, so jq still gets its turn: one interpreter
+    # start, once per hook run.
+    if _fr_try_parser "$_fr_cand" && "$FR_JSON_BIN" -I -c '' >/dev/null 2>&1; then
       FR_JSON_KIND=python3
       return 0
     fi
@@ -100,7 +161,9 @@ fr_json_field() {
   fr_json_resolve || return 1
   if [ "$FR_JSON_KIND" = "python3" ]; then
     # `python3 -c` (NOT a heredoc): stdin must stay free to carry the payload.
-    "$FR_JSON_BIN" -c '
+    # `-I` (isolated): no cwd on sys.path, no PYTHON* variables, no user site. Without
+    # it a `json.py` in the hook's cwd is the `json` this imports (super-fr#1484).
+    "$FR_JSON_BIN" -I -c '
 import json, sys
 try:
     data = json.load(sys.stdin)
