@@ -565,3 +565,8 @@ Fixed in 9bf334e0d: unparseable test files are recorded and named on their own l
 ### l-errors-r9-resolved · finding [fixed] · resolves l-errors-r9: Locate-before-stamp window: an include added between locate and the stamp was untracked
 
 Fixed in 9bf334e0d: _through_cache re-locates after compute and stores nothing when the result differs (a stale hit was already impossible; this removes an entry stamped over an incomplete list).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved-2 created=2026-11-19T21:24:52+00:00 state=open resolves=l-tests-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1579 -->
+### l-tests-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1579] · resolves l-tests-r5: The _Advance stand-in exposes only exit_code, output and stdout
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1579.
