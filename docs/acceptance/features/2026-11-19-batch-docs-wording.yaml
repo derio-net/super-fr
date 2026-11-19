@@ -118,3 +118,10 @@ rows:
     status: ci
     notes: 'R7-R9: skill prose asserted and the schema number pinned to the engine'
     verify: none
+amendments:
+  - row: writing-standards-docs-groups
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_writing_standards_docs.py#test_only_the_two_exceptions_carry_a_writing_standard_key
+    why: R6 renamed the pinned test
