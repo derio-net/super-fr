@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 from fr.triage.components import (
     CHROME_CSS,
     GUTTER_CSS,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     SKEW_CSS,
     TOKENS_CSS,
     page_header,
@@ -35,6 +37,7 @@ from fr.triage.kanban import (
     HeldIssue,
     Member,
     PrView,
+    cutoff_hidden_waves,
 )
 from fr.triage.render import FONTS, _safe_url, esc, noun
 
@@ -101,19 +104,35 @@ button.jump { font: inherit; font-size: .78rem; color: var(--accent); background
 code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--ground);
   border: 1px solid var(--line); border-radius: 4px; white-space: pre-wrap;
   overflow-wrap: break-word; user-select: all; }
-/* A column with no card collapses to a strip in the wide layout (gh#1417). The selector reads
-   the cards themselves, so the markup carries no second statement of "empty". */
+/* A column's header carries its toggle (R10). `.collapsed` is the column's own state: an empty
+   column starts with it, a viewer can set or clear it on any column, and the script keeps it
+   per scope. In the wide layout a collapsed column is a strip with its title turned on its side
+   (gh#1417); in the narrow layouts it only hides its cards. */
+.toolbar { display: flex; gap: 8px; margin-top: 16px; }
+button.chip { font: inherit; font-size: .82rem; color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; cursor: pointer; }
+button.chip[aria-pressed="true"] { color: var(--surface); background: var(--accent);
+  border-color: var(--accent); }
+button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card[hidden] { display: none; }
+button.coltoggle { font: inherit; color: inherit; background: transparent; border: 0; padding: 0;
+  cursor: pointer; text-align: left; font-weight: 600; }
+button.coltoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.coltoggle::before { content: "\\25BE\\00a0"; color: var(--muted); }
+.col.collapsed button.coltoggle::before { content: "\\25B8\\00a0"; }
+.col.collapsed .col-body { display: none; }
 @media (min-width: 1101px) {
   .board { display: flex; }
   .col { flex: 1 1 0; }
-  .col:not(:has(.card)) { flex: 0 0 2.4rem; padding: 10px 6px; }
-  .col:not(:has(.card)) h2 { writing-mode: vertical-rl; transform: rotate(180deg);
+  .col.collapsed { flex: 0 0 2.4rem; padding: 10px 6px; }
+  .col.collapsed h2 { writing-mode: vertical-rl; transform: rotate(180deg);
     margin: 0 auto; gap: 8px; white-space: nowrap; justify-content: flex-start; }
 }
 @media (max-width: 1100px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .board { grid-template-columns: minmax(0, 1fr); } }
 """
     + CHROME_CSS
+    + PAGE_CSS
     + GUTTER_CSS
     + SKEW_CSS
 )
@@ -134,6 +153,66 @@ SCRIPT = """
   function save() {
     var open = cards().filter(function (c) { return c.open; }).map(function (c) { return c.id; });
     write({ open: open, y: window.scrollY });
+  }
+  var scope = document.body.dataset.scope || "";
+  function colKey(col) { return "fr-triage:" + scope + ":col:" + col.dataset.column; }
+  function remembered(col) {
+    try { return localStorage.getItem(colKey(col)); } catch (e) { return null; }
+  }
+  function remember(col, collapsed) {
+    try {
+      localStorage.setItem(colKey(col), collapsed ? "1" : "0");
+    } catch (e) { /* unavailable */ }
+  }
+  function setCollapsed(col, collapsed) {
+    col.classList.toggle("collapsed", collapsed);
+    var toggle = col.querySelector("button.coltoggle");
+    if (toggle) { toggle.setAttribute("aria-expanded", collapsed ? "false" : "true"); }
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("section.col"), function (col) {
+    var was = remembered(col);
+    if (was === "1" || was === "0") { setCollapsed(col, was === "1"); }
+    var toggle = col.querySelector("button.coltoggle");
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        var collapsed = !col.classList.contains("collapsed");
+        setCollapsed(col, collapsed);
+        remember(col, collapsed);
+      });
+    }
+  });
+  // The wave cutoff (R18). The server decides which cards the cutoff hides, from the render
+  // time (`kanban.cutoff_hidden_waves`), and marks each with `data-cutoff-hidden`; this
+  // script only applies the marker or clears it.
+  var cutoff = document.getElementById("cutoff");
+  var cutoffKey = "fr-triage:" + scope + ":cutoff";
+  function cutoffWas() {
+    try { return localStorage.getItem(cutoffKey); } catch (e) { return null; }
+  }
+  function cutoffRemember(on) {
+    try { localStorage.setItem(cutoffKey, on ? "1" : "0"); } catch (e) { /* unavailable */ }
+  }
+  function applyCutoff() {
+    var on = !cutoff || cutoff.getAttribute("aria-pressed") === "true";
+    cards().forEach(function (c) { c.hidden = on && c.hasAttribute("data-cutoff-hidden"); });
+    Array.prototype.forEach.call(document.querySelectorAll("section.col"), function (col) {
+      var count = col.querySelector(".count");
+      if (count) { count.textContent = String(col.querySelectorAll(".card:not([hidden])").length); }
+    });
+    if (cutoff) { cutoff.textContent = on ? "last 30 days" : "all waves"; }
+  }
+  if (cutoff) {
+    var chosen = cutoffWas();
+    if (chosen === "1" || chosen === "0") {
+      cutoff.setAttribute("aria-pressed", chosen === "1" ? "true" : "false");
+    }
+    cutoff.addEventListener("click", function () {
+      var on = cutoff.getAttribute("aria-pressed") !== "true";
+      cutoff.setAttribute("aria-pressed", on ? "true" : "false");
+      cutoffRemember(on);
+      applyCutoff();
+    });
+    applyCutoff();
   }
   var saved = read();
   (saved.open || []).forEach(function (id) {
@@ -322,7 +401,7 @@ def _body(card: Card, scope_args: Sequence[str]) -> str:
     return f'<div class="body">{"".join(parts)}</div>'
 
 
-def _card(card: Card, scope_args: Sequence[str]) -> str:
+def _card(card: Card, scope_args: Sequence[str], *, hidden: bool = False) -> str:
     bid = card.batch.id
     classes = "card needs-you" if card.needs_you else "card"
     count = len(card.members)
@@ -350,7 +429,9 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
         f'<span class="hint">{esc(card.hint)}</span></summary>'
     )
     return (
-        f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}">'
+        f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}" '
+        f'data-wave="{"" if card.wave is None else card.wave}"'
+        f"{' data-cutoff-hidden' if hidden else ''}>"
         f"{summary}{_body(card, scope_args)}</details>"
     )
 
@@ -389,13 +470,23 @@ def _gated_card(g: GatedCard) -> str:
     )
 
 
-def _column(column: ColumnView, scope_args: Sequence[str]) -> str:
-    cards = "".join(_card(c, scope_args) for c in column.cards)
+def _column(
+    column: ColumnView, scope_args: Sequence[str], hidden_waves: frozenset[str] = frozenset()
+) -> str:
+    cards = "".join(
+        _card(c, scope_args, hidden=c.wave is not None and str(c.wave) in hidden_waves)
+        for c in column.cards
+    )
     cards += "".join(_gated_card(g) for g in column.gated)
+    count = len(column.cards) + len(column.gated)
+    collapsed = count == 0
+    key = esc(column.key)
     return (
-        f'<section class="col" data-column="{esc(column.key)}">'
-        f'<h2>{esc(column.title)} <span class="count">{len(column.cards) + len(column.gated)}'
-        f"</span></h2>{cards}</section>"
+        f'<section class="col{" collapsed" if collapsed else ""}" data-column="{key}">'
+        f'<h2><button type="button" class="coltoggle" '
+        f'aria-expanded="{"false" if collapsed else "true"}" aria-controls="col-{key}">'
+        f'{esc(column.title)}</button> <span class="count">{count}</span></h2>'
+        f'<div class="col-body" id="col-{key}">{cards}</div></section>'
     )
 
 
@@ -415,10 +506,15 @@ def render_board(
     board that stopped moving is told apart from a quiet one. None: no quota clause.
     *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
     commands carry; *refresh* is the reload interval in seconds, 0 for none."""
+    hidden_waves = cutoff_hidden_waves((c for col in board.columns for c in col.cards), rendered_at)
     if board.batch_count or board.gated_count:
         body = (
+            '<div class="toolbar" role="toolbar" aria-label="Which waves to show">'
+            '<button type="button" class="chip" id="cutoff" aria-pressed="true">'
+            "last 30 days</button>"
+            "</div>"
             '<div class="board">'
-            + "".join(_column(c, scope_args) for c in board.columns)
+            + "".join(_column(c, scope_args, hidden_waves) for c in board.columns)
             + "</div>"
         )
     else:
@@ -443,14 +539,14 @@ def render_board(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Batches · {esc(board.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n"
-        f'<body data-refresh="{max(0, int(refresh))}">\n<main>\n'
+        f'<body data-refresh="{max(0, int(refresh))}" data-scope="{esc(board.scope)}">\n<main>\n'
         f"<header><h1>Batches</h1>"
         f'<p class="meta">{esc(board.scope)} · rendered {_when(rendered_at)} · '
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
         f"{page_header('batches', present)}\n{banner}\n"
         f"{_held(board.held)}\n"
         f"{body}\n"
-        f'<footer class="meta">{quota}Rendered by <code>fr triage board</code> from facts.json '
+        f'<footer class="meta">{quota}Rendered by <code>fr triage batches</code> from facts.json '
         "and judgements.yaml.</footer>\n"
-        f"</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{SCRIPT}{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )

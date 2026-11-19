@@ -90,7 +90,13 @@ def _journal_slugs(run: Any) -> tuple[str | None, str | None]:
 def lens_set(root: Path, run: RunState) -> LensSet:
     """The lens set of `run`'s feature at `root`. Raises `LensError`."""
     spec_slug, plan_slug = _journal_slugs(run)
-    return lens_set_for(root, spec_slug=spec_slug, plan_slug=plan_slug)
+    from fr.run.target import TargetError, target_ref
+
+    try:
+        ref = target_ref(root, getattr(run, "base_branch", None))
+    except TargetError as error:
+        raise LensError(str(error)) from error
+    return lens_set_for(root, spec_slug=spec_slug, plan_slug=plan_slug, base_ref=ref)
 
 
 def _added(root: Path, spec_slug: str | None, plan_slug: str | None) -> dict[str, list[Reason]]:
@@ -132,10 +138,12 @@ def _changed(root: Path, ref: str | None) -> tuple[str | None, list[str] | None]
         raise LensError(f"git could not read the feature's diff: {e}") from e
 
 
-def lens_set_for(root: Path, *, spec_slug: str | None, plan_slug: str | None) -> LensSet:
+def lens_set_for(
+    root: Path, *, spec_slug: str | None, plan_slug: str | None, base_ref: str | None = None
+) -> LensSet:
     """The lens set from the named journals and the branch's diff. Raises `LensError`."""
     added = _added(root, spec_slug, plan_slug)
-    ref = default_ref(root)
+    ref = base_ref if base_ref is not None else default_ref(root)
     base_text = base_config_text(root, ref)
     rules = rules_in_force(base_text, head_config_text(root))
     head = effective_lenses(root)

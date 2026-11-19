@@ -2,7 +2,7 @@
 
 The page answers "How did we get here?": the snapshot timeline (stepping through the stored
 snapshots shows what the board showed then), then the **finished waves** as tabs (the
-board's own wave table, its batch links pointing at `triage.html`), then the authored
+Backlog's own wave table, its batch links pointing at the Backlog), then the authored
 fragments `history/manifest.yaml` places among them. A wave is finished when every batch in
 it is terminal (`batch_drive.finished_waves`, the one predicate); a finished wave shows here
 and not on the board.
@@ -12,19 +12,24 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime
 
-from fr.triage.batch import BATCH_STAGES
+from fr.triage.batch import BATCH_STAGES, batch_pr
 from fr.triage.components import (
     BASE_CSS,
     CHROME_CSS,
     GRID_CSS,
     GUTTER_CSS,
-    TABS_CSS,
-    TABS_SCRIPT,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     TOKENS_CSS,
+    Linker,
+    fold,
+    page,
     page_header,
+    rendered_by,
     tabs,
+    when,
 )
 from fr.triage.fragments import Resolved, splice
 from fr.triage.model import Facts, Judgements
@@ -33,12 +38,8 @@ from fr.triage.snapshot import Snapshot, diff_snapshots
 from fr.triage.views import batch_stages, cancelled_waves, finished_waves, preselected_wave, waves
 
 DASH = "—"
-PAGE_FILE = "history.html"
-HISTORY_DIR = "history"
-BOARD_FILE = "triage.html"
-
 GENERATED = ("timeline", "finished-waves")
-MOVED = {"waves": "board"}  # a section an old manifest may name that the board owns
+MOVED = {"waves": "backlog"}  # a section an old manifest may name that the Backlog owns
 
 CSS = (
     TOKENS_CSS
@@ -56,13 +57,13 @@ CSS = (
   border: 1px solid var(--line); }
 """
     + CHROME_CSS
-    + TABS_CSS
+    + PAGE_CSS
     + GUTTER_CSS
 )
 
 
-def _stamp(when: datetime) -> str:
-    return when.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+def _stamp(moment: datetime) -> str:
+    return when(moment)
 
 
 def _list(items: Sequence[str]) -> str:
@@ -123,11 +124,14 @@ def _snapshot_panel(snap: Snapshot, previous: Snapshot | None) -> str:
 
 
 def _timeline(snapshots: Sequence[tuple[datetime, Snapshot]]) -> str:
-    head = '<section id="snapshot-timeline"><h2>Snapshot timeline</h2>'
+    def section(body: str, count: int | None) -> str:
+        return fold("snapshot-timeline", "Snapshot timeline", count, body, heading="h2")
+
     if not snapshots:
-        return (
-            f'{head}<p class="quiet">No snapshots yet: `fr triage render` stores one each '
-            "time the board changes, and the timeline steps through them.</p></section>"
+        return section(
+            '<p class="quiet">No snapshots yet: `fr triage backlog` stores one each '
+            "time the board changes, and the timeline steps through them.</p>",
+            None,
         )
     panels = [
         (f"s{i}", _stamp(when), _snapshot_panel(snap, snapshots[i - 1][1] if i else None))
@@ -139,7 +143,7 @@ def _timeline(snapshots: Sequence[tuple[datetime, Snapshot]]) -> str:
             '<p class="lede">Only one snapshot is stored, so there is nothing to step '
             "through yet; the next render that changes the board adds a step.</p>"
         )
-    return f"{head}{note}{tabs('snapshot', 'Snapshots', panels, len(panels) - 1)}</section>"
+    return section(f"{note}{tabs('snapshot', 'Snapshots', panels, len(panels) - 1)}", len(panels))
 
 
 def _finished_waves(facts: Facts, judgements: Judgements) -> str:
@@ -151,13 +155,21 @@ def _finished_waves(facts: Facts, judgements: Judgements) -> str:
     if not grouped:
         return f'{head}<p class="quiet">No wave is finished yet.</p></section>'
     picked = preselected_wave(facts, judgements, among=done)
+    linker = Linker.from_facts(facts)
     keys = list(grouped)
     selected = keys.index(str(picked)) if picked is not None else len(keys) - 1
     panels = [
         (
             key,
             f"Wave {key} · cancelled" if key in cancelled else f"Wave {key}",
-            wave_table(batches, facts, judgements, BOARD_FILE),
+            wave_table(
+                batches,
+                facts,
+                judgements,
+                page("backlog").file,
+                linker=linker,
+                prs={b.id: batch_pr(b, facts) for b in batches},
+            ),
         )
         for key, batches in grouped.items()
     ]
@@ -172,9 +184,11 @@ def render_history(
     resolved: Resolved,
     notes: Sequence[str] = (),
     present: Sequence[str] = ("history",),
+    rendered_at: datetime | None = None,
 ) -> str:
     """The page: same inputs, same bytes. The timeline, the finished waves and the authored
-    fragments in the order *resolved* (the manifest) gives."""
+    fragments in the order *resolved* (the manifest) gives; *rendered_at* is the moment the
+    masthead states (triage-pages-ux R5)."""
     generated = {
         "timeline": lambda: _timeline(snapshots),
         "finished-waves": lambda: _finished_waves(facts, judgements),
@@ -188,9 +202,9 @@ def render_history(
         f"<title>{esc(title)}</title>\n{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
         f'<header class="mast"><h1>{esc(title)}</h1><div class="meta">'
         f"<span>collected {esc(facts.collected_at)}</span>"
-        "<span>rendered by <code>fr triage history render</code></span></div>"
+        f"{rendered_by(rendered_at, 'fr triage history render')}</div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('history', present)}\n"
         + "\n".join(body)
-        + f"\n</main>\n<script>{TABS_SCRIPT}</script>\n</body>\n</html>\n"
+        + f"\n</main>\n<script>{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )

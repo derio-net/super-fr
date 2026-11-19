@@ -19,7 +19,7 @@ from fr.triage.errors import TriageError
 from fr.triage.kanban import Board
 from fr.triage.kanban_render import render_board
 from fr.triage.model import Facts, Judgements, Scope, Skipped, TriageConfig
-from fr.triage.render import render
+from fr.triage.render import render_backlog
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_dispatch import FakeCheckout
@@ -142,7 +142,7 @@ def test_the_banner_names_ignored_keys_and_skipped_repos_escaped() -> None:
 
 def test_triage_html_renders_the_banner_directly_under_the_nav_and_no_skipped_note() -> None:
     facts = _facts(config_ignored={REPO: ["future_key"]}, skipped=[Skipped(repo="o/r", reason="x")])
-    page = render(facts, Judgements.model_validate({"schema": 1}))
+    page = render_backlog(facts, Judgements.model_validate({"schema": 1}))
     nav_end = page.index("</nav>")
     assert page.index('role="alert"') > nav_end
     assert "<nav" not in page[nav_end : page.index('role="alert"')]

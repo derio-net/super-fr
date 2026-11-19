@@ -2,8 +2,8 @@
 
 The same scope options as every `fr triage` verb. It reads the scope's state directory
 (`facts.json`, `judgements.yaml`, `subsystems.yaml`, `architecture/manifest.yaml` and the
-fragments it names) and the git checkout it measures, and writes only `architecture.html`
-beside them, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success (a manifest
+fragments it names) and the git checkout it measures, and writes only the Architecture
+page beside them, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success (a manifest
 entry with no file is reported, and shown on the page, but is not a failure); 2 usage, a
 missing `facts.json` (the message names the collect command), an unreadable state file, or
 a malformed fragment (nothing is written).
@@ -12,6 +12,8 @@ a malformed fragment (nothing is written).
 from __future__ import annotations
 
 import webbrowser
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -23,27 +25,28 @@ from fr.artifacts.atomic import write_text_atomic
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    PageWritten,
     RepoOpt,
     WorkspaceOpt,
     console,
     err_console,
+    say_warning,
     triage_app,
 )
 from fr.triage.architecture import (
-    ARCHITECTURE_DIR,
     GENERATED,
     MOVED,
-    PAGE_FILE,
     SUBSYSTEMS_FILE,
     Measured,
     load_subsystems,
     measure_subsystems,
     render_architecture,
 )
-from fr.triage.components import pages_present, refresh_navs
+from fr.triage.components import fragment_dir, page, pages_present, refresh_navs
 from fr.triage.errors import TriageError
-from fr.triage.fragments import resolve_manifest
+from fr.triage.fragments import moved_notes, resolve_manifest
 from fr.triage.gitseam import Checkout, GitError
+from fr.triage.model import Scope
 from fr.triage.render import plural
 
 architecture_app = typer.Typer(
@@ -59,8 +62,71 @@ def _fail(message: str) -> typer.Exit:
     return typer.Exit(code=2)
 
 
-def _warn(message: str) -> None:
-    err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+def write_architecture(
+    scope: Scope,
+    target: Path,
+    *,
+    now: datetime,
+    warn: Callable[[str], None] = say_warning,
+    checkout: Checkout | Path | None = None,
+    now_ref: str = "HEAD",
+    measured: dict[str, Measured] | None = None,
+) -> PageWritten:
+    """Render the Architecture page into the state directory *target* with *now* as the
+    render time (spec 2026-11-18-triage-pages-ux §C). Line counts are measured through
+    *checkout* (a `Checkout`, or a path to a clone; None is the current directory's) at
+    *now_ref*, unless *measured*, an earlier measurement, is given: then no git call is
+    made. The measurement used is on the result. A clone that cannot be read is a warning
+    and an unmeasured page. Raises `TriageError` for a broken subsystems file or manifest."""
+    _, facts, judgements = triage_cmd._load_state(scope, target, None, read_only=True)
+    subsystems = load_subsystems(target / SUBSYSTEMS_FILE)
+    folder, _ = fragment_dir(target, "architecture")
+    resolved = resolve_manifest(folder, GENERATED, MOVED)
+
+    used: dict[str, Measured] = {}
+    if measured is not None:
+        used = measured
+    elif subsystems.subsystems:
+        try:
+            clone = (
+                Checkout.at(checkout)
+                if checkout is None or isinstance(checkout, Path)
+                else checkout
+            )
+            used = measure_subsystems(clone, subsystems, now_ref=now_ref)
+        except GitError as exc:
+            warn(f"not measured: {exc}")
+
+    notes = [f"manifest entry {name} has no file in {folder.name}/" for name in resolved.missing]
+    notes += moved_notes(resolved)
+    if resolved.appended:
+        notes.append(
+            f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
+            "the entries it lists, in the default order"
+        )
+    for note in notes:
+        warn(note)
+    out = target / page("architecture").file
+    write_text_atomic(
+        out,
+        render_architecture(
+            facts,
+            judgements,
+            subsystems=subsystems,
+            measured=used,
+            resolved=resolved,
+            notes=notes,
+            present=pages_present(target, "architecture"),
+            rendered_at=now,
+        ),
+    )
+    refresh_navs(target, "architecture", warn=triage_cmd.warn_nav)
+    return PageWritten(
+        out,
+        f"{out} ({plural(len(subsystems.subsystems), 'subsystem')}, "
+        f"{plural(len(resolved.fragments), 'fragment')})",
+        measured=used,
+    )
 
 
 @architecture_app.command("render")
@@ -78,7 +144,7 @@ def render_command(
     ] = "HEAD",
     open_: bool = typer.Option(False, "--open", help="Open the page in a browser."),
 ) -> None:
-    """Write architecture.html: the summary, subsystem cards and size table, with the
+    """Write the Architecture page: the summary, subsystem cards and size table, with the
     authored fragments `architecture/manifest.yaml` places among them.
 
     Line counts are measured with `git ls-tree` and `git grep` at each subsystem's
@@ -86,51 +152,13 @@ def render_command(
     cannot be measured is an em dash.
     """
     scope = triage_cmd._scope(repo, org)
-    target, facts, judgements = triage_cmd._load_state(scope, dir_override, workspace)
+    target, _, _ = triage_cmd._load_state(scope, dir_override, workspace)
     try:
-        subsystems = load_subsystems(target / SUBSYSTEMS_FILE)
-        resolved = resolve_manifest(target / ARCHITECTURE_DIR, GENERATED, MOVED)
+        written = write_architecture(
+            scope, target, now=datetime.now(UTC), checkout=checkout, now_ref=now_ref
+        )
     except TriageError as exc:
         raise _fail(str(exc)) from exc
-
-    measured: dict[str, Measured] = {}
-    if subsystems.subsystems:
-        try:
-            measured = measure_subsystems(Checkout.at(checkout), subsystems, now_ref=now_ref)
-        except GitError as exc:
-            _warn(f"not measured: {exc}")
-
-    notes = [
-        f"manifest entry {name} has no file in {ARCHITECTURE_DIR}/" for name in resolved.missing
-    ]
-    for name, page in resolved.moved.items():
-        notes.append(f"manifest names `{name}`, which is now on the {page} page; skipped")
-    if resolved.appended:
-        notes.append(
-            f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
-            "the entries it lists, in the default order"
-        )
-    for note in notes:
-        _warn(note)
-    out = target / PAGE_FILE
-    write_text_atomic(
-        out,
-        render_architecture(
-            facts,
-            judgements,
-            subsystems=subsystems,
-            measured=measured,
-            resolved=resolved,
-            notes=notes,
-            present=pages_present(target, "architecture"),
-        ),
-    )
-    refresh_navs(target, "architecture", warn=triage_cmd.warn_nav)
-    console.print(
-        f"wrote {out} ({plural(len(subsystems.subsystems), 'subsystem')}, "
-        f"{plural(len(resolved.fragments), 'fragment')})",
-        markup=False,
-        soft_wrap=True,
-    )
+    console.print(f"wrote {written.detail}", markup=False, soft_wrap=True)
     if open_:
-        webbrowser.open(out.resolve().as_uri())
+        webbrowser.open(written.path.resolve().as_uri())

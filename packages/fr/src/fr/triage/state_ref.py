@@ -54,7 +54,9 @@ REF_FILES: tuple[str, ...] = (
     "judgements.yaml",
     "origins.yaml",
     "subsystems.yaml",
-    "board/",
+    "board/",  # the Backlog's and Issues' old fragment directory, still read as a fallback
+    "backlog/",
+    "issues/",
     "origins/",
     "architecture/",
     "history/",
@@ -66,6 +68,7 @@ REF_FILES: tuple[str, ...] = (
     "requests.yaml",
     "sessions.yaml",
     "rehomes.yaml",
+    "drive-pages.json",
 )
 """THE list of what the state ref carries: a name ending in `/` is a directory, taken
 whole (every regular file under it, never through a symlink)."""

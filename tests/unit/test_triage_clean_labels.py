@@ -66,13 +66,13 @@ def test_check_text_lists_stale_then_release_pending_and_held_apart(tmp_path: Pa
 
 
 def test_the_triage_page_folds_the_set_and_the_board_notes_the_command() -> None:
-    from fr.triage.render import render
+    from fr.triage.render import render_issues
 
     f = _facts(_entry(1, "stale"), _entry(2, "held"))
-    page = render(f, judgements({}))
+    page = render_issues(f, judgements({}))
     assert 'id="closed-in-progress"' in page and "widgets#1" in page and "widgets#2" in page
     assert "<details" in page[page.index('id="closed-in-progress"') - 20 :]
-    clean = render(_facts(), judgements({}))
+    clean = render_issues(_facts(), judgements({}))
     assert 'id="closed-in-progress"' not in clean
 
 
@@ -91,10 +91,10 @@ def test_the_board_note_fires_on_stale_or_release_pending_and_names_the_rule() -
 
 def test_every_surface_states_the_same_clearing_rule(tmp_path: Path) -> None:
     from fr.triage.check import CLEARING_RULE
-    from fr.triage.render import render
+    from fr.triage.render import render_issues
 
     f = _facts(_entry(1, "stale"), _entry(2, "release-pending"))
-    page = render(f, judgements({}))
+    page = render_issues(f, judgements({}))
     assert "claim sync --yes" in page and "clean-labels --yes" in page
     (tmp_path / "facts.json").write_text(json.dumps(f.to_json()), "utf-8")
     out = (

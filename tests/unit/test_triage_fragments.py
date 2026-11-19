@@ -11,9 +11,10 @@ from fr.triage.errors import TriageError
 from fr.triage.fragments import Entry, Resolved, resolve_manifest, splice
 
 
-def test_pages_registry_lists_the_five_pages() -> None:
+def test_pages_registry_lists_the_six_pages() -> None:
     assert tuple(p.key for p in PAGES) == (
         "backlog",
+        "issues",
         "batches",
         "origins",
         "architecture",
@@ -21,14 +22,16 @@ def test_pages_registry_lists_the_five_pages() -> None:
     )
     assert tuple(p.title for p in PAGES) == (
         "Backlog",
+        "Issues",
         "Batches",
         "Origins",
         "Architecture",
         "History",
     )
     assert tuple(p.file for p in PAGES) == (
-        "triage.html",
-        "board.html",
+        "backlog.html",
+        "issues.html",
+        "batches.html",
         "origins.html",
         "architecture.html",
         "history.html",
@@ -50,15 +53,15 @@ def test_page_header_marks_the_current_page_and_states_the_goal() -> None:
     assert re.search(r'class="goal"[^>]*>[^<]*Where do defects come from', h)
 
 
-def test_collapsed_renders_a_closed_fold_with_title_and_count() -> None:
-    from fr.triage.components import collapsed
+def test_fold_renders_a_closed_fold_with_title_and_count() -> None:
+    from fr.triage.components import fold
 
-    h = collapsed("x", "A <Title>", 3, "<p>b</p>")
+    h = fold("x", "A <Title>", 3, "<p>b</p>")
     assert h.startswith('<details id="x" class="fold">')
     assert " open" not in h.split(">")[0]
     assert "<summary>A &lt;Title&gt;" in h and '<span class="count">3</span>' in h
     assert "<p>b</p>" in h
-    assert 'class="count"' not in collapsed("y", "T", None, "")
+    assert 'class="count"' not in fold("y", "T", None, "")
 
 
 # ---------------------------------------------------------------------- manifest
@@ -283,3 +286,63 @@ def test_a_missing_entry_renders_nothing(tmp_path: Path) -> None:
     resolved = resolve_manifest(d, GEN)
     assert splice(resolved, {g: (lambda: "x") for g in GEN})[:1] != [""]
     assert all("gone" not in o for o in splice(resolved, {}))
+
+
+# ------------------------------------------------------------- fold groups (R9, §I)
+
+GROUP = (
+    "sections:\n  - summary\n  - fold: Archived notes (2026-10-02)\n    entries:\n"
+    "      - a.html\n      - b.html\n  - c.html\n"
+)
+
+
+def test_a_fold_group_resolves_its_files_in_order_on_any_page(tmp_path: Path) -> None:
+    d = _arch(tmp_path, GROUP, a__html="<p>A</p>", b__html="<p>B</p>", c__html="<p>C</p>")
+    resolved = resolve_manifest(d, GEN)
+    group = resolved.order[1]
+    assert group.title == "Archived notes (2026-10-02)" and group.collapsed
+    assert [m.name for m in group.group] == ["a.html", "b.html"]
+    assert set(resolved.fragments) == {"a.html", "b.html", "c.html"}
+    assert resolved.missing == []
+
+
+def test_a_fold_group_renders_one_closed_fold_holding_both_fragments_in_order(
+    tmp_path: Path,
+) -> None:
+    d = _arch(tmp_path, GROUP, a__html="<p>AAA</p>", b__html="<p>BBB</p>", c__html="<p>CCC</p>")
+    out = splice(resolve_manifest(d, GEN), {g: (lambda: "") for g in GEN})
+    folds = [o for o in out if o.startswith("<details")]
+    assert len(folds) == 1
+    html = folds[0]
+    assert " open" not in html.split(">")[0]
+    assert "Archived notes (2026-10-02)" in html and '<span class="count">2</span>' in html
+    assert html.index("AAA") < html.index("BBB") and "CCC" not in html
+    assert 'data-fragment="a.html"' in html and 'data-fragment="b.html"' in html
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "- fold: G\n    entries: [a.html]\n    colapsed: true",
+        "- fold: G",
+        "- fold: G\n    entries: []",
+        "- fold: ''\n    entries: [a.html]",
+        "- fold: G\n    entries: [{fragment: a.html}]",
+        "- fold: G\n    entries: [summary]",
+        "- fold: G\n    entries: [../a.html]",
+    ],
+)
+def test_a_bad_fold_group_is_refused_naming_the_manifest(tmp_path: Path, entry: str) -> None:
+    d = _arch(tmp_path, f"sections:\n  {entry}\n", a__html="<p>a</p>")
+    with pytest.raises(TriageError, match="manifest.yaml"):
+        resolve_manifest(d, GEN)
+
+
+def test_a_file_in_a_group_and_listed_again_shows_once(tmp_path: Path) -> None:
+    d = _arch(
+        tmp_path,
+        "sections:\n  - fold: G\n    entries: [a.html]\n  - a.html\n",
+        a__html="<p>only once</p>",
+    )
+    out = splice(resolve_manifest(d, GEN), {g: (lambda: "") for g in GEN})
+    assert "".join(out).count("only once") == 1

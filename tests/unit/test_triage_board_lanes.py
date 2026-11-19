@@ -198,12 +198,12 @@ def test_the_rendered_board_shows_the_lane_columns() -> None:
 
 
 def test_p5_r1_a_recorded_merge_stop_reaches_the_rendered_needs_you_now() -> None:
-    from fr.triage.render import render
+    from fr.triage.render import render_backlog
 
     f, jd = _open(_cursor("none"), labels=["approved-fr"])
     stop = MergeStop(head="sha-11", reason="conflict", at="2026-10-01T12:00:00Z")
-    assert 'data-need="needs-reviewer"' not in render(f, jd)
-    assert 'data-need="needs-reviewer"' in render(f, jd, stops={"a": stop})
+    assert 'data-need="needs-reviewer"' not in render_backlog(f, jd)
+    assert 'data-need="needs-reviewer"' in render_backlog(f, jd, stops={"a": stop})
 
 
 def test_p5_r3_a_green_unapproved_delivered_pr_has_one_row() -> None:

@@ -78,6 +78,42 @@ def test_pr_create_opens_a_draft_and_records_the_url_on_the_cursor(
     assert git(repo, "status", "--porcelain", "--", "docs") == "", "the cursor is committed"
 
 
+def test_pr_create_uses_the_runs_recorded_merge_target(tmp_path: Path, forge: FakeGhClient) -> None:
+    from fr.run.model import save_run_state
+
+    repo = _repo(tmp_path)
+    state = load_run_state(repo, "r1")
+    save_run_state(repo, state.model_copy(update={"base_branch": "management"}))
+    result = _create(repo)
+    assert result.exit_code == 0, result.output
+    call = next(call for name, call in forge.calls if name == "create_pr")
+    assert call["base"] == "management", (
+        "MR creation must not silently return to the remote default"
+    )
+
+
+def test_pr_create_refuses_target_different_from_the_reviewed_run(
+    tmp_path: Path, forge: FakeGhClient
+) -> None:
+    from fr.run.model import save_run_state
+
+    repo = _repo(tmp_path)
+    state = load_run_state(repo, "r1")
+    save_run_state(repo, state.model_copy(update={"base_branch": "management"}))
+    result = _create(repo, "--base", "main")
+    assert result.exit_code == 2 and "target" in result.output
+    assert not [call for call in forge.calls if call[0] == "create_pr"]
+
+
+def test_nondefault_pr_target_must_be_recorded_before_review(
+    tmp_path: Path, forge: FakeGhClient
+) -> None:
+    repo = _repo(tmp_path)
+    result = _create(repo, "--base", "management")
+    assert result.exit_code == 2 and "run target" in result.output
+    assert not [call for call in forge.calls if call[0] == "create_pr"]
+
+
 def test_there_is_no_flag_to_open_a_ready_pr(tmp_path: Path, forge: FakeGhClient) -> None:
     repo = _repo(tmp_path)
     for flag in ("--ready", "--no-draft", "--draft=false"):

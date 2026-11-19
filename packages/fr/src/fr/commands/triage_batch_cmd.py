@@ -239,6 +239,7 @@ from fr.triage.claim_sync import (
 )
 from fr.triage.claims import Claim, expired, held_line, held_map, held_members, taken_keys
 from fr.triage.claims import stale as claim_stale
+from fr.triage.components import page
 from fr.triage.cursor import read_cursor
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
@@ -3822,6 +3823,18 @@ class _Driver:
         self.lease, self.leased = lease, False  # R9: renewed every pass, when given
         self.scope_args = scope_args or []
         self.board_failures: set[str] = set()  # board write failures, since the last good one
+        # per page key: its write failures since the last good one (R6), and what the
+        # drive's pages remember between passes
+        self.page_failures: dict[str, set[str]] = {}
+        self._measured: dict[str, Any] | None = None  # architecture's last measurement
+        self._clone_probed = False  # the pages' clone was looked for (R6)
+        self._pages_clone: Checkout | None = None
+        # What the last page-writing pass left (`drive-pages.json`, read at the first pages
+        # of this process: the cloud driver's state arrives with its lease): R7
+        self._memory_read = False
+        self._baselined = False  # a snapshot decision was made, here or by an earlier process
+        self._owed = False  # a wave finish is still owed its snapshot
+        self._paged_unfinished: frozenset[str] | None = None
         self.workspace_prefix = workspace_prefix
         self.keep_sessions = keep_sessions
         self.checkout_paths = checkouts
@@ -5354,6 +5367,7 @@ class _Driver:
         if self.yes:
             if paced is None or paced.kind != "essential":
                 self._write_board()  # an essential-only pass keeps the last board (R14)
+                self._write_pages(False)  # nor does it write the pages (R6)
         else:
             _say("nothing done; re-run with --yes to act")
         stuck = [a.batch for a in plan.actions if a.kind == "blocked"]
@@ -5413,7 +5427,7 @@ class _Driver:
                 _say(f"restart failed {pane}: {reason}")
 
     def _write_board(self) -> None:
-        """Render `board.html` from what this pass left on disk (R11). A board that cannot
+        """Render the Batches page from what this pass left on disk (R11). A board that cannot
         be written is one warning per distinct cause and never changes the pass."""
         try:
             out, _ = triage_kanban_cmd.write_board(
@@ -5438,6 +5452,154 @@ class _Driver:
         else:
             self.board_failures.clear()
             triage_kanban_cmd.publish(self.scope, self.target, out, self.publish_failures)
+
+    def _page_failed(self, key: str, exc: BaseException) -> None:
+        """A page that cannot be written is one warning per distinct cause, and never changes
+        the pass (R6), as the board's write is today."""
+        cause = triage_kanban_cmd.one_line(exc)
+        failed = self.page_failures.setdefault(key, set())
+        if cause not in failed:
+            failed.add(cause)
+            err_console.print(
+                f"[yellow]warning:[/yellow] could not write the "
+                f"{escape(page(key).title)} page: {escape(cause)}",
+                soft_wrap=True,
+            )
+
+    def _scope_clone(self) -> Checkout | None:
+        """The clone of a single-repo scope's repo this driver holds; None for any other
+        scope, or when it is not usable (the pages then render with no measurement). The
+        probe runs once per driver and its miss is said once, in a warning, never an error."""
+        if self.scope.kind != "repo":
+            return None
+        if not self._clone_probed:
+            self._clone_probed = True
+            repo = self.scope.target
+            try:
+                why = _checkout_refusal(self.path_of(repo), repo)
+                if why is None:
+                    self._pages_clone = self.checkout(repo)
+            except Exception as exc:  # noqa: BLE001 - a view never fails the pass on its clone
+                why = triage_kanban_cmd.one_line(exc)
+            if why is not None:
+                self._report_once(
+                    f"clone\0pages\0{why}",
+                    f"no usable clone of {repo} ({why}); Architecture renders with no measurement",
+                )
+        return self._pages_clone
+
+    def _write_pages(self, wave_finished: bool) -> None:
+        """Re-render, after the board, every page whose inputs are on disk, in registry order
+        (R6): Backlog and Issues, Origins (when `origins-facts.json` exists), Architecture
+        (when `subsystems.yaml` exists) and History. A page that cannot be written is one
+        warning per distinct cause. Takes the drive's snapshot when R7 says so: on the first
+        page-writing pass of a scope with no `drive-pages.json` when it differs from the latest
+        stored one, then on a pass that finds a wave finished: *wave_finished*, a wave of the
+        remembered unfinished set that is finished now, or one a failed write still owes.
+        Architecture measures on the first pass and a wave-finish pass only. What the pass
+        leaves is written to `drive-pages.json`, so another process carries on from it."""
+        from fr.commands import (
+            triage_architecture_cmd,
+            triage_history_cmd,
+            triage_origins_cmd,
+        )
+        from fr.triage.architecture import SUBSYSTEMS_FILE
+        from fr.triage.drive_pages import PagesMemory, load_memory, save_memory
+        from fr.triage.origins import FACTS_FILE as ORIGINS_FACTS
+        from fr.triage.snapshot import latest_snapshot, store_snapshot
+
+        if not self._memory_read:
+            self._memory_read = True
+            if (memory := load_memory(self.target)) is not None:
+                self._baselined, self._owed = True, memory.owed
+                self._paged_unfinished = memory.unfinished
+        gone = (
+            self._paged_unfinished is not None
+            and self._unfinished is not None
+            and bool(self._paged_unfinished - self._unfinished)
+        )
+        finished = wave_finished or self._owed or gone
+        now = _now()
+        clone = self._scope_clone()
+        wrote_backlog = False
+
+        def said_once(key: str, message: str) -> None:
+            self._report_once(key, message)
+
+        def warn(key: str) -> Callable[[str], None]:
+            return lambda message: said_once(f"page\0{key}\0{message}", message)
+
+        def write_backlog() -> None:
+            nonlocal wrote_backlog
+            written = triage_cmd.write_backlog(
+                self.scope,
+                self.target,
+                now=now,
+                warn=warn("backlog"),
+                # The cloud driver reads its own runners only, its mailbox already open
+                # (p4-o2); the host's pages load as they always did (R10).
+                loader=self.runner if self.adapter.kind == "cloud" else None,
+                prefix=self.workspace_prefix,
+                ci_none=frozenset(r for r, none in self._ci.items() if none),
+                matrix=clone.path if clone is not None else None,
+            )
+            snap = written.snapshot
+            store = finished
+            if not self._baselined:
+                store = snap is not None and snap != latest_snapshot(self.target)
+            if snap is not None and store:
+                store_snapshot(
+                    self.target, snap, now,
+                    warn=lambda m: said_once(f"snapshot\0{m}", m),
+                )  # fmt: skip
+            self._baselined = wrote_backlog = True
+
+        def write_origins() -> None:
+            triage_origins_cmd.write_origins(self.scope, self.target, now=now, warn=warn("origins"))
+
+        def write_architecture() -> None:
+            remeasure = self._measured is None or finished
+            written = triage_architecture_cmd.write_architecture(
+                self.scope,
+                self.target,
+                now=now,
+                warn=warn("architecture"),
+                checkout=clone,
+                measured={} if clone is None else (None if remeasure else self._measured),
+            )
+            if clone is not None:
+                self._measured = written.measured
+
+        def write_history() -> None:
+            triage_history_cmd.write_history(self.scope, self.target, now=now, warn=warn("history"))
+
+        due = [
+            ("backlog", write_backlog, True),
+            ("origins", write_origins, (self.target / ORIGINS_FACTS).is_file()),
+            ("architecture", write_architecture, (self.target / SUBSYSTEMS_FILE).is_file()),
+            ("history", write_history, True),
+        ]
+        for key, write, wanted in due:
+            if not wanted:
+                continue
+            try:
+                write()
+            except Exception as exc:  # noqa: BLE001 - a page is a view; it never fails a pass
+                self._page_failed(key, exc)
+            else:
+                self.page_failures.pop(key, None)
+        # A failed Backlog write keeps the snapshot owed for the next pass (p4-r4).
+        self._owed = self._owed or finished
+        if wrote_backlog:
+            self._owed = False
+        if self._unfinished is not None:
+            self._paged_unfinished = self._unfinished
+            try:
+                save_memory(self.target, PagesMemory(self._unfinished, self._owed))
+            except OSError as exc:
+                self._report_once(
+                    f"pages-memory\0{exc}", f"could not remember the pages' state: {exc}"
+                )
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""

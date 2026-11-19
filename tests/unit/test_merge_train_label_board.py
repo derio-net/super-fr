@@ -351,11 +351,11 @@ def test_a_ci_none_repo_asks_for_the_label_with_no_check_at_all() -> None:
 
 
 def test_the_page_threads_ci_none_to_needs_you() -> None:
-    from fr.triage.render import render
+    from fr.triage.render import render_backlog
 
     f, jd = _one(labels=[], checks={"pass": 0, "fail": 0, "pending": 0})
-    assert 'data-need="approve-pr"' not in render(f, jd)
-    assert 'data-need="approve-pr"' in render(f, jd, ci_none={REPO})
+    assert 'data-need="approve-pr"' not in render_backlog(f, jd)
+    assert 'data-need="approve-pr"' in render_backlog(f, jd, ci_none={REPO})
 
 
 def test_a_board_render_builds_one_snapshot_and_one_pass(

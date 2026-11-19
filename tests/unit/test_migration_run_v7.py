@@ -36,7 +36,7 @@ def _seed(root: Path, text: str | None = None) -> Path:
 
 def test_the_hop_is_registered_and_moves_six_to_seven() -> None:
     chain = MIGRATIONS.chain("run", 6)
-    hops = [(6, 7), (7, 8), (8, 9), (9, 10), (10, 11)]
+    hops = [(6, 7), (7, 8), (8, 9), (9, 10), (10, 11), (11, 12)]
     assert [(m.from_version, m.to_version) for m in chain] == hops
 
 
@@ -46,7 +46,7 @@ def test_a_v6_cursor_migrates_with_its_figures_moved_into_usage(tmp_path: Path) 
     assert report.failed == (), report.failed
 
     text = cursor.read_text()
-    assert read_version("run", cursor) == 11  # 6 -> 7, then the stamp-only hops to 11
+    assert read_version("run", cursor) == 12  # 6 -> 7, then the additive stamp-only hops
     parse_run_state(text)  # the LIVE model reads it
     for gone in ("estimate:", "measured:", "main_session:"):
         assert gone not in text

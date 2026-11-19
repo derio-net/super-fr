@@ -1226,6 +1226,7 @@ def _tests(repo_root: Path, state: RunState) -> str | None:
 def _proportionality(repo_root: Path, state: RunState) -> str:
     from fr.parser import PlanSchemaError, parse
     from fr.proportionality import run_report
+    from fr.run.target import TargetError, target_ref
 
     plan_rel = next(
         (r.emitted["plan"] for r in state.steps.values() if r.emitted and "plan" in r.emitted),
@@ -1234,8 +1235,12 @@ def _proportionality(repo_root: Path, state: RunState) -> str:
     if plan_rel is None:
         return "No plan recorded for this run."
     try:
-        report = run_report(repo_root, parse(emitted_path(repo_root, plan_rel)), None)
-    except (PlanSchemaError, OSError) as e:
+        report = run_report(
+            repo_root,
+            parse(emitted_path(repo_root, plan_rel)),
+            target_ref(repo_root, state.base_branch),
+        )
+    except (PlanSchemaError, OSError, TargetError) as e:
         return _unavailable(repo_root, e)
     return f"```text\n{report.text.rstrip()}\n```"
 
