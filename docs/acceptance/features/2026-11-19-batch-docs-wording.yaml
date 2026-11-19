@@ -125,3 +125,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_writing_standards_docs.py#test_only_the_two_exceptions_carry_a_writing_standard_key
     why: R6 renamed the pinned test
+  - row: writing-standards-docs-groups
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_writing_standards_docs.py#test_only_the_three_exceptions_carry_a_writing_standard_key
+    why: R6 renamed the pinned test
