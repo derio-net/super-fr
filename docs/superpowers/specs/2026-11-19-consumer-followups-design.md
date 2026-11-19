@@ -53,7 +53,8 @@ that directory itself when the call has no `workdir`. Both the whole-line isolat
 guard and the merged-PR push guard receive that directory.
 
 R2. The OpenCode plugin's edit gate resolves a relative target path against the
-session's `location.directory`. An absolute target is judged as today.
+session's `location.directory`, and judges a patch with no parseable target (its
+unresolvable-patch probe) in that directory too. An absolute target is judged as today.
 
 R3. The OpenCode plugin's pipeline sentinel is written for the repo that contains the
 session's `location.directory`.
@@ -63,8 +64,9 @@ event names (top-level or child; each session's own, never its parent's). When t
 lookup fails, answers about another session, or names no directory, the plugin's
 directory is used, as today. The plugin looks a session up at most once per process
 while the lookup succeeds: a found directory is cached by session id, and a failed
-lookup is not cached. A failed lookup never throws out of a hook, and the gates' own
-decisions and refusal texts are unchanged.
+lookup is not cached. A lookup is bounded: one that has not answered within 2 seconds
+counts as failed (the fallback, uncached). A failed lookup never throws out of a hook,
+and the gates' own decisions and refusal texts are unchanged.
 
 R5. The scaffolded Gitea acceptance workflow's `matrix` job checks out with
 `persist-credentials: false`, so no job of the Gitea workflow keeps a credential in
@@ -76,6 +78,13 @@ names a login page, in either form `tea.api_result` produces (the HTML-body caus
 3xx redirect). One predicate in `fr/tea.py` recognises both forms. Every other
 `TeaError` keeps the site's fail-soft answer.
 
+R7. A login page raised by R6 reaches the operator as a refusal that names it, never as
+a traceback: the DevOps gate's default-branch read (`fr/ops/gate.py`, `Gate.default`)
+turns a forge error into its `StageFailed` refusal (exit 2) naming the error, and the
+isolation lifecycle's existing `FORGE_ERRORS` refusal (`fr isolation up`'s default-branch
+read, and the PR lookup of `gc`, `down` and `status`) names it where it used to fall back
+to `main` or to "no PR".
+
 ## Design
 
 ### A. Session directory for the gates (R1–R4)
@@ -86,12 +95,17 @@ names a login page, in either form `tea.api_result` produces (the HTML-body caus
 id and caches only a found directory in a module-level map shared across plugin reloads,
 in the same way as `sharedClaimed()` and `sharedServed()`. An answer whose `id` is not
 the asked id, a lookup that throws, or one with no `location.directory` returns the
-fallback and is not cached. The resolver never throws.
+fallback and is not cached. The lookup races a 2-second timer (R4); a timeout returns
+the fallback, uncached, so a hanging `session.get` costs each tool call at most that bound
+and a failing one costs one quick RPC per call (q2 keeps failures uncached). The resolver
+never throws.
 
 In `src/index.ts`:
 
 - `execute.before` resolves the directory once per event (after `claimChild`, before the
-  shell gate) and passes it to `shellCwd(...)` and `gate(...)`;
+  shell gate) and passes it to `shellCwd(...)` and `gate(...)`; inside `gate` it is the base
+  of `normalizeTarget` for both relative targets and the unresolvable-patch probe
+  (`index.ts:197`);
 - `execute.after` resolves it once and passes it to `writePipelineSentinel(...)`.
 
 The bind handler keeps its own child-session rule (a child never rebinds its parent).
@@ -104,9 +118,17 @@ follow the session, and why (gh#1371, #1552).
 ### B. Gitea matrix checkout (R5)
 
 `WORKFLOW_TEMPLATE_GITEA`'s `matrix` checkout gains `persist-credentials: false` beside
-`fetch-depth: 0`, matching the GitHub template. The golden files of the rendered Gitea
-workflow, if any, are regenerated. A consumer gets the change through
+`fetch-depth: 0`, matching the GitHub template. Both Gitea goldens are regenerated:
+`tests/fixtures/acceptance_scaffold/gitea-actions.golden` (matrix checkout at `:48`) and
+`gitea-actions.published.golden`. A consumer gets the change through
 `fr acceptance init --refresh-ci`.
+
+The job needs no credential. The report's `--link-mode github` only builds URLs,
+`upload-artifact` uses the runner's own token, and fr installs from public GitHub. On a
+private repo the check's default-ref fetch now fails. With `fetch-depth: 0` that failure
+is a warning: `branch_refusals` (`amend.py:349-358`) checks against the local ref and
+prints "cannot fetch the default ref …". The GitHub matrix job prints the same warning on
+every run of a private repo today.
 
 ### C. tea login page at the fail-soft sites (R6)
 
@@ -117,14 +139,35 @@ of the six sites changes from `except _tea.TeaError: return <empty>` to: re-rais
 the predicate holds, else return the empty answer as today. The docstrings that say
 "fails soft" / "any error" name the exception.
 
-Callers already handle a raised forge error (`hostclient.FORGE_ERRORS` includes
-`TeaError`), as they do for the GitLab adapter's same rule.
+The GitLab adapter re-raises a named login page at only three sites (`real_glabclient.py:402`,
+`:428`, `:465`), so its callers prove nothing about the other three. Each tea site's callers,
+after the change:
+
+- `pr_for_branch`: `pr_cmd.py:73`, `push_cmd.py:157`, `debt/engine.py:505` and
+  `run/adopt.py:788` catch `FORGE_ERRORS` already. The isolation lifecycle's `_pr_from`
+  (`isolation/local.py:3166-3168`, used by `gc`, `down` and `status`) turns it into its
+  host refusal. That is intended (R7): `gc` must not read an unreachable forge as "no PR".
+- `default_branch`: `fr isolation up` (`isolation/local.py:3024-3031`) refuses with the host
+  refusal where it used to base the branch on `main`, which is intended (R7). The DevOps gate
+  (`ops/gate.py:336`) catches nothing today: `Gate.default` gains `except FORGE_ERRORS`,
+  raising `StageFailed(..., code=2)` with the error's text (R7).
+- `file_exists`: `migrate.py:928-934` catches `Exception` and degrades to "unresolved
+  locally — confirm and re-run". It is left as it is, because the degrade is documented and
+  the note already sends the operator to look. `spec.py:246` catches `FORGE_ERRORS`.
+- `list_dir`, `list_linked_prs`, `pr_status_by_url`: the callers checked by the spec
+  review (`observe.py:53`, `gatebackfill/forge.py:94`) catch forge errors.
 
 ### Out of scope
 
 - The bash hooks' behaviour (Claude Code already judges in the session's `cwd`).
 - The GitHub and GitLab templates (already without a persisted credential in the matrix
   job; GitLab has no `checkout`).
+- A CI checkout whose default branch is outside `main`/`master`/`trunk`/`develop` has no
+  default ref, so the check refuses in CI (`amend.py:322-336`). This predates R5 and does
+  not depend on the credential (spec-review s-r5).
+- A child session has no pipeline sentinel of its own, so the shell and push guards never
+  fire for it in any directory (`guard.ts:184-190`, `push.ts:48-53`). This predates R4
+  (spec-review s-r6).
 - `tea.with_retry`'s transient classification (a login page is not transient, and is not
   retried today).
 
@@ -132,9 +175,9 @@ Callers already handle a raised forge error (`hostclient.FORGE_ERRORS` includes
 
 strategy: candidate
 
-- opencode-gates-session-directory: none — bun tests in `packages/fr-opencode-plugin` with a session directory that differs from the plugin's, for each gate and the fallback
+- opencode-gates-session-directory: none — bun tests in `packages/fr-opencode-plugin` with a session directory that differs from the plugin's, for the shell gate (guard and push), relative edit targets, the unresolvable-patch probe, the sentinel, the fallback (a failed, foreign, empty and hanging lookup) and the cache
 - gitea-matrix-no-persisted-token: none — CI unit test on the rendered Gitea workflow
-- tea-fail-soft-login-page: none — one parametrised CI unit test over the six sites with the redacted login-page fixture, plus a non-login `TeaError` staying fail-soft
+- tea-fail-soft-login-page: none — one parametrised CI unit test over the six sites with the redacted login-page fixture, plus a non-login `TeaError` staying fail-soft, the DevOps gate's `StageFailed` refusal and the isolation up refusal naming the login page
 
 ## Implementation Plans
 
