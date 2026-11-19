@@ -565,6 +565,34 @@ def _bare_host(host: str) -> str:
     return host.split(":", 1)[0]
 
 
+def _url_host(repo: str) -> str:
+    """The bare host of a forge remote's URL, "" when it has none."""
+    url = https_form(repo)
+    return (urlparse(url).hostname or "").lower() if url else ""
+
+
+def _checkout_host(root: Path) -> str:
+    """The bare host a checkout's forge names: declared, else its origin's. Raw
+    hostnames, never the SaaS-filtered ones (review p4-r7)."""
+    from fr import _hosts
+
+    return _bare_host(_hosts.declared_host(root) or _hosts.origin_hostname(root) or "")
+
+
+def _speaks_for(repo: str, root: Path | None) -> Path | None:
+    """*root* when that checkout's forge names *repo*'s host, else None. One host is one
+    forge instance, so a checkout's declared forge type is also the type of every other
+    repo on its host: the one way a tracking repo with no checkout of its own escapes
+    the URL-only reading, which takes every self-hosted host for GitHub (gh#1527)."""
+    if root is None or is_local(repo):
+        return None
+    host = _url_host(repo)
+    try:
+        return root if host and _checkout_host(root) == host else None
+    except Exception:  # noqa: BLE001 - an unreadable checkout speaks for nothing
+        return None
+
+
 def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
     """*repo*'s visibility from its forge, always asked on the host of *repo*'s own URL
     (the slug's host). With a *checkout* of it, its declared forge type picks the client
@@ -579,7 +607,7 @@ def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
     if slug is None:
         return None
     url = https_form(repo)
-    url_host = (urlparse(url).hostname or "").lower() if url else ""
+    url_host = _url_host(repo)
     if url is None or not url_host:
         return None
     try:
@@ -590,10 +618,9 @@ def _forge_visibility(repo: str, checkout: Path | None = None) -> str | None:
         else:
             # The slug is the remote's, so the host asked must be the remote's too: a
             # checkout whose forge names another host would answer for another repo of
-            # the same name (review p4-r7). Raw hostnames, never the SaaS-filtered ones.
+            # the same name (review p4-r7).
             root = Path(checkout)
-            raw = _hosts.declared_host(root) or _hosts.origin_hostname(root) or ""
-            if _bare_host(raw) != url_host:
+            if _checkout_host(root) != url_host:
                 return None
             backend = _hosts.detect_backend(root)
         saas = _hosts.DEFAULT_HOST_BACKENDS.get(url_host)
@@ -617,7 +644,8 @@ def check_privacy(
     """R24 privacy: refuse a tracking repo more visible than the target, and either
     visibility unreadable (fail closed, naming the repo). A local path is private, so a
     local pair passes. *target_root*, the target's checkout, has its visibility read by
-    its own forge client (review p4-r7)."""
+    its own forge client (review p4-r7), and so has a tracking repo on the same forge
+    host (gh#1527); a tracking repo elsewhere is placed by its URL."""
     from fr.triage.privacy import more_visible
 
     target = target_remote or "."
@@ -625,7 +653,10 @@ def check_privacy(
         return
     seen: dict[str, str] = {}
     for repo in (ref.repo, target):
-        checkout = target_root if repo == target and repo != ref.repo else None
+        if repo == target and repo != ref.repo:
+            checkout = target_root
+        else:
+            checkout = _speaks_for(repo, target_root)
         answer = "private" if repo == "." else visibility(repo, checkout)
         if answer is None:
             raise SettingsError(
