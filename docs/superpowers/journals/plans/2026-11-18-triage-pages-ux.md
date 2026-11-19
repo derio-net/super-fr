@@ -386,3 +386,64 @@ a hook after that pass.
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 _write_pages is new code beside _write_board; the four command bodies were already lifted into writers in T1, so there was nothing left to tidy
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-11-19T04:53:11+00:00 phase=4 -->
+### review-p4 · review · Phase 4 review: the driver re-renders every page and snapshots at a wave's finish (phase 4)
+
+Independent review of 2adefd2..a322faa42 against R6, R7 and design §C, after reading batch_drive.py,
+driver.py, the drive loop in triage_batch_cmd.py and fr triage drive pass end to end. Holds: the drive
+pass stays pure; pages are written only on --yes passes that are neither quiet nor essential-only; Origins
+and Architecture wait for their inputs; per-page failure sets warn once per cause; atomic writes; the
+refactored commands keep their output, refusals and warnings; the cloud loader and ci_none are passed.
+Five findings, all in scope, all fixed: chiefly the drive's page memory now persists in drive-pages.json,
+carried by the state ref, so host restarts and cloud wakes keep the R6/R7 rules.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-19T04:53:11+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · A single-repo scope with no usable clone prints a red error line every pass (phase 4)
+
+_scope_clone went through _open_checkout/_fail, printing before raising, uncached and not once per cause.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-19T04:53:11+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · The cloud driver builds a fresh _Driver per wake, losing the drive's page memory (phase 4)
+
+Architecture re-measured every wake, a snapshot whenever the board changed, and the wave-finish rule never fired.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-19T04:53:11+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · Docs state the measurement and snapshot rules without saying they held only for the host loop (phase 4)
+
+fr-wave-driver.md and docs/triage/README.md misled a cloud-driver reader.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-19T04:53:11+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · A wave-finish snapshot is lost on an early drive exit or a failing Backlog write (phase 4)
+
+The finish was seen only by a later pass the drive might not run, and the owed flag was cleared before the write.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-19T04:53:11+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · The purity test only greps for datetime.now (phase 4)
+
+Other clock, git or subprocess use in batch_drive.py passed it.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-19T04:53:11+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: A single-repo scope with no usable clone prints a red error line every pass (phase 4)
+
+f7427b4f8: _scope_clone probes with _checkout_refusal once per driver, caches hit or miss, and a miss is one once-per-cause warning.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-19T04:53:11+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: The cloud driver builds a fresh _Driver per wake, losing the drive's page memory (phase 4)
+
+209f66595: drive-pages.json (fr/triage/drive_pages.py) holds the unfinished waves, the owed flag and the serialised measurement, written atomically and carried by state_ref.REF_FILES; two drives in sequence keep the rules.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-19T04:53:11+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: Docs state the measurement and snapshot rules without saying they held only for the host loop (phase 4)
+
+958b8df56: both pages describe the memory file for host and cloud drivers, with reviewed stamps.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-19T04:53:11+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: A wave-finish snapshot is lost on an early drive exit or a failing Backlog write (phase 4)
+
+209f66595: a new process sees a wave finished while no driver ran; the owed flag clears only after the Backlog write and snapshot succeed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-19T04:53:11+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: The purity test only greps for datetime.now (phase 4)
+
+b8ff83fdd: an AST check refuses clock calls, time/subprocess/gitseam imports in batch_drive.py, and is shown to catch an impure source.
