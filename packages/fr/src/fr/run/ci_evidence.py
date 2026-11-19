@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -109,6 +109,35 @@ def load_gate_checks(repo_root: Path, rev: str = "HEAD") -> list[str] | None:
             "with at least one name"
         )
     return [n.strip() for n in names]
+
+
+def declared_tests_mode(repo_root: Path) -> Literal["ci"] | None:
+    """`"ci"` when `.fr/ci.yaml` at HEAD declares `tests: ci`, else None (spec
+    2026-11-19-local-suite-cost R8, §3.F). The repo's default suite evidence for
+    `deliver` and its phases: CI, with the fast tier as a phase's last local act.
+
+    Read at HEAD alone, unlike `declared_gates`: the key relaxes no gate (a local
+    full-suite log stays accepted), so a branch may declare it for its own runs.
+    Any other value of `tests` is refused; other unknown keys stay ignored, as
+    `load_gate_checks` ignores them."""
+    try:
+        res = git_answer(repo_root, "show", f"HEAD:{CI_CONFIG}")
+    except GitUnavailableError as e:
+        raise CiEvidenceRefused(f"git could not read {CI_CONFIG}: {e}") from e
+    if res.returncode != 0:
+        return None
+    try:
+        data = yaml.safe_load(res.stdout)
+    except yaml.YAMLError as e:
+        raise CiEvidenceRefused(f"{CI_CONFIG} at HEAD is not YAML: {e}") from e
+    if not isinstance(data, dict) or "tests" not in data:
+        return None
+    if data["tests"] != "ci":
+        raise CiEvidenceRefused(
+            f"{CI_CONFIG} at HEAD declares tests: {data['tests']!r}; the only value is "
+            "`tests: ci` (or leave the key out)"
+        )
+    return "ci"
 
 
 def declared_gates(repo_root: Path, base: str | None) -> list[str] | None:

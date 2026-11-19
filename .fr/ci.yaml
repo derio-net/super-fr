@@ -1,1 +1,4 @@
 gate_checks: [ci-ok]
+# The repo's suite evidence (spec 2026-11-19-local-suite-cost R8): CI. A phase runs
+# the fast advisory tier last; a local `pytest -m ""` full-suite log stays accepted.
+tests: ci
