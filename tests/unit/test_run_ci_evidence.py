@@ -323,9 +323,13 @@ def test_a_malformed_ci_yaml_is_refused(tmp_path: Path, text: str) -> None:
 
 
 def test_this_repo_declares_ci_ok_as_its_gate() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    import yaml
 
-    assert (repo_root / ".fr" / "ci.yaml").read_text().strip() == "gate_checks: [ci-ok]"
+    repo_root = Path(__file__).resolve().parents[2]
+    data = yaml.safe_load((repo_root / ".fr" / "ci.yaml").read_text())
+
+    # `tests: ci` (spec 2026-11-19-local-suite-cost R8): CI is this repo's suite evidence.
+    assert data == {"gate_checks": ["ci-ok"], "tests": "ci"}
 
 
 # --- p2-r1: without a file, the required NAMES, reported or not ------------
