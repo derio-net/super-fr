@@ -8421,6 +8421,12 @@ batches:
     - super-fr#1448
     - super-fr#1449
     - super-fr#1450
+  - kind: closeout
+    at: '2026-11-19T22:10:36.994896Z'
+    runner: herdr
+    handle: w3Q:p3
+    run: 2026-11-19-feat-batch-docs-wording
+    archive: chore/closeout-2026-11-19-4
 - id: retire-vk
   title: Retire VibeKanban support
   ids:
@@ -8780,6 +8786,11 @@ batches:
     - super-fr#1488
   - kind: post_merge
     at: '2026-11-19T12:13:24.289554Z'
+  - kind: closeout
+    at: '2026-11-19T22:10:38.826846Z'
+    runner: herdr
+    handle: w3Q:p3
+    archive: chore/closeout-2026-11-19-4
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
@@ -8815,6 +8826,12 @@ batches:
     - super-fr#1527
   - kind: post_merge
     at: '2026-11-19T19:46:44.774761Z'
+  - kind: closeout
+    at: '2026-11-19T22:10:40.540146Z'
+    runner: herdr
+    handle: w3Q:p3
+    run: 2026-11-19-fix-batch-stealth-gitlab
+    archive: chore/closeout-2026-11-19-4
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
@@ -9600,3 +9617,34 @@ closeouts:
   - docs-wording
   - owed-followups
   - stealth-gitlab
+  pr: 1582
+  head: f1502c509e32476693fac6aeb098ea2cb69fef81
+  members:
+  - docs-wording
+  - owed-followups
+  - stealth-gitlab
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-18-batch-owed-followups.md"
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-19-stealth-gitlab-visibility.md"
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-19-batch-docs-wording.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-19-batch-docs-wording.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-batch-docs-wording/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-batch-docs-wording/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-batch-docs-wording/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-batch-docs-wording/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-batch-docs-wording/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-19-feat-batch-docs-wording.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-19-batch-docs-wording-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-19-feat-batch-docs-wording.yaml"
+  - "D\tdocs/superpowers/journals/debug/2026-11-18-batch-owed-followups.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-19-stealth-gitlab-visibility.md"
+  - "D\tdocs/superpowers/journals/plans/2026-11-19-batch-docs-wording.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-19-batch-docs-wording.md"
+  - "D\tdocs/superpowers/plans/2026-11-19-batch-docs-wording/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-19-batch-docs-wording/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-19-batch-docs-wording/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-19-batch-docs-wording/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-19-batch-docs-wording/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-19-feat-batch-docs-wording.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-19-batch-docs-wording-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-19-feat-batch-docs-wording.yaml"
