@@ -8,7 +8,12 @@ repo when it has one, else in the scope's repo:
 - a cause with no issue gets one (or adopts an open one carrying its marker, so two hosts
   never file the same cause twice);
 - a cause whose open issue was filed at a lower count gets one comment with the new count;
-- a cause whose issue was closed and that recurred gets a new issue naming the closed one.
+- a cause whose issue was closed and that recurred gets a new issue naming the closed one
+  (or adopts the open one another host already filed for it); one that did not recur since
+  its filing is left closed.
+
+A forge error mid-filing stops the filing: what was filed before it is in the returned
+ledger, and the error is the result's last line (`Filing.error`), never a traceback.
 
 An issue carries the label `fr:driver-failure`, a hidden marker `fr-driver-failure:<cause>`,
 the cause, kind, counts, dates, fr version and exception class, and never the failure's
@@ -81,6 +86,7 @@ class Filing:
 
     lines: list[str]
     changed: bool = False
+    error: str | None = None  # the forge error that stopped the filing, if one did
 
 
 def file_failures(
@@ -102,6 +108,9 @@ def file_failures(
         )
     except ListingCapped as capped:  # a partial answer adopts what it found, files the rest
         open_issues = capped.issues
+    except Exception as exc:  # noqa: BLE001 - every backend's error: nothing was written
+        return Filing([f"nothing filed in {repo}: its open issues could not be read: {exc}"],
+                      error=str(exc))  # fmt: skip
     by_marker: dict[str, int] = {}
     for issue in open_issues:
         for found in re.findall(r"<!-- fr-driver-failure:(\S+) -->", str(issue.get("body", ""))):
@@ -139,38 +148,54 @@ def file_failures(
         entry.filed_count = entry.count
         out.changed = True
 
-    for cause, entry in ledger.by_count():
+    def adopt(cause: str, entry: Cause, found: int) -> None:  # filed from another host
+        if write:
+            entry.issue = f"{repo}#{found}"
+            out.changed = True
+        out.lines.append(f"{cause}: {verb}adopt {repo}#{found}")
+        if comments_ok and write and entry.count > entry.filed_count:
+            comment(cause, entry, found)
+
+    def one(cause: str, entry: Cause) -> None:
         number = _number(entry.issue) if entry.issue else None
         if entry.issue and entry.issue.startswith(f"{repo}#") and number is not None:
             state = str(_view_state(client, repo, number))
             if state == "CLOSED":
                 closed = entry.issue
+                if entry.count <= entry.filed_count:  # nothing since its filing (p1a-r3)
+                    out.lines.append(f"{cause}: {closed} closed, no recurrence")
+                    return
+                if cause in by_marker:  # another host re-filed it already (p1a-r4)
+                    adopt(cause, entry, by_marker[cause])
+                    return
                 create(cause, entry, closed)
                 out.lines.append(f"{cause}: {verb}file a new issue (it recurred after {closed} "
                                  "was closed)")  # fmt: skip
-                continue
+                return
             if entry.count > entry.filed_count:
                 if not comments_ok:
                     out.lines.append(f"{cause}: {entry.issue} not commented: "
                                      f"{policy.block('comments')}")  # fmt: skip
-                    continue
+                    return
                 comment(cause, entry, number)
                 out.lines.append(f"{cause}: {verb}comment the count {entry.count} on {entry.issue}")
-                continue
+                return
             out.lines.append(f"{cause}: {entry.issue} is up to date ({entry.count})")
-            continue
+            return
         if cause in by_marker:  # filed from another host: adopt it
-            found = by_marker[cause]
-            if write:
-                entry.issue = f"{repo}#{found}"
-                out.changed = True
-            out.lines.append(f"{cause}: {verb}adopt {repo}#{found}")
-            if comments_ok and write and entry.count > entry.filed_count:
-                comment(cause, entry, found)
-            continue
+            adopt(cause, entry, by_marker[cause])
+            return
         create(cause, entry, None)
         shown = f" as {entry.issue}" if write and entry.issue else ""
         out.lines.append(f"{cause}: {verb}file an issue in {repo}{shown}")
+
+    for cause, entry in ledger.by_count():
+        try:
+            one(cause, entry)
+        except Exception as exc:  # noqa: BLE001 - every backend's error: keep what was done
+            out.lines.append(f"{cause}: the forge failed, filing stopped: {exc}")
+            out.error = str(exc)
+            break
     return out
 
 

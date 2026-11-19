@@ -3393,8 +3393,9 @@ class ForgeReadError(Exception):
     """A read a drive pass depends on failed or timed out (gh#910): the forge's, the
     clone's fetch, `.fr/triage.yaml` on the default branch (gh#921, gh#998), or the state
     repo's visibility, which the lease and the pass's save read (gh#1134). Loop
-    mode skips the rest of the pass and reads again after `--interval`; `--once` and
-    plan mode exit with *code*, as before."""
+    mode ends the pass as the transient `forge-read` (batch-train-truth R3: the backoff
+    doubles from `--interval`, a rate limit keeps its budget wait); `--once` and plan mode
+    exit with *code*, as before."""
 
     def __init__(self, message: str, *, code: int) -> None:
         super().__init__(message)
@@ -7474,24 +7475,17 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
             try:
                 acted, summary, blocked = one_pass(driver)
             except ForgeReadError as exc:
-                if once or not driver.yes:
-                    _error(str(exc))
-                    return LoopEnd(exc.code)
-                if paced is not None and paced.limited(str(exc)):
-                    pace = paced.rate_limited()
+                if paced is not None and paced.limited(str(exc)):  # loop mode, with --yes
+                    pace = paced.rate_limited()  # a rate limit keeps its own budget wait (R3)
                     _say(paced.line(pace))
                     if driver.restart_to is not None:
                         return LoopEnd(0, driver.restart_to)
                     wait_out(driver, pace)
                     continue
                 # Like a refused merge (rg-4), a degraded forge ends neither the run nor
-                # the loop: reported once per cause, then read again (gh#910).
-                _ledger(driver, "transient", "forge-read", str(exc), type(exc).__name__)
-                _report_read_failure(driver, str(exc), f"pass skipped, retrying every {interval}s")
-                if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
-                    return LoopEnd(0, driver.restart_to)  # post_merge installed a newer fr
-                _wait(interval)
-                continue
+                # the loop (gh#910): the R3 transient `forge-read`, through the boundary.
+                raise TransientPassFailure("forge-read", str(exc), code=exc.code,
+                                           original=exc) from exc  # fmt: skip
             failed = 0
             driver.read_failures.clear()
             if driver.yes and not once:
@@ -7527,18 +7521,20 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
         except Exception as exc:  # noqa: BLE001 - THE boundary: every failure is classified
             failure = classify(exc)
             if once or not driver.yes:  # R6: today's exit code, from the carried code
-                if failure.message:
+                if failure.message and not failure.said:
                     _error(failure.message)
                 if driver.yes:
                     _ledger_failure(driver, failure)
                 return LoopEnd(failure.code)
             failed += 1
             if isinstance(failure, TransientPassFailure) and failed >= MAX_FAILED_PASSES:
-                failure = DriverRefusal(
+                stop = DriverRefusal(
                     failure.cause,
                     f"{MAX_FAILED_PASSES} passes in a row failed, the last with: "
                     f"{failure.message or failure.cause}",
                 )
+                _stop(driver, stop, ledgered=failure)  # the cause stays transient (p1a-r10)
+                return LoopEnd(stop.code)
             if isinstance(failure, DriverRefusal):
                 _stop(driver, failure)
                 return LoopEnd(failure.code)
@@ -7546,7 +7542,8 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
             wait = backoff(interval, failed)
             if failure.cause not in driver.read_failures:
                 driver.read_failures.add(failure.cause)
-                said = f"{escape(failure.message)} " if failure.message else ""
+                shown = failure.message and not failure.said
+                said = f"{escape(failure.message)} " if shown else ""
                 err_console.print(
                     f"[yellow]warning:[/yellow] {said}({failure.cause}); the pass ended, "
                     f"its state kept; the next pass in {wait}s",
@@ -7585,16 +7582,20 @@ def _driver_pass(driver: _Driver) -> None:
         _report_read_failure(driver, f"the driver record: {err}", "not recorded")
 
 
-def _stop(driver: _Driver, refusal: DriverRefusal) -> None:
+def _stop(
+    driver: _Driver, refusal: DriverRefusal, *, ledgered: TransientPassFailure | None = None
+) -> None:
     """A refusal ends the looping driver (R8): recorded on `driver.yaml` and in the ledger,
-    the board rendered once to show it, and the stop said with how to resume and file it."""
-    _ledger_failure(driver, refusal)
+    the board rendered once to show it, and the stop said with how to resume and file it.
+    The tenth transient failure in a row (R5) stops as a refusal, but its cause is counted
+    in the ledger as what it was, *ledgered* (p1a-r10)."""
+    _ledger_failure(driver, ledgered if ledgered is not None else refusal)
     try:
         record_refusal(driver.target, refusal.cause, refusal.message, refusal.resume, _now(),
                        __version__)  # fmt: skip
     except (OSError, TriageError) as err:
         _report_read_failure(driver, f"the driver record: {err}", "not recorded")
-    if refusal.message:
+    if refusal.message and not refusal.said:
         _error(refusal.message)
     driver._write_board()
     err_console.print(

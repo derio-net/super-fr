@@ -34,12 +34,30 @@ RESUME = "fix it, then run `fr triage batch drive --yes` again"
 """The resume line of a refusal whose fix is the operator's own."""
 
 
-class DriverRefusal(Exception):  # noqa: N818 - the name the spec gives it
-    """A failure only the operator can fix: the looping driver stops (exit *code*)."""
+FAIL_MESSAGE = "fr_message"
+"""The attribute a `_fail` helper's `typer.Exit` carries its message in (p1a-r1): `str()` of
+an `Exit` is its exit code, so the text is read from here, never from `str(exc)`."""
 
-    def __init__(self, cause: str, message: str, resume: str = RESUME, code: int = 2) -> None:
+
+def fail_exit(message: str, code: int = 2) -> typer.Exit:
+    """The `typer.Exit` a `_fail` helper raises once it printed *message*: it carries the
+    message (`FAIL_MESSAGE`), so the boundary records it and does not print it again."""
+    exit_ = typer.Exit(code=code)
+    setattr(exit_, FAIL_MESSAGE, message)
+    return exit_
+
+
+class DriverRefusal(Exception):  # noqa: N818 - the name the spec gives it
+    """A failure only the operator can fix: the looping driver stops (exit *code*).
+    *said* is true when the message was already printed where it was raised."""
+
+    def __init__(
+        self, cause: str, message: str, resume: str = RESUME, code: int = 2, *,
+        said: bool = False,
+    ) -> None:  # fmt: skip
         super().__init__(message)
         self.cause, self.message, self.resume, self.code = cause, message, resume, code
+        self.said = said
 
 
 class TransientPassFailure(Exception):  # noqa: N818 - the name the spec gives it
@@ -51,10 +69,12 @@ class TransientPassFailure(Exception):  # noqa: N818 - the name the spec gives i
         message: str,
         code: int = 2,
         original: BaseException | None = None,
+        *,
+        said: bool = False,
     ) -> None:
         super().__init__(message)
         self.cause, self.message, self.code = cause, message, code
-        self.original = original
+        self.original, self.said = original, said
 
 
 # The refusal classes, most specific first: (class, cause, resume). `None` as the cause
@@ -103,11 +123,13 @@ def classify(exc: BaseException) -> DriverRefusal | TransientPassFailure:
             return DriverRefusal(named or f"config:{type(exc).__name__}", message, resume)
     if isinstance(exc, PrivacyError):  # after VisibilityUnreadable, its transient subclass
         return DriverRefusal("privacy", message)
-    if isinstance(exc, typer.Exit):
+    if isinstance(exc, typer.Exit):  # its str() is the code: the text is `_fail`'s (p1a-r1)
         cause = f"exit:{_raiser(exc.__traceback__)}"
+        text = str(getattr(exc, FAIL_MESSAGE, "") or "")
+        said = bool(text)  # `_fail` printed it as it raised
         if exc.exit_code == 2:
-            return DriverRefusal(cause, message)
-        return TransientPassFailure(cause, message, code=exc.exit_code, original=exc)
+            return DriverRefusal(cause, text, said=said)
+        return TransientPassFailure(cause, text, code=exc.exit_code, original=exc, said=said)
     if isinstance(exc, GitError):
         return TransientPassFailure(f"git:{git_op(message)}", message, original=exc)
     if isinstance(exc, TriageError):

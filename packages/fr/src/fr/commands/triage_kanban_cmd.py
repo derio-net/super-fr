@@ -67,6 +67,7 @@ from fr.triage.components import (
     skew_banner,
     strip_nav,
 )
+from fr.triage.drive_errors import fail_exit
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.driver_record import stopped, stopped_line, view_inputs
@@ -98,8 +99,11 @@ DISPATCH_INSTALL_HINT = (
 
 
 def _fail(message: str, code: int = 2) -> NoReturn:
+    """Print *message* and exit *code*. The `Exit` carries the message as `fr_message`
+    (`fr.triage.drive_errors.FAIL_MESSAGE`), because `str()` of an `Exit` is its code: the
+    wave driver's boundary records the text, and does not print it a second time."""
     err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise typer.Exit(code=code)
+    raise fail_exit(message, code)
 
 
 def one_line(exc: BaseException) -> str:

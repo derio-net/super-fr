@@ -126,6 +126,31 @@ def save_ledger(state_dir: Path, ledger: Ledger) -> None:
     )
 
 
+Filed = dict[str, tuple[str | None, int]]
+"""What a filing changed, per cause: its `issue` and `filed_count`."""
+
+
+def filed(ledger: Ledger) -> Filed:
+    """*ledger*'s filing fields, per cause: compared before and after a filing."""
+    return {cause: (entry.issue, entry.filed_count) for cause, entry in ledger.causes.items()}
+
+
+def save_filed(state_dir: Path, changed: Filed, filed_from: Ledger) -> Ledger:
+    """Write a filing's *changed* causes into the ledger AS IT STANDS NOW (p1a-r8): a
+    running driver may have counted failures while the filing talked to the forge, so the
+    ledger is read again and only `issue` and `filed_count` are taken from the filing. A
+    cause the ledger no longer has comes back whole, from *filed_from*. The ledger saved."""
+    current = load_ledger(state_dir)
+    for cause, (issue, count) in changed.items():
+        entry = current.causes.get(cause)
+        if entry is None:
+            current.causes[cause] = filed_from.causes[cause]
+            continue
+        current.causes[cause] = entry.model_copy(update={"issue": issue, "filed_count": count})
+    save_ledger(state_dir, current)
+    return current
+
+
 def record_failure(
     state_dir: Path,
     kind: FailureKind,

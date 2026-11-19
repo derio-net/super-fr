@@ -2210,15 +2210,16 @@ def test_a_failed_recollect_does_not_end_the_loop_and_is_reported_once(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
-    """gh#910: loop mode skips the pass, waits --interval and reads again; the same
-    cause twice in a row is reported once; the merge lands once the forge answers."""
+    """gh#910: loop mode skips the pass and reads again after the R3 backoff (--interval,
+    doubling); the same cause twice in a row is reported once; the merge lands once the
+    forge answers."""
     _pr_open(world, tmp_path)
     calls = _flaky_collect(monkeypatch, world, failures=2, message=EOF_MSG)
     naps = _naps_until(monkeypatch, 3)
     result = _drive_named(tmp_path, "--yes", "--interval", "7")
     assert isinstance(result.exception, _StopError), result.output
     assert len(calls) == 3
-    assert naps[:2] == [7, 7]
+    assert naps[:2] == [7, 14]
     assert result.output.count("unexpected EOF") == 1
     assert world.merged == [(101, "sha-101", "squash")]
 

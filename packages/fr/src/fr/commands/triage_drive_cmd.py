@@ -39,7 +39,7 @@ from fr.commands.triage_cmd import (
     resolve_state_dir,
     triage_app,
 )
-from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
+from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify, fail_exit
 from fr.triage.errors import TriageError
 from fr.triage.lease import (
     DEFAULT_INTERVAL_MIN,
@@ -77,7 +77,7 @@ def _now() -> datetime:
 
 def _fail(message: str, code: int = 2) -> NoReturn:
     err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise typer.Exit(code=code)
+    raise fail_exit(message, code)
 
 
 IntervalOpt = Annotated[
@@ -595,18 +595,17 @@ def drive_pass_command(
             if newer is None and stop is None and not reexec:
                 acted, summary, _ = batch.one_pass(driver, lease_taken=True)
     except batch.ForgeReadError as exc:
-        if not is_rate_limited(str(exc)):
-            _fail(str(exc), code=exc.code)
+        if not is_rate_limited(str(exc)):  # the R3 transient `forge-read` (p1a-r5)
+            read = TransientPassFailure("forge-read", str(exc), code=exc.code, original=exc)
+            _pass_failed(outbox, driver, target, read)
+            raise typer.Exit(code=read.code) from exc
         # a rate limit ends the pass, not the session: record the wait, exit 3 (R2, R16)
         _write_outbox(outbox, driver.outbox())
         console.print(pacer.line(pacer.rate_limited()), markup=False, soft_wrap=True)
         raise typer.Exit(code=3) from exc
     except Exception as exc:  # noqa: BLE001 - the pass's one boundary (batch-train-truth R6)
         failure = classify(exc)
-        _write_outbox(outbox, driver.outbox())  # what the pass asked so far is still owed
-        _record_failure(target, failure)
-        if failure.message:
-            err_console.print(f"[red]error:[/red] {escape(failure.message)}", soft_wrap=True)
+        _pass_failed(outbox, driver, target, failure)
         raise typer.Exit(code=failure.code) from exc
     pacer.clean()
     if newer is not None:
@@ -627,6 +626,26 @@ def drive_pass_command(
     code = batch.pass_exit(driver, acted, summary)
     if code:
         raise typer.Exit(code=code)
+
+
+def _pass_failed(
+    outbox: Path, driver: Any, target: Path, failure: DriverRefusal | TransientPassFailure
+) -> None:
+    """A cloud pass that failed (R6): the outbox it has is written (what it asked so far is
+    still owed), the failure counted in the ledger (R9) and said; a refusal's line names
+    how to resume and how to track it (R10)."""
+    from fr.triage.driver_record import FAILURES_COMMAND
+
+    _write_outbox(outbox, driver.outbox())
+    _record_failure(target, failure)
+    if failure.message and not failure.said:
+        err_console.print(f"[red]error:[/red] {escape(failure.message)}", soft_wrap=True)
+    if isinstance(failure, DriverRefusal):
+        err_console.print(
+            f"[red]driver stopped[/red] ({failure.cause}); resume: {escape(failure.resume)}; "
+            f"track it: {FAILURES_COMMAND}",
+            soft_wrap=True,
+        )
 
 
 def _record_failure(target: Path, failure: DriverRefusal | TransientPassFailure) -> None:
@@ -786,7 +805,7 @@ def drive_failures_command(
     issue closed. Its labels, marker and counts are written; the message never is."""
     from fr.settings import SettingsError
     from fr.triage.driver_failures import file_failures
-    from fr.triage.driver_record import load_ledger, save_ledger
+    from fr.triage.driver_record import filed, load_ledger, save_filed
     from fr.triage.scope_config import load_durable
 
     if yes and not file:
@@ -823,15 +842,33 @@ def drive_failures_command(
             "to file its driver failures in: choose one at `fr triage collect`, or file them by "
             "hand from the list above"
         )
+    if checkout is not None:  # its policy is the target's only if it is the target (p1a-r9)
+        from fr.commands.triage_batch_cmd import _checkout_refusal
+
+        reason = _checkout_refusal(checkout, where)
+        if reason is not None:
+            _fail(reason)
     client = make_failures_client(where, _failures_host(target, where))
     try:
         policy = failure_policy(client, where, checkout)
     except SettingsError as exc:
         _fail(str(exc))
+    if checkout is None:
+        console.print(
+            f"note: tracking was not checked (no --checkout): only {where}'s forge settings "
+            "gate the filing; pass --checkout <a clone of it> to honour `tracking: none` too",
+            markup=False,
+            soft_wrap=True,
+        )
+    before = filed(ledger)
     filing = file_failures(ledger, client, where, policy, write=yes)
     for line in filing.lines:
         console.print(line, markup=False, soft_wrap=True)
     if not yes:
         console.print("nothing written: add --yes to file", markup=False)
-    if filing.changed:
-        save_ledger(target, ledger)
+    if filing.changed:  # only what the filing changed, into the ledger as it stands now
+        after = filed(ledger)
+        save_filed(target, {c: v for c, v in after.items() if before.get(c) != v}, ledger)
+    if filing.error is not None:
+        _fail(f"filing stopped at a forge error; what was filed before it is recorded: "
+              f"{filing.error}")  # fmt: skip

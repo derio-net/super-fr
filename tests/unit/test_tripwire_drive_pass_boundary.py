@@ -20,7 +20,26 @@ SOURCE = (
     / "commands"
     / "triage_batch_cmd.py"
 )
-GUARDED_FUNCTIONS = frozenset({"one_pass", "_host_loop", "wait_out"})
+GUARDED_FUNCTIONS = frozenset(
+    {
+        "one_pass",
+        "_host_loop",
+        "wait_out",
+        # the loop proper and what its iteration and handler call (p1a-r6)
+        "_loop",
+        "_wait",
+        "_error",
+        "_ledger",
+        "_ledger_failure",
+        "_driver_pass",
+        "_stop",
+        "_report_read_failure",
+        "backoff",
+        "pass_exit",
+        "_stalled_line",
+        "_say",
+    }
+)
 GUARDED_CLASSES = frozenset({"_Driver"})
 
 
@@ -75,3 +94,11 @@ def test_the_tripwire_sees_both_shapes() -> None:
         "    _fail('fine here')\n"
     )
     assert _offences(sample) == ["_Driver:3: _fail(...)", "wait_out:5: raise typer.Exit"]
+
+
+def test_every_guarded_name_is_still_defined() -> None:
+    """A rename moves a body out from under the guard silently (p1a-r6): every guarded name
+    must be a top-level function or class of the module."""
+    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    defined = {getattr(top, "name", None) for top in tree.body}
+    assert sorted((GUARDED_FUNCTIONS | GUARDED_CLASSES) - defined) == []

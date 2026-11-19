@@ -392,3 +392,127 @@ def test_failures_file_without_yes_prints_the_plan_only(
     assert "would file" in out and "nothing written" in out
     assert client.created == [] and client.labels_ensured == []
     assert (tmp_path / FAILURES_FILE).read_bytes() == before
+
+
+@pytest.mark.usefixtures("_home")
+def test_failures_file_does_not_refile_a_closed_cause_with_no_recurrence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1a-r3: a closed issue whose cause did not recur since its filing is left closed."""
+    _ledger(tmp_path)
+    client = FakeIssues()
+    _failures(tmp_path, client, monkeypatch, "--file", "--yes")
+    closed = load_ledger(tmp_path).causes["lease-held"].issue
+    assert closed is not None
+    client.issues[int(closed.split("#")[1])]["state"] = "CLOSED"
+    for _ in range(2):
+        code, out, _ = _failures(tmp_path, client, monkeypatch, "--file", "--yes")
+        assert code == 0, out
+        assert f"{closed} closed, no recurrence" in out
+    assert len(client.created) == 2
+    assert load_ledger(tmp_path).causes["lease-held"].issue == closed
+
+
+@pytest.mark.usefixtures("_home")
+def test_failures_file_adopts_another_hosts_refiling_of_a_closed_cause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1a-r4: a cause that recurred after its issue closed adopts the open issue another
+    host already re-filed for it, rather than filing a duplicate."""
+    _ledger(tmp_path)
+    client = FakeIssues()
+    _failures(tmp_path, client, monkeypatch, "--file", "--yes")
+    closed = load_ledger(tmp_path).causes["lease-held"].issue
+    assert closed is not None
+    client.issues[int(closed.split("#")[1])]["state"] = "CLOSED"
+    client.issues[40] = {"body": "<!-- fr-driver-failure:lease-held -->\n", "title": "t",
+                         "state": "OPEN", "labels": frozenset()}  # fmt: skip
+    record_failure(tmp_path, "refusal", "lease-held", "held", LATER, "8.3.0")
+    code, out, _ = _failures(tmp_path, client, monkeypatch, "--file", "--yes")
+    assert code == 0, out
+    assert len(client.created) == 2, "no duplicate filed"
+    assert load_ledger(tmp_path).causes["lease-held"].issue == f"{REPO}#40"
+    assert [n for n, _ in client.comments] == [40]
+
+
+@pytest.mark.usefixtures("_home")
+def test_failures_file_records_what_it_filed_before_a_forge_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1a-r4: a forge error mid-filing is reported, and the issues filed before it are
+    recorded, so the next run does not file them again."""
+    _ledger(tmp_path)
+
+    class Failing(FakeIssues):
+        def create_issue(self, repo: str, *, title: str, body: str, labels: frozenset[str]) -> str:
+            if self.created:
+                raise RuntimeError("HTTP 502: Bad Gateway")
+            return super().create_issue(repo, title=title, body=body, labels=labels)
+
+    client = Failing()
+    code, out, _ = _failures(tmp_path, client, monkeypatch, "--file", "--yes")
+    assert code != 0, out
+    assert "HTTP 502" in out
+    assert "Traceback" not in out
+    ledger = load_ledger(tmp_path)
+    assert ledger.causes["lease-held"].issue == f"{REPO}#10"
+    assert ledger.causes["push-refused"].issue is None
+
+
+@pytest.mark.usefixtures("_home")
+def test_failures_file_keeps_failures_a_running_driver_recorded_meanwhile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1a-r8: the save merges only what the filing changed into the ledger as it stands
+    at save time; a cause or count the driver recorded during the forge calls survives."""
+    _ledger(tmp_path)
+
+    class Racing(FakeIssues):
+        def create_issue(self, repo: str, *, title: str, body: str, labels: frozenset[str]) -> str:
+            record_failure(tmp_path, "transient", "git:fetch", "meanwhile", LATER, "8.3.0")
+            record_failure(tmp_path, "refusal", "lease-held", "again", LATER, "8.3.0")
+            return super().create_issue(repo, title=title, body=body, labels=labels)
+
+    code, out, _ = _failures(tmp_path, Racing(), monkeypatch, "--file", "--yes")
+    assert code == 0, out
+    ledger = load_ledger(tmp_path)
+    assert "git:fetch" in ledger.causes
+    lease = ledger.causes["lease-held"]
+    assert lease.issue is not None and lease.count > 3
+    assert lease.filed_count == 3, "the count the issue was filed with"
+
+
+def _clone(path: Path, origin: str) -> Path:
+    import subprocess
+
+    path.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(["git", "-C", str(path), "remote", "add", "origin",
+                    f"https://github.com/{origin}.git"], check=True)  # fmt: skip
+    return path
+
+
+@pytest.mark.usefixtures("_home")
+def test_failures_file_refuses_a_checkout_of_another_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1a-r9: --checkout is read for the target's policy, so it must be the target."""
+    state = tmp_path / "state"
+    _ledger(state)
+    other = _clone(tmp_path / "other", "derio-net/blog-craft")
+    client = FakeIssues()
+    code, out, _ = _failures(state, client, monkeypatch, "--file", "--yes", "--checkout",
+                             str(other))  # fmt: skip
+    assert code == 2, out
+    assert "derio-net/blog-craft" in " ".join(out.split())
+    assert client.created == []
+
+
+@pytest.mark.usefixtures("_home")
+def test_failures_file_without_a_checkout_says_tracking_was_not_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ledger(tmp_path)
+    code, out, _ = _failures(tmp_path, FakeIssues(), monkeypatch, "--file")
+    assert code == 0, out
+    assert "tracking was not checked" in " ".join(out.split())

@@ -740,6 +740,11 @@ def test_sigterm_releases_the_host_drivers_lease_and_restores_the_handler(
         (lambda: StateRefConflict("another writer moved the ref"), 2, "state-ref-conflict"),
         (lambda: StateRefPushRefused("the remote refused the push"), 2, "push-refused"),
         (lambda: ValueError("an fr bug"), 2, "unexpected:ValueError"),
+        (
+            lambda: triage_batch_cmd.ForgeReadError("the forge timed out", code=2),
+            2,
+            "forge-read",
+        ),
     ],
 )
 def test_a_failed_pass_writes_its_outbox_and_exits_with_the_carried_code(
@@ -774,4 +779,12 @@ def test_a_failed_pass_writes_its_outbox_and_exits_with_the_carried_code(
         "derio-net/super-fr/run/batch-b1",
         "derio-net/super-fr/run/batch-b2",
     ]
-    assert load_ledger(state).causes[cause].count == 1
+    entry = load_ledger(state).causes[cause]
+    assert entry.count == 1
+    assert entry.message == str(failure())
+    refused = cause == "state-ref-conflict"
+    assert entry.kind == ("refusal" if refused else "transient")
+    flat = " ".join(result.output.split())
+    if refused:  # R10: a refusal's exit output names how to track it, and how to resume
+        assert "fr triage drive failures --file --yes" in flat
+        assert "resume:" in flat

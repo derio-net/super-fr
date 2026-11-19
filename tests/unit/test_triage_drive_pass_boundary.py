@@ -131,6 +131,14 @@ def test_classify_an_exit_1_from_a_helper_is_transient_with_its_code() -> None:
     assert out.code == 1
 
 
+def test_classify_an_exit_through_fail_carries_the_fail_message_not_the_code() -> None:
+    """p1a-r1: `str()` of a typer.Exit is its code; the message is the one `_fail` printed."""
+    refusal = classify(_raise_in("dispatch_batch", "_fail('the batch is gone')"))
+    transient = classify(_raise_in("dispatch_batch", "_fail('the runner', code=1)"))
+    assert (refusal.message, transient.message) == ("the batch is gone", "the runner")
+    assert classify(_raise_in("dispatch_batch", "raise typer.Exit(code=2)")).message == ""
+
+
 def test_classify_returns_an_already_classified_failure_unchanged() -> None:
     refusal = DriverRefusal("runner-refused:fake", "no", "fix it")
     transient = TransientPassFailure("dispatch-failed:fake", "no", code=1)
@@ -263,7 +271,8 @@ def test_ten_failed_passes_in_a_row_stop_as_a_refusal_with_the_last_cause(
     assert driver.boards == 1
     ledger = load_ledger(tmp_path).causes
     assert ledger["triage:TriageError"].count == 9
-    assert ledger["git:fetch"].kind == "refusal"
+    assert ledger["git:fetch"].kind == "transient", "the stop is a refusal, its cause is not"
+    assert ledger["git:fetch"].message == "`git fetch` failed"
     record = load_record(tmp_path)
     assert record is not None and record.last_refusal is not None
     assert record.last_refusal.cause == "git:fetch"
@@ -348,6 +357,72 @@ def test_a_pass_whose_helper_fails_with_exit_2_stops_as_that_helper(
     _script(monkeypatch, _raise_in("dispatch_batch", "_fail('the batch is gone')"))
     assert _loop(StubDriver(tmp_path)) == triage_batch_cmd.LoopEnd(2)
     assert "exit:dispatch_batch" in capsys.readouterr().err
+
+
+def test_an_exit_refusal_records_the_fail_text_and_prints_it_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float],
+    capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    """p1a-r1: the ledger, driver.yaml and the stop line carry `_fail`'s text, never "2"."""
+    _script(monkeypatch, _raise_in("dispatch_batch", "_fail('the batch is gone')"))
+    assert _loop(StubDriver(tmp_path)) == triage_batch_cmd.LoopEnd(2)
+    err = capsys.readouterr().err
+    assert err.count("the batch is gone") == 1, err
+    assert "error: 2" not in err
+    assert load_ledger(tmp_path).causes["exit:dispatch_batch"].message == "the batch is gone"
+    record = load_record(tmp_path)
+    assert record is not None and record.last_refusal is not None
+    assert record.last_refusal.message == "the batch is gone"
+
+
+@pytest.mark.parametrize("code", [1, 2])
+def test_once_prints_an_exit_failures_text_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float], code: int,
+    capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    _script(monkeypatch, _raise_in("dispatch_batch", f"_fail('the batch is gone', code={code})"))
+    assert _loop(StubDriver(tmp_path), once=True) == triage_batch_cmd.LoopEnd(code)
+    err = capsys.readouterr().err
+    assert err.count("the batch is gone") == 1, err
+    assert "error: 2" not in err and "error: 1" not in err
+    assert load_ledger(tmp_path).causes["exit:dispatch_batch"].message == "the batch is gone"
+
+
+def test_a_forge_read_failure_backs_off_counts_and_stops_like_any_transient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float],
+    capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    """p1a-r2: a forge read that is not a rate limit is the R3 transient `forge-read`: the
+    backoff doubles, it is reported once, and the tenth in a row stops the loop (R5)."""
+    reads = [triage_batch_cmd.ForgeReadError("the forge timed out", code=2) for _ in range(10)]
+    _script(monkeypatch, *reads)
+    assert _loop(StubDriver(tmp_path), interval=60) == triage_batch_cmd.LoopEnd(2)
+    assert sleeps == [60, 120, 240, 480, 900, 900, 900, 900, 900]
+    err = " ".join(capsys.readouterr().err.split())
+    assert err.count("the forge timed out (forge-read)") == 1, err
+    entry = load_ledger(tmp_path).causes["forge-read"]
+    assert (entry.kind, entry.count, entry.exception) == ("transient", 10, "ForgeReadError")
+    record = load_record(tmp_path)
+    assert record is not None and record.last_refusal is not None
+    assert record.last_refusal.cause == "forge-read"
+
+
+def test_a_clean_pass_resets_a_forge_read_streak(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    read = triage_batch_cmd.ForgeReadError
+    _script(monkeypatch, read("x", code=2), read("x", code=2), False, read("x", code=2), True)
+    assert _loop(StubDriver(tmp_path), interval=10) == triage_batch_cmd.LoopEnd(0)
+    assert sleeps == [10, 20, 10, 10]
+
+
+def test_once_exits_with_a_forge_reads_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float],
+    capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    _script(monkeypatch, triage_batch_cmd.ForgeReadError("the forge timed out", code=2))
+    assert _loop(StubDriver(tmp_path), once=True) == triage_batch_cmd.LoopEnd(2)
+    assert capsys.readouterr().err.count("the forge timed out") == 1
 
 
 def test_a_pass_whose_helper_fails_with_exit_1_is_transient(
