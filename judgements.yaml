@@ -8403,6 +8403,24 @@ batches:
     at: '2026-11-19T18:55:53.126399Z'
     pr: 1560
     head: 2523640bc451751f3a6295516f92a850552fe444
+  - kind: post_merge
+    at: '2026-11-19T19:26:05.041357Z'
+  - kind: claims_released
+    at: '2026-11-19T19:26:06.296308Z'
+    keys:
+    - super-fr#1265
+    - super-fr#1421
+    - super-fr#1440
+    - super-fr#1441
+    - super-fr#1442
+    - super-fr#1443
+    - super-fr#1444
+    - super-fr#1445
+    - super-fr#1446
+    - super-fr#1447
+    - super-fr#1448
+    - super-fr#1449
+    - super-fr#1450
 - id: retire-vk
   title: Retire VibeKanban support
   ids:
@@ -8774,6 +8792,12 @@ batches:
     head_before: 45353e154254f438651a023c3357b2da11fdc3d0
     head_after: 643719ac47415f16084afb2ad6f6503b0a23ca2b
     base: e2e22e50cf0403561fb2c2128508a79992d92a47
+  - kind: update
+    at: '2026-11-19T19:25:41.287851Z'
+    pr: 1570
+    head_before: 643719ac47415f16084afb2ad6f6503b0a23ca2b
+    head_after: 274981aa3ad20c9eb57ef38d43f3473299b49e2b
+    base: 382c1f3108db12e71af850025c0e5545691f7f90
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
