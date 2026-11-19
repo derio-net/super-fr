@@ -4784,6 +4784,10 @@ batches:
   launch:
     runner: herdr
     harness: claude
+  events:
+  - kind: cancel
+    at: '2026-11-19T09:41:09.419973Z'
+    reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
 - id: cursor-model
   title: The cursor records the model an attempt ran on, not its tier binding
   ids:
