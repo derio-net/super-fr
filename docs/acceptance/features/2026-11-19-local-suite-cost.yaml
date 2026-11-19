@@ -55,9 +55,13 @@ rows:
       run'
     origin:
     - spec:2026-11-19-local-suite-cost#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tests_mode.py#test_tests_ci_is_declared
+      - super-fr:tests/unit/test_tests_mode.py#test_the_briefs_carry_the_declared_mode_and_the_fast_tier
+      - super-fr:tests/unit/test_tests_mode.py#test_the_phase_executor_brief_carries_the_key_when_declared
+    status: ci
+    notes: 'phase 3: declared_tests_mode and both briefs'' tests key pinned'
   - id: ci-ok-required-on-main
     capability: Merge protection
     acceptance: main refuses a merge whose ci-ok check is not green
