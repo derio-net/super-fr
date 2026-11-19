@@ -388,6 +388,43 @@ def test_a_pr_on_a_forge_the_inputs_do_not_know_stays_text() -> None:
     assert not re.search(r"<a [^>]*>grp/proj#5</a>", row)
 
 
+def test_the_ended_cell_links_each_closing_pr_and_keeps_an_unsafe_one_as_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import (
+        ClosingPr,
+        OriginIssue,
+        Origins,
+        OriginsFacts,
+        render_origins,
+    )
+
+    page = _page_with_prs(monkeypatch, tmp_path)
+    ended = re.findall(r"<td>(closed completed in 6\.0 h by .*?)</td>", _row(page, "widgets#1"))
+    assert ended == [
+        f'closed completed in 6.0 h by <a href="https://github.com/{REPO}/pull/301" '
+        'rel="noopener noreferrer">#301</a>'
+    ]
+
+    def row_for(url: str, issue_url: str) -> str:
+        issue = OriginIssue(
+            key="b#1", repo="a/b", number=1, title="t", url=issue_url,
+            created_at="2026-09-01T00:00:00Z", state="closed", reason="completed",
+            closing_prs=[ClosingPr(repo="a/b", number=5, title="x", url=url)],
+        )  # fmt: skip
+        facts = OriginsFacts(
+            scope="a/b", since="2026-09-01", collected_at="2026-09-02T00:00:00Z", issues=[issue]
+        )
+        return _row(render_origins(facts, Origins()), "b#1")
+
+    unsafe = row_for("javascript:alert(1)", "http://example.test/a/b/issues/1")
+    assert "by #5" in unsafe and "javascript:" not in unsafe
+    assert not re.search(r"<a [^>]*>#5</a>", unsafe)
+    # the same PR with a known https url links to it
+    safe = row_for("https://example.test/a/b/pull/5", "https://example.test/a/b/issues/1")
+    assert 'href="https://example.test/a/b/pull/5"' in safe
+
+
 def test_a_non_https_pr_url_is_never_an_href() -> None:
     from fr.triage.origins import (
         MergedPr,

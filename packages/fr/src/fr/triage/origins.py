@@ -763,6 +763,14 @@ ISSUE_HEAD = (
 STATES = ("open", "closed", "all")
 
 
+def _closing_link(pr: ClosingPr, linker: Linker) -> str:
+    """`#n` of a closing PR, linked when the Linker knows where it is (https only)."""
+    href = linker.href(pr.repo, pr.number)
+    if href is None:
+        return f"#{pr.number}"
+    return f'<a href="{esc(href)}" rel="noopener noreferrer">#{pr.number}</a>'
+
+
 def _issue_row(
     i: OriginIssue, o: Origin | None, held: Mapping[str, OriginIssue], linker: Linker
 ) -> str:
@@ -775,7 +783,7 @@ def _issue_row(
         if i.state == "closed"
         else "open"
     )
-    by = ", ".join(f"#{p.number}" for p in i.closing_prs)
+    by = ", ".join(_closing_link(p, linker) for p in i.closing_prs)
     detail = (
         f"{esc(o.reason)}" + (f"<br><small>{esc(o.evidence)}</small>" if o.evidence else "")
         if o
@@ -789,7 +797,7 @@ def _issue_row(
         f"<td>{o.source if o else DASH}</td>"
         f'<td class="sev-{o.severity if o else "low"}">{o.severity if o else DASH}</td>'
         f"<td>{_related_pr(o, linker)}</td>"
-        f'<td>{closed}{f" by {esc(by)}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
+        f'<td>{closed}{f" by {by}" if by else ""}</td><td class="wrap">{detail}</td></tr>'
     )
 
 
