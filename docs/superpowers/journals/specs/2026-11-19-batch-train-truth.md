@@ -300,3 +300,8 @@ Process lifetime and visibility, reviewable apart from the boundary.
 ### phase-split-2026-11-19-batch-train-truth-p3 · decision · ask: red and conflicting drafts handed back before approval, one fetch per pass (#1492, #1493, #1540)
 
 Merge-train walk and conflict probe; independent of the supervisor.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-batch-train-truth-p4 created=2026-11-19T11:08:41+00:00 -->
+### phase-split-2026-11-19-batch-train-truth-p4 · decision · ask: label-swap retry, cancel without a clone and the docs (#1541, #1543, R24)
+
+Small fixes plus pages describing what landed.
