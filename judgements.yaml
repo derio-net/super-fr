@@ -7526,6 +7526,10 @@ batches:
   after:
   - batch-finish-labels
   bump: minor
+  events:
+  - kind: cancel
+    at: '2026-11-19T09:41:18.731317Z'
+    reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
 - id: claims-pr-authors
   title: 'Claims trust across hosts: a driving account outside pr_authors and the repo''s members is still
     recognised'
