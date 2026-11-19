@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+
+from fr import git_cache
 
 
 def _run_git(args: list[str], cwd: Path | None = None) -> str:
@@ -181,6 +183,43 @@ WELL_KNOWN_DEFAULTS = ("main", "master", "trunk", "develop")
 """Candidate trunk names, remote-tracking first, then local. Last resort."""
 
 
+def _through_cache(
+    root: Path,
+    question: tuple[str, ...],
+    remote: str | None,
+    compute: Callable[[], tuple[str | None | GitRefusal, tuple[str, ...]]],
+) -> str | None | GitRefusal:
+    """Answer *question* about *root* from `fr.git_cache`'s open scope, else ask git.
+
+    *compute* returns the answer and the remote-tracking ref names (under
+    *remote*) it consulted. An answer is stored with the fingerprint of what it
+    read, and only when the fingerprint taken before git ran (over the
+    well-known names) still holds after it: a write racing the question is
+    never cached. A `GitRefusal` is never stored; a `GitUnavailableError`
+    propagates and stores nothing. Outside a scope, or for a repository
+    `git_cache.locate` will not fingerprint, *compute* runs every time.
+    """
+    cache = git_cache.active()
+    located = git_cache.locate(root) if cache is not None else None
+    if cache is None or located is None:
+        return compute()[0]
+    key = (located.git_dir, Path(root).resolve(), *question)
+    hit = cache.get(key)
+    if hit is not None:
+        answer, names, stamp = hit
+        if git_cache.fingerprint(located, remote, names) == stamp:
+            return answer  # type: ignore[no-any-return]
+        del cache[key]
+    before = git_cache.fingerprint(located, remote, WELL_KNOWN_DEFAULTS)
+    answer, consulted = compute()
+    if isinstance(answer, GitRefusal):
+        return answer
+    if git_cache.fingerprint(located, remote, WELL_KNOWN_DEFAULTS) == before:
+        names = tuple(dict.fromkeys((*WELL_KNOWN_DEFAULTS, *consulted)))
+        cache[key] = (answer, names, git_cache.fingerprint(located, remote, names))
+    return answer
+
+
 def remote_name(root: Path) -> str | None | GitRefusal:
     """Which remote speaks for "the default branch" (review r5-c3 / r5-e6).
 
@@ -189,7 +228,15 @@ def remote_name(root: Path) -> str | None | GitRefusal:
     two unnamed-by-config remotes are a genuine ambiguity and this refuses
     rather than picking one — callers decide whether an automatic commit is
     allowed, or whether a plan counts as merged, on the answer.
+
+    Inside a `fr.git_cache.scope()` (every CLI command) a repeated question is
+    answered from the cache while nothing it read has changed (spec
+    `2026-11-19-local-suite-cost` R1).
     """
+    return _through_cache(root, ("remote_name",), None, lambda: (_remote_name(root), ()))
+
+
+def _remote_name(root: Path) -> str | None | GitRefusal:
     configured = git_answer(root, "config", "--get", "checkout.defaultRemote")
     if configured.returncode == 0 and configured.stdout.strip():
         return configured.stdout.strip()
@@ -227,19 +274,31 @@ def remote_default_ref(root: Path) -> str | None | GitRefusal:
     `None` when there is no remote, or neither source resolves; the remote's
     `GitRefusal` (e.g. two remotes, no `checkout.defaultRemote`) passes
     through. A branch with a `/` in it (`origin/release/main`) survives.
+
+    Cached inside a `fr.git_cache.scope()`, like `remote_name`.
     """
     remote = remote_name(root)
     if remote is None or isinstance(remote, GitRefusal):
         return remote
+    return _through_cache(
+        root, ("remote_default_ref", remote), remote, lambda: _default_ref_of(root, remote)
+    )
+
+
+def _default_ref_of(root: Path, remote: str) -> tuple[str | None, tuple[str, ...]]:
+    """`remote_default_ref`'s git work for *remote*, and the ref names it consulted."""
     head = git_answer(root, "symbolic-ref", "--quiet", "--short", f"refs/remotes/{remote}/HEAD")
     if head.returncode == 0 and head.stdout.strip():
         named = head.stdout.strip().removeprefix(f"{remote}/")
         if named and ref_exists(root, f"refs/remotes/{remote}/{named}"):
-            return f"{remote}/{named}"
+            return f"{remote}/{named}", (named,)
+        consulted: tuple[str, ...] = (named,) if named else ()
+    else:
+        consulted = ()
     for name in WELL_KNOWN_DEFAULTS:
         if ref_exists(root, f"refs/remotes/{remote}/{name}"):
-            return f"{remote}/{name}"
-    return None
+            return f"{remote}/{name}", consulted
+    return None, consulted
 
 
 def on_default_branch(root: Path, default_ref: str) -> bool:
