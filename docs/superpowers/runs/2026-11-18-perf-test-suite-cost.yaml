@@ -184,6 +184,14 @@ steps:
           findings: l-docs-accuracy-r1,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-errors-r7,l-errors-r8,l-errors-r9
           lenses: docs-accuracy=13:l-docs-accuracy-r1;errors=10:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-errors-r7,l-errors-r8,l-errors-r9;tests=26:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-19T21:10:27+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-19T21:10:27+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d2814f1b-87a4-4558-bbe3-e21fd24f245b
 fr_version: 8.2.0
 pr: https://github.com/derio-net/super-fr/pull/1559
