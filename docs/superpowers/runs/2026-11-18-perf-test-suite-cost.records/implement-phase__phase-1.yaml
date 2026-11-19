@@ -1,0 +1,63 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-11-18-perf-test-suite-cost --step implement-phase --item phase/1 --record docs/superpowers/runs/2026-11-18-perf-test-suite-cost.records/implement-phase__phase-1.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 12
+run: 2026-11-18-perf-test-suite-cost
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T3.S4]
+refactor:
+  P1.T1: "a one-assertion smoke test and a two-key fragment: nothing to clean"
+journal:
+  - kind: finding
+    id: p1-call-count-target
+    phase: 1
+    review_scope: in
+    title: "Spec §3.A's ceiling of 500 git starts is out of R1's reach: the cache gets the profiled test to 611"
+    body: |
+      Measured with tests/unit/test_git_cache_call_count.py (a Popen counter over the
+      profiled test's own body): 924 without the cache, 611 with it. The cache does what
+      R1 asks: remote_name and remote_default_ref now cost one answer per fr invocation
+      (5 git starts each time, 19 invocations: config --system, config --get
+      checkout.defaultRemote, remote, symbolic-ref, rev-parse --verify), down from about
+      seven. Spec §2's "about 490 calls" is not all removable, because every CLI call
+      opens a new scope and asks once. The rest of the 611 comes from call sites R1 leaves
+      out of scope: rev-parse --verify <ref>^{commit} (51, settings/load.py:108 and the
+      acceptance fold), rev-parse --git-dir (62), for-each-ref (42), --show-toplevel (29),
+      rev-parse --verify HEAD (20). The test pins CEILING = 615. Two ways to settle it:
+      amend §3.A's target to the measured figure, or widen R1 (a process-wide memo of the
+      system-config path would save 19; caching the ^{commit} lookups would save about 50).
+  - kind: decision
+    id: p1-git-cache-imports
+    phase: 1
+    title: "git_cache imports fr.git's ceiling and git_answer helpers inside its functions, not only types"
+    body: |
+      git.py imports git_cache at module level, so git_cache takes `_ceiling_directories`
+      (the walk stops where git's discovery stops, as safe_directory_args does) and
+      `git_answer` (the system-config probe, run with the C locale and time limit) through
+      function-local imports. That avoids the import cycle and keeps one git seam. It
+      imports nothing else from fr.
+  - kind: decision
+    id: p1-fingerprint-extras
+    phase: 1
+    title: "The fingerprint is wider than §3.A's list, and every gap fails toward going to git"
+    body: |
+      Beyond §3.A it also records st_ctime_ns, every GIT_* variable plus HOME and
+      XDG_CONFIG_HOME (rather than only GIT_CONFIG_COUNT/KEY/VALUE), and the legacy
+      <common>/remotes and <common>/branches entries `git remote` also lists. locate()
+      also returns None for a bare repository on the walk, a system-config path git
+      will not name, and an include key passed through GIT_CONFIG_PARAMETERS or
+      GIT_CONFIG_KEY_*. An answer is stored only when a fingerprint taken over the
+      well-known names before git ran still holds after it, so a racing write is never
+      cached. When the system config file exists but is empty, `config --system --list
+      --show-origin` names no path, so the probe falls back to `git var GIT_CONFIG_SYSTEM`.
+  - kind: discovery
+    id: p1-tdd-order
+    phase: 1
+    title: "Task 2's locate/fingerprint tests were written before git_cache.py but first run after it"
+    body: |
+      Task 3's routing tests were seen RED (one question cached starts no git: 19 != 13;
+      the call count read 924), then GREEN. Task 2's tests were written first, but they
+      first ran after git_cache.py existed, so their RED was never observed. They pass.
+evidence: {tests: ci}
