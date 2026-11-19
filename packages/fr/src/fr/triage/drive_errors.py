@@ -20,7 +20,7 @@ import re
 import shlex
 from types import TracebackType
 
-import click
+import typer
 
 from fr.forgeapi import ForgeApiError
 from fr.ghclient import UnsupportedForgeOperation
@@ -103,7 +103,7 @@ def classify(exc: BaseException) -> DriverRefusal | TransientPassFailure:
             return DriverRefusal(named or f"config:{type(exc).__name__}", message, resume)
     if isinstance(exc, PrivacyError):  # after VisibilityUnreadable, its transient subclass
         return DriverRefusal("privacy", message)
-    if isinstance(exc, click.exceptions.Exit):
+    if isinstance(exc, typer.Exit):
         cause = f"exit:{_raiser(exc.__traceback__)}"
         if exc.exit_code == 2:
             return DriverRefusal(cause, message)
