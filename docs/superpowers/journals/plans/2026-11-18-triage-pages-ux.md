@@ -246,3 +246,48 @@ f3aff71db: Depends on links each batch id to backlog.html#batch-<id>; test seen 
 ### p2-r7-resolved · finding [fixed] · resolves p2-r7: Architecture's issue list built an href from i.url with no https-only check (phase 2)
 
 4809de179: Architecture issue links go through _safe_url (https only), with a javascript: test. Older code, fixed here because it is one line and the security lens covers it.
+
+<!-- fr:journal kind=decision scope=plan id=p3-collect-reuses-the-pr-read created=2026-11-19T00:31:53+00:00 phase=3 -->
+### p3-collect-reuses-the-pr-read · decision · origins collect keeps merged PRs from the one PR list it already reads, not a second merged-state read (phase 3)
+
+collect_origins already lists PRs (state all) once per repo for the closing-PR map; MergedPr rows come from that same read, kept when merged_at is on or after --since. R15 asks for one list read per repo, and a second one would break it. A short page already refuses the whole collect, so no extra truncation warning is needed.
+
+<!-- fr:journal kind=decision scope=plan id=p3-origins-pr-links-use-issues-url created=2026-11-19T00:31:53+00:00 phase=3 -->
+### p3-origins-pr-links-use-issues-url · decision · an Origins PR reference the facts do not hold links to the github.com issues route, not pull (phase 3)
+
+Origins' PR links go through the Linker (R11), so an unknown number on a github.com base links to /issues/<n>, which GitHub redirects. A PR in prs links to its own url. test_related_pr_cell asserts the issues route.
+
+<!-- fr:journal kind=decision scope=plan id=p3-terminal-is-the-done-column created=2026-11-19T00:31:53+00:00 phase=3 -->
+### p3-terminal-is-the-done-column · decision · the cutoff's terminal is the Done column (phase 3)
+
+Card.terminal is column == done (cancelled, abandoned, merged and archived), the same set finished_waves uses; a merged batch still owed its close-out is not terminal. cutoff_hidden_waves is the Python statement of the rule the script applies.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-scope-key-is-the-scope-name created=2026-11-19T00:31:53+00:00 phase=3 -->
+### p3-scope-key-is-the-scope-name · discovery · the storage key carries the scope name, owner--repo (phase 3)
+
+body data-scope is Board.scope, which is the directory-safe name, so keys read fr-triage:example-org--widgets:col:running and fr-triage:example-org--widgets:cutoff.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-column-test-helpers-matched-the-old-class created=2026-11-19T00:31:53+00:00 phase=3 -->
+### p3-column-test-helpers-matched-the-old-class · discovery · a kanban cmd test helper and a shell scenario matched the exact column class (phase 3)
+
+test_triage_kanban_cmd._column and tests/scenarios/triage-cancelled-terminal.sh matched class=col; a collapsed column adds a class, so both now allow more classes.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-19T00:31:53+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the gh#1417 empty-column rule was replaced by the collapsed-state rule in the same edit; nothing left over
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-19T00:31:53+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+one pure helper and one script block; no duplicate of the rule
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-19T00:31:53+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+collect reuses the PR list it already read; no second read or code path to tidy
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t5 created=2026-11-19T00:31:53+00:00 phase=3 -->
+### no-refactor-p3-t5 · discovery · no-refactor-because P3.T5 (phase 3)
+
+browser check, docs and suite only: no code
