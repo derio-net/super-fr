@@ -193,3 +193,6 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-batch-docs-wording-p2 created=2026-11-19T09:44:48+00:00 -->
+### phase-split-2026-11-19-batch-docs-wording-p2 · decision · ask: phase 2 serves its own ask (site build and page rendering, R11-R13)
