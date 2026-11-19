@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-19-wave-merge-queue-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-19T21:24:07+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-19T21:24:07+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: a675f8da-621c-489c-90c0-07d7c601e9f7
   plan:
     state: pending
   plan-review:
