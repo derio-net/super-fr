@@ -163,7 +163,8 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R19
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: born at brainstorm; scenario written by its phase
+    scenario: tests/scenarios/wave-queue-release-hold.sh
   - id: wave-queue-closeout-migrates
     capability: collected close-out
     acceptance: 'A wave''s close-out is never held by a stale artifact a registered
