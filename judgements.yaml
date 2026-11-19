@@ -7481,6 +7481,10 @@ batches:
   after:
   - needs-you-columns
   skill: debug
+  events:
+  - kind: cancel
+    at: '2026-11-19T09:40:38.699841Z'
+    reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
 - id: adopt-fixes
   title: 'batch adopt: adopt a session on the default branch, show what --list needs, and add --hold'
   ids:
