@@ -1,0 +1,172 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-docs-wording
+step: brainstorm
+outcome: done
+questions:
+  rounds: 1
+journal:
+- kind: discovery
+  input: true
+  id: brief
+  title: 'Operator brief: batch docs-wording (13 issues)'
+  body: 'Batch `docs-wording` of derio-net/super-fr: 13 issues, delivered as ONE pull request (branch
+    feat/batch-docs-wording). Batch title: Docs, help and skill wording sweep. Members:
+
+    - #1265 docs: `fr init scaffold --ops` hint (fr ops gate + fr-devops-gate SKILL) is incomplete — missing
+    required --profile/--purpose, and doesn''t say where to scaffold
+
+    - #1441 ops_cmd.py `fr ops seal --encrypt` help says {target} is the target''s name; it is the shell-quoted
+    full path
+
+    - #1445 fr plan rework help says the parent is "(Complete + archived)"; rework_create accepts a live
+    or incomplete parent
+
+    - #1440 fr''s CLI help lines are too long for STE, so docs/reference/cli.md''s generated tree cannot
+    meet the guides'' standard
+
+    - #1447 fr init scaffold --help prints `<tool>;` - Rich markup eats `[@<version>]`
+
+    - #1446 fr-acceptance.md backfill list already renders broken at the merge base: step 4 merges into
+    step 3''s paragraph
+
+    - #1450 fr-exit-gates.md tester bullet''s fenced example renders as inline code, at the merge base
+    too
+
+    - #1443 docs-currency.md and merge-protection.md lists already rendered broken at the merge base
+
+    - #1442 scripts/build-site.py fill_pages replaces <!-- site:pages --> even inside inline code
+
+    - #1421 shared top bar is cramped at 390 and wraps at 320, and its left edge differs between article
+    pages and the landing
+
+    - #1449 fr-triage SKILL.md says a first run creates judgements with schema: 11; the engine writes
+    12
+
+    - #1444 fr-acceptance SKILL.md:116 says a --verify row keeps nagging in fr acceptance status whatever
+    its status, under Post-merge owed
+
+    - #1448 fr-progress SKILL.md lists fr status among the commands that preview until --yes
+
+    Why together: regenerates all three mirror sets (sync-opencode, sync-hermes, sync-readme). Delivery:
+    draft PR with one `Closes derio-net/super-fr#N` line per member; no member issue as a phase tracking_issue;
+    never add approved-fr.'
+- kind: decision
+  id: d1-rework-help
+  title: '#1445: the code is right; fix help and docstring'
+  body: Operator chose "Fix help to match code" over tightening rework_create. Behaviour unchanged.
+- kind: decision
+  id: d2-cli-ste
+  title: '#1440: rewrite failing help lines and drop cli.md exemption'
+  body: 'Operator chose to shorten the ~14 failing help first lines, regenerate, remove writing_standard:
+    none from cli.md, and update the pinned exception list and the explainers-currency rule.'
+- kind: decision
+  id: d3-bar-two-rows
+  title: '#1421: two-row bar on phones'
+  body: 'Operator chose: at <=480 px the site name on row 1, the four links on row 2; no ragged wrap,
+    no horizontal scroll.'
+- kind: decision
+  id: d4-bar-edge
+  title: '#1421: bar text aligns with each page''s content'
+  body: Operator chose to match each page's own content column rather than one fixed gutter.
+- kind: decision
+  id: d5-guards
+  title: Add three guards
+  body: 'Operator selected all three: build refuses a fence rendered inline; unit test pins fr-triage
+    SKILL schema to JUDGEMENTS_SCHEMA; unit test fails when Rich markup eats bracketed help text.'
+- kind: decision
+  id: d6-verification
+  title: 'Verification: strategy none, CI plus screenshots'
+  body: 'Operator chose no candidate walk: CI unit tests, site-build and writing-standards check, and
+    browser screenshots of the built site for the bar.'
+- kind: decision
+  id: d7-no-hold
+  title: No post-merge hold, no Test Plan
+  body: 'Operator chose no tester/devops gate (gate: developer) and no Test Plan.'
+- kind: discovery
+  id: gh1449-already-fixed
+  title: '#1449 is already fixed at the base; only the pin (R9) is new'
+  body: 'fr-triage SKILL.md says schema: 12 in both places at 66e02916d, matching JUDGEMENTS_SCHEMA (triage/model.py:98).
+    merge-protection.md (#1443) already renders correctly (f52f33659).'
+resolves: []
+acceptance:
+- id: cli-help-matches-code
+  capability: cli
+  acceptance: 'fr''s help and hints state what the code does: the ops-gate scaffold hint is a complete
+    command that says where to scaffold, seal''s {target} is the shell-quoted path, rework accepts a live
+    or archived parent, and scaffold''s <tool>[@<version>] prints as written.'
+  origin:
+  - spec:2026-11-19-batch-docs-wording#R1
+  - spec:2026-11-19-batch-docs-wording#R2
+  - spec:2026-11-19-batch-docs-wording#R3
+  - spec:2026-11-19-batch-docs-wording#R4
+  status: not-implemented
+  verify: none
+- id: cli-help-rich-markup-safe
+  capability: cli
+  acceptance: No fr command's rendered --help loses bracketed text from its help strings to Rich markup;
+    a test over every command fails naming the one that does.
+  origin:
+  - spec:2026-11-19-batch-docs-wording#R5
+  status: not-implemented
+  verify: none
+- id: cli-reference-ste
+  capability: published-docs
+  acceptance: The generated command tree in the CLI reference page passes the STE writing standard, and
+    the page is checked as a reference page with no exemption.
+  origin:
+  - spec:2026-11-19-batch-docs-wording#R6
+  status: not-implemented
+  verify: none
+- id: skill-prose-matches-engine
+  capability: skills
+  acceptance: 'The fr-acceptance, fr-progress and fr-triage skills state what the engine does: status
+    lists a verify-live row only while it is debt, only repair and migrate take --yes, and the judgements
+    schema number matches the engine (pinned by a test).'
+  origin:
+  - spec:2026-11-19-batch-docs-wording#R7
+  - spec:2026-11-19-batch-docs-wording#R8
+  - spec:2026-11-19-batch-docs-wording#R9
+  status: not-implemented
+  verify: none
+- id: site-code-blocks-render
+  capability: published-docs
+  acceptance: Every fenced code block on the published site renders as a code block inside its list, and
+    the site build fails naming the page when one would render as inline code.
+  origin:
+  - spec:2026-11-19-batch-docs-wording#R11
+  - spec:2026-11-19-batch-docs-wording#R12
+  status: not-implemented
+  verify: none
+- id: site-pages-marker-own-line
+  capability: published-docs
+  acceptance: The site build fills the page-list marker only where it stands on a line of its own; a page
+    that names the marker in text keeps its text and its list intact.
+  origin:
+  - spec:2026-11-19-batch-docs-wording#R13
+  status: not-implemented
+  verify: none
+- id: site-top-bar-phone-layout
+  capability: published-docs
+  acceptance: On a phone the top bar reads as two rows, the site name then its four links, with no wrap
+    or horizontal scroll at 320 px, and its text starts at the content's left edge on article pages and
+    the landing alike.
+  origin:
+  - spec:2026-11-19-batch-docs-wording#R14
+  - spec:2026-11-19-batch-docs-wording#R15
+  status: not-implemented
+  verify: none
+  visual:
+    states:
+    - article-320
+    - article-390
+    - article-1280
+    - landing-320
+    - landing-390
+    - landing-1280
+    - guide-390
+    - reference-390
+    interactions:
+    - bar-links-tappable-at-320
+emitted:
+  spec: docs/superpowers/specs/2026-11-19-batch-docs-wording-design.md
+evidence: {}
