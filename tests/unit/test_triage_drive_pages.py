@@ -328,13 +328,13 @@ def test_a_new_process_sees_a_wave_that_finished_while_no_driver_ran(
     _subsystems(tmp_path)
     _drive(tmp_path, "--once", "--yes")
     assert _snapshots(tmp_path) == 1 and len(calls) == 1
-    _drive(tmp_path, "--once", "--yes")  # nothing changed: no snapshot, no new measurement
-    assert _snapshots(tmp_path) == 1 and len(calls) == 1
+    _drive(tmp_path, "--once", "--yes")  # a new process measures on its first pass (R6)
+    assert _snapshots(tmp_path) == 1 and len(calls) == 2
     _cancel(tmp_path)  # a wave finishes (as a pass's own archive leaves it) between drives
     _drive(tmp_path, "--once", "--yes")
-    assert _snapshots(tmp_path) == 2 and len(calls) == 2
+    assert _snapshots(tmp_path) == 2 and len(calls) == 3
     _drive(tmp_path, "--once", "--yes")
-    assert _snapshots(tmp_path) == 2 and len(calls) == 2
+    assert _snapshots(tmp_path) == 2 and len(calls) == 4
 
 
 def test_the_memory_file_is_written_beside_the_state_and_carried_by_the_ref(
@@ -379,14 +379,129 @@ def test_a_backlog_write_that_raises_keeps_the_snapshot_owed(
     assert seen == [1] and _snapshots(tmp_path) == 2  # stored by the pass after the failure
 
 
-def test_the_memory_round_trips_and_an_unreadable_file_is_no_memory(tmp_path: Path) -> None:
-    from fr.triage.architecture import Measure
+def _memory_file(state: Path, **body: Any) -> Path:
+    path = state / "drive-pages.json"
+    path.write_text(json.dumps({"schema": 1, "unfinished": ["1"], "owed": False, **body}), "utf-8")
+    return path
+
+
+def test_the_memory_round_trips_and_holds_no_measurement(tmp_path: Path) -> None:
     from fr.triage.drive_pages import PAGES_FILE, PagesMemory, load_memory, save_memory
 
-    measured = {"src": Measured(then=Measure("HEAD", "abc", 3, 40), now=None)}
-    save_memory(tmp_path, PagesMemory(frozenset({"2", "1"}), True, measured))
-    assert load_memory(tmp_path) == PagesMemory(frozenset({"1", "2"}), True, measured)
+    save_memory(tmp_path, PagesMemory(frozenset({"2", "1"}), True))
+    assert load_memory(tmp_path) == PagesMemory(frozenset({"1", "2"}), True)
+    assert set(json.loads((tmp_path / PAGES_FILE).read_text("utf-8"))) == {
+        "schema", "unfinished", "owed",
+    }  # fmt: skip
     (tmp_path / PAGES_FILE).write_text("{not json", encoding="utf-8")
     assert load_memory(tmp_path) is None
     (tmp_path / PAGES_FILE).unlink()
     assert load_memory(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"schema": 2},
+        {"schema": "1"},
+        {"unfinished": "12"},
+        {"unfinished": [1, 2]},
+        {"unfinished": None},
+        {"owed": "yes"},
+        {"owed": 1},
+        {"surprise": True},
+    ],
+)
+def test_a_memory_of_the_wrong_shape_is_no_memory(tmp_path: Path, body: dict[str, Any]) -> None:
+    from fr.triage.drive_pages import load_memory
+
+    _memory_file(tmp_path, **body)
+    assert load_memory(tmp_path) is None
+
+
+def test_an_old_file_that_still_carries_a_measurement_loads_without_it(tmp_path: Path) -> None:
+    from fr.triage.drive_pages import PagesMemory, load_memory
+
+    _memory_file(tmp_path, measured={"src": {"then": None, "now": None}})
+    assert load_memory(tmp_path) == PagesMemory(frozenset({"1"}), False)
+
+
+def _real_measure(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    from fr.triage.architecture import Measure
+
+    calls: list[int] = []
+
+    def measure(checkout: Any, subsystems: Any, *, now_ref: str) -> dict[str, Measured]:
+        calls.append(1)
+        return {"src": Measured(then=Measure("HEAD", "abc1234", 7, 4242), now=None)}
+
+    monkeypatch.setattr(triage_architecture_cmd, "measure_subsystems", measure)
+    return calls
+
+
+def test_a_planted_measurement_in_an_old_memory_never_reaches_the_page(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _running(world, tmp_path, 1)
+    _subsystems(tmp_path)
+    plant = {
+        "then": {"ref": "HEAD", "commit": "PLANTED_C", "files": "PLANTED_F", "lines": "PLANTED_L"}
+    }
+    _memory_file(tmp_path, measured={"src": {**plant, "now": None}})
+    calls = _real_measure(monkeypatch)
+    _drive(tmp_path, "--once", "--yes")
+    page = (tmp_path / "architecture.html").read_text(encoding="utf-8")
+    assert "PLANTED" not in page and "4242" in page
+    assert len(calls) == 1  # measured afresh, as a new process's first pass does
+
+
+def test_the_pages_of_later_passes_render_the_measurement_without_taking_it_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _running(world, tmp_path, 1)
+    _subsystems(tmp_path)
+    calls = _real_measure(monkeypatch)
+    loop = Loop(monkeypatch, tmp_path, 3)
+    seen: list[bool] = []
+    loop.between.update(
+        {n: lambda: seen.append("4242" in (tmp_path / "architecture.html").read_text("utf-8"))
+         for n in (1, 2)}
+    )  # fmt: skip
+    loop.run()
+    assert seen == [True, True] and len(calls) == 1
+
+
+def test_a_scope_with_no_usable_clone_renders_dashes_and_never_measures(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _running(world, tmp_path, 1)
+    _subsystems(tmp_path)
+    calls = _real_measure(monkeypatch)
+    monkeypatch.setattr(triage_batch_cmd, "_checkout_refusal", lambda p, r: "not a clone")
+    driver = _driver(tmp_path)
+    driver._measured = {"src": Measured(then=None, now=None)}  # a remembered one is never shown
+    driver._write_pages(False)
+    page = (tmp_path / "architecture.html").read_text(encoding="utf-8")
+    assert "4242" not in page and "\u2014" in page and calls == []
+
+
+def test_a_malformed_memory_means_the_first_pass_decisions_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    calls = _real_measure(monkeypatch)
+    _clock(monkeypatch)
+    _running(world, tmp_path, 1)
+    _subsystems(tmp_path)
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 1 and len(calls) == 1
+    (tmp_path / "drive-pages.json").write_text('{"schema": 1, "unfinished": 5}', "utf-8")
+    _drive(tmp_path, "--once", "--yes")  # baseline compared: the board is the stored one
+    assert _snapshots(tmp_path) == 1 and len(calls) == 2
+    (tmp_path / "drive-pages.json").write_text("garbage", "utf-8")
+    world.issues[2] = "closed"  # the board differs from the latest snapshot
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 2 and len(calls) == 3

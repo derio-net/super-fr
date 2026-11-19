@@ -5513,7 +5513,6 @@ class _Driver:
             if (memory := load_memory(self.target)) is not None:
                 self._baselined, self._owed = True, memory.owed
                 self._paged_unfinished = memory.unfinished
-                self._measured = memory.measured
         gone = (
             self._paged_unfinished is not None
             and self._unfinished is not None
@@ -5566,7 +5565,7 @@ class _Driver:
                 now=now,
                 warn=warn("architecture"),
                 checkout=clone,
-                measured=({} if clone is None else None) if remeasure else self._measured,
+                measured={} if clone is None else (None if remeasure else self._measured),
             )
             if clone is not None:
                 self._measured = written.measured
@@ -5596,7 +5595,7 @@ class _Driver:
         if self._unfinished is not None:
             self._paged_unfinished = self._unfinished
             try:
-                save_memory(self.target, PagesMemory(self._unfinished, self._owed, self._measured))
+                save_memory(self.target, PagesMemory(self._unfinished, self._owed))
             except OSError as exc:
                 self._report_once(
                     f"pages-memory\0{exc}", f"could not remember the pages' state: {exc}"

@@ -181,7 +181,7 @@ def _delta(a: int | None, b: int | None) -> str:
 
 
 def _num(n: int | None) -> str:
-    return DASH if n is None else str(n)
+    return DASH if n is None else str(int(n))
 
 
 def _place(facts: Facts, judgements: Judgements, subsystems: Subsystems) -> dict[str, list[Issue]]:
