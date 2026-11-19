@@ -8575,6 +8575,22 @@ batches:
     run: 2026-11-19-feat-batch-docs-wording
     archive: chore/closeout-2026-11-19-4
     archived: 1582
+  - kind: claims_released
+    at: '2026-11-19T22:25:16.380437Z'
+    keys:
+    - super-fr#1265
+    - super-fr#1441
+    - super-fr#1445
+    - super-fr#1440
+    - super-fr#1447
+    - super-fr#1446
+    - super-fr#1450
+    - super-fr#1443
+    - super-fr#1442
+    - super-fr#1421
+    - super-fr#1449
+    - super-fr#1444
+    - super-fr#1448
 - id: retire-vk
   title: Retire VibeKanban support
   ids:
@@ -8945,6 +8961,13 @@ batches:
     handle: w3Q:p3
     archive: chore/closeout-2026-11-19-4
     archived: 1582
+  - kind: claims_released
+    at: '2026-11-19T22:25:16.380437Z'
+    keys:
+    - super-fr#1483
+    - super-fr#1485
+    - super-fr#1486
+    - super-fr#1488
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
@@ -8993,6 +9016,10 @@ batches:
     run: 2026-11-19-fix-batch-stealth-gitlab
     archive: chore/closeout-2026-11-19-4
     archived: 1582
+  - kind: claims_released
+    at: '2026-11-19T22:25:16.380437Z'
+    keys:
+    - super-fr#1527
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
@@ -9420,6 +9447,11 @@ exports:
   pr: 1562
   head: 40bd18a7f9702be698b41a0d87344c10779df957
   merged: true
+- wave: '21'
+  repo: derio-net/super-fr
+  at: '2026-11-19T22:25:09.252197Z'
+  pr: 1584
+  head: 909a33f1632029e3ad2c4cfbbb46169a3486199c
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
