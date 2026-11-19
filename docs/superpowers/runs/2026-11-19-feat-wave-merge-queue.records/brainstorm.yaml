@@ -1,0 +1,265 @@
+schema_version: 12
+run: 2026-11-19-feat-wave-merge-queue
+step: brainstorm
+outcome: done
+questions:
+  rounds: 2
+  trigger: operator-request
+  reason: the operator asked whether a squash-chain variant would work; one follow-up settled it and the
+    queue CI trigger
+journal:
+- kind: discovery
+  input: true
+  id: brief
+  title: 'Operator brief: forge-independent wave merge queue (#1576)'
+  body: 'Operator brief (verbatim):
+
+
+    derio-net/super-fr#1576 — design a forge-independent merge queue, exclusive to a wave, owned by the
+    wave driver (fr triage batch drive). Read the issue in full; it lists the measured causes and the
+    proposal. Operator decisions already made: the queue must NOT rely on GitHub''s merge queue or any
+    forge''s queue; it is wave-exclusive. Settle the open questions in the issue in the question round.
+    Start by reading packages/fr/src/fr/triage/batch_drive.py, batch_merge.py and commands/triage_batch_cmd.py
+    end to end (the bridge audit rule in AGENTS.md applies), plus scripts/release.py and .github/workflows/release.yml.
+    Related: #1577 (conflicts at planning), #1569, #1497, #1496, #1492, #1493. Output is a spec; stop
+    for the operator''s decision before planning.
+
+
+    Issue #1576, title: Wave driver: a forge-independent merge queue, exclusive to a wave (no update when
+    main moves, approval pinned to content, one close-out and one release per wave)
+
+
+    ## Problem
+
+
+    The wave driver''s merge train does not flow. On 2026-11-19 (waves 21–23) the same actions repeated
+    for hours: update a PR that is behind, wait for full CI, lose `approved-fr`, re-label, hit a stale
+    artifact or a conflict, hand back, wait again. Each merge restarts that cycle for every PR behind
+    it.
+
+
+    Measured causes:
+
+
+    1. **Main moves two or three times per merge.** `release.yml` runs on every push to main, so each
+    batch merge is followed by a release commit (v8.3.0-rc.4, rc.5 and rc.6 came from three merges). Each
+    close-out PR merge moves main again. The train updates every PR behind main, and each update means
+    a full CI cycle (14 test shards, even for an archive-only close-out such as #1567), a new head and
+    a new chance to conflict. The PRs are updated and tested one after another.
+
+    2. **Approval is pinned to a head SHA.** Any push the driver did not make voids `approved-fr`, including
+    a pure merge of main and an empty "re-run checks" commit (#1567), though neither changed what the
+    operator approved.
+
+    3. **Live run cursors sit on main between the feature merge and the close-out.** When a shape change
+    lands (run kind v12), they read as stale until the next release migrates them, and `validate-artifacts`
+    fails on every other PR (#1564 failed on triage-pages'' cursor and its own). A stale artifact that
+    a registered migration can move is not a defect on a PR.
+
+    4. **The two merges per feature multiply all of this.** The feature PR and the close-out PR each move
+    main and each pay full CI.
+
+
+    ## Proposal: a forge-independent merge queue, exclusive to a wave
+
+
+    The idea comes from merge queues (GitHub''s merge queue, bors, GitLab merge trains): **a PR is never
+    updated because main moved.** But fr must not depend on any forge''s queue (GitHub''s needs GraphQL,
+    which the cloud driver cannot use; GitLab''s is Premium-only; Gitea has none), so the driver owns
+    the queue:
+
+
+    - **Wave-exclusive.** While a wave is merging, only that wave''s batch PRs (and its close-out) enter
+    the queue. Anything else merges between waves.
+
+    - **Speculative combinations.** For each approved green PR in queue order, the driver builds `main
+    + PRs ahead + this PR` on a throwaway branch that fr owns, pushes it, and lets the repo''s CI test
+    it. When it is green, main moves to exactly the tested combination. When one fails, it leaves the
+    queue and only the combinations behind it are rebuilt. Several combinations can be tested in parallel.
+    The PR branch is never touched; it is reopened only for a real conflict or a red result of its own.
+
+    - **Approval pinned to content.** `approved-fr` records the PR''s own diff (patch-id against the merge
+    base), not the head SHA. A merge of main, an empty commit or a driver update keeps it; only a change
+    to the PR''s own diff voids it.
+
+    - **One close-out per wave.** In repos whose fr artifacts live on the default branch (not quiet or
+    stealth), the collected close-out takes every batch of the wave and merges once, as the last entry
+    of the wave''s queue.
+
+    - **One release per wave.** No release from a push while a wave''s queue is draining; the release
+    runs once the queue is empty (and the daily cron stays as the backstop). The release''s migration
+    then follows the wave directly.
+
+    - **A stale artifact a registered migration can move does not fail a PR.** `validate-artifacts` on
+    a PR migrates in place (no commit) and fails only on a migration that refuses.
+
+
+    Open questions for the spec: how main is moved to the tested combination on each forge (fast-forward
+    push by a bypass actor, or the forge''s merge of the PR at a pinned head, and what that means for
+    the squash merge method and for "merged" state on the PR); where the queue state lives (the scope''s
+    state ref); how the release learns that a wave is draining; how a quiet or stealth repo, or a repo
+    with no CI, takes part.
+
+
+    ## Related
+
+
+    - #1555 (local suite cost), #1340 (CI wall clock): cheaper cycles, not fewer.
+
+    - #1569, #1497, #1496: close-out holds and re-recording.
+
+    - #1492, #1493: red and conflicting drafts in the train.
+
+
+    '
+- kind: decision
+  id: d-forge-independent
+  title: No forge merge queue; wave-exclusive
+  body: 'Given in the brief: the queue must not rely on GitHub''s or any forge''s merge queue, and is
+    exclusive to a wave.'
+  answered_by: operator
+- kind: decision
+  id: d-land
+  title: 'Landing: per repo, push by default, forge merge as option'
+  body: 'Operator chose a per-repo choice (push | merge) plus, for squash repos, a squash-rebased chain
+    main<A<B<C built from the PRs. Asked whether closing a,b,c would work, the analysis showed fr reads
+    the batch PR''s MERGED state everywhere (stage, gate ledger, Closes, release gating); operator chose:
+    move each PR head to its squashed commit, then fast-forward main, so the lowercase PRs read MERGED.'
+  answered_by: operator
+- kind: decision
+  id: d-ci
+  title: 'Queue CI: push trigger on fr-queue/**'
+  body: 'Operator chose a push trigger on fr-queue/** declared in .fr/triage.yaml (queue.ci: push), over
+    shadow draft PRs.'
+  answered_by: operator
+- kind: decision
+  id: d-release
+  title: 'Release: hold ref + dispatch'
+  body: Operator chose a hold branch fr-hold/<scope-id> that fr release status / release.py read, deleted
+    at drain with a release dispatch; daily cron as backstop.
+  answered_by: operator
+- kind: decision
+  id: d-depth
+  title: Speculation depth configurable, default 2
+  body: Operator chose queue.depth, default 2.
+  answered_by: operator
+- kind: decision
+  id: d-replace
+  title: Replace the train and the GitHub merge-queue mode
+  body: 'Operator chose: the wave queue is the only merge path; a repo whose base requires a forge merge
+    queue is held with a reason; no-wave batches form one-batch queues between waves.'
+  answered_by: operator
+- kind: lens
+  lens: security
+  title: The driver force-pushes PR heads (with leases) and fast-forwards main; approval semantics change
+    from head SHA to patch-id.
+- kind: lens
+  lens: tests
+  title: The queue must be proven against real bare git remotes, crash windows and lease failures, not
+    only fakes.
+resolves: []
+acceptance:
+- id: wave-queue-speculative-land
+  capability: wave merge queue
+  acceptance: The wave driver merges a wave's approved green PRs by testing speculative combinations (main
+    + PRs ahead + this PR) on fr-owned branches and moving main to exactly the tested commit; no PR branch
+    is ever updated because main moved and no forge merge queue is used.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R1
+  - spec:2026-11-19-wave-merge-queue#R3
+  - spec:2026-11-19-wave-merge-queue#R4
+  - spec:2026-11-19-wave-merge-queue#R8
+  - spec:2026-11-19-wave-merge-queue#R9
+  - spec:2026-11-19-wave-merge-queue#R14
+  status: not-implemented
+- id: wave-queue-land-methods
+  capability: wave merge queue
+  acceptance: Landing by atomic push leaves every landed PR reading MERGED on the forge, with history
+    in the repo's merge method (merge commits, or one squashed commit per PR); landing by forge merge
+    refuses rather than land an untested tree.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R5
+  - spec:2026-11-19-wave-merge-queue#R10
+  - spec:2026-11-19-wave-merge-queue#R11
+  status: not-implemented
+- id: wave-queue-wave-exclusive
+  capability: wave merge queue
+  acceptance: While a wave's queue is open only that wave's PRs and its one close-out enter it; later
+    waves and no-wave batches wait until it drains.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R2
+  - spec:2026-11-19-wave-merge-queue#R15
+  status: not-implemented
+- id: wave-queue-approval-content
+  capability: approval gate
+  acceptance: An approved-fr approval survives any push that leaves the PR's own diff unchanged (a merge
+    of main, an empty commit, the queue's own landing rewrite) and is voided only by a change to that
+    diff.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R12
+  status: not-implemented
+- id: wave-queue-eject
+  capability: wave merge queue
+  acceptance: A combination that fails twice or conflicts takes only its own PR out of the queue, hands
+    it back to its session through the existing budgets, and rebuilds only the combinations behind it.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R6
+  - spec:2026-11-19-wave-merge-queue#R13
+  status: not-implemented
+- id: wave-queue-release-hold
+  capability: release
+  acceptance: A repo cuts no release while a wave's queue drains and exactly one release follows the drain
+    (dispatched, or from the next push or the daily cron); a stale hold older than a day is ignored with
+    a warning.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R17
+  - spec:2026-11-19-wave-merge-queue#R18
+  - spec:2026-11-19-wave-merge-queue#R19
+  status: not-implemented
+- id: wave-queue-closeout-migrates
+  capability: collected close-out
+  acceptance: 'A wave''s close-out is never held by a stale artifact a registered migration can move:
+    it migrates what it archives on its own branch.'
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R16
+  status: not-implemented
+- id: wave-queue-migratable-validation
+  capability: artifact validation
+  acceptance: fr validate artifacts --allow-migratable passes a stale artifact a registered migration
+    can move and fails one it cannot, so a PR is not failed by another run's stale cursor.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R21
+  status: not-implemented
+- id: wave-queue-one-path
+  capability: wave merge queue
+  acceptance: 'The queue is the driver''s and batch merge''s only merge path: a repo that requires a forge
+    queue, refuses the push, or lacks queue CI is held with what it needs, ci-none repos land without
+    a CI wait, and a restarted driver never lands twice.'
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R7
+  - spec:2026-11-19-wave-merge-queue#R20
+  - spec:2026-11-19-wave-merge-queue#R22
+  - spec:2026-11-19-wave-merge-queue#R23
+  - spec:2026-11-19-wave-merge-queue#R24
+  status: not-implemented
+- id: wave-queue-visible
+  capability: triage board
+  acceptance: The pass, the board and the Batches page show each repo's queue line (wave, base, entries
+    and their state, hold), and an approved queued PR never reads as awaiting approval.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R25
+  status: not-implemented
+- id: wave-queue-live-wave
+  capability: wave merge queue
+  acceptance: A real wave on super-fr drains through the queue with no PR updates, one approval per PR
+    and one release for the wave.
+  origin:
+  - spec:2026-11-19-wave-merge-queue#R1
+  - spec:2026-11-19-wave-merge-queue#R9
+  - spec:2026-11-19-wave-merge-queue#R10
+  - spec:2026-11-19-wave-merge-queue#R17
+  status: not-implemented
+  verify: live
+emitted:
+  spec: docs/superpowers/specs/2026-11-19-wave-merge-queue-design.md
+evidence: {}
