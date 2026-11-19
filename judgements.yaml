@@ -8991,21 +8991,25 @@ exports:
   at: '2026-11-19T09:45:26.386290Z'
   pr: 1562
   head: 40bd18a7f9702be698b41a0d87344c10779df957
+  merged: true
 - wave: '12'
   repo: derio-net/super-fr
   at: '2026-11-19T09:45:26.386290Z'
   pr: 1562
   head: 40bd18a7f9702be698b41a0d87344c10779df957
+  merged: true
 - wave: '13'
   repo: derio-net/super-fr
   at: '2026-11-19T09:45:26.386290Z'
   pr: 1562
   head: 40bd18a7f9702be698b41a0d87344c10779df957
+  merged: true
 - wave: '14'
   repo: derio-net/super-fr
   at: '2026-11-19T09:45:26.386290Z'
   pr: 1562
   head: 40bd18a7f9702be698b41a0d87344c10779df957
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
