@@ -8610,6 +8610,10 @@ batches:
     run: 2026-11-18-feat-batch-triage-pages
     archive: chore/closeout-2026-11-19-3
     archived: 1567
+  - kind: claims_released
+    at: '2026-11-19T22:08:59.756424Z'
+    keys:
+    - super-fr#1544
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -9586,3 +9590,13 @@ closeouts:
   - "D\tdocs/superpowers/usage/2026-11-18-feat-batch-triage-pages.yaml"
   handed:
   - 93acf9e02f7e2d9366e14855059b912724a2f028
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-19-4
+  branch: chore/closeout-2026-11-19-4
+  at: '2026-11-19T22:08:43.676592Z'
+  runner: herdr
+  handle: w3Q:p3
+  planned:
+  - docs-wording
+  - owed-followups
+  - stealth-gitlab
