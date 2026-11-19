@@ -3828,6 +3828,28 @@ issues:
       bare `batch drive` (every batch with a wave) would dispatch it. Six such batches (waves 11-14) were
       cancelled by hand on 2026-11-19.'
     note: Batch triage-hardening.
+  super-fr#1569:
+    tier: 3
+    theme: triage-closeout
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: 'Observed 2026-11-19 (triage-pages): a close-out refused only because a release had not yet
+      migrated a live cursor got a durable `closeout_hold`; the retry on the held `chore/closeout-…` branch
+      was read as reopened and started a duplicate close-out (#1566/#1567).'
+    note: 'Batch closeout-truth (same close-out bookkeeping as #1496/#1497).'
+  super-fr#1572:
+    tier: 3
+    theme: triage-intake
+    cx: S
+    severity: low
+    kind: defect
+    verified: true
+    detail: '`collect.py:844-874`: a judged PR past the 200-PR list is viewed with `view_issue`, discarded
+      as `PR_PAST_LIMIT` and stored nowhere, so 20 old judged PRs are unreachable and re-viewed on every
+      driver pass.'
+    note: Batch triage-hardening.
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -8723,6 +8745,7 @@ batches:
   - super-fr#1496
   - super-fr#1497
   - super-fr#1494
+  - super-fr#1569
   rationale: '#1496 leads to #1497''s unreleasable hold; #1494 is the same finish step. Same driver modules
     as train-truth, so it waits.'
   wave: 23
