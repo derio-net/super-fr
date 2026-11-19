@@ -54,9 +54,17 @@ rows:
     origin:
     - spec:2026-11-18-triage-pages-ux#R6
     - spec:2026-11-18-triage-pages-ux#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_yes_pass_writes_the_pages_whose_inputs_exist
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_origins_and_architecture_wait_for_their_inputs
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_plan_mode_writes_no_page
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_writer_that_raises_warns_once_per_cause_and_the_pass_completes
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_later_pass_stores_one_exactly_when_a_wave_finishes
+      - super-fr:tests/unit/test_triage_page_writers.py#test_write_backlog_writes_both_pages_with_the_moment_passed_in
+    status: ci
+    notes: Drive passes write the pages whose inputs exist and snapshot at a wave's
+      finish.
     verify: none
   - id: triage-pages-folds
     capability: triage pages
