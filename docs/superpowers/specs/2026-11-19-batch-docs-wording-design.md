@@ -53,10 +53,16 @@ of shipping silently. One pull request delivers all thirteen.
   code, gets the whole page list spliced into item 5 of its numbered list.
 - **#1421.** `scripts/site/bar.css` has one phone rule (`max-width:480px`, shrinks gap
   and font) and `flex-wrap:wrap`, so at 320 px the links wrap raggedly. Article pages
-  pull the bar out with `margin:-3rem -1.25rem` and pad it `1.25rem`; the landing sets
-  `.landing .site-bar{margin:0}` while its content sits at a `1.5rem` gutter inside a
-  centred 1120 px column (`scripts/site/landing.css:45,53`), so the bar's text starts at a
-  different left edge from the content below it.
+  pull the bar out with `margin:-3rem -1.25rem` and pad it `1.25rem`. On the landing,
+  `body.landing .site-bar` (`scripts/site/landing.css:53`) already pads the bar with
+  `max(1.5rem, calc((100% - 1120px)/2 + 1.5rem))`, the gutter of the content's `.wrap`
+  (`:45`), so on desktop the two share a left edge. At ≤720 px `.wrap` drops to `1.15rem`
+  (`:199`) while the bar keeps its `1.5rem` minimum, so at 320 and 390 px the bar's text
+  sits about 0.35rem right of the content. `body.landing` rules outrank `bar.css`, so on
+  the landing `.site-name`'s size is landing.css:55's, not the bar's phone rule's. The
+  article column's own padding comes from blog-craft's broadsheet style, which this repo
+  does not hold; whether the bar lines up there at phone widths is for the screenshots to
+  show.
 
 ## 3. Operator decisions (question round 1)
 
@@ -73,19 +79,19 @@ of shipping silently. One pull request delivers all thirteen.
 
 ## Requirements
 
-R1. When `fr ops gate` finds no ops profile, its hint names a complete command, `fr init scaffold --ops --profile <name> --purpose "<one line>"`, and says to run it on a new branch cut from the default branch and land the profile by its own pull request; `fr-devops-gate` SKILL.md says the same.
+R1. When `fr ops gate` finds no ops profile, its hint names a complete command, `fr init scaffold --ops --profile <name> --purpose "<one line>"`, and says to run it on a new branch cut from the default branch and land the profile by its own pull request; `fr-devops-gate` SKILL.md and the explainer `docs/explainers/fr-devops-gate.md` (which gives the same command at :63-64) say the same.
 R2. `fr ops seal --encrypt`'s help says `{target}` is the target's path, shell-quoted, and the docstring of `fr.ops.helpers.seal` says the same.
 R3. `fr plan rework`'s argument help and `rework_create`'s docstring say the parent plan may be live (`plans/`) or archived (`implemented/plans/`, `archived-plans/`), complete or not; what `rework_create` accepts and does is unchanged.
-R4. `fr init scaffold --help` shows `<tool>[@<version>]` as written.
+R4. Every fr help string that holds bracketed text renders it as written in `--help`: `fr init scaffold --help` shows `<tool>[@<version>]`, and the other strings R5's test flags do too (known at the base: `acceptance_cmd.py:755,1137,1141` `[#test_name]`/`[#R<n>]`/`[#anchor]`, `triage_batch_cmd.py:773` `[a-z][a-z0-9-]{0,39}`).
 R5. A unit test renders the `--help` of every fr command and fails, naming the command, when bracketed text (`[...]`) in one of its help strings (option help, argument help or the command's docstring) is missing from the rendered output.
-R6. Every help first line that the generated command tree carries (`docs/reference/cli.md`, `README.md`) passes the pinned STE checker with no FAIL; `docs/reference/cli.md` no longer carries `writing_standard: none` and is checked as a reference page; the pinned exception list (`tests/unit/test_writing_standards_docs.py`) and `.claude/rules/explainers-currency.md` name two exceptions, `why-fr.md` and `index.md`.
-R7. `fr-acceptance` SKILL.md says that `fr acceptance status` lists a `--verify live` row only while the row is debt (its status is a debt status, or the row is contested), not whatever its status.
+R6. Every help first line that the generated command tree in `docs/reference/cli.md` carries passes the pinned STE checker with no FAIL; `docs/reference/cli.md` no longer carries `writing_standard: none` and is checked as a reference page; the pinned exception list (`tests/unit/test_writing_standards_docs.py`) and `.claude/rules/explainers-currency.md` name two exceptions, `why-fr.md` and `index.md`. (README's table is derived from the same lines, shortened by `sync-readme.py`, and is not a checked page.)
+R7. `fr-acceptance` SKILL.md says that `fr acceptance status` lists a `--verify live` row only while the row is debt (as `is_debt` defines it: a debt status, contested, or an unstamped or stale `local`), not whatever its status.
 R8. `fr-progress` SKILL.md says `fr repair` and `fr migrate v1-to-v2` preview by default and apply only with `--yes`, and that `fr status` only reads and has no `--yes`.
 R9. A unit test fails when a judgements `schema: <n>` that `fr-triage` SKILL.md states differs from `JUDGEMENTS_SCHEMA`.
-R10. The OpenCode and Hermes mirrors of every edited skill and the generated README and cli.md tables are regenerated in the same change.
+R10. The OpenCode and Hermes mirrors of every edited skill, the OpenCode instructions mirror of every edited rule (`.opencode/instructions/explainers-currency.md`), and the generated README and cli.md tables are regenerated in the same change.
 R11. In the built site every fenced code block of a page renders as a code block, never as inline code: `fr-acceptance.md`'s backfill steps 1–5 render as one numbered list with step 3's example a code block inside it; the Tester example of `fr-exit-gates.md` and both indented examples of `docs-currency.md` render as code blocks inside their list items.
-R12. The site build fails, naming the page, when a fenced code block of a page's source renders as inline code, and writes no output for that page.
-R13. `fill_pages` replaces `<!-- site:pages -->` only on a line that holds the marker alone (surrounding whitespace allowed); the marker inside inline code or running text is left as written. `docs-currency.md`'s "How the site is built" list renders as one numbered list, items 1–6, showing the marker as code.
+R12. The site build fails, naming the page and the fence's line in the page's own source file, when a fenced code block of that page does not render as a code block (`<pre>`), with or without an info word; like every other refusal, it writes no page at all.
+R13. `fill_pages` replaces `<!-- site:pages -->` only on a line that holds the marker alone (surrounding whitespace allowed); the marker inside inline code or running text is left as written. The numbered list under `docs-currency.md`'s "How this repo builds its site" (:157-178) renders as one list, items 1–6, showing the marker as code.
 R14. At widths up to 480 px the top bar lays out as two rows: the site name alone on the first, its four links on the second; at 320 px no row wraps and the page has no horizontal scroll. Above 480 px the bar stays one row.
 R15. The bar's text starts at the left edge of the content below it, on article pages and on the landing, at 320 px, 390 px and desktop widths.
 
@@ -98,11 +104,14 @@ R15. The bar's text starts at the left edge of the content below it, on article 
   clause names why: a profile committed on the feature branch would ride the feature PR.
 - R2, R3: string-only edits in `ops_cmd.py`, `ops/helpers.py`, `plan_cmd.py`,
   `plan_ops.py`.
-- R4: write the bracket escaped for Rich (`\[@<version>]`) so the rendered help shows
-  it. R5's test is the guard: walk the Typer app's Click command tree
-  (`typer.main.get_command(fr.cli.app)`), render each command's help with `CliRunner`,
-  collect every `[...]` span from its params' `help` and its docstring (unescaping `\[`),
-  and assert each appears in the output. Help with no bracket passes trivially.
+- R4/R5: write R5's test first and run it: the set it flags is the set R4 escapes
+  (`\[` in the source, so Rich prints the bracket). The test walks the Typer app's Click
+  command tree (`typer.main.get_command(fr.cli.app)`), renders each command's help with
+  `CliRunner` under a very wide terminal (`COLUMNS`/`TERMINAL_WIDTH` set, e.g. 1000) so
+  Rich does not wrap, then normalises the output (drop box glyphs `│╭╮╰╯─`, collapse
+  whitespace) and the expected text alike. The expected spans are every `[...]` in the
+  params' `help` and the docstring, with `\[` read as `[`. Help with no bracket passes
+  trivially. A self-test feeds it one unescaped `[@x]` string and asserts it fails.
 - R6: shorten the help first lines that fail (under 25 words, one claim per sentence),
   run `scripts/sync-readme.py`, drop the key from cli.md, update
   `test_only_the_three_exceptions_carry_a_writing_standard_key` (renamed for two) and the
@@ -119,12 +128,17 @@ R15. The bar's text starts at the left edge of the content below it, on article 
 
 - R11: re-indent each list item's continuation and fence to the 4 spaces Python-Markdown
   needs, and put a blank line before step 4 of the backfill list. Only whitespace changes.
-- R12: after markdown rendering, the build compares the page's fenced blocks with the
-  rendered HTML. A fence (a line opening with three backticks, at any indent, outside
-  another fence) whose rendered form is `<p><code>` followed by its info word, or that
-  produced no `<pre>`, fails the build with the page path and the fence's source line.
-  The check lives in `scripts/build-site.py` beside the existing refusals and follows
-  their "no file for that page" rule.
+- R12: one counting rule. Count the fences in the page's own source file (opening lines
+  of three or more backticks at any indent, paired by `_FENCE`, `build-site.py:312`), and
+  count the `<pre>` blocks the renderer produced for the article body, excluding any
+  `<pre>` that a figure, raw HTML in the source or the renderer's own chrome contributed
+  (so count only `<pre>` elements whose text matches a source fence's body, or compare
+  against a render of the article alone). When fewer fences rendered as `<pre>` than the
+  source holds, find the first one whose body appears inside `<p><code>` (or nowhere in
+  a `<pre>`) and raise `BuildError` naming the page path and that fence's line number in
+  the source file as read from disk, before `fill_pages`/`fill_figures` splice lines in.
+  It runs in the build's refusal pass (`build-site.py:1270-1343`), so no page is written
+  when it fires.
 - R13: `fill_pages` matches the marker with a multiline regex anchored to a whole line
   (`^[ \t]*<!-- site:pages -->[ \t]*$`). The landing's own marker is on its own line,
   so the front page is unchanged.
@@ -133,13 +147,32 @@ R15. The bar's text starts at the left edge of the content below it, on article 
 
 - R14: in the `max-width:480px` rule the bar wraps on purpose: `.site-name` takes
   `flex-basis:100%` (alone on row 1) and the links share row 2 with even gaps, sized so
-  the four fit at 320 px without wrapping. No JavaScript, no new markup if CSS suffices.
+  the four fit at 320 px without wrapping, under bar.css's sizes on article pages and
+  under landing.css's `body.landing` sizes (`:53,55`) on the landing. No JavaScript, no
+  new markup if CSS suffices.
 - R15: the bar's horizontal padding follows the gutter of the page it sits on. On the
-  landing that is `max(1.5rem, calc((100% - 1120px)/2 + 1.5rem))` (the same expression
-  landing.css uses); on article pages the existing pull-out keeps the text on the
-  article column, and the phone rule keeps that true at 320 and 390 px.
+  landing, add a `max-width:720px` rule beside landing.css:199 so the bar's padding
+  matches `.wrap`'s `1.15rem` there (desktop is already aligned). On article pages, the
+  screenshots at 320, 390 and 1280 px decide whether the pull-out lines up with the
+  broadsheet column; if not, bar.css's phone rule corrects the margin and padding.
 - Evidence is browser screenshots of the built site (article, guide, reference and
   landing at 320 px, 390 px and 1280 px), opened and compared at implement and review.
+
+### Pages the docs-currency gate owes (all requirements)
+
+`fr docs check` refuses `deliver` while a page whose `covers:` matches an edited path is
+unchanged. Each phase edits or re-stamps the pages its paths make stale, and ends with
+`fr docs check`. Known at the base: `docs/ops.md` (ops/**, ops_cmd.py),
+`docs/explainers/fr-init.md` (init_cmd.py), `docs/explainers/fr-brainstorming-and-plan.md`
+and `docs/reference/plan-model.md` (plan_cmd.py), `docs/explainers/fr-progress.md`
+(fr-progress SKILL), `docs/explainers/fr-devops-gate.md` (edited per R1),
+`docs/explainers/fr-acceptance.md` and `docs/explainers/fr-triage.md` (their skills),
+`docs/reference/cli.md` (commands/*.py), and `docs/docs-currency.md` (build-site.py,
+scripts/site/**, the explainers-currency rule). The R6 help rewrites touch further
+`commands/*.py` modules; the check names their pages. The new R12 refusal is described
+where the build's rules live: docs-currency.md's "Write a page that builds" list (a fence
+inside a list item is indented 4 spaces) and the build-failure list in
+`.claude/rules/explainers-currency.md`.
 
 ## Verification
 
