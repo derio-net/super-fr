@@ -113,9 +113,9 @@ def test_an_unknown_cx_is_refused(tmp_path: Path) -> None:
         load_judgements(path)
 
 
-def test_schema_12_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> None:
-    """Schemas 2 to 11 load (batches to archive conflicts); the next is refused."""
-    path = _write(tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", "schema: 13"))
+def test_schema_14_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> None:
+    """Schemas 2 to 13 load (batches to the wave merge queue); the next is refused."""
+    path = _write(tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", "schema: 14"))
 
     with pytest.raises(TriageError, match=str(path)) as exc:
         load_judgements(path)
@@ -434,7 +434,7 @@ def _released_batch(schema: int) -> dict[str, object]:
 def test_a_claims_released_event_loads_in_schema_6() -> None:
     from fr.triage.model import JUDGEMENTS_READS, JUDGEMENTS_SCHEMA, Judgements
 
-    assert JUDGEMENTS_SCHEMA == 12 and JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+    assert JUDGEMENTS_SCHEMA == 13 and JUDGEMENTS_READS == tuple(range(1, 14))
     j = Judgements.model_validate(_released_batch(6))
     assert j.batches[0].events[0].kind == "claims_released"
 

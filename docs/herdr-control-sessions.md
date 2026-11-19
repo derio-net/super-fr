@@ -53,7 +53,7 @@ reconstructs durable state, never the source transcript or initial goal.
 Scope ownership comes before shared server/pane ownership. On contention, the command
 stops without input. Both OS locks are independently verified. Use reliable local
 `FR_TRIAGE_LOCK_DIR` and `FR_HERDR_CACHE_DIR` when shared storage cannot enforce locks.
-Judgements writers stamp schema 12 (read 1–12); engine-owned replacement
+Judgements writers stamp schema 13 (read 1–13); engine-owned replacement
 attempt/success/failure events are audit only, not dispatch/cancel transitions.
 
 Partial failures return nonzero with a pending descriptor/attempt and inspection

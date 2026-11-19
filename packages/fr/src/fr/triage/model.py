@@ -83,7 +83,9 @@ from fr.triage.stage import Stage, derive_stage
 # never admitted by it (the rule fails closed) and its body is withheld on the next collect.
 FACTS_SCHEMA: Final[int] = 15
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
-# The version this fr WRITES: every engine write stamps 12 (recovery ownership/session
+# The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
+# `queues:` list and its events, a batch's `deferred` and `requeued` events and an
+# approval's `patch_id`, 2026-11-19-wave-merge-queue R24; 12 was recovery ownership/session
 # metadata; 11 added the `archive_conflict` event,
 # 2026-10-14-merge-truth §E; 10 was the `closeout_handback` and `closeout_hold` events and
 # the collected close-outs, 2026-10-14-exit-gates R15/R27; 9 was the `update`, `approval`,
@@ -95,8 +97,8 @@ FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[12] = 12
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+JUDGEMENTS_SCHEMA: Literal[13] = 13
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -945,6 +947,10 @@ class ApprovalEvent(_Strict):
     pr: int
     head: str = Field(min_length=1)
     voided_at: str | None = None
+    # The PR's patch-id at *head* (2026-11-19-wave-merge-queue R12): the approval holds
+    # while the live patch-id equals it. None on an approval recorded before schema 13,
+    # which `reaches()` reads instead; "" is an empty diff's patch-id.
+    patch_id: str | None = None
 
 
 RedDelivery = Literal["session", "none"]
@@ -1057,6 +1063,202 @@ class ArchiveConflictEvent(_Strict):
     handle: str | None = None
 
 
+class DeferredEvent(_Strict):
+    """`fr triage batch defer` took this batch out of wave *wave*'s queue and its drain; the
+    PR stays open (spec 2026-11-19-wave-merge-queue R24, R29). Needs judgements schema 13."""
+
+    kind: Literal["deferred"]
+    at: AwareDatetime
+    wave: int | None = None
+
+
+class RequeuedEvent(_Strict):
+    """`fr triage batch requeue` asked for this batch to join wave *wave*'s queue, or the
+    next queue to open when None, as a between-waves entry (spec 2026-11-19-wave-merge-queue
+    R24, R29). Needs judgements schema 13."""
+
+    kind: Literal["requeued"]
+    at: AwareDatetime
+    wave: int | None = None
+
+
+QueueEntryKind = Literal["closeout", "export", "archive", "housekeeping"]
+
+
+class QueueEntryRef(_Strict):
+    """One queue entry (spec 2026-11-19-wave-merge-queue R24, R32): a batch, by its id, or
+    any other PR by its number and *kind*. Exactly one of the two forms."""
+
+    batch: str | None = None
+    pr: int | None = None
+    kind: QueueEntryKind | None = None
+
+    @model_validator(mode="after")
+    def _a_batch_or_a_pr_and_its_kind(self) -> QueueEntryRef:
+        as_pr = self.pr is not None or self.kind is not None
+        if (self.batch is not None) == as_pr:
+            raise ValueError("a queue entry names a batch id, or a PR number and its kind")
+        if as_pr and (self.pr is None or self.kind is None):
+            raise ValueError("a queue entry's PR needs both `pr` and `kind`")
+        return self
+
+
+class QueueOpenEvent(_Strict):
+    """The queue opened: the hold was pushed `open` (spec 2026-11-19-wave-merge-queue R24,
+    R17). Needs judgements schema 13. Written by the engine only."""
+
+    kind: Literal["queue_open"]
+    at: AwareDatetime
+
+
+class QueueBuiltEvent(_Strict):
+    """Slot *slot* holds combination *sha*: *base*, every entry ahead, then *entry* at
+    *head* with *patch_id* (spec 2026-11-19-wave-merge-queue R24, R4). Needs judgements
+    schema 13. Written by the engine only."""
+
+    kind: Literal["queue_built"]
+    at: AwareDatetime
+    slot: int = Field(ge=1)
+    sha: str = Field(min_length=1)
+    entry: QueueEntryRef
+    head: str = Field(min_length=1)
+    patch_id: str
+    base: str = Field(min_length=1)
+
+
+class QueueEjectEvent(_Strict):
+    """*entry* left the queue unlanded, for *reason* (spec 2026-11-19-wave-merge-queue
+    R24). Needs judgements schema 13. Written by the engine only."""
+
+    kind: Literal["queue_eject"]
+    at: AwareDatetime
+    entry: QueueEntryRef
+    reason: Literal["conflict", "red", "operator"]
+    detail: str = ""
+
+
+class QueueLandEvent(_Strict):
+    """The queue moved `main` to *main*, landing *entries* (spec 2026-11-19-wave-merge-queue
+    R24). Needs judgements schema 13. Written by the engine only."""
+
+    kind: Literal["queue_land"]
+    at: AwareDatetime
+    main: str = Field(min_length=1)
+    entries: list[QueueEntryRef] = Field(min_length=1)
+
+
+class QueueDrainEvent(_Strict):
+    """The queue drained at *main*: the hold was pushed `drained` (spec
+    2026-11-19-wave-merge-queue R24, R17). Needs judgements schema 13. Engine-written."""
+
+    kind: Literal["queue_drain"]
+    at: AwareDatetime
+    main: str | None = None
+
+
+class QueueClearedEvent(_Strict):
+    """The release cleared the hold, or the driver cleared it under `release: none` (spec
+    2026-11-19-wave-merge-queue R24, R18). Needs judgements schema 13. Engine-written."""
+
+    kind: Literal["queue_cleared"]
+    at: AwareDatetime
+    detail: str = ""
+
+
+class QueueReleaseEvent(_Strict):
+    """The DevOps stage released `gate:devops`-held *entry* (its `fr-queue:release` label)
+    at *head* and *patch_id* (spec 2026-11-19-wave-merge-queue R24, R26). Needs judgements
+    schema 13. Written by the engine only."""
+
+    kind: Literal["queue_release"]
+    at: AwareDatetime
+    entry: QueueEntryRef
+    head: str = Field(min_length=1)
+    patch_id: str
+
+
+class QueuePostmergeDoneEvent(_Strict):
+    """The DevOps stage's post-merge ops for *entry* completed (its `fr-queue:postmerge-done`
+    label), lifting the barrier (spec 2026-11-19-wave-merge-queue R24, R26). Needs
+    judgements schema 13. Written by the engine only."""
+
+    kind: Literal["queue_postmerge_done"]
+    at: AwareDatetime
+    entry: QueueEntryRef
+
+
+class QueueApprovalEvent(_Strict):
+    """fr recorded `approved-fr` on non-batch *entry* at *head* and *patch_id*; *voided_at*
+    is the head that voided it (spec 2026-11-19-wave-merge-queue R24, R12, R32). Needs
+    judgements schema 13. Written by the engine only."""
+
+    kind: Literal["approval"]
+    at: AwareDatetime
+    entry: QueueEntryRef
+    head: str = Field(min_length=1)
+    patch_id: str | None = None
+    voided_at: str | None = None
+
+
+QueueEvent = Annotated[
+    QueueOpenEvent
+    | QueueBuiltEvent
+    | QueueEjectEvent
+    | QueueLandEvent
+    | QueueDrainEvent
+    | QueueClearedEvent
+    | QueueReleaseEvent
+    | QueuePostmergeDoneEvent
+    | QueueApprovalEvent,
+    Field(discriminator="kind"),
+]
+
+
+def _time_ordered(events: list[Any], what: str) -> list[Any]:
+    """*events*, refused when one precedes the event before it."""
+    for earlier, later in zip(events, events[1:], strict=False):
+        if later.at < earlier.at:
+            raise ValueError(
+                f"{what} events must be time-ordered: {later.kind} at {later.at} "
+                f"follows {earlier.kind} at {earlier.at}"
+            )
+    return events
+
+
+class QueueRecord(_Strict):
+    """One wave merge queue (spec 2026-11-19-wave-merge-queue R24): *repo*'s queue for
+    *wave* (None between waves) in *scope*, started from *base*, and its events in order.
+    A restarted driver resumes from these and the forge. Needs judgements schema 13."""
+
+    repo: str = Field(min_length=1)  # OWNER/REPO
+    wave: int | None = None
+    scope: str = Field(min_length=1)
+    base: str = Field(min_length=1)
+    events: list[QueueEvent] = []
+
+    @field_validator("events")
+    @classmethod
+    def _events_are_time_ordered(cls, v: list[QueueEvent]) -> list[Any]:
+        return _time_ordered(v, "queue")
+
+
+SCHEMA_13_EVENTS = frozenset(
+    {
+        "queue_open",
+        "queue_built",
+        "queue_eject",
+        "queue_land",
+        "queue_drain",
+        "queue_cleared",
+        "queue_release",
+        "queue_postmerge_done",
+        "deferred",
+        "requeued",
+    }
+)
+"""The event kinds only a schema 13 `judgements.yaml` may carry (wave-merge-queue R24). A
+queue's `approval` is in no set: `queues:` itself needs schema 13."""
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -1083,6 +1285,7 @@ _EVENT_SCHEMAS: tuple[tuple[int, frozenset[str]], ...] = (
     (9, SCHEMA_9_EVENTS),
     (10, SCHEMA_10_EVENTS),
     (11, SCHEMA_11_EVENTS),
+    (13, SCHEMA_13_EVENTS),
 )
 
 
@@ -1101,7 +1304,9 @@ BatchEvent = Annotated[
     | EnqueueEvent
     | CloseoutHandbackEvent
     | CloseoutHoldEvent
-    | ArchiveConflictEvent,
+    | ArchiveConflictEvent
+    | DeferredEvent
+    | RequeuedEvent,
     Field(discriminator="kind"),
 ]
 
@@ -1166,13 +1371,7 @@ class Batch(_Strict):
     @field_validator("events")
     @classmethod
     def _events_are_time_ordered(cls, v: list[BatchEvent]) -> list[Any]:
-        for earlier, later in zip(v, v[1:], strict=False):
-            if later.at < earlier.at:
-                raise ValueError(
-                    f"batch events must be time-ordered: {later.kind} at {later.at} "
-                    f"follows {earlier.kind} at {earlier.at}"
-                )
-        return v
+        return _time_ordered(v, "batch")
 
     @property
     def repo_name(self) -> str:
@@ -1209,7 +1408,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -1218,6 +1417,7 @@ class Judgements(_Strict):
     features: list[Feature] = []  # ranked groups (wave-driver R9); any schema
     exports: list[Export] = []  # the driver's per-wave state exports; schema 4
     closeouts: list[CollectedCloseout] = []  # collected close-out start markers; schema 10
+    queues: list[QueueRecord] = []  # the wave merge queues (wave-merge-queue R24); schema 13
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -1312,7 +1512,18 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
-        carried = {e.kind for b in self.batches for e in b.events}
+        if self.queues and self.schema_ < 13:
+            raise ValueError(
+                f"`queues:` needs schema 13, but this file is stamped schema {self.schema_}"
+            )
+        if self.schema_ < 13 and any(
+            isinstance(e, ApprovalEvent) and e.patch_id is not None
+            for b in self.batches
+            for e in b.events
+        ):
+            raise ValueError("an approval's `patch_id` needs schema 13")
+        carried: set[str] = {e.kind for b in self.batches for e in b.events}
+        carried |= {e.kind for q in self.queues for e in q.events}
         if self.schema_ < 12 and any(
             isinstance(e, ReplacementEvent) and (e.recover or e.target_pane or e.session)
             for b in self.batches

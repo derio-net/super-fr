@@ -181,7 +181,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-     engine-appended `events` (fr reads schemas 1–12 and writes 12, see
+     engine-appended `events` (fr reads schemas 1–13 and writes 13, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -209,9 +209,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     events; schema 7 adds audited `replacement` attempt/success/failure events
     that never change dispatch age or lifecycle; 8 adds `claim_taken`, which makes a
     taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
-    (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); current writers
-     stamp 12 (read 1–12), adding recovery ownership/session audit metadata;
-     11 added `archive_conflict` (merge-truth R12).
+    (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); 11 added
+     `archive_conflict` (merge-truth R12); 12 recovery ownership/session audit metadata;
+     current writers stamp 13 (read 1–13), adding the wave merge queue's `queues:` list,
+     the batch `deferred`/`requeued` events and an approval's `patch_id`
+     (wave-merge-queue R12, R24).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
