@@ -124,9 +124,14 @@ rows:
     origin:
     - spec:2026-11-18-triage-pages-ux#R4
     - spec:2026-11-18-triage-pages-ux#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pages_split.py#test_the_backlog_holds_the_decisions_only
+      - super-fr:tests/unit/test_triage_pages_split.py#test_the_issues_page_holds_the_lists_only
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_kind_filter_has_the_structure_its_script_acts_on
+    status: ci
+    notes: Backlog holds the decisions, Issues the lists, with the kind filter's structure
+      pinned.
     verify: none
     visual:
       states:
