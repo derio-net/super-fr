@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-19-fix-batch-stealth-gitlab
+workflow: fr-goal-light@1
+branch: fix/batch-stealth-gitlab
+started: '2026-11-19T12:01:58+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  plan:
+    state: pending
+  spec-plan-review:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 8.3.0rc3
+issue: 1527
