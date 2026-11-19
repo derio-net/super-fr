@@ -40,3 +40,8 @@ install.sh exports uv.lock (--frozen --all-packages --no-dev --no-emit-workspace
 ### e888afdd2e7b · review · Independent adversarial review: one important finding, fixed; two minor, one fixed
 
 1 (important, fixed): a python3 that resolves but cannot run (pyenv shim, CLT stub) made the unguarded fr_json_field calls abort the edit gate under set -eu with no deny. Fixed: reads guarded, deny_fixed fallback, resolver probes python and falls through to jq; tests test_a_python3_that_cannot_run_and_no_jq_still_denies (fails before), ..._falls_through_to_jq. 2 (minor, fixed): jq branch handed __HOOK_PARSE_ERROR__ as a file path; now denies. 3 (minor, not fixed, out of scope): plugins/super-fr/scripts/fr-statusline-claude.sh runs a bare jq (status line, not a hook) and fr-run-idle-guard.sh a command -v pkill; noted in the PR. Residual: the glob override forces rimraf@5 onto glob 14 in the dev graph; rimraf is never run by the plugin or its tests.
+
+<!-- fr:journal kind=finding scope=debug id=babb2387bc80 created=2026-11-19T21:35:05+00:00 state=refuted -->
+### babb2387bc80 · finding [refuted] · CI shard 4 placement-move-and-drift failure: flake, not this change
+
+test_placement_move_and_drift failed once in CI (fr placement move refused: an acceptance fragment uncommitted in feat__live). The scenario runs no hook, jq, python3 or install.sh; it passed 3/3 in the workspace on the same tree, and a rerun of the failed job passed. main is green at 612b3976c.
