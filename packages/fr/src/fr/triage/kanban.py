@@ -360,9 +360,8 @@ def cutoff_hidden_waves(
 ) -> frozenset[str]:
     """The waves the Batches page's cutoff hides (R18): every batch of the wave is terminal
     and none had an event on or after *days* before *rendered_at*. A wave with any other
-    batch shows, and a card with no wave is never part of one. The page's script applies
-    this same rule in the browser, from each card's `data-wave`, `data-terminal` and
-    `data-active` and the body's `data-rendered`."""
+    batch shows, and a card with no wave is never part of one. The render marks each card of
+    these waves with `data-cutoff-hidden`; the page's script only applies the marker."""
     since = rendered_at - timedelta(days=days)
     quiet: dict[str, bool] = {}
     for card in cards:

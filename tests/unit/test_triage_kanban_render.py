@@ -175,27 +175,101 @@ def _as(card: Card, wave: int | None, stage: str, *events: str) -> Card:
     )
 
 
-def test_every_card_carries_its_wave_terminal_state_and_latest_event() -> None:
-    board, _ = _board()
-    page = render_board(board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=[])
-    seen = {}
-    for card in (c for col in board.columns for c in col.cards):
-        attrs = dict(
-            re.findall(r'data-(wave|terminal|active)="([^"]*)"', _card(page, card.batch.id))
-        )
-        assert set(attrs) == {"wave", "terminal", "active"}, card.batch.id
-        assert attrs["wave"] == ("" if card.wave is None else str(card.wave))
-        assert attrs["terminal"] == ("1" if card.terminal else "0")
-        latest = max((e.at for e in card.events), default=None)
-        assert attrs["active"] == ("" if latest is None else latest.isoformat())
-        seen[card.batch.id] = attrs
-    assert {a["terminal"] for a in seen.values()} == {"0", "1"}
-    assert "" in {a["active"] for a in seen.values()}
-    assert any(a["active"] for a in seen.values())
+def _page_of(cards: list[Card], *, at: datetime = AT) -> str:
+    """A page whose Done column holds *cards* exactly, rendered at the pinned clock *at*."""
+    from fr.triage.kanban import ColumnView
+
+    board = Board(
+        scope="example-org--widgets",
+        collected_at="2026-10-05T00:00:00Z",
+        columns=(ColumnView(key="done", title="Done", cards=tuple(cards)),),
+    )
+    return render_board(board, scope_args=SCOPE, rendered_at=at, refresh=0, notes=[])
 
 
-def test_the_body_carries_the_render_time_the_cutoff_counts_back_from() -> None:
-    assert f'data-rendered="{AT.isoformat()}"' in _page()
+def _named(card: Card, bid: str) -> Card:
+    return replace(card, batch=card.batch.model_copy(update={"id": bid}))
+
+
+def _marked(page: str) -> dict[str, bool]:
+    """Per batch id, whether its card carries the server's cutoff marker."""
+    out = {}
+    for m in re.finditer(r'<details class="card[^"]*" id="card-([^"]+)"([^>]*)>', page):
+        out[m.group(1)] = "data-cutoff-hidden" in m.group(2)
+    return out
+
+
+def test_the_server_marks_the_cards_of_the_waves_the_cutoff_hides() -> None:
+    base = _cards()
+    cards = [
+        _named(_as(base[0], 1, "merged", "2026-08-01T09:00:00+00:00"), "old-a"),
+        _named(_as(base[1], 1, "merged"), "old-b"),
+        _named(_as(base[2], 2, "merged", "2026-11-01T09:00:00+00:00"), "recent"),
+        _named(_as(base[3], 3, "dispatched"), "live"),
+        _named(_as(base[4], None, "merged"), "nowave"),
+    ]
+    assert _marked(_page_of(cards)) == {
+        "old-a": True,
+        "old-b": True,  # a quiet, finished wave: every card of it
+        "recent": False,
+        "live": False,
+        "nowave": False,
+    }
+    # the markers are that helper's answer, not a second rule
+    assert cutoff_hidden_waves(cards, AT) == {"1"}
+
+
+def test_the_marker_follows_the_thirty_day_boundary_to_the_second() -> None:
+    base = _cards()
+
+    def marker(event_at: str) -> bool:
+        card = _named(_as(base[0], 1, "merged", event_at), "b")
+        return _marked(_page_of([card]))["b"]
+
+    assert marker("2026-09-05T21:30:00+00:00") is False  # exactly 30 days: still active
+    assert marker("2026-09-05T21:29:59+00:00") is True  # one second older: quiet
+    assert marker("2026-09-05T21:30:01+00:00") is False
+
+
+def test_cards_carry_their_wave_and_no_date_inputs_for_the_script() -> None:
+    page = _page_of([_as(_cards()[0], 4, "merged", "2026-08-01T09:00:00+00:00")])
+    assert 'data-wave="4"' in page
+    # the browser applies the server's marker; it is given no dates to decide from
+    assert "data-active" not in page and "data-terminal" not in page
+    assert "data-rendered" not in page
+
+
+def test_the_script_only_applies_the_marker_and_parses_no_dates() -> None:
+    assert "data-cutoff-hidden" in SCRIPT
+    assert "Date.parse" not in SCRIPT and "new Date" not in SCRIPT
+
+
+def test_every_selector_the_script_queries_matches_the_markup_it_acts_on() -> None:
+    page = _page()
+    selectors = re.findall(r'querySelector(?:All)?\("([^"]+)"\)', SCRIPT)
+    assert selectors
+    for sel in selectors:
+        simple = re.sub(r":not\([^)]*\)", "", sel).split(" ")[-1]
+        m = re.fullmatch(r"([a-z0-9]*)(?:\.([\w-]+))?(?:#([\w-]+))?", simple)
+        if m is None:
+            continue  # an attribute selector: pinned by its own test
+        tag, cls, ident = m.groups()
+        if ident:
+            assert f'id="{ident}"' in page, sel
+        elif cls:
+            assert re.search(rf'<{tag or "[a-z]+"} [^>]*class="[^"]*\b{cls}\b', page), sel
+        else:
+            assert f"<{tag}" in page, sel
+
+
+def test_the_script_reads_the_column_key_and_toggle_the_markup_carries() -> None:
+    page = _page()
+    for key in ("proposed", "running", "done"):
+        assert re.search(
+            rf'<section class="col[^"]*" data-column="{key}"><h2><button[^>]*class="coltoggle"',
+            page,
+        ), key
+    assert "dataset.column" in SCRIPT and "button.coltoggle" in SCRIPT
 
 
 def test_the_cutoff_toggle_is_a_pressed_toolbar_button_by_default() -> None:

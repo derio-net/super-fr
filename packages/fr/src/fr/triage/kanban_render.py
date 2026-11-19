@@ -37,6 +37,7 @@ from fr.triage.kanban import (
     HeldIssue,
     Member,
     PrView,
+    cutoff_hidden_waves,
 )
 from fr.triage.render import FONTS, _safe_url, esc, noun
 
@@ -180,8 +181,9 @@ SCRIPT = """
       });
     }
   });
-  // The wave cutoff (R18). The rule is `kanban.cutoff_hidden_waves`: a wave whose cards are all
-  // terminal, none with an event in the 30 days before `body[data-rendered]`, is hidden.
+  // The wave cutoff (R18). The server decides which cards the cutoff hides, from the render
+  // time (`kanban.cutoff_hidden_waves`), and marks each with `data-cutoff-hidden`; this
+  // script only applies the marker or clears it.
   var cutoff = document.getElementById("cutoff");
   var cutoffKey = "fr-triage:" + scope + ":cutoff";
   function cutoffWas() {
@@ -190,23 +192,9 @@ SCRIPT = """
   function cutoffRemember(on) {
     try { localStorage.setItem(cutoffKey, on ? "1" : "0"); } catch (e) { /* unavailable */ }
   }
-  function quietWaves() {
-    var since = Date.parse(document.body.dataset.rendered || "") - 30 * 86400000;
-    var quiet = {};
-    if (isNaN(since)) { return quiet; }
-    cards().forEach(function (c) {
-      var wave = c.dataset.wave;
-      if (!wave) { return; }
-      var at = c.dataset.active ? Date.parse(c.dataset.active) : NaN;
-      var settled = c.dataset.terminal === "1" && (isNaN(at) || at < since);
-      quiet[wave] = (wave in quiet ? quiet[wave] : true) && settled;
-    });
-    return quiet;
-  }
   function applyCutoff() {
     var on = !cutoff || cutoff.getAttribute("aria-pressed") === "true";
-    var quiet = on ? quietWaves() : {};
-    cards().forEach(function (c) { c.hidden = Boolean(c.dataset.wave && quiet[c.dataset.wave]); });
+    cards().forEach(function (c) { c.hidden = on && c.hasAttribute("data-cutoff-hidden"); });
     Array.prototype.forEach.call(document.querySelectorAll("section.col"), function (col) {
       var count = col.querySelector(".count");
       if (count) { count.textContent = String(col.querySelectorAll(".card:not([hidden])").length); }
@@ -413,7 +401,7 @@ def _body(card: Card, scope_args: Sequence[str]) -> str:
     return f'<div class="body">{"".join(parts)}</div>'
 
 
-def _card(card: Card, scope_args: Sequence[str]) -> str:
+def _card(card: Card, scope_args: Sequence[str], *, hidden: bool = False) -> str:
     bid = card.batch.id
     classes = "card needs-you" if card.needs_you else "card"
     count = len(card.members)
@@ -442,9 +430,8 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
     )
     return (
         f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}" '
-        f'data-wave="{"" if card.wave is None else card.wave}" '
-        f'data-terminal="{"1" if card.terminal else "0"}" '
-        f'data-active="{"" if card.active_at is None else esc(card.active_at.isoformat())}">'
+        f'data-wave="{"" if card.wave is None else card.wave}"'
+        f"{' data-cutoff-hidden' if hidden else ''}>"
         f"{summary}{_body(card, scope_args)}</details>"
     )
 
@@ -483,8 +470,13 @@ def _gated_card(g: GatedCard) -> str:
     )
 
 
-def _column(column: ColumnView, scope_args: Sequence[str]) -> str:
-    cards = "".join(_card(c, scope_args) for c in column.cards)
+def _column(
+    column: ColumnView, scope_args: Sequence[str], hidden_waves: frozenset[str] = frozenset()
+) -> str:
+    cards = "".join(
+        _card(c, scope_args, hidden=c.wave is not None and str(c.wave) in hidden_waves)
+        for c in column.cards
+    )
     cards += "".join(_gated_card(g) for g in column.gated)
     count = len(column.cards) + len(column.gated)
     collapsed = count == 0
@@ -514,6 +506,7 @@ def render_board(
     board that stopped moving is told apart from a quiet one. None: no quota clause.
     *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
     commands carry; *refresh* is the reload interval in seconds, 0 for none."""
+    hidden_waves = cutoff_hidden_waves((c for col in board.columns for c in col.cards), rendered_at)
     if board.batch_count or board.gated_count:
         body = (
             '<div class="toolbar" role="toolbar" aria-label="Which waves to show">'
@@ -521,7 +514,7 @@ def render_board(
             "last 30 days</button>"
             "</div>"
             '<div class="board">'
-            + "".join(_column(c, scope_args) for c in board.columns)
+            + "".join(_column(c, scope_args, hidden_waves) for c in board.columns)
             + "</div>"
         )
     else:
@@ -546,8 +539,7 @@ def render_board(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Batches · {esc(board.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n"
-        f'<body data-refresh="{max(0, int(refresh))}" data-scope="{esc(board.scope)}" '
-        f'data-rendered="{esc(rendered_at.isoformat())}">\n<main>\n'
+        f'<body data-refresh="{max(0, int(refresh))}" data-scope="{esc(board.scope)}">\n<main>\n'
         f"<header><h1>Batches</h1>"
         f'<p class="meta">{esc(board.scope)} · rendered {_when(rendered_at)} · '
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
