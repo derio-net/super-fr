@@ -429,20 +429,49 @@ requirement the spec does not state is a spec defect, fixed in the spec.
 
 ```bash
 uv sync                                             # install workspace deps
-uv run pytest -q --no-cov -n auto                   # fast, parallel (pytest-xdist); full `pytest -n auto` (CI) also gates cov-fail-under=75
+uv run pytest -q --no-cov -n auto                   # parallel (pytest-xdist), scenario tier deselected: advisory, not deliver evidence
+uv run pytest -m "" -q --no-cov -n auto             # the whole suite, scenarios included (the full local run)
+uv run pytest --fr-scope -n 2 -q --no-cov           # fast advisory tier: what this branch's changes reach, plus the smoke set
 uv run pytest tests/unit/test_foo.py::test_bar -q   # single test
 uv run ruff check packages/ tests/                  # lint
 uv run ruff format packages/ tests/                 # format (no --check: writes)
 uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src
 uv run --no-project python scripts/bump-version.py --check   # version lockstep
-uv run pytest -n auto --no-cov --store-durations    # refresh .test_durations (pytest-split shard weights)
+uv run pytest -m "" -n auto --no-cov --store-durations   # refresh .test_durations (every test, scenarios included)
 ```
 
 The `test` job in CI is sharded 7 ways with pytest-split (the release's shards stay at 6), balanced by the
 committed `.test_durations` file. Refresh it with the command above after a
 test file grows or shrinks a lot — a stale file only makes the shards less
 balanced, never wrong; the CI time-budget watcher is what notices when the
-imbalance starts to cost real wall clock.
+imbalance starts to cost real wall clock. On a host too loaded to run the whole
+suite, merge the stored durations of a green CI run's shards instead (each uploads
+`durations-py<v>-shard-<n>`; `scripts/split_check.py merge -o .test_durations
+<the 3.14 leg's shard-durations.json files>`, as `split-check` does on `main`).
+
+**Tiers** (spec `2026-11-19-local-suite-cost` R5–R8). `pyproject.toml`'s `addopts`
+carries `-m "not scenario"`: the `scenario` marker (every test of
+`tests/integration/test_install_sh.py`, and every test of
+`tests/integration/test_scenarios.py` but its cheap
+`test_every_scenario_script_has_a_test_here` tripwire) is deselected from a plain
+local run. `-m ""` runs the whole suite. CI's `collect` and `test` jobs and the
+release's collect and shards replace `addopts`, and the release's one-process staged
+suite passes `-m ""`, so all of them run every test;
+`tests/unit/test_scenario_tier_commands.py` pins each command line. `--fr-scope
+[<base>]` (`tests/fr_scope.py`, wired from `tests/conftest.py`) is the fast tier: the
+test files changed since the merge-base with `<base>` (default: the remote default
+ref), those whose imports reach a changed module directly or through `tests/`
+helpers, everything under a changed `conftest.py`, and the `smoke` set
+(`tests/unit/test_smoke_cli.py`, one CLI round trip per top-level command); never the
+`scenario` tier. It is not sound: a test that starts `fr` as a subprocess is invisible
+to the import graph. Any session that is not the whole configured suite (`--fr-scope`,
+a non-empty `-m` or `-k`, explicit paths, `--lf`, `--sw`, so also the plain default run)
+prints `fr-scope: advisory — not deliver evidence` on a line of its own, and fr refuses
+a `tests` log holding that line at `deliver` and at a phase unit. **This repo declares
+`tests: ci`** in `.fr/ci.yaml`: CI is its suite evidence. The `deliver` and phase
+executor briefs carry `tests: {mode: ci, fast_tier: ...}`; an executor runs the fast
+tier last instead of the full suite, and `deliver` uses `tests: ci` (a local `-m ""`
+log stays accepted).
 
 **The CI time-budget watcher** (`.github/workflows/ci-budget.yml` +
 `scripts/ci_budget.py`, spec `2026-09-26-ci-time-budget-design.md`) files (and
@@ -454,7 +483,14 @@ watch-list tripwire) until it is either named in `ci-budget.yml`'s
 `on.workflow_run.workflows` (by its own `name:`, not its filename) or given
 `exclude: true` in `.github/ci-budget.yaml`.
 
-`-n auto` is ~6x faster than serial (~150 s vs ~870 s on a 12-core host).
+Measured 2026-11-19 from CI run 44544149927 (this repo's PR #1559 after the suite-cost
+work, the py3.14 leg's seven shards, every test): 16,989 tests, 4,157 worker-seconds
+(the py3.11 leg: 4,180), of which the `scenario` tier is 145 tests and 870
+worker-seconds; each shard job took 2 min 50 s to 4 min 37 s, and the whole CI run
+5 min 18 s of wall clock. The previous file (2026-11-15, 15,182 tests, 18,855
+worker-seconds) was measured on another machine, so the two totals do not compare. A
+local whole-suite wall clock was not measured: on a host other sessions load it takes
+hours, which is why CI is the suite evidence.
 A test that passes serially but fails under `-n auto` is order-dependent or
 wall-clock-tight, not an xdist bug: reset process-global state in an autouse
 fixture in `tests/conftest.py` (see `_fresh_forge_policy_cache`) rather than
