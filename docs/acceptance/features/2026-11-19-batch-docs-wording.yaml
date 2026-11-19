@@ -18,9 +18,14 @@ rows:
     - spec:2026-11-19-batch-docs-wording#R2
     - spec:2026-11-19-batch-docs-wording#R3
     - spec:2026-11-19-batch-docs-wording#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate_cmd.py#test_no_ops_profile_is_refused_naming_scaffold
+      - super-fr:tests/unit/test_ops_gate_cmd.py#test_seal_help_says_target_is_the_quoted_path
+      - super-fr:tests/unit/test_ops_gate_cmd.py#test_plan_rework_help_names_live_or_archived_parents
+    status: ci
+    notes: 'R1-R4: hint, seal and rework help asserted against rendered output; bracket
+      escapes covered by cli-help-rich-markup-safe'
     verify: none
   - id: cli-help-rich-markup-safe
     capability: cli
