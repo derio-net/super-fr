@@ -25,3 +25,8 @@ run/model.py records the sha256 of the cursor bytes each command read or wrote. 
 ### f-cli-bound · finding [fixed] · A cli step is bounded in time and in stored output (#1507)
 
 The cli executor runs the shell in its own session with a timeout (FR_CLI_STEP_TIMEOUT, default 600 s, 0 for none; a malformed value exits 2 and runs nothing). On timeout os.killpg kills the whole group (killing only the shell left 'sleep 30 | cat' holding the pipe open) and the step fails with exit 124. The cursor stores the last 16 KiB of stdout under a 'truncated' header. Commit fdcf46fb6.
+
+<!-- fr:journal kind=review scope=debug id=r1 created=2026-11-19T21:20:36+00:00 -->
+### r1 · review · Independent adversarial review of the branch: 2 bugs in the new cli runner, fixed
+
+A reviewer with no session context read the diff. In scope, fixed in the next commit: (1) start_new_session put the step out of reach of Ctrl-C and fr's own kill, and a bare Popen does not kill on exception, so an interrupted advance orphaned the step; any exception now kills the group. (2) the post-kill communicate had no timeout, so a setsid grandchild could hold the advance open; it now waits at most 5 s. Also fixed: non-UTF-8 stdout raised UnicodeDecodeError (pre-existing). Each has a test watched failing first. Not acted on, as nits: the stored stdout is the 16 KiB cap plus a header line; save_run_state's compare surfaces a permission error as a traceback; record apply's byte-restore rewrites the cursor outside the registry, which is unreachable as a false refusal because every such path ends the command. The reviewer could not break the atomic-write or lost-update claims.
