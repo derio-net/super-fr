@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-17 still true after the origin-only reword and -design fragment fixes (gh#1439, gh#1461); 2026-11-15 still true after deliver started stamping merged local rows by amendment (gh#1462)
+reviewed: 2026-11-18 the scaffolded CI now pins its actions and fr by commit (consumer-delivery); 2026-11-17 still true after the origin-only reword and -design fragment fixes (gh#1439, gh#1461); 2026-11-15 still true after deliver started stamping merged local rows by amendment (gh#1462)
 ---
 
 ## What does the matrix record?
@@ -254,6 +254,22 @@ narrows the push trigger to `main`.) A weekly run upserts one `<repo>: Technical
 issue (`fr debt issue`). That issue's Acceptance debt section is what
 `fr acceptance digest` renders. The weekly run also refreshes a draft PR that archives
 long-merged plans.
+
+The scaffolded workflow runs code with your repo's tokens, so it pins what it runs. Every
+action is a commit SHA with a version comment. The `fr` it installs is the commit of the
+release tag of the `fr` that wrote the file, not `main`. On GitLab, each job also installs
+one uv release and checks its SHA-256. The debt job pins its `tea` and `glab` the same
+way. The pins leave one thing open: the GitLab job image `python:3.12` is a tag, and a tag
+can move.
+
+A moving branch could change what your CI runs between two runs. A commit cannot. To move
+the pins, run `fr acceptance init --refresh-ci`. On GitLab, `--refresh-ci` prints the jobs to
+paste over the old ones. It never rewrites `.gitlab-ci.yml`. `fr acceptance check` warns
+when the pin is older than the `fr` you run, and never fails because of it.
+
+The weekly debt job needs a token that can push and open a pull request. Name it
+`FR_DEBT_TOKEN`. On Gitea and GitLab, the debt job installs its own pinned CLI. On GitLab,
+only the debt job stops, with one line, when that masked variable is missing.
 
 ## What can the matrix not do?
 

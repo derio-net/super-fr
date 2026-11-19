@@ -55,7 +55,17 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     box = {"report": _report(("old-plan", 30), ("held-plan", 30), ("young-plan", 3), ("odd", None))}
     monkeypatch.setenv("FR_REPO_ROOT", str(work))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
-    monkeypatch.delenv("FR_DEBT_TOKEN", raising=False)
+    for var in (
+        "FR_DEBT_TOKEN",
+        "GH_TOKEN",
+        "GITLAB_TOKEN",
+        "GITEA_TOKEN",
+        "CI_SERVER_HOST",
+        "CI_SERVER_PORT",
+        "GITHUB_SERVER_URL",
+        "GITEA_SERVER_URL",
+    ):
+        monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(debt_cmd, "_client", lambda root: gh)
     monkeypatch.setattr(debt_cmd, "_compute", lambda root, c, slug, days: box["report"])
     monkeypatch.setattr(
@@ -201,3 +211,316 @@ def test_a_failed_archive_never_publishes_its_stderr_in_the_pr_body(
     assert "SECRET" not in r.output
     for pr in _calls(world["gh"], "create_pr"):
         assert "SECRET" not in pr["body"] and "x-access-token" not in pr["body"]
+
+
+# --- R11: the two remote git calls authenticate through the environment alone ----------
+
+
+class _Spy:
+    """Records every `git` subprocess `_git` starts: its argv and its env."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.calls: list[tuple[list[str], dict | None]] = []
+        real = subprocess.run
+
+        def run(argv: list[str], *a: object, **kw: object) -> object:
+            self.calls.append((list(argv), kw.get("env")))  # type: ignore[arg-type]
+            return real(argv, *a, **kw)  # type: ignore[call-overload]
+
+        monkeypatch.setattr(subprocess, "run", run)
+
+    def remote(self) -> list[tuple[list[str], dict | None]]:
+        return [c for c in self.calls if {"ls-remote", "push"} & set(c[0])]
+
+
+def _basic(user: str, token: str) -> str:
+    import base64
+
+    return "AUTHORIZATION: basic " + base64.b64encode(f"{user}:{token}".encode()).decode()
+
+
+@pytest.mark.parametrize(
+    ("var", "forge", "user", "host"),
+    [
+        ("FR_DEBT_TOKEN", "github", "x-access-token", "github.com"),
+        ("GH_TOKEN", "github", "x-access-token", "github.com"),
+        ("GITLAB_TOKEN", "gitlab", "oauth2", "git.example.com"),
+        ("GITEA_TOKEN", "gitea", "oauth2", "gitea.example.com"),
+    ],
+)
+def test_remote_calls_carry_the_token_in_the_environment_only(
+    world: dict, monkeypatch: pytest.MonkeyPatch, var: str, forge: str, user: str, host: str
+) -> None:
+    from fr import _hosts
+
+    work = world["work"]
+    path = "/g/p.git"
+    _git(work, "remote", "set-url", "origin", f"https://gitlab-ci-token:jobtok@{host}{path}")
+    monkeypatch.setattr(_hosts, "detect_backend", lambda root: forge)
+    if host != "github.com":  # github.com is resolved for real: origin's SaaS host
+        monkeypatch.setattr(debt_cmd, "_forge_host", lambda root, f: host)
+    monkeypatch.setenv(var, "s3cret")
+    stripped = f"https://{host}{path}"
+    _git(work, "config", f"url.{world['bare']}.insteadOf", stripped)
+    spy = _Spy(monkeypatch)
+    from fr.debt import sweep as sw
+
+    _git(work, "checkout", "-q", "-b", sw.BRANCH)
+    debt_cmd._push(work)
+    calls = spy.remote()
+    assert len(calls) == 2
+    for argv, env in calls:
+        assert stripped in argv
+        assert not any("s3cret" in a or "jobtok" in a for a in argv)
+        assert env is not None
+        assert env["GIT_CONFIG_COUNT"] == "2"
+        # An empty value first resets any persisted header for the URL, then ours.
+        assert env["GIT_CONFIG_KEY_0"] == f"http.{stripped}.extraheader"
+        assert env["GIT_CONFIG_VALUE_0"] == ""
+        assert env["GIT_CONFIG_KEY_1"] == f"http.{stripped}.extraheader"
+        assert env["GIT_CONFIG_VALUE_1"] == _basic(user, "s3cret")
+    assert "s3cret" not in (work / ".git" / "config").read_text()
+
+
+def test_without_a_token_the_remote_calls_are_unchanged(
+    world: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.debt import sweep as sw
+
+    work = world["work"]
+    _git(work, "checkout", "-q", "-b", sw.BRANCH)
+    spy = _Spy(monkeypatch)
+    debt_cmd._push(work)
+    for argv, env in spy.remote():
+        assert "origin" in argv
+        assert env is None
+
+
+def _no_rewrite(world: dict) -> None:
+    """`git remote get-url` applies insteadOf; the direct `_remote_auth` tests want the
+    origin URL itself."""
+    _git(world["work"], "config", "--unset", f"url.{world['bare']}.insteadOf")
+
+
+def test_an_existing_git_config_count_is_kept_and_extended(
+    world: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _no_rewrite(world)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.askPass")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "")
+    monkeypatch.setenv("GH_TOKEN", "s3cret")
+    url, env, _ = debt_cmd._remote_auth(world["work"])
+    assert env is not None
+    assert env["GIT_CONFIG_COUNT"] == "3"
+    assert env["GIT_CONFIG_KEY_0"] == "core.askPass"
+    assert (env["GIT_CONFIG_KEY_1"], env["GIT_CONFIG_VALUE_1"]) == (f"http.{url}.extraheader", "")
+    assert env["GIT_CONFIG_VALUE_2"] == _basic("x-access-token", "s3cret")
+
+
+@pytest.mark.parametrize(
+    ("debt", "forge_var", "expected"),
+    [
+        ("dedicated", "forge", "dedicated"),  # FR_DEBT_TOKEN wins over the forge's own
+        ("", "forge", "forge"),
+        ("   \t", "forge", "forge"),  # whitespace-only is no token
+    ],
+)
+def test_token_precedence(
+    world: dict, monkeypatch: pytest.MonkeyPatch, debt: str, forge_var: str, expected: str
+) -> None:
+    _no_rewrite(world)
+    monkeypatch.setenv("FR_DEBT_TOKEN", debt)
+    monkeypatch.setenv("GH_TOKEN", forge_var)
+    _, env, token = debt_cmd._remote_auth(world["work"])
+    assert token == expected
+    assert env is not None
+    assert env["GIT_CONFIG_VALUE_1"] == _basic("x-access-token", expected)
+
+
+def test_a_mirror_origin_gets_no_credential_and_one_warning(
+    world: dict, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """l-security-r2: the token goes only to the forge host fr resolved for this
+    checkout; an origin elsewhere (a mirror) is called plain, with no header."""
+    work = world["work"]
+    _git(work, "remote", "set-url", "origin", f"https://mirror.example.org/{SLUG}.git")
+    monkeypatch.setenv("GH_TOKEN", "s3cret")
+    remote, env, token = debt_cmd._remote_auth(work)
+    assert (remote, env, token) == ("origin", None, "")
+    err = capsys.readouterr().err
+    assert err.count("pushing without the token") == 1
+    assert "mirror.example.org" in err and "github.com" in err and "s3cret" not in err
+
+
+def test_the_matching_host_gets_the_header(world: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    _no_rewrite(world)
+    monkeypatch.setenv("GH_TOKEN", "s3cret")
+    remote, env, _ = debt_cmd._remote_auth(world["work"])
+    assert remote == f"https://github.com/{SLUG}.git"
+    assert env is not None and env["GIT_CONFIG_VALUE_1"] == _basic("x-access-token", "s3cret")
+
+
+def test_a_declared_host_is_the_one_the_token_goes_to(
+    world: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = world["work"]
+    (work / ".devcontainer").mkdir()
+    (work / ".devcontainer/fr-profiles.yaml").write_text(
+        "profiles:\n  dev:\n    purpose: x\nschema_version: 2\n"
+        "forge: {type: gitlab, host: git.example.com}\n"
+    )
+    monkeypatch.setenv("GITLAB_TOKEN", "s3cret")
+    _git(work, "remote", "set-url", "origin", "https://git.example.com/g/p.git")
+    assert debt_cmd._remote_auth(work)[1] is not None
+    _git(work, "remote", "set-url", "origin", "https://other.example.org/g/p.git")
+    assert debt_cmd._remote_auth(work)[1] is None
+
+
+def test_a_failing_git_never_prints_the_token(world: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    """l-tests-r6: whatever git echoes, the RuntimeError carries `***`, never the token."""
+
+    class Done:
+        returncode = 128
+        stdout = ""
+        stderr = "fatal: unable to access 'https://x-access-token:s3cret@github.com/': s3cret"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: Done())
+    with pytest.raises(RuntimeError) as exc:
+        debt_cmd._git(world["work"], "ls-remote", "origin", secret="s3cret")
+    assert "s3cret" not in str(exc.value)
+    assert "***" in str(exc.value)
+
+
+def test_git_really_sends_exactly_one_authorization_header(
+    world: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """l-tests-r2 + l-errors-r2: git speaks HTTP to a local server. A header persisted in
+    .git/config (as actions/checkout leaves one) is reset, the job token in origin's
+    user-info is never sent, and the one Authorization header is ours."""
+    import base64
+    import http.server
+    import threading
+
+    seen: list[list[tuple[str, str]]] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - the stdlib's name
+            seen.append([(k, v) for k, v in self.headers.items()])
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *a: object) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        work = world["work"]
+        _git(work, "config", "--unset", f"url.{world['bare']}.insteadOf")
+        base = f"http://127.0.0.1:{port}"
+        _git(
+            work,
+            "remote",
+            "set-url",
+            "origin",
+            f"http://gitlab-ci-token:jobtok@127.0.0.1:{port}/g/p.git",
+        )
+        old = base64.b64encode(b"x-access-token:persisted").decode()
+        _git(work, "config", f"http.{base}/.extraheader", f"AUTHORIZATION: basic {old}")
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+        monkeypatch.setenv("GIT_TERMINAL_PROMPT", "0")
+        monkeypatch.setenv("GITLAB_TOKEN", "s3cret")
+        monkeypatch.setattr(debt_cmd, "_forge_host", lambda root, f: "127.0.0.1")
+        from fr import _hosts
+
+        monkeypatch.setattr(_hosts, "detect_backend", lambda root: "gitlab")
+        with pytest.raises(RuntimeError) as exc:
+            debt_cmd._push(work)
+        assert "s3cret" not in str(exc.value)
+    finally:
+        server.shutdown()
+    assert seen, "git never reached the server"
+    want = "Basic " + base64.b64encode(b"oauth2:s3cret").decode()
+    for headers in seen:
+        auth = [v for k, v in headers if k.lower() == "authorization"]
+        assert len(auth) == 1
+        assert auth[0].lower() == want.lower()
+        assert auth[0].split()[1] == want.split()[1]
+        sent = " ".join(v for _, v in headers)
+        assert "jobtok" not in sent
+        assert base64.b64encode(b"gitlab-ci-token:jobtok").decode() not in sent
+
+
+# --- the CI server's own host may receive the token (R12, R13, undeclared forge) --------
+
+
+def _self_hosted(world: dict, monkeypatch: pytest.MonkeyPatch, forge: str, url: str) -> None:
+    from fr import _hosts
+
+    _no_rewrite(world)
+    _git(world["work"], "remote", "set-url", "origin", url)
+    monkeypatch.setattr(_hosts, "detect_backend", lambda root: forge)
+    monkeypatch.setenv(_FORGE_VAR[forge], "s3cret")
+
+
+_FORGE_VAR = {"gitlab": "GITLAB_TOKEN", "gitea": "GITEA_TOKEN"}
+
+
+def test_gitlab_ci_trusts_its_own_server_host(world: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    _self_hosted(world, monkeypatch, "gitlab", "https://gitlab-ci-token:x@git.example.com/g/p.git")
+    monkeypatch.setenv("CI_SERVER_HOST", "git.example.com")
+    remote, env, _ = debt_cmd._remote_auth(world["work"])
+    assert remote == "https://git.example.com/g/p.git"
+    assert env is not None and env["GIT_CONFIG_VALUE_1"] == _basic("oauth2", "s3cret")
+
+
+@pytest.mark.parametrize("var", ["GITHUB_SERVER_URL", "GITEA_SERVER_URL"])
+def test_gitea_actions_trusts_its_own_server_host(
+    world: dict, monkeypatch: pytest.MonkeyPatch, var: str
+) -> None:
+    _self_hosted(world, monkeypatch, "gitea", "https://git.example.com/o/r.git")
+    monkeypatch.setenv(var, "https://git.example.com")
+    _, env, _ = debt_cmd._remote_auth(world["work"])
+    assert env is not None and env["GIT_CONFIG_VALUE_1"] == _basic("oauth2", "s3cret")
+
+
+@pytest.mark.parametrize(
+    ("server", "origin"),
+    [
+        ("https://git.example.com", "https://other.example.org/o/r.git"),
+        ("https://git.example.com:3000", "https://git.example.com:4000/o/r.git"),
+    ],
+)
+def test_a_ci_server_on_another_host_or_port_is_not_trusted(
+    world: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    server: str,
+    origin: str,
+) -> None:
+    _self_hosted(world, monkeypatch, "gitea", origin)
+    monkeypatch.setenv("GITHUB_SERVER_URL", server)
+    assert debt_cmd._remote_auth(world["work"]) == ("origin", None, "")
+    assert capsys.readouterr().err.count("pushing without the token") == 1
+
+
+def test_a_port_on_one_side_only_still_matches(
+    world: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _self_hosted(world, monkeypatch, "gitea", "https://git.example.com:3000/o/r.git")
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://git.example.com")
+    assert debt_cmd._remote_auth(world["work"])[1] is not None
+
+
+def test_outside_ci_a_self_hosted_origin_stays_untrusted(
+    world: dict, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _self_hosted(world, monkeypatch, "gitlab", "https://git.example.com/g/p.git")
+    assert debt_cmd._remote_auth(world["work"]) == ("origin", None, "")
+    assert capsys.readouterr().err.count("pushing without the token") == 1

@@ -1363,17 +1363,23 @@ def init_cmd(
     ci_type = ci.type
     if ci_type == "none" and with_ci:
         ci_type = CI_FOR_FORGE[services.forge.type]
-    outcome = init(
-        root,
-        org,
-        repo,
-        backend=backend,
-        with_ci=with_ci,
-        ci_type=ci_type,
-        tracking_type=services.tracking.type,
-        no_ci_reason=reason,
-        pages_decision=_pages_decision(root, ci_type),
-    )
+    from fr.acceptance.pin import FrPinError
+
+    try:
+        outcome = init(
+            root,
+            org,
+            repo,
+            backend=backend,
+            with_ci=with_ci,
+            ci_type=ci_type,
+            tracking_type=services.tracking.type,
+            no_ci_reason=reason,
+            pages_decision=_pages_decision(root, ci_type),
+        )
+    except FrPinError as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}; nothing was written")
+        raise typer.Exit(2) from e
     for rel in outcome.created:
         typer.echo(f"created {rel}")
     for rel in outcome.modified:
@@ -1427,7 +1433,13 @@ def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
     plan = publish_plan(root, ci_type, _pages_decision(root, ci_type))
     for notice in plan.notices:
         typer.echo(notice)
-    out = refresh_ci(root, ci_type, debt=debt, pages=plan.pages, comment=plan.comment)
+    from fr.acceptance.pin import FrPinError
+
+    try:
+        out = refresh_ci(root, ci_type, debt=debt, pages=plan.pages, comment=plan.comment)
+    except FrPinError as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}; nothing was rewritten")
+        raise typer.Exit(2) from e
     if out.status == "missing":
         err_console.print(f"[red]error:[/red] {out.path} does not exist; run `fr acceptance init`")
         raise typer.Exit(1)

@@ -43,6 +43,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+from fr.forge_body import not_json_reason
 from fr.ghclient import CommandRunner, run_cli
 from fr.labels import LabelDef
 
@@ -112,7 +113,9 @@ def api_result(result: subprocess.CompletedProcess[str]) -> Any:
             if isinstance(body, dict) and body.get("message"):
                 detail = f": {body['message']}"
         except json.JSONDecodeError:
-            pass
+            reason = not_json_reason(result.stdout or "", stderr)
+            if reason:
+                raise TeaError(f"HTTP {status} with {reason}", stderr=stderr) from None
         raise TeaError(f"HTTP {status}{detail}", stderr=stderr)
     out = (result.stdout or "").strip()
     try:
@@ -120,14 +123,19 @@ def api_result(result: subprocess.CompletedProcess[str]) -> Any:
     except json.JSONDecodeError as exc:
         # tea follows redirects, so a forward-auth proxy's login page can arrive
         # as a 200: an HTML body is the only sign of it left.
-        if out.startswith("<") or "text/html" in stderr.lower():
-            raise TeaError(
-                f"HTTP {status} with an HTML body, not Gitea's JSON — an SSO or "
-                "forward-auth login page, most likely; exempt the instance's /api/ "
-                "paths or use an internal URL",
-                stderr=stderr,
-            ) from exc
+        reason = not_json_reason(out, stderr)
+        if reason:
+            raise TeaError(f"HTTP {status} with {reason}", stderr=stderr) from exc
         raise TeaError(f"HTTP {status} with a body that is not JSON: {exc}", stderr=stderr) from exc
+
+
+def loads(out: str, what: str) -> Any:
+    """`json.loads` of a tea command's output, or TeaError naming the cause."""
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError as exc:
+        reason = not_json_reason(out)
+        raise TeaError(f"{what}: {reason}" if reason else f"unreadable {what}: {exc}") from exc
 
 
 def api_json(path: str, *, cwd: Path | None = None, run: CommandRunner | None = None) -> Any:
@@ -187,10 +195,8 @@ def view_issue(repo: str, number: int) -> dict[str, object]:
 
     No `view` subcommand exists — `tea issues <n> --output json` alone
     shows the issue in detail (per `tea issues --help`)."""
-    import json
-
     out = _run_tea(["issues", str(number), "--repo", repo, "--output", "json"])
-    result: dict[str, object] = json.loads(out)
+    result: dict[str, object] = loads(out, "`tea issues` output")
     return result
 
 

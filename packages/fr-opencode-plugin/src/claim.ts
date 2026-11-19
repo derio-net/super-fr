@@ -37,6 +37,7 @@
 // claim landing (the gh#494 standard), `parity.yaml` keeps
 // `dispatch-holder-identity` `partial` on OpenCode.
 import { runFr } from "./fr";
+import { sessionDirectory } from "./session";
 
 export type ClaimAnswer = { code: number | null };
 
@@ -65,7 +66,7 @@ function defaultRunFr(timeoutMs: number): (cwd: string, args: string[]) => Promi
   return async (cwd, args) => ({ code: (await runFr(args, { cwd, timeoutMs })).code });
 }
 
-type Child = { agent: string; model?: string };
+type Child = { agent: string; model?: string; directory?: string };
 
 /** The child's agent and model — or undefined for a top-level session, a
  * failed lookup, or one that names no agent. */
@@ -81,7 +82,7 @@ async function childOf(session: unknown, id: string): Promise<Child | undefined>
     model && typeof model.providerID === "string" && typeof model.id === "string"
       ? `${model.providerID}/${model.id}`
       : undefined;
-  return { agent: data.agent, model: named };
+  return { agent: data.agent, model: named, directory: sessionDirectory(data, "") || undefined };
 }
 
 export function createClaimHandler(options: ClaimHandlerOptions) {
@@ -101,7 +102,7 @@ export function createClaimHandler(options: ClaimHandlerOptions) {
       const args = ["run", "claim", "--open-unit", "--agent", sessionID, "--agent-type", child.agent];
       args.push("--harness", "opencode");
       if (child.model) args.push("--model", child.model);
-      await runFr(options.directory, args);
+      await runFr(child.directory ?? options.directory, args);
     } catch {
       // Fail open, always. See the header.
     }

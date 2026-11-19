@@ -200,7 +200,10 @@ def test_a_refused_cli_json_moves_no_byte(tmp_path: Path) -> None:
 
 def test_install_sh_fails_loudly_when_delivery_refuses() -> None:
     install = (REPO_ROOT / "scripts" / "install.sh").read_text()
-    assert 'if ! bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install' in install
+    assert (
+        'if ! FR_OPENCODE_RULES="${CLAUDE_RULES[*]}" bash '
+        '"$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install'
+    ) in install
     assert "fr-opencode-plugin was NOT installed" in install
 
 

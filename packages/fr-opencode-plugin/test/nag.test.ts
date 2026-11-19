@@ -295,4 +295,37 @@ describe("a plain repo's nag spawns nothing for the placement (review p6-r8)", (
       process.env.PATH = saved;
     }
   });
+
+  test("follows the session's directory with one lookup, not the plugin's", async () => {
+    const other = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-other-")));
+    try {
+      mkdirSync(join(other, ".git"));
+      mkdirSync(join(other, "docs", "acceptance", "features"), { recursive: true });
+      writeFileSync(join(other, "docs", "acceptance", "features", "g.yaml"), "rows:\n");
+      const looked: string[] = [];
+      const session = {
+        get: async ({ sessionID }: { sessionID: string }) => {
+          looked.push(sessionID);
+          return { id: sessionID, location: { directory: join(other, "docs") } };
+        },
+      };
+      const { calls, runFr } = stub({ code: 0, stdout: "rows\n" });
+      const nag = createNagHandler({ session, directory: "/nonexistent-plugin-dir", runFr, served: new Set() });
+      const event = ctxEvent("ses_dir");
+      await nag(event);
+      expect(calls).toEqual([{ cwd: other, args: ["acceptance", "status", "--brief"] }]);
+      expect(looked).toEqual(["ses_dir"]);
+      await nag(event); // served: no second lookup
+      expect(looked).toEqual(["ses_dir"]);
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to the plugin directory when the session names none", async () => {
+    const { calls, runFr } = stub({ code: 0, stdout: "rows\n" });
+    const nag = createNagHandler({ session: topLevel, directory: repo, runFr, served: new Set() });
+    await nag(ctxEvent("ses_fb"));
+    expect(calls).toEqual([{ cwd: repo, args: ["acceptance", "status", "--brief"] }]);
+  });
 });

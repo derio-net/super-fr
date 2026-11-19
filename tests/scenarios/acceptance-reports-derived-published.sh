@@ -18,6 +18,22 @@ printf '# widgets\n\nA fixture.\n' > README.md
 git add -A && git commit -qm seed || fail "seed commit"
 git checkout -qb feat/reports || fail "work off the default branch"
 
+# Hermetic pin: `init --with-ci` pins the install line to the commit of the installed fr's
+# release tag, read with `git ls-remote` from github.com. Here a local bare repo holds that
+# annotated tag, and a scratch HOME's gitconfig rewrites the URL to it (the read keeps HOME).
+# No network, and it works before the version is tagged (release.yml's pre-tag suite).
+world="$(cd "$(mktemp -d)" && pwd -P)"
+export HOME="$world/home"; mkdir -p "$HOME"
+version="$(fr --version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+(rc[0-9]+)?' | head -1)"
+[ -n "$version" ] || fail "no version from fr --version"
+tag="v$(printf '%s' "$version" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)rc([0-9]+)$/\1-rc.\2/')"
+git init -q "$world/seed" || fail "seed repo"
+git -C "$world/seed" -c user.name=s -c user.email=s@example.invalid commit -q --allow-empty -m release || fail "seed commit"
+git -C "$world/seed" -c user.name=s -c user.email=s@example.invalid tag -a "$tag" -m "$tag" || fail "annotated tag"
+sha="$(git -C "$world/seed" rev-parse "$tag^{commit}")"
+git clone -q --bare "$world/seed" "$world/super-fr.git" || fail "bare repo"
+printf '[url "file://%s"]\n\tinsteadOf = https://github.com/derio-net/super-fr\n' "$world/super-fr.git" > "$HOME/.gitconfig"
+
 run_fr out acceptance init --with-ci
 require_exit 0 "$out"
 wf=".github/workflows/acceptance-report.yml"
@@ -26,6 +42,10 @@ workflow="$(cat "$wf")"
 expect_grep 'fr acceptance check' "$workflow" "the workflow gates"
 expect_grep 'fr acceptance summary' "$workflow" "the job summary is written"
 expect_grep 'fetch-depth: 0' "$workflow" "the fold gets full history"
+case "$workflow" in
+  *"super-fr@$sha#subdirectory=packages/fr\"  # $tag"*) ;;
+  *) fail "the workflow does not pin fr to $tag ($sha)" ;;
+esac
 refuse_grep 'pages-check|deploy-pages|pages:' "$workflow" "no Pages job when visibility is unknown"
 readme="$(cat README.md)"
 expect_grep '<!-- fr:acceptance-badge -->' "$readme" "the badge opens"
