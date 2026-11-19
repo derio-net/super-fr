@@ -59,8 +59,8 @@ rows:
       (idle session handed back once per head, working one waited on, gone one a Needs
       you now entry) and is never shown as awaiting approval
     origin:
-    - spec:2026-11-19-batch-train-truth#R14
     - spec:2026-11-19-batch-train-truth#R15
+    - spec:2026-11-19-batch-train-truth#R16
     levels: {}
     status: not-implemented
     notes: ''
