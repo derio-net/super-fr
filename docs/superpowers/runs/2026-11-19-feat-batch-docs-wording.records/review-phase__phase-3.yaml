@@ -28,7 +28,6 @@ evidence:
   model: claude-sonnet-5
 visual:
   - row: site-top-bar-phone-layout
-    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/shoot.py
     shots:
       - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/fr-audit.html-320-dark.png, shows: [article-320, bar-links-tappable-at-320]}
       - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/fr-audit.html-390-dark.png, shows: [article-390]}
