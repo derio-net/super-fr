@@ -514,7 +514,27 @@ def test_the_state_filter_is_three_toggles_with_all_pressed_and_hidden_without_s
     )
     assert buttons == [("open", "false"), ("closed", "false"), ("all", "true")]
     # with scripts off every row shows
-    assert not re.search(r"<tr [^>]*\bhidden\b", section)
+    assert not re.search(r"<tr (?![^>]*class=\"none\")[^>]*\bhidden\b", section)
+
+
+def test_each_group_table_holds_a_hidden_placeholder_the_filter_shows_when_no_row_does(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import STATE_FILTER_SCRIPT
+
+    section = _section(_page(monkeypatch, tmp_path), "issue-table")
+    folds = [(c, b) for c, n, b in _folds(section) if n != "0"]
+    assert len(folds) == 6
+    for category, body in folds:
+        placeholder = re.findall(r'<tr class="none"([^>]*)><td colspan="8">([^<]*)</td></tr>', body)
+        assert len(placeholder) == 1, category
+        attrs, text = placeholder[0]
+        assert "hidden" in attrs.split() and text == "No issue.", category
+        # inside the table body the script toggles, and not a data-state row the filter counts
+        assert body.index('class="none"') > body.index("<tbody>")
+        assert "data-state" not in attrs
+    # the script looks the placeholder up by the class the markup gives it
+    assert "tr.none" in STATE_FILTER_SCRIPT
 
 
 def test_each_row_carries_its_state_for_the_filter_to_read(

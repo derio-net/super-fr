@@ -563,6 +563,8 @@ STATE_FILTER_SCRIPT = """
           row.hidden = !show;
           if (show) { shown += 1; }
         });
+        var none = fold.querySelector("tr.none");
+        if (none) { none.hidden = shown > 0; }
         var count = fold.querySelector("summary .count");
         if (count) { count.textContent = String(shown); }
       });
@@ -761,6 +763,8 @@ ISSUE_HEAD = (
     '<th>Severity</th><th>Related PR</th><th>Ended</th><th class="wrap">Why</th></tr></thead>'
 )
 STATES = ("open", "closed", "all")
+# Shown by the state filter when it hides every row of a group; absent from the count.
+NONE_ROW = '<tr class="none" hidden><td colspan="8">No issue.</td></tr>'
 
 
 def _closing_link(pr: ClosingPr, linker: Linker) -> str:
@@ -821,7 +825,7 @@ def _issue_table(facts: OriginsFacts, origins: Origins, linker: Linker) -> str:
             len(rows),
             (
                 f'<div class="scroll"><table>{ISSUE_HEAD}'
-                f"<tbody>{''.join(rows)}</tbody></table></div>"
+                f"<tbody>{''.join(rows)}{NONE_ROW}</tbody></table></div>"
                 if rows
                 else '<p class="lede">No issue.</p>'
             ),
