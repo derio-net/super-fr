@@ -3,7 +3,7 @@ run: 2026-11-19-feat-batch-consumer-followups
 workflow: fr-goal@1
 branch: feat/batch-consumer-followups
 started: '2026-11-19T22:17:21+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-19T22:32:50+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-19T22:32:57+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
