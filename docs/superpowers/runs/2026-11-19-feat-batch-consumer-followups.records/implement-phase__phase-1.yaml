@@ -1,0 +1,10 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-consumer-followups
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1]
+refactor: {}
+journal: []
+resolves: []
+evidence: {}
