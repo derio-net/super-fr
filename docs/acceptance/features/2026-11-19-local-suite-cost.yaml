@@ -39,9 +39,15 @@ rows:
     origin:
     - spec:2026-11-19-local-suite-cost#R6
     - spec:2026-11-19-local-suite-cost#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_scope.py#test_a_changed_source_module_selects_through_tests_helpers
+      - super-fr:tests/unit/test_fr_scope.py#test_any_narrowed_session_is_advisory
+      - super-fr:tests/unit/test_run_advisory_log.py#test_deliver_refuses_an_advisory_log
+      - super-fr:tests/unit/test_run_advisory_log.py#test_a_phase_unit_refuses_an_advisory_log
+    status: ci
+    notes: 'phase 3: selection over a fixture repo, the advisory line''s conditions,
+      and the refusal at deliver and at a phase unit'
   - id: repo-declares-ci-tests-evidence
     capability: Delivery evidence
     acceptance: 'A repo whose .fr/ci.yaml declares `tests: ci` gets deliver and implement-phase
