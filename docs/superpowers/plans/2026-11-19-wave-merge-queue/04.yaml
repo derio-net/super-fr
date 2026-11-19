@@ -56,7 +56,7 @@ tasks:
       - A `drained` hold older than `release_wait_hours` is a Need (R19).
   - id: P4.T2.S4
     text: |-
-      REFACTOR: update release.py's module docstring and AGENTS.md's release paragraph for the hold; record the rows' level refs; full suite, ruff and mypy green.
+      REFACTOR: update release.py's module docstring and AGENTS.md's release paragraph for the hold. Write `tests/scenarios/wave-queue-release-hold.sh` (sourcing `_common.sh`): `fr release status --from-json` over facts holding an `open`, a stale `open`, a `drained` and a `cleared` hold, asserting held, warned, and not held twice. Record the rows' level refs; full suite (incl. `tests/integration/test_scenarios.py`), ruff and mypy green.
 state:
   steps:
     P4.T1.S1:

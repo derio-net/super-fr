@@ -64,7 +64,7 @@ tasks:
       GREEN: implement the flag in `validate_cmd.py` and edit the two workflows.
   - id: P6.T3.S3
     text: |-
-      REFACTOR: docstrings; record the three rows' level refs; full suite, ruff and mypy green.
+      REFACTOR: docstrings. Write `tests/scenarios/wave-queue-migratable-validation.sh` (a fixture with a stale-but-migratable plan stamp: `fr validate artifacts` fails, `--allow-migratable` passes and prints `stale, migratable`) and `tests/scenarios/wave-queue-closeout-migrates.sh` (`fr migrate artifacts --yes --path <one stale file>` migrates that file only and leaves a second stale file as it was), both sourcing `_common.sh`. Record the three rows' level refs; full suite (incl. `tests/integration/test_scenarios.py`), ruff and mypy green.
 state:
   steps:
     P6.T1.S1:

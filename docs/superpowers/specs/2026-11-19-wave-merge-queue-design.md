@@ -362,6 +362,18 @@ picks the remedy when enabling the queue.
 
 strategy: candidate
 - wave-queue-live-wave: live — only a real wave on this repo exercises GitHub's merged-by-push detection, the atomic push against the real ruleset, and `release.yml` reading and clearing the hold; every other row is proven pre-merge by the fake forge over real bare git repositories.
+- wave-queue-speculative-land: none — a candidate scenario never reaches a forge; the CI suite proves it over a fake forge and real bare git remotes (Test Plan 1, 8, 16), and wave-queue-live-wave walks it live.
+- wave-queue-land-methods: none — needs a forge to read merged state; the CI suite proves it over a fake forge and real bare git remotes (Test Plan 2–4), and wave-queue-live-wave walks it live.
+- wave-queue-wave-exclusive: none — needs forge PR state; the CI suite proves it with the pure planner and the fake forge (Test Plan 9, 18).
+- wave-queue-approval-content: none — needs PR labels and heads; the CI suite proves it over a real git repo and the fake forge (Test Plan 5).
+- wave-queue-eject: none — needs forge checks and sessions; the CI suite proves it with the pure planner and the fake forge (Test Plan 6, 7).
+- wave-queue-one-path: none — needs forge merge state and rules; the CI suite proves it with the fake forge (Test Plan 12, 14, 15, 23, 24).
+- wave-queue-devops-barrier: none — needs PR labels and the DevOps stage's forge reads; the CI suite proves it with the fake forge (Test Plan 19).
+- wave-queue-broken-hold: none — needs a remote holding the hold ref and a forge; the CI suite proves it over real bare git remotes (Test Plan 20).
+- wave-queue-operator-loop: none — PR comments and Needs need a forge; the CI suite proves them with the fake forge (Test Plan 21).
+- wave-queue-leave-wave: none — needs a driver's forge-read snapshot; the CI suite proves it with the pure planner and the fake forge (Test Plan 22).
+- wave-queue-visible: none — the queue line and board read forge state; the CI suite proves them with the fake forge (Test Plan 17).
+- wave-queue-post-merge: none — needs forge merged state and a driver checkout; the CI suite proves it over real bare git remotes (Test Plan 25).
 
 gate: wave-queue-live-wave=tester
 
