@@ -145,3 +145,12 @@ amendments:
       open hold older than a day is ignored with a warning, and an uncleared drained
       hold becomes a Need.
     why: 'hold became a handshake: the release clears it (operator, round 3)'
+  - row: wave-queue-wave-exclusive
+    op: reword
+    base: 0
+    acceptance: While a wave's queue is open or releasing, only that wave's PRs and
+      its one close-out (of its ungated batches) enter it. Later waves wait as PRs until
+      the previous wave's release is cut. No-wave batches, passed-gate close-outs and
+      DevOps housekeeping PRs queue alone between waves.
+    why: later waves wait for the previous wave's release; gated close-outs leave the
+      wave close-out (operator, round 3)
