@@ -106,6 +106,16 @@ rows:
     levels: {}
     status: not-implemented
     notes: born at brainstorm
+  - id: wave-queue-operator-loop
+    capability: wave merge queue
+    acceptance: The operator sees every queue problem as a Needs-you entry with a command
+      to paste, each queued PR's state in one comment edited in place, and a wave report
+      at drain (landed, ejected and deferred PRs, cycles, approvals, the release).
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R28
+    levels: {}
+    status: not-implemented
+    notes: born at brainstorm
   - id: wave-queue-approval-content
     capability: approval gate
     acceptance: An approved-fr approval survives any push that leaves the PR's own diff
