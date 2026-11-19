@@ -69,6 +69,7 @@
 // The server hands one terminal event to every subscribed listener (three, in
 // that walk), so the once-per-position memory is also what keeps the nudge
 // single when the same turn end arrives several times.
+import { sessionDirectory, type SessionInfo } from "./session";
 import { runFr } from "./fr";
 
 export type FrAnswer = { code: number | null; stdout: string };
@@ -147,21 +148,12 @@ function sessionApi(session: unknown): SessionApi | undefined {
   return api as SessionApi;
 }
 
-type SessionInfo = { id?: unknown; parentID?: unknown; location?: { directory?: unknown } | null };
-
 /** The session's info only when the lookup SUCCEEDED and named no parent. */
 async function topLevelInfo(api: SessionApi, id: string): Promise<SessionInfo | undefined> {
   const info = (await api.get({ sessionID: id })) as SessionInfo | null | undefined;
   // A successful lookup names the session it found; anything else is unknown.
   if (!info || typeof info !== "object" || info.id !== id) return undefined;
   return info.parentID === undefined || info.parentID === null ? info : undefined;
-}
-
-/** Where fr is asked: the session's own `location.directory` (gh#1371 — a
- * session can live in another checkout than the plugin), else `fallback`. */
-function sessionDirectory(info: SessionInfo, fallback: string): string {
-  const directory = info.location?.directory;
-  return typeof directory === "string" && directory !== "" ? directory : fallback;
 }
 
 export function createIdleHandler(options: IdleHandlerOptions) {

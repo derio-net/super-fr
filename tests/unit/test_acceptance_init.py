@@ -159,7 +159,8 @@ def test_workflow_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     debt_run = "\n".join(s.get("run", "") for s in debt["steps"])
     assert "fr debt issue --yes" in debt_run and "fr debt archive-pr --yes" in debt_run
     assert debt["steps"][0]["with"]["fetch-depth"] == 0
-    assert "FR_DEBT_TOKEN" in debt["steps"][0]["with"]["token"]
+    assert "token" not in debt["steps"][0]["with"]  # R11: no token in the checkout
+    assert debt["steps"][0]["with"]["persist-credentials"] is False
     assert "debt" in wf["on"]["workflow_dispatch"]["inputs"]
     uploads = [s for s in steps if "upload-artifact" in s.get("uses", "")]
     assert uploads and uploads[0]["with"]["path"] == "docs/acceptance/report.html"

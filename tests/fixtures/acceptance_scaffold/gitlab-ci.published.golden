@@ -26,9 +26,19 @@ acceptance-report:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
   before_script:
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
-    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+    - |
+      case "$(uname -m)" in
+        x86_64|amd64) url='https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-gnu.tar.gz'; sha='c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83';;
+        aarch64|arm64) url='https://github.com/astral-sh/uv/releases/download/0.13.7/uv-aarch64-unknown-linux-gnu.tar.gz'; sha='71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc';;
+        *) echo "uv 0.13.7: unsupported architecture $(uname -m)" >&2; exit 1;;
+      esac
+      curl -fsSL "$url" -o /tmp/uv.tar.gz
+      echo "$sha  /tmp/uv.tar.gz" | sha256sum -c -
+      rm -rf /tmp/uv-x && mkdir -p /tmp/uv-x && tar -xzf /tmp/uv.tar.gz -C /tmp/uv-x --strip-components=1
+      mkdir -p "$HOME/.local/bin"
+      install -m 755 /tmp/uv-x/uv /tmp/uv-x/uvx "$HOME/.local/bin/"
+      export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
   script:
     - git fetch origin "+refs/heads/$CI_DEFAULT_BRANCH:refs/remotes/origin/$CI_DEFAULT_BRANCH"
     - fr acceptance check
@@ -54,9 +64,19 @@ pages:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
-    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+    - |
+      case "$(uname -m)" in
+        x86_64|amd64) url='https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-gnu.tar.gz'; sha='c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83';;
+        aarch64|arm64) url='https://github.com/astral-sh/uv/releases/download/0.13.7/uv-aarch64-unknown-linux-gnu.tar.gz'; sha='71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc';;
+        *) echo "uv 0.13.7: unsupported architecture $(uname -m)" >&2; exit 1;;
+      esac
+      curl -fsSL "$url" -o /tmp/uv.tar.gz
+      echo "$sha  /tmp/uv.tar.gz" | sha256sum -c -
+      rm -rf /tmp/uv-x && mkdir -p /tmp/uv-x && tar -xzf /tmp/uv.tar.gz -C /tmp/uv-x --strip-components=1
+      mkdir -p "$HOME/.local/bin"
+      install -m 755 /tmp/uv-x/uv /tmp/uv-x/uvx "$HOME/.local/bin/"
+      export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
   script:
     - |
       fr acceptance pages-check || {
@@ -72,18 +92,48 @@ pages:
       - public
 
 # Its own job, so a failing `fr acceptance check` above never skips the debt run.
+# It needs a masked CI/CD variable FR_DEBT_TOKEN with the `api` scope: the job's own
+# token cannot file issues or merge requests through `glab`, so the job stops with one
+# line naming the variable when it is unset.
 technical-debt:
   stage: acceptance
   image: python:3.12
   variables:
     GIT_DEPTH: "0"
+    GITLAB_TOKEN: $FR_DEBT_TOKEN
+    GITLAB_HOST: $CI_SERVER_HOST
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
   before_script:
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
-    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+    - |
+      [ -n "$FR_DEBT_TOKEN" ] || {
+        echo "Set the masked CI/CD variable FR_DEBT_TOKEN (api scope)."; exit 1; }
+    - |
+      case "$(uname -m)" in
+        x86_64|amd64) url='https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-unknown-linux-gnu.tar.gz'; sha='c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83';;
+        aarch64|arm64) url='https://github.com/astral-sh/uv/releases/download/0.13.7/uv-aarch64-unknown-linux-gnu.tar.gz'; sha='71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc';;
+        *) echo "uv 0.13.7: unsupported architecture $(uname -m)" >&2; exit 1;;
+      esac
+      curl -fsSL "$url" -o /tmp/uv.tar.gz
+      echo "$sha  /tmp/uv.tar.gz" | sha256sum -c -
+      rm -rf /tmp/uv-x && mkdir -p /tmp/uv-x && tar -xzf /tmp/uv.tar.gz -C /tmp/uv-x --strip-components=1
+      mkdir -p "$HOME/.local/bin"
+      install -m 755 /tmp/uv-x/uv /tmp/uv-x/uvx "$HOME/.local/bin/"
+      export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
+    - |
+      case "$(uname -m)" in
+        x86_64|amd64) url='https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1.107.0/glab_1.107.0_linux_amd64.tar.gz'; sha='eb42f56eb1a789cf4f22aa5960ff0ef60cf1e7fc1295327501f9f59030d5ae2c';;
+        aarch64|arm64) url='https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1.107.0/glab_1.107.0_linux_arm64.tar.gz'; sha='8356e442ed42ff6973cbe267dd7371c65f9b810b01e7d70bb557cd284e7b35ba';;
+        *) echo "glab 1.107.0: unsupported architecture $(uname -m)" >&2; exit 1;;
+      esac
+      curl -fsSL "$url" -o /tmp/glab.dl
+      echo "$sha  /tmp/glab.dl" | sha256sum -c -
+      mkdir -p "$HOME/.local/bin"
+      rm -rf /tmp/glab-x && mkdir -p /tmp/glab-x && tar -xzf /tmp/glab.dl -C /tmp/glab-x
+      install -m 755 /tmp/glab-x/bin/glab "$HOME/.local/bin/glab"
+      export PATH="$HOME/.local/bin:$PATH"
   script:
     - fr debt issue --yes
     - fr debt archive-pr --yes
