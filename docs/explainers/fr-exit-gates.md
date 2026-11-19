@@ -84,9 +84,7 @@ A person passes a gate, or a record shows that the work the gate guards is done.
   need an explicit pass. Otherwise you walk the rows
   ([fr-acceptance](fr-acceptance.md)) or record the pass by hand:
 
-  ```bash
-  fr gate pass --pr 123 --gate tester --notes "walked the install on a clean machine" --yes
-  ```
+        fr gate pass --pr 123 --gate tester --notes "walked the install on a clean machine" --yes
 
 - **DevOps.** The stage that does the operations, runs the probes and then passes the gate is
   its own command; [the DevOps gate](fr-devops-gate.md) covers it. `fr gate pass --gate devops`

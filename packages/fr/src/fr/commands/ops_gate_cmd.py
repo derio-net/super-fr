@@ -203,8 +203,9 @@ def _profile(root: Path, named: str | None) -> str:
         return named
     if not names:
         _refuse(
-            "no profile here is declared `ops: true`: scaffold one with "
-            "`fr init scaffold --ops`, then re-run"
+            "no profile here is declared `ops: true`. On a new branch cut from the "
+            'default branch, run `fr init scaffold --ops --profile <name> --purpose "<one line>"`. '
+            "Land that profile by its own pull request, then re-run"
         )
     if len(names) > 1:
         _refuse(f"several ops profiles ({', '.join(names)}): pass --profile <name>")
@@ -224,8 +225,10 @@ def gate(
         typer.Option("--method", help="Merge method (default: the repo's): merge|squash|rebase."),
     ] = None,
 ) -> None:
-    """The DevOps stage: pre-merge ops, the merge, post-merge ops, the devops Test Plan
-    steps, the gate pass, the tester hand-off and the archive, in 8 recorded stages.
+    """The DevOps stage, in 8 recorded stages.
+
+    The stages are pre-merge ops, the merge, post-merge ops, the devops Test Plan steps,
+    the gate pass, the tester hand-off and the archive.
 
     Runs on the harness host at a terminal; previews without --yes. The merge asks its
     own confirmation even with --yes. A rerun resumes at the first unrecorded stage."""

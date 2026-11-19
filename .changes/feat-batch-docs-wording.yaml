@@ -1,0 +1,2 @@
+bump: patch
+summary: Help text and skill prose now match what the code does; bracketed help text renders, and the CLI reference follows the STE standard

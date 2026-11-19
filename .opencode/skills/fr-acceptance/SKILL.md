@@ -113,7 +113,7 @@ minus `-design.md`), `plan:<slug>` — so an archive never rewrites a row. Other
 
 A row born from a spec's `## Requirements` list cites the requirement, not just
 the spec: `--origin spec:<slug>#R<n>` (repeat `--origin` for several ids).
-A row only a live, operator-driven run can prove — never a unit test — carries `--verify live` (the old `post-merge` spelling migrates to it); it keeps nagging in `fr acceptance status` whatever its status, and the PR body lists it under `## Post-merge verification owed`. `--verify <strategy|none>` takes any strategy `fr verification list` resolves, or `none` (verified some other way; the spec's `## Verification` says what); `set-status --verify` sets it too, and omitting the flag preserves what the row already carries.
+A row only a live, operator-driven run can prove — never a unit test — carries `--verify live` (the old `post-merge` spelling migrates to it); `fr acceptance status` lists it only while it is debt (a debt status, contested, or an unstamped or stale `local`), and the PR body lists it under `## Post-merge verification owed`. `--verify <strategy|none>` takes any strategy `fr verification list` resolves, or `none` (verified some other way; the spec's `## Verification` says what); `set-status --verify` sets it too, and omitting the flag preserves what the row already carries.
 
 ## Walks, issues and closing on live evidence
 

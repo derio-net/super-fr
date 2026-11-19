@@ -156,16 +156,16 @@ def create_cmd(
         None, "--prose-file", help="Markdown file with the plan's prose body."
     ),
 ) -> None:
-    """Scaffold a new v2 plan folder + append spec row.
+    r"""Scaffold a new v2 plan folder + append spec row.
 
     --phases-file YAML shape:
       - {number, title, tag (agentic|manual), depends_on: [N,...],
-          acceptance ([row-ids], acceptance-matrix rows this phase advances),
+          acceptance (\[row-ids], acceptance-matrix rows this phase advances),
           skeleton (bool, walking-skeleton marker for the first agentic phase;
             owed only when the plan has two or more agentic phases),
           tier (mechanical|standard|hard, harness-neutral dispatch complexity
             hint; agentic phases should set one, see fr-plan),
-          files ([globs], repo-relative paths the phase expects to touch) and
+          files (\[globs], repo-relative paths the phase expects to touch) and
           estimate_lines (int, expected added+deleted lines) — proportionality
             inputs; either one floors fr_version at 4.20.0,
           tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
@@ -362,7 +362,9 @@ def _acceptance_flip_nudge(plan_dir: Path, phase_n: int) -> None:
 @plan_app.command("rework")
 def rework(
     parent_plan_dir: Path = typer.Argument(
-        ..., help="Path to parent plan folder (Complete + archived)."
+        ...,
+        help="Path to the parent plan folder: live under plans/, or archived under "
+        "implemented/plans/ or archived-plans/. It may be complete or not.",
     ),
 ) -> None:
     """Scaffold a sibling rework plan + append spec row."""

@@ -21,9 +21,10 @@ cloud_app = typer.Typer(
 
 @cloud_app.command("doctor")
 def doctor() -> None:
-    """Every cloud prerequisite (forge.api, the plugin, the repo's agents artifact, a
-    current fr, rsync, a merge method the driver may use) and its state; exits 1 when
-    any fails."""
+    """Print every cloud prerequisite and its state; exits 1 when any fails.
+
+    The prerequisites are forge.api, the plugin, the repo's agents artifact, a current
+    fr, rsync, and a merge method the driver may use."""
     checks = cloud.check(repo_root=cloud.repo_root_of())
     for c in checks:
         mark = "ok  " if c.ok else "FAIL"
