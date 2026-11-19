@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-16 owed-archive-side-effects phase 3, the page now describes `fr archive --dry-run` and its two refusals. 2026-11-15 phase 1, a refused archive writes nothing (page now says so); fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-16 owed-archive-side-effects phase 3, the page now describes `fr archive --dry-run` and its two refusals. 2026-11-15 phase 1, a refused archive writes nothing (page now says so); fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## Why is there nothing to sync?

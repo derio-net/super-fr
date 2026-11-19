@@ -12,7 +12,7 @@ covers:
   - packages/fr/src/fr/lenses/**
   - plugins/super-fr/lenses/**
   - packages/fr/src/fr/commands/lenses_cmd.py
-reviewed: 2026-11-13 new page
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-13 new page
 ---
 
 ## What a lens is
