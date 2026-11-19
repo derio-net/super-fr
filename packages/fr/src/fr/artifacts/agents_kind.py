@@ -95,6 +95,11 @@ MIGRATIONS.register(rerender_migration(4, 5))
 """4 -> 5: both agents tell their reader it may add (or suggest) a review lens (spec
 2026-11-12-review-lenses R14)."""
 
+MIGRATIONS.register(rerender_migration(5, 6))
+"""5 -> 6: `fr-phase-executor` runs the fast tier as its last act, and returns
+`tests_log: none`, when its brief carries `tests.mode: ci` (spec
+2026-11-19-local-suite-cost R8)."""
+
 MIGRATIONS.register(
     Repair(
         kind=KIND,
