@@ -8587,6 +8587,11 @@ batches:
     - super-fr#1501
   - kind: post_merge
     at: '2026-11-19T09:56:24.169707Z'
+  - kind: closeout
+    at: '2026-11-19T09:57:50.578730Z'
+    runner: herdr
+    handle: w3P:p5
+    archive: chore/closeout-2026-11-19-1
 - id: owed-followups
   title: 'Archive and owed follow-ups: symlinked live root, fail-closed marker read, unreadable default
     ref, host-pinned issue refs'
@@ -9304,3 +9309,10 @@ closeouts:
   handle: w3P:p5
   planned:
   - dispatch-safety
+  pr: 1563
+  head: 9c472cf9b7cbe0fb242be4a6bea70f5f45c7dd9f
+  members:
+  - dispatch-safety
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-18-batch-dispatch-safety.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-18-batch-dispatch-safety.md"
