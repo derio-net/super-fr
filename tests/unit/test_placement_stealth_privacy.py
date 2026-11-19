@@ -340,3 +340,35 @@ def test_check_privacy_passes_the_target_checkout(
     ref = stealth.parse_ref("git@track.example:me/track.git@main")
     stealth.check_privacy(ref, "git@git.example:acme/widget.git", target_root=tmp_path)
     assert ("git@git.example:acme/widget.git", tmp_path) in seen
+
+
+# --- gh#1527: a tracking repo with no checkout, on the target's self-hosted forge ---------
+
+
+def test_a_tracking_url_on_the_targets_self_hosted_forge_is_read_with_its_forge_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bare clone URL carries no route shape, so the URL alone reads a self-hosted GitLab
+    as GitHub. The target checkout's forge declaration names the forge of that very host,
+    so the tracking repo is asked through the same client (gh#1527)."""
+    forge = _VisForge("private")
+    built = _backends(monkeypatch, forge)
+    _checkout(monkeypatch, backend="gitlab", declared=None, origin="gitlab.example")
+    ref = stealth.parse_ref("git@gitlab.example:grp/track.git@main")
+    stealth.check_privacy(ref, "git@gitlab.example:grp/widget.git", target_root=tmp_path)
+    assert built == [("gitlab", "gitlab.example"), ("gitlab", "gitlab.example")]
+    assert forge.asked == ["grp/track", "grp/widget"]
+
+
+def test_a_tracking_url_on_another_host_is_still_placed_by_its_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The target's declaration speaks only for its own host: a tracking repo elsewhere
+    keeps the URL's own reading (here gitlab.com, a SaaS host)."""
+    forge = _VisForge("private")
+    built = _backends(monkeypatch, forge)
+    _checkout(monkeypatch, backend="gitlab", declared="forge.example", origin=None)
+    ref = stealth.parse_ref("git@gitlab.com:me/track.git@main")
+    stealth.check_privacy(ref, "git@forge.example:grp/widget.git", target_root=tmp_path)
+    assert built == [("gitlab", "gitlab.com"), ("gitlab", "forge.example")]
+    assert forge.asked == ["me/track", "grp/widget"]
