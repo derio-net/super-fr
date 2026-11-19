@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
+reviewed: 2026-11-19 cursor writes are atomic, a save refuses another command's newer cursor, and a cli step has a timeout and a bounded stored output (batch run-durability). 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
 ---
 
 # Workflow shapes and the run cursor
@@ -41,6 +41,16 @@ fr workflow check <shape>             # validate a shape; --all checks every one
 The cursor is a git-tracked file, `docs/superpowers/runs/<run-id>.yaml`, a sibling of the
 journals. That path is the repo placement's. Under the quiet and stealth placements, the
 cursor sits below the feature root. It is archived with the plan it produced.
+
+fr writes the cursor to a temporary file and then replaces the old file with it. If a write
+fails, the last cursor stays as it was. Each `fr run` command records the cursor that it read.
+If a different command changes the cursor before this command saves, this command stops with
+exit code 2 and writes nothing. Run the command again to act on the new cursor.
+
+A `cli` step can run for 600 seconds. After that time, fr stops the step and all the
+processes that it started. The step is then failed with exit code 124. To change the limit,
+set `FR_CLI_STEP_TIMEOUT` to a number of seconds, or to `0` for no limit. The cursor
+keeps only the last 16 KiB of the step's output. A first line tells how much fr removed.
 
 `fr workflow check` validates the schema, duplicate step ids, `needs` that point nowhere,
 cycles and unknown capabilities. CI runs it on every shipped shape.

@@ -14,6 +14,7 @@ Three causes, pinned separately:
 from __future__ import annotations
 
 import ast
+import json
 import os
 import shutil
 import subprocess
@@ -233,7 +234,7 @@ def _cli_run(tmp_path: Path, run: str):
         shipped,
         "one",
         "workflow: one\nschema: 1\nunit: run\nsteps:\n"
-        f"  - id: step\n    kind: cli\n    run: {run!r}\n"
+        f"  - id: step\n    kind: cli\n    run: {json.dumps(run)}\n"  # JSON is YAML
         '  - id: after\n    kind: cli\n    run: "true"\n',
     )
     started = _invoke(
@@ -284,3 +285,15 @@ def test_a_cli_step_keeps_only_a_bounded_tail_of_its_stdout(tmp_path: Path) -> N
 def test_a_short_cli_stdout_is_stored_unchanged(tmp_path: Path) -> None:
     _, state = _cli_run(tmp_path, "echo hello")
     assert state.steps["step"].stdout == "hello\n"
+
+
+def test_a_malformed_timeout_is_refused_and_runs_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FR_CLI_STEP_TIMEOUT", "soon")
+    marker = tmp_path / "ran"
+    result, state = _cli_run(tmp_path, f"touch {marker}")
+    assert result.exit_code == 2, result.output
+    assert "FR_CLI_STEP_TIMEOUT" in result.output
+    assert not marker.exists()
+    assert state.steps["step"].state != "done"
