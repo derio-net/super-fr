@@ -9067,6 +9067,8 @@ batches:
     - super-fr#1508
     - super-fr#1509
     - super-fr#1510
+  - kind: post_merge
+    at: '2026-11-19T22:42:49.939183Z'
 - id: triage-hardening
   title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
     out of dedupe'
@@ -9897,3 +9899,11 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-19-feat-batch-docs-wording.yaml"
   - "D\tdocs/superpowers/specs/2026-11-19-batch-docs-wording-design.md"
   - "D\tdocs/superpowers/usage/2026-11-19-feat-batch-docs-wording.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-19-5
+  branch: chore/closeout-2026-11-19-5
+  at: '2026-11-19T22:42:59.126340Z'
+  runner: herdr
+  handle: w3R:p2
+  planned:
+  - hook-hardening
