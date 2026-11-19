@@ -9074,6 +9074,12 @@ batches:
     runner: herdr
     handle: w3R:p2
     archive: chore/closeout-2026-11-19-5
+  - kind: closeout
+    at: '2026-11-19T22:55:40.076325Z'
+    runner: herdr
+    handle: w3R:p2
+    archive: chore/closeout-2026-11-19-5
+    archived: 1585
 - id: triage-hardening
   title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
     out of dedupe'
@@ -9913,6 +9919,7 @@ closeouts:
   planned:
   - hook-hardening
   pr: 1585
+  merged: true
   head: cd6a645a34593734f405178073a4c28e6ae0ffad
   members:
   - hook-hardening
