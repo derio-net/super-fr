@@ -407,7 +407,7 @@ class RunState(BaseModel):
 
         if value is not None:
             why = unsafe_branch(value)
-            if why is not None or value.startswith("refs/"):
+            if why is not None or value == "HEAD" or value.startswith("refs/"):
                 raise ValueError(f"invalid merge target {value!r}: {why or 'use a branch name'}")
         return value
 

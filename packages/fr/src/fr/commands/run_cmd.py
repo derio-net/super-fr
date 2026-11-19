@@ -6049,8 +6049,14 @@ def target_cmd(
             target_ref(root, base)
             console.print(f"run {run_id} already targets {base}")
             return
-        review = state.steps.get("lens-review")
-        if state.pr is not None or (review is not None and review.state != "pending"):
+        manifest = _resolve_manifest_for_state(root, state)
+        reviewed = any(
+            _reviews_the_feature(_evidence_target(step, None))
+            and state.steps.get(step.id) is not None
+            and state.steps[step.id].state != "pending"
+            for step in manifest.steps
+        )
+        if state.pr is not None or reviewed:
             raise TargetError(
                 "cannot change the merge target after lens review was dispatched "
                 "or a PR was recorded"
@@ -6061,7 +6067,7 @@ def target_cmd(
 
         if feature_merge_base(root, ref) is None:
             raise TargetError(f"no merge-base between HEAD and target {base!r}")
-    except TargetError as error:
+    except (TargetError, WorkflowError, RunStateError) as error:
         err_console.print(escape(str(error)), soft_wrap=True)
         raise typer.Exit(2) from error
     _save_run_state(root, state.model_copy(update={"base_branch": base}))

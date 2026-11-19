@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.artifacts.paths import unsafe_branch
-from fr.git import GitUnavailableError, git_answer, remote_name
+from fr.git import GitUnavailableError, git_answer
 
 
 class TargetError(ValueError):
@@ -21,12 +21,14 @@ def target_ref(root: Path, branch: str | None) -> str | None:
     if branch is None:
         return None
     why = unsafe_branch(branch)
-    if why is not None or branch.startswith("refs/"):
+    if why is not None or branch == "HEAD" or branch.startswith("refs/"):
         raise TargetError(f"invalid merge target {branch!r}: {why or 'use a branch name'}")
     try:
-        remote = remote_name(root)
-        if not isinstance(remote, str):
-            raise TargetError("cannot resolve the merge target without one known remote")
+        # PR creation addresses origin_slug(), not checkout.defaultRemote.
+        # Reviewing another remote's same-named branch would certify a different diff.
+        remote = "origin"
+        if git_answer(root, "remote", "get-url", remote).returncode != 0:
+            raise TargetError("cannot resolve the merge target without the PR destination origin")
         ref = f"refs/remotes/{remote}/{branch}"
         found = git_answer(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
         if found.returncode != 0:
