@@ -190,6 +190,16 @@ operator-facing only: nothing reads it to decide anything, and it is not carried
 strategy: none
 gate: developer
 
+- drive-pass-boundary: none — CI tests drive `_host_loop` with a fake remote refusing one push and a pass raising each failure class; the AST tripwire pins the boundary
+- drive-failure-ledger: none — CI tests over the ledger writer, the board need and `drive failures --file` against a fake GhClient
+- drive-session-supervisor: none — CI integration tests run a real supervisor and child process, SIGKILL the child and kill the parent
+- drive-red-drafts: none — CI unit tests on both walks and `_recover` with fake sessions (idle, working, done)
+- drive-conflict-early: none — CI tests with a fake forge reporting CONFLICTING and a scratch git repo for the trial merge
+- drive-fetch-once: none — CI unit test counting fetches on a fake checkout that fails
+- swap-labels-retry-converges: none — CI unit test with a fake `_run_gh` that applies part of a call, then refuses
+- cancel-undispatched-no-checkout: none — CI CLI test of `batch cancel --yes` with no `--checkout` on a never-dispatched batch
+- drive-activity-log: none — CI tests on `DriveLog` (append, rotate, follow across a rotation) and the board panel render
+
 Every requirement is proven by unit and integration tests in CI with fakes: a fake remote that
 refuses one state-ref push, fake runner sessions with idle/working/done statuses, a fake forge
 reporting `CONFLICTING`, a scratch git repo for the trial merge, and a real child process the
