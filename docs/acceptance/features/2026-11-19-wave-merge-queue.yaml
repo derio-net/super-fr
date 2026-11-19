@@ -116,6 +116,17 @@ rows:
     levels: {}
     status: not-implemented
     notes: born at brainstorm
+  - id: wave-queue-leave-wave
+    capability: wave merge queue
+    acceptance: A batch that cannot merge can leave its wave (defer), so the wave drains
+      without it, and can later ask to join a named or the next queue (requeue). The
+      driver proposes this when the batch blocks the drain, and never decides it.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R29
+    - spec:2026-11-19-wave-merge-queue#R30
+    levels: {}
+    status: not-implemented
+    notes: born at brainstorm
   - id: wave-queue-approval-content
     capability: approval gate
     acceptance: An approved-fr approval survives any push that leaves the PR's own diff
