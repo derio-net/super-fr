@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
+reviewed: 2026-11-19 explicit merge targets preserve existing run steps and evidence; target alignment applies to review, delivery and PR creation
 ---
 
 # Workflow shapes and the run cursor
@@ -29,6 +29,7 @@ is the file that records which step the run is on.
 
 ```bash
 fr run start <shape> --branch <b>     # resolve the shape, ensure the workspace, start the cursor
+fr run target <run-id> --base <b>     # record a fetched non-default merge target before lens review
 fr run advance <run-id>               # run the next cli step, or print the next agent brief
 fr run resolve <run-id> --step <id> --state done   # record an agent step's outcome
 fr run status <run-id>                # the cursor and every step's state
@@ -41,6 +42,12 @@ fr workflow check <shape>             # validate a shape; --all checks every one
 The cursor is a git-tracked file, `docs/superpowers/runs/<run-id>.yaml`, a sibling of the
 journals. That path is the repo placement's. Under the quiet and stealth placements, the
 cursor sits below the feature root. It is archived with the plan it produced.
+
+A run without an explicit merge target keeps the remote-default behavior. Use
+`fr run target` before lens review starts when the change will merge elsewhere.
+It records `base_branch` without replacing the run or clearing its steps. The
+same target supplies lens rules, the review diff, delivery docs/proportionality
+checks and draft PR creation. A later `--base` cannot contradict that target.
 
 `fr workflow check` validates the schema, duplicate step ids, `needs` that point nowhere,
 cycles and unknown capabilities. CI runs it on every shipped shape.

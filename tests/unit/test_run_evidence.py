@@ -680,6 +680,25 @@ def test_deliver_derives_and_stores_the_proportionality_witness(tmp_path: Path) 
     assert report.splitlines()[0].count(merge_base) == 1
 
 
+def test_deliver_uses_recorded_target_when_remote_default_is_unrelated(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path)
+    _git(repo, "push", "-q", "origin", "HEAD:management")
+    target = _invoke(repo, shipped, ["run", "target", "r1", "--base", "management"])
+    assert target.exit_code == 0, target.output
+    # A real unrelated commit, not a shallow-history or missing-ref fixture.
+    orphan = _git(
+        repo, "commit-tree", _git(repo, "rev-parse", "HEAD^{tree}"), "-m", "independent default"
+    )
+    _git(repo, "update-ref", "refs/remotes/origin/main", orphan)
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["deliver"]
+    witness = units.evidence_of(record, "step/deliver")["proportionality"]
+    assert witness.startswith(_git(repo, "merge-base", "HEAD", "origin/management") + ":")
+
+
 def test_a_caller_supplied_proportionality_is_refused_as_derived(tmp_path: Path) -> None:
     repo, shipped = _at_deliver(tmp_path)
 

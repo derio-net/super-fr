@@ -155,6 +155,7 @@ one artifact kind.
   - `fr run start`: Start a run: resolve the shape, ensure isolation, write run state in it.
   - `fr run reshape`: Move a drifted cursor onto the shape's current step list.
   - `fr run adopt`: Give in-flight work a run cursor, inferred from artifacts that exist.
+  - `fr run target`: Record the merge target before lens review, preserving the existing run.
   - `fr run status`: Print the cursor, every step's state, who is holding each dispatched unit, since when, and whether it has returned.
   - `fr run cost`: Print what a run cost, per step and per model, from its usage file (`docs/superpowers/usage/<run>.yaml`, then `implemented/usage/`).
   - `fr run advance`: Advance the cursor by one step.
