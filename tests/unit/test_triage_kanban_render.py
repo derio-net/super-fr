@@ -166,11 +166,11 @@ def _cards() -> list[Card]:
     return [c for col in board.columns for c in col.cards]
 
 
-def _as(card: Card, wave: int | None, column: str, *events: str) -> Card:
+def _as(card: Card, wave: int | None, stage: str, *events: str) -> Card:
     return replace(
         card,
         wave=wave,
-        column=column,  # type: ignore[arg-type]
+        stage=stage,  # type: ignore[arg-type]
         events=tuple(EventRow("dispatch", datetime.fromisoformat(e), "") for e in events),
     )
 
@@ -185,7 +185,7 @@ def test_every_card_carries_its_wave_terminal_state_and_latest_event() -> None:
         )
         assert set(attrs) == {"wave", "terminal", "active"}, card.batch.id
         assert attrs["wave"] == ("" if card.wave is None else str(card.wave))
-        assert attrs["terminal"] == ("1" if card.column == "done" else "0")
+        assert attrs["terminal"] == ("1" if card.terminal else "0")
         latest = max((e.at for e in card.events), default=None)
         assert attrs["active"] == ("" if latest is None else latest.isoformat())
         seen[card.batch.id] = attrs
@@ -212,47 +212,75 @@ def test_the_cutoff_toggle_is_a_pressed_toolbar_button_by_default() -> None:
     assert 'id="cutoff"' not in empty
 
 
+def _card_named(bid: str) -> Card:
+    board, _ = _board()
+    return board.card(bid)
+
+
+def test_a_merged_batch_never_archived_and_still_closing_out_is_terminal() -> None:
+    card = _card_named("c-none")  # PR merged, no close-out event: the Closing out column
+    assert card.column == "closing-out" and card.stage == "merged"
+    assert card.terminal is True
+
+
+def test_each_terminal_kind_is_terminal() -> None:
+    assert _card_named("c-session").terminal  # merged, close-out started but not archived
+    assert _card_named("d-done").terminal  # merged and archived
+    assert _card_named("x-cancelled").stage == "cancelled" and _card_named("x-cancelled").terminal
+    assert replace(_card_named("r-run"), stage="abandoned").terminal  # abandoned
+    # a partial batch is terminal once its close-out archived, not before
+    partial = _card_named("d-partial")
+    assert partial.stage == "partial" and not partial.terminal
+
+
+def test_a_batch_still_in_flight_or_waiting_is_not_terminal() -> None:
+    for bid in ("p-queued", "w-wait", "r-run", "o-draft", "o-ready"):
+        assert not _card_named(bid).terminal, bid
+
+
 def test_a_wave_of_only_terminal_batches_with_no_recent_event_is_hidden() -> None:
     base = _cards()
     old = "2026-08-01T09:00:00+00:00"
-    cards = [_as(base[0], 1, "done", old), _as(base[1], 1, "done")]
+    cards = [_as(base[0], 1, "merged", old), _as(base[1], 1, "merged")]
     assert cutoff_hidden_waves(cards, AT) == frozenset({"1"})
 
 
 def test_a_recent_event_in_any_card_keeps_the_wave_shown() -> None:
     base = _cards()
     cards = [
-        _as(base[0], 1, "done", "2026-08-01T09:00:00+00:00"),
-        _as(base[1], 1, "done", "2026-09-20T09:00:00+00:00"),  # 15 days before AT
+        _as(base[0], 1, "merged", "2026-08-01T09:00:00+00:00"),
+        _as(base[1], 1, "merged", "2026-09-20T09:00:00+00:00"),  # 15 days before AT
     ]
     assert cutoff_hidden_waves(cards, AT) == frozenset()
 
 
 def test_the_cutoff_is_thirty_days_before_the_render_and_days_is_a_parameter() -> None:
     base = _cards()
-    cards = [_as(base[0], 1, "done", "2026-09-05T21:30:00+00:00")]  # exactly 30 days
+    cards = [_as(base[0], 1, "merged", "2026-09-05T21:30:00+00:00")]  # exactly 30 days
     assert cutoff_hidden_waves(cards, AT) == frozenset()
     assert cutoff_hidden_waves(cards, AT, days=29) == frozenset({"1"})
-    assert cutoff_hidden_waves([_as(base[0], 1, "done", "2026-09-05T21:29:59+00:00")], AT) == {"1"}
+    assert cutoff_hidden_waves([_as(base[0], 1, "merged", "2026-09-05T21:29:59+00:00")], AT) == {
+        "1"
+    }
 
 
 def test_a_wave_with_a_batch_that_is_not_terminal_always_shows() -> None:
     base = _cards()
-    cards = [_as(base[0], 2, "done"), _as(base[1], 2, "proposed")]  # proposed, eventless
+    cards = [_as(base[0], 2, "merged"), _as(base[1], 2, "proposed")]  # proposed, eventless
     assert cutoff_hidden_waves(cards, AT) == frozenset()
 
 
 def test_cards_with_no_wave_are_never_hidden() -> None:
     base = _cards()
-    assert cutoff_hidden_waves([_as(base[0], None, "done")], AT) == frozenset()
+    assert cutoff_hidden_waves([_as(base[0], None, "merged")], AT) == frozenset()
 
 
 def test_each_wave_is_judged_on_its_own_cards() -> None:
     base = _cards()
     cards = [
-        _as(base[0], 1, "done"),
-        _as(base[1], 2, "running", "2026-08-01T09:00:00+00:00"),
-        _as(base[2], 3, "done", "2026-10-01T09:00:00+00:00"),
+        _as(base[0], 1, "merged"),
+        _as(base[1], 2, "dispatched", "2026-08-01T09:00:00+00:00"),
+        _as(base[2], 3, "merged", "2026-10-01T09:00:00+00:00"),
     ]
     assert cutoff_hidden_waves(cards, AT) == frozenset({"1"})
 

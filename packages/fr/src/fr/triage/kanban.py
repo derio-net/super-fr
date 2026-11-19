@@ -303,6 +303,9 @@ class HeldIssue:
     line: str  # `claims.held_line`: the same words the drive and the batch verbs use
 
 
+_TERMINAL_STAGES: frozenset[BatchStage] = frozenset({"merged", "cancelled", "abandoned"})
+
+
 @dataclass(frozen=True)
 class Card:
     batch: Batch
@@ -341,8 +344,10 @@ class Card:
 
     @property
     def terminal(self) -> bool:
-        """Merged and archived, cancelled or abandoned: the Done column (R18)."""
-        return self.column == "done"
+        """Merged (archived or not), cancelled or abandoned, or a close-out that archived
+        (R18): the engine's own stage and close-out state, never the column the card sits
+        in, so a merged batch still owed its close-out is terminal."""
+        return self.stage in _TERMINAL_STAGES or closeout_state(self.batch) == "archived"
 
     @property
     def active_at(self) -> datetime | None:
