@@ -203,6 +203,20 @@ def test_the_pages_marker_becomes_a_list_grouped_by_section() -> None:
     assert out.startswith("intro\n") and out.rstrip().endswith("outro")
 
 
+def test_a_marker_shown_in_a_fence_or_followed_by_text_is_left_as_written() -> None:
+    entries = [bs.Entry("docs/ops.md", "Ops", "Manual operations.")]
+    page = "docs/explainers/index.md"
+    fenced = "show:\n\n```\n<!-- site:pages -->\n```\n"
+    assert bs.fill_pages(fenced, page, entries) == fenced
+    tilde = "~~~\n<!-- site:pages -->\n~~~\n"
+    assert bs.fill_pages(tilde, page, entries) == tilde
+    trailing = "<!-- site:pages --> and more\n"
+    assert bs.fill_pages(trailing, page, entries) == trailing
+    both = fenced + "\n<!-- site:pages -->\n"
+    out = bs.fill_pages(both, page, entries)
+    assert out.startswith(fenced) and "- [Ops](../ops.md)" in out
+
+
 def test_a_text_without_the_marker_is_unchanged() -> None:
     assert bs.fill_pages("plain\n", "docs/explainers/index.md", []) == "plain\n"
 
@@ -1485,3 +1499,191 @@ def test_figures_css_keeps_the_wide_form_legible_in_an_article_column() -> None:
         r"@media\s*\(min-width:\s*1080px\)\s*\{article\.explainer \.site-figure\{width:960px",
         css,
     )
+
+
+# -- R13: the pages marker fills only on a line of its own -------------------------------
+
+
+def test_the_pages_marker_fills_only_when_it_stands_on_a_line_of_its_own() -> None:
+    entries = [bs.Entry("docs/ops.md", "Ops", "Manual operations.")]
+    text = (
+        "1. Write `<!-- site:pages -->` in the page.\n\n"
+        "<!-- site:pages -->\n\n"
+        "   <!-- site:pages -->  \n"
+    )
+    out = bs.fill_pages(text, "docs/explainers/index.md", entries)
+    assert "1. Write `<!-- site:pages -->` in the page." in out
+    assert out.count("<!-- site:pages -->") == 1
+    assert out.count("- [Ops](../ops.md): Manual operations.") == 2
+
+
+def test_a_marker_only_inside_inline_code_leaves_the_text_unchanged() -> None:
+    text = "1. Put `<!-- site:pages -->` here.\n"
+    assert bs.fill_pages(text, "docs/explainers/index.md", []) == text
+
+
+# -- R12: a fenced block that does not render as a code block is refused -----------------
+
+
+def _fence_renderer(renderer, fonts, source, out):
+    """Stand-in for python-markdown's rule: a fence renders as <pre> only at the start of a
+    line; indented under a list item it leaves inline code (checked against markdown 3.11)."""
+    lines = source.read_text(encoding="utf-8").split("\n")
+    parts, i = [], 0
+    while i < len(lines):
+        m = re.match(r"^( *)```(\w*)\s*$", lines[i])
+        if not m:
+            i += 1
+            continue
+        j = i + 1
+        while j < len(lines) and not re.match(r"^ *```\s*$", lines[j]):
+            j += 1
+        body = "\n".join(x.strip() for x in lines[i + 1 : j])
+        if len(m.group(1)) == 0:
+            parts.append(f"<pre><code>{body}</code></pre>")
+        else:
+            parts.append(f"<p><code>{m.group(2)} {body}</code></p>")
+        i = j + 1
+    html = (
+        "<html><head><style>@font-face{src:url(data:font/woff2;base64,AA)}</style></head>"
+        f"<body><article>{''.join(parts)}</article></body></html>"
+    )
+    out.write_text(html, encoding="utf-8")
+    return html
+
+
+def _fence_repo(tmp_path: Path, body: str) -> tuple[Path, Path]:
+    root, craft = _mini_repo(tmp_path)
+    (root / "docs" / "a.md").write_text(f"---\ntitle: a\n---\n\n{body}")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    return root, craft
+
+
+@pytest.mark.parametrize(
+    ("body", "line"),
+    [
+        ("1. Step\n\n  ```bash\n  echo hi\n  ```\n", 7),
+        ("1. Step\n\n   ```\n   echo hi\n   ```\n", 7),
+        ("1. Step\n\n    ```bash\n    echo hi\n    ```\n", 7),
+        ("<!-- site:pages -->\n\n1. Step\n\n  ```bash\n  echo hi\n  ```\n", 9),
+    ],
+)
+def test_a_fence_that_renders_without_pre_is_refused_and_no_page_is_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str, line: int
+) -> None:
+    root, craft = _fence_repo(tmp_path, body)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fence_renderer)
+    with pytest.raises(bs.BuildError, match=rf"docs/a\.md:{line}\b"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not list(out.rglob("*.html"))
+
+
+def test_a_top_level_fence_builds_and_an_indented_block_in_a_list_is_no_fence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body = "1. Step\n\n        echo hi\n\n```yaml\na: 1\n```\n"
+    root, craft = _fence_repo(tmp_path, body)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fence_renderer)
+    assert "guides/a.html" in bs.build(root, out, craft, REF, "https://github.com/o/r")
+
+
+def test_a_pre_elsewhere_on_the_page_does_not_satisfy_a_fence() -> None:
+    raw = "x\n\n  ```bash\n  echo hi\n  ```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3"):
+        bs.check_fences_render(raw, "<pre>other</pre><p><code>echo hi</code></p>", "a.md")
+    bs.check_fences_render(
+        raw, "<pre><code>echo&nbsp;hi</code></pre>".replace("&nbsp;", " "), "a.md"
+    )
+
+
+def test_a_fence_rendered_as_literal_text_in_a_pre_is_refused() -> None:
+    # a fence indented 8 spaces in a list item is an indented code block: the renderer
+    # keeps the fence lines as text, so the body sits in a <pre> beside its own fence
+    raw = "- item\n\n        ```bash\n        echo hi\n        ```\n"
+    shown = "<ul><li><p>item</p><pre><code>```bash\necho hi\n```</code></pre></li></ul>"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3:"):
+        bs.check_fences_render(raw, shown, "a.md")
+
+
+def test_a_short_fence_body_is_not_satisfied_by_a_longer_pre() -> None:
+    raw = "- a\n\n  ```\n  foo\n  ```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3:"):
+        bs.check_fences_render(raw, "<pre>foo bar</pre><p><code>foo</code></p>", "a.md")
+
+
+def test_two_fences_with_one_body_each_need_their_own_pre() -> None:
+    raw = "```\nfoo\n```\n\n- a\n\n  ```\n  foo\n  ```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:7:"):
+        bs.check_fences_render(raw, "<pre><code>foo</code></pre><p><code>foo</code></p>", "a.md")
+    bs.check_fences_render(raw, "<pre><code>foo</code></pre><pre><code>foo</code></pre>", "a.md")
+
+
+def _real_render(src: str) -> str:
+    markdown = pytest.importorskip("markdown")
+    # the extensions the pinned blog-craft renderer (tools/render_explainer.py) passes
+    return markdown.markdown(src, extensions=["fenced_code", "codehilite", "tables", "sane_lists"])
+
+
+@pytest.mark.parametrize("indent", [2, 3, 4])
+def test_the_real_converter_leaves_an_indented_fence_in_a_list_without_pre(indent: int) -> None:
+    pad = " " * indent
+    raw = f"1. Step\n\n{pad}```bash\n{pad}echo hi\n{pad}```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3:"):
+        bs.check_fences_render(raw, _real_render(raw), "a.md")
+
+
+def test_the_real_converter_renders_a_top_level_fence_and_an_8_space_block_as_pre() -> None:
+    raw = "```bash\necho hi\n```\n"
+    bs.check_fences_render(raw, _real_render(raw), "a.md")
+    listed = "1. Step\n\n        echo hi\n"
+    assert "<pre>" in _real_render(listed)
+    bs.check_fences_render(listed, _real_render(listed), "a.md")
+
+
+def test_a_mermaid_fence_is_the_renderers_to_place_and_is_not_checked() -> None:
+    raw = "x\n\n```mermaid\nflowchart LR\n  a --> b\n```\n"
+    assert bs.source_fences(raw) == []
+    bs.check_fences_render(raw, '<pre class="mermaid">flowchart</pre>', "a.md")
+
+
+def _css_block(css: str, query: str) -> str:
+    """The body of the `@media (<query>){...}` block, braces balanced."""
+    start = css.index(f"@media ({query})")
+    open_at = css.index("{", start)
+    depth = 0
+    for i in range(open_at, len(css)):
+        depth += {"{": 1, "}": -1}.get(css[i], 0)
+        if depth == 0:
+            return css[open_at + 1 : i]
+    raise AssertionError(f"unbalanced @media ({query})")
+
+
+def test_the_bar_reads_as_two_rows_on_a_phone() -> None:
+    """R14: the site name alone on row 1, the four links in a no-wrap row 2."""
+    css = (bs.SITE_DIR / "bar.css").read_text(encoding="utf-8")
+    phone = re.sub(r"\s+", "", _css_block(css, "max-width:480px"))
+    assert ".site-bar.site-name{" in phone and "flex-basis:100%" in phone
+    assert "margin-right:0" in phone
+    # the links share one row: they may not wrap or be given a basis of their own
+    assert "white-space:nowrap" in phone
+    assert ".site-bara:not(.site-name){padding:.35rem0}" in phone  # a tap target of about 24px
+
+
+def test_the_landing_bar_takes_the_wrap_gutter_on_a_phone() -> None:
+    """R15: at 720px the landing bar's padding matches `.wrap`'s phone gutter."""
+    css = (bs.SITE_DIR / "landing.css").read_text(encoding="utf-8")
+    phone = re.sub(r"\s+", "", _css_block(css, "max-width:720px"))
+    gutter = re.search(r"\.wrap\{padding:0([\d.]+rem)\}", phone)
+    assert gutter is not None
+    assert (
+        f"body.landing.site-bar{{padding-left:{gutter.group(1)};padding-right:{gutter.group(1)}}}"
+        in phone
+    )
+
+
+def test_the_article_bar_follows_the_broadsheet_column() -> None:
+    """R15: the bar's text starts where the 720px article column does, at any width."""
+    css = re.sub(r"\s+", "", (bs.SITE_DIR / "bar.css").read_text(encoding="utf-8"))
+    assert "padding:.7remmax(1.25rem,calc((100%-720px)/2+1.25rem))" in css

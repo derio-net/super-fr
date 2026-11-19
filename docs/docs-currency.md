@@ -15,7 +15,7 @@ covers:
   - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-15 owed-archive-side-effects phase 1, the default-branch helper moved to fr.git and docs.load wraps it; page unchanged. 2026-11-13 writing-standards-docs phase 1, explainers-currency now names each page group's writing standard; this page still defers authoring detail to that rule
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 owed-archive-side-effects phase 1, the default-branch helper moved to fr.git and docs.load wraps it; page unchanged. 2026-11-13 writing-standards-docs phase 1, explainers-currency now names each page group's writing standard; this page still defers authoring detail to that rule
 ---
 
 # Docs currency: keep pages true to the code
@@ -131,21 +131,19 @@ is the one way to defeat this gate, and no tool can stop it.
 - **A shipped rule**, `docs-currency`, states the obligation for every harness.
 - **CI is the gate no flow can skip.** In a GitHub Actions job:
 
-  ```yaml
-  docs-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0          # the diff needs the merge base
-      # install fr however your repo does, then:
-      - name: Pages covering a changed path changed too
-        if: github.event_name == 'pull_request'
-        run: fr docs check --base "origin/${{ github.base_ref }}"
-      - name: Pages are well formed and cover what they claim
-        if: github.event_name != 'pull_request'
-        run: fr docs check
-  ```
+        docs-check:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v4
+              with:
+                fetch-depth: 0          # the diff needs the merge base
+            # install fr however your repo does, then:
+            - name: Pages covering a changed path changed too
+              if: github.event_name == 'pull_request'
+              run: fr docs check --base "origin/${{ github.base_ref }}"
+            - name: Pages are well formed and cover what they claim
+              if: github.event_name != 'pull_request'
+              run: fr docs check
 
   Fetch the checkout's full history (`fetch-depth: 0`). A shallow clone cannot compute the merge
   base, and the check then says so; it does not pass. Add the job to any aggregate check that your
@@ -172,7 +170,8 @@ push, `.github/workflows/pages.yml` runs `scripts/build-site.py`, which:
 4. rewrites relative links. A link to another page's source becomes that page's route.
    A link to any other tracked file becomes a GitHub link at the built commit.
    A link to a path that git does not track **fails the build**;
-5. fills a `<!-- site:pages -->` marker with a list of every page, grouped by section.
+5. fills a `<!-- site:pages -->` marker that stands alone on its line with a list of every page,
+   grouped by section. The marker inside running text, inline code or a fenced block is left as written.
    Each entry comes from the page's `title` and the first sentence of its `tldr`.
    On the front page, these are the Explainers, Guides and Reference lists that the top bar links to;
 6. places each figure (below), then gives every page the same top bar.
@@ -209,15 +208,16 @@ up to 860 px wide, or up to 1079 px inside an article page. Only a page with a f
 
 - Use inline Markdown links. A relative image, a reference-style link definition and a raw HTML
   `href` fail the build. Absolute URLs are fine.
-- Fence all code, and name the language. Link to sibling pages with relative `.md` paths.
+- Fence all code at the top level, and name the language. Inside a list item the renderer does
+  not read a fence: it shows the code as plain text. Write it there as a code block indented 8
+  spaces, with a blank line before and after. The build refuses a fence that does not render as
+  a code block, and names the page and line. Link to sibling pages with relative `.md` paths.
 - The build drops a `# H1` that opens the body of an article page, because the renderer prints the title
   itself. Keep it in the source, so that the file reads well on GitHub.
 - To preview, build into a directory outside the repo:
 
-  ```bash
-  uv run --isolated --no-project --with markdown --with pyyaml python \
-    scripts/build-site.py /tmp/site --blog-craft /path/to/blog-craft-checkout
-  ```
+        uv run --isolated --no-project --with markdown --with pyyaml python \
+          scripts/build-site.py /tmp/site --blog-craft /path/to/blog-craft-checkout
 
   `--isolated` matters: without it a pygments install elsewhere on the machine changes how code
   blocks render.

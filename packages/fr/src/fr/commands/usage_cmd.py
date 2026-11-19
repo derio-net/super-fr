@@ -205,10 +205,11 @@ def _has_cursor(repo: Path, run: str) -> bool:
 
 @usage_app.command("backfill")
 def backfill_cmd(repo: RepoOpt = None) -> None:
-    """Write `implemented/usage/<run>.yaml` for every archived run that has none
-    (spec §5.B.5), and price an archived file's sessions that were still open
-    when it was captured (gh#756): reads archived cursors and this host's
-    transcripts, never writes a run cursor. Re-running is a no-op."""
+    """Write `implemented/usage/<run>.yaml` for every archived run that has none.
+
+    It also prices an archived file's sessions that were still open when it was
+    captured (spec §5.B.5, gh#756). It reads archived cursors and this host's
+    transcripts, and never writes a run cursor. Re-running is a no-op."""
     from fr.usage.backfill import backfill
 
     _require_host(repo)

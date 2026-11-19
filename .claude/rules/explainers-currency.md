@@ -53,8 +53,11 @@ than literal values, prefixes its ids with the file's name and two hyphens, and 
 page must be one the page it links to already makes. The build fails, naming the page, on a
 missing hero key, an unknown kind, an unknown terminal kind, an act with no numbered section, a
 malformed card or grid, a missing or unsafe figure, a link to an untracked path, `layout:
-landing` anywhere but the page routed to `index.html`, a renderer page with no embedded font, or
-one that cannot take the top bar. A change under `scripts/site/` deploys the site.
+landing` anywhere but the page routed to `index.html`, a renderer page with no embedded font, one
+that cannot take the top bar, or a fenced block that does not render as a code block (the renderer does
+not read a fence inside a list item: write the code there as a block indented 8 spaces; the error
+names `page:line`). A `<!-- site:pages -->` marker fills
+only on a line of its own outside a fenced block, so the page can quote it in inline code or a fence. A change under `scripts/site/` deploys the site.
 A relative link to another page's `.md` becomes its route; a link to any other tracked file
 becomes a GitHub link at the built commit; a link to a path git does not track fails the
 build. `./acceptance/` is the one site route a page may name directly.
@@ -67,11 +70,11 @@ Every page follows a writing standard from `derio-net/blog-craft`, checked by it
 - guides (`docs/*.md`) and reference pages (`docs/reference/*.md`): `ste`;
 - explainers (`docs/explainers/*.md`): `plain-language`.
 
-Three pages depart from their group, and each says so in its own front matter:
+Two pages depart from their group, and each says so in its own front matter:
 `docs/explainers/why-fr.md` (the argument essay) carries `writing_standard:
-elements-of-style`; `docs/explainers/index.md` (the landing page) and
-`docs/reference/cli.md` (its command tree is generated from `fr`'s help text) carry
-`writing_standard: none`. No other page carries the key: a new page takes its group's
+elements-of-style`; `docs/explainers/index.md` (the landing page) carries
+`writing_standard: none`. `docs/reference/cli.md` is checked as a reference page: its
+command tree is generated from `fr`'s help first lines, so each one stays within `ste`. No other page carries the key: a new page takes its group's
 standard. The rules themselves live in blog-craft, one file per standard:
 `skills/apply-writing-standard/standards/ste.md`, `plain-language.md` and
 `elements-of-style.md`. Product terms a page cannot avoid (abbreviations such as `PR` and
@@ -136,7 +139,7 @@ and look at the pages: a renderer change shows up in every page at once.
   `/`, `/01-fr-goal.html` and `/fr-isolation.html` stay published.
 - `tests/unit/test_pages_workflow.py` — the deploy's triggers, the build step and the pin.
 - `scripts/check-writing-standards.sh` — the writing-standard check, run by CI's `site-build`
-  job; `tests/unit/test_writing_standards_docs.py` pins its page-group mapping and the three
+  job; `tests/unit/test_writing_standards_docs.py` pins its page-group mapping and the two
   front-matter exceptions.
 - `.fr/lenses.yaml` — the `docs-accuracy` lens and the path rule that requires it for every
   page (`fr lenses check` validates it); `tests/unit/test_writing_standards_docs.py` pins both
