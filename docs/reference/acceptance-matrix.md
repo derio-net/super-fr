@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
+reviewed: 2026-11-19 the scaffolded Gitea matrix job keeps no checkout token (batch consumer-followups, gh#1553); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
 ---
 
 # The acceptance matrix
@@ -186,6 +186,8 @@ scenario. The [verification strategies guide](../verification-strategies.md) cov
   and Gitea, the pinned `setup-uv` action installs uv.
 - The debt job installs `tea` (Gitea) or `glab` (GitLab) at one version, with a recorded
   SHA-256.
+- On GitHub and Gitea, no checkout keeps its token in `.git/config`
+  (`persist-credentials: false`).
 
 The GitLab job image `python:3.12` is a tag, and a tag can move. `init` reads the `fr`
 commit with `git ls-remote`. If the read fails, `init` exits 2 and writes nothing.

@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 # fr ops — manual operations you can check and run
@@ -257,6 +257,8 @@ close anything:
 
 - **The default branch** comes from the forge's repo metadata, never from the PR's base ref.
   The stage cross-checks it with the base clone's `origin/HEAD`, and stops when they disagree.
+  It stops with exit 2 when the forge read fails, for example on an SSO login page, and names
+  the error.
   It stops on a PR based on any other branch. It also stops on one that adds or changes files
   under `docs/superpowers/implemented/journals/`.
 - **A PR-carried journal that cannot be parsed** is a refusal, never an empty exclusion.

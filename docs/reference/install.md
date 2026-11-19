@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
+reviewed: 2026-11-19 the OpenCode gates and the sentinel judge in the session directory (batch consumer-followups, gh#1552); 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
 ---
 
 # Install super-fr
@@ -76,7 +76,9 @@ a `rules/` folder in the plugin directory. The plugin adds each rule to the syst
 request. It adds a rule only when the prompt does not hold its text yet. It also skips a
 rule when a part's `Instructions from:` header names the same rule file. The acceptance
 nag, the session binding and the child claim run `fr` in the session's own directory, not in the
-directory the plugin loaded from.
+directory the plugin loaded from. The shell gate, the push guard, the edit gate and the
+pipeline sentinel also judge in the session's own directory. If the plugin cannot read that
+directory within 2 seconds, it uses the plugin directory.
 
 OpenCode 1.x is not supported. `fr` reports a 1.x session as one that it cannot read, and
 tells you to upgrade.
