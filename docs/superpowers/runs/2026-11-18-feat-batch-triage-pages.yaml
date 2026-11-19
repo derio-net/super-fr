@@ -135,12 +135,19 @@ steps:
           tests: p3-suite.log@b8e96a29c6f0;tree=b55766c7ff44d795a26393ae90d4234a89dbab734cfc387acef9f35d3d12cfe7
           visual: triage-pages-folds:6:6dabb5a79248,triage-batches-columns-cutoff:8:175809c97121,triage-origins-groups-prs:7:b40d923790ea
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-19T00:31:56+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: bd72e033-22c2-4336-9bd1-eb0cee343bb7
+          returned: '2026-11-19T02:13:16+00:00'
+          outcome: done
+        evidence:
+          review: review-p3
+          reviewer: a42854f6751cad912
+          visual: triage-pages-folds:6:b1af58acfe2a,triage-batches-columns-cutoff:9:180e5892abe0,triage-origins-groups-prs:11:7723e444eabb
+          findings: p3-r1,p3-r2,p3-r3,p3-r4,p3-r5
   journal-check:
     state: pending
   lens-review:

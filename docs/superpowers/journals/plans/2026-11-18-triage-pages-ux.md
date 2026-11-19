@@ -291,3 +291,64 @@ collect reuses the PR list it already read; no second read or code path to tidy
 ### no-refactor-p3-t5 · discovery · no-refactor-because P3.T5 (phase 3)
 
 browser check, docs and suite only: no code
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-11-19T02:13:14+00:00 phase=3 -->
+### review-p3 · review · Phase 3 review: Batches columns and cutoff, Origins groups, filter and merged PRs (phase 3)
+
+Independent review of da54b59dc..73ce5d5a1 against R10, R14, R15, R18, design D/G/H, plan 03.yaml
+and the three visual rows, with the reviewer's own browser walk (26 shots, light/dark 1280, light 390,
+a legacy origins file with no prs, storage blocked). Holds: column toggles with aria-expanded and
+remembered state; storage try/catch; the cutoff hides only terminal waves idle past 30 days; Origins
+groups folded in CATEGORIES order with counts, the state filter's counts, a hash opening only its fold;
+merged PRs kept from the one PR read, "not collected" for a missing one; escaping and https-only hrefs;
+reuse of fold, Linker, stamp_text, PAGE_SCRIPT; docs accurate. Five findings, all in scope, all fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-19T02:13:14+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Column-toggle and cutoff browser logic tested only by searching script text (phase 3)
+
+cutoff_hidden_waves was a Python copy no render path called; the JS date rule could drift with tests green.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-19T02:13:14+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Card.terminal narrower than R18's merged, archived, cancelled or abandoned (phase 3)
+
+column == "done" left a merged batch that never archived visible past the cutoff indefinitely.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-19T02:13:14+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · origins collect silently drops a PR created before --since but merged inside the window (phase 3)
+
+The PR list is creation-ordered; a long-lived PR beyond the page is lost with no warning.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-19T02:13:14+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · Origins Ended cell renders closing PRs as bare #n text (phase 3)
+
+Linker.from_origins holds their URLs; R11 says every PR reference links to the forge.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-19T02:13:14+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · State filter leaves a header-only table when it hides every row of a group (phase 3)
+
+A group empty at render shows "No issue."; the filtered-empty state should match.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-19T02:13:14+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Column-toggle and cutoff browser logic tested only by searching script text (phase 3)
+
+f23c85d65: render marks cards of hidden waves with data-cutoff-hidden from cutoff_hidden_waves; the script only applies the marker. Tests pin the boundary and the selectors the script reads.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-19T02:13:14+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Card.terminal narrower than R18's merged, archived, cancelled or abandoned (phase 3)
+
+cbbf53400: Card.terminal reads the engine's stage and close-out state: merged, cancelled, abandoned or archived. One test per terminal kind.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-19T02:13:14+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: origins collect silently drops a PR created before --since but merged inside the window (phase 3)
+
+29cc2550d (+2bc8e717a): a full PR list warns, naming the repo, that an older PR merged in the window may show not collected; documented in fr-triage.md.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-19T02:13:14+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: Origins Ended cell renders closing PRs as bare #n text (phase 3)
+
+6ff3c2399: closing PRs in the Ended cell link through the Linker, https only.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-19T02:13:14+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: State filter leaves a header-only table when it hides every row of a group (phase 3)
+
+6070901a6: each group carries a hidden No issue. row the state filter shows when no row is visible.
