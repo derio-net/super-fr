@@ -7539,6 +7539,10 @@ batches:
     other''s claims.'
   wave: 14
   skill: debug
+  events:
+  - kind: cancel
+    at: '2026-11-19T09:41:45.917118Z'
+    reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
 - id: adopt-multi-repo
   title: 'batch adopt: a session spanning several repos'
   ids:
