@@ -9069,6 +9069,11 @@ batches:
     - super-fr#1510
   - kind: post_merge
     at: '2026-11-19T22:42:49.939183Z'
+  - kind: closeout
+    at: '2026-11-19T22:45:00.539951Z'
+    runner: herdr
+    handle: w3R:p2
+    archive: chore/closeout-2026-11-19-5
 - id: triage-hardening
   title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
     out of dedupe'
@@ -9907,3 +9912,10 @@ closeouts:
   handle: w3R:p2
   planned:
   - hook-hardening
+  pr: 1585
+  head: cd6a645a34593734f405178073a4c28e6ae0ffad
+  members:
+  - hook-hardening
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-19-batch-hook-hardening.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-19-batch-hook-hardening.md"
