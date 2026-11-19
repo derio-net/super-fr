@@ -7507,6 +7507,10 @@ batches:
   rationale: 'Wave 13: low defects, isolated in the model-bindings code.'
   wave: 13
   skill: debug
+  events:
+  - kind: cancel
+    at: '2026-11-19T09:41:00.461487Z'
+    reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
 - id: merge-queue
   title: 'Merge race: require an up-to-date or merge-queued main, release bot bypass, the driver enqueues
     where a queue is required'
