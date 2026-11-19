@@ -25,3 +25,8 @@ The resolvers for git (fr_git_resolve, plugin resolveGit) and fr (fr_fr_resolve,
 ### 07300a16a16e · root-cause · B: installs resolve dependencies afresh instead of from the tested lock
 
 install.sh's uv tool install takes no constraints from uv.lock; npm -g @devcontainers/cli is unversioned; bun.lock carries glob 13.0.5/10.5.0 and minimatch 10.2.5/9.0.9 pinned by @opencode/util 2.1.0 and rimraf 5, inside GHSA-3g3m-2fjr-6pw4 (glob >=9.0.0 <=14.0.1, fix 14.0.2) and GHSA-g3hv-75wg-m249 (minimatch >=7.0.0 <11.0.1, fix 11.0.1), ranges re-read from the advisory database. Dev graph only: delivery copies src/, the plugin imports types only.
+
+<!-- fr:journal kind=finding scope=debug id=eccd12d862b2 created=2026-11-19T20:41:43+00:00 state=fixed -->
+### eccd12d862b2 · finding [fixed] · A fixed: tools resolved from absolute PATH entries, python -I, edit gate denies without jq
+
+lib: fr_which/_fr_first_candidate replace command -v; fr_jq/fr_gh/fr_jq_resolve/fr_gh_resolve; python3 -I -c; a python3 that cannot run is skipped. fr-isolation-required.sh: parses via fr_json_field, every read guarded, denies on no parser / failing parser / unreadable payload (deny_fixed needs no parser). Ten hooks + Hermes push guard call fr_jq/fr_gh. Plugin: src/tools.ts resolveTool; segment.ts and push.ts spawn the resolved bash/gh. Tests first: tests/unit/test_hooks_planted_tools.py, packages/fr-opencode-plugin/test/tools.test.ts (commit ee6da13e8).
