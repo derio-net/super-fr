@@ -46,9 +46,12 @@ rows:
       writing standard, and the page is checked as a reference page with no exemption.
     origin:
     - spec:2026-11-19-batch-docs-wording#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_writing_standards_docs.py#test_only_the_two_exceptions_carry_a_writing_standard_key
+    status: ci
+    notes: 'R6: cli.md carries no exemption; CI site-build runs the STE checker over
+      it'
     verify: none
   - id: site-code-blocks-render
     capability: published-docs
