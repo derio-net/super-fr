@@ -205,3 +205,9 @@ site to show it. R10 is how the change is delivered, not a business claim, so it
 `writing-standards-docs-groups` (spec `2026-11-13-writing-standards-docs`) already says
 reference pages are held to STE; when R6 renames its pinned test, its level ref is
 re-pointed by amendment (`add-level`/`drop-level`), not edited in place.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-19-batch-docs-wording | `derio-net/super-fr` | `2026-11-19-batch-docs-wording` | — |

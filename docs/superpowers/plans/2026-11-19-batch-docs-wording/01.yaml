@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Help text and skill prose state what the code does (R1–R10)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - cli-help-matches-code
+  - cli-help-rich-markup-safe
+  - cli-reference-ste
+  - skill-prose-matches-engine
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/*.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/ops/helpers.py
+  - packages/fr/src/fr/plan_ops.py
+  - plugins/super-fr/skills/fr-devops-gate/SKILL.md
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - plugins/super-fr/skills/fr-progress/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - README.md
+  - docs/**/*.md
+  - .claude/rules/explainers-currency.md
+  - tests/unit/test_cli_help_brackets.py
+  - tests/unit/test_fr_triage_skill_schema.py
+  - tests/unit/test_ops_gate_cmd.py
+  - tests/unit/test_ops_helpers.py
+  - tests/unit/test_writing_standards_docs.py
+  - tests/unit/test_*help*.py
+  - docs/acceptance/features/*.yaml
+  - .changes/feat-batch-docs-wording.yaml
+  estimate_lines: 420
+tasks:
+- number: 1
+  title: Smoke — the touched suites are green on the unchanged tree
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest -q --no-cov tests/unit/test_ops_gate_cmd.py tests/unit/test_ops_helpers.py tests/unit/test_writing_standards_docs.py tests/unit/test_fr_triage_skill_example.py tests/unit/test_tripwire_readme_sync.py`; all green before any change (a red one is recorded as a discovery, not fixed here).
+- number: 2
+  title: Rich markup never eats bracketed help text (R4, R5)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: new tests/unit/test_cli_help_brackets.py. Walk `typer.main.get_command(fr.cli.app)` recursively; for every command render `--help` through `typer.testing.CliRunner` with env `COLUMNS=1000`, `TERMINAL_WIDTH=1000`; normalise output and expected text alike (drop `│╭╮╰╯─`, collapse whitespace). Expected spans: every `[...]` in each param's `help` and in the command's help/docstring, with `\[` read as `[`. Fail naming the command path and the missing span. Add a self-test building a throwaway Typer app whose option help holds an unescaped `<x>[@<v>]` and assert the checker reports it. Run: fails on at least init scaffold `--tool` (the spec also lists acceptance_cmd.py:755,1137,1141 and triage_batch_cmd.py:773).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: escape each flagged bracket for Rich (`\[`) in its source help string (init_cmd.py:33 and every other one the test names). Re-run until green; `uv run fr init scaffold --help` shows `<tool>[@<version>]`.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: if span extraction and normalisation exceed a few lines, make them one helper the test and its self-test share; re-run the file.
+- number: 3
+  title: Help and hint text match the code (R1, R2, R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_ops_gate_cmd.py extend the missing-ops-profile test (around :115) to assert the hint contains `fr init scaffold --ops --profile` and `--purpose` and mentions a new branch from the default branch. Assert via CliRunner that `fr ops seal --help` describes `{target}` as the path, shell-quoted, not "the target's name", and that `fr plan rework --help` no longer says "Complete + archived" and names live or archived parents. Run; they fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: edit ops_gate_cmd.py:207's hint (R1: complete command, run on a new branch cut from the default branch, land the profile by its own PR); ops_cmd.py:536 seal --encrypt help and helpers.py:141 docstring (R2); plan_cmd.py:365 argument help and plan_ops.py rework_create docstring (R3: parent live under plans/ or archived under implemented/plans/ or archived-plans/, complete or not). Edit fr-devops-gate SKILL.md:35 and docs/explainers/fr-devops-gate.md:63-64 to say what R1 says. Tests pass.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: if the R1 hint text now appears in two messages, keep one constant; re-run the two test files.
+- number: 4
+  title: Skill prose matches the engine (R7, R8, R9)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: new tests/unit/test_fr_triage_skill_schema.py reads plugins/super-fr/skills/fr-triage/SKILL.md, finds every judgements `schema: <n>` (the prose "creates the file with `schema: N`" and the example's `schema: N` line), asserts at least one was found and each equals `fr.triage.model.JUDGEMENTS_SCHEMA`. In the same file assert fr-acceptance SKILL.md no longer contains "whatever its status" and fr-progress SKILL.md no longer groups `fr status` with commands that preview until `--yes`. Run: the schema pin passes, the two prose asserts fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: fr-acceptance SKILL.md:116 — `fr acceptance status` lists a `--verify live` row only while it is debt (`is_debt`: a debt status, contested, or an unstamped or stale `local`); keep the Post-merge verification owed clause. fr-progress SKILL.md:29 — `fr repair` and `fr migrate v1-to-v2` preview by default and apply only with `--yes`; `fr status` only reads and has no `--yes`. Tests pass.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: none needed for prose; confirm the new test file is minimal and re-run it.
+- number: 5
+  title: The CLI reference meets STE with no exemption (R6)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: in tests/unit/test_writing_standards_docs.py set EXCEPTIONS to two (why-fr.md, index.md) and rename `test_only_the_three_exceptions_carry_a_writing_standard_key` to `test_only_the_two_exceptions_carry_a_writing_standard_key`; drop `writing_standard: none` from docs/reference/cli.md. Check out the pinned blog-craft (`.github/blog-craft.ref`) into a scratch dir outside the repo and run `bash scripts/check-writing-standards.sh <dir>`: it FAILs on cli.md help lines (~14 sentence_length).
+  - id: P1.T5.S2
+    text: |-
+      GREEN: shorten each failing help first line in packages/fr/src/fr/commands/*.py (and cli.py) to sentences of at most 25 words, keeping every fact; run `uv run --no-project python scripts/sync-readme.py`; repeat the checker until no FAIL (warnings allowed). Update `.claude/rules/explainers-currency.md`'s "Three pages depart" paragraph and its Enforcement bullet to two pages. Re-run tests/unit/test_writing_standards_docs.py and tests/unit/test_tripwire_readme_sync.py.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: re-read each rewritten help line against its command (no fact lost or changed). Re-point the merged row that cites the renamed test: `uv run fr acceptance amend --id writing-standards-docs-groups --op add-level --level unit=super-fr:tests/unit/test_writing_standards_docs.py#test_only_the_two_exceptions_carry_a_writing_standard_key --why "R6 renamed the pinned test" --feature 2026-11-19-batch-docs-wording`, then the matching `--op drop-level` for the old name.
+- number: 6
+  title: Mirrors, fragment, docs currency, rows (R10)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Run `uv run --no-project python scripts/sync-opencode.py`, `scripts/sync-hermes.py`, `scripts/sync-readme.py`, then each with `--check`. Add `.changes/feat-batch-docs-wording.yaml` (`bump: patch`, one-line summary). Run `uv run fr docs check` and edit or re-stamp (`reviewed: 2026-11-19 <note>`) every page it names; re-run until clean. Move this phase's four rows to `ci` with their test refs (step record acceptance section). Run the full suite last: `uv run pytest -q --no-cov -n auto > <host-visible log> 2>&1`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

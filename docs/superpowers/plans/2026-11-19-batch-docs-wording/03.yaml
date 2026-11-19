@@ -1,0 +1,68 @@
+schema_version: 2
+phase:
+  number: 3
+  title: The top bar reads as two rows on a phone and lines up with the content (R14,
+    R15)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - site-top-bar-phone-layout
+  tier: standard
+  files:
+  - scripts/site/bar.css
+  - scripts/site/landing.css
+  - tests/unit/test_build_site.py
+  - docs/docs-currency.md
+  - docs/**/*.md
+  - docs/acceptance/features/*.yaml
+  estimate_lines: 120
+tasks:
+- number: 1
+  title: Two-row bar at phone widths (R14)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in tests/unit/test_build_site.py, read scripts/site/bar.css and assert its max-width:480px rule gives `.site-bar .site-name` a full-width basis and the links a no-wrap row; read landing.css and assert a max-width:720px rule sets the landing bar's horizontal padding to `.wrap`'s phone gutter. Run; fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: edit bar.css's 480px rule: `.site-name` alone on row 1, the four links on row 2 with even gaps sized to fit at 320 px under bar.css sizes and under landing.css's body.landing sizes (:53,55). No JavaScript; no markup change unless CSS cannot do it. Test passes.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: drop CSS the new rule made dead (e.g. the old 480px gap shrink); re-run tests/unit/test_build_site.py.
+- number: 2
+  title: Bar text aligns with the content (R15), proven by screenshots
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      GREEN: in landing.css beside :199 make the bar's padding match `.wrap`'s 1.15rem at ≤720 px. Build the site into a scratch dir outside the repo with the pinned blog-craft, serve it (`python3 -m http.server` from the output dir), and capture screenshots into a host-visible scratch dir of the explainer, a guide, a reference page and the landing at 320, 390 and 1280 px; open every one. Measure via the DOM: the bar text's left edge equals the first content element's left edge, no bar row wraps, and `document.documentElement.scrollWidth <= innerWidth`. If article pages misalign, correct bar.css's phone margin/padding and re-capture.
+  - id: P3.T2.S2
+    text: |-
+      Run `uv run fr docs check` (stamp docs-currency.md, which covers scripts/site/**); fill the record's visual section with every state and interaction of the row; set the row to `ci` with its test ref; run the full suite last into a host-visible log.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
