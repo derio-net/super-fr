@@ -668,19 +668,29 @@ def test_a_dedup_hit_does_not_consume_a_slot():
     assert result.skipped == 0
 
 
-def test_a_raising_existing_dispatches_degrades_to_an_empty_snapshot():
+def test_a_raising_existing_dispatches_submits_nothing_this_tick():
+    """super-fr#1499: a failed dedup lookup is not an empty one. Read as
+    "nothing is dispatched yet", it re-submitted every item the backend
+    already held, so tick now fails each item for this tick (the next one
+    retries) and submits and stamps nothing."""
     from fr_dispatch import tick
 
-    plan, repo, n = _one_phase_plan()
+    plan = _two_phase_plan()
     gh = FakeGhClient()
-    _ready(gh, plan, repo, (n,))
+    _ready(gh, plan, REPO, (101, 102))
+    m = RecordingMetrics()
     runner = FakeRunner(raise_in={"existing_dispatches"})
 
-    result = tick(plan, gh, runner)
+    result = tick(plan, gh, runner, metrics=m)
 
-    assert len(runner.dispatched) == 1
-    assert any("dedup fetch failed" in f for f in result.failures)
-    assert result.synced == 1
+    assert runner.dispatched == []
+    assert _synced_adds(gh) == []
+    assert result.synced == 0
+    assert result.errors == 2
+    assert result.skipped == 2
+    assert all("dedup fetch failed" in f for f in result.failures)
+    assert m.reasons == ["dedup", "dedup"]
+    assert m.heartbeats == 1
 
 
 # ── (f) Issue creation stays operator-only ────────────────────────────

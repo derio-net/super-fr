@@ -2,7 +2,8 @@
 """Re-download every pinned host-CLI asset and confirm its sha256 still matches (gh#576).
 
 `fr init scaffold --backend gitlab|gitea` installs glab/tea from a pinned
-release asset, verified by a recorded sha256 (`fr.isolation.scaffold.HOST_CLI_PINS`).
+release asset, verified by a recorded sha256 (`fr.isolation.scaffold.HOST_CLI_PINS`),
+and the scaffolded GitLab CI installs uv the same way (`fr.acceptance.scaffold.UV_PIN`).
 A pin can rot silently — an asset re-uploaded, moved or deleted — and the first
 anyone would hear of it is a devcontainer failing postCreate. This script is the
 check that fails on its own instead: one line per (cli, arch) asset, exit 1 on
@@ -19,6 +20,7 @@ import sys
 import urllib.request
 from collections.abc import Callable, Iterable, Iterator, Mapping
 
+from fr.acceptance.scaffold import UV_PIN
 from fr.isolation.scaffold import HOST_CLI_PINS, HostCliPin
 
 TIMEOUT_SECONDS = 60
@@ -58,7 +60,8 @@ def check(pins: Mapping[str, HostCliPin], fetch: Fetch) -> int:
 
 
 def main() -> None:
-    sys.exit(check(HOST_CLI_PINS, fetch_url))
+    # The uv the scaffolded GitLab jobs install (fr.acceptance.scaffold.UV_PIN) rots the same way.
+    sys.exit(check({**HOST_CLI_PINS, "uv": UV_PIN}, fetch_url))
 
 
 if __name__ == "__main__":

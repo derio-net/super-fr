@@ -4,11 +4,11 @@
 // while `cd <worktree> && …`, judged on the WHOLE line, is not.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { load } from "./fake";
+import { fakeCtx, load } from "./fake";
 
 let root: string;
 let base: string;
@@ -76,5 +76,25 @@ describe("phase-2 wiring", () => {
     const event = { sessionID: "ses_1", system: [] as unknown[] };
     await context(event);
     expect(event.system).toEqual([]);
+  });
+
+  test("the context hook appends the delivered rules once, from the plugin's own rules/ directory", async () => {
+    // A delivered copy: the sources plus rules/ beside them.
+    const copy = mkdtempSync(join(tmpdir(), "fr-delivered-"));
+    try {
+      cpSync(join(import.meta.dir, "..", "src"), copy, { recursive: true });
+      mkdirSync(join(copy, "rules"));
+      writeFileSync(join(copy, "rules", "r.md"), "DELIVERED RULE\n");
+      const delivered = (await import(join(copy, "index.ts"))).default;
+      const fake = fakeCtx({ directory: base, session: { get: async () => ({ id: "ses_1" }) } });
+      await delivered.setup(fake.ctx as never);
+      const hook = fake.hooks.get("session:context")![0]! as (e: unknown) => Promise<void>;
+      const event = { sessionID: "ses_1", system: [] as unknown[] };
+      await hook(event);
+      await hook(event);
+      expect(event.system).toEqual([{ type: "text", text: "DELIVERED RULE\n" }]);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
   });
 });

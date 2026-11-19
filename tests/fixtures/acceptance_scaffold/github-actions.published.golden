@@ -34,13 +34,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # check judges merged rows against the default branch's history
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
       - name: Write Actions summary (branch / PR / main)
@@ -51,7 +51,7 @@ jobs:
           REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: fr acceptance report --link-mode github --ref "$REF"
       - name: Upload report artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: acceptance-report
           path: docs/acceptance/report.html
@@ -70,13 +70,13 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
       - name: Upsert the report comment
         env:
           GH_TOKEN: ${{ github.token }}
@@ -104,13 +104,13 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
       - name: Re-check that Pages is no wider than the repo
         id: visibility
         env:
@@ -131,19 +131,20 @@ jobs:
         run: |
           mkdir -p _site
           fr acceptance report --link-mode github --ref "$GITHUB_SHA" --out _site/index.html
-      - uses: actions/configure-pages@v6
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         if: steps.visibility.outputs.allowed == 'true'
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: steps.visibility.outputs.allowed == 'true'
         with:
           path: _site
       - id: deploy
         if: steps.visibility.outputs.allowed == 'true'
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
-  # The debt job holds the write permissions and the dedicated token; the matrix
-  # job above (which runs this repo's code on every PR) holds neither. It does not
-  # `needs:` the matrix, so a week with failing rows still updates the issue.
+  # The debt job holds the write permissions; the matrix job above (which runs this
+  # repo's code on every PR) holds neither. The dedicated token FR_DEBT_TOKEN reaches
+  # the archive-pr step alone: checkout keeps no credential, so no other step can push.
+  # It does not `needs:` the matrix, so a week with failing rows still updates the issue.
   debt:
     if: github.event_name == 'schedule' || inputs.debt
     runs-on: ubuntu-latest
@@ -153,13 +154,13 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
-      - uses: astral-sh/setup-uv@v5
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
       - name: Technical debt issue (weekly)
         env:
           GH_TOKEN: ${{ github.token }}

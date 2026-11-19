@@ -86,6 +86,93 @@ describe("bind", () => {
     ]);
   });
 
+  test("follows the session's directory: relative and missing workdir, one lookup", async () => {
+    const calls: { args: string[]; cwd: string }[] = [];
+    let lookups = 0;
+    const handler = createBindHandler({
+      session: {
+        get: async () => {
+          lookups += 1;
+          return { id: "ses_1", location: { directory: join(root, "repo") } };
+        },
+      },
+      directory: "/nonexistent-plugin-dir",
+      runFr: async (args, cwd) => {
+        calls.push({ args, cwd });
+        return { code: 0, stdout: "" };
+      },
+    });
+    await handler({ tool: "shell", sessionID: "ses_1", status: "completed", input: { command: "fr isolation up --branch x" } });
+    await handler({ tool: "shell", sessionID: "ses_1", status: "completed", input: { command: "fr isolation up", workdir: "sub" } });
+    expect(calls.map((c) => c.cwd)).toEqual([join(root, "repo"), join(root, "repo", "sub")]);
+    expect(calls[0]!.args).toContain(join(root, "repo"));
+    expect(lookups).toBe(2);
+  });
+
+  test("falls back to the plugin directory when the session names none", async () => {
+    const calls: { cwd: string }[] = [];
+    const handler = createBindHandler({
+      session: { get: async () => ({ id: "ses_1" }) },
+      directory: root,
+      runFr: async (_args, cwd) => {
+        calls.push({ cwd });
+        return { code: 0, stdout: "" };
+      },
+    });
+    await handler({ tool: "shell", sessionID: "ses_1", status: "completed", input: { command: "fr isolation up" } });
+    expect(calls).toEqual([{ cwd: root }]);
+  });
+
+  test("a throwing lookup binds from the plugin directory (l-tests-r5)", async () => {
+    const calls: { cwd: string }[] = [];
+    const handler = createBindHandler({
+      session: {
+        get: async () => {
+          throw new Error("lookup failed");
+        },
+      },
+      directory: root,
+      runFr: async (_args, cwd) => {
+        calls.push({ cwd });
+        return { code: 0, stdout: "" };
+      },
+    });
+    await handler({ tool: "shell", sessionID: "ses_1", status: "completed", input: { command: "fr isolation up" } });
+    expect(calls).toEqual([{ cwd: root }]);
+  });
+
+  test("an answer for another session id is not this session's: plugin directory, and not a child (l-tests-r5)", async () => {
+    const calls: { cwd: string }[] = [];
+    const handler = createBindHandler({
+      session: {
+        get: async () => ({ id: "ses_other", parentID: "ses_p", location: { directory: join(root, "elsewhere") } }),
+      },
+      directory: root,
+      runFr: async (_args, cwd) => {
+        calls.push({ cwd });
+        return { code: 0, stdout: "" };
+      },
+    });
+    await handler({ tool: "shell", sessionID: "ses_1", status: "completed", input: { command: "fr isolation up" } });
+    expect(calls).toEqual([{ cwd: root }]);
+  });
+
+  test("a command that cannot bind makes no session lookup", async () => {
+    let lookups = 0;
+    const handler = createBindHandler({
+      session: {
+        get: async () => {
+          lookups += 1;
+          return { id: "s" };
+        },
+      },
+      directory: root,
+      runFr: async () => ({ code: 0, stdout: "" }),
+    });
+    await handler({ tool: "shell", sessionID: "s", status: "completed", input: { command: "ls -la" } });
+    expect(lookups).toBe(0);
+  });
+
   test("a child session never rebinds", async () => {
     let called = false;
     const handler = createBindHandler({

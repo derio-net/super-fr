@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from fr.acceptance.ci import ci_active
+from fr.acceptance.pin import FrPin
 from fr.acceptance.scaffold import init
 from fr.cli import app
 from typer.testing import CliRunner
@@ -172,7 +173,9 @@ class TestGoldenRenders:
     def test_debt_on_matches_the_golden(self, ci_type: str) -> None:
         from fr.acceptance.scaffold import render_workflow
 
-        assert render_workflow(ci_type, debt=True) == (GOLDEN / f"{ci_type}.golden").read_text()
+        pin = FrPin("0123456789abcdef0123456789abcdef01234567", "v8.1.5")
+        got = render_workflow(ci_type, debt=True, fr_pin=pin)
+        assert got == (GOLDEN / f"{ci_type}.golden").read_text()
 
     @pytest.mark.parametrize("debt", [True, False])
     @pytest.mark.parametrize("ci_type", CI_TYPES)

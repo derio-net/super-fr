@@ -408,6 +408,12 @@ def check(
                 )
 
     result.warnings.extend(_workflow_coverage_warnings(matrix, root, own))
+    # R10: a pipeline pinned to an older fr is a warning, never a failure.
+    import fr
+    from fr.acceptance.pin import stale_pin_warning
+
+    if (stale := stale_pin_warning(root, fr.__version__)) is not None:
+        result.warnings.append(stale)
 
     # Reports are derived from the fold, never committed (spec 2026-11-04 R20): a
     # tracked one is a second copy that drifts, so it is refused, naming the file.

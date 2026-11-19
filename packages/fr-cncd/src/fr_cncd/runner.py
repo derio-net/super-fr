@@ -43,6 +43,7 @@ from fr_dispatch.item_graph import phase_payload
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
     from fr_dispatch.work_item import WorkItem
 
@@ -57,6 +58,25 @@ class CncdError(Exception):
 
 def _env_base_url() -> str | None:
     return os.environ.get("CNCD_URL") or None
+
+
+def _plan_folder_files(plan_dir: Path) -> dict[str, str]:
+    """The plan folder's regular files, by name, refusing any symlink.
+
+    `Path.is_file()` and `read_text()` both follow links, so a link in the
+    folder would ship its target, any file on the dispatching host, to the
+    cncd server (super-fr#1501). A plan folder holds no links, so one is
+    refused by name rather than skipped: dropping it silently would send a
+    plan missing a file the author put there.
+    """
+    entries = sorted(plan_dir.iterdir())
+    links = [p.name for p in entries if p.is_symlink()]
+    if links:
+        raise CncdError(
+            f"plan folder {plan_dir} holds a symlink ({', '.join(links)}); "
+            "cncd dispatch sends only regular files, replace it with the file itself"
+        )
+    return {p.name: p.read_text() for p in entries if p.is_file()}
 
 
 def build_ingest_payload(item: WorkItem) -> dict[str, Any]:
@@ -83,7 +103,7 @@ def build_ingest_payload(item: WorkItem) -> dict[str, Any]:
     at `can_dispatch`.
     """
     plan, phase, issue_number = phase_payload(item)
-    files = {p.name: p.read_text() for p in sorted(plan.dir.iterdir()) if p.is_file()}
+    files = _plan_folder_files(plan.dir)
     return {
         "kind": "plan_folder",
         "schema_version": 2,
