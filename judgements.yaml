@@ -8562,6 +8562,12 @@ batches:
     run in the same run_cmd surface.'
   wave: 22
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-19T11:08:49.288315Z'
+    runner: herdr
+    handle: w3P:p6
+    branch: fix/batch-run-durability
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
