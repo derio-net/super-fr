@@ -8701,6 +8701,12 @@ batches:
   rationale: Single placement defect; blocks stealth setup on self-hosted GitLab.
   wave: 22
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-19T11:59:24.833327Z'
+    runner: herdr
+    handle: w3P:p9
+    branch: fix/batch-stealth-gitlab
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
