@@ -8580,6 +8580,11 @@ batches:
     head_before: 659d0bbeb0c560cbcee722abd788acbdf7c202ca
     head_after: 1307dfb4b3389f088213716f7c34b5baab17aae5
     base: 5925ac1d48b93d96ab6b567020a42205f0abb524
+  - kind: claims_released
+    at: '2026-11-19T09:51:42.333359Z'
+    keys:
+    - super-fr#1499
+    - super-fr#1501
 - id: owed-followups
   title: 'Archive and owed follow-ups: symlinked live root, fail-closed marker read, unreadable default
     ref, host-pinned issue refs'
