@@ -9408,3 +9408,11 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-18-feat-batch-triage-pages.yaml"
   - "D\tdocs/superpowers/specs/2026-11-18-triage-pages-ux-design.md"
   - "D\tdocs/superpowers/usage/2026-11-18-feat-batch-triage-pages.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-19-3
+  branch: chore/closeout-2026-11-19-3
+  at: '2026-11-19T11:33:24.843616Z'
+  runner: herdr
+  handle: w3P:p8
+  planned:
+  - triage-pages
