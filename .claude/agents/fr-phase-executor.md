@@ -150,13 +150,15 @@ suite a second time. `tests_log: none` only when the phase is `failed` or
 `blocked` before a suite could mean anything, or under the declared default
 below.
 
-**The declared default.** When your brief carries `tests: {mode: ci,
-fast_tier: <command>}`, the repo declares CI as its suite evidence (`.fr/ci.yaml`'s
-`tests: ci`). Do not run the full suite: your last act, after your last code commit
-and with the code tree clean, is the `fast_tier` command, through `fr isolation
-exec -- …` like every other. It runs the tests your changes reach plus a smoke set,
-and it prints `fr-scope: advisory — not deliver evidence`: fr refuses that log as
-`tests` evidence, so name no log in the record. Return `tests_log: none` with the
+**The declared default.** When your brief carries `tests.mode: ci`, the repo
+declares CI as its suite evidence (`.fr/ci.yaml`'s `tests: ci`). Do not run the
+full suite: your last act, after your last code commit and with the code tree
+clean, is the repo's own fast tier, through `fr isolation exec -- …` like every
+other command. When the brief also carries `fast_tier` (a command), the repo names
+that tier in `.fr/ci.yaml` and you run exactly that command; without it, run the
+tests your changes touch and their neighbours by the repo's own means. fr ships
+no fast tier, so the command and what it selects are the repo's. Either run is
+advisory, never `tests` evidence, so name no log in the record. Return `tests_log: none` with the
 fast tier's pass/fail line in `summary`; a red fast tier is fixed before you return,
 like a red suite.
 

@@ -461,17 +461,23 @@ suite passes `-m ""`, so all of them run every test;
 [<base>]` (`tests/fr_scope.py`, wired from `tests/conftest.py`) is the fast tier: the
 test files changed since the merge-base with `<base>` (default: the remote default
 ref), those whose imports reach a changed module directly or through `tests/`
-helpers, everything under a changed `conftest.py`, and the `smoke` set
+helpers, everything under a changed `conftest.py`, those whose source names a changed
+non-Python file's name (an agent, a skill, YAML, a script), and the `smoke` set
 (`tests/unit/test_smoke_cli.py`, one CLI round trip per top-level command); never the
 `scenario` tier. It is not sound: a test that starts `fr` as a subprocess is invisible
 to the import graph. Any session that is not the whole configured suite (`--fr-scope`,
-a non-empty `-m` or `-k`, explicit paths, `--lf`, `--sw`, so also the plain default run)
+a non-empty `-m` or `-k`, explicit paths or a run from a subdirectory, `--lf`, `--sw`,
+`--ignore`, `--ignore-glob`, `--deselect`, `-x`/`--maxfail`, `-o testpaths=`, so also
+the plain default run)
 prints `fr-scope: advisory — not deliver evidence` on a line of its own, and fr refuses
 a `tests` log holding that line at `deliver` and at a phase unit. **This repo declares
-`tests: ci`** in `.fr/ci.yaml`: CI is its suite evidence. The `deliver` and phase
-executor briefs carry `tests: {mode: ci, fast_tier: ...}`; an executor runs the fast
-tier last instead of the full suite, and `deliver` uses `tests: ci` (a local `-m ""`
-log stays accepted).
+`tests: ci`** in `.fr/ci.yaml`, and names its fast tier there as `fast_tier` (`{base}`
+is the only placeholder; fr ships no fast tier, so a repo without the key gets
+`tests: {mode: ci}` alone). The `deliver` and phase executor briefs carry
+`tests: {mode: ci, fast_tier: ...}`; an executor runs the fast tier last instead of
+the full suite, and `deliver` uses `tests: ci` (a local `-m ""` log stays accepted).
+`tests: ci` needs valid `gate_checks` in the same file. `--fr-scope` also names, on
+one line, the changed paths no test reaches beyond the smoke set.
 
 **The CI time-budget watcher** (`.github/workflows/ci-budget.yml` +
 `scripts/ci_budget.py`, spec `2026-09-26-ci-time-budget-design.md`) files (and

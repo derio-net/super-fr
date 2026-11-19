@@ -33,7 +33,7 @@ PINNED_AT_VERSION = 6
 
 CANONICAL_SHA256: dict[str, str] = {
     "fr-spec-reviewer": "69fdf80f9ad6de326027215c65d3251f31a7c61bbca9b3793f74a17d2085671e",
-    "fr-phase-executor": "45ca2895be4b314de9298db888e845e2e2264bd79a278254b13d9611ac455702",
+    "fr-phase-executor": "87c85757d9d402ca89f4674fba394b26799cf1200f162e5ecc492aa38b54e525",
 }
 
 

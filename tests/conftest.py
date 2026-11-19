@@ -677,7 +677,15 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     value = config.getoption("--fr-scope")
     if value is None:
         return
-    from tests.fr_scope import ImportIndex, ScopeError, changed_paths, keep_item, resolve_base
+    from tests.fr_scope import (
+        ImportIndex,
+        ScopeError,
+        changed_paths,
+        keep_item,
+        resolve_base,
+        unreached,
+        unreached_line,
+    )
     from tests.fr_scope import select as scope_select
 
     root = config.rootpath
@@ -685,7 +693,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         changed = changed_paths(root, resolve_base(root, value))
     except ScopeError as exc:
         raise pytest.UsageError(str(exc)) from exc
-    selected = scope_select(ImportIndex.build(root), changed)
+    index = ImportIndex.build(root)
+    selected = scope_select(index, changed)
+    # Printed in the terminal summary: what this tier covers with the smoke set alone.
+    config._fr_scope_unreached = unreached_line(unreached(index, changed))  # type: ignore[attr-defined]
     kept, dropped = [], []
     for item in items:
         rel = item.path.relative_to(root).as_posix()
@@ -697,15 +708,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 def pytest_terminal_summary(terminalreporter: object, config: pytest.Config) -> None:
-    from tests.fr_scope import ADVISORY_LINE, advisory_reasons
+    from tests.fr_scope import ADVISORY_LINE, session_reasons
 
-    reasons = advisory_reasons(
-        fr_scope=config.getoption("--fr-scope"),
-        markexpr=config.option.markexpr or "",
-        keyword=config.option.keyword or "",
-        explicit_args=config.args_source == pytest.Config.ArgsSource.ARGS,
-        last_failed=bool(getattr(config.option, "lf", False)),
-        stepwise=bool(getattr(config.option, "stepwise", False)),
-    )
-    if reasons:
+    unreached = getattr(config, "_fr_scope_unreached", "")
+    if unreached:
+        terminalreporter.write_line(unreached)  # type: ignore[attr-defined]
+    if session_reasons(config):
         terminalreporter.write_line(ADVISORY_LINE)  # type: ignore[attr-defined]

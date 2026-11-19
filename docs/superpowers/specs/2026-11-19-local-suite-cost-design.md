@@ -73,11 +73,11 @@ R2. The fixtures that build a started run (`record_support.started_run`) and `te
 R3. The twelve slowest files named in #1555 are each profiled (setup against assertion time, and subprocess count) and each gets a remedy or a recorded reason for none. Each file's single-file run time is measured before and after, on the same host, with the host load stated.
 R4. A test case is merged or removed only when another test asserts the same claim on the same code path. Each merged or removed case is named in the plan journal with the test that still covers it, and no acceptance-matrix level ref loses its test.
 R5. The tests of `tests/integration/test_install_sh.py` and the scenario tests of `tests/integration/test_scenarios.py` carry a `scenario` marker, and the default local run deselects it. `test_every_scenario_script_has_a_test_here` stays unmarked. CI's `collect` and sharded `test` jobs, the release's collect and shards, and the release's one-process staged suite all still run every test, scenarios included, and a test pins each of those command lines.
-R6. A pytest option, `--fr-scope [<base-ref>]` (`tests/conftest.py`), runs a fast tier. `<base-ref>` defaults to `fr.git.remote_default_ref`. The tier selects: test files changed, added or untracked since the merge-base; test files whose imports (direct, or through the `tests/` helper modules they import) name a changed source module or one of its parent packages; test files importing a changed `tests/` helper; every test under the directory of a changed `conftest.py`; and the tests marked `smoke`. It never selects the `scenario` tier.
-R7. A pytest session that does not run the whole configured suite prints the line `fr-scope: advisory — not deliver evidence` on a line of its own in its terminal summary. That is a session with `--fr-scope`, a non-empty effective `-m` or `-k`, explicit path arguments, `--lf` or `--sw`. The default local run is such a session because of R5, and `-m ""` runs the whole suite. fr refuses, at `deliver` and at a phase unit, a `tests` log with that exact line (a whole-line match), naming the line and the `-m ""` full-suite or `tests: ci` alternative. A phase log refused here never becomes a witness, so `tests: reuse` cannot carry one into `deliver`.
-R8. `.fr/ci.yaml` may declare `tests: ci` beside `gate_checks`, read at HEAD; any other value of `tests` is refused, and other unknown keys stay ignored. When the repo declares it, the `deliver` brief names `tests: ci` as the repo's suite evidence (a local `-m ""` full-suite log stays accepted), and each `implement-phase` brief tells the executor to run the fast tier (R6) as its last act instead of the full suite, and to return `tests_log: none` with the fast tier's pass/fail summary. This repo's `.fr/ci.yaml` declares it.
+R6. A pytest option, `--fr-scope [<base-ref>]` (`tests/conftest.py`), runs a fast tier. `<base-ref>` defaults to `fr.git.remote_default_ref`. The tier selects: test files changed, added or untracked since the merge-base; test files whose imports (direct, or through the `tests/` helper modules they import) name a changed source module or one of its parent packages; test files importing a changed `tests/` helper; every test under the directory of a changed `conftest.py`; for a changed path that is neither a source module nor under `tests/`, the test files whose source names its file name; and the tests marked `smoke`. Changed code paths that select no test beyond the smoke set are named on one line, so the gap is visible. The changed set is read with `--no-renames`, so a renamed module's old name selects its importers too. It never selects the `scenario` tier.
+R7. A pytest session that does not run the whole configured suite prints the line `fr-scope: advisory — not deliver evidence` on a line of its own in its terminal summary. That is a session with `--fr-scope`, a non-empty effective `-m` or `-k`, explicit path arguments or any collection that is not `testpaths` (a run from a subdirectory), `--lf`, `--sw`, a non-empty `--ignore`, `--ignore-glob` or `--deselect`, `-x` or `--maxfail`, or `-o testpaths=`. The default local run is such a session because of R5, and `-m ""` runs the whole suite. fr refuses, at `deliver` and at a phase unit, a `tests` log with that exact line (a whole-line match), naming the line and the `-m ""` full-suite or `tests: ci` alternative. A phase log refused here never becomes a witness, so `tests: reuse` cannot carry one into `deliver`.
+R8. `.fr/ci.yaml` may declare `tests: ci` beside `gate_checks`, read at HEAD; any other value of `tests` is refused, `tests: ci` without valid `gate_checks` in the same file is refused (`deliver` could never accept it), and other unknown keys stay ignored. The same file may name the repo's own fast tier as `fast_tier: <command>`, with `{base}` (the run's default ref) its only placeholder; any other value, or `fast_tier` without `tests: ci`, is refused. The command is the repo's, because fr ships no fast tier: R6's `--fr-scope` exists only in this repo's `tests/`. When the repo declares `tests: ci`, the `deliver` brief names `tests: ci` as the repo's suite evidence (a local full-suite log stays accepted), and each `implement-phase` brief tells the executor to run the fast tier as its last act instead of the full suite (the declared `fast_tier` when there is one, else the tests its change touches, by the repo's own means), and to return `tests_log: none` with the fast tier's pass/fail summary. This repo's `.fr/ci.yaml` declares `tests: ci` and `fast_tier: "uv run pytest --fr-scope {base} -n 2 -q --no-cov"`.
 R9. `ci-ok` is a required status check on `main`. The operator sets it in a back-loaded manual phase: `scripts/configure-main-protection.sh --stage bypass`, then a release pushed by the app, then `--stage require`, accepting that `require` also makes every PR be up to date with `main` before it merges.
-R10. After track 1 lands, `.test_durations` is refreshed with `uv run pytest -m "" -n auto --no-cov --store-durations` (every test, scenarios included). AGENTS.md's refresh command (:436) and timing figures (:455) are replaced with that command and the measured figures, and AGENTS.md describes the fast tier, the `scenario` marker, `-m ""` and the declared `tests: ci` default.
+R10. After track 1 lands, `.test_durations` is refreshed with every test, scenarios included: either locally with `uv run pytest -m "" -n auto --no-cov --store-durations`, or, when the host is too loaded to run the whole suite, by merging a green CI run's stored shard durations with `scripts/split_check.py merge`. Both record the same tests' durations, and the CI route measures them on the runners that use the file. AGENTS.md's refresh command (:436) and timing figures (:455) are replaced with that command and the measured figures, and AGENTS.md describes the fast tier, the `scenario` marker, `-m ""` and the declared `tests: ci` default.
 
 ## 3. Design
 
@@ -194,7 +194,7 @@ walk, not pytest, and do not change.
 ### 3.E The fast tier and the advisory line (R6, R7)
 
 `tests/conftest.py` adds `--fr-scope`. It builds the changed set from `git diff
---name-only <merge-base>` together with `git ls-files --others
+--name-only --no-renames <merge-base>` together with `git ls-files --others
 --exclude-standard`. The import index comes from `ast` over `tests/**/*.py`. A test
 file is selected when it imports a changed module or one of its parent packages,
 either directly or through the `tests/` helper modules it imports, transitively
@@ -202,10 +202,14 @@ within `tests/` only. Transitive imports through source modules are not followed
 because nearly every test reaches `fr.cli`. Phase 2 marks a small `smoke` set: one
 CLI round trip per top-level command group. The selection is advisory. It makes no
 claim to be sound, because tests that start `fr` as a subprocess are invisible to
-an import graph.
+an import graph. A changed path that is not a source module and not under `tests/`
+(an agent, a skill, YAML, a shell script) selects the test files whose source names
+its file name. The changed code paths that still select nothing are printed on one
+line, `fr-scope: no test reaches <n> changed paths: ...`.
 
 A `pytest_terminal_summary` hook prints the advisory line whenever the session is
-not the whole configured suite (R7's list). `run_cmd._read_suite_log` refuses a log
+not the whole configured suite (R7's list). Collection that is not pytest's
+`ArgsSource.TESTPATHS` counts as narrowed, so a run from a subdirectory does too. `run_cmd._read_suite_log` refuses a log
 in which some line, stripped, equals the advisory line. A test shows that a log
 which only quotes the string inside other output is accepted.
 
@@ -213,18 +217,22 @@ which only quotes the string inside other output is accepted.
 
 `fr/run/ci_evidence.py` gains `declared_tests_mode(repo_root) -> Literal["ci"] |
 None`. It reads `.fr/ci.yaml` at HEAD and refuses any `tests` value other than
-`ci`. `load_gate_checks` and its return type do not change, and unknown keys stay
+`ci`, and `tests: ci` whose `gate_checks` `load_gate_checks` refuses.
+`declared_fast_tier(repo_root) -> str | None` reads `fast_tier` at HEAD: a non-empty
+string whose only placeholder is `{base}`, in a file that declares `tests: ci`. `load_gate_checks` and its return type do not change, and unknown keys stay
 ignored. The key does not relax a gate, because a full local log stays accepted.
 So reading it at HEAD lets this PR's own runs use it.
 
 The `deliver` and `implement-phase` briefs gain a `tests` key when the repo
-declares it:
+declares it: `{mode: ci}`, with `fast_tier: <the declared command>` when the repo
+names one, `{base}` replaced by the run's default ref (`remote_default_ref`). The
+command is the repo's, because fr ships no fast tier: `--fr-scope` is this repo's
+own `tests/conftest.py`, and a brief that named it would send every other repo's
+executor to an option its pytest does not have. This repo declares
 
 ```
-{mode: ci, fast_tier: "uv run pytest --fr-scope <base> -n 2 -q --no-cov"}
+fast_tier: "uv run pytest --fr-scope {base} -n 2 -q --no-cov"
 ```
-
-`<base>` is the run's default ref, from `remote_default_ref`.
 
 Text changes that go with it:
 

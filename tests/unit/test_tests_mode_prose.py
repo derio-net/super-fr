@@ -44,3 +44,15 @@ def test_fr_goal_section_8_names_the_declared_default_and_the_full_local_run() -
     s8 = _section(8)
     assert "declared default" in s8
     assert '`-m ""`' in s8
+
+
+def test_the_fast_tier_is_the_repos_own_never_supers_frs() -> None:
+    """p3-r1: fr ships no fast tier. The executor runs the repo's `fast_tier` when
+    the brief names one, else the tests its change touches; no shipped prose names
+    super-fr's own `--fr-scope` as if every repo had it."""
+    agent = _agent()
+    assert "fr ships no fast tier" in agent
+    assert "without it, run the tests your changes touch" in agent
+    assert "--fr-scope" not in agent
+    s5 = _section(5)
+    assert "fr ships none" in s5 and "--fr-scope" not in s5

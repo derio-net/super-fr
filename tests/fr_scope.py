@@ -15,7 +15,11 @@ The selection, for a set of changed repo-relative paths:
   `tests/` modules it imports, transitively within `tests/` only. Imports through
   source modules are not followed: nearly every test reaches `fr.cli`;
 - a test module that imports a changed `tests/` module, transitively;
-- every test module under the directory of a changed `conftest.py`.
+- every test module under the directory of a changed `conftest.py`;
+- for a changed path that is neither a source module nor under `tests/` (an agent,
+  a skill, a YAML file, a shell script), every test module whose source names the
+  path's file name. Paths that still select nothing are named in one line
+  (`unreached`), so a gap the import graph cannot see is visible.
 
 `smoke` tests always run and `scenario` tests never do; both are item-level, so
 they are decided in `keep_item`, not here.
@@ -25,9 +29,10 @@ from __future__ import annotations
 
 import ast
 import subprocess
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from fr.run.ci_evidence import ADVISORY_LINE  # one definition: the line fr refuses
 
@@ -51,7 +56,9 @@ def changed_paths(root: Path, base: str) -> set[str]:
     """Repo-relative paths changed since the merge-base of `base` and HEAD (the
     working tree included), plus untracked files git does not ignore."""
     merge_base = _git(root, "merge-base", base, "HEAD").strip()
-    diff = _git(root, "diff", "--name-only", merge_base)
+    # `--no-renames`: a rename is its old path deleted and its new one added, so
+    # the tests that import the OLD module (now broken) are selected too.
+    diff = _git(root, "diff", "--name-only", "--no-renames", merge_base)
     untracked = _git(root, "ls-files", "--others", "--exclude-standard")
     return {line for line in (diff + untracked).splitlines() if line.strip()}
 
@@ -129,13 +136,16 @@ def imported_names(source: str, module: str, *, is_package: bool = False) -> set
 
 @dataclass(frozen=True)
 class ImportIndex:
-    """`tests/` module path -> the names its imports name."""
+    """`tests/` module path -> the names its imports name, and -> its source
+    (for the file-name mentions a non-Python change selects by)."""
 
     imports: Mapping[str, frozenset[str]]
+    sources: Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def build(cls, root: Path) -> ImportIndex:
         out: dict[str, frozenset[str]] = {}
+        sources: dict[str, str] = {}
         for file in sorted((root / "tests").rglob("*.py")):
             rel = file.relative_to(root).as_posix()
             module = tests_module(rel)
@@ -145,11 +155,23 @@ class ImportIndex:
             out[rel] = frozenset(
                 imported_names(text, module, is_package=file.name == "__init__.py")
             )
-        return cls(out)
+            sources[rel] = text
+        return cls(out, sources)
 
 
 def _names_changed_source(name: str, changed_modules: set[str]) -> bool:
     return any(name == c or name.startswith(c + ".") for c in changed_modules)
+
+
+def _mentions(index: ImportIndex, path: str) -> set[str]:
+    """Test modules whose source names `path`'s file name: the only reach fr can
+    see for a change no import names (an agent, a skill, YAML, a script)."""
+    name = PurePosixPath(path).name
+    return {rel for rel, text in index.sources.items() if is_test_file(rel) and name in text}
+
+
+def _is_import_reachable(path: str) -> bool:
+    return source_module(path) is not None or PurePosixPath(path).parts[:1] == ("tests",)
 
 
 def select(index: ImportIndex, changed: Iterable[str]) -> set[str]:
@@ -188,7 +210,27 @@ def select(index: ImportIndex, changed: Iterable[str]) -> set[str]:
             }
         elif is_test_file(path) and path.startswith("tests/"):
             selected.add(path)
+        elif not _is_import_reachable(path):
+            selected |= _mentions(index, path)
     return selected
+
+
+def unreached(index: ImportIndex, changed: Iterable[str]) -> list[str]:
+    """The changed code paths (fr's run artifacts excluded) that select no test on
+    their own: what the fast tier covers with the smoke set alone. Sorted."""
+    from fr.run.code_tree import is_code_path
+
+    return sorted(p for p in set(changed) if is_code_path(p) and not select(index, {p}))
+
+
+def unreached_line(paths: Sequence[str], limit: int = 10) -> str:
+    """The one line naming `unreached` paths (empty when there are none)."""
+    if not paths:
+        return ""
+    shown = ", ".join(paths[:limit])
+    more = f", +{len(paths) - limit} more" if len(paths) > limit else ""
+    n = len(paths)
+    return f"fr-scope: no test reaches {n} changed path{'' if n == 1 else 's'}: {shown}{more}"
 
 
 def keep_item(rel_path: str, markers: Iterable[str], selected: set[str]) -> bool:
@@ -204,11 +246,19 @@ def advisory_reasons(
     fr_scope: str | None,
     markexpr: str,
     keyword: str,
-    explicit_args: bool,
+    args_source: str,
     last_failed: bool,
     stepwise: bool,
+    ignore: Sequence[str] | None,
+    ignore_glob: Sequence[str] | None,
+    deselect: Sequence[str] | None,
+    maxfail: int,
+    testpaths_overridden: bool,
 ) -> list[str]:
-    """Why a session is not the whole configured suite (R7); empty when it is."""
+    """Why a session is not the whole configured suite (R7); empty when it is.
+    `args_source` is the name of pytest's `Config.ArgsSource`: only `TESTPATHS`
+    collects the configured suite (`ARGS` is explicit paths, `INVOCATION_DIR` a
+    run from a directory other than the root)."""
     reasons = []
     if fr_scope is not None:
         reasons.append("--fr-scope")
@@ -216,10 +266,45 @@ def advisory_reasons(
         reasons.append(f"-m {markexpr!r}")
     if keyword.strip():
         reasons.append(f"-k {keyword!r}")
-    if explicit_args:
+    if args_source == "ARGS":
         reasons.append("explicit paths")
+    elif args_source != "TESTPATHS":
+        reasons.append(f"collected from {args_source.lower()}, not testpaths")
     if last_failed:
         reasons.append("--lf")
     if stepwise:
         reasons.append("--sw")
+    for flag, values in (
+        ("--ignore", ignore),
+        ("--ignore-glob", ignore_glob),
+        ("--deselect", deselect),
+    ):
+        if values:
+            reasons.append(f"{flag} {' '.join(values)}")
+    if maxfail > 0:
+        reasons.append(f"--maxfail={maxfail}")
+    if testpaths_overridden:
+        reasons.append("-o testpaths=")
     return reasons
+
+
+def session_reasons(config: Any) -> list[str]:
+    """`advisory_reasons` read off a `pytest.Config` (its options at pytest's own
+    defaults: None for the list options, 0 for `maxfail`)."""
+    o = config.option
+    overrides = getattr(o, "override_ini", None) or []
+    return advisory_reasons(
+        fr_scope=config.getoption("--fr-scope"),
+        markexpr=getattr(o, "markexpr", "") or "",
+        keyword=getattr(o, "keyword", "") or "",
+        args_source=config.args_source.name,
+        last_failed=bool(getattr(o, "lf", False)),
+        stepwise=bool(getattr(o, "stepwise", False)),
+        ignore=getattr(o, "ignore", None),
+        ignore_glob=getattr(o, "ignore_glob", None),
+        deselect=getattr(o, "deselect", None),
+        maxfail=int(getattr(o, "maxfail", 0) or 0),
+        testpaths_overridden=any(
+            str(item).split("=", 1)[0].strip() == "testpaths" for item in overrides
+        ),
+    )

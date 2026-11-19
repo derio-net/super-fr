@@ -11,7 +11,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from fr.run.ci_evidence import CiEvidenceRefused, declared_tests_mode, load_gate_checks
+from fr.run.ci_evidence import (
+    CiEvidenceRefused,
+    declared_fast_tier,
+    declared_tests_mode,
+    load_gate_checks,
+)
 from fr.workflow.model import Step
 
 from tests.unit.test_run_cli import (
@@ -24,6 +29,7 @@ from tests.unit.test_run_cli import (
 )
 
 FAST_TIER = "uv run pytest --fr-scope origin/main -n 2 -q --no-cov"
+FAST_TIER_DECL = 'fast_tier: "uv run pytest --fr-scope {base} -n 2 -q --no-cov"\n'
 
 
 def _git(root: Path, *args: str) -> str:
@@ -71,6 +77,48 @@ def test_any_other_value_is_refused(tmp_path: Path, value: str) -> None:
         declared_tests_mode(root)
 
 
+@pytest.mark.parametrize(
+    "body",
+    ["tests: ci\n", "gate_checks: []\ntests: ci\n", "gate_checks: ci-ok\ntests: ci\n"],
+)
+def test_tests_ci_without_valid_gate_checks_is_refused(tmp_path: Path, body: str) -> None:
+    """p3-r6: `deliver` would refuse `tests: ci` without gate checks, so the
+    declaration refuses up front, saying why."""
+    root = _with_ci_yaml(tmp_path, body)
+    with pytest.raises(CiEvidenceRefused, match="gate_checks") as e:
+        declared_tests_mode(root)
+    assert "tests: ci" in str(e.value)
+
+
+def test_a_declared_fast_tier_is_read_with_its_base(tmp_path: Path) -> None:
+    root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n" + FAST_TIER_DECL)
+    assert declared_fast_tier(root) == "uv run pytest --fr-scope {base} -n 2 -q --no-cov"
+
+
+def test_no_fast_tier_declares_none(tmp_path: Path) -> None:
+    root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n")
+    assert declared_fast_tier(root) is None
+    assert declared_fast_tier(_with_ci_yaml(tmp_path / "b", None)) is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["3", "[a, b]", "''", '"run {other}"', '"run {base} {0}"', '"run {"', '"run {base!r}"'],
+)
+def test_a_fast_tier_that_is_not_a_command_with_only_base_is_refused(
+    tmp_path: Path, value: str
+) -> None:
+    root = _with_ci_yaml(tmp_path, f"gate_checks: [ci-ok]\ntests: ci\nfast_tier: {value}\n")
+    with pytest.raises(CiEvidenceRefused, match="fast_tier"):
+        declared_fast_tier(root)
+
+
+def test_a_fast_tier_without_tests_ci_is_refused(tmp_path: Path) -> None:
+    root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\n" + FAST_TIER_DECL)
+    with pytest.raises(CiEvidenceRefused, match="tests: ci"):
+        declared_fast_tier(root)
+
+
 def test_the_key_is_read_at_head_not_in_the_working_tree(tmp_path: Path) -> None:
     root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\n")
     (root / ".fr" / "ci.yaml").write_text("gate_checks: [ci-ok]\ntests: ci\n")
@@ -101,11 +149,21 @@ def _reviewer_step() -> Step:
 def test_the_briefs_carry_the_declared_mode_and_the_fast_tier(tmp_path: Path) -> None:
     from fr.commands.run_cmd import _tests_brief
 
-    root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n")
+    root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n" + FAST_TIER_DECL)
     want = {"tests": {"mode": "ci", "fast_tier": FAST_TIER}}
     assert _tests_brief(root, _deliver_step()) == want
     assert _tests_brief(root, _executor_step()) == want
     assert _tests_brief(root, _reviewer_step()) == {}
+
+
+def test_without_a_declared_fast_tier_the_briefs_carry_the_mode_alone(tmp_path: Path) -> None:
+    """p3-r1: fr ships no fast tier; the command is the repo's, so a repo that
+    names none gets `tests: {mode: ci}` and runs its touched tests its own way."""
+    from fr.commands.run_cmd import _tests_brief
+
+    root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n")
+    assert _tests_brief(root, _deliver_step()) == {"tests": {"mode": "ci"}}
+    assert _tests_brief(root, _executor_step()) == {"tests": {"mode": "ci"}}
 
 
 def test_without_the_key_the_briefs_carry_no_tests_key(tmp_path: Path) -> None:
@@ -132,7 +190,7 @@ def _member_brief(tmp_path: Path, ci_yaml: str | None) -> dict:
 
 
 def test_the_phase_executor_brief_carries_the_key_when_declared(tmp_path: Path) -> None:
-    brief = _member_brief(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n")
+    brief = _member_brief(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n" + FAST_TIER_DECL)
     assert brief["step"] == "code"
     assert brief["tests"]["mode"] == "ci"
     assert brief["tests"]["fast_tier"].startswith("uv run pytest --fr-scope")
@@ -141,3 +199,10 @@ def test_the_phase_executor_brief_carries_the_key_when_declared(tmp_path: Path) 
 
 def test_the_phase_executor_brief_has_no_key_when_undeclared(tmp_path: Path) -> None:
     assert "tests" not in _member_brief(tmp_path, None)
+
+
+def test_this_repo_declares_its_own_fast_tier() -> None:
+    root = Path(__file__).resolve().parents[2]
+    assert declared_tests_mode(root) == "ci"
+    tier = declared_fast_tier(root)
+    assert tier is not None and "--fr-scope {base}" in tier

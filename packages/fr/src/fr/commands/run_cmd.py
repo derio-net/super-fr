@@ -4843,32 +4843,33 @@ def _build_member_brief(
     }
 
 
-FAST_TIER_COMMAND = "uv run pytest --fr-scope {base} -n 2 -q --no-cov"
-"""The fast advisory tier a phase executor runs last under a declared `tests: ci`
-(spec 2026-11-19-local-suite-cost R6, R8)."""
-
-
 def _tests_brief(repo_root: Path, step: Step) -> dict[str, Any]:
-    """`tests: {mode: ci, fast_tier: ...}` for `deliver` (a step that declares
+    """`tests: {mode: ci[, fast_tier: ...]}` for `deliver` (a step that declares
     `tests` evidence) and for a phase executor's unit, when the repo's
     `.fr/ci.yaml` at HEAD declares `tests: ci` (spec 2026-11-19-local-suite-cost
-    R8, §3.F) — else nothing, so every other brief is unchanged. A `tests` value
+    R8, §3.F) — else nothing, so every other brief is unchanged. `fast_tier` is
+    the repo's own command (`.fr/ci.yaml`'s `fast_tier`, `{base}` made the run's
+    default ref), present only when the repo names one: fr ships none. A value
     fr refuses refuses the brief (exit 2), never read as "not declared"."""
     from fr.git import remote_default_ref
-    from fr.run.ci_evidence import CiEvidenceRefused, declared_tests_mode
+    from fr.run.ci_evidence import CiEvidenceRefused, declared_fast_tier, declared_tests_mode
 
     if "tests" not in step.evidence and step.agent != PHASE_EXECUTOR_AGENT:
         return {}
     try:
         mode = declared_tests_mode(repo_root)
+        template = declared_fast_tier(repo_root) if mode is not None else None
     except CiEvidenceRefused as e:
         err_console.print(f"[red]{step.id}: refused — {escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     if mode is None:
         return {}
-    base = remote_default_ref(repo_root)
-    fast_tier = FAST_TIER_COMMAND.format(base=base if isinstance(base, str) and base else "")
-    return {"tests": {"mode": mode, "fast_tier": " ".join(fast_tier.split())}}
+    tests: dict[str, Any] = {"mode": mode}
+    if template is not None:
+        base = remote_default_ref(repo_root)
+        command = template.format(base=base if isinstance(base, str) and base else "")
+        tests["fast_tier"] = " ".join(command.split())
+    return {"tests": tests}
 
 
 def _review_findings_brief(member: Step, item: str) -> dict[str, str]:

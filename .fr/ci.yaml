@@ -1,4 +1,6 @@
 gate_checks: [ci-ok]
 # The repo's suite evidence (spec 2026-11-19-local-suite-cost R8): CI. A phase runs
-# the fast advisory tier last; a local `pytest -m ""` full-suite log stays accepted.
+# this repo's own fast advisory tier last (`fast_tier`, `{base}` the run's default
+# ref); a local `pytest -m ""` full-suite log stays accepted.
 tests: ci
+fast_tier: "uv run pytest --fr-scope {base} -n 2 -q --no-cov"

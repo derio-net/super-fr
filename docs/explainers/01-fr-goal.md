@@ -243,8 +243,11 @@ unpushed, and an open pull request must not conflict.
 
 A repository can also make CI its default evidence, with one line in its CI
 settings file. Then each phase's agent runs only a quick check of the tests its
-change reaches, as its last step, and delivery names the CI checks. That quick
-check prints the advisory line, so it can never stand in for the whole suite.
+change reaches, as its last step, and delivery names the CI checks. The quick
+check is the repository's own: it can name the command in the same file, and
+without one the agent runs the tests its change touches. The tool ships no quick
+check of its own. Either way the check is never evidence, so it can never stand
+in for the whole suite.
 
 CI tested your branch
 merged into its base, not your branch alone, and the record says so by naming
