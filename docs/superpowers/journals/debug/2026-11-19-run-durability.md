@@ -5,3 +5,8 @@
 ### b0abf3ab05f1 · repro · Four run-durability defects, all live on origin/main 15990c10
 
 save_run_state (run/model.py:600) and 14 plan_ops.py writes use Path.write_text, which truncates before it writes: an exception or crash mid-write leaves a truncated cursor/plan/spec (#1500, #1524). No lock or compare-before-write guards a cursor: two fr run commands that load the same cursor each save, and the later save drops the earlier one's update (#1511). A kind: cli step runs subprocess.run(shell=True) with no timeout and stores its whole stdout in the cursor (run_cmd.py:6498, #1507).
+
+<!-- fr:journal kind=root-cause scope=debug id=1cce6c5a4d8f created=2026-11-19T11:39:08+00:00 -->
+### 1cce6c5a4d8f · root-cause · Three causes, not one: non-atomic writes; no cursor concurrency control; an unbounded cli step
+
+(1) Writers bypass fr.artifacts.atomic.write_text_atomic. (2) The cursor's load-modify-save has no mutual exclusion; atomicity alone does not prevent a lost update. (3) The cli step executor sets no timeout and stores proc.stdout unbounded. Fixed as one commit each, failing test first.
