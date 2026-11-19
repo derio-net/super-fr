@@ -36,3 +36,27 @@ The reviewer had no shell, so the orchestrator ran the checks: the sync
 --check runs, fr docs check, fr acceptance check, the STE checker (0
 FAIL) and the targeted tests, all green after merging origin/main.
 review-findings: none
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fence-in-list-not-read created=2026-11-19T13:47:20+00:00 phase=2 -->
+### p2-fence-in-list-not-read · discovery · A fence inside a list item never renders under the pinned renderer, at any indent (phase 2)
+
+The spec (R11) assumed a 4-space indent makes Python-Markdown read a fence inside a list
+item. Checked with markdown 3.11 and the pinned blog-craft renderer: fenced_code matches only
+a fence at the start of a line, so 2, 3 and 4 spaces all give inline code. What renders as a
+block inside a list item is an indented code block (8 spaces, blank line around it).
+So the four pages now carry indented code blocks (no fence, no language), and the R12
+refusal message says to write the code as an 8-space block or move it out of the list.
+Spec R11's "4 spaces" wording is stale; the observable R11 outcome (code blocks inside
+their list items) holds.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-mermaid-fence created=2026-11-19T13:47:20+00:00 phase=2 -->
+### p2-mermaid-fence · discovery · The R12 check skips mermaid fences (phase 2)
+
+docs/explainers/fr-isolation.md holds a mermaid fence, which the renderer stashes and
+re-inserts as <pre class="mermaid"> with its own text, so its body never matches a <pre> of
+the markdown render. source_fences skips an info word starting with mermaid.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-19T13:47:20+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+whitespace-only page edits and a rule sentence; no code to clean
