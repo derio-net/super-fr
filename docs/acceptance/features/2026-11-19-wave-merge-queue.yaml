@@ -182,7 +182,8 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R21
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: born at brainstorm; scenario written by its phase
+    scenario: tests/scenarios/wave-queue-migratable-validation.sh
   - id: wave-queue-visible
     capability: triage board
     acceptance: The pass, the board and the Batches page show each repo's queue line
