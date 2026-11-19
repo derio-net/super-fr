@@ -1,5 +1,5 @@
 schema: 12
-ranked_at: 2026-11-18
+ranked_at: 2026-11-19
 tiers:
 - n: 1
   title: Work can be lost
@@ -118,7 +118,7 @@ issues:
     kind: defect
     severity: low
     detail: 'Mostly mitigated on main: `trusted_author` (`triage/claims.py:176-181`) also trusts OWNER/MEMBER/COLLABORATOR association, so two org or collaborator accounts do see each other''s claims. The residue is a driving account with no such association and no `pr_authors` entry.'
-    note: A skill line plus an optional `check` warning; or close if the association rule is judged sufficient.
+    note: 'Re-judged 2026-11-19: residue unchanged (`claims.py:182`); the fr-triage skill still does not tell operators to list every driving account in `pr_authors`. Moved into batch triage-hardening.'
   super-fr#1074:
     tier: 4
     theme: runner-dispatch
@@ -141,11 +141,11 @@ issues:
     tier: 4
     theme: triage-batches
     cx: S-M
-    verified: false
-    kind: feature
+    verified: true
+    kind: parked
     severity: low
     detail: Want a step that drafts an issue from an ad-hoc session's transcript (reader exists in `fr/usage/readers/`), shows it for confirmation, files and judges it; 21 sessions were done by hand.
-    note: Rare once work starts from issues; a fr-triage skill step may suffice. Batch with the adopt follow-ups.
+    note: 'Re-judged 2026-11-19: still live (no such verb on main) but rare now that work starts from issues. Parked; its batch issue-from-transcript was cancelled.'
   super-fr#1071:
     tier: 4
     theme: triage-batches
@@ -161,11 +161,11 @@ issues:
     tier: 4
     theme: triage-batches
     cx: L
-    verified: false
-    kind: feature
+    verified: true
+    kind: parked
     severity: med
     detail: A batch is one repo and one PR, so a session coupling PRs across sibling repos can be adopted only by its primary PR, and the driver may merge one half of a coupled change.
-    note: 'Needs a spec decision first: cross-repo batches or a cross-repo `after:` the driver honours.'
+    note: 'Re-judged 2026-11-19: still live (batches stay single-repo). Parked until the operator decides cross-repo batches vs a cross-repo `after:`; its batch adopt-multi-repo was cancelled.'
   super-fr#1069:
     tier: 4
     theme: triage-batches
@@ -3816,6 +3816,18 @@ issues:
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with
       it.'
+  super-fr#1561:
+    tier: 2
+    theme: triage-batches
+    cx: S
+    severity: med
+    kind: defect
+    verified: true
+    detail: '`derive_batch_stage` (`triage/batch.py:335`) returns `proposed` for any batch with no lifecycle
+      event, so a never-dispatched batch whose members all closed stays Proposed/Waiting for ever, and a
+      bare `batch drive` (every batch with a wave) would dispatch it. Six such batches (waves 11-14) were
+      cancelled by hand on 2026-11-19.'
+    note: Batch triage-hardening.
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -8619,6 +8631,8 @@ batches:
   - super-fr#1539
   - super-fr#1542
   - super-fr#1545
+  - super-fr#1075
+  - super-fr#1561
   rationale: triage-intake follow-ups plus the dedupe universe, in collect/intake/dedupe; waits on train-truth's
     triage changes.
   wave: 23
