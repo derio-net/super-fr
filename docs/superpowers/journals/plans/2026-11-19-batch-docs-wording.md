@@ -186,3 +186,31 @@ renderer, outside R14's bar scope; not fixed here.
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 CSS and a measuring script only; the code of T1 had nothing left to tidy beyond its own S3
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-19T14:50:17+00:00 phase=3 state=open review_scope=out -->
+### p3-r1 · finding [open] (reviewer: out of scope) · guides/ops.html and reference/install.html scroll horizontally at 320px from wide code blocks (phase 3)
+
+scrollWidth 379 and 376 at 320 px; the bar's own scrollWidth is 320. Wide yaml/bash code blocks, not the bar.
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-11-19T14:50:17+00:00 phase=3 -->
+### p3-review · review · Phase 3 review (R14-R15): no in-scope findings (phase 3)
+
+A separate reviewer built the site, captured its own screenshots with its own script
+(headless Chromium 1243, file:// URLs) and measured with JS: at 320/390 the site name
+is alone on row 1 and the four links share row 2 with no overlap (links 29.5px tall,
+27.8 on the landing); bar scrollWidth == clientWidth; fr-audit.html and index.html
+scrollWidth == innerWidth at 320/390/1280; bar text left edge == h1 left edge (21.25
+article/guide/reference, 18.4 landing at phone widths; 280 and 105.5 at 1280). The
+padding max() resolves against the viewport (bar bleeds to full width). Light and dark
+give identical geometry. The 480px-rule and padding tests would fail without the rules.
+fr docs check and fr acceptance check clean. Only finding: p3-r1 (out of scope).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-19T14:50:17+00:00 phase=3 state=open resolves=p3-r1 out_of_scope=true -->
+### p3-r1-resolved · finding [out-of-scope] · resolves p3-r1: guides/ops.html and reference/install.html scroll horizontally at 320px from wide code blocks (phase 3)
+
+The page overflow comes from wide code blocks in the page body, which this change does not touch; R14 is about the bar, whose own width fits at 320 px.
+
+<!-- fr:journal kind=finding scope=plan id=p3-article-table-overflow-resolved created=2026-11-19T14:50:17+00:00 phase=3 state=open resolves=p3-article-table-overflow out_of_scope=true -->
+### p3-article-table-overflow-resolved · finding [out-of-scope] · resolves p3-article-table-overflow: 01-fr-goal.html scrolls horizontally on a phone because of a wide table, not the bar (phase 3)
+
+01-fr-goal.html overflows on phones from a wide article table in its body, not the bar; this change does not touch article content or table styling.

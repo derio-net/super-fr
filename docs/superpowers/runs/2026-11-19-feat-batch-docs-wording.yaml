@@ -3,7 +3,7 @@ run: 2026-11-19-feat-batch-docs-wording
 workflow: fr-goal@1
 branch: feat/batch-docs-wording
 started: '2026-11-19T09:10:20+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-19T14:46:31+00:00'
+    state: done
+    at: '2026-11-19T14:50:19+00:00'
     members:
     - implement-phase
     - review-phase
@@ -133,12 +133,19 @@ steps:
         evidence:
           visual: site-top-bar-phone-layout:10:717f3fdfc0a2
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-19T14:46:31+00:00'
           harness: claude-code
-          model: claude-opus-5-5
+          model: claude-sonnet-5
           session: 6c571a27-d120-4bc7-bbad-052e840f51cd
+          returned: '2026-11-19T14:50:19+00:00'
+          outcome: done
+        evidence:
+          review: p3-review
+          reviewer: a00648e9ea26db445
+          visual: site-top-bar-phone-layout:8:36c1ddfd4159
+          findings: p3-article-table-overflow,p3-r1
   journal-check:
     state: pending
   lens-review:
