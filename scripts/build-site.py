@@ -1268,7 +1268,9 @@ def check_fences_render(raw: str, rendered_html: str, page: str) -> None:
     Python-Markdown reads a fence only at the start of a line: inside a list item it
     renders the fence as inline code. Each fence's body must therefore sit inside a `<pre>`
     of the rendered page; matching by body means figure and chrome `<pre>` blocks
-    cannot satisfy it.
+    cannot satisfy it. A `<pre>` that also shows the fence's opening line rendered the
+    fence as literal text (a fence indented as an indented code block), so it does not
+    count either.
     """
 
     def norm(text: str) -> str:
@@ -1278,9 +1280,10 @@ def check_fences_render(raw: str, rendered_html: str, page: str) -> None:
         norm(re.sub(r"<[^>]+>", "", m))
         for m in re.findall(r"<pre\b.*?</pre>", rendered_html, re.DOTALL)
     ]
+    lines = raw.split("\n")
     for line, body in source_fences(raw):
-        want = norm(body)
-        if want and not any(want in pre for pre in pres):
+        want, opener = norm(body), norm(lines[line - 1])
+        if want and not any(want in pre and opener not in pre for pre in pres):
             raise BuildError(
                 f"{page}:{line}: this fenced block does not render as a code block; "
                 "a fence inside a list item is not read: write it there as a code block "

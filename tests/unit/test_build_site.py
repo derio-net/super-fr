@@ -1584,6 +1584,15 @@ def test_a_pre_elsewhere_on_the_page_does_not_satisfy_a_fence() -> None:
     )
 
 
+def test_a_fence_rendered_as_literal_text_in_a_pre_is_refused() -> None:
+    # a fence indented 8 spaces in a list item is an indented code block: the renderer
+    # keeps the fence lines as text, so the body sits in a <pre> beside its own fence
+    raw = "- item\n\n        ```bash\n        echo hi\n        ```\n"
+    shown = "<ul><li><p>item</p><pre><code>```bash\necho hi\n```</code></pre></li></ul>"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3:"):
+        bs.check_fences_render(raw, shown, "a.md")
+
+
 def test_a_mermaid_fence_is_the_renderers_to_place_and_is_not_checked() -> None:
     raw = "x\n\n```mermaid\nflowchart LR\n  a --> b\n```\n"
     assert bs.source_fences(raw) == []

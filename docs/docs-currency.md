@@ -132,18 +132,18 @@ is the one way to defeat this gate, and no tool can stop it.
 - **CI is the gate no flow can skip.** In a GitHub Actions job:
 
         docs-check:
-         runs-on: ubuntu-latest
-         steps:
-           - uses: actions/checkout@v4
-             with:
-               fetch-depth: 0          # the diff needs the merge base
-           # install fr however your repo does, then:
-           - name: Pages covering a changed path changed too
-             if: github.event_name == 'pull_request'
-             run: fr docs check --base "origin/${{ github.base_ref }}"
-           - name: Pages are well formed and cover what they claim
-             if: github.event_name != 'pull_request'
-             run: fr docs check
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v4
+              with:
+                fetch-depth: 0          # the diff needs the merge base
+            # install fr however your repo does, then:
+            - name: Pages covering a changed path changed too
+              if: github.event_name == 'pull_request'
+              run: fr docs check --base "origin/${{ github.base_ref }}"
+            - name: Pages are well formed and cover what they claim
+              if: github.event_name != 'pull_request'
+              run: fr docs check
 
   Fetch the checkout's full history (`fetch-depth: 0`). A shallow clone cannot compute the merge
   base, and the check then says so; it does not pass. Add the job to any aggregate check that your
@@ -216,7 +216,7 @@ up to 860 px wide, or up to 1079 px inside an article page. Only a page with a f
 - To preview, build into a directory outside the repo:
 
         uv run --isolated --no-project --with markdown --with pyyaml python \
-         scripts/build-site.py /tmp/site --blog-craft /path/to/blog-craft-checkout
+          scripts/build-site.py /tmp/site --blog-craft /path/to/blog-craft-checkout
 
   `--isolated` matters: without it a pygments install elsewhere on the machine changes how code
   blocks render.

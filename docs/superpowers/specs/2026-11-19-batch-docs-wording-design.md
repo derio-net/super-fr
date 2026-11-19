@@ -131,17 +131,15 @@ R15. The bar's text starts at the left edge of the content below it, on article 
   `p2-fence-in-list-not-read`). So each of the four examples becomes an indented code block
   (8 spaces, no fence) inside its list item, and step 4 of the backfill list gets a blank
   line before it. The examples' text does not change.
-- R12: one counting rule. Count the fences in the page's own source file (opening lines
-  of three or more backticks at any indent, paired by `_FENCE`, `build-site.py:312`), and
-  count the `<pre>` blocks the renderer produced for the article body, excluding any
-  `<pre>` that a figure, raw HTML in the source or the renderer's own chrome contributed
-  (so count only `<pre>` elements whose text matches a source fence's body, or compare
-  against a render of the article alone). When fewer fences rendered as `<pre>` than the
-  source holds, find the first one whose body appears inside `<p><code>` (or nowhere in
-  a `<pre>`) and raise `BuildError` naming the page path and that fence's line number in
-  the source file as read from disk, before `fill_pages`/`fill_figures` splice lines in.
-  It runs in the build's refusal pass (`build-site.py:1270-1343`), so no page is written
-  when it fires.
+- R12: one matching rule. Each fence of the page's own source file (opening lines of
+  three backticks or tildes at any indent, paired by `_FENCE`; a `mermaid` fence is the
+  renderer's to place and is skipped) must have its body inside a `<pre>` of the rendered
+  page, and that `<pre>` must not also show the fence's opening line (a fence rendered as
+  literal text). Matching by body means a `<pre>` from a figure, raw HTML or the
+  renderer's chrome cannot satisfy a fence. The first fence that fails raises
+  `BuildError` naming the page path and the fence's line in the source file as read from
+  disk (front matter included). The check runs on each page's render, before `build()`
+  writes any page, so no page is written when it fires.
 - R13: `fill_pages` matches the marker with a multiline regex anchored to a whole line
   (`^[ \t]*<!-- site:pages -->[ \t]*$`). The landing's own marker is on its own line,
   so the front page is unchanged.
