@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-19 Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -189,7 +189,10 @@ names a `--since` that the page does cover. It also keeps the pull requests merg
 that date, so the page can show each one's title and merge date. The "Every issue" section
 has a filter for open, closed or all issues and one fold for each category below, each with
 its count; the filter updates the counts. In the list of pull requests that left work
-behind, each row opens to the issues that name it. A pull request the file does not hold
+behind, each row opens to the issues that name it. The PR list is read once per repo,
+newest created first. When it comes back full, collect warns: a PR created before the
+oldest one read but merged inside the window can lie beyond it, and then shows
+"not collected". A pull request the file does not hold
 (merged before the window, or collected by an older fr) shows "not collected". The categories describe what the defect *is*, not who noticed it:
 
 - **latent**: always there, nothing changed it;

@@ -203,6 +203,13 @@ def collect_origins(
             warnings.append(f"skipped {repo}: {exc}")
             continue
         collected += 1
+        if len(raw_prs) >= pr_limit:
+            # Newest created first: a PR created before the page's oldest but merged in the
+            # window is beyond it, so the leaderboards may show it as "not collected".
+            warnings.append(
+                f"{repo}: the PR list hit its limit ({pr_limit}); a PR created before the "
+                "oldest one read but merged since --since is not collected"
+            )
         for what, rows, limit in (("issue", raw_issues, issue_limit), ("PR", raw_prs, pr_limit)):
             if (oldest := _short_of(rows, limit, cutoff)) is not None:
                 short.append((f"{repo}'s {what} list", f"--{what.lower()}-limit", limit, oldest))

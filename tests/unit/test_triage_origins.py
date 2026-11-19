@@ -881,6 +881,30 @@ def test_a_full_issue_list_and_a_full_pr_list_inside_the_window_each_refuse() ->
     assert quiet.warnings == []
 
 
+class _FullPrForge(_ManyForge):
+    """A PR list that reaches back before --since and is exactly as long as its limit."""
+
+    def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        (inside,) = super().list_prs(repo=repo, state=state, limit=limit)
+        older = {**inside, "number": 3, "createdAt": "2026-08-01T00:00:00Z"}
+        return [inside, older][:limit]
+
+
+def test_a_full_pr_list_warns_that_prs_created_before_the_page_may_be_missing() -> None:
+    """The PR list is ordered by creation: a PR created before --since but merged inside the
+    window can sit beyond a full page, so a full list is named, never silently trusted."""
+    from fr.triage.model import Scope
+
+    scope = Scope(kind="repo", target="example-org/alpha")
+    full = _collect_scope(_FullPrForge(["example-org/alpha"]), scope, pr_limit=2)
+    assert len(full.warnings) == 1
+    warning = full.warnings[0]
+    assert "example-org/alpha" in warning and "PR list" in warning and "not collected" in warning
+    # a list shorter than its limit read everything: no warning
+    short = _collect_scope(_FullPrForge(["example-org/alpha"]), scope, pr_limit=3)
+    assert short.warnings == []
+
+
 def test_origins_asks_for_its_own_issue_fields_and_triage_collect_is_unchanged() -> None:
     from fr import gh
     from fr.triage.model import Scope
