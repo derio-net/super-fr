@@ -9080,6 +9080,14 @@ batches:
     handle: w3R:p2
     archive: chore/closeout-2026-11-19-5
     archived: 1585
+  - kind: claims_released
+    at: '2026-11-19T22:59:35.703685Z'
+    keys:
+    - super-fr#1509
+    - super-fr#1484
+    - super-fr#1481
+    - super-fr#1508
+    - super-fr#1510
 - id: triage-hardening
   title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
     out of dedupe'
