@@ -8802,6 +8802,8 @@ batches:
     at: '2026-11-19T19:39:26.151045Z'
     keys:
     - super-fr#1527
+  - kind: post_merge
+    at: '2026-11-19T19:46:44.774761Z'
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
