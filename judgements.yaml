@@ -8694,6 +8694,13 @@ batches:
     head_before: eb84ee6a85ede77015a52ef01e93d4f4d463ad64
     head_after: d8b0fad58b4005923fd5f11703d03ba4f57d1078
     base: f1b70d9791ef3671fe709146acffe0ebf12ccce7
+  - kind: claims_released
+    at: '2026-11-19T12:06:32.475942Z'
+    keys:
+    - super-fr#1483
+    - super-fr#1485
+    - super-fr#1486
+    - super-fr#1488
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
