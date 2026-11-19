@@ -16,7 +16,7 @@ covers:
   - packages/fr-cncd/src/**
   - packages/fr-herdr/src/fr_herdr/runner.py
   - packages/fr-claude-cloud/src/**
-reviewed: 2026-11-15 no shipped tick caller; preflight reasons; issues stranded on the removed VK runner
+reviewed: 2026-11-19 the dedup failure reason (#1499) and the cncd symlink refusal (#1501); 2026-11-15 no shipped tick caller; preflight reasons; issues stranded on the removed VK runner
 ---
 
 ## Why does the plan stay the source of truth?
@@ -135,7 +135,7 @@ When a queued phase sits still, work through these, in order:
 1. **Is anything calling `tick`?** If your scheduled process passes `tick` a metrics
    pusher, `tick` stamps a heartbeat gauge, `<namespace>_heartbeat_last_success_timestamp`, at the end of each
    tick. Each failure increments `<namespace>_failure_total` with a `reason`: `preflight`,
-   `repo_gate`, `unknown_repo`, `unit_mismatch`, `backend_error` or `gh_error`. Plan
+   `dedup`, `repo_gate`, `unknown_repo`, `unit_mismatch`, `backend_error` or `gh_error`. Plan
    discovery adds `stale_artifact` for a plan whose files this `fr` cannot read.
 
    `preflight` means the whole tick was refused before dispatch: a missing required
@@ -144,6 +144,14 @@ When a queued phase sits still, work through these, in order:
    repo. `unit_mismatch` means an issue has the label of a runner that never takes that
    unit. `fr apply --to` refuses that up front, so look for labels set by hand or by an
    older `fr`.
+
+   `dedup` means the runner could not say which items it already holds, so `tick` handed
+   nothing over that tick and tries again on the next one. Guessing "none" would hand the
+   same phase over twice.
+
+   A `backend_error` from `cncd` that names a symlink means the plan folder holds a link.
+   `cncd` sends the folder's files to its server, and it refuses a link because it would
+   send whatever the link points to. Replace the link with the file.
 2. **Is the phase eligible?** `fr status <plan-dir>`. A phase dispatches only when its
    rendered labels say ready-but-not-synced, it has a `tracking_issue`, and plan and spec
    are on the default branch.
