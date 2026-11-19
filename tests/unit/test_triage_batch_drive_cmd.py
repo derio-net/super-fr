@@ -352,6 +352,12 @@ class DriveCheckout:
     def reach_commit(self, sha: str, branch: str) -> bool:
         return bool(sha)
 
+    def patch_id(self, head: str, ref: str) -> str:
+        """No patch-id in a fake clone: the approval gate judges by `reaches` (R12)."""
+        from fr.triage.gitseam import GitError
+
+        raise GitError("a fake clone has no patch-id")
+
     def list_dir(self, ref: str, directory: str) -> list[str]:
         prefix = directory.rstrip("/") + "/"
         return sorted({f.removeprefix(prefix).split("/")[0] for (at, f) in self.files

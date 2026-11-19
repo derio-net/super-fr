@@ -103,6 +103,7 @@ from fr.triage import batch_closeout as collected
 from fr.triage.approval import (
     ApprovalVerdict,
     EventWriter,
+    PatchIdOf,
     approval_verdict,
     ensure_approval_label,
     facts_without_label,
@@ -524,6 +525,36 @@ def _claim_for_dispatch(env: ClaimEnv, batch: Batch) -> list[str]:
 def make_checkout(path: Path | None) -> Checkout:
     """The local clone the batch verbs work in (§3.I). Tests replace this."""
     return Checkout.at(path)
+
+
+def pr_branches(facts: Facts, repo: str) -> dict[int, str]:
+    """Each of *repo*'s PRs in *facts*, by number, with its head branch."""
+    return {p.number: p.head_ref for p in (*facts.batch_prs, *facts.prs) if p.repo == repo}
+
+
+def patch_id_reader(checkout: Checkout, branches: Mapping[int, str]) -> PatchIdOf:
+    """The `patch_id_of` the approval gate reads (spec 2026-11-19-wave-merge-queue R12,
+    §E): PR *pr*'s patch-id at *head* against `origin/<default>` in *checkout*, as last
+    fetched, fetching the PR's branch (*branches*) once when the clone lacks *head*. None
+    when git cannot say (no such commit, no default branch), which the verdict reads by
+    `reaches`. Memoised per reader: build one per pass."""
+    seen: dict[tuple[int, str], str | None] = {}
+
+    def of(pr: int, head: str) -> str | None:
+        if (pr, head) not in seen:
+            seen[pr, head] = _read_patch_id(checkout, branches.get(pr, ""), head)
+        return seen[pr, head]
+
+    return of
+
+
+def _read_patch_id(checkout: Checkout, branch: str, head: str) -> str | None:
+    try:
+        if not branch or not checkout.reach_commit(head, branch):
+            return None
+        return checkout.patch_id(head, f"origin/{checkout.default_branch()}")
+    except GitError:
+        return None
 
 
 def load_runner(name: str) -> Runner:
@@ -2953,9 +2984,10 @@ def batch_merge_command(
             ensure_approval_label(client, owner_repo, ctx.say, seen=set())
         # The approval gate (merge-train-safety §A, R1-R2): settle under --yes, say what
         # would be settled otherwise, then hold every batch without a valid approval.
+        ctx.patch_id_of = patch_id_reader(checkout, pr_branches(facts, owner_repo))
         verdicts = settle_approvals(
             client, record, owner_repo, [(e.batch, e.pr.number) for e in queue], ctx.say,
-            now=_now(), dry_run=not yes,
+            now=_now(), dry_run=not yes, patch_id_of=ctx.patch_id_of,
         )  # fmt: skip
     except UnsupportedForgeOperation as exc:
         _fail(str(exc))
@@ -3904,6 +3936,7 @@ class _Driver:
         # move only when the default branch does
         self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
         self._fetched: set[str] = set()  # per pass: repos whose origin was fetched (p4-r7)
+        self._patch_ids: dict[str, PatchIdOf] = {}  # per pass: each repo's patch-id reader
 
     # -------------------------------------------------------------- reaching out
 
@@ -4120,6 +4153,7 @@ class _Driver:
             )
         ctx = self._merge[repo]
         # Read each pass, as the pass's own verdict is: the context outlives a pass.
+        ctx.patch_id_of = self._patch_id_of(facts, repo)
         ctx.ci_none = self._ci_none(repo)
         ctx.rules = self._base_rules(facts, repo)
         config = facts.config_for(repo)
@@ -4299,9 +4333,10 @@ class _Driver:
                     e.pr.checks or {},
                     ci_none=self._ci_none(repo),
                 )
+                head = str(view.get("head_oid") or "")
                 approvals[e.batch.id] = approval_verdict(
-                    e.batch.events, e.pr.number, str(view.get("head_oid") or ""),
-                    view.get("labels"),
+                    e.batch.events, e.pr.number, head, view.get("labels"),
+                    patch_id=self._live_patch_id(facts, repo, e.pr.number, head, view),
                 )  # fmt: skip
                 live[e.batch.id] = LivePr(
                     number=e.pr.number,
@@ -4841,6 +4876,27 @@ class _Driver:
             self._fetched.add(repo)
         return checkout
 
+    def _patch_id_of(self, facts: Facts, repo: str) -> PatchIdOf:
+        """This pass's `patch_id_reader` for *repo* (wave-merge-queue R12), over the clone
+        fetched once per pass; one per repo per pass, so each head is read once."""
+        if repo not in self._patch_ids:
+            try:
+                checkout = self._fetched_reader(repo)
+            except GitError:
+                self._patch_ids[repo] = lambda pr, head: None
+            else:
+                self._patch_ids[repo] = patch_id_reader(checkout, pr_branches(facts, repo))
+        return self._patch_ids[repo]
+
+    def _live_patch_id(
+        self, facts: Facts, repo: str, pr: int, head: str, view: dict[str, Any]
+    ) -> str | None:
+        """The snapshot's patch-id for open PR *pr* at *head*, read only when it carries
+        `approved-fr` (R12: read while the PR is open and before it lands)."""
+        if view.get("state") != "OPEN" or APPROVED_FR.name not in (view.get("labels") or ()):
+            return None
+        return self._patch_id_of(facts, repo)(pr, head)
+
     def _reader(self, repo: str) -> Checkout:
         """The clone for a read: the checked one with --yes, else leniently opened
         (plan mode never refuses on a clone it does not write)."""
@@ -5208,7 +5264,10 @@ class _Driver:
             for repo, open_prs in sorted(by_repo.items()):
                 client = self.client(facts, repo)
                 ensure_approval_label(client, repo, _say, seen=self._label_seen)
-                settle_approvals(client, record, repo, open_prs, _say, now=_now())
+                settle_approvals(
+                    client, record, repo, open_prs, _say, now=_now(),
+                    patch_id_of=self._patch_id_of(facts, repo),
+                )  # fmt: skip
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
@@ -5260,6 +5319,8 @@ class _Driver:
             else frozenset[str]()
         )
         self._label_seen: set[str] = set()  # one approval-label check per repo per pass (R4)
+        # Per pass, and before the settle: its patch-id reads share the pass's one fetch.
+        self._fetched, self._patch_ids = set(), {}
         if self.yes:
             wrote, voided = self._settle_approvals(facts, judgements, carried)
             if voided:  # what the forge says now: this pass's views never show them approved
@@ -5273,7 +5334,6 @@ class _Driver:
         for ctx in self._merge.values():
             ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
-        self._fetched = set()
         self._ctx_checked, self._ctx_held = set(), {}
         self._rules = {}
         self._policies = {}

@@ -134,6 +134,9 @@ class MergeContext:
     # merge-train-safety §D, R12.
     rules: BaseRules = field(default_factory=BaseRules)
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+    # Reads a PR's patch-id at a head (spec 2026-11-19-wave-merge-queue R12): the approval
+    # gate compares it; None judges approvals by `reaches` alone.
+    patch_id_of: Callable[[int, str], str | None] | None = None
 
     @property
     def strict_checks(self) -> bool:
@@ -444,7 +447,9 @@ def _approved_and_ready(
     if hold is not None:
         return MergeAttempt("unapproved", head=head, reason=hold)
     events = [*batch.events, *ctx.recorded.get(batch.id, [])]
-    verdict = approval_verdict(events, pr.number, head, view.get("labels"))
+    labelled = APPROVED_FR.name in (view.get("labels") or ())
+    patch_id = ctx.patch_id_of(pr.number, head) if ctx.patch_id_of and labelled else None
+    verdict = approval_verdict(events, pr.number, head, view.get("labels"), patch_id=patch_id)
     if isinstance(verdict, Void):
         why = (
             f"was approved at {verdict.approved_head[:12]}, but its head moved to {head[:12]}; "

@@ -60,12 +60,13 @@ def _run(
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
     `GitError` with the command's own words. *env* is laid over the process environment;
-    *stdin* is fed to the command (text in text mode, bytes with `text=False`). *coded*: any return code is an answer,
-    `(code, stdout + stderr)`, never a raise (text mode only). *passthrough* leaves streams
-    with the operator instead of capturing them: `stderr` (stdout is still captured), or
-    `all` (nothing is, for a command that asks on the terminal). *exact_env*: *env* is
-    the child's WHOLE environment, not laid over this one, so a variable can be removed
-    (`fr.safe_spawn.safe_fr_env` drops a relative `PYTHONPATH`)."""
+    *stdin* is fed to the command (text in text mode, bytes with `text=False`). *coded*:
+    any return code is an answer, `(code, stdout + stderr)`, never a raise (text mode
+    only). *passthrough* leaves streams with the operator instead of capturing them:
+    `stderr` (stdout is still captured), or `all` (nothing is, for a command that asks on
+    the terminal). *exact_env*: *env* is the child's WHOLE environment, not laid over this
+    one, so a variable can be removed (`fr.safe_spawn.safe_fr_env` drops a relative
+    `PYTHONPATH`)."""
     full_env = dict(env or {}) if exact_env else ({**os.environ, **env} if env else None)
     pipe = subprocess.PIPE
     try:

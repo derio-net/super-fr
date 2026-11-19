@@ -91,3 +91,49 @@ def test_a_binary_edit_changes_the_patch_id(repo: Path) -> None:
 
 def test_an_empty_diff_has_an_empty_patch_id(repo: Path) -> None:
     assert Checkout(repo).patch_id("main", "main") == ""
+
+
+# ------------------------------------------------------------------ the command's reader
+
+
+def _clone_with_a_pr(tmp_path: Path) -> tuple[Path, Path, str]:
+    """A bare origin with `main` and `feat` (the PR), and a clone that fetched only `main`:
+    the PR's head is unknown to it."""
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--quiet", "--bare", "--initial-branch=main", str(origin))
+    work = tmp_path / "work"
+    _git(tmp_path, "clone", "--quiet", str(origin), str(work))
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(work, "config", k, v)
+    _git(work, "checkout", "--quiet", "-b", "main")
+    (work / "code.py").write_text("x = 1\n")
+    _commit(work, "seed")
+    _git(work, "push", "--quiet", "origin", "main")
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "--quiet", "--branch", "main", str(origin), str(clone))
+    _git(work, "checkout", "--quiet", "-b", "feat")
+    (work / "code.py").write_text("x = 2\n")
+    head = _commit(work, "feat")
+    _git(work, "push", "--quiet", "origin", "feat")
+    return work, clone, head
+
+
+def test_the_reader_fetches_the_pr_branch_and_reads_against_origin_default(
+    tmp_path: Path,
+) -> None:
+    from fr.commands.triage_batch_cmd import patch_id_reader
+
+    work, clone, head = _clone_with_a_pr(tmp_path)
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+
+    assert reader(7, head) == Checkout(work).patch_id(head, "main") != ""
+
+
+def test_the_reader_says_none_when_git_cannot(tmp_path: Path) -> None:
+    from fr.commands.triage_batch_cmd import patch_id_reader
+
+    _, clone, head = _clone_with_a_pr(tmp_path)
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+
+    assert reader(8, head) is None  # no branch known for the PR
+    assert reader(7, "f" * 40) is None  # a head the branch does not hold
