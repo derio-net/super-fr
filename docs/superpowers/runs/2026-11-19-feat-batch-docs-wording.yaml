@@ -3,11 +3,14 @@ run: 2026-11-19-feat-batch-docs-wording
 workflow: fr-goal@1
 branch: feat/batch-docs-wording
 started: '2026-11-19T09:10:20+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-19T09:10:33+00:00'
+    state: done
+    at: '2026-11-19T09:35:07+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-19-batch-docs-wording-design.md
   spec-review:
     state: pending
   plan:
