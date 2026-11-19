@@ -1,0 +1,211 @@
+schema_version: 12
+run: 2026-11-19-feat-wave-merge-queue
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-r1
+  title: Patch-id approval ignores whitespace and binary content
+  body: git patch-id --stable strips whitespace; plain git diff collapses binaries (approval.py:59-75
+    is exact-head today).
+  review_scope: in
+- kind: finding
+  id: sr-r2
+  title: Under merge, the landing push leases no PR head
+  body: R10/§D left head refs out of the push under merge, so a session push could be silently dropped.
+  review_scope: in
+- kind: finding
+  id: sr-r3
+  title: Non-atomic fallback can leave PR branches carrying other PRs' changes
+  body: Pushing heads first then main can strand stacked heads.
+  review_scope: in
+- kind: finding
+  id: sr-r4
+  title: Patch-id 'survives the landing rewrite' is false
+  body: Against either base the landed head's diff differs.
+  review_scope: in
+- kind: finding
+  id: sr-r5
+  title: Hold commit identity is contradictory; ls-remote cannot read state
+  body: A ref at main's sha has no own message; a commit on top is never contained by main.
+  review_scope: in
+- kind: finding
+  id: sr-r6
+  title: A drain not carried by a main push starts no release
+  body: 'land: merge, deferral and quiet drains push only fr-hold/*.'
+  review_scope: in
+- kind: finding
+  id: sr-r7
+  title: Test Plan 11 contradicts R17
+  body: Item 11 said the final landing push deletes the hold.
+  review_scope: in
+- kind: finding
+  id: sr-r8
+  title: R7 refuses ci none repos that R20 admits
+  body: 'No-CI repos cannot declare ci: push.'
+  review_scope: in
+- kind: finding
+  id: sr-r9
+  title: Queue branch has two names
+  body: R4 vs §C differed.
+  review_scope: in
+- kind: finding
+  id: sr-r10
+  title: Two scopes on one repo would run two queues
+  body: Hold and leases were keyed by scope.
+  review_scope: in
+- kind: finding
+  id: sr-r11
+  title: Repo-level queue events and non-batch entries have no home in judgements
+  body: Judgements events live on Batch (model.py:1209-1220).
+  review_scope: in
+- kind: finding
+  id: sr-r12
+  title: DevOps stage 2 completion would let stage 3 run before the merge
+  body: _merged accepts a recorded stage 2 (ops/gate.py:1136).
+  review_scope: in
+- kind: finding
+  id: sr-r13
+  title: _archive and _export_merge are other merge paths
+  body: triage_batch_cmd.py:6794-6807, :7099-7111 call pr_merge.
+  review_scope: in
+- kind: finding
+  id: sr-r14
+  title: post_merge and post_merge_restart undefined for multi-batch landings
+  body: post_merge ran per merged batch.
+  review_scope: in
+- kind: finding
+  id: sr-r15
+  title: Wave selection and the in-flight cap can deadlock; a later wave could open first
+  body: Lowest-ready selection and IN_FLIGHT counting pr-open (batch_drive.py:74, :2012).
+  review_scope: in
+- kind: finding
+  id: sr-r16
+  title: Combinations do not run the acceptance gate
+  body: acceptance-report.yml runs on PRs and main only.
+  review_scope: in
+- kind: finding
+  id: sr-r17
+  title: Nothing cleans fr-queue branches; the cloud proxy cannot delete
+  body: state_ref.py:18-24.
+  review_scope: in
+- kind: finding
+  id: sr-r18
+  title: Merged-on-push does not hold for Gitea by default; the engine is GhClient-only
+  body: ghclient.py:556-663; Gitea autodetect manual merge is off by default.
+  review_scope: in
+- kind: finding
+  id: sr-r19
+  title: Restricted fr migrate artifacts does not exist
+  body: migrate_cmd.py:134-143 takes only --yes/--adopt.
+  review_scope: in
+- kind: finding
+  id: sr-r20
+  title: Fast-forwarding a protected main needs a named identity
+  body: The operator credential as bypass actor would let every session push to main.
+  review_scope: in
+- kind: finding
+  id: sr-r21
+  title: Rebase method breaks release.py's first-parent PR cross-check
+  body: 'AGENTS.md release gating: land by merge commit or squash.'
+  review_scope: out
+- kind: review
+  id: spec-review-1
+  title: 'independent spec review: 21 findings'
+  body: fr-spec-reviewer raised sr-r1..sr-r20 in scope and sr-r21 out of scope; decisions honoured in
+    substance, defects in mechanism. All in-scope findings fixed in the spec (commit 'spec review fixes');
+    rows updated for R31-R36 and a post-merge row added.
+- kind: lens
+  lens: errors
+  title: 'Many partial-failure windows: atomic push, crash between build/land and its event, hold handshake
+    races, cloud proxy refusals (reviewer suggestion).'
+resolves:
+- id: sr-r1
+  state: fixed
+  body: R12 names `git diff --binary --full-index --no-color <mb> <head> | git patch-id --verbatim`; Test
+    Plan 5 adds whitespace-only and binary edits that void.
+- id: sr-r2
+  state: fixed
+  body: R10 and §D push every landed head ref (unchanged under merge) with a lease; Test Plan 3 runs under
+    squash and merge.
+- id: sr-r3
+  state: fixed
+  body: 'The fallback is removed: a server refusing --atomic is held (R10, R22); Test Plan 3 covers it.'
+- id: sr-r4
+  state: fixed
+  body: 'Claim dropped: R12 says the patch-id is read only before landing; a landed PR is merged and never
+    re-read.'
+- id: sr-r5
+  state: fixed
+  body: 'R17: a hold is a commit whose parent is the base (open) or drained main (drained); release clears
+    when its base contains that parent. R18/§G: release.py fetches the ref and reads the message; --version
+    runs are held; a superseded run clears nothing.'
+- id: sr-r6
+  state: fixed
+  body: 'R19: every drain reaches the release through the drained-hold push; release.yml runs on fr-hold/**
+    pushes (not deletions); Test Plan 18 covers deferral and land: merge drains.'
+- id: sr-r7
+  state: fixed
+  body: 'Item 11 rewritten: the driver moves it to drained; only the release (or release: none) clears
+    it, by a leased push.'
+- id: sr-r8
+  state: fixed
+  body: 'R7 adds `queue.ci: none`, allowed only where services say ci none; R20 keyed on it; Test Plan
+    12/14.'
+- id: sr-r9
+  state: fixed
+  body: 'One name: bounded slots `fr-queue/<scope-id>/slot-<k>` (R4, §C).'
+- id: sr-r10
+  state: fixed
+  body: 'R31: one hold ref per repo (`fr-hold/queue`) taken by a leased push; another scope''s hold blocks
+    opening and landing with a Need; Test Plan 23.'
+- id: sr-r11
+  state: fixed
+  body: 'R24: schema 13 adds a `queues:` list with repo-level records and snake_case kinds registered
+    in _EVENT_SCHEMAS; non-batch entries and their approvals live there.'
+- id: sr-r12
+  state: fixed
+  body: 'R26/§J: stage 2 adds `fr-queue:release` and records nothing; _merged reads only the forge; the
+    driver settles labels into events (no state-ref access from fr ops gate); a Need names `fr ops gate
+    --run <id>` after landing.'
+- id: sr-r13
+  state: fixed
+  body: 'R32: close-out, archive, export and housekeeping PRs are queue entries under their trust rules;
+    §I lists the change; Test Plan 24.'
+- id: sr-r14
+  state: fixed
+  body: 'R33: post_merge once per landing at the landed main, gating the next landing and the close-out
+    start; failure pauses with a Need; Test Plan 25.'
+- id: sr-r15
+  state: fixed
+  body: 'R2/§B: open the lowest wave with a non-terminal batch; R36: PRs waiting on a later queue do not
+    count against max_inflight; Test Plan 9.'
+- id: sr-r16
+  state: fixed
+  body: 'R7: every workflow reporting a required check must run on fr-queue/**; a check that never reports
+    is a Need; this repo adds fr-queue/** to ci.yml and acceptance-report.yml.'
+- id: sr-r17
+  state: fixed
+  body: 'R4: bounded slot branches reused by leased force-push, never deleted; R17: the hold is cleared
+    by a `cleared` commit where deletion is refused.'
+- id: sr-r18
+  state: fixed
+  body: 'Background corrected; R35: the queue runs on the GitHub clients (graphql and rest), glab/tea
+    are held naming gh#611, Gitea needs autodetect, and every landed PR is read back (a still-open one
+    is a Need).'
+- id: sr-r19
+  state: fixed
+  body: R16 names a new repeatable `--path`, refusing non-per-file (retiring) hops; Test Plan 10.
+- id: sr-r20
+  state: fixed
+  body: 'R34: main must accept the direct push via a ruleset with no PR rule (required checks already
+    passed on the tested sha) or a driver-dedicated bypass identity; fr never makes the operator''s credential
+    a bypass actor; a refusal holds with both remedies and land: merge.'
+- id: sr-r21
+  state: out-of-scope
+  body: 'Out of scope: a forge rebase merge has the same effect today and this repo uses squash; not caused
+    by this change.'
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: aa232eb8b66867fa1
