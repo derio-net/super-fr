@@ -103,17 +103,20 @@ R6. While `fr triage batch drive` runs, every `--yes` pass that writes the board
 collected and is not essential-only) re-renders, after the board, every page whose inputs are
 on disk: Backlog and Issues, History, Origins (when `origins-facts.json` exists) and
 Architecture (when `subsystems.yaml` exists). Architecture re-measures line counts only on
-the drive's first such pass and on a pass in which a wave finished, and it reuses the drive's
-last measurement on the other passes. With no checkout of the scope's repo it renders with no
+the first such pass of a driver process and on a pass in which a wave finished, and it reuses
+the process's last measurement on the other passes. With no checkout of the scope's repo it renders with no
 measurement, as the command does when git fails. A page that cannot be rendered is one
 warning per distinct cause and never changes the pass, as the board's write is today. A
 plan-mode, quiet or essential-only pass re-renders nothing.
-R7. The driver stores a snapshot on the first pass of a drive that writes the pages, when it
-differs from the latest stored one (a baseline per drive), and on every later such pass in
-which a wave went from unfinished to finished. It uses the wave sets the driver already tracks
-for dedupe (`self._unfinished`), not a comparison with a stored snapshot. It takes the
-snapshot with the same function `fr triage backlog` uses. A driver re-render stores no other
-snapshot. `fr triage backlog` run by hand keeps storing one whenever the board changed.
+R7. The driver stores a snapshot on the first page-writing pass that finds no drive memory,
+when the board differs from the latest stored snapshot (the baseline). After that the memory
+(`drive-pages.json` in the scope's state directory, carried in the state ref) carries across
+restarts and cloud wakes, and a snapshot is stored only when a wave went from unfinished to
+finished: a wave in the remembered unfinished set that is finished now, or one a failed
+Backlog write still owes. The memory is the previous page-writing pass's unfinished wave set
+and an owed flag, nothing else: Architecture's measurement stays in the process. The snapshot
+is the one `fr triage backlog` takes. A driver re-render stores no other snapshot.
+`fr triage backlog` run by hand keeps storing one whenever the board changed.
 R8. One fold component in `components.py`, used by every section-level collapsible on every
 page (a page section, an origin group, a fragment group). Small collapsibles inside a row or a
 panel (a PR's issue list, a snapshot's stage list) stay plain `<details>`. A fold's summary
@@ -219,9 +222,9 @@ keeps its signature and gains `now`.
 The driver gets one method, `_write_pages(wave_finished: bool)`, called right after
 `_write_board` on the same passes. It renders in registry order and keeps one failure set
 per page, like `board_failures`. `wave_finished` is true when a wave in the previous pass's
-`self._unfinished` is finished now. On the drive's first page-writing pass, `_write_pages`
-stores a snapshot when it differs from `latest_snapshot`. On a later pass it stores one when
-`wave_finished` is true. The snapshot is the same `take_snapshot` call `write_backlog` makes.
+`self._unfinished` is finished now. On the first page-writing pass with no drive memory, `_write_pages`
+stores a snapshot when it differs from `latest_snapshot`. Otherwise it stores one when a wave
+finished (`wave_finished`, the remembered set, or an owed flag). The snapshot is the same `take_snapshot` call `write_backlog` makes.
 The acceptance rows come from the checkout the driver holds for a single-repo scope, else
 `acceptance_rows(None)` (not tracked). Architecture measures with that checkout at its
 `HEAD`, the command's default. The driver keeps the result in memory for the next passes.

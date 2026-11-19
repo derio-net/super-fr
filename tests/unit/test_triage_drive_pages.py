@@ -505,3 +505,20 @@ def test_a_malformed_memory_means_the_first_pass_decisions_again(
     world.issues[2] = "closed"  # the board differs from the latest snapshot
     _drive(tmp_path, "--once", "--yes")
     assert _snapshots(tmp_path) == 2 and len(calls) == 3
+
+
+def test_a_second_drive_over_a_changed_board_stores_none_unless_a_wave_finished(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _clock(monkeypatch)
+    _running(world, tmp_path, 1)
+    world.issues[2] = "open"
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 1
+    world.issues[2] = "closed"  # the board changed; the memory file is present
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 1
+    _cancel(tmp_path)  # a wave finished
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 2
