@@ -253,25 +253,27 @@ def on_default_branch(root: Path, default_ref: str) -> bool:
     return bool(branch) and branch == default_ref.partition("/")[2]
 
 
-_PINNED_ON_DEFAULT: dict[Path, bool] = {}
-"""Checkouts whose `head_on_default_branch` answer is pinned (`pinned_head_on_default_branch`)."""
+_PINNED_ON_DEFAULT: dict[Path, bool | None] = {}
+"""Checkouts whose default-branch answer is pinned (`pinned_head_on_default_branch`).
+A pinned None is "cannot tell" (`default_branch_answer`), not "not pinned"."""
 
 
 @contextmanager
-def pinned_head_on_default_branch(root: Path, answer: bool) -> Iterator[None]:
-    """While active, `head_on_default_branch(root)` answers *answer* for the checkout at
-    *root*. `fr archive --dry-run` runs in a detached scratch copy of the checkout, which
-    must answer as the real checkout does (review p3-r4)."""
+def pinned_head_on_default_branch(root: Path, answer: bool | None) -> Iterator[None]:
+    """While active, `default_branch_answer(root)` answers *answer* for the checkout at
+    *root* (and `head_on_default_branch` its folded `answer is True`). `fr archive
+    --dry-run` runs in a detached scratch copy of the checkout, which must answer as the
+    real checkout does (review p3-r4), "cannot tell" included (super-fr#1486)."""
     key = Path(root).resolve()
-    previous = _PINNED_ON_DEFAULT.get(key)
+    had, previous = key in _PINNED_ON_DEFAULT, _PINNED_ON_DEFAULT.get(key)
     _PINNED_ON_DEFAULT[key] = answer
     try:
         yield
     finally:
-        if previous is None:
-            _PINNED_ON_DEFAULT.pop(key, None)
-        else:
+        if had:
             _PINNED_ON_DEFAULT[key] = previous
+        else:
+            _PINNED_ON_DEFAULT.pop(key, None)
 
 
 def head_on_default_branch(root: Path) -> bool:
@@ -281,14 +283,35 @@ def head_on_default_branch(root: Path) -> bool:
     HEAD is detached: the caller then behaves as off the default branch. A checkout
     `pinned_head_on_default_branch` names answers what it was pinned to.
     """
-    if _PINNED_ON_DEFAULT:
-        pinned = _PINNED_ON_DEFAULT.get(Path(root).resolve())
-        if pinned is not None:
-            return pinned
+    key = Path(root).resolve() if _PINNED_ON_DEFAULT else None
+    if key is not None and key in _PINNED_ON_DEFAULT:
+        return _PINNED_ON_DEFAULT[key] is True
     found = remote_default_ref(root)
     if found is None or isinstance(found, GitRefusal):
         return False
     return on_default_branch(root, found)
+
+
+def default_branch_answer(root: Path) -> bool | None:
+    """Whether HEAD is the local branch of the remote's default ref, or None when fr
+    cannot tell: the default ref cannot be read (no remote, a refusal, no ref) or git
+    cannot run. A detached HEAD is a readable False. A checkout
+    `pinned_head_on_default_branch` names answers what it was pinned to.
+
+    `head_on_default_branch` folds None into False, which is safe only where "off the
+    default branch" does nothing (resolve closes no issue, R3). A caller whose "off"
+    writes (`fr archive` recording owed entries, R8) reads this and treats None as the
+    default branch (super-fr#1486)."""
+    key = Path(root).resolve() if _PINNED_ON_DEFAULT else None
+    if key is not None and key in _PINNED_ON_DEFAULT:
+        return _PINNED_ON_DEFAULT[key]
+    try:
+        found = remote_default_ref(root)
+        if found is None or isinstance(found, GitRefusal):
+            return None
+        return on_default_branch(root, found)
+    except GitUnavailableError:
+        return None
 
 
 def safe_directory_args(root: Path) -> list[str]:

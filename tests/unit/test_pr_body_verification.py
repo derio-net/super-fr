@@ -329,3 +329,24 @@ def test_a_walk_verified_row_lets_the_close_through(tmp_path: Path) -> None:
     )
 
     _gate(root, "Closes #7\n")
+
+
+@pytest.mark.parametrize(
+    ("written", "host", "want"),
+    [
+        ("https://github.com/o/proj/issues/7", "github.com", "o/proj#7"),
+        ("https://GitHub.com/o/proj/issues/7", "github.com", "o/proj#7"),
+        ("https://evil.example/o/proj/issues/7", "github.com", None),
+        ("https://github.com.evil.example/o/proj/issues/7", "github.com", None),
+        ("https://github.com/o/proj/issues/7", "", None),  # the forge host is unknown
+        ("#7", "", "o/proj#7"),
+        ("o/proj#7", "github.com", "o/proj#7"),
+    ],
+)
+def test_a_url_on_another_host_does_not_normalise_when_the_host_is_given(
+    written: str, host: str, want: str | None
+) -> None:
+    """super-fr#1488: `_URL_REF` kept only the path, so a lookalike URL on any host
+    normalised to this repo's issue. Given the forge host, a URL on another host (or
+    any URL, when the host is unknown) names no issue here."""
+    assert normalize_issue_ref(written, IDENTITY, host=host) == want
