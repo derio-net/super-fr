@@ -16,9 +16,14 @@ rows:
     - spec:2026-11-18-triage-pages-ux#R1
     - spec:2026-11-18-triage-pages-ux#R2
     - spec:2026-11-18-triage-pages-ux#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_triage_page_names.py#test_the_registry_names_every_scanned_file_name
+      - super-fr:tests/unit/test_tripwire_triage_page_names.py#test_no_module_names_a_page_file_outside_the_registry
+      - super-fr:tests/unit/test_triage_render_command.py#test_fr_triage_render_is_an_alias_that_says_so
+      - super-fr:tests/unit/test_triage_nav_pages.py#test_the_registry_names_every_page_once_in_nav_order
+    status: ci
+    notes: Registry tripwire and the renamed commands pin one name per page.
     verify: none
   - id: triage-pages-rendered-stamp
     capability: triage pages
