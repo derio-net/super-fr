@@ -50,7 +50,15 @@ rows:
     origin:
     - spec:2026-11-19-consumer-followups#R6
     - spec:2026-11-19-consumer-followups#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_sso_html.py#test_a_tea_fail_soft_site_re_raises_a_login_page
+      - super-fr:tests/unit/test_forge_sso_html.py#test_a_tea_fail_soft_site_keeps_its_answer_for_any_other_error
+      - super-fr:tests/unit/test_forge_sso_html.py#test_names_login_page_knows_both_forms_and_nothing_else
+      - super-fr:tests/unit/test_ops_gate.py#test_a_forge_error_on_the_default_branch_read_is_a_refusal_naming_it
+      - super-fr:tests/unit/test_isolation_forge_refusal.py#test_a_gitea_login_page_is_refused_by_name_not_read_as_main_or_no_pr
+    status: ci
+    notes: the six RealTeaClient fail-soft sites re-raise both login-page forms and
+      keep their answer otherwise; the DevOps gate and the isolation lifecycle refuse
+      naming it
     verify: none
