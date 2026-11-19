@@ -172,7 +172,8 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R16
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: born at brainstorm; scenario written by its phase
+    scenario: tests/scenarios/wave-queue-closeout-migrates.sh
   - id: wave-queue-migratable-validation
     capability: artifact validation
     acceptance: fr validate artifacts --allow-migratable passes a stale artifact a registered
