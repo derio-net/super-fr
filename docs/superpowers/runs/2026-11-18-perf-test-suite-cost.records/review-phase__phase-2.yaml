@@ -1,0 +1,88 @@
+schema_version: 12
+run: 2026-11-18-perf-test-suite-cost
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+- kind: finding
+  id: p2-r1
+  title: Exit-label flake (two tests, one worker, one shared at_deliver template) unexplained; no template self-check
+  body: Raised by the phase-2 independent reviewer; verified against the code by the orchestrator.
+  review_scope: in
+- kind: finding
+  id: p2-r2
+  title: Patch stripping covered only the asker's setattr/setitem; chdir, syspath_prepend, mid-test undo leaked silently
+  body: Raised by the phase-2 independent reviewer; verified against the code by the orchestrator.
+  review_scope: in
+- kind: finding
+  id: p2-r3
+  title: p2-m-total quoted run_cli and gate_cmd figures the per-file entries do not support; load-confounded headline
+  body: Raised by the phase-2 independent reviewer; verified against the journal by the orchestrator.
+  review_scope: in
+- kind: finding
+  id: p2-r4
+  title: _pristine ignored base/.git state (refs, config, isolation state) before the walkers rmtree base
+  body: Raised by the phase-2 independent reviewer; verified against the code by the orchestrator. Latent.
+  review_scope: in
+- kind: finding
+  id: p2-r5
+  title: copy() repaired one worktree and one origin only; _remap silently skipped Path and other payload types
+  body: Raised by the phase-2 independent reviewer; verified against the code by the orchestrator.
+  review_scope: in
+- kind: finding
+  id: p2-r6
+  title: Autouse path env (sessions, transcripts, opencode db) named the asker's tmp_path during a build
+  body: Raised by the phase-2 independent reviewer; verified against the code by the orchestrator. Latent.
+  review_scope: in
+- kind: review
+  id: review-p2-1
+  title: 'Phase 2 independent review: 6 findings, all in scope, all fixed'
+  body: 'Reviewer (general-purpose, separate context) reviewed the phase-2 commits eef63da9f, e7c705eb7,
+    dd9d87fb9, 4068595ab, b45e98d0f against spec R2-R4; it built three templates by hand in a sandbox
+    HOME and confirmed worktree relinking, mtime preservation, per-worker builds and that no test case
+    was dropped. Raised p2-r1..p2-r6 (all in scope). Two out-of-scope notes, not caused by this change:
+    home_sandbox does not neutralise XDG_CONFIG_HOME/GIT_CONFIG_SYSTEM (parity with the old per-test
+    sandbox), and `fr acceptance check` errors from specs newer than the branch base. Fixes: 7d48489e1
+    (p2-r3) and 546bf5173 (p2-r1, r2, r4, r5, r6). The fixer wrote code before tests for r1, r2, r5, r6;
+    the orchestrator restored the pre-fix fixture_templates.py and conftest.py and the new test module
+    failed (collection error on the missing names), then restored the fix. Assessment: with fixes.'
+resolves:
+- id: p2-r1
+  state: fixed
+  body: 'Fixed in 546bf5173: every template build runs `_check_shape` and the builder''s own state asserts
+    (started_run step, at_deliver step running with a clean tree and a suite.log no older than the newest
+    code path, at_spec_review); a build error is a TemplateBuildError naming the template, so a bad
+    template fails at build, never as downstream refusals. The flake''s cause was searched for and not
+    established: the at_deliver builder has no wall-clock or timeout dependence beyond the suite.log mtime
+    ordering, which copies preserve.'
+- id: p2-r2
+  state: fixed
+  body: 'Fixed in 546bf5173: a build refuses an active chdir or syspath_prepend, a mid-test undo below the
+    baseline, and a missing baseline inside a test; the helper documents what cannot be detected
+    (monkeypatch.context(), unittest.mock, direct os.environ writes) and the private APIs read;
+    test_the_private_pytest_apis_the_guard_reads_are_still_there pins them, so a pytest change fails one
+    named test.'
+- id: p2-r3
+  state: fixed
+  body: 'Fixed in 7d48489e1: journal discovery p2-m-total-2 supersedes p2-m-total, reconciles each figure
+    with its per-file entry, states the load for every wall figure, leads with subprocess starts and CPU,
+    and withdraws the wall-time totals as load-confounded.'
+- id: p2-r4
+  state: fixed
+  body: 'Fixed in 546bf5173: test_run_cli `_pristine` also compares the base .git side (refs, local config,
+    .git/fr, worktree admin entries) with the template''s, so a caller with such state takes the slow
+    path; parametrized test for ref, config and fr-state.'
+- id: p2-r5
+  state: fixed
+  body: 'Fixed in 546bf5173: `_remap` rewrites Path and raises TypeError on any other non-scalar; `copy`
+    raises TemplateBuildError for a second linked worktree or a non-origin remote unless relink is given;
+    `_check_shape` catches an unremappable payload at build.'
+- id: p2-r6
+  state: fixed
+  body: 'Fixed in 546bf5173: `build_paths` points FR_SESSIONS_DIR, FR_TRANSCRIPT_ROOT, FR_OPENCODE_DB,
+    FR_MODELS_CACHE_DIR, FR_OPS_TRUST_DIR and FR_OPS_GATE_DIR into the factory''s sandbox for the build;
+    a guard test fails if a future autouse fixture adds an uncovered path variable.'
+evidence:
+  review: review-p2-1
+  reviewer: a721365998cccc771
+  model: claude-sonnet-5-5
