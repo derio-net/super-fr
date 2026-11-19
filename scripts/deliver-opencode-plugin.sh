@@ -12,6 +12,7 @@
 #
 #   <plugins>/fr-opencode-plugin/index.ts      the server plugin (+ its modules)
 #   <plugins>/fr-opencode-plugin/tui/index.tsx the status line (TUI only)
+#   <plugins>/fr-opencode-plugin/rules/*.md    the shipped rules (injected by rules.ts)
 #
 # The 1.x shape also wrote a top-level loader, `<plugins>/fr-opencode-plugin.ts`,
 # beside the directory. On 2.x that loads the plugin TWICE (plan finding
@@ -23,7 +24,13 @@
 # status-line probe reads, and OpenCode de-duplicates the two (measured).
 # A file path there is silently ignored by 2.1.0 — it must be the directory.
 #
-# Usage: deliver-opencode-plugin.sh install|uninstall <plugins-dir>
+# Usage: [FR_OPENCODE_RULES="a.md b.md"] deliver-opencode-plugin.sh install|uninstall <plugins-dir>
+#
+# The rule list is an environment variable, not arguments: install.sh owns the
+# one list (CLAUDE_RULES) and passes it as one space-separated string, which
+# keeps the positional contract (`install <dir>`) every caller and test uses.
+# Each named rule is copied from .opencode/instructions/ into rules/; a named
+# rule with no file refuses before a byte moves. Unset means no rules.
 #
 # - install replaces the plugin directory wholesale, so a file removed upstream
 #   does not linger; it is idempotent, and so is the cli.json entry (by exact
@@ -42,6 +49,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 src="$root/packages/fr-opencode-plugin/src"
 segment="$root/plugins/super-fr/scripts/fr-statusline-segment.sh"
 name="fr-opencode-plugin"
+instructions="$root/.opencode/instructions"
 cli_json="$(dirname "$plugins")/cli.json"
 
 # The cli.json entry is the plugin directory's absolute path. It is derived
@@ -116,12 +124,24 @@ case "$action" in
     [ -f "$segment" ] || { echo "deliver-opencode-plugin: no status-line segment at $segment" >&2; exit 1; }
     command -v jq >/dev/null 2>&1 || { echo "deliver-opencode-plugin: jq is required" >&2; exit 1; }
     validate_cli_json
+    # One read into an array: no pathname expansion, and every name must be a
+    # plain `<name>.md` (no `/`, no `..`, no glob), checked before a byte moves.
+    rules=()
+    read -r -a rules <<<"${FR_OPENCODE_RULES:-}" || true
+    for rule in ${rules[@]+"${rules[@]}"}; do
+      [[ "$rule" =~ ^[A-Za-z0-9._-]+\.md$ && "$rule" != .* ]] || { echo "deliver-opencode-plugin: refusing rule name '$rule' (want <name>.md); nothing was written" >&2; exit 1; }
+      [ -f "$instructions/$rule" ] || { echo "deliver-opencode-plugin: no rule file $instructions/$rule (run scripts/sync-opencode.py); nothing was written" >&2; exit 1; }
+    done
     mkdir -p "$plugins"
     rm -rf "${plugins:?}/$name" "${plugins:?}/$name.ts"
     mkdir -p "$plugins/$name/tui"
     cp "$src"/*.ts "$plugins/$name/"
     cp "$src"/tui/*.ts "$src"/tui/*.tsx "$plugins/$name/tui/"
     cp "$segment" "$plugins/$name/tui/"
+    if [ "${#rules[@]}" -gt 0 ]; then
+      mkdir -p "$plugins/$name/rules"
+      for rule in "${rules[@]}"; do cp "$instructions/$rule" "$plugins/$name/rules/$rule"; done
+    fi
     register
     ;;
   uninstall)

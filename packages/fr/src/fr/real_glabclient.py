@@ -35,6 +35,7 @@ from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 from urllib.parse import quote, urlparse
 
 from fr import glab as _glab
+from fr.forge_body import names_login_page, not_json_reason
 from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body, run_cli
 from fr.labels import LabelDef
 
@@ -142,7 +143,7 @@ class RealGlabClient(UnsupportedBatchOps):
             out = self._api(f"projects/{encoded_repo}/issues/{issue_number}/related_merge_requests")
         except _glab.GlabError:
             return []
-        nodes = json.loads(out) if out else []
+        nodes = _glab._loads(out, "related merge requests output") if out else []
         result: list[dict[str, Any]] = []
         for n in nodes:
             raw_state = n.get("state", "opened")
@@ -177,7 +178,7 @@ class RealGlabClient(UnsupportedBatchOps):
             raise  # a refusal is not "no MR" (gh#1014)
         except _glab.GlabError:
             return None
-        raw = json.loads(out)
+        raw = _glab._loads(out, "`glab mr view` output")
         raw_state = raw.get("state", "opened")
         if raw_state == "merged":
             state = "MERGED"
@@ -201,10 +202,7 @@ class RealGlabClient(UnsupportedBatchOps):
             out = _glab._run_glab(args, host=self._host, cwd=cwd)
         # Exit 0 with output fr cannot read is still the forge's failure: the
         # deliver gate refuses on a GlabError and would crash on anything else.
-        try:
-            raw = json.loads(out)
-        except json.JSONDecodeError as exc:
-            raise _glab.GlabError(f"unreadable `glab mr view` output: {exc}") from exc
+        raw = _glab._loads(out, "`glab mr view` output")
         if not isinstance(raw, dict):
             raise _glab.GlabError("unreadable `glab mr view` output: not a JSON object")
         return str(raw.get("description") or "")
@@ -290,8 +288,8 @@ class RealGlabClient(UnsupportedBatchOps):
     def authenticated_login(self) -> str:
         out = self._api("user")
         try:
-            return str(json.loads(out)["username"])
-        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            return str(_glab._loads(out, "`glab api user` output")["username"])
+        except (KeyError, TypeError) as exc:
             raise _glab.GlabError(f"unreadable `glab api user` output: {exc}") from exc
 
     @_hosted
@@ -316,10 +314,7 @@ class RealGlabClient(UnsupportedBatchOps):
                 f"projects/{quote(repo, safe='')}/issues?state=opened&order_by=created_at&sort=asc"
                 f"&per_page={per}&page={page}"
             )
-            try:
-                got = json.loads(out) if out.strip() else []
-            except json.JSONDecodeError as exc:
-                raise _glab.GlabError(f"unreadable `glab api` issues output: {exc}") from exc
+            got = _glab._loads(out, "`glab api` issues output") if out.strip() else []
             if not isinstance(got, list):
                 raise _glab.GlabError("unreadable `glab api` issues output: not a JSON list")
             for i in got:
@@ -347,10 +342,7 @@ class RealGlabClient(UnsupportedBatchOps):
         out = self._glab(
             ["mr", "list", "--repo", repo, "--source-branch", branch, "--output", "json"]
         )
-        try:
-            mrs = json.loads(out) if out.strip() else []
-        except json.JSONDecodeError as exc:
-            raise _glab.GlabError(f"unreadable `glab mr list` output: {exc}") from exc
+        mrs = _glab._loads(out, "`glab mr list` output") if out.strip() else []
         if not isinstance(mrs, list):
             return None
         for mr in mrs:
@@ -404,7 +396,10 @@ class RealGlabClient(UnsupportedBatchOps):
             return None
         try:
             raw = json.loads(result.stdout)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            reason = not_json_reason(result.stdout)
+            if reason:
+                raise _glab.GlabError(reason) from exc
             return None
         if not isinstance(raw, dict):
             return None
@@ -428,8 +423,12 @@ class RealGlabClient(UnsupportedBatchOps):
         if not repo:
             return None
         try:
-            raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
-        except (_glab.GlabError, ValueError, OSError):
+            raw = _glab._loads(self._api(f"projects/{quote(repo, safe='')}"), "project output")
+        except _glab.GlabError as exc:
+            if names_login_page(str(exc)):
+                raise  # a login page is named, not read as "unknown"
+            return None
+        except (ValueError, OSError):
             return None
         value = raw.get("issues_enabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None
@@ -438,7 +437,7 @@ class RealGlabClient(UnsupportedBatchOps):
     def repo_visibility(self, repo: str) -> str:
         """The project's `visibility` (`public`|`internal`|`private`), via `glab api
         projects/:id`; raises when it cannot be read, as the `GhClient` contract says."""
-        raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
+        raw = _glab._loads(self._api(f"projects/{quote(repo, safe='')}"), "project output")
         value = raw.get("visibility") if isinstance(raw, dict) else None
         if not isinstance(value, str) or not value:
             raise _glab.GlabError(f"projects/{repo}: no visibility in the answer")
@@ -450,7 +449,7 @@ class RealGlabClient(UnsupportedBatchOps):
         from fr.acceptance.pages import UNKNOWN, from_gitlab
 
         try:
-            raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
+            raw = _glab._loads(self._api(f"projects/{quote(repo, safe='')}"), "project output")
             # gitlab.com always enforces Pages access control; a self-managed instance's
             # setting is not in the API, so it is never assumed. gitlab.com is established
             # from the answer's own `web_url` host, never inferred from "no host was
@@ -462,7 +461,11 @@ class RealGlabClient(UnsupportedBatchOps):
                 and (urlparse(web_url).hostname or "").lower() == "gitlab.com"
             )
             return from_gitlab(raw, access_control=on_gitlab_com)
-        except (_glab.GlabError, ValueError, OSError):
+        except _glab.GlabError as exc:
+            if names_login_page(str(exc)):
+                raise  # a login page is named, not read as "unknown" (as issues_enabled)
+            return UNKNOWN
+        except (ValueError, OSError):
             return UNKNOWN
 
     @_hosted
@@ -507,7 +510,7 @@ class RealGlabClient(UnsupportedBatchOps):
             if _glab.is_not_found(exc):
                 return []
             raise
-        entries = json.loads(out) if out else []
+        entries = _glab._loads(out, "repository tree output") if out else []
         return [e["name"] for e in entries if isinstance(e, dict) and "name" in e]
 
     @_hosted
@@ -523,7 +526,7 @@ class RealGlabClient(UnsupportedBatchOps):
         out = self._api(
             f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}"
         )
-        data = json.loads(out)
+        data = _glab._loads(out, "repository file output")
         content = data.get("content", "")
         return base64.b64decode(content).decode("utf-8")
 

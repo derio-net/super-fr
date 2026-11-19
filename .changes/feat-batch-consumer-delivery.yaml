@@ -1,0 +1,2 @@
+bump: minor
+summary: OpenCode consumers now get the shipped rules and plugin handlers follow the session's directory; the consumer CI scaffold pins actions and fr by SHA (setup-uv moves v5 to v10.3.0 on GitHub), Gitea/GitLab debt jobs get credentials, and SSO login pages are named

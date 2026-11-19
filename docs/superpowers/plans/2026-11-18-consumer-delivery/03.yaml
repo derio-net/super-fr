@@ -1,0 +1,80 @@
+schema_version: 2
+phase:
+  number: 3
+  title: tea and glab name an SSO / forward-auth login page (R14)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - forge-sso-html-refusal
+  tier: standard
+  files:
+  - packages/fr/src/fr/forge_body.py
+  - packages/fr/src/fr/tea.py
+  - packages/fr/src/fr/glab.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - tests/**/*.py
+  - tests/fixtures/**
+  - docs/**
+  - docs/acceptance/features/2026-11-18-consumer-delivery.yaml
+  estimate_lines: 350
+tasks:
+- number: 1
+  title: Fixture and the shared helper
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Add tests/fixtures/forge/sso_login_redirect.txt (a 302 header block with `location: https://auth.example.com/…` and `content-type: text/html`) and sso_login_page.html (a minimal login page), with a header comment saying they follow the captured shape of a forward-auth login redirect, hosts redacted to RFC 2606 names (auth.example.com, git.example.com).
+  - id: P3.T1.S2
+    text: |-
+      RED: tests/unit/test_forge_body.py — `not_json_reason(html)` names "SSO or forward-auth login page" and the remedy; leading whitespace before `<` still matches; `not_json_reason("garbage")` and `not_json_reason("{")` return None; stderr naming text/html matches with a non-HTML stdout. GREEN: implement packages/fr/src/fr/forge_body.py (`stderr: str = ""`). Then switch `tea.api_result`'s inline HTML check to it, keeping test_tea.py green.
+- number: 2
+  title: Every tea / glab JSON read uses it
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      List the sites: `grep -n "json.loads" packages/fr/src/fr/{tea,glab,real_teaclient,real_glabclient}.py`, keeping those that parse `_run_tea`/`_run_glab`/`tea api`/`glab api` output. RED: tests/unit/test_forge_sso_html.py, one parametrised test with an id per site, each feeding the HTML fixture as that call's stdout (monkeypatch `_run_tea`/`_run_glab`/the api runner) and asserting TeaError/GlabError whose message names the forward-auth cause; plus a guard test that greps the four modules and fails when a `json.loads` site is not in the parametrised list (so a new one must be added). Fails today.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: at each site catch `json.JSONDecodeError` (adding the catch where it is missing) and raise the adapter's error with `not_json_reason(out) or <the existing message>`. Run `uv run pytest -q --no-cov -n auto tests/unit/test_tea.py tests/unit/test_glab.py tests/unit/test_real_teaclient.py tests/unit/test_real_glabclient.py tests/unit/test_forge_sso_html.py tests/unit/test_forge_body.py`: green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: where several sites in one module repeat the try/except, fold them into one small module-local `_loads(out, what)` helper; re-run the same tests.
+- number: 3
+  title: Docs and acceptance row for phase 3
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      `uv run fr docs check --base origin/main`: update or re-stamp pages covering the tea/glab adapters. `uv run fr acceptance set-status --id forge-sso-html-refusal --status ci --level unit=super-fr:tests/unit/test_forge_sso_html.py#<test> --notes "every tea/glab JSON read names an SSO login page, fixture-pinned"`. `uv run fr acceptance check`: clean.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-18T18:03:22+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-18T18:03:22+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-18T18:03:22+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-18T18:03:22+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-11-18T18:03:22+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-18T18:03:22+00:00'
+      note: null
+  completion:
+    at: '2026-11-18T18:03:22+00:00'
+    note: null
+    observed_prs: []

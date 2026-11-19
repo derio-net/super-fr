@@ -1,0 +1,4 @@
+# Follows the shape of a captured forward-auth redirect; hosts redacted to RFC 2606 names.
+HTTP/2 302
+location: https://auth.example.com/login?rd=https%3A%2F%2Fgit.example.com%2Fapi%2Fv1%2Fuser
+content-type: text/html; charset=utf-8

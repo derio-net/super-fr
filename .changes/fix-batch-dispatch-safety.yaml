@@ -1,0 +1,2 @@
+bump: patch
+summary: "Dispatch safety: a failed dedup lookup now submits nothing that tick (it used to re-submit every item), and a cncd dispatch refuses a plan folder holding a symlink instead of sending the link's target."

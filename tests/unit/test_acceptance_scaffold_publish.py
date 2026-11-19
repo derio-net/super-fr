@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 import yaml
+from fr.acceptance.pin import FrPin
 from fr.acceptance.scaffold import (
     BADGE_CLOSE,
     BADGE_OPEN,
@@ -29,13 +30,14 @@ from tests.unit.acceptance_helpers import make_repo, row
 from tests.unit.settings_repo import git, land_on_main
 
 GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "acceptance_scaffold"
+GOLDEN_PIN = FrPin("0123456789abcdef0123456789abcdef01234567", "v8.1.5")
 CI_TYPES = ["github-actions", "gitea-actions", "gitlab-ci"]
 runner = CliRunner()
 
 
 @pytest.mark.parametrize("ci_type", CI_TYPES)
 def test_published_render_matches_the_golden(ci_type: str) -> None:
-    got = render_workflow(ci_type, debt=True, pages=True, comment=True)
+    got = render_workflow(ci_type, debt=True, pages=True, comment=True, fr_pin=GOLDEN_PIN)
     assert got == (GOLDEN / f"{ci_type}.published.golden").read_text()
 
 

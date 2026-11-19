@@ -27,6 +27,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { runFr as runResolvedFr } from "./fr";
 import { frPaths, placementEnabled, switchRefMaybe } from "./marker";
+import { sessionDirectory, type SessionInfo } from "./session";
 import type { RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -102,15 +103,16 @@ function repoRootOf(directory: string): string | undefined {
   }
 }
 
-async function isTopLevel(session: unknown, id: string): Promise<boolean> {
+/** The session's info when the lookup succeeded and it is top-level, else undefined. */
+async function topLevelInfo(session: unknown, id: string): Promise<SessionInfo | undefined> {
   const get = (session as { get?: unknown } | null | undefined)?.get;
-  if (typeof get !== "function") return false;
+  if (typeof get !== "function") return undefined;
   const info = (await (get as (r: { sessionID: string }) => Promise<unknown>).call(session, { sessionID: id })) as
-    | { id?: unknown; parentID?: unknown }
+    | SessionInfo
     | null
     | undefined;
-  if (!info || typeof info !== "object" || info.id !== id) return false;
-  return info.parentID === undefined || info.parentID === null;
+  if (!info || typeof info !== "object" || info.id !== id) return undefined;
+  return info.parentID === undefined || info.parentID === null ? info : undefined;
 }
 
 export function createNagHandler(options: NagHandlerOptions) {
@@ -126,11 +128,14 @@ export function createNagHandler(options: NagHandlerOptions) {
       const sessionID = event.sessionID;
       if (typeof sessionID !== "string" || sessionID === "" || served.has(sessionID)) return;
 
-      const root = repoRootOf(options.directory);
-      if (!root || !hasAcceptance(root)) return;
-
       served.add(sessionID); // before any await: one attempt per session
-      if (!(await isTopLevel(options.session, sessionID))) return;
+      // One lookup gives both the top-level check and the directory fr is asked
+      // in: the session's own, which can be another checkout than the plugin's.
+      const info = await topLevelInfo(options.session, sessionID);
+      if (!info) return;
+
+      const root = repoRootOf(sessionDirectory(info, options.directory));
+      if (!root || !hasAcceptance(root)) return;
 
       const answer = await runFr(root, ["acceptance", "status", "--brief"]);
       let text: string | undefined;

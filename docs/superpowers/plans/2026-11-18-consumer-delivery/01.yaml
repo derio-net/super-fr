@@ -1,0 +1,140 @@
+schema_version: 2
+phase:
+  number: 1
+  title: OpenCode plugin — shipped rules delivered and injected; handlers follow the
+    session (R1-R7)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-rules-delivered
+  - opencode-handlers-session-directory
+  skeleton: true
+  tier: standard
+  files:
+  - scripts/install.sh
+  - scripts/deliver-opencode-plugin.sh
+  - packages/fr-opencode-plugin/src/**
+  - packages/fr-opencode-plugin/test/**
+  - packages/fr-opencode-plugin/README.md
+  - tests/unit/test_install_copies_rules.py
+  - tests/unit/test_install_copies_opencode_rules.py
+  - tests/unit/test_opencode_plugin_delivery.py
+  - tests/unit/test_install_sh.py
+  - docs/**
+  - .changes/feat-batch-consumer-delivery.yaml
+  - docs/acceptance/features/2026-11-18-consumer-delivery.yaml
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: Smoke — touched suites green on the unchanged tree; change fragment
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      On the unchanged tree run `bun test` in packages/fr-opencode-plugin and `uv run pytest -q --no-cov -n auto tests/unit/test_install_copies_rules.py tests/unit/test_opencode_plugin_delivery.py`; both green (any red is a discovery, not fixed here).
+  - id: P1.T1.S2
+    text: |-
+      Add `.changes/feat-batch-consumer-delivery.yaml` with `bump: minor` and a one-line summary covering: OpenCode consumers now get the shipped rules; plugin handlers follow the session's directory; the consumer CI scaffold pins actions and fr by SHA (setup-uv moves v5 -> v10.3.0 on GitHub); Gitea/GitLab debt jobs get credentials; SSO login pages are named. Commit and `fr push`; the draft PR's CI is the smoke.
+- number: 2
+  title: Deliver the shipped rules into the plugin directory (R1, R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: new tests/unit/test_install_copies_opencode_rules.py — run `scripts/deliver-opencode-plugin.sh install <tmp>/plugins` the way install.sh calls it (with the rule list install.sh passes) and assert `<tmp>/plugins/fr-opencode-plugin/rules/` holds exactly the files named in install.sh's `CLAUDE_RULES` array (parse the array from scripts/install.sh, as test_install_copies_rules.py does), each byte-equal to `.opencode/instructions/<rule>`; assert no repo-local-only rule (acceptance-matrix.md, artifact-versioning.md, explainers-currency.md, third-party-privacy.md) is delivered; assert `uninstall` removes the directory and the rules with it. Also assert install.sh passes CLAUDE_RULES to the delivery (drift: a rule added to CLAUDE_RULES and not delivered fails). Fails today.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: deliver-opencode-plugin.sh takes the rule list (env var `FR_OPENCODE_RULES`, space-separated, or extra args — pick one and comment why) and, after it copies src/, copies each `.opencode/instructions/<rule>` into `<plugins>/fr-opencode-plugin/rules/`, refusing (exit non-zero, nothing half-written) when a named rule file is missing. install.sh's call (near :1023) passes "${CLAUDE_RULES[@]}". Re-run the new test and test_opencode_plugin_delivery.py: green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep one list (CLAUDE_RULES) with no copy of it in the delivery script; update the script's header comment (it lists what install writes) to name `rules/`. Re-run both tests.
+- number: 3
+  title: Inject the delivered rules, once per request (R2)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: new packages/fr-opencode-plugin/test/rules.test.ts for a `createRulesHandler({rulesDir})` from src/rules.ts — (a) a dir with b.md and a.md appends two system parts in name order holding each file's text; (b) calling it again with an `event.system` that already contains those texts appends nothing (kept-between-requests case); (c) a second handler instance (plugin loaded twice) over the same event appends nothing; (d) an `event.system` part that already holds a rule's text inside a longer string (as OpenCode's `instructions` loader writes it, "Instructions from: <path>\n<text>") is not appended again; (e) a missing dir, an empty dir and an unreadable file add nothing / skip that file; (f) a non-array `system` or a throwing fs never throws. Child and top-level sessions behave alike (no session lookup). Fails today.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement src/rules.ts — read `<rulesDir>/*.md` once (lazily, cached per handler), sorted by name; on each `context` event push each rule's text unless `event.system.some(part => typeof part === "string" && part.includes(text))` (trim the file text for the comparison). Wire it in src/index.ts beside the nag's `ctx.session.hook("context", …)`, with `rulesDir` = the plugin's own directory joined with `rules` (from `import.meta.dir` / `fileURLToPath(import.meta.url)`). No `// super-fr-parity:` marker (spec §A: parity does not model rule delivery). Run `bun test`: green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: add a test in test/wiring.test.ts (or registration.test.ts, whichever already asserts the hook wiring) that the plugin registers the rules handler on the `context` hook; document the module in the src/index.ts header list and in packages/fr-opencode-plugin/README.md (a "Shipped rules" section: where they come from, once-per-request de-dup, no rules/ in the in-tree plugin). Run `bun test` and `uv run fr harness parity --check` (must still pass with no new marker).
+- number: 4
+  title: nag, bind and claim run fr in the session's directory (R4-R7)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in test/nag.test.ts, test/bind.test.ts and test/claim.test.ts add cases where the fake session's `get` returns a `location.directory` different from the plugin's `directory`: the nag's `fr acceptance status` runs in the repo root of the session's directory (and `hasAcceptance` is judged there); bind resolves a relative `workdir` and a missing one against the session's directory and runs fr there; claim runs `fr run claim` in the child session's directory. Each also has a fallback case (no `location`) that keeps the plugin directory. Assert call counts: at most one `session.get` per handler invocation; bind makes no lookup for a command that cannot bind; the nag makes no lookup for a session already served. Fails today.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: move idle.ts's pure `sessionDirectory(info, fallback)` (src/idle.ts:162-165) to a shared module (e.g. src/session.ts) and import it in idle.ts. nag: reorder to served check, served.add, one session.get, top-level check, directory from that info, repoRootOf, hasAcceptance. bind: a pure command-text pre-check (reuse whatever `bindArgs` keys on — `fr isolation up|exec|down` / `fr run start`) before any lookup; then one get giving both the child check and the directory; `shellCwd(sessionDir, input.workdir)`; `bindArgs` with that cwd. claim: use the child info `childOf` already reads. unbind: unchanged, plus a comment that `fr isolation detach --session` acts on the session's bindings wherever they are (isolation_cmd.py detach), so its cwd chooses nothing. Run `bun test`: green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: remove any now-duplicate session-info helpers between nag/bind/claim/idle; keep each handler's never-throws contract (a failed get falls back). Run `bun test` and the package's typecheck (`bunx tsc --noEmit -p packages/fr-opencode-plugin` or its script): clean.
+- number: 5
+  title: Docs and acceptance rows for phase 1
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Run `uv run fr docs check --base origin/main`; for each page whose covered paths changed (install.sh, deliver-opencode-plugin.sh, the plugin), edit the page to describe the new behaviour (OpenCode consumers get the shipped rules; handlers follow the session) or bump its `reviewed` stamp with a note when it is still true. Re-run: clean for phase-1 paths.
+  - id: P1.T5.S2
+    text: |-
+      Record evidence with `uv run fr acceptance set-status`: `opencode-handlers-session-directory` -> `ci` with `--level unit=super-fr:packages/fr-opencode-plugin/test/bind.test.ts` (and the nag/claim tests; confirm CI's opencode-plugin-test job runs `bun test`) and notes; `opencode-rules-delivered` -> `walk-owed` with `--level unit=super-fr:tests/unit/test_install_copies_opencode_rules.py#<test>` and `unit=super-fr:packages/fr-opencode-plugin/test/rules.test.ts`, notes "delivery and injection unit-pinned; live OpenCode load owed post-merge (Test Plan 1)". Run `uv run fr acceptance check`: no new errors.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-18T16:03:17+00:00'
+      note: null
+  completion:
+    at: '2026-11-18T16:03:17+00:00'
+    note: null
+    observed_prs: []

@@ -93,6 +93,16 @@ describe("child claim (OpenCode): names the holder while it holds", () => {
     expect(calls).toHaveLength(1);
   });
 
+  test("claims in the child session's own directory, with one lookup", async () => {
+    const { client, looked } = fakeClient({
+      data: { ...CHILD, location: { directory: "/other/checkout" } },
+    });
+    const { runFr, calls } = fr();
+    await createClaimHandler({ session: client, directory: "/plugin/dir", runFr })({ sessionID: "ses_child" });
+    expect(calls.map((c) => c.cwd)).toEqual(["/other/checkout"]);
+    expect(looked).toEqual(["ses_child"]);
+  });
+
   test("a model the session does not name is left to fr", async () => {
     const { client } = fakeClient({ data: { ...CHILD, model: undefined } });
     const { runFr, calls } = fr();
