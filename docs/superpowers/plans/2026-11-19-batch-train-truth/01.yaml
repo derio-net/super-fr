@@ -42,10 +42,10 @@ tasks:
   steps:
   - id: P1.T2.S1
     text: |-
-      RED: tests/unit/test_triage_drive_pass_boundary.py::test_classify_* — `classify(StateRefConflict(..))`, `LeaseHeld`, `LeaseExpired`, `UnsupportedForgeOperation`, the privacy refusal and a strict-config `TriageError` subclass are `DriverRefusal` (code 2, a stable cause, a resume line; `LeaseExpired`'s resume is `fr triage lease take --yes`); `StateRefPushRefused` is transient cause `push-refused`; `GitError` is `git:<op>`; a plain `TriageError` is `triage:<Class>`; `ValueError` is `unexpected:ValueError`; a click `Exit(2)` raised inside a function `dispatch_batch` is a refusal cause `exit:dispatch_batch`, `Exit(1)` transient code 1. Causes never contain the message text. Fails: module missing.
+      RED: tests/unit/test_triage_drive_pass_boundary.py::test_classify_* — `classify(StateRefConflict(..))`, `LeaseHeld`, `LeaseExpired`, `UnsupportedForgeOperation`, the privacy refusal and a strict-config `TriageError` subclass are `DriverRefusal` (code 2, a stable cause, a resume line; `LeaseExpired`'s resume is `fr triage lease take --yes`); `StateRefPushRefused` is transient cause `push-refused`; `GitError` is `git:<op>`; a plain `TriageError` is `triage:<Class>`; `ValueError` is `unexpected:ValueError`; a `typer.Exit(2)` raised inside a function `dispatch_batch` is a refusal cause `exit:dispatch_batch`, `Exit(1)` transient code 1. Causes never contain the message text. Fails: module missing.
   - id: P1.T2.S2
     text: |-
-      GREEN: new packages/fr/src/fr/triage/drive_errors.py with `DriverRefusal(cause, message, resume, code=2)`, `TransientPassFailure(cause, message, code=2, original)` and `classify(exc)`; the click `Exit` function name is the innermost traceback frame whose module starts with `fr.`. Test green.
+      GREEN: new packages/fr/src/fr/triage/drive_errors.py with `DriverRefusal(cause, message, resume, code=2)`, `TransientPassFailure(cause, message, code=2, original)` and `classify(exc)`; the `typer.Exit` function name is the innermost traceback frame whose module starts with `fr.`. Test green.
   - id: P1.T2.S3
     text: |-
       REFACTOR: one table maps refusal classes to (cause, resume); no isinstance chain elsewhere. Re-run.
