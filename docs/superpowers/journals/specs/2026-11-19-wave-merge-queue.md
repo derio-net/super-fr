@@ -369,3 +369,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p5 created=2026-11-19T22:27:52+00:00 decided_by=agent -->
 ### phase-split-2026-11-19-wave-merge-queue-p5 · decision · ask: one merge path, other merges as entries and the old train removed (R22, R23, R32)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p6 created=2026-11-19T22:27:55+00:00 decided_by=agent -->
+### phase-split-2026-11-19-wave-merge-queue-p6 · decision · ask: gates and the wave close-out (R15, R16, R21, R26)
