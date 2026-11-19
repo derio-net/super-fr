@@ -14,9 +14,19 @@ rows:
       write in that invocation never leaves a stale answer
     origin:
     - spec:2026-11-19-local-suite-cost#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_git_cache.py#test_two_identical_questions_in_one_scope_start_git_once
+      - super-fr:tests/unit/test_git_cache.py#test_outside_a_scope_git_starts_every_time
+      - super-fr:tests/unit/test_git_cache.py#test_a_fetch_that_creates_the_default_ref_is_seen
+      - super-fr:tests/unit/test_git_cache.py#test_remote_set_head_is_seen
+      - super-fr:tests/unit/test_git_cache.py#test_a_reftable_repository_is_never_cached
+      - super-fr:tests/unit/test_git_cache.py#test_the_cli_entry_opens_a_scope
+      - super-fr:tests/unit/test_git_cache_call_count.py#test_the_profiled_scenario_starts_far_fewer_git_processes
+    status: ci
+    notes: 'R1 pinned by unit tests in CI: one git start per scope, a fresh answer after
+      each in-scope change, no cache outside a scope, includes and reftable never stale,
+      and the call-count drop on the profiled scenario'
   - id: scenario-tier-deselected-locally
     capability: Test tiers
     acceptance: A default local pytest run deselects the scenario tier, while CI's shards
