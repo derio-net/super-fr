@@ -133,9 +133,9 @@ R15. The bar's text starts at the left edge of the content below it, on article 
   line before it. The examples' text does not change.
 - R12: one matching rule. Each fence of the page's own source file (opening lines of
   three backticks or tildes at any indent, paired by `_FENCE`; a `mermaid` fence is the
-  renderer's to place and is skipped) must have its body inside a `<pre>` of the rendered
-  page, and that `<pre>` must not also show the fence's opening line (a fence rendered as
-  literal text). Matching by body means a `<pre>` from a figure, raw HTML or the
+  renderer's to place and is skipped) must have its body as the whole text of a `<pre>` of
+  the rendered page (whitespace-normalised), so a `<pre>` that merely contains the body,
+  or also shows the fence's own lines (a fence rendered as literal text), does not count. Matching by body means a `<pre>` from a figure, raw HTML or the
   renderer's chrome cannot satisfy a fence. The first fence that fails raises
   `BuildError` naming the page path and the fence's line in the source file as read from
   disk (front matter included). The check runs on each page's render, before `build()`

@@ -1593,6 +1593,12 @@ def test_a_fence_rendered_as_literal_text_in_a_pre_is_refused() -> None:
         bs.check_fences_render(raw, shown, "a.md")
 
 
+def test_a_short_fence_body_is_not_satisfied_by_a_longer_pre() -> None:
+    raw = "- a\n\n  ```\n  foo\n  ```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3:"):
+        bs.check_fences_render(raw, "<pre>foo bar</pre><p><code>foo</code></p>", "a.md")
+
+
 def test_a_mermaid_fence_is_the_renderers_to_place_and_is_not_checked() -> None:
     raw = "x\n\n```mermaid\nflowchart LR\n  a --> b\n```\n"
     assert bs.source_fences(raw) == []
