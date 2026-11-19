@@ -20,7 +20,7 @@ regenerated.
 | `subsystems.yaml` | by hand | the architecture page's 15 subsystem cards: globs, `then_ref`, themes |
 | `<page>/manifest.yaml` | by hand | per page (`backlog/`, `issues/`, `origins/`, `architecture/`, `history/`; Backlog and Issues each read an older `board/` when their own directory is absent): the section order, generated sections and authored fragments interleaved |
 | `<page>/*.html` | `authored-src/build.py`, or by hand | the authored fragments a manifest lists; they travel with the state |
-| `snapshots/` | `fr triage backlog` | one per render; the backlog page's "Since last report" and the history page's timeline. Not reproducible |
+| `snapshots/` | `fr triage backlog`, and the driver | one per change the board shows when `fr triage backlog` runs by hand; from the driver, one on its first page-writing pass (when the board differs from the latest) and one each time a wave finishes. The backlog page's "Since last report" and the history page's timeline. Not reproducible |
 | `authored-src/` | by hand | the sources of the built fragments (below) |
 
 Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json` and the
@@ -59,6 +59,12 @@ fr triage architecture render --repo derio-net/super-fr --now-ref origin/main
 fr triage history render --repo derio-net/super-fr
 uv run fr triage state export --to docs/triage --repo derio-net/super-fr
 ```
+
+While `fr triage batch drive --yes` runs, each pass that collected re-renders the Backlog, Issues and
+History pages after the Batches page (Origins when `origins-facts.json` exists, Architecture
+when `subsystems.yaml` exists), so the commands above are for a state the driver is not
+running on. Architecture re-measures only on the driver's first such pass and when a wave
+finishes.
 
 The state directory stays the working copy because `fr triage batch drive` writes `judgements.yaml`
 on every pass. `.fr/triage.yaml` sets `export: {path: docs/triage}`, so the driver exports

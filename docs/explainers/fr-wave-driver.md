@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-19 the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -170,6 +170,23 @@ We built the driver around the few moments that are yours:
 with four "Needs you" lanes (developer, reviewer, tester, devops). While a driver runs with
 `--yes` it re-renders that page on every pass. (`fr triage board` is the old name of the
 command and still works.)
+
+The driver keeps the other pages current too. After the Batches page, each pass that
+collected re-renders the Backlog, the Issues page and History. It also
+renders Origins when `origins-facts.json` exists, and Architecture when `subsystems.yaml`
+exists. Each page states when it was rendered. A pass that only plans (no `--yes`), one that
+stands quiet because nothing changed, and an essential-only one (the quota is low) render no
+page. A page that cannot be written gives one warning for each distinct cause, and the pass
+goes on.
+
+Architecture counts lines with git, so the driver measures only on its first page-writing
+pass and on a pass in which a wave finished. Every other pass reuses that measurement.
+
+The driver also stores a snapshot, the record that the Backlog's "Since last report" and the
+History timeline read. It stores one on the first page-writing pass of a drive, when the
+board differs from the last stored snapshot. After that it stores one each time a wave
+finishes, and at no other time. A snapshot taken by hand with `fr triage backlog` still
+happens whenever the board changed.
 
 ## Where does it run?
 

@@ -88,7 +88,11 @@ def write_architecture(
         used = measured
     elif subsystems.subsystems:
         try:
-            clone = checkout if isinstance(checkout, Checkout) else Checkout.at(checkout)
+            clone = (
+                Checkout.at(checkout)
+                if checkout is None or isinstance(checkout, Path)
+                else checkout
+            )
             used = measure_subsystems(clone, subsystems, now_ref=now_ref)
         except GitError as exc:
             warn(f"not measured: {exc}")
