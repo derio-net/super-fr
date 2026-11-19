@@ -90,7 +90,7 @@ rows:
     acceptance: A refused label swap that applied part of its change, followed by the
       retry, ends with exactly the wanted labels
     origin:
-    - spec:2026-11-19-batch-train-truth#R19
+    - spec:2026-11-19-batch-train-truth#R20
     levels: {}
     status: not-implemented
     notes: ''
