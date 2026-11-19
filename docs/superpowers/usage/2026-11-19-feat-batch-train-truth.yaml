@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-19-feat-batch-train-truth
+captures:
+- host: h-7fc2eaf0
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-19T10:51:19+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 755bf926-d4e8-4f88-99cb-388408cbe75e
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 90
+        cache_write: 197593
+        cache_read: 6996982
+        output: 39342
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 18
+      other:
+        usd: null
+        turns: 9
+      paperwork:
+        usd: null
+        turns: 14
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 96144
+        cache_read: 137247
+        output: 391
+      brainstorm:
+        usd: null
+        turns: 39
+        input: 84
+        cache_write: 101449
+        cache_read: 6859735
+        output: 38951
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 96144
+          cache_read: 137247
+          output: 391
+        brainstorm:
+          usd: null
+          turns: 39
+          input: 84
+          cache_write: 101449
+          cache_read: 6859735
+          output: 38951
