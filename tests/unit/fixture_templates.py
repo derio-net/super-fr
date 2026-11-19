@@ -70,8 +70,8 @@ def _remap(value: Any, old: tuple[str, ...], new: str) -> Any:
         for prefix in old:
             value = value.replace(prefix, new)
         return value
-    if isinstance(value, list):
-        return [_remap(v, old, new) for v in value]
+    if isinstance(value, (list, tuple)):
+        return type(value)(_remap(v, old, new) for v in value)
     if isinstance(value, dict):
         return {k: _remap(v, old, new) for k, v in value.items()}
     return value
@@ -84,10 +84,12 @@ class FixtureTemplates:
         self.root = root
         self.env = dict(env)
         self._built: dict[str, tuple[Path, Any]] = {}
+        self._count = 0
 
     def _build(self, key: str, build: Callable[[Path], Any]) -> tuple[Path, Any]:
         if key not in self._built:
-            template = self.root / f"t{len(self._built)}"
+            self._count += 1  # a template may build another (deliver on started_run)
+            template = self.root / f"t{self._count}"
             template.mkdir(parents=True)
             old = {k: os.environ.get(k) for k in self.env}
             os.environ.update(self.env)

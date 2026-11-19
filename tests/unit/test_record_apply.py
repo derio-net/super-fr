@@ -499,15 +499,21 @@ def _build_at_spec_review(tmp_path: Path) -> None:
     commit_all(root, "at spec-review")
 
 
-def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path:
+def _at_spec_review(
+    tmp_path: Path, *, finding_scope: str | None = None, fresh: bool = False
+) -> Path:
     """A run whose `spec-review` step is open, optionally with an open spec
     finding `f1` the reviewer tagged `finding_scope`. An independent copy of the
-    worker's template (`fixture_templates`)."""
+    worker's template (`fixture_templates`); `fresh` builds it in place instead, for a test
+    that observes the setup's own calls (`test_exit_label_sync_points`)."""
     from datetime import datetime
 
     from fr.journal.model import JournalEntry, append_journal_entry
 
-    fixture_templates.current().copy("at_spec_review", _build_at_spec_review, tmp_path)
+    if fresh:
+        _build_at_spec_review(tmp_path)
+    else:
+        fixture_templates.current().copy("at_spec_review", _build_at_spec_review, tmp_path)
     root = tmp_path / "workspace"
     if finding_scope is not None:
         append_journal_entry(

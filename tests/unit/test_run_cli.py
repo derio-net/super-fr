@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -1421,7 +1422,16 @@ artifact being stored verbatim, so the shape has to declare it."""
 
 
 def _started_emitter(tmp_path: Path):
-    repo = _repo(tmp_path, branch="feat/x")
+    from tests.unit import fixture_templates
+
+    fixture_templates.current().copy("run_cli:emitter", _build_emitter, tmp_path)
+    return tmp_path / "workspace", tmp_path / "shipped"
+
+
+def _build_emitter(tmp_path: Path) -> None:
+    """The template `_started_emitter` copies (spec 2026-11-19-local-suite-cost §3.B)."""
+    _build_repo(tmp_path, "feat/x")
+    repo = tmp_path / "workspace"
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "emitter", _EMIT_SHAPE)
     assert (
@@ -1431,7 +1441,6 @@ def _started_emitter(tmp_path: Path):
         == 0
     )
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
-    return repo, shipped
 
 
 @pytest.mark.usefixtures("complete_live_pr")
@@ -2146,7 +2155,71 @@ steps:
 _FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
+def _pristine(repo: Path, shipped: Path, shape: str | None = None) -> bool:
+    """Is `repo` exactly what `_repo(tmp_path)` copied (branch `b`, nothing added) and
+    `shipped` empty or holding only `<shape name>.yaml` as given? A template stands in for
+    a walk only over that starting point, else the walk runs as written."""
+    if not (repo.parent / "base").is_dir() or repo != repo.parent / "workspace":
+        return False
+    seen = {
+        p.relative_to(repo).as_posix()
+        for p in repo.rglob("*")
+        if ".git" not in p.relative_to(repo).parts and p.name != ".git"
+    }
+    marker = json.loads((repo / ".fr-isolation").read_text())
+    if seen != {
+        ".fr-isolation",
+        "seed.md",
+        "docs",
+        "docs/superpowers",
+        "docs/superpowers/workflows",
+    }:
+        return False
+    held = {p.name: p.read_text() for p in shipped.glob("*")} if shipped.is_dir() else {}
+    return marker["branch"] == "b" and held == ({} if shape is None else {"grouped.yaml": shape})
+
+
 def _started_grouped_with_plan(
+    repo: Path,
+    shipped: Path,
+    plan_rel: str | None = None,
+    *,
+    phase_tier: str | None = None,
+    strip_tier: bool = False,
+) -> str:
+    """`_walk_grouped_with_plan`, from a template when the caller changed nothing (spec
+    2026-11-19-local-suite-cost §3.B): the run is started, advanced and its plan resolved once
+    per `(phase_tier, strip_tier)` and worker, then copied."""
+    from tests.unit import fixture_templates
+
+    if plan_rel is None and _pristine(repo, shipped, _GROUPED_SHAPE):
+        root = repo.parent
+        shutil.rmtree(root / "base")
+        shutil.rmtree(repo)
+        shutil.rmtree(shipped)
+        return fixture_templates.current().copy(
+            f"run_cli:grouped:{phase_tier}:{strip_tier}",
+            lambda directory: _build_grouped(directory, phase_tier, strip_tier),
+            root,
+        )
+    return _walk_grouped_with_plan(
+        repo, shipped, plan_rel, phase_tier=phase_tier, strip_tier=strip_tier
+    )
+
+
+def _build_grouped(directory: Path, phase_tier: str | None, strip_tier: bool) -> str:
+    _build_repo(directory, "b")
+    _write_shape(directory / "shipped", "grouped", _GROUPED_SHAPE)
+    return _walk_grouped_with_plan(
+        directory / "workspace",
+        directory / "shipped",
+        None,
+        phase_tier=phase_tier,
+        strip_tier=strip_tier,
+    )
+
+
+def _walk_grouped_with_plan(
     repo: Path,
     shipped: Path,
     plan_rel: str | None = None,
@@ -2160,8 +2233,6 @@ def _started_grouped_with_plan(
     `phase_tier` writes a `tier:` into the copied fixture's phase header —
     what the shipped `fr-goal` shape's `tier: from_phase` sentinel points at.
     """
-    import shutil
-
     if plan_rel is not None:
         # gh#519 shape: the caller already wrote the plan (e.g. `_plan_with_tags`
         # for its manual-phase coverage) and just wants it resolved onto the run.
@@ -5326,7 +5397,38 @@ def _drive_the_group(repo: Path, shipped: Path) -> list[str]:
     raise AssertionError("the group never completed")
 
 
+class _Advance:
+    """The advance `_walk_to_implement` ended on, as a template carries it."""
+
+    def __init__(self, exit_code: int, output: str) -> None:
+        self.exit_code = exit_code
+        self.output = output
+        self.stdout = output
+
+
 def _fr_goal_at_implement(repo: Path, shipped: Path):
+    """`_walk_to_implement`, from a template: the nine tests that start at the `implement`
+    group each walked eleven `fr run` calls to get there (spec 2026-11-19-local-suite-cost
+    §3.B). `repo` is `_repo`'s copy and `shipped` its sibling; both are replaced by the
+    template's, which holds the same repository with the run already walked."""
+    from tests.unit import fixture_templates
+
+    if not _pristine(repo, shipped):
+        return _walk_to_implement(repo, shipped)
+    root = repo.parent
+    shutil.rmtree(root / "base")
+    shutil.rmtree(repo)
+    got = fixture_templates.current().copy("run_cli:at_implement", _build_at_implement, root)
+    return _Advance(got["exit_code"], got["output"])
+
+
+def _build_at_implement(directory: Path) -> dict[str, object]:
+    _build_repo(directory, "b")
+    briefed = _walk_to_implement(directory / "workspace", directory / "shipped")
+    return {"exit_code": briefed.exit_code, "output": briefed.output}
+
+
+def _walk_to_implement(repo: Path, shipped: Path):
     """Drive the REAL shipped `fr-goal` manifest to its `implement` group, and
     return the advance that ran `plan-review` and briefed `phase/1/implement-phase`.
 
@@ -5335,8 +5437,6 @@ def _fr_goal_at_implement(repo: Path, shipped: Path):
     than a convenient stand-in — this is the walking skeleton's proof that
     the CLI harness reaches the real runtime.
     """
-    import shutil
-
     shipped.mkdir(parents=True, exist_ok=True)
     shutil.copy(_SHIPPED_FR_GOAL, shipped / "fr-goal.yaml")
 

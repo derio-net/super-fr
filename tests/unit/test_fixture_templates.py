@@ -101,3 +101,18 @@ def test_a_run_cli_template_is_keyed_per_branch(tmp_path, fixture_templates):
     assert git(again, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/x"
     assert json.loads((y / ".fr-isolation").read_text())["branch"] == "feat/y"
     assert valid_workspace(again, "feat/x").ok
+
+
+def test_a_template_may_be_built_from_another_template(tmp_path, fixture_templates):
+    """`at_deliver` is built by copying `started_run` into its own template directory."""
+
+    def inner(directory: Path) -> str:
+        (directory / "inner.txt").write_text("i")
+        return "inner"
+
+    def outer(directory: Path) -> str:
+        assert fixture_templates.copy("nested-inner", inner, directory / "in") == "inner"
+        return "outer"
+
+    assert fixture_templates.copy("nested-outer", outer, tmp_path / "c") == "outer"
+    assert (tmp_path / "c" / "in" / "inner.txt").read_text() == "i"

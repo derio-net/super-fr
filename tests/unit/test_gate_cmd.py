@@ -33,7 +33,17 @@ def _fake(labels: list[str], state: str = "MERGED") -> FakeGhClient:
 
 
 @pytest.fixture
-def forge(monkeypatch: pytest.MonkeyPatch) -> Any:
+def forge(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
+    """A fake forge, run from an empty checkout of its own. The verbs under test read the
+    journals and plans of the checkout they run in: from the working directory they used to
+    read THIS repository's (770 journals, parsed again for every key: 41 s for one test,
+    spec 2026-11-19-local-suite-cost R3), which is also a test touching the repo under test."""
+    import subprocess
+
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(checkout)], check=True)
+    monkeypatch.chdir(checkout)
     holder: dict[str, Any] = {"urls": []}
 
     def client(url: str) -> FakeGhClient:
