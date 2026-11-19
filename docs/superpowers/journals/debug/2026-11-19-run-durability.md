@@ -15,3 +15,8 @@ save_run_state (run/model.py:600) and 14 plan_ops.py writes use Path.write_text,
 ### f-atomic · finding [fixed] · Cursor, plan and spec writes are atomic (#1500, #1524)
 
 save_run_state and all 14 plan_ops.py writes go through write_text_atomic (temp file in the same directory, fsync, os.replace). A failed fsync leaves the old file byte-identical and no temp file behind (tests/unit/test_run_durability.py section 1; an AST tripwire forbids plain write_text in both modules). write_text_atomic now gives a new file the umask default mode, as write_text did, instead of mkstemp's 0600. Commit 1bc4281aa.
+
+<!-- fr:journal kind=finding scope=debug id=f-lost-update created=2026-11-19T21:12:01+00:00 state=fixed -->
+### f-lost-update · finding [fixed] · A save that would lose another command's cursor update refuses (#1511)
+
+run/model.py records the sha256 of the cursor bytes each command read or wrote. save_run_state compares the file on disk with that record, under a flock on the runs directory, and raises RunStateConflictError when it changed or was removed; fr run exits 2 and writes nothing, fr pr create reports the opened PR it could not record. The record is cleared at each CLI entry, so one command saving twice is fine. A long-held per-command lock was rejected: resolve_in_process re-enters within one process, and flock belongs to the open file description. Commit 0d242ad63.
