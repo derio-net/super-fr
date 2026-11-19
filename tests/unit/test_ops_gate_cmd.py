@@ -123,7 +123,7 @@ def test_seal_help_says_target_is_the_quoted_path() -> None:
         runner.invoke(app, ["ops", "seal", "--help"], env={"COLUMNS": "1000"}).output.split()
     )
     assert "target's name" not in flat
-    assert "path" in flat and "shell-quoted" in flat
+    assert "{target} the target's path, shell-quoted." in flat
 
 
 def test_plan_rework_help_names_live_or_archived_parents() -> None:
@@ -131,7 +131,10 @@ def test_plan_rework_help_names_live_or_archived_parents() -> None:
         runner.invoke(app, ["plan", "rework", "--help"], env={"COLUMNS": "1000"}).output.split()
     )
     assert "Complete + archived" not in flat
-    assert "live" in flat and "archived" in flat
+    assert (
+        "Path to the parent plan folder: live under plans/, or archived under "
+        "implemented/plans/ or archived-plans/. It may be complete or not." in flat
+    )
 
 
 # ------------------------------------------------------------- fr ops status --ready

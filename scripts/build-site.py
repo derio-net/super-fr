@@ -43,6 +43,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import cache
@@ -280,7 +281,18 @@ def fill_pages(text: str, page: str, entries: list[Entry]) -> str:
         for _key, heading, rows in page_groups(page, entries)
     ]
     listing = "\n\n".join(blocks)
-    return _MARKER_LINE.sub(lambda _m: listing, text)
+    # a marker inside a fenced block is shown, not filled (same pairing as source_fences)
+    out, fence = [], ""
+    for line in text.splitlines(keepends=True):
+        f = _FENCE.match(line)
+        if f and not fence:
+            fence = f.group(1)
+        elif f and f.group(1) == fence:
+            fence = ""
+        elif not fence:
+            line = _MARKER_LINE.sub(lambda _m: listing, line)
+        out.append(line)
+    return "".join(out)
 
 
 def parse_front_matter(text: str) -> dict:
@@ -1280,9 +1292,15 @@ def check_fences_render(raw: str, rendered_html: str, page: str) -> None:
         norm(re.sub(r"<[^>]+>", "", m))
         for m in re.findall(r"<pre\b.*?</pre>", rendered_html, re.DOTALL)
     ]
+    available = Counter(pres)
     for line, body in source_fences(raw):
         want = norm(body)
-        if want and want not in pres:
+        if not want:
+            continue  # an empty fence has no text to look for in a <pre>
+        # each fence consumes its own <pre>: one block cannot satisfy two identical fences
+        if available[want] > 0:
+            available[want] -= 1
+        else:
             raise BuildError(
                 f"{page}:{line}: this fenced block does not render as a code block; "
                 "a fence inside a list item is not read: write it there as a code block "

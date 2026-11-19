@@ -171,7 +171,7 @@ push, `.github/workflows/pages.yml` runs `scripts/build-site.py`, which:
    A link to any other tracked file becomes a GitHub link at the built commit.
    A link to a path that git does not track **fails the build**;
 5. fills a `<!-- site:pages -->` marker that stands alone on its line with a list of every page,
-   grouped by section. The marker inside running text or inline code is left as written.
+   grouped by section. The marker inside running text, inline code or a fenced block is left as written.
    Each entry comes from the page's `title` and the first sentence of its `tldr`.
    On the front page, these are the Explainers, Guides and Reference lists that the top bar links to;
 6. places each figure (below), then gives every page the same top bar.

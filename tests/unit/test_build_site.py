@@ -203,6 +203,20 @@ def test_the_pages_marker_becomes_a_list_grouped_by_section() -> None:
     assert out.startswith("intro\n") and out.rstrip().endswith("outro")
 
 
+def test_a_marker_shown_in_a_fence_or_followed_by_text_is_left_as_written() -> None:
+    entries = [bs.Entry("docs/ops.md", "Ops", "Manual operations.")]
+    page = "docs/explainers/index.md"
+    fenced = "show:\n\n```\n<!-- site:pages -->\n```\n"
+    assert bs.fill_pages(fenced, page, entries) == fenced
+    tilde = "~~~\n<!-- site:pages -->\n~~~\n"
+    assert bs.fill_pages(tilde, page, entries) == tilde
+    trailing = "<!-- site:pages --> and more\n"
+    assert bs.fill_pages(trailing, page, entries) == trailing
+    both = fenced + "\n<!-- site:pages -->\n"
+    out = bs.fill_pages(both, page, entries)
+    assert out.startswith(fenced) and "- [Ops](../ops.md)" in out
+
+
 def test_a_text_without_the_marker_is_unchanged() -> None:
     assert bs.fill_pages("plain\n", "docs/explainers/index.md", []) == "plain\n"
 
@@ -1597,6 +1611,35 @@ def test_a_short_fence_body_is_not_satisfied_by_a_longer_pre() -> None:
     raw = "- a\n\n  ```\n  foo\n  ```\n"
     with pytest.raises(bs.BuildError, match=r"a\.md:3:"):
         bs.check_fences_render(raw, "<pre>foo bar</pre><p><code>foo</code></p>", "a.md")
+
+
+def test_two_fences_with_one_body_each_need_their_own_pre() -> None:
+    raw = "```\nfoo\n```\n\n- a\n\n  ```\n  foo\n  ```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:7:"):
+        bs.check_fences_render(raw, "<pre><code>foo</code></pre><p><code>foo</code></p>", "a.md")
+    bs.check_fences_render(raw, "<pre><code>foo</code></pre><pre><code>foo</code></pre>", "a.md")
+
+
+def _real_render(src: str) -> str:
+    markdown = pytest.importorskip("markdown")
+    # the extensions the pinned blog-craft renderer (tools/render_explainer.py) passes
+    return markdown.markdown(src, extensions=["fenced_code", "codehilite", "tables", "sane_lists"])
+
+
+@pytest.mark.parametrize("indent", [2, 3, 4])
+def test_the_real_converter_leaves_an_indented_fence_in_a_list_without_pre(indent: int) -> None:
+    pad = " " * indent
+    raw = f"1. Step\n\n{pad}```bash\n{pad}echo hi\n{pad}```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3:"):
+        bs.check_fences_render(raw, _real_render(raw), "a.md")
+
+
+def test_the_real_converter_renders_a_top_level_fence_and_an_8_space_block_as_pre() -> None:
+    raw = "```bash\necho hi\n```\n"
+    bs.check_fences_render(raw, _real_render(raw), "a.md")
+    listed = "1. Step\n\n        echo hi\n"
+    assert "<pre>" in _real_render(listed)
+    bs.check_fences_render(listed, _real_render(listed), "a.md")
 
 
 def test_a_mermaid_fence_is_the_renderers_to_place_and_is_not_checked() -> None:

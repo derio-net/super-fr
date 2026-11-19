@@ -57,7 +57,7 @@ landing` anywhere but the page routed to `index.html`, a renderer page with no e
 that cannot take the top bar, or a fenced block that does not render as a code block (the renderer does
 not read a fence inside a list item: write the code there as a block indented 8 spaces; the error
 names `page:line`). A `<!-- site:pages -->` marker fills
-only on a line of its own, so the page can quote it in inline code. A change under `scripts/site/` deploys the site.
+only on a line of its own outside a fenced block, so the page can quote it in inline code or a fence. A change under `scripts/site/` deploys the site.
 A relative link to another page's `.md` becomes its route; a link to any other tracked file
 becomes a GitHub link at the built commit; a link to a path git does not track fails the
 build. `./acceptance/` is the one site route a page may name directly.

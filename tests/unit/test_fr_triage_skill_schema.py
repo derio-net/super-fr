@@ -21,7 +21,9 @@ def test_the_triage_skill_states_the_judgements_schema_the_engine_writes() -> No
 
 
 def test_the_acceptance_skill_does_not_say_a_live_row_nags_whatever_its_status() -> None:
-    assert "whatever its status" not in _skill("fr-acceptance")
+    text = " ".join(_skill("fr-acceptance").split())
+    assert "whatever its status" not in text
+    assert "`fr acceptance status` lists it only while it is debt" in text
 
 
 def test_the_progress_skill_does_not_group_status_with_the_yes_commands() -> None:
