@@ -28,6 +28,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.paths import KIND_DIRS, artifact_root
 
 StepState = Literal["pending", "running", "done", "failed", "blocked"]
@@ -597,7 +598,7 @@ def save_run_state(repo_root: Path, state: RunState) -> Path:
     """Write `state` to its canonical path, creating parent dirs as needed."""
     path = run_path(repo_root, state.run)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dump_run_state(state))
+    write_text_atomic(path, dump_run_state(state))
     return path
 
 
