@@ -393,6 +393,23 @@ class RunState(BaseModel):
     pr: str | None = None
     """The PR `fr pr create` opened for this run (R12), its url. Under
     `git.pr: ask`, `deliver` accepts only this PR. Run version 11."""
+    base_branch: str | None = None
+    """Explicit merge target recorded before lens review; absent keeps the remote default.
+
+    Set by `fr run target --base`, never inferred from an arbitrary common
+    ancestor or the feature branch's tracking branch. Run version 12.
+    """
+
+    @field_validator("base_branch")
+    @classmethod
+    def _safe_base_branch(cls, value: str | None) -> str | None:
+        from fr.artifacts.paths import unsafe_branch
+
+        if value is not None:
+            why = unsafe_branch(value)
+            if why is not None or value.startswith("refs/"):
+                raise ValueError(f"invalid merge target {value!r}: {why or 'use a branch name'}")
+        return value
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

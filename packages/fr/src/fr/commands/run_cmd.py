@@ -2136,7 +2136,9 @@ def _verified_evidence(
     if state_value == "done" and "docs" in step.evidence:
         derive(
             "docs",
-            lambda: _docs_witness(key, repo_root, announce="proportionality" not in step.evidence),
+            lambda: _docs_witness(
+                key, repo_root, announce="proportionality" not in step.evidence, state=state
+            ),
         )
     if state_value == "done" and "single-phase" in step.evidence:
         derive(
@@ -2399,7 +2401,7 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    base = _witness_base(key, repo_root, "proportionality", announce=True)
+    base = _witness_base(key, repo_root, "proportionality", announce=True, state=state)
     report = run_report(repo_root, plan, base)
     if report.merge_base is None:
         err_console.print(
@@ -2411,7 +2413,9 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
     return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
 
 
-def _docs_witness(key: str, repo_root: Path, *, announce: bool) -> str:
+def _docs_witness(
+    key: str, repo_root: Path, *, announce: bool, state: RunState | None = None
+) -> str:
     """`<merge-base-sha>:<sha256>` of the current pages, `none` with no
     `.fr/docs.yaml` — or exit 2 with the check's own findings (R9).
 
@@ -2429,7 +2433,7 @@ def _docs_witness(key: str, repo_root: Path, *, announce: bool) -> str:
         config = load_config(repo_root)
         if config is None:
             return "none"
-        base = _witness_base(key, repo_root, "docs", announce=announce)
+        base = _witness_base(key, repo_root, "docs", announce=announce, state=state)
         outcome = evaluate(repo_root, config, base)
         merge_base = merge_base_of(repo_root, base)
     except DocsEnvError as e:
@@ -2446,13 +2450,24 @@ def _docs_witness(key: str, repo_root: Path, *, announce: bool) -> str:
     return f"{merge_base}:{hashlib.sha256(current.encode()).hexdigest()}"
 
 
-def _witness_base(key: str, repo_root: Path, name: str, *, announce: bool) -> str:
+def _witness_base(
+    key: str, repo_root: Path, name: str, *, announce: bool, state: RunState | None = None
+) -> str:
     """The base a derived delivery witness diffs against, or exit 2 naming why.
 
     `proportionality` and `docs` share it, so both diff against one commit.
     `announce` prints the fallback used when the remote default branch did not
     resolve.
     """
+    from fr.run.target import TargetError, target_ref
+
+    if state is not None and state.base_branch is not None:
+        try:
+            explicit = target_ref(repo_root, state.base_branch)
+        except TargetError as error:
+            _derived_refusal(key, [f"cannot derive {name} evidence — {error}"])
+        assert explicit is not None
+        return explicit
     base, label = _proportionality_base(repo_root)
     if base is None:
         err_console.print(
@@ -6011,6 +6026,46 @@ def _render_cursor(state: RunState, console: Console) -> None:
     console.print(f"workflow: {state.workflow}")
     console.print(f"branch: {state.branch}")
     console.print(f"cursor: {state.cursor}")
+
+
+@run_app.command("target")
+@_commits_run_writes("target")
+def target_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    base: str = typer.Option(
+        ..., "--base", help="The fetched remote branch this run will merge into."
+    ),
+) -> None:
+    """Record the merge target before lens review, preserving the existing run."""
+    from fr.git import git_answer
+    from fr.run.target import TargetError, target_ref
+
+    root = resolve_repo_root()
+    state = _load_or_exit(root, run_id)
+    try:
+        if git_answer(root, "branch", "--show-current").stdout.strip() != state.branch:
+            raise TargetError("set the merge target from this run's own branch")
+        if state.base_branch == base:
+            target_ref(root, base)
+            console.print(f"run {run_id} already targets {base}")
+            return
+        review = state.steps.get("lens-review")
+        if state.pr is not None or (review is not None and review.state != "pending"):
+            raise TargetError(
+                "cannot change the merge target after lens review was dispatched "
+                "or a PR was recorded"
+            )
+        ref = target_ref(root, base)
+        assert ref is not None
+        from fr.proportionality import feature_merge_base
+
+        if feature_merge_base(root, ref) is None:
+            raise TargetError(f"no merge-base between HEAD and target {base!r}")
+    except TargetError as error:
+        err_console.print(escape(str(error)), soft_wrap=True)
+        raise typer.Exit(2) from error
+    _save_run_state(root, state.model_copy(update={"base_branch": base}))
+    console.print(f"run {run_id} targets {base}; existing steps and evidence preserved")
 
 
 @run_app.command("status")

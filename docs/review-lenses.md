@@ -12,7 +12,7 @@ covers:
   - packages/fr/src/fr/lenses/**
   - plugins/super-fr/lenses/**
   - packages/fr/src/fr/commands/lenses_cmd.py
-reviewed: 2026-11-13 new page
+reviewed: 2026-11-19 explicit run merge targets and fail-closed target alignment
 ---
 
 ## What a lens is
@@ -91,9 +91,29 @@ Nothing closes or withdraws it, because the point is that a concern once raised 
 
 **A path rule needs one.** A repo can say that a change to certain files always
 gets a lens, whatever any agent thought (see the config below). The rules in force are
-the union of the default branch's rules and the branch's own. So one pull request can add a
+the union of the merge target's rules and the branch's own. By default the target is
+the remote's default branch. So one pull request can add a
 repo's first rule and be held to it. But no pull request can remove a rule from under
 itself.
+
+### A non-default merge target
+
+Before lens review starts, record a different target on the existing run:
+
+```bash
+fr run target <run-id> --base maintenance/example
+fr lenses status --run <run-id>
+```
+
+The named remote branch must be fetched and share history with the feature.
+The command preserves the run ID, steps and evidence. It does not change the
+remote default or guess a target from the feature's upstream branch.
+
+Lens review uses that target's rules and merge-base. Delivery uses it for the
+proportionality and docs checks, and draft PR creation uses the same branch.
+A missing target fails closed rather than falling back to the default branch.
+Once lens review has started or a PR is recorded, the target cannot be changed.
+`fr pr create --base` cannot silently select a different target after review.
 
 ## The lens review
 

@@ -479,7 +479,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 11: `RunState.issue` and `RunState.pr` — the run's issue and the
             # PR `fr pr create` opened (spec 2026-11-04-repo-feature-settings
             # R12, R14), migration `fr.artifacts.run_issue`. Additive, so stamp-only.
-            current_version=11,
+            current_version=12,
             locator=repo_glob("run", "*.yaml"),
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
