@@ -522,3 +522,77 @@ def test_a_second_drive_over_a_changed_board_stores_none_unless_a_wave_finished(
     _cancel(tmp_path)  # a wave finished
     _drive(tmp_path, "--once", "--yes")
     assert _snapshots(tmp_path) == 2
+
+
+# ------------------------------------------- once per distinct cause, page by page (R6)
+
+
+def _warnings(capfd: pytest.CaptureFixture[str]) -> list[str]:
+    return [ln for ln in capfd.readouterr().err.splitlines() if "could not write" in ln]
+
+
+def test_a_second_cause_warns_again_and_the_same_cause_after_a_good_write_warns_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    _running(world, tmp_path, 1)
+    real = triage_cmd.write_backlog
+    cause: list[str | None] = [None]
+
+    def flaky(*a: Any, **kw: Any) -> Any:
+        if cause[0] is not None:
+            raise OSError(cause[0])
+        return real(*a, **kw)
+
+    monkeypatch.setattr(triage_cmd, "write_backlog", flaky)
+    driver = _driver(tmp_path)
+    for step in ["disk full", "disk full", "no space", None, "disk full", "disk full"]:
+        cause[0] = step
+        driver._write_pages(False)
+    lines = _warnings(capfd)
+    assert [("disk full" in ln, "no space" in ln) for ln in lines] == [
+        (True, False), (False, True), (True, False),
+    ]  # fmt: skip
+
+
+def test_each_page_has_its_own_failure_set_and_the_others_are_still_written(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    from fr.commands import triage_history_cmd, triage_origins_cmd
+
+    _running(world, tmp_path, 1)
+    _origins(tmp_path)
+    _subsystems(tmp_path)
+    _spy_measure(monkeypatch)
+
+    def boom(*a: Any, **kw: Any) -> Any:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(triage_history_cmd, "write_history", boom)
+    monkeypatch.setattr(triage_origins_cmd, "write_origins", boom)
+    monkeypatch.setattr(triage_architecture_cmd, "write_architecture", boom)
+    driver = _driver(tmp_path)
+    driver._write_pages(False)
+    driver._write_pages(False)
+    lines = _warnings(capfd)
+    for title in ("History", "Origins", "Architecture"):
+        assert sum(f"the {title} page" in ln for ln in lines) == 1, (title, lines)
+    assert not any("Backlog" in ln for ln in lines)
+    assert {"backlog", "issues"} <= _written(tmp_path)
+    assert set(driver.page_failures) == {"history", "origins", "architecture"}
+
+
+def test_a_broken_manifest_is_warned_by_the_pass_and_never_raised(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    capfd: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    _running(world, tmp_path, 1)
+    (tmp_path / "history").mkdir()
+    (tmp_path / "history" / "manifest.yaml").write_text("sections: [[\n", encoding="utf-8")
+    driver = _driver(tmp_path)
+    driver._write_pages(False)  # raises nothing
+    driver._write_pages(False)
+    lines = _warnings(capfd)
+    assert len(lines) == 1 and "the History page" in lines[0]
+    assert "backlog" in _written(tmp_path)
