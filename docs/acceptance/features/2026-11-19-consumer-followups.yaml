@@ -33,9 +33,12 @@ rows:
       persisting gitea.token, so the PR's own code never runs with it in .git/config.
     origin:
     - spec:2026-11-19-consumer-followups#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_publish.py#test_no_gitea_job_keeps_a_credential_in_git_config
+    status: ci
+    notes: 'every actions/checkout step of every rendered Gitea workflow sets persist-credentials:
+      false'
     verify: none
   - id: tea-fail-soft-login-page
     capability: Gitea reads name an SSO login page instead of reading it as absent
