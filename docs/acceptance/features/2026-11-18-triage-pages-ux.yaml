@@ -256,3 +256,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_then_the_folds
     why: the triage-pages-ux split renamed this test
+  - row: triage-page-goals
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_six_pages
+    why: 'the triage-pages-ux split renamed this test: a sixth page (Issues)'
