@@ -447,3 +447,137 @@ f7427b4f8: _scope_clone probes with _checkout_refusal once per driver, caches hi
 ### p4-r5-resolved · finding [fixed] · resolves p4-r5: The purity test only greps for datetime.now (phase 4)
 
 b8ff83fdd: an AST check refuses clock calls, time/subprocess/gitseam imports in batch_drive.py, and is shown to catch an impure source.
+
+<!-- fr:journal kind=review scope=plan id=review-lenses created=2026-11-19T05:49:38+00:00 -->
+### review-lenses · review · Lens review: docs-accuracy, security and tests over the whole feature
+
+Three independent reviewers, one per lens, over cbf001bc..HEAD.
+docs-accuracy: commands, files, the Backlog/Issues split, Batches, Origins, driver page writing, snapshot
+rules and state carriage hold against the code; two findings. security: escaping before linkification,
+https-only hrefs, entity lookbehind, URL-quoted wave/batch targets, no innerHTML or selector injection from
+location.hash, fixed-name state carriage, no new subprocess or dependency all hold, probed with payloads;
+the drive memory's measurement was the gap. tests: markup contracts pinned for tabs, folds, kind filter,
+state filter and the kanban scripts; renamed tests not weakened; gaps in failure paths and two
+script-source greps. Decision: the drive memory no longer carries the Architecture measurement (per-process
+only), which closes l-security-r1, l-security-r2 and l-docs-accuracy-r1; R6/R7 amended to memory-based
+baselining. Two out-of-scope findings filed as derio-net/super-fr#1556 and #1557.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · A no-clone driver was documented as rendering Architecture unmeasured but reused a remembered measurement
+
+fr-wave-driver.md and docs/triage/README.md against _write_pages' reuse of the drive-pages.json measurement.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · The herdr control page's reviewed note misdescribed this feature's change to triage_batch_cmd.py
+
+The stamp said a docstring reword; later phases added the page writer and memory there.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · drive-pages.json was loaded without type checks; a planted measurement reached architecture.html unescaped
+
+Measure(**raw) accepted any JSON; _num returned str(n) unescaped; a non-int lines crashed every pass.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · drive-pages.json joined the state ref unchecked by the privacy guard
+
+A private scope repo's commit SHAs and line counts could reach a public state repo.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-19T05:49:38+00:00 state=open review_scope=out -->
+### l-security-r3 · finding [open] (reviewer: out of scope) · The carried snapshots hold issue keys the privacy guard never reads
+
+Predates this change; unjudged private issue keys can reach a public state repo.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · The driver's reuse of the Architecture measurement was unpinned
+
+The test counted measure calls with a spy whose value rendered like no measurement.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · R7's baseline per drive was implemented per memory file with no test telling them apart
+
+Only an unchanged-board second drive was tested; the spec was not amended.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · Once-per-distinct-cause page warnings were tested with one cause on one writer
+
+No second cause, no reset after success, no other writer, no TriageError.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · Stage-filter and cutoff-choice tests grepped the script source
+
+The href^= to href*= change for backlog.html#batch- links was unpinned.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · remove_legacy raising OSError had no test
+
+triage backlog and triage batches turn it into a warning; nothing pinned that.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-19T05:49:38+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · load_memory was tested only for bad JSON and a missing file
+
+Schema mismatch, wrong-typed fields and the driver's first-pass fallback were untested.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-19T05:49:38+00:00 state=open review_scope=out -->
+### l-tests-r7 · finding [open] (reviewer: out of scope) · The Issues page filter script throws when its filter bar is absent
+
+Predates this change (carried over from triage.html); no test renders Issues without backlog-by-tier.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: A no-clone driver was documented as rendering Architecture unmeasured but reused a remembered measurement
+
+0ce1ead4f: the measurement is per-process only; a no-clone driver always renders dashes; both pages updated.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: The herdr control page's reviewed note misdescribed this feature's change to triage_batch_cmd.py
+
+5f3ad1e9a, 34c08e752: the stamp names the page writer and memory; session control unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: drive-pages.json was loaded without type checks; a planted measurement reached architecture.html unescaped
+
+0ce1ead4f (+534508ef5): drive-pages.json holds only unfinished wave ids and the owed flag, load_memory validates strictly, _num int-coerces; a planted measurement never reaches the page.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: drive-pages.json joined the state ref unchecked by the privacy guard
+
+0ce1ead4f: no SHA or line count is persisted, so nothing of the scope repo's code leaves the process.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-19T05:49:38+00:00 state=open resolves=l-security-r3 out_of_scope=true -->
+### l-security-r3-resolved · finding [out-of-scope] · resolves l-security-r3: The carried snapshots hold issue keys the privacy guard never reads
+
+Predates this change, which neither adds nor touches snapshot carriage; filed as derio-net/super-fr#1556.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: The driver's reuse of the Architecture measurement was unpinned
+
+0ce1ead4f: a spy returning real numbers shows every pass in one process rendering them with one measure call; no clone renders dashes.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: R7's baseline per drive was implemented per memory file with no test telling them apart
+
+a1ab842fc: spec R6/R7 amended to memory-based baselining; a second drive over a changed board stores none unless a wave finished.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: Once-per-distinct-cause page warnings were tested with one cause on one writer
+
+df98ade1f: second cause, reset after a good write, per-page failure sets for History/Origins/Architecture, and a broken manifest warned and never raised.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: Stage-filter and cutoff-choice tests grepped the script source
+
+67dff9951: an attribute-selector checker runs the stage script's selector against the rendered batch links (a ^= revert fails); the cutoff id and scope are checked against the markup.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: remove_legacy raising OSError had no test
+
+4f98f2aa5: an OSError from remove_legacy is a warning; both commands exit 0 with the page written.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-19T05:49:38+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: load_memory was tested only for bad JSON and a missing file
+
+0ce1ead4f: each wrong-shaped memory loads as no memory, and the driver then takes the first-pass decisions.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-19T05:49:38+00:00 state=open resolves=l-tests-r7 out_of_scope=true -->
+### l-tests-r7-resolved · finding [out-of-scope] · resolves l-tests-r7: The Issues page filter script throws when its filter bar is absent
+
+Predates this change (the old triage.html had it; the split carried it over); filed as derio-net/super-fr#1557.
