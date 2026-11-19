@@ -194,10 +194,11 @@ def _through_cache(
     *compute* returns the answer and the remote-tracking ref names (under
     *remote*) it consulted. An answer is stored with the fingerprint of what it
     read, and only when the fingerprint taken before git ran (over the
-    well-known names) still holds after it: a write racing the question is
-    never cached. A `GitRefusal` is never stored; a `GitUnavailableError`
-    propagates and stores nothing. Outside a scope, or for a repository
-    `git_cache.locate` will not fingerprint, *compute* runs every time.
+    well-known names and the branch the remote's loose `HEAD` names) still
+    holds after it: a write racing the question is never cached. A
+    `GitRefusal` is never stored; a `GitUnavailableError` propagates and
+    stores nothing. Outside a scope, or for a repository `git_cache.locate`
+    will not fingerprint, *compute* runs every time.
     """
     cache = git_cache.active()
     located = git_cache.locate(root) if cache is not None else None
@@ -210,12 +211,14 @@ def _through_cache(
         if git_cache.fingerprint(located, remote, names) == stamp:
             return answer  # type: ignore[no-any-return]
         del cache[key]
-    before = git_cache.fingerprint(located, remote, WELL_KNOWN_DEFAULTS)
+    named = git_cache.head_target(located, remote) if remote is not None else None
+    watched = (*WELL_KNOWN_DEFAULTS, *((named,) if named else ()))
+    before = git_cache.fingerprint(located, remote, watched)
     answer, consulted = compute()
     if isinstance(answer, GitRefusal):
         return answer
-    if git_cache.fingerprint(located, remote, WELL_KNOWN_DEFAULTS) == before:
-        names = tuple(dict.fromkeys((*WELL_KNOWN_DEFAULTS, *consulted)))
+    if git_cache.fingerprint(located, remote, watched) == before:
+        names = tuple(dict.fromkeys((*watched, *consulted)))
         cache[key] = (answer, names, git_cache.fingerprint(located, remote, names))
     return answer
 

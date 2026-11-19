@@ -147,25 +147,62 @@ def test_locate_gives_none_with_worktree_config(tmp_path: Path) -> None:
     assert git_cache.locate(root) is None
 
 
-@pytest.mark.parametrize(
-    "section", ["[include]\n\tpath = x\n", '[includeIf "gitdir:/x/"]\n\tpath = y\n']
-)
-def test_locate_gives_none_with_an_include_in_the_repository_config(
-    tmp_path: Path, section: str
-) -> None:
-    root = _repo(tmp_path / "r")
-    with (root / ".git" / "config").open("a") as f:
-        f.write(section)
-    assert git_cache.locate(root) is None
-
-
-def test_locate_gives_none_with_an_include_in_the_global_config(
+def test_locate_gives_none_under_the_legacy_git_config_variable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _repo(tmp_path / "r")
+    other = tmp_path / "other.gitconfig"
+    other.write_text("")
+    monkeypatch.setenv("GIT_CONFIG", str(other))
+    assert git_cache.locate(root) is None
+
+
+def test_an_include_in_the_repository_config_is_followed(tmp_path: Path) -> None:
+    root = _repo(tmp_path / "r")
+    (root / ".git" / "extra.gitconfig").write_text("")
+    with (root / ".git" / "config").open("a") as f:
+        f.write("[include]\n\tpath = extra.gitconfig\n")
+    found = git_cache.locate(root)
+    assert found is not None
+    assert (root / ".git" / "extra.gitconfig") in found.config_files
+
+
+def test_an_include_if_in_the_global_config_is_followed_whatever_its_condition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path / "r")
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    (home / "work.gitconfig").write_text("[include]\n\tpath = nested.gitconfig\n")
     glob = tmp_path / "global.gitconfig"
-    glob.write_text("[include]\n\tpath = other\n")
+    glob.write_text(
+        '[includeIf "gitdir:/nowhere/"]\n\tpath = ~/work.gitconfig\n'
+        '[includeIf "gitdir:~/elsewhere/"] path = "~/absent.gitconfig"\n'
+    )
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(glob))
+    found = git_cache.locate(root)
+    assert found is not None
+    assert {home / "work.gitconfig", home / "nested.gitconfig", home / "absent.gitconfig"} <= set(
+        found.config_files
+    )
+
+
+@pytest.mark.parametrize(
+    "value", ["%(prefix)/etc/x", "~someone/x", ""], ids=["prefix", "tilde-user", "empty"]
+)
+def test_an_include_path_that_cannot_be_resolved_declines(tmp_path: Path, value: str) -> None:
+    root = _repo(tmp_path / "r")
+    with (root / ".git" / "config").open("a") as f:
+        f.write(f"[include]\n\tpath = {value}\n")
+    assert git_cache.locate(root) is None
+
+
+def test_an_include_cycle_hits_the_depth_limit_and_declines(tmp_path: Path) -> None:
+    root = _repo(tmp_path / "r")
+    (root / ".git" / "loop.gitconfig").write_text("[include]\n\tpath = loop.gitconfig\n")
+    with (root / ".git" / "config").open("a") as f:
+        f.write("[include]\n\tpath = loop.gitconfig\n")
     assert git_cache.locate(root) is None
 
 
@@ -216,28 +253,40 @@ def test_outside_a_scope_git_starts_every_time(tmp_path: Path, git_starts: GitSt
     assert git_cache.active() is None
 
 
-def test_a_fetch_that_creates_the_default_ref_is_seen(tmp_path: Path) -> None:
+def _hit(git_starts: GitStarts, ask, expected) -> None:  # type: ignore[no-untyped-def]
+    """Asking again answers *expected* from the cache: no git starts."""
+    before = git_starts.count
+    assert ask() == expected
+    assert git_starts.count == before, git_starts.calls[before:]
+
+
+def test_a_fetch_that_creates_the_default_ref_is_seen(
+    tmp_path: Path, git_starts: GitStarts
+) -> None:
     work, _ = _with_origin(tmp_path)
     with git_cache.scope():
         assert remote_default_ref(work) is None
+        _hit(git_starts, lambda: remote_default_ref(work), None)
         _git(work, "fetch", "-q", "origin")
         assert remote_default_ref(work) == "origin/main"
 
 
-def test_remote_set_head_is_seen(tmp_path: Path) -> None:
+def test_remote_set_head_is_seen(tmp_path: Path, git_starts: GitStarts) -> None:
     work, origin = _with_origin(tmp_path)
     _git(origin, "branch", "trunk", "main")
     _git(work, "fetch", "-q", "origin")
     with git_cache.scope():
         assert remote_default_ref(work) == "origin/main"
+        _hit(git_starts, lambda: remote_default_ref(work), "origin/main")
         _git(work, "remote", "set-head", "origin", "trunk")
         assert remote_default_ref(work) == "origin/trunk"
+        _hit(git_starts, lambda: remote_default_ref(work), "origin/trunk")
         _git(work, "remote", "set-head", "origin", "-a")
         assert remote_default_ref(work) == "origin/main"
 
 
 def test_a_default_remote_set_in_the_global_config_is_seen(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_starts: GitStarts
 ) -> None:
     work, origin = _with_origin(tmp_path)
     _git(work, "remote", "add", "upstream", str(origin))
@@ -246,50 +295,87 @@ def test_a_default_remote_set_in_the_global_config_is_seen(
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(glob))
     with git_cache.scope():
         assert remote_name(work) == "origin"
+        _hit(git_starts, lambda: remote_name(work), "origin")
         subprocess.run(
             ["git", "config", "--global", "checkout.defaultRemote", "upstream"], check=True
         )
         assert remote_name(work) == "upstream"
 
 
-def test_a_remote_added_is_seen(tmp_path: Path) -> None:
+def test_a_remote_added_is_seen(tmp_path: Path, git_starts: GitStarts) -> None:
     work = _repo(tmp_path / "work")
     with git_cache.scope():
         assert remote_name(work) is None
+        _hit(git_starts, lambda: remote_name(work), None)
         _git(work, "remote", "add", "elsewhere", str(tmp_path / "nowhere.git"))
         assert remote_name(work) == "elsewhere"
 
 
-def test_a_ref_deleted_from_packed_refs_is_seen(tmp_path: Path) -> None:
+def test_a_ref_deleted_from_packed_refs_is_seen(tmp_path: Path, git_starts: GitStarts) -> None:
     work, _ = _with_origin(tmp_path)
     _git(work, "fetch", "-q", "origin")
     _git(work, "pack-refs", "--all")
     assert not (work / ".git" / "refs" / "remotes" / "origin" / "main").exists()
     with git_cache.scope():
         assert remote_default_ref(work) == "origin/main"
+        _hit(git_starts, lambda: remote_default_ref(work), "origin/main")
         _git(work, "update-ref", "-d", "refs/remotes/origin/main")
         assert remote_default_ref(work) is None
 
 
-def test_a_nested_default_branch_is_followed_and_its_ref_watched(tmp_path: Path) -> None:
+def test_a_nested_default_branch_is_followed_and_its_ref_watched(
+    tmp_path: Path, git_starts: GitStarts
+) -> None:
     work, origin = _with_origin(tmp_path)
     _git(origin, "branch", "release/x/main", "main")
     _git(work, "fetch", "-q", "origin")
     _git(work, "remote", "set-head", "origin", "release/x/main")
     with git_cache.scope():
         assert remote_default_ref(work) == "origin/release/x/main"
+        _hit(git_starts, lambda: remote_default_ref(work), "origin/release/x/main")
         _git(work, "update-ref", "-d", "refs/remotes/origin/release/x/main")
         assert remote_default_ref(work) == "origin/main"
 
 
-def test_a_linked_worktree_reads_and_watches_the_common_dir(tmp_path: Path) -> None:
+def test_a_linked_worktree_reads_and_watches_the_common_dir(
+    tmp_path: Path, git_starts: GitStarts
+) -> None:
     work, _ = _with_origin(tmp_path)
     wt = tmp_path / "wt"
     _git(work, "worktree", "add", "-q", "-b", "side", str(wt))
     with git_cache.scope():
         assert remote_default_ref(wt) is None
+        _hit(git_starts, lambda: remote_default_ref(wt), None)
         _git(work, "fetch", "-q", "origin")
         assert remote_default_ref(wt) == "origin/main"
+
+
+def test_a_named_branch_changed_while_git_answers_is_not_cached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The before-stamp covers the branch `refs/remotes/<remote>/HEAD` names (p1-r4)."""
+    import fr.git as fr_git
+
+    work, origin = _with_origin(tmp_path)
+    _git(origin, "branch", "stable", "main")
+    _git(work, "fetch", "-q", "origin")
+    _git(work, "remote", "set-head", "origin", "stable")
+    real = fr_git._default_ref_of
+    raced = {"done": False}
+
+    def racing(root, remote):  # type: ignore[no-untyped-def]
+        answer = real(root, remote)
+        if not raced["done"]:
+            raced["done"] = True
+            # A bare unlink: `update-ref -d` also rewrites packed-refs, which the
+            # well-known before-stamp would catch on its own.
+            (work / ".git" / "refs" / "remotes" / "origin" / "stable").unlink()
+        return answer
+
+    monkeypatch.setattr(fr_git, "_default_ref_of", racing)
+    with git_cache.scope():
+        assert remote_default_ref(work) == "origin/stable"
+        assert remote_default_ref(work) == "origin/main"
 
 
 def test_a_refusal_is_not_cached(tmp_path: Path, git_starts: GitStarts) -> None:
@@ -334,20 +420,68 @@ def test_a_root_that_is_not_a_repository_is_not_cached(
         assert git_starts.count > n
 
 
-def test_an_include_config_repository_is_never_cached(
+def test_a_global_include_if_config_is_cached_and_its_included_file_watched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_starts: GitStarts
+) -> None:
+    work, origin = _with_origin(tmp_path)
+    _git(work, "remote", "add", "upstream", str(origin))
+    included = tmp_path / "x.gitconfig"
+    included.write_text("")
+    glob = tmp_path / "global.gitconfig"
+    glob.write_text(f'[includeIf "gitdir:{work}/"]\n\tpath = {included}\n')
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(glob))
+    with git_cache.scope():
+        assert remote_name(work) == "origin"
+        _hit(git_starts, lambda: remote_name(work), "origin")
+        included.write_text("[checkout]\n\tdefaultRemote = upstream\n")
+        assert remote_name(work) == "upstream"
+
+
+def test_a_relative_include_in_the_repository_config_is_watched(
     tmp_path: Path, git_starts: GitStarts
 ) -> None:
-    work, _ = _with_origin(tmp_path)
-    _git(work, "fetch", "-q", "origin")
-    (tmp_path / "extra.gitconfig").write_text("")
+    work, origin = _with_origin(tmp_path)
+    _git(work, "remote", "add", "upstream", str(origin))
+    extra = work / ".git" / "extra.gitconfig"
+    extra.write_text("")
     with (work / ".git" / "config").open("a") as f:
-        f.write(f"[include]\n\tpath = {tmp_path / 'extra.gitconfig'}\n")
+        f.write("[include]\n\tpath = extra.gitconfig\n")
     with git_cache.scope():
-        assert remote_default_ref(work) == "origin/main"
-        mid = git_starts.count
-        assert remote_default_ref(work) == "origin/main"
-        # The second answer goes to git again: remote_name's two calls, at least.
-        assert git_starts.count - mid >= 2
+        assert remote_name(work) == "origin"
+        _hit(git_starts, lambda: remote_name(work), "origin")
+        extra.write_text("[checkout]\n\tdefaultRemote = upstream\n")
+        assert remote_name(work) == "upstream"
+
+
+def test_an_onbranch_include_flips_with_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_starts: GitStarts
+) -> None:
+    work, origin = _with_origin(tmp_path)
+    _git(work, "remote", "add", "upstream", str(origin))
+    _git(work, "branch", "other")
+    included = tmp_path / "onbranch.gitconfig"
+    included.write_text("[checkout]\n\tdefaultRemote = upstream\n")
+    with (work / ".git" / "config").open("a") as f:
+        f.write(f'[includeIf "onbranch:other"]\n\tpath = {included}\n')
+    with git_cache.scope():
+        assert remote_name(work) == "origin"
+        _hit(git_starts, lambda: remote_name(work), "origin")
+        _git(work, "checkout", "-q", "other")
+        assert remote_name(work) == "upstream"
+
+
+def test_the_system_config_path_is_asked_once_per_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_starts: GitStarts
+) -> None:
+    monkeypatch.delenv("GIT_CONFIG_NOSYSTEM", raising=False)
+    monkeypatch.delenv("GIT_CONFIG_SYSTEM", raising=False)
+    monkeypatch.setattr(git_cache, "_SYSTEM_MEMO", {})
+    work, _ = _with_origin(tmp_path)
+    for _ in range(2):
+        with git_cache.scope():
+            remote_name(work)
+    probes = [c for c in git_starts.calls if "--system" in c]
+    assert len(probes) == 1, probes
 
 
 def test_a_reftable_repository_is_never_cached(tmp_path: Path, git_starts: GitStarts) -> None:

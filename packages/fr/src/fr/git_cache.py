@@ -19,11 +19,17 @@ What is NEVER cached (`locate` gives None, or `fr.git` declines to store):
 
 - a `GitRefusal`, and a `GitUnavailableError` (it propagates, nothing is stored);
 - a root with no repository above it, or a bare repository (no `.git` to read);
-- a repository located by `GIT_DIR` / `GIT_COMMON_DIR` in the environment;
+- a repository located by `GIT_DIR` / `GIT_COMMON_DIR` in the environment, or
+  read with the legacy `GIT_CONFIG` file in the environment;
 - a `reftable` repository (its refs are not files this module can stat);
 - `extensions.worktreeConfig` (a per-worktree config file the list would miss);
-- an `[include]` / `[includeIf]` in any config file read, or an `include` key
-  passed through the environment (the included files are not in the list);
+- an `[include]` / `[includeIf]` path that cannot be resolved to a file
+  (`%(prefix)/`, `~user/`, an empty or unparseable value), an include chain
+  deeper than git's own limit (10), or an `include` key passed through the
+  environment. Every other include is FOLLOWED: the included file joins the
+  stat'd list whether or not its condition matches (over-invalidating is safe,
+  a stale hit is not), and the per-worktree `HEAD` is stat'd so an `onbranch:`
+  condition that flips is seen;
 - a system config file whose path git would not name.
 """
 
@@ -31,6 +37,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -43,10 +50,21 @@ ABSENT = ("absent",)
 
 _CACHE: ContextVar[dict[Any, Any] | None] = ContextVar("fr_git_cache", default=None)
 
-_SYSTEM_CONFIG_KEY = ("git_cache", "system-config")
 _UNKNOWN = "unknown"
 
-_INCLUDE = re.compile(r"^\s*\[\s*include", re.IGNORECASE | re.MULTILINE)
+_SYSTEM_MEMO: dict[tuple[str | None, ...], str] = {}
+"""The system config path git names, per git binary and environment, for the process.
+
+The path is compiled into the git binary (its prefix), so one answer serves every
+scope; `GIT_CONFIG_NOSYSTEM` / `GIT_CONFIG_SYSTEM` are read before this memo is."""
+
+MAX_INCLUDE_DEPTH = 10
+"""git's own `MAX_INCLUDE_DEPTH`: a deeper chain (a cycle, say) declines."""
+
+_SECTION = re.compile(r'^\s*\[\s*([A-Za-z0-9.-]+)\s*(?:"((?:[^"\\\n]|\\.)*)")?\s*\](.*)$')
+_KEY = re.compile(r"^\s*([A-Za-z][A-Za-z0-9-]*)\s*(=\s*(.*))?$")
+_ESCAPES = {"n": "\n", "t": "\t", "b": "\b", "\\": "\\", '"': '"'}
+
 _WORKTREE_CONFIG = re.compile(r"worktreeconfig", re.IGNORECASE)
 
 
@@ -79,6 +97,8 @@ def locate(root: Path) -> Located | None:
     """The repository *root* sits in, or None when the cache must not apply."""
     if os.environ.get("GIT_DIR") or os.environ.get("GIT_COMMON_DIR"):
         return None
+    if os.environ.get("GIT_CONFIG"):
+        return None
     try:
         here = Path(root).resolve()
     except OSError:
@@ -98,21 +118,131 @@ def locate(root: Path) -> Located | None:
     system = _system_config(here)
     if system == _UNKNOWN:
         return None
-    files = (*((Path(system),) if system else ()), *_global_configs(), common / "config")
     if _env_includes():
         return None
-    for path in files:
-        try:
-            text = path.read_text(errors="replace")
-        except FileNotFoundError:
+    roots = (*((Path(system),) if system else ()), *_global_configs(), common / "config")
+    files: list[Path] = []
+    for path in roots:
+        if not _visit_config(path, 0, files):
+            return None
+    return Located(git_dir=git_dir, common_dir=common, config_files=tuple(files))
+
+
+def head_target(located: Located, remote: str) -> str | None:
+    """The branch `refs/remotes/<remote>/HEAD` names, read from its loose file, or None."""
+    try:
+        text = (located.common_dir / "refs" / "remotes" / remote / "HEAD").read_text()
+    except OSError:
+        return None
+    prefix = f"ref: refs/remotes/{remote}/"
+    line = text.strip()
+    return (line.removeprefix(prefix) or None) if line.startswith(prefix) else None
+
+
+def _visit_config(path: Path, depth: int, files: list[Path]) -> bool:
+    """Add *path* and every file it includes to *files*; False when the cache must decline."""
+    files.append(path)
+    try:
+        text = path.read_text(errors="replace")
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    if _WORKTREE_CONFIG.search(text):
+        return False
+    included = _include_paths(text)
+    if included is None:
+        return False
+    for raw in included:
+        target = _resolve_include(raw, path)
+        if target is None or depth + 1 > MAX_INCLUDE_DEPTH:
+            return False
+        if not _visit_config(target, depth + 1, files):
+            return False
+    return True
+
+
+def _include_paths(text: str) -> list[str] | None:
+    """Every `include.path` / `includeIf.<cond>.path` value in *text*, or None when
+    an include section or value is spelled in a form this reader does not parse."""
+    found: list[str] = []
+    section: str | None = None
+    for line in text.splitlines():
+        header = _SECTION.match(line)
+        if header:
+            name, sub, line = header.group(1).lower(), header.group(2), header.group(3)
+            if name.startswith("include"):
+                if not ((name == "include" and sub is None) or (name == "includeif" and sub)):
+                    return None
+                section = "include"
+            else:
+                section = name
+            if not line.strip():
+                continue
+        elif line.lstrip().startswith("["):
+            if "include" in line.lower():
+                return None
+            section = None
             continue
-        except OSError:
+        if section != "include":
+            continue
+        stripped = line.strip()
+        if not stripped or stripped[0] in "#;":
+            continue
+        key = _KEY.match(stripped)
+        if key is None:
             return None
-        if _INCLUDE.search(text):
+        if key.group(1).lower() != "path":
+            continue
+        value = _parse_value(key.group(3)) if key.group(2) is not None else None
+        if not value:
             return None
-        if path == common / "config" and _WORKTREE_CONFIG.search(text):
+        found.append(value)
+    return found
+
+
+def _parse_value(raw: str) -> str | None:
+    """A config value as git reads it (quotes, escapes, comments), or None."""
+    out: list[str] = []
+    pending = ""
+    quoted = False
+    i = 0
+    while i < len(raw):
+        c = raw[i]
+        if c == "\\":
+            escaped = _ESCAPES.get(raw[i + 1]) if i + 1 < len(raw) else None
+            if escaped is None:
+                return None  # a continuation line or an unknown escape
+            out.append(pending + escaped)
+            pending = ""
+            i += 2
+            continue
+        if c == '"':
+            quoted = not quoted
+        elif not quoted and c in "#;":
+            break
+        elif not quoted and c.isspace():
+            pending += c
+        else:
+            out.append(pending + c)
+            pending = ""
+        i += 1
+    return None if quoted else "".join(out)
+
+
+def _resolve_include(raw: str, including: Path) -> Path | None:
+    """An include path as git resolves it, or None when it is not a concrete file."""
+    if "%(" in raw:
+        return None
+    if raw.startswith("~/"):
+        home = os.environ.get("HOME")
+        if not home:
             return None
-    return Located(git_dir=git_dir, common_dir=common, config_files=files)
+        return Path(home) / raw[2:]
+    if raw.startswith("~"):
+        return None
+    target = Path(raw)
+    return target if target.is_absolute() else including.parent / target
 
 
 def fingerprint(
@@ -122,6 +252,8 @@ def fingerprint(
     common = located.common_dir
     paths = [
         *located.config_files,
+        # The per-worktree HEAD: an `includeIf "onbranch:..."` follows it.
+        located.git_dir / "HEAD",
         common / "packed-refs",
         # `git remote` also lists the legacy remotes/ and branches/ entries.
         common / "remotes",
@@ -193,18 +325,24 @@ def _truthy(value: str) -> bool:
 
 
 def _system_config(here: Path) -> str:
-    """The system config path, "" for none, or `_UNKNOWN`. Asked of git once per scope."""
+    """The system config path, "" for none, or `_UNKNOWN`. Asked of git once per process
+    for each git binary (`_SYSTEM_MEMO`)."""
     if _truthy(os.environ.get("GIT_CONFIG_NOSYSTEM", "")):
         return ""
     configured = os.environ.get("GIT_CONFIG_SYSTEM")
     if configured is not None:
         return configured or _UNKNOWN
-    cache = active()
-    if cache is not None and _SYSTEM_CONFIG_KEY in cache:
-        return str(cache[_SYSTEM_CONFIG_KEY])
+    binary = shutil.which("git")
+    key = (
+        os.path.realpath(binary) if binary else None,
+        os.environ.get("GIT_EXEC_PATH"),
+        os.environ.get("PREFIX"),
+    )
+    if key in _SYSTEM_MEMO:
+        return _SYSTEM_MEMO[key]
     found = _ask_system_config(here)
-    if cache is not None:
-        cache[_SYSTEM_CONFIG_KEY] = found
+    if found != _UNKNOWN:
+        _SYSTEM_MEMO[key] = found
     return found
 
 
