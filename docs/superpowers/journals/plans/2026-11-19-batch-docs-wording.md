@@ -214,3 +214,103 @@ The page overflow comes from wide code blocks in the page body, which this chang
 ### p3-article-table-overflow-resolved · finding [out-of-scope] · resolves p3-article-table-overflow: 01-fr-goal.html scrolls horizontally on a phone because of a wide table, not the bar (phase 3)
 
 01-fr-goal.html overflows on phones from a wide article table in its body, not the bar; this change does not touch article content or table styling.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · R12 fence tests used only a stand-in renderer
+
+The stand-in encoded the same rule as the check, so real Python-Markdown behaviour was never tested.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · check_fences_render let one <pre> satisfy two fences with one body
+
+Matching was by membership, not per occurrence.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · bracket-help test matched spans by presence against the whole page
+
+A duplicated span, or one also in the usage line, masked an eaten copy.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · R14/R15 tests pin CSS strings rather than measuring layout
+
+They would pass with a visually wrong bar.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · ops/rework help tests asserted trivially-true substrings
+
+'path', 'live', 'archived' occur elsewhere in the help.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · acceptance-skill prose test was negative-only
+
+It never asserted the corrected claim.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-tests-r7 · finding [open] (reviewer: in scope) · fill_pages filled an own-line marker inside a fenced block
+
+A page showing the marker in a fence would get the list spliced in; untested, as was trailing text.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · cli.md reviewed stamp repeated older notes and missed this batch
+
+The merge resolution concatenated two overlapping stamps.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-19T14:57:45+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · docs-currency.md did not say the marker fills only on its own line
+
+Item 5 of 'How this repo builds its site' was incomplete.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-19T14:57:45+00:00 -->
+### lens-review-1 · review · Lens review: tests (7 findings) and docs-accuracy (2 findings)
+
+One reviewer per lens over the whole diff from merge base f1b70d979. tests examined the
+five test files, build-site.py, bar.css and landing.css; docs-accuracy examined cli.md,
+docs-currency.md, the explainers-currency rule, fr-devops-gate/fr-acceptance/fr-exit-gates
+pages, build-site.py, the site CSS, ops_gate_cmd.py and three skills. Fixes: 6f09a0ec2
+(docs-accuracy r1, r2), 61b658f7b (tests r1, r2, r3, r5, r6, r7), 4daf69e36 (markdown in
+the dev group so r1's real-converter tests run in CI). l-tests-r4 refuted.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: R12 fence tests used only a stand-in renderer
+
+61b658f7b + 4daf69e36: tests run the real Python-Markdown converter with the renderer's extensions (2/3/4-space list fences refused, top-level fence and 8-space block pass); markdown is a dev dependency so CI runs them.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: check_fences_render let one <pre> satisfy two fences with one body
+
+61b658f7b: each fence consumes one <pre> (Counter); test_two_fences_with_one_body_each_need_their_own_pre fails on the old code.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: bracket-help test matched spans by presence against the whole page
+
+61b658f7b: missing_spans is count-based per page; new self-tests for a duplicated span with one copy eaten and a span also in the usage line.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-19T14:57:45+00:00 state=refuted resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [refuted] · resolves l-tests-r4: R14/R15 tests pin CSS strings rather than measuring layout
+
+The layout itself is proven by the row's visual evidence: two reviewers' own screenshots and JS measurements at 320/390/1280 recorded at review-phase phase/3. CI has no browser, so the unit tests deliberately guard the rules that produce that layout against regression; a layout test would need browser infrastructure this repo's suite does not have.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: ops/rework help tests asserted trivially-true substrings
+
+61b658f7b: the tests assert the replacement sentences (whitespace-normalised) for seal's {target} and the rework parent.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: acceptance-skill prose test was negative-only
+
+61b658f7b: the test also asserts the corrected sentence (listed only while it is debt).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-tests-r7 -->
+### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: fill_pages filled an own-line marker inside a fenced block
+
+61b658f7b: fill_pages skips fenced lines; test_a_marker_shown_in_a_fence_or_followed_by_text_is_left_as_written fails on the old code. Docs and rule say so.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: cli.md reviewed stamp repeated older notes and missed this batch
+
+6f09a0ec2: one stamp, this batch's note first, then main's.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-19T14:57:45+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: docs-currency.md did not say the marker fills only on its own line
+
+6f09a0ec2 and 61b658f7b: item 5 says the marker fills only alone on its line, outside a fenced block.
