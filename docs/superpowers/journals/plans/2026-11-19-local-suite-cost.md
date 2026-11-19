@@ -275,3 +275,58 @@ Fixed in 546bf5173: `_remap` rewrites Path and raises TypeError on any other non
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: Autouse path env (sessions, transcripts, opencode db) named the asker's tmp_path during a build (phase 2)
 
 Fixed in 546bf5173: `build_paths` points FR_SESSIONS_DIR, FR_TRANSCRIPT_ROOT, FR_OPENCODE_DB, FR_MODELS_CACHE_DIR, FR_OPS_TRUST_DIR and FR_OPS_GATE_DIR into the factory's sandbox for the build; a guard test fails if a future autouse fixture adds an uncovered path variable.
+
+<!-- fr:journal kind=decision scope=plan id=p3-d-scenario-mark-loop created=2026-11-19T20:17:31+00:00 phase=3 -->
+### p3-d-scenario-mark-loop · decision · test_scenarios.py marks every test but the tripwire with a module-level loop, not a module pytestmark (phase 3)
+
+Spec §3.D says "a module `pytestmark` that the tripwire's own test overrides", but pytest cannot lift a module mark from one test: `-m` matches `iter_markers()`, which walks the module node's own markers. A loop at the end of the module applies `pytest.mark.scenario` to every `test_*` function except those in `_UNMARKED = {"test_every_scenario_script_has_a_test_here"}`: the same module-level rule with the one exemption, and a new scenario test is marked without anyone remembering to. Pinned by test_scenario_tier_commands.py::test_the_default_local_run_keeps_only_the_tripwire_of_the_scenario_file.
+
+<!-- fr:journal kind=decision scope=plan id=p3-d-import-match created=2026-11-19T20:17:31+00:00 phase=3 -->
+### p3-d-import-match · decision · --fr-scope matches an import against a changed module or a changed parent package of the imported name, never the reverse (phase 3)
+
+An imported dotted name M (`import a.b.c`, or `from a.b import c` read as `a.b.c`) selects its test file for a changed source module C when M == C or M starts with C + "." (C is M itself or a package M's import runs). A test that only does `import fr` is NOT selected when `fr/run/c.py` changes: reading R6's "or one of its parent packages" the other way would select nearly every test for any change under `fr/`, since most import `fr` somewhere. Test modules imported by other test modules (e.g. `from tests.unit.test_run_cli import _repo`) are treated as helpers: heat spreads backwards along every tests/-internal import. Pinned by test_fr_scope.py (helper, deep helper, package, parent-only cases).
+
+<!-- fr:journal kind=decision scope=plan id=p3-d-smoke-set created=2026-11-19T20:17:31+00:00 phase=3 -->
+### p3-d-smoke-set · decision · The smoke set is one `<command> --help` round trip per top-level fr command, derived from the app (phase 3)
+
+tests/unit/test_smoke_cli.py parametrizes over `typer.main.get_command(app).commands` (37 top-level commands today) and invokes each with `--help` through CliRunner. Marking one existing behavioural test per group by hand would go stale as groups are added; the derived list cannot miss a group. It proves the CLI imports and registers every group, not that each group's behaviour is right — the fast tier is advisory, and CI is the evidence.
+
+<!-- fr:journal kind=decision scope=plan id=p3-d-executor-brief-key created=2026-11-19T20:17:31+00:00 phase=3 -->
+### p3-d-executor-brief-key · decision · The `tests` brief key rides a flat step that declares `tests` evidence (deliver) and a member whose agent is the phase executor (phase 3)
+
+`run_cmd._tests_brief(repo_root, step)` keys on `"tests" in step.evidence` or `step.agent == PHASE_EXECUTOR_AGENT`, not on step ids, so both shipped shapes (fr-goal, fr-goal-light) and repo overrides get it while review-phase does not. A refused `tests` value in `.fr/ci.yaml` refuses the brief (exit 2) rather than reading as "not declared". When `remote_default_ref` gives no ref the command is `--fr-scope` with no value, which resolves (or refuses) at pytest time.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-durations-from-ci created=2026-11-19T20:17:31+00:00 phase=3 -->
+### p3-durations-from-ci · discovery · .test_durations was refreshed from CI run 44544149927's shard durations, not a local run (R10) (phase 3)
+
+The host was loaded by other sessions and a local full suite takes hours, so no local `-m ""` run was made. CI's `test` shards run `-o addopts="--strict-markers"` (every test, scenarios included, the same set `-m ""` runs) with `--store-durations --clean-durations`, and each uploads `durations-py<v>-shard-<n>`. The py3.14 leg's seven files from CI run 44544149927 (head b45e98d0f, this PR after phases 1-2, green) were merged with `scripts/split_check.py merge`, exactly what `split-check` does on main. Result: 16,989 tests, 4,157 worker-seconds (py3.11 leg 4,180); scenario tier 145 tests, 870 worker-seconds; shard jobs 2m50s-4m37s; whole CI run 5m18s wall. The old file (15,182 tests, 18,855 worker-seconds, 2026-11-15) was measured on another machine, so the totals do not compare and no saving is claimed from them. Tests added in phase 3 and in the phase-2 review fixes are absent from the file; pytest-split weighs a missing test by the average, so this only affects balance. AGENTS.md states these figures and the CI-merge refresh route beside the R10 command.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-tdd-order created=2026-11-19T20:17:31+00:00 phase=3 -->
+### p3-tdd-order · discovery · tests/fr_scope.py was drafted before test_fr_scope.py; RED was shown by moving it aside (phase 3)
+
+For P3.T2 the selection module was written first, then the test file; the RED run was taken with tests/fr_scope.py moved out (ImportError), and the conftest wiring was RED on its own (`unrecognized arguments: --fr-scope`, the two end-to-end tests) before the hooks were added. T1, T2.S3 and T3 were test-first (missing `-m ""` / unmarked collection; ImportError on ADVISORY_LINE and declared_tests_mode; four failing prose pins).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-piped-exit created=2026-11-19T20:17:31+00:00 phase=3 -->
+### p3-piped-exit · discovery · One commit (caeee8416) landed over a red test because a `pytest | tail` chain read tail's exit (phase 3)
+
+`test_run_ci_evidence.py::test_this_repo_declares_ci_ok_as_its_gate` pinned `.fr/ci.yaml` byte-for-byte as `gate_checks: [ci-ok]`; declaring `tests: ci` broke it, and the `&& git commit` after `pytest ... | tail -1` committed anyway. Fixed in the next commit (1ad844bfc: the test now parses the YAML and expects both keys); every later gate wrote raw output to a log and read the exit code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f-fr-scope-optional-value created=2026-11-19T20:17:31+00:00 phase=3 state=open review_scope=out -->
+### p3-f-fr-scope-optional-value · finding [open] (reviewer: out of scope) · `--fr-scope` with nargs='?' swallows a following path as its base (`--fr-scope tests/unit/x.py`) (phase 3)
+
+argparse gives an optional-value option the next non-dash token. `pytest --fr-scope tests/unit/test_x.py` reads the path as the base ref and fails in `git merge-base` with a usage error naming it, so nothing runs silently wrong; the brief's command and AGENTS.md always put the base (or a dash option) right after it. A `--fr-scope=` spelling or a separate `--fr-scope-base` would remove the trap; R6 fixes the `--fr-scope [<base-ref>]` form, so it is left.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-19T20:17:31+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+The change is a marker registration, one addopts token, a module-level marking loop and one `-m ""` argument; the new test's predicate is already one function. Nothing duplicated to fold.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-19T20:17:31+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+tests/fr_scope.py was written pure from the start (selection, keep_item, advisory_reasons) with conftest holding only the pytest adapters; the advisory line has one definition (fr.run.ci_evidence.ADVISORY_LINE) that tests/fr_scope.py re-exports, and the refusal is one predicate (is_advisory_log). No duplication left.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-19T20:17:31+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+declared_tests_mode reuses load_gate_checks' read shape (git show HEAD:.fr/ci.yaml) and the one brief helper `_tests_brief` serves both builders; the agent/skill edits are prose. Nothing to fold.
