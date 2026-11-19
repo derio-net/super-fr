@@ -184,8 +184,10 @@ steps:
           findings: l-docs-accuracy-r1,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-errors-r7,l-errors-r8,l-errors-r9
           lenses: docs-accuracy=13:l-docs-accuracy-r1;errors=10:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-errors-r7,l-errors-r8,l-errors-r9;tests=26:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
   deliver:
-    state: running
-    at: '2026-11-19T21:10:27+00:00'
+    state: done
+    at: '2026-11-19T21:29:23+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1559
     units:
       step/deliver:
         attempts:
@@ -193,5 +195,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: d2814f1b-87a4-4558-bbe3-e21fd24f245b
+          returned: '2026-11-19T21:28:45+00:00'
+          outcome: done
+        evidence:
+          tests: ci:f9848a552217583f3402baa925eac8386f086aae+unknown;tree=2278774c01076f1303d2653562b3a48a7ba03c304efc210c8838f9078ec4cd03
+          walk: 20261119T211134Z.log@a0985528a58a
+          proportionality: 28f2c623e22226df18937a4b3db24d1325c9d321:79eac62cad903eb269e72a81bd49e2f220cc4a1e97f6a0a27341919738831c63
+          docs: 28f2c623e22226df18937a4b3db24d1325c9d321:3e07c631cad62d0222de19d4765993ea15bfccce7b0662612a0a87a5e813ce43
+          visual: none
 fr_version: 8.2.0
 pr: https://github.com/derio-net/super-fr/pull/1559
