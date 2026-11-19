@@ -26,3 +26,4 @@ steps:
     state: pending
 fr_version: 8.3.0rc3
 issue: 1527
+pr: https://github.com/derio-net/super-fr/pull/1570
