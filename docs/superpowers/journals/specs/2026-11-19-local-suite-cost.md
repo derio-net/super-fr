@@ -323,3 +323,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-local-suite-cost-p4 created=2026-11-19T09:19:48+00:00 -->
 ### phase-split-2026-11-19-local-suite-cost-p4 · decision · ask: R9 is an operator-only ruleset change (manual)
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-local-suite-cost-p1 created=2026-11-19T09:19:52+00:00 -->
+### tier-2026-11-19-local-suite-cost-p1 · decision · hard: a correctness cache over git state on the default-ref path every merge, archive and dispatch check relies on
