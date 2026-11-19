@@ -71,8 +71,8 @@ rows:
       rules; a version-file-only conflict is not handed back; no PR the forge reports
       clean is trial-merged; a conflicting PR is never asked for approval
     origin:
-    - spec:2026-11-19-batch-train-truth#R16
     - spec:2026-11-19-batch-train-truth#R17
+    - spec:2026-11-19-batch-train-truth#R18
     levels: {}
     status: not-implemented
     notes: ''
