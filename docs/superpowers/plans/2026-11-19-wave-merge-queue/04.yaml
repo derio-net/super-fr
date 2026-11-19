@@ -1,0 +1,89 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The hold handshake and the release (R17–R19, R27)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - wave-queue-release-hold
+  - wave-queue-broken-hold
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/queue_exec.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/commands/release_cmd.py
+  - packages/fr/src/fr/release*/**/*.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - scripts/release.py
+  - .github/workflows/release.yml
+  - AGENTS.md
+  - tests/**/*.py
+  - docs/acceptance/features/2026-11-19-wave-merge-queue.yaml
+  estimate_lines: 800
+tasks:
+- number: 1
+  title: Hold states written by the driver
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED, over a bare remote:
+      - `queue-open` pushes `refs/heads/fr-hold/queue` as a commit whose parent is the base and whose message is `fr-hold: open scope <id> wave <N> opened <ISO> refreshed <ISO>`, leased on the ref being absent or cleared. A refresh re-pushes it with a new refreshed time.
+      - `queue-drain` pushes `drained`, with the drained main as parent. A lease failure on the hold is reported, never forced.
+      - Under `release: none`, the driver pushes `cleared` at drain.
+      - A vanished or cleared `open` hold found while the queue is open is re-armed, with one Need naming any tag cut from a partly landed wave (R17, R27).
+  - id: P4.T1.S2
+    text: |-
+      GREEN: implement the hold reading and writing in `queue_exec.py`, with a pure `parse_hold(message)` in `wave_queue.py`; add the planner's re-arm rule and the `queue_drain` and `queue_cleared` events.
+- number: 2
+  title: fr release status and release.py honour the hold
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED:
+      - `fr release status --from-json` with `hold: {state: open, refreshed: <now-1h>}` reports held, naming scope and wave. Refreshed more than 24 h ago, it warns and does not hold. `drained` and `cleared` never hold.
+      - In `tests/unit/test_release_script.py`: `release.py` fetches the hold ref and passes it in the facts. It cuts nothing under `open`; a `--version` run is held too and prints the clear command.
+      - After a finished run (published, or "nothing installable") whose base contains a drained hold's parent, it pushes a leased `cleared` commit. A superseded run and a failed run clear nothing (R18).
+  - id: P4.T2.S2
+    text: |-
+      GREEN: extend the release-status facts model and decision in `release_cmd.py`. In `scripts/release.py`, add the credential-free fetch, the facts field, and the leased clear as the last step of the publish/finish path and of the path that cuts nothing.
+  - id: P4.T2.S3
+    text: |-
+      GREEN:
+      - `.github/workflows/release.yml` adds `push: branches: ['fr-hold/**']` and skips a deletion push (`if: github.event.deleted != true` on `prepare`). The clear runs in the job that ends the run, with the token that job already holds. Pin the trigger and the guard in a workflow test.
+      - The driver dispatches `queue.release_workflow` on drain; a failed dispatch only warns.
+      - A `drained` hold older than `release_wait_hours` is a Need (R19).
+  - id: P4.T2.S4
+    text: |-
+      REFACTOR: update release.py's module docstring and AGENTS.md's release paragraph for the hold; record the rows' level refs; full suite, ruff and mypy green.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -393,3 +393,9 @@ gate: wave-queue-live-wave=tester
 24. Other merges: a collected close-out, an export PR and a housekeeping PR each land through the queue under their trust rule; `pr_merge` is never called outside `land: merge`. (R32)
 25. `post_merge` runs once per landing at the landed `main`, records every batch it covered, gates the next landing, and a failure pauses landings with a Need. A landed PR the forge still shows open pauses the queue with a Need. (R33, R35)
 26. Post-merge, live: the next wave on this repo drains through the queue; record the number of PR updates (expected 0), CI cycles per PR, approvals per PR (expected 1), and releases cut (expected 1 for the wave). (all; row `wave-queue-live-wave`)
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-19-wave-merge-queue | `derio-net/super-fr` | `2026-11-19-wave-merge-queue` | — |

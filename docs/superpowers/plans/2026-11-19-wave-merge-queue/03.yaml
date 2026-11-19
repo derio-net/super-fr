@@ -1,0 +1,118 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Building and landing on git and the forge (R4–R7, R10, R11, R20, R33–R35)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - wave-queue-land-methods
+  - wave-queue-post-merge
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/triage/queue_exec.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/**/*.py
+  - docs/acceptance/features/2026-11-19-wave-merge-queue.yaml
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: Building combinations into slots
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: `tests/integration/test_queue_build.py`, over a real bare remote:
+      - Under `squash`, building [a, b] pushes slot-1 = main+A and slot-2 = main+A+B. Each entry is one commit with subject `<title> (#n)` holding the PR's whole change.
+      - Under `merge`, it builds two `--no-ff` merge commits with subject `Merge pull request #n from <head-ref>`. Under `rebase`, it replays the PR's commits.
+      - A rebuild with the same inputs gives the same tree and a new sha.
+      - A conflict in a version file alone is resolved by today's `_unresolvable` rule and carries the slot version. Any other conflict raises `MergeConflictError` with the paths.
+      - Each slot push is leased on the sha the slot held, so a stale lease fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: add `packages/fr/src/fr/triage/queue_exec.py` with `build(checkout, base, entries, method, version) -> list[Built]`, reusing `batch_merge._unresolvable` and the version `set_`/`relock` calls. Add `Checkout.push_leased(refspecs, leases, atomic)` to `gitseam.py`.
+- number: 2
+  title: Landing by atomic push and by forge merge
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: landing [a, b] by push is ONE `--atomic` push, leased on the base and on each head the combination was built from. It moves main to slot-2's sha and, under squash, moves each PR head ref to its own commit. Under merge, the head refs are pushed unchanged, with leases.
+      - A session push to b's head between build and land fails the whole push, and no ref moves (under both methods).
+      - A fake server without atomic support yields `queue-held`.
+      - `land: merge` calls `pr_merge(head_sha=…)` per entry in order, then compares `main^{tree}` with the slot tree and stops on a mismatch (R10, R11, R22).
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement `land_push` and `land_merge` in `queue_exec.py`. Record `queue_built` before each slot push and `queue_land` after a successful landing, through the one judgements writer (`event_writer` in `triage_batch_cmd.py`).
+  - id: P3.T2.S3
+    text: |-
+      RED:
+      - After a landing, the driver reads each landed PR back. A PR the fake forge still shows OPEN gives a Need and pauses the queue (R35).
+      - A repo whose client is glab or tea is `queue-held`, naming gh#611.
+      - A push refused by protection (GH006 or GH013 in stderr) holds the queue, naming R34's two remedies and `queue.land: merge`.
+  - id: P3.T2.S4
+    text: |-
+      GREEN: implement the read-back and the held reasons in the executor.
+- number: 3
+  title: Checks on combinations and post_merge per landing
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED:
+      - A slot's verdict comes from `commit_checks(repo, sha)` under the base's `required_check_names` (or `.fr/ci.yaml`'s gate checks). A required check that has not reported within `check_wait_minutes` is a Need naming it.
+      - A missing `queue.ci` refuses the queue, naming the line to add. `queue.ci: none` is refused where services report CI, and otherwise lands without a CI wait (R7, R20).
+      - `post_merge` runs once per landing, at the landed main. It records `post_merge` on every landed batch and blocks the next `queue-land` until it finishes. A failure pauses landings with a Need (R33).
+  - id: P3.T3.S2
+    text: |-
+      GREEN: implement:
+      - the slot-checks reader in the snapshot;
+      - the `queue:` block in the triage config model (`ci`, `depth`, `land`, `check_wait_minutes`, `release`, `release_workflow`, `release_wait_hours`, `stall_hours`, with the spec's defaults);
+      - `queue-post-merge` in the executor, reusing `_post_merge`.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: cover the crash windows. A test kills the executor after `queue_built` and again after the land push, and asserts that the next pass resumes from events and the forge without a second landing (R24). Record the rows' level refs; full suite, ruff and mypy green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,131 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The pure wave-queue planner (R2, R3, R8, R9, R13, R14, R30, R31, R36)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - wave-queue-speculative-land
+  - wave-queue-wave-exclusive
+  - wave-queue-eject
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/**/*.py
+  - docs/acceptance/features/2026-11-19-wave-merge-queue.yaml
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: Phases, wave choice and the hold lease
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: `tests/unit/test_wave_queue_planner.py`, over a pure `QueueSnapshot` (records, hold state, batches with waves and stages, live PRs, approvals, slot checks, base sha, config, now):
+      - An idle repo with wave 3 unfinished and wave 4 ready opens wave 3 (`queue-open`) even with nothing of wave 3 ready, and reports wave 4's entries as waiting.
+      - A repo whose hold another scope holds (`open` or `drained`) gets `queue-held`, naming that scope, and no other action (R31).
+      - A `drained` hold yields no open; a `cleared` or absent hold allows one.
+      - Between-waves entries are taken only when no waved batch is unfinished (R2, R3).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: create `packages/fr/src/fr/triage/wave_queue.py` with `QueueSnapshot`, `QueueAction` (the action kinds of spec §A), `QueuePhase` (open | releasing | idle, from records and hold) and `plan_queue(snap) -> QueuePlan`. Implement phase reading, and wave choice as "the lowest wave with a non-terminal batch" (terminal means landed, cancelled, abandoned or deferred). The module reads no clock, git or forge; a test checks its imports.
+- number: 2
+  title: Building, depth and landing the green prefix
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: for an open queue with entries a, b, c in readiness order and depth 2:
+      - It plans `queue-build` for a and b into slots 1 and 2 on the base.
+      - With both slots green, it plans `queue-land` for the prefix [a, b] at slot 2's sha.
+      - With slot 1 green and slot 2 pending, it lands [a] and keeps slot 2 testing, because slot 2's parent is now the landed main; it then builds c into the freed slot.
+      - With slot 1 pending, nothing lands (R8, R9).
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement in `plan_queue`: entry ordering (readiness order from the records), slot assignment 1..depth, the longest-green-prefix landing, and refilling the freed slots after a landing.
+  - id: P2.T2.S3
+    text: |-
+      RED: a foreign base move, where the live base differs from the queue's recorded base and no `queue_land` produced it, plans `queue-rebuild` for every slot on the new base. It reports once per new base (keyed in `warned`), and no action names a PR head ref (R14).
+  - id: P2.T2.S4
+    text: |-
+      GREEN: implement R14 in `plan_queue`.
+- number: 3
+  title: Ejection and the red and conflict decisions
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: when slot 2 fails while slot 1 is green, and no rebuild has run at that tree, the planner plans one rebuild of slot 2 (same entries, flagged fresh). A second failure plans:
+      - `queue-eject` of b with reason red, carrying the slot sha and the failing checks;
+      - `red_decision`'s outcome: handback for an idle session, wait for a working one, needs_you when the session is absent or the budget is spent;
+      - a rebuild of c on main+a.
+      A conflict recorded at build gives `queue-eject` with reason conflict, through `conflict_decision` (R6, R13). An ejected entry re-enters only when its head moves.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement ejection in `wave_queue.py`, reusing `batch_drive.red_decision` and `batch_drive.conflict_decision`. Remove `red_decision`'s `reupdate` rule and its tests in the same commit, since the queue never updates a PR branch.
+- number: 4
+  title: Drain, stall proposals and the cap
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED:
+      - A wave whose batches are all landed, cancelled, abandoned or deferred, and whose close-out has landed (or which has none), plans `queue-drain`.
+      - When every other batch is terminal and one batch has a spent hand-back budget, or its last head change and last event are older than `stall_hours`, the planner yields exactly one Need with the `fr triage batch defer` and `requeue` commands, and never a write (R30).
+      - `batch_drive`'s in-flight cap no longer counts a `pr-open` batch whose wave's queue is not open (R36).
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement the drain, the stall proposal and the cap exemption (the occupants set in `batch_drive.py` reads a predicate exported by `wave_queue`).
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR: call `plan_queue` from `drive_pass` per repo, in place of `_walk_train`; until phase 3 lands, the command executes only the queue's report actions. Record the three rows' level refs in the step record; full suite, ruff and mypy green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
