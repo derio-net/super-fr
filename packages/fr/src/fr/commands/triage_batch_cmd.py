@@ -770,7 +770,7 @@ def batch_list_command(
 
 @batch_app.command("create")
 def batch_create_command(
-    batch_id: Annotated[str, typer.Argument(help="Batch id, a slug: [a-z][a-z0-9-]{0,39}.")],
+    batch_id: Annotated[str, typer.Argument(help="Batch id, a slug: \\[a-z]\\[a-z0-9-]{0,39}.")],
     title: TitleOpt = None,
     issue: IssueOpt = None,
     rationale: RationaleOpt = None,

@@ -134,8 +134,10 @@ def status_cmd(
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
 ) -> None:
-    """Print the feature's lens set: each lens with every reason and the step that
-    added it, or the path rule that requires it and one matching file."""
+    """Print the feature's lens set.
+
+    Each lens shows every reason and the step that added it, or the path rule that
+    requires it and one matching file."""
     root = resolve_repo_root()
     run = _branch_run(root, run_id)
     try:

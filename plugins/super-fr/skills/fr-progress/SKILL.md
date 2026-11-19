@@ -26,7 +26,7 @@ In v2 there is no dedicated progress subcommand surface — queries decompose in
 
 First time in a repo with `docs/superpowers/` or fr config: **never**
 manually create, move, or archive files under it (#378). Run in order —
-`fr status`/`fr repair`/`fr migrate v1-to-v2` preview by default, no `--yes`:
+`fr repair` and `fr migrate v1-to-v2` preview by default and apply only with `--yes`; `fr status` only reads and has no `--yes`:
 
 ```bash
 fr --help                       # confirm fr is installed / repo is fr-managed

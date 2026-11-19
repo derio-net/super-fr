@@ -8488,10 +8488,11 @@ def claim_cmd(
         "(gh#530). Refuses when zero or several units fit.",
     ),
 ) -> None:
-    """Put the orchestrator's reported identity onto the dispatch `fr run
-    advance` already opened for a unit (spec §3, §4.C) — the `agent`/
-    `harness` half of `Attempt` that only the orchestrator can report,
-    fr itself can only derive `agent_type`/`model` and time its own act.
+    """Put the orchestrator's reported identity onto the dispatch for a unit.
+
+    `fr run advance` already opened that dispatch (spec §3, §4.C). The identity is the
+    `agent`/`harness` half of `Attempt`, which only the orchestrator can report. fr
+    itself can only derive `agent_type`/`model` and time its own act.
 
     Requires an OPEN dispatch record for the unit: a claim annotates a
     dispatch `fr run advance` made, it does not invent one. Re-claiming the

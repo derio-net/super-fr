@@ -32,8 +32,9 @@ fr ops gate --run <run-id> --yes    # act; resumes at the first unrecorded stage
 It runs on the harness host at a terminal, from a checkout that holds the run (the
 feature workspace, or the base clone once the PR merged). It refuses a non-interactive
 context, so a delivering agent cannot run it: the operator types it, or watches you run
-it in their terminal. It needs a profile declared `ops: true` (`fr init scaffold --ops`
-writes one).
+it in their terminal. It needs a profile declared `ops: true`. Write one on a new branch cut from the
+default branch, with `fr init scaffold --ops --profile <name> --purpose "<one line>"`,
+and land it by its own pull request, not on the feature branch.
 
 | Stage | What it does |
 |---|---|
