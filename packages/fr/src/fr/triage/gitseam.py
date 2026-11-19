@@ -52,7 +52,7 @@ def _run(
     ok: tuple[int, ...] = (0,),
     timeout: float | None = None,
     env: dict[str, str] | None = None,
-    stdin: str | None = None,
+    stdin: str | bytes | None = None,
     coded: bool = False,
     passthrough: Literal["none", "stderr", "all"] = "none",
     exact_env: bool = False,
@@ -60,7 +60,7 @@ def _run(
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
     `GitError` with the command's own words. *env* is laid over the process environment;
-    *stdin* is fed to the command (text mode only). *coded*: any return code is an answer,
+    *stdin* is fed to the command (text in text mode, bytes with `text=False`). *coded*: any return code is an answer,
     `(code, stdout + stderr)`, never a raise (text mode only). *passthrough* leaves streams
     with the operator instead of capturing them: `stderr` (stdout is still captured), or
     `all` (nothing is, for a command that asks on the terminal). *exact_env*: *env* is
@@ -637,6 +637,22 @@ class Checkout:
         out = git(["diff", "--name-status", "--no-renames", "-z", f"{ref}...{head}"], self.path)
         parts = [p for p in out.split("\0") if p]
         return frozenset(f"{parts[i][0]}\t{parts[i + 1]}" for i in range(0, len(parts) - 1, 2))
+
+    def patch_id(self, head: str, ref: str) -> str:
+        """*head*'s patch-id against its merge base with *ref* (spec 2026-11-19-wave-merge-queue
+        R12): exactly `git diff --binary --full-index --no-color <merge-base> <head> | git
+        patch-id --verbatim`, so whitespace and binary content count. The first field of the
+        output; "" for an empty diff, which `git patch-id` answers with nothing."""
+        base = git(["merge-base", head, ref], self.path).strip()
+        diff = git_bytes(["diff", "--binary", "--full-index", "--no-color", base, head], self.path)
+        if not diff:
+            return ""
+        out: bytes = _run(
+            ["git", "patch-id", "--verbatim"], self.path, text=False, stdin=diff,
+            timeout=GIT_TIMEOUT_SECONDS,
+        )  # fmt: skip
+        fields = out.decode("ascii", "replace").split()
+        return fields[0] if fields else ""
 
     def commits_since(self, ref: str, head: str) -> tuple[str, ...]:
         """The commits on *ref*..*head*, newest first."""
