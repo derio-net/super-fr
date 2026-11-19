@@ -685,7 +685,13 @@ def carry_forward(old: RunState, new: RunState, *, now: str) -> RunState:
                 record, key, _carry_unit(unit, units.unit_record(fresh, key), now=now)
             )
         steps[step_id] = record
-    return new.model_copy(update={"steps": steps, "driver": old.driver or new.driver})
+    return new.model_copy(
+        update={
+            "steps": steps,
+            "driver": old.driver or new.driver,
+            "base_branch": old.base_branch if old.base_branch is not None else new.base_branch,
+        }
+    )
 
 
 def _rel(repo_root: Path, path: Path) -> str:

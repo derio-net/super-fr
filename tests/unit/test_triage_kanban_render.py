@@ -8,12 +8,13 @@ from __future__ import annotations
 import html
 import re
 import shlex
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fr.triage import kanban_render
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS
-from fr.triage.kanban import Board, build_board
+from fr.triage.components import GUTTER_CSS, PAGE_SCRIPT, TOKENS_CSS
+from fr.triage.kanban import Board, Card, EventRow, build_board, cutoff_hidden_waves
 from fr.triage.kanban_render import CSS, SCRIPT, render_board
 
 from tests.unit.triage_board_fixtures import batch, facts, issue, j, judgements
@@ -58,7 +59,9 @@ def test_a_board_with_no_batches_says_so() -> None:
 
 def test_seven_columns_with_their_counts_in_order() -> None:
     page = _page()
-    heads = re.findall(r'<h2>(\w[\w ·]*) <span class="count">(\d+)</span></h2>', page)
+    heads = re.findall(
+        r'<h2><button[^>]*>(\w[\w ·]*)</button> <span class="count">(\d+)</span></h2>', page
+    )
     # The fixture's partial batch is owed its close-out: Partial, not Done (gh#985).
     assert heads == [
         ("Proposed", "2"), ("Waiting", "2"), ("Running", "3"),
@@ -80,8 +83,8 @@ def test_a_column_holds_a_card_element_exactly_when_its_count_is_not_zero() -> N
     # must mean "count 0" for every column, batch cards and gated cards alike.
     page = _page()
     cols = re.findall(
-        r'<section class="col" data-column="([^"]+)"><h2>[^<]* <span class="count">(\d+)</span>'
-        r"</h2>(.*?)</section>",
+        r'<section class="col[^"]*" data-column="([^"]+)"><h2><button[^>]*>[^<]*</button> '
+        r'<span class="count">(\d+)</span></h2>(.*?)</section>',
         page,
         re.S,
     )
@@ -91,16 +94,273 @@ def test_a_column_holds_a_card_element_exactly_when_its_count_is_not_zero() -> N
     assert {count == "0" for _, count, _ in cols} == {True, False}
 
 
-def test_the_wide_layout_collapses_empty_columns_to_a_rotated_strip() -> None:
+def test_the_wide_layout_collapses_a_collapsed_column_to_a_rotated_strip() -> None:
     m = re.search(r"@media \(min-width: 1101px\) \{(.*?)\n\}", CSS, re.S)
     assert m, "the collapse is scoped to the wide layout"
     wide = m.group(1)
     assert ".board { display: flex; }" in wide
-    assert ".col:not(:has(.card)) { flex: 0 0 " in wide
+    # The state is the column's own class, not a reading of its cards: a viewer can collapse
+    # a column that holds cards and expand one that holds none (R10).
+    assert ".col.collapsed { flex: 0 0 " in wide
+    assert ":has(" not in wide
     # Reads bottom to top: a -90 degree turn of the title.
     assert "writing-mode: vertical-rl" in wide and "rotate(180deg)" in wide
     # The narrow layouts keep the grid, where a strip would waste a row.
     assert "max-width: 1100px" in CSS and "max-width: 720px" in CSS
+
+
+def _columns(page: str) -> list[tuple[str, str, str, str]]:
+    """(key, classes, h2, body) of every column section."""
+    return re.findall(
+        r'<section class="col([^"]*)" data-column="([^"]+)">(<h2>.*?</h2>)(.*?)</section>',
+        page,
+        re.S,
+    )  # type: ignore[return-value]
+
+
+def test_every_column_header_holds_a_toggle_that_says_whether_it_is_expanded() -> None:
+    cols = _columns(_page())
+    assert len(cols) == 11
+    for classes, key, h2, body in cols:
+        button = re.search(r"<button([^>]*)>", h2)
+        assert button, key
+        attrs = button.group(1)
+        empty = re.search(r'class="card[ "]', body) is None
+        assert 'type="button"' in attrs
+        assert f'aria-expanded="{"false" if empty else "true"}"' in attrs, key
+        assert ("collapsed" in classes.split()) == empty, key
+        # The toggle names the region it controls, and that region holds the cards.
+        controls = re.search(r'aria-controls="([^"]+)"', attrs)
+        assert controls and f'id="{controls.group(1)}"' in body, key
+    assert {"collapsed" in c.split() for c, *_ in cols} == {True, False}
+
+
+def test_a_gated_only_column_starts_expanded() -> None:
+    page = _page()
+    for classes, key, h2, body in _columns(page):
+        if "data-gated-pr" in body:
+            assert "collapsed" not in classes.split(), key
+
+
+def test_the_body_names_the_scope_the_column_state_is_kept_under() -> None:
+    page = _page()
+    assert f'data-scope="{html.escape(_board()[0].scope)}"' in page
+    assert 'data-scope="x&quot;y&lt;"' in render_board(
+        replace(_board()[0], scope='x"y<'), scope_args=SCOPE, rendered_at=AT, refresh=0, notes=[]
+    )
+
+
+def test_the_script_remembers_each_column_under_a_scope_key_and_guards_every_access() -> None:
+    assert '"fr-triage:" + ' in SCRIPT and '":col:"' in SCRIPT
+    # Every localStorage read or write sits inside a try block.
+    for m in re.finditer(r"localStorage\.(getItem|setItem)", SCRIPT):
+        before = SCRIPT[: m.start()]
+        assert before.rfind("try {") > before.rfind("}"), m.group(0)
+
+
+# ------------------------------------------------------------- the wave cutoff (R18)
+
+
+def _cards() -> list[Card]:
+    board, _ = _board()
+    return [c for col in board.columns for c in col.cards]
+
+
+def _as(card: Card, wave: int | None, stage: str, *events: str) -> Card:
+    return replace(
+        card,
+        wave=wave,
+        stage=stage,  # type: ignore[arg-type]
+        events=tuple(EventRow("dispatch", datetime.fromisoformat(e), "") for e in events),
+    )
+
+
+def _page_of(cards: list[Card], *, at: datetime = AT) -> str:
+    """A page whose Done column holds *cards* exactly, rendered at the pinned clock *at*."""
+    from fr.triage.kanban import ColumnView
+
+    board = Board(
+        scope="example-org--widgets",
+        collected_at="2026-10-05T00:00:00Z",
+        columns=(ColumnView(key="done", title="Done", cards=tuple(cards)),),
+    )
+    return render_board(board, scope_args=SCOPE, rendered_at=at, refresh=0, notes=[])
+
+
+def _named(card: Card, bid: str) -> Card:
+    return replace(card, batch=card.batch.model_copy(update={"id": bid}))
+
+
+def _marked(page: str) -> dict[str, bool]:
+    """Per batch id, whether its card carries the server's cutoff marker."""
+    out = {}
+    for m in re.finditer(r'<details class="card[^"]*" id="card-([^"]+)"([^>]*)>', page):
+        out[m.group(1)] = "data-cutoff-hidden" in m.group(2)
+    return out
+
+
+def test_the_server_marks_the_cards_of_the_waves_the_cutoff_hides() -> None:
+    base = _cards()
+    cards = [
+        _named(_as(base[0], 1, "merged", "2026-08-01T09:00:00+00:00"), "old-a"),
+        _named(_as(base[1], 1, "merged"), "old-b"),
+        _named(_as(base[2], 2, "merged", "2026-11-01T09:00:00+00:00"), "recent"),
+        _named(_as(base[3], 3, "dispatched"), "live"),
+        _named(_as(base[4], None, "merged"), "nowave"),
+    ]
+    assert _marked(_page_of(cards)) == {
+        "old-a": True,
+        "old-b": True,  # a quiet, finished wave: every card of it
+        "recent": False,
+        "live": False,
+        "nowave": False,
+    }
+    # the markers are that helper's answer, not a second rule
+    assert cutoff_hidden_waves(cards, AT) == {"1"}
+
+
+def test_the_marker_follows_the_thirty_day_boundary_to_the_second() -> None:
+    base = _cards()
+
+    def marker(event_at: str) -> bool:
+        card = _named(_as(base[0], 1, "merged", event_at), "b")
+        return _marked(_page_of([card]))["b"]
+
+    assert marker("2026-09-05T21:30:00+00:00") is False  # exactly 30 days: still active
+    assert marker("2026-09-05T21:29:59+00:00") is True  # one second older: quiet
+    assert marker("2026-09-05T21:30:01+00:00") is False
+
+
+def test_cards_carry_their_wave_and_no_date_inputs_for_the_script() -> None:
+    page = _page_of([_as(_cards()[0], 4, "merged", "2026-08-01T09:00:00+00:00")])
+    assert 'data-wave="4"' in page
+    # the browser applies the server's marker; it is given no dates to decide from
+    assert "data-active" not in page and "data-terminal" not in page
+    assert "data-rendered" not in page
+
+
+def test_the_script_only_applies_the_marker_and_parses_no_dates() -> None:
+    assert "data-cutoff-hidden" in SCRIPT
+    assert "Date.parse" not in SCRIPT and "new Date" not in SCRIPT
+
+
+def test_every_selector_the_script_queries_matches_the_markup_it_acts_on() -> None:
+    page = _page()
+    selectors = re.findall(r'querySelector(?:All)?\("([^"]+)"\)', SCRIPT)
+    assert selectors
+    for sel in selectors:
+        simple = re.sub(r":not\([^)]*\)", "", sel).split(" ")[-1]
+        m = re.fullmatch(r"([a-z0-9]*)(?:\.([\w-]+))?(?:#([\w-]+))?", simple)
+        if m is None:
+            continue  # an attribute selector: pinned by its own test
+        tag, cls, ident = m.groups()
+        if ident:
+            assert f'id="{ident}"' in page, sel
+        elif cls:
+            assert re.search(rf'<{tag or "[a-z]+"} [^>]*class="[^"]*\b{cls}\b', page), sel
+        else:
+            assert f"<{tag}" in page, sel
+
+
+def test_the_script_reads_the_column_key_and_toggle_the_markup_carries() -> None:
+    page = _page()
+    for key in ("proposed", "running", "done"):
+        assert re.search(
+            rf'<section class="col[^"]*" data-column="{key}"><h2><button[^>]*class="coltoggle"',
+            page,
+        ), key
+    assert "dataset.column" in SCRIPT and "button.coltoggle" in SCRIPT
+
+
+def test_the_cutoff_toggle_is_a_pressed_toolbar_button_by_default() -> None:
+    page = _page()
+    bar = re.search(r'<div class="toolbar" role="toolbar"[^>]*>(.*?)</div>', page, re.S)
+    assert bar
+    button = re.search(r"<button([^>]*)>([^<]*)</button>", bar.group(1))
+    assert button
+    assert 'aria-pressed="true"' in button.group(1) and 'id="cutoff"' in button.group(1)
+    assert button.group(2) == "last 30 days"
+    # A board with nothing on it has nothing to cut off.
+    board = build_board(facts([]), judgements({}), {})
+    empty = render_board(board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=[])
+    assert 'id="cutoff"' not in empty
+
+
+def _card_named(bid: str) -> Card:
+    board, _ = _board()
+    return board.card(bid)
+
+
+def test_a_merged_batch_never_archived_and_still_closing_out_is_terminal() -> None:
+    card = _card_named("c-none")  # PR merged, no close-out event: the Closing out column
+    assert card.column == "closing-out" and card.stage == "merged"
+    assert card.terminal is True
+
+
+def test_each_terminal_kind_is_terminal() -> None:
+    assert _card_named("c-session").terminal  # merged, close-out started but not archived
+    assert _card_named("d-done").terminal  # merged and archived
+    assert _card_named("x-cancelled").stage == "cancelled" and _card_named("x-cancelled").terminal
+    assert replace(_card_named("r-run"), stage="abandoned").terminal  # abandoned
+    # a partial batch is terminal once its close-out archived, not before
+    partial = _card_named("d-partial")
+    assert partial.stage == "partial" and not partial.terminal
+
+
+def test_a_batch_still_in_flight_or_waiting_is_not_terminal() -> None:
+    for bid in ("p-queued", "w-wait", "r-run", "o-draft", "o-ready"):
+        assert not _card_named(bid).terminal, bid
+
+
+def test_a_wave_of_only_terminal_batches_with_no_recent_event_is_hidden() -> None:
+    base = _cards()
+    old = "2026-08-01T09:00:00+00:00"
+    cards = [_as(base[0], 1, "merged", old), _as(base[1], 1, "merged")]
+    assert cutoff_hidden_waves(cards, AT) == frozenset({"1"})
+
+
+def test_a_recent_event_in_any_card_keeps_the_wave_shown() -> None:
+    base = _cards()
+    cards = [
+        _as(base[0], 1, "merged", "2026-08-01T09:00:00+00:00"),
+        _as(base[1], 1, "merged", "2026-09-20T09:00:00+00:00"),  # 15 days before AT
+    ]
+    assert cutoff_hidden_waves(cards, AT) == frozenset()
+
+
+def test_the_cutoff_is_thirty_days_before_the_render_and_days_is_a_parameter() -> None:
+    base = _cards()
+    cards = [_as(base[0], 1, "merged", "2026-09-05T21:30:00+00:00")]  # exactly 30 days
+    assert cutoff_hidden_waves(cards, AT) == frozenset()
+    assert cutoff_hidden_waves(cards, AT, days=29) == frozenset({"1"})
+    assert cutoff_hidden_waves([_as(base[0], 1, "merged", "2026-09-05T21:29:59+00:00")], AT) == {
+        "1"
+    }
+
+
+def test_a_wave_with_a_batch_that_is_not_terminal_always_shows() -> None:
+    base = _cards()
+    cards = [_as(base[0], 2, "merged"), _as(base[1], 2, "proposed")]  # proposed, eventless
+    assert cutoff_hidden_waves(cards, AT) == frozenset()
+
+
+def test_cards_with_no_wave_are_never_hidden() -> None:
+    base = _cards()
+    assert cutoff_hidden_waves([_as(base[0], None, "merged")], AT) == frozenset()
+
+
+def test_each_wave_is_judged_on_its_own_cards() -> None:
+    base = _cards()
+    cards = [
+        _as(base[0], 1, "merged"),
+        _as(base[1], 2, "dispatched", "2026-08-01T09:00:00+00:00"),
+        _as(base[2], 3, "merged", "2026-10-01T09:00:00+00:00"),
+    ]
+    assert cutoff_hidden_waves(cards, AT) == frozenset({"1"})
+
+
+def test_the_script_keeps_the_cutoff_choice_like_the_column_state() -> None:
+    assert re.search(r'"fr-triage:" \+ scope \+ ":cutoff"', SCRIPT)
 
 
 def test_every_card_is_a_details_element_with_its_id() -> None:
@@ -239,13 +499,13 @@ def test_non_https_urls_are_not_linked() -> None:
 
 
 def test_the_script_element_is_the_module_constant() -> None:
-    assert _script(_page()) == SCRIPT
-    assert _script(_page(hostile=True)) == SCRIPT
+    assert _script(_page()) == SCRIPT + PAGE_SCRIPT
+    assert _script(_page(hostile=True)) == SCRIPT + PAGE_SCRIPT
 
 
 def test_refresh_reaches_the_script_as_a_body_attribute() -> None:
-    assert '<body data-refresh="30">' in _page()
-    assert '<body data-refresh="0">' in _page(refresh=0)
+    assert re.search(r'<body data-refresh="30"[ >]', _page())
+    assert re.search(r'<body data-refresh="0"[ >]', _page(refresh=0))
     assert "dataset.refresh" in SCRIPT
 
 
@@ -485,3 +745,18 @@ def test_an_absent_closeout_has_a_batch_front_and_no_closeout_jump_or_code() -> 
     assert [c.endswith("--closeout") for c in _cmds(body)] == [False]
     section = body.split("<h4>Close-out session</h4>", 1)[1]
     assert 'class="jump"' not in section and 'class="cmd"' not in section
+
+
+def test_the_cutoff_choice_reads_an_id_and_a_scope_the_markup_carries() -> None:
+    """The script reaches the cutoff toggle by id and keys its choice by the body's
+    `data-scope`: both must be in the page it ships with, not only in the script text."""
+    page = _page()
+    ids = re.findall(r'getElementById\("([^"]+)"\)', SCRIPT)
+    assert "cutoff" in ids
+    assert 'id="cutoff"' in page
+    assert re.search(r"var scope = document\.body\.dataset\.scope", SCRIPT)
+    scope = re.search(r'<body[^>]*\bdata-scope="([^"]*)"', page)
+    assert scope and scope.group(1)
+    assert re.search(r'"fr-triage:" \+ scope \+ ":cutoff"', SCRIPT)
+    key = f"fr-triage:{scope.group(1)}:cutoff"
+    assert key.startswith("fr-triage:") and key.endswith(":cutoff") and "::" not in key

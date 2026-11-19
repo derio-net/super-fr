@@ -802,9 +802,15 @@ def _write_manual_owed(repo_root: Path, plan: Any, blockers: tuple[str, ...]) ->
     if not phases:
         return
     name = plan.dir.name
-    from fr.git import head_on_default_branch
+    from fr.git import default_branch_answer
 
-    if head_on_default_branch(repo_root):  # R8: no commit lands here, so nothing is written
+    on_default = default_branch_answer(repo_root)
+    if on_default is not False:  # R8: no commit lands here, so nothing is written
+        if on_default is None:  # super-fr#1486: unknown is the default branch's side
+            typer.echo(
+                "  fr cannot tell whether HEAD is the default branch (its default ref or "
+                "git cannot be read), so it records nothing"
+            )
         for line in af.manual_owed_preview(repo_root, name, phases):
             typer.echo(f"  would record owed: {line}")
         return
@@ -995,7 +1001,7 @@ def _dry_run(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, 
     way the run ends (review p3-r9)."""
     from fr import archive_preview as ap
     from fr.artifacts.paths import outside_repo
-    from fr.git import head_on_default_branch, pinned_head_on_default_branch
+    from fr.git import default_branch_answer, pinned_head_on_default_branch
 
     global _PREVIEW  # noqa: PLW0603 — set only while the command runs
     real_root = resolve_repo_root().resolve()
@@ -1015,7 +1021,8 @@ def _dry_run(run: Callable[..., None], args: tuple[Any, ...], kwargs: dict[str, 
         if outside:
             code = _exit_code_of(run, args, kwargs)
         else:
-            on_default = head_on_default_branch(real_root)  # p3-r4: the real checkout's answer
+            # p3-r4: the real checkout's answer, 'cannot tell' included (super-fr#1486)
+            on_default = default_branch_answer(real_root)
             with (
                 ap.scratch_checkout(real_root) as scratch,
                 pinned_head_on_default_branch(scratch, on_default),

@@ -1,7 +1,7 @@
 """The drive lock's file and liveness rule, as pure path + pid logic (wave-driver R6).
 
 `fr triage batch drive` takes `<state dir>/drive.lock` (see `triage_batch_cmd.drive_lock`);
-`fr triage board --watch` only needs to know whether a live driver holds it, and must not
+`fr triage batches --watch` only needs to know whether a live driver holds it, and must not
 import the command module that owns the lock (the import between the two stays one-way).
 Both share this reading, so "alive" means the same thing to each.
 """

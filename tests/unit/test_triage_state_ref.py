@@ -96,7 +96,7 @@ EVERY = {
 }
 NEVER = {
     "facts.json": b"{}\n",
-    "board.html": b"<html></html>\n",
+    "batches.html": b"<html></html>\n",
     "origins.html": b"<html></html>\n",
     "scope.yaml": b"claim_expiry_hours: 24\n",
     "origins-facts.json": b"{}\n",
@@ -120,6 +120,8 @@ def test_ref_files_is_the_one_list_and_names_the_durable_export_set() -> None:
         "origins.yaml",
         "subsystems.yaml",
         "board/",
+        "backlog/",
+        "issues/",
         "origins/",
         "architecture/",
         "history/",
@@ -131,6 +133,7 @@ def test_ref_files_is_the_one_list_and_names_the_durable_export_set() -> None:
         "requests.yaml",
         "sessions.yaml",
         "rehomes.yaml",
+        "drive-pages.json",
     )
     files = {e for e in REF_FILES if not e.endswith("/")}
     dirs = tuple(e.rstrip("/") for e in REF_FILES if e.endswith("/"))

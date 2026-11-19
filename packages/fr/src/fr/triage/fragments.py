@@ -4,8 +4,10 @@
 A page's `<state>/<page>/manifest.yaml` lists, in order, the generated sections the page
 has and the fragment files beside it; `resolve_manifest` reads it and `splice` renders it,
 a fragment exactly at its manifest position, between generated sections if that is where it
-is listed. An entry is a string, or a mapping `{fragment: <file>, title: <text>,
-collapsed: true}` that renders the fragment as a closed section.
+is listed. An entry is a string, a mapping `{fragment: <file>, title: <text>,
+collapsed: true}` that renders the fragment as a closed section, or a fold group
+`{fold: <title>, entries: [<file>, ...]}` that renders its fragments, in order, in one closed
+fold (triage-pages-ux R9). A group holds files only, and every page accepts one.
 
 This module knows no page: each page passes its own generated section names (and the names
 that moved to another page) in.
@@ -31,7 +33,7 @@ from pathlib import Path
 
 import yaml
 
-from fr.triage.components import collapsed
+from fr.triage.components import fold, page
 from fr.triage.errors import TriageError
 
 MANIFEST_FILE = "manifest.yaml"
@@ -112,11 +114,14 @@ def validate_fragment(name: str, text: str) -> None:
 @dataclass(frozen=True)
 class Entry:
     """One manifest entry: a generated-section name or a fragment file name; *title* and
-    *collapsed* belong to mapping entries only."""
+    *collapsed* belong to mapping entries only, *group* to a fold group."""
 
     name: str
     title: str | None = None
     collapsed: bool = False
+    group: tuple[Entry, ...] = ()
+    """The fragment entries of a fold group, in order; empty for any other entry. The group's
+    own *name* is `fold:<title>` and its *title* the heading."""
 
 
 @dataclass(frozen=True)
@@ -133,11 +138,35 @@ class Resolved:
 
 
 _MAPPING_KEYS = frozenset({"fragment", "title", "collapsed"})
+_GROUP_KEYS = frozenset({"fold", "entries"})
+FOLD_PREFIX = "fold:"
+
+
+def _group(path: Path, raw: dict[object, object]) -> Entry:
+    unknown = sorted(str(k) for k in raw if k not in _GROUP_KEYS)
+    if unknown:
+        raise TriageError(
+            f"{path}: unknown key {', '.join(unknown)} in a fold group "
+            f"(allowed: {', '.join(sorted(_GROUP_KEYS))})"
+        )
+    title, items = raw.get("fold"), raw.get("entries")
+    if not isinstance(title, str) or not title:
+        raise TriageError(f"{path}: a fold group needs a `fold:` heading")
+    if not isinstance(items, list) or not items:
+        raise TriageError(f"{path}: the fold group {title!r} needs an `entries:` list of files")
+    members = []
+    for item in items:
+        if not isinstance(item, str) or not item:
+            raise TriageError(f"{path}: the fold group {title!r} lists fragment file names only")
+        members.append(Entry(item))
+    return Entry(f"{FOLD_PREFIX}{title}", title, True, tuple(members))
 
 
 def _entry(path: Path, raw: object) -> Entry:
     if isinstance(raw, str) and raw:
         return Entry(raw)
+    if isinstance(raw, dict) and "fold" in raw:
+        return _group(path, raw)
     if isinstance(raw, dict):
         unknown = sorted(str(k) for k in raw if k not in _MAPPING_KEYS)
         if unknown:
@@ -183,12 +212,47 @@ def resolve_manifest(
     fragments: dict[str, str] = {}
     missing: list[str] = []
     moved_here: dict[str, str] = {}
+
+    def load(name: str) -> None:
+        """Validate fragment file *name* and keep its text, or list it as missing."""
+        if "/" in name or "\\" in name or name.startswith("."):
+            raise TriageError(
+                f"{path}: entry {name!r} must be a generated section "
+                f"({', '.join(generated)}) or a file directly inside the {page_dir.name}/ "
+                "directory"
+            )
+        file = page_dir / name
+        if not file.is_file():
+            missing.append(name)
+            return
+        try:
+            text = file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise TriageError(f"fragment {name} cannot be read: {exc}") from exc
+        validate_fragment(name, text)
+        fragments[name] = text
+
     for item in entries:
         entry = _entry(path, item)
         if entry.name in seen:
             continue
         seen.add(entry.name)
         is_mapping = isinstance(item, dict)
+        if entry.group:
+            members = []
+            for member in entry.group:
+                if member.name in moved or member.name in generated:
+                    raise TriageError(
+                        f"{path}: {member.name!r} is a section, not a fragment file, so it "
+                        f"cannot be in the fold group {entry.title!r}"
+                    )
+                if member.name in seen:
+                    continue
+                seen.add(member.name)
+                members.append(member)
+                load(member.name)
+            order.append(Entry(entry.name, entry.title, True, tuple(members)))
+            continue
         if entry.name in moved:
             if is_mapping:
                 raise TriageError(f"{path}: {entry.name!r} is a section, not a fragment file")
@@ -202,22 +266,7 @@ def resolve_manifest(
             order.append(entry)
             continue
         order.append(entry)
-        if "/" in entry.name or "\\" in entry.name or entry.name.startswith("."):
-            raise TriageError(
-                f"{path}: entry {entry.name!r} must be a generated section "
-                f"({', '.join(generated)}) or a file directly inside the {page_dir.name}/ "
-                "directory"
-            )
-        file = page_dir / entry.name
-        if not file.is_file():
-            missing.append(entry.name)
-            continue
-        try:
-            text = file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise TriageError(f"fragment {entry.name} cannot be read: {exc}") from exc
-        validate_fragment(entry.name, text)
-        fragments[entry.name] = text
+        load(entry.name)
     appended = [name for name in generated if name not in seen]
     return Resolved(
         order=[*order, *(Entry(a) for a in appended)],
@@ -228,33 +277,64 @@ def resolve_manifest(
     )
 
 
-def _fragment(entry: Entry, text: str, used_ids: set[str]) -> str:
-    section = (
+def moved_notes(resolved: Resolved) -> list[str]:
+    """One note per manifest entry naming a section another page owns now, naming that
+    page by its registry title (triage-pages-ux R4)."""
+    return [
+        f"manifest names `{name}`, which is now on the {page(key).title} page; skipped"
+        for name, key in resolved.moved.items()
+    ]
+
+
+def _fragment(entry: Entry, text: str) -> str:
+    return (
         f'<section class="fragment" data-fragment="{html.escape(entry.name, quote=True)}">'
         f'<div class="scroll">{text}</div></section>'
     )
-    if not entry.collapsed:
-        return section
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", entry.name).strip("-").lower()
-    # Two file names can slug alike (`a_b.html`, `a-b.html`): number the later one, so
-    # every collapsed fragment keeps a unique, linkable id (review p1-r2).
+
+
+def _anchor(name: str, used_ids: set[str]) -> str:
+    """A unique, linkable id for a collapsed fragment or fold group named *name*. Two names
+    can slug alike (`a_b.html`, `a-b.html`): the later one is numbered (review p1-r2)."""
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").lower()
     base, n = f"fragment-{slug}", 2
     anchor = base
     while anchor in used_ids:
         anchor, n = f"{base}-{n}", n + 1
     used_ids.add(anchor)
-    return collapsed(anchor, entry.title or entry.name, None, section)
+    return anchor
 
 
 def splice(resolved: Resolved, generated: Mapping[str, Callable[[], str]]) -> list[str]:
     """Walk `order` once: a generated entry becomes its builder's HTML, a fragment entry its
-    wrapped file (closed, when the entry asks). An entry with no builder and no file (a
-    missing fragment) renders nothing."""
+    wrapped file (in a closed fold, when the entry asks), a fold group one closed fold of its
+    fragments in order. An entry with no builder and no file (a missing fragment) renders
+    nothing."""
     out: list[str] = []
     used_ids: set[str] = set()
     for entry in resolved.order:
         if entry.name in generated:
             out.append(generated[entry.name]())
+        elif entry.group:
+            parts = [
+                _fragment(m, resolved.fragments[m.name])
+                for m in entry.group
+                if m.name in resolved.fragments
+            ]
+            if parts:
+                out.append(
+                    fold(
+                        _anchor(entry.title or entry.name, used_ids),
+                        entry.title or "",
+                        len(parts),
+                        "".join(parts),
+                    )
+                )
         elif entry.name in resolved.fragments:
-            out.append(_fragment(entry, resolved.fragments[entry.name], used_ids))
+            section = _fragment(entry, resolved.fragments[entry.name])
+            if entry.collapsed:
+                section = fold(
+                    _anchor(entry.name, used_ids), entry.title or entry.name, None, section
+                )
+            out.append(section)
     return out

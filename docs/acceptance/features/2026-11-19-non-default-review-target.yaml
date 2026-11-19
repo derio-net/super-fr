@@ -1,0 +1,44 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-non-default-review-target
+repo: derio-net/super-fr
+rows:
+amendments:
+  - row: review-lenses-path-rules
+    op: set-status
+    base: 1
+    status: ci
+    notes: Existing path-rule acceptance remains automated in CI. Added real Git regression
+      for an explicitly recorded non-default merge target with history unrelated to
+      the remote default, preserving the target's mandatory security lens despite a
+      feature disabling it. Missing explicit target fails closed. Local focused tests
+      passed; this amendment does not claim a new installed-candidate or live walk.
+    why: Existing path-rule acceptance remains automated in CI. Added real Git regression
+      for an explicitly recorded non-default merge target with history unrelated to
+      the remote default, preserving the target's mandatory security lens despite a
+      feature disabling it. Missing explicit target fails closed. Local focused tests
+      passed; this amendment does not claim a new installed-candidate or live walk.
+  - row: review-lenses-path-rules
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_lenses_accumulate.py#test_run_reviews_its_explicit_target_even_when_default_history_is_unrelated
+    why: Existing path-rule acceptance remains automated in CI. Added real Git regression
+      for an explicitly recorded non-default merge target with history unrelated to
+      the remote default, preserving the target's mandatory security lens despite a
+      feature disabling it. Missing explicit target fails closed. Local focused tests
+      passed; this amendment does not claim a new installed-candidate or live walk.
+  - row: review-lenses-path-rules
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_run_target.py#test_missing_explicit_lens_target_never_falls_back_to_default
+    why: Existing path-rule acceptance remains automated in CI. Added real Git regression
+      for an explicitly recorded non-default merge target with history unrelated to
+      the remote default, preserving the target's mandatory security lens despite a
+      feature disabling it. Missing explicit target fails closed. Local focused tests
+      passed; this amendment does not claim a new installed-candidate or live walk.

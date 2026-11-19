@@ -485,6 +485,12 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
         return
     keep = live_root / ".gitkeep"
     rel = keep.relative_to(repo_root)
+    linked = _symlinked_component(repo_root, live_root)
+    if linked is not None:
+        # super-fr#1483: `O_NOFOLLOW` guards only `.gitkeep` itself; a link above it
+        # would be followed by mkdir/iterdir/open and the file written elsewhere.
+        _warn_live_root(rel, f"{linked} is a symbolic link, so fr will not write through it")
+        return
     created = False
     try:
         live_root.mkdir(parents=True, exist_ok=True)
@@ -511,6 +517,21 @@ def _keep_live_root(repo_root: Path, plan_dir: Path) -> None:
     log = _MOVE_LOG.get()
     if log is not None and (created or added.returncode == 0):
         log.keeps.append((len(log.moves), rel, created))
+
+
+def _symlinked_component(repo_root: Path, target: Path) -> Path | None:
+    """The first path component of *target* below *repo_root* that is a symbolic
+    link (repo-relative), else None. A component that does not exist yet is not a
+    link, and nothing below it can be one either."""
+    current = repo_root
+    for part in target.relative_to(repo_root).parts:
+        current = current / part
+        try:
+            if stat.S_ISLNK(os.lstat(current).st_mode):
+                return current.relative_to(repo_root)
+        except FileNotFoundError:
+            return None
+    return None
 
 
 def _warn_live_root(rel: Path, cause: str) -> None:

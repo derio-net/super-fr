@@ -85,8 +85,8 @@ EOF2
 drive() { run_fr out triage batch drive --once --yes --keep-sessions --repo "$repo" --dir "$state" \
   --checkout "$repo=$PWD"; }
 board() {  # the board over the facts the last pass collected
-  run_fr page triage render --repo "$repo" --dir "$state"; require_exit 0 "$page"
-  cat "$state/triage.html"
+  run_fr page triage backlog --repo "$repo" --dir "$state"; require_exit 0 "$page"
+  cat "$state/backlog.html"
 }
 log() { cat "$FAKE_GH_LOG"; }
 R="repos/$repo"
@@ -100,7 +100,7 @@ refuse_grep "pulls/1080/merge" "$(log)" "no merge call for an unlabelled PR"
 page="$(board)"
 expect_grep "label it approved-fr to merge" "$page" "the board's Needs you asks for the label"
 expect_grep 'data-need="approve-pr"' "$page" "the ask is an approve-pr Need"
-expect_grep "awaiting approval" "$(cat "$state/board.html")" "the kanban card awaits approval"
+expect_grep "awaiting approval" "$(cat "$state/batches.html")" "the kanban card awaits approval"
 
 # `batch merge` holds the unapproved batch; naming it is refused; nothing is written.
 merge() { run_fr out triage batch merge "$@" --repo "$repo" --dir "$state" --checkout "$PWD"; }

@@ -33,17 +33,23 @@ from fr.triage.components import (
     CHROME_CSS,
     GRID_CSS,
     GUTTER_CSS,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     SKEW_CSS,
-    TABS_CSS,
-    TABS_SCRIPT,
     TOKENS_CSS,
-    collapsed,
+    Linker,
+    batch_href,
+    fold,
+    page,
     page_header,
     skew_banner,
+    stamp_text,
     tabs,
+    wave_href,
+    when,
 )
 from fr.triage.debt import digest_for, issue_figures, untrusted_for
-from fr.triage.fragments import Entry, Resolved, splice
+from fr.triage.fragments import Entry, Resolved, moved_notes, splice
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
 from fr.triage.model import issue_key
@@ -65,6 +71,7 @@ from fr.triage.views import (
 
 if TYPE_CHECKING:
     from fr.triage.batch import MergeStep
+    from fr.triage.components import Moment
     from fr.triage.dedupe import CandidateGroup
     from fr.triage.model import (
         Batch,
@@ -115,6 +122,12 @@ header.mast h1 { margin: 0 0 6px; font-size: 1.6rem; font-weight: 600; letter-sp
 .count { background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
   padding: 2px 10px; font-size: .85rem; }
 .count b { font-family: var(--mono); font-weight: 500; }
+button.count { font: inherit; font-size: .85rem; color: var(--ink); cursor: pointer; }
+button.count[aria-pressed="false"] { color: var(--muted); background: transparent;
+  border-style: dashed; }
+button.count[aria-pressed="true"] { border-color: var(--accent); }
+button.count:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tag.wave a { color: inherit; }
 .notes { margin: 12px 0 0; padding: 0; list-style: none; font-size: .85rem; color: var(--sev-2); }
 .notes li { overflow-wrap: anywhere; }
 .bar { position: sticky; top: 0; z-index: 2; background: var(--ground);
@@ -202,8 +215,7 @@ details.batch > .detail { padding: 4px 12px 10px; }
 .badge.pending { color: var(--sev-2); border-color: var(--sev-2); }
 .badge.merge { font-family: var(--mono); }
 footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
-.decide { margin-top: 28px; }
-.decide h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.decide { margin: 0; padding-bottom: 8px; }
 .decide h3 { margin: 14px 0 4px; font-size: .95rem; color: var(--muted); }
 .decide ul { margin: 4px 0; padding-left: 20px; }
 .decide li { margin: 3px 0; overflow-wrap: anywhere; }
@@ -219,7 +231,7 @@ footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
 .next .why { color: var(--muted); font-size: .88rem; display: block; }
 """
     + GRID_CSS
-    + TABS_CSS
+    + PAGE_CSS
     + CHROME_CSS
     + GUTTER_CSS
     + SKEW_CSS
@@ -304,9 +316,9 @@ SCRIPT = """
 })();
 """
 
-# The Batches fold's script (R5): toggles cards by `data-stage`, and opens the card a
-# `#batch-<id>` link names with every `details` around it, then scrolls to it. A constant.
-FOLD_SCRIPT = """
+# The Batches section's script (R5): toggles cards by `data-stage`, and switches a card's stage on
+# when a `#batch-<id>` link names it (the fold script opens and scrolls). A constant.
+STAGE_FILTER_SCRIPT = """
 (function () {
   var boxes = Array.prototype.slice.call(document.querySelectorAll("input[data-stage-filter]"));
   var cards = Array.prototype.slice.call(document.querySelectorAll("details.batch"));
@@ -330,31 +342,62 @@ FOLD_SCRIPT = """
     if (plan) { plan.hidden = !anyStep; }
     if (empty) { empty.hidden = any || !cards.length; }
   }
+  // A hash naming a card of a stage that is switched off switches that stage on, so the card
+  // is there for the fold script, which opens what is around it and scrolls (review p2-r3).
   function reveal() {
     var id = "";
     try { id = decodeURIComponent(location.hash.slice(1)); } catch (e) { return; }
     var target = id ? document.getElementById(id) : null;
-    if (!target) { return; }
+    if (!target || !target.dataset.stage) { return; }
     boxes.forEach(function (b) {
       if (target.dataset.stage === b.value) { b.checked = true; }
     });
     apply();
-    for (var n = target; n; n = n.parentElement) {
-      if (n.tagName === "DETAILS") { n.open = true; }
-    }
-    target.scrollIntoView();
   }
   boxes.forEach(function (b) { b.addEventListener("change", apply); });
   document.addEventListener("click", function (e) {
-    var a = e.target.closest ? e.target.closest('a[href^="#batch-"]') : null;
-    // A new hash fires `hashchange`, which reveals; only a link to the hash already shown
-    // fires nothing, so the click covers that case alone (review p2-r4).
-    if (a && a.hash === location.hash) { reveal(); }
+    var a = e.target.closest ? e.target.closest('a[href*="#batch-"]') : null;
+    // only a link to the hash already shown fires no `hashchange`
+    if (a && a.hash === location.hash && a.pathname === location.pathname) { reveal(); }
   });
   window.addEventListener("hashchange", reveal);
   if (filter) { filter.hidden = false; }
   apply();
   reveal();
+})();
+"""
+
+# The Waves kind filter (R13): each toggle in the Closing order toolbar shows or hides the rows
+# whose `data-kinds` include its kind, several at once; a wave tab with every row hidden shows
+# its message. A constant: no page text reaches it.
+KIND_FILTER_SCRIPT = """
+(function () {
+  var bar = document.querySelector('#closing-order [role="toolbar"]');
+  if (!bar) { return; }
+  var buttons = Array.prototype.slice.call(bar.querySelectorAll("button[data-kind]"));
+  function apply() {
+    var on = buttons.filter(function (b) { return b.getAttribute("aria-pressed") === "true"; })
+      .map(function (b) { return b.dataset.kind; });
+    Array.prototype.forEach.call(document.querySelectorAll('#waves [role="tabpanel"]'),
+      function (panel) {
+        var rows = Array.prototype.slice.call(panel.querySelectorAll("tr[data-kinds]"));
+        var shown = 0;
+        rows.forEach(function (r) {
+          var show = r.dataset.kinds.split(" ").some(function (k) { return on.indexOf(k) !== -1; });
+          r.hidden = !show;
+          if (show) { shown += 1; }
+        });
+        var empty = panel.querySelector("p.kinds-empty");
+        if (empty) { empty.hidden = shown > 0 || rows.length === 0; }
+      });
+  }
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true");
+      apply();
+    });
+  });
+  apply();
 })();
 """
 
@@ -375,13 +418,23 @@ FILTER_BAR = """<div class="bar" role="toolbar" aria-label="Filter and sort">
 <button class="chip" type="button" data-filter="conflicts" aria-pressed="false">conflicts</button>
 </div>"""
 
-GENERATED = (
-    "since", "needs", "next-up", "waves", "possible-duplicates", "backlog", "features", "parked",
-    "patterns", "debt", "prs", "batches",
+BACKLOG_GENERATED = ("since", "needs", "next-up", "waves", "batches")
+"""The Backlog's generated sections, the decisions, in default order (triage-pages-ux R4).
+The masthead and nav sit outside the manifest, always first; the stage filter belongs to
+`batches`."""
+
+ISSUES_GENERATED = (
+    "possible-duplicates", "backlog", "features", "parked", "awaiting-live",
+    "closed-in-progress", "patterns", "debt", "prs",
 )  # fmt: skip
-"""The board's generated sections, in default order (spec 2026-10-05-triage-pages-goal §C).
-The masthead and nav sit outside the manifest, always first; `FILTER_BAR` belongs to
-`backlog` and the stage filter to `batches`."""
+"""The Issues page's generated sections, the lists, in default order (R4); `FILTER_BAR`
+belongs to `backlog`."""
+
+BACKLOG_MOVED = dict.fromkeys(ISSUES_GENERATED, "issues")
+"""The sections a Backlog manifest may name that the Issues page owns (page keys)."""
+
+ISSUES_MOVED = dict.fromkeys(BACKLOG_GENERATED, "backlog")
+"""The sections an Issues manifest may name that the Backlog owns (page keys)."""
 
 UNRANKED_TITLE = "Unranked — not yet triaged"
 UNRANKED_DESC = (
@@ -406,20 +459,45 @@ def esc(s: str) -> str:
     return html.escape(s, quote=True)
 
 
-def inline(text: str) -> str:
-    """Escape first, then allow exactly `code` and **bold** (spec §3.D).
+def inline(text: str, linker: Linker | None = None) -> str:
+    """Escape first, then allow exactly `code` and **bold** (spec §3.D), then, with a
+    *linker*, link each PR or issue reference outside a code span (triage-pages-ux R11).
 
     A single left-to-right pass: code content is literal, and code inside bold
     nests validly (`<strong><code>x</code></strong>`) because only the bold
-    span's own text is scanned for code.
+    span's own text is scanned for code. A link's href comes from the linker's inputs,
+    never from the text, and the text it wraps is already escaped.
     """
 
-    def tag(m: re.Match[str]) -> str:
-        if m.group(1) is not None:
-            return f"<code>{m.group(1)}</code>"
-        return "<strong>" + _CODE.sub(r"<code>\1</code>", m.group(2)) + "</strong>"
+    def plain(escaped: str) -> str:
+        return escaped if linker is None else linker.prose(escaped)
 
-    return _INLINE.sub(tag, esc(text))
+    def bold(escaped: str) -> str:
+        out, last = [], 0
+        for m in _CODE.finditer(escaped):
+            out.append(plain(escaped[last : m.start()]))
+            out.append(f"<code>{m.group(1)}</code>")
+            last = m.end()
+        out.append(plain(escaped[last:]))
+        return "".join(out)
+
+    escaped = esc(text)
+    out, last = [], 0
+    for m in _INLINE.finditer(escaped):
+        out.append(plain(escaped[last : m.start()]))
+        out.append(
+            f"<code>{m.group(1)}</code>"
+            if m.group(1) is not None
+            else f"<strong>{bold(m.group(2))}</strong>"
+        )
+        last = m.end()
+    out.append(plain(escaped[last:]))
+    return "".join(out)
+
+
+def _keys(ids: Sequence[str], linker: Linker | None) -> str:
+    """A list of judgement keys: each a link to its issue when *linker* knows it (R11)."""
+    return linker.key_links(ids) if linker is not None else esc(", ".join(ids))
 
 
 def _capitalise(s: str) -> str:
@@ -487,7 +565,7 @@ def _possible_duplicates(groups: Sequence[CandidateGroup], by_key: dict[str, Iss
             "<code>duplicate_of</code> or <code>distinct_from</code> to settle each.</p>"
             + "".join(blocks)
         )
-    return collapsed(
+    return fold(
         "possible-duplicates",
         "Possible duplicates",
         len(groups),
@@ -513,6 +591,7 @@ def _row(
     patterns: list[str],
     batches: Sequence[str] = (),
     duplicates: Sequence[Nested] = (),
+    linker: Linker | None = None,
 ) -> str:
     stage = issue.stage
     cx = judgement.cx if judgement else "-"
@@ -549,9 +628,11 @@ def _row(
         tags.append(f'<span class="tag dupe">+{plural(len(duplicates), "duplicate")}</span>')
     detail: list[str] = []
     if judgement and judgement.detail:
-        detail.append(f"<p>{inline(judgement.detail)}</p>")
+        detail.append(f"<p>{inline(judgement.detail, linker)}</p>")
     if judgement and judgement.note:
-        detail.append(f'<p class="note"><strong>Note.</strong> {inline(judgement.note)}</p>')
+        detail.append(
+            f'<p class="note"><strong>Note.</strong> {inline(judgement.note, linker)}</p>'
+        )
     detail.extend(f'<p class="pattern">Pattern: {p}</p>' for p in patterns)
     if duplicates:
         detail.append(_duplicates_block(duplicates))
@@ -596,10 +677,16 @@ def _section(tier: str, sev: str, title: str, desc: str, rows: list[str]) -> str
         f'<section class="tier {sev}{extra}" data-tier="{esc(tier)}">'
         f'<p class="tier-desc">{desc}</p>{body}</section>'
     )
-    return collapsed(f"backlog-tier-{tier}", title, len(rows), inner)
+    return fold(f"backlog-tier-{tier}", title, len(rows), inner)
 
 
-def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_at: str) -> str:
+def _pr_row(
+    pr: PullRequest,
+    judgement: Judgement | None,
+    order: int,
+    collected_at: str,
+    linker: Linker | None = None,
+) -> str:
     """Render an open PR with the forge's status, never an inferred status."""
     checks = pr.checks or {}
     if checks.get("fail", 0):
@@ -634,7 +721,7 @@ def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_
     )
     detail = [f'<p class="anchor"><strong>Anchor:</strong> {esc(anchor)}</p>']
     if delivery_note:
-        detail.append(f"<p>{inline(delivery_note)}</p>")
+        detail.append(f"<p>{inline(delivery_note, linker)}</p>")
     return (
         f'<details class="row" {attr_s}>'
         f'<summary><span class="num">{esc(issue_key(pr.repo, pr.number))}</span>'
@@ -648,21 +735,36 @@ def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_
 
 
 def _prs_section(
-    prs: list[PullRequest], judgements: Judgements, start: int, collected_at: str
+    prs: list[PullRequest],
+    judgements: Judgements,
+    start: int,
+    collected_at: str,
+    linker: Linker | None = None,
 ) -> str:
     rows = []
     for offset, pr in enumerate(prs):
         key = issue_key(pr.repo, pr.number)
-        rows.append(_pr_row(pr, judgements.issues.get(key), start + offset, collected_at))
+        rows.append(_pr_row(pr, judgements.issues.get(key), start + offset, collected_at, linker))
     body = "".join(rows) if rows else '<p class="empty">No open pull requests.</p>'
     inner = (
         '<section class="prs"><p class="tier-desc">Open pull requests, with their '
         f'implementation anchor and delivery verdict.</p><div class="rows">{body}</div></section>'
     )
-    return collapsed("prs", "PRs", len(prs), inner)
+    return fold("prs", "PRs", len(prs), inner)
 
 
-def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
+def _masthead(
+    facts: Facts,
+    judgements: Judgements,
+    result: CheckResult,
+    *,
+    title: str,
+    notes: Sequence[str] = (),
+    rendered_at: Moment | None = None,
+) -> str:
+    """The masthead both Backlog and Issues open with. *notes* are escaped here, after the
+    facts' own; *rendered_at* is the render's moment (R5), passed in so a render stays a
+    pure function of its inputs; None states no render time."""
     open_n = sum(1 for i in facts.issues if i.state == "open")
     in_flight = sum(1 for i in facts.issues if i.stage in IN_FLIGHT)
     ranked = judgements.ranked_at.isoformat() if judgements.ranked_at else "never"
@@ -673,21 +775,23 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
         ("settled", len(result.settled) + len(result.settled_prs)),
         (noun(len(facts.collected), "repo"), len(facts.collected)),
     ]
-    notes = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
-    notes += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
-    notes += [
+    lines = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
+    lines += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
+    lines += [
         f"Orphaned judgement {esc(k)}: it names no repo this collect read"
         " (a typo or a renamed repo)."
         for k in result.orphaned
     ]
+    lines += [esc(n) for n in notes]
     notes_html = (
-        '<ul class="notes">' + "".join(f"<li>{n}</li>" for n in notes) + "</ul>" if notes else ""
+        '<ul class="notes">' + "".join(f"<li>{n}</li>" for n in lines) + "</ul>" if lines else ""
     )
+    stamp = "" if rendered_at is None else f"<span>rendered {when(rendered_at)}</span>"
     return (
         '<header class="mast">'
-        f"<h1>Backlog triage · {esc(facts.scope)}</h1>"
+        f"<h1>{esc(title)} · {esc(facts.scope)}</h1>"
         '<div class="meta">'
-        f'<span>collected <span class="mono">{esc(facts.collected_at)}</span></span>'
+        f'<span>collected <span class="mono">{esc(facts.collected_at)}</span></span>{stamp}'
         f'<span>ranked <span class="mono">{esc(ranked)}</span></span>'
         f"<span>{esc(facts.kind)} scope</span></div>"
         '<div class="counts">'
@@ -696,15 +800,15 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
     )
 
 
-def _batch_card(batch: Batch, facts: Facts) -> str:
+def _batch_card(batch: Batch, facts: Facts, linker: Linker | None = None) -> str:
     """A closed `details` the board's links open (R5); `data-stage` is what the stage
     filter toggles."""
     stage = derive_batch_stage(batch, facts)
     event = last_dispatch(batch)
     pr = find_batch_pr(batch, facts)
-    lines = [f'<p class="mono">{esc(", ".join(batch.ids))}</p>']
+    lines = [f'<p class="mono">{_keys(batch.ids, linker)}</p>']
     if batch.rationale:
-        lines.append(f"<p>{inline(batch.rationale)}</p>")
+        lines.append(f"<p>{inline(batch.rationale, linker)}</p>")
     if event and event.reserved_version:
         lines.append(
             f'<p>reserved version <span class="mono">{esc(event.reserved_version)}</span></p>'
@@ -739,7 +843,7 @@ def _merge_step(step: MergeStep) -> str:
 
 def _stage_filter(judgements: Judgements, facts: Facts) -> str:
     """One checkbox per derived batch stage present, all on. Rendered `hidden`:
-    `FOLD_SCRIPT` shows it, so without JavaScript there is no control that does nothing."""
+    `STAGE_FILTER_SCRIPT` shows it, so without JavaScript there is no control that does nothing."""
     present = {derive_batch_stage(b, facts) for b in judgements.batches}
     boxes = "".join(
         f'<label><input type="checkbox" data-stage-filter value="{s}" checked> {s}</label>'
@@ -749,11 +853,13 @@ def _stage_filter(judgements: Judgements, facts: Facts) -> str:
     return f'<fieldset class="stage-filter" hidden><legend>Show stages</legend>{boxes}</fieldset>'
 
 
-def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> str:
+def _batches(
+    judgements: Judgements, facts: Facts, *, board: bool = False, linker: Linker | None = None
+) -> str:
     """The Batches fold (spec 2026-09-25-triage-batches §3.G); empty with no batches."""
     if not judgements.batches:
         return ""
-    cards = "".join(_batch_card(b, facts) for b in judgements.batches)
+    cards = "".join(_batch_card(b, facts, linker) for b in judgements.batches)
     cards += '<p class="filter-empty" hidden>No batches match the selected stages.</p>'
     steps = planned_merge_order(judgements.batches, facts, judgements.issues)
     order = (
@@ -765,8 +871,8 @@ def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> st
         else ""
     )
     link = (
-        '<p class="tier-desc"><a href="board.html">Open the Batches page</a> '
-        "(<code>fr triage board</code>): the same batches as a Kanban, with session status.</p>"
+        f'<p class="tier-desc"><a href="{page("batches").file}">Open the Batches page</a> '
+        "(<code>fr triage batches</code>): the same batches as a Kanban, with session status.</p>"
         if board
         else ""
     )
@@ -775,18 +881,18 @@ def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> st
         f"one run. Members also appear in their tiers, with a batch chip.</p>{link}"
         f"{_stage_filter(judgements, facts)}{cards}{order}</section>"
     )
-    return collapsed("batches", "Batches", len(judgements.batches), inner)
+    return fold("batches", "Batches", len(judgements.batches), inner, open_=True, heading="h2")
 
 
-def _patterns(judgements: Judgements) -> str:
+def _patterns(judgements: Judgements, linker: Linker | None = None) -> str:
     if not judgements.patterns:
         return ""
     items = "".join(
         f"<article><h3>{esc(p.title)}</h3>"
-        f'<p class="mono">{esc(", ".join(p.ids))}</p><p>{inline(p.body)}</p></article>'
+        f'<p class="mono">{_keys(p.ids, linker)}</p><p>{inline(p.body, linker)}</p></article>'
         for p in judgements.patterns
     )
-    return collapsed(
+    return fold(
         "patterns",
         "Patterns",
         len(judgements.patterns),
@@ -822,7 +928,6 @@ CHANGE_LABELS = {
 
 def _since_table(since: SnapshotDiff | None) -> str:
     """Since last report: one row per transition (R3); a batch row links to its card."""
-    head = '<section class="decide" id="since-last-report"><h2>Since last report</h2>'
     if since is None:
         body = (
             '<p class="quiet">No earlier snapshot: this is the first report, so there is '
@@ -849,7 +954,11 @@ def _since_table(since: SnapshotDiff | None) -> str:
         )
     if since is not None and since.acceptance_note:
         body += f'<p class="quiet">{esc(since.acceptance_note)}</p>'
-    return f"{head}{body}</section>"
+    count = len(since.transitions) if since is not None and since.transitions else None
+    return fold(
+        "since-last-report", "Since last report", count, f'<div class="decide">{body}</div>',
+        open_=True, heading="h2",
+    )  # fmt: skip
 
 
 def _needs_section(
@@ -860,64 +969,134 @@ def _needs_section(
     stops: Mapping[str, MergeStop] | None = None,
 ) -> str:
     rows = needs_you(facts, judgements, session_notes, ci_none=ci_none, stops=stops)
-    head = '<section class="decide" id="needs-you-now"><h2>Needs you now</h2>'
+
+    def section(body: str, count: int | None) -> str:
+        return fold(
+            "needs-you-now", "Needs you now", count, f'<div class="decide">{body}</div>',
+            open_=True, heading="h2",
+        )  # fmt: skip
+
     if not rows:
-        return f'{head}<p class="quiet">Nothing needs you now.</p></section>'
+        return section('<p class="quiet">Nothing needs you now.</p>', None)
     items = "".join(
         f'<li class="need" data-need="{esc(r.kind)}" data-ref="{esc(r.ref)}">'
         f'<span class="kind">{esc(NEED_LABELS[r.kind])}</span>{_link(r.text, r.href)}</li>'
         for r in rows
     )
-    return f'{head}<ul class="cards">{items}</ul></section>'
+    return section(f'<ul class="cards">{items}</ul>', len(rows))
 
 
-def _next_section(facts: Facts, judgements: Judgements) -> str:
+def _next_section(facts: Facts, judgements: Judgements, linker: Linker | None = None) -> str:
     rows = next_up(facts, judgements)
-    head = '<section class="decide" id="next-up"><h2>Next up</h2>'
+
+    def section(body: str, count: int | None) -> str:
+        return fold(
+            "next-up", "Next up", count, f'<div class="decide">{body}</div>',
+            open_=True, heading="h2",
+        )  # fmt: skip
+
     if not rows:
-        return f'{head}<p class="quiet">Nothing is waiting to start.</p></section>'
+        return section('<p class="quiet">Nothing is waiting to start.</p>', None)
     items = []
     for r in rows:
         tier = f"tier {r.tier}" if r.tier is not None else "no tier"
-        deps = f"after {', '.join(r.deps)}" if r.deps else "no dependencies"
+        deps = (
+            "after " + ", ".join(f'<a href="{batch_href(d)}">{esc(d)}</a>' for d in r.deps)
+            if r.deps
+            else "no dependencies"
+        )
         mark = '<span class="pill bstage-proposed">held</span> ' if r.waiting else ""
+        name = esc(r.ref if r.kind == "batch" else r.title)
+        if r.kind == "batch":
+            name = f'<a href="{batch_href(r.ref)}">{name}</a>'
+        wave = (
+            f'<span class="tag wave"><a href="{wave_href(r.wave, False)}">'
+            f"wave {esc(r.wave)}</a></span>"
+            if r.wave is not None
+            else ""
+        )
         items.append(
             f'<li class="next" data-next="{esc(r.kind)}" data-ref="{esc(r.ref)}" '
             f'data-waiting="{"1" if r.waiting else "0"}">{mark}'
-            f"<strong>{esc(r.ref if r.kind == 'batch' else r.title)}</strong> "
+            f"<strong>{name}</strong> {wave}"
             f'<span class="tag">{tier}</span><span class="tag">size {esc(r.size)}</span>'
-            f'<span class="tag">{esc(deps)}</span>{_sev_pill(r.severity)}'
-            f'<span class="why">{inline(r.reason)}</span></li>'
+            f'<span class="tag">{deps}</span>{_sev_pill(r.severity)}'
+            f'<span class="why">{inline(r.reason, linker)}</span></li>'
         )
-    return f'{head}<ul class="cards">{"".join(items)}</ul></section>'
+    return section(f'<ul class="cards">{"".join(items)}</ul>', len(rows))
+
+
+KINDS = ("defect", "feature", "parked", "unkinded")
+"""The issue kinds, in the order the Waves section lists them; `unkinded` is no kind."""
+
+
+def _kinds_of(ids: Sequence[str], judgements: Judgements) -> str:
+    """The space-separated kinds of a batch's issues, in `KINDS` order (R13)."""
+    found = {
+        (
+            j.kind
+            if (j := judgements.issues.get(k)) is not None and j.kind is not None
+            else "unkinded"
+        )
+        for k in ids
+    }
+    return " ".join(k for k in KINDS if k in found) or "unkinded"
+
+
+def _pr_cell(pr: PullRequest | None) -> str:
+    """A batch's PR for History's table (R16): its link, title and merge date, or a dash."""
+    if pr is None:
+        return DASH
+    url = _safe_url(pr.url)
+    ref = f"#{pr.number}"
+    link = f'<a href="{url}" rel="noopener noreferrer">{ref}</a>' if url else ref
+    when_ = stamp_text(pr.merged_at) if pr.merged_at else pr.state.lower()
+    return f'{link} {esc(pr.title)} <span class="quiet">{esc(when_)}</span>'
 
 
 def wave_table(
-    batches: Sequence[Batch], facts: Facts, judgements: Judgements, href_prefix: str = ""
+    batches: Sequence[Batch],
+    facts: Facts,
+    judgements: Judgements,
+    href_prefix: str = "",
+    *,
+    linker: Linker | None = None,
+    prs: Mapping[str, PullRequest | None] | None = None,
 ) -> str:
     """One wave's table; *href_prefix* is put before each batch link's `#batch-<id>`, so the
-    history page (another file) links to the board's cards."""
-    cols = ("Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage")
+    history page (another file) links to the board's cards. Each row carries `data-kinds`
+    for the Waves kind filter (R13). *prs*, when given, adds a PR column: each batch's PR by
+    batch id, None for none (R16)."""
+    cols = ["Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage"]
+    if prs is not None:
+        cols.append("PR")
     rows = []
     for b in batches:
         stage = derive_batch_stage(b, facts)
         tier = batch_tier(b.ids, judgements.issues)
-        cells = (
+        cells = [
             ("", f'<a href="{esc(href_prefix)}#batch-{esc(b.id)}">{esc(b.id)}</a>'),
             (' class="n"', f"{DASH if tier is None else tier}"),
             ("", esc(b.skill)),
-            (' class="mono"', esc(", ".join(b.ids))),
-            ("", inline(b.rationale)),
+            (' class="mono"', _keys(b.ids, linker)),
+            ("", inline(b.rationale, linker)),
             ("", esc(size_of(b.ids, judgements.issues))),
-            ("", esc(", ".join(b.after) or "-")),
+            (
+                "",
+                ", ".join(f'<a href="{batch_href(d)}">{esc(d)}</a>' for d in b.after) or "-",
+            ),
             ("", f'<span class="pill bstage-{stage}">{stage}</span>'),
-        )
+        ]
+        if prs is not None:
+            cells.append(("", _pr_cell(prs.get(b.id))))
         # data-label names the column on each cell, for the stacked phone layout (gh#1001)
         tds = "".join(
             f'<td{attrs} data-label="{label}">{body}</td>'
             for label, (attrs, body) in zip(cols, cells, strict=True)
         )
-        rows.append(f'<tr data-batch="{esc(b.id)}">{tds}</tr>')
+        rows.append(
+            f'<tr data-batch="{esc(b.id)}" data-kinds="{_kinds_of(b.ids, judgements)}">{tds}</tr>'
+        )
     head = "".join(f"<th>{c}</th>" for c in cols)
     return (
         f'<div class="tablewrap"><table class="grid stack"><thead><tr>{head}</tr></thead>'
@@ -925,14 +1104,14 @@ def wave_table(
     )
 
 
-def _features_table(judgements: Judgements, facts: Facts) -> str:
+def _features_table(judgements: Judgements, facts: Facts, linker: Linker | None = None) -> str:
     if not judgements.features:
         return ""
     open_keys = {i.key for i in facts.issues if i.state == "open"}
     rows = "".join(
         f'<tr data-feature="{esc(f.title)}"><td>{f.rank}</td><td>{esc(f.title)}</td>'
-        f'<td class="mono">{esc(", ".join(f.ids))}</td><td>{inline(f.why)}</td>'
-        f"<td>{inline(f.start)}</td>"
+        f'<td class="mono">{_keys(f.ids, linker)}</td><td>{inline(f.why, linker)}</td>'
+        f"<td>{inline(f.start, linker)}</td>"
         f"<td>{sum(1 for k in f.ids if k in open_keys)} open</td></tr>"
         for f in sorted(judgements.features, key=lambda f: (f.rank, f.title))
     )
@@ -941,7 +1120,7 @@ def _features_table(judgements: Judgements, facts: Facts) -> str:
         f'<div class="tablewrap"><table class="grid"><thead><tr>'
         f"{head}</tr></thead><tbody>{rows}</tbody></table></div>"
     )
-    return collapsed("ranked-features", "Ranked features", len(judgements.features), table)
+    return fold("ranked-features", "Ranked features", len(judgements.features), table)
 
 
 def _parked(facts: Facts, judgements: Judgements) -> str:
@@ -967,17 +1146,22 @@ def _parked(facts: Facts, judgements: Judgements) -> str:
             note = f" <em>duplicate of {ref}</em>"
         lis.append(f"<li>{_link(i.key, i.url)} {esc(i.title)}{note}</li>")
     items = "".join(lis)
-    return collapsed("parked", "Parked", len(parked), f"<ul>{items}</ul>")
+    return fold("parked", "Parked", len(parked), f"<ul>{items}</ul>")
 
 
-def _waves_section(facts: Facts, judgements: Judgements) -> str:
+def _waves_section(facts: Facts, judgements: Judgements, linker: Linker | None = None) -> str:
     counts = kind_counts(facts, judgements)
+    # One toggle per kind (R13), all on; `KIND_FILTER_SCRIPT` hides the rows of no pressed
+    # kind. `data-kind` stays the last attribute, the counts' own hook.
     chips = "".join(
-        f'<span class="count" data-kind="{k}"><b>{n}</b> {k}</span>' for k, n in counts.items()
+        f'<button type="button" class="count" aria-pressed="true" data-kind="{k}">'
+        f"<b>{n}</b> {k}</button>"
+        for k, n in counts.items()
     )
     head = (
-        '<section class="decide waves" id="waves"><h2>Waves</h2>'
-        f'<div id="closing-order"><h3>Closing order</h3><div class="counts">{chips}</div></div>'
+        '<div id="closing-order"><h3>Closing order</h3>'
+        f'<div class="counts" role="toolbar" aria-label="Show batches with issues of kind">'
+        f"{chips}</div></div>"
     )
     stages = batch_stages(facts, judgements)
     done = finished_waves(judgements.batches, stages)
@@ -986,29 +1170,37 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
         picked = preselected_wave(facts, judgements, among=set(grouped))
         keys = list(grouped)
         selected = keys.index(str(picked)) if str(picked) in keys else len(keys) - 1
+        empty = '<p class="quiet kinds-empty" hidden>No batch of the selected kinds.</p>'
         panels = [
             (key, "No wave" if key == UNWAVED else f"Wave {key}",
-             wave_table(batches, facts, judgements))
+             wave_table(batches, facts, judgements, linker=linker) + empty)
             for key, batches in grouped.items()
         ]  # fmt: skip
         body = tabs("wave", "Waves", panels, selected)
     else:
         body = '<p class="quiet">No waves: no batch carries a <code>wave</code> yet.</p>'
+
+    def finished(keys: Sequence[str]) -> str:
+        return ", ".join(f'<a href="{wave_href(k, True)}">Wave {esc(k)}</a>' for k in keys)
+
     if done and not any(k != UNWAVED for k in grouped):
         body = (
             '<p class="quiet">Every wave is finished: see '
-            '<a href="history.html">the history page</a>.</p>' + (body if grouped else "")
+            f'<a href="{page("history").file}">the History page</a> '
+            f"({finished(sorted(done, key=int))}).</p>" + (body if grouped else "")
         )
     if cancelled := sorted(cancelled_waves(judgements.batches, stages), key=int):
         # gh#1000: a wave of cancelled batches is finished and leaves the tabs; say so.
-        names = ", ".join(f"Wave {k}" for k in cancelled)
         verb = "was" if len(cancelled) == 1 else "were"
         body += (
-            f'<p class="quiet">{names} {verb} cancelled: every batch in it was cancelled '
-            'or abandoned, so it left the board; see <a href="history.html">the history '
-            "page</a>.</p>"
+            f'<p class="quiet">{finished(cancelled)} {verb} cancelled: every batch in it was '
+            f'cancelled or abandoned, so it left the board; see <a href="{page("history").file}">'
+            "the History page</a>.</p>"
         )
-    return f"{head}{body}</section>"
+    return fold(
+        "waves", "Waves", None, f'<div class="decide waves">{head}{body}</div>',
+        open_=True, heading="h2",
+    )  # fmt: skip
 
 
 def _slug(repo: str) -> str:
@@ -1028,14 +1220,12 @@ def _debt_repo(facts: Facts, repo: str, since: SnapshotDiff | None, show_note: l
         for i in untrusted_for(facts, repo)
     )
     if digest is None:
-        return collapsed(
-            f"debt-{_slug(repo)}", repo, None, '<p class="quiet">no report</p>' + ignored
-        )
+        return fold(f"debt-{_slug(repo)}", repo, None, '<p class="quiet">no report</p>' + ignored)
     link = _link(f"#{digest.number}", _safe_url(digest.url))
     fig = issue_figures(digest)
     if fig is None:
         body = f'<p class="quiet">legacy digest — no figures ({link})</p>' + ignored
-        return collapsed(f"debt-{_slug(repo)}", repo, None, body)
+        return fold(f"debt-{_slug(repo)}", repo, None, body)
     before_all = since.debt_before if since is not None else None
     before = before_all.get(repo) if before_all else None
     acc_before = before["acceptance"] if before else None
@@ -1087,7 +1277,7 @@ def _debt_repo(facts: Facts, repo: str, since: SnapshotDiff | None, show_note: l
         f'<li>Owed: <span class="debt-owed">{esc(owed)}</span></li></ul>'
         f'<p class="quiet">{link}{when_}</p>{ignored}'
     )
-    return collapsed(f"debt-{_slug(repo)}", repo, fig["total"], body)
+    return fold(f"debt-{_slug(repo)}", repo, fig["total"], body)
 
 
 def _debt_panel(facts: Facts, since: SnapshotDiff | None) -> str:
@@ -1107,7 +1297,13 @@ def _debt_panel(facts: Facts, since: SnapshotDiff | None) -> str:
             '<p class="quiet">The status split moved acceptance rows out of <code>skipped</code>: '
             "the first trend after it shows that one-time move.</p>"
         )
-    return '<section class="decide" id="debt"><h2>Debt</h2>' + "".join(parts) + notes + "</section>"
+    return fold(
+        "debt",
+        "Debt",
+        None,
+        '<div class="decide">' + "".join(parts) + notes + "</div>",
+        heading="h2",
+    )
 
 
 def _awaiting_live(
@@ -1126,7 +1322,7 @@ def _awaiting_live(
         + "".join(row(i, judgements.issues.get(i.key), "awaiting-live") for i in issues)
         + "</div></section>"
     )
-    return collapsed("awaiting-live", "Awaiting live", len(issues), inner)
+    return fold("awaiting-live", "Awaiting live", len(issues), inner)
 
 
 def _closed_in_progress(entries: Sequence[StaleInProgress]) -> str:
@@ -1148,33 +1344,30 @@ def _closed_in_progress(entries: Sequence[StaleInProgress]) -> str:
         "<strong>held</strong> ones belong to another scope.</p>"
         f"<ul>{items}</ul>"
     )
-    return collapsed("closed-in-progress", "Closed but in progress", len(entries), inner)
+    return fold("closed-in-progress", "Closed but in progress", len(entries), inner)
 
 
-def render(
+@dataclass(frozen=True)
+class _Sections:
+    """Every generated section of Backlog and Issues, as lazy builders over one shared
+    load and one classification, plus that classification for the masthead."""
+
+    result: CheckResult
+    builders: dict[str, Callable[[], str]]
+
+
+def _sections(
     facts: Facts,
     judgements: Judgements,
-    since: SnapshotDiff | None = None,
-    resolved: Resolved | None = None,
+    since: SnapshotDiff | None,
     *,
-    board: bool = False,
-    session_notes: Mapping[str, str] | None = None,
-    ci_none: Collection[str] = (),
-    present: Sequence[str] = ("backlog",),
-    stops: Mapping[str, MergeStop] | None = None,
-) -> str:
-    """The board for *facts* and *judgements*: same inputs, same bytes.
-
-    *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
-    there is none, and the page says so. *resolved* is the board manifest
-    (`<state>/board/manifest.yaml`, `fragments.resolve_manifest`): it orders the generated
-    sections and places authored fragments among them; None is the default order. *board*
-    links the sibling `board.html` (the batch Kanban, `fr triage board`) from the Batches
-    section; the caller says whether one exists. *session_notes* are blocked sessions'
-    notes by item id (cloud-triage R15), listed under Needs you now. *stops* are the
-    driver's recorded merge stops: a conflicting export PR's is listed too (merge-truth R12).
-    """
+    board: bool,
+    session_notes: Mapping[str, str] | None,
+    ci_none: Collection[str],
+    stops: Mapping[str, MergeStop] | None,
+) -> _Sections:
     show_repo = facts.kind != "repo"
+    linker = Linker.from_facts(facts)
     result = classify(facts, judgements)  # the one classification, shared below
     patterns_by_key: dict[str, list[str]] = {}
     for p in judgements.patterns:
@@ -1207,6 +1400,7 @@ def render(
             patterns=patterns_by_key.get(issue.key, []),
             batches=batches_by_key.get(issue.key, []),
             duplicates=nested.get(issue.key, []),
+            linker=linker,
         )
 
     def backlog() -> str:
@@ -1232,41 +1426,124 @@ def render(
             count += len(rows)
             sev = f"sev-{min(pos + 1, SEVERITIES)}"
             title = f"Tier {tier.n} · {tier.title}"
-            folds.append(_section(str(tier.n), sev, title, inline(tier.description), rows))
-        tiers = collapsed("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
-        return (
-            tiers
-            + _awaiting_live(result.awaiting_live, row, judgements)
-            + _closed_in_progress(result.closed_in_progress)
-        )
+            folds.append(_section(str(tier.n), sev, title, inline(tier.description, linker), rows))
+        return fold("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
         "needs": lambda: _needs_section(facts, judgements, session_notes, ci_none, stops),
-        "next-up": lambda: _next_section(facts, judgements),
-        "waves": lambda: _waves_section(facts, judgements),
+        "next-up": lambda: _next_section(facts, judgements, linker),
+        "waves": lambda: _waves_section(facts, judgements, linker),
+        "batches": lambda: _batches(judgements, facts, board=board, linker=linker),
         "possible-duplicates": lambda: _possible_duplicates(result.candidates, by_key),
         "backlog": backlog,
-        "features": lambda: _features_table(judgements, facts),
+        "features": lambda: _features_table(judgements, facts, linker),
         "parked": lambda: _parked(facts, judgements),
+        "awaiting-live": lambda: _awaiting_live(result.awaiting_live, row, judgements),
+        "closed-in-progress": lambda: _closed_in_progress(result.closed_in_progress),
+        "patterns": lambda: _patterns(judgements, linker),
         "debt": lambda: _debt_panel(facts, since),
-        "patterns": lambda: _patterns(judgements),
-        "prs": lambda: _prs_section(facts.prs, judgements, 1, facts.collected_at),
-        "batches": lambda: _batches(judgements, facts, board=board),
+        "prs": lambda: _prs_section(facts.prs, judgements, 1, facts.collected_at, linker),
     }
-    resolved = resolved or Resolved(order=[Entry(g) for g in GENERATED])
-    sections = [s for s in splice(resolved, builders) if s]
+    return _Sections(result, builders)
+
+
+def _page(
+    key: str,
+    facts: Facts,
+    judgements: Judgements,
+    sections: _Sections,
+    resolved: Resolved,
+    *,
+    notes: Sequence[str],
+    present: Sequence[str],
+    rendered_at: Moment | None,
+    script: str,
+) -> str:
+    owned = BACKLOG_GENERATED if key == "backlog" else ISSUES_GENERATED
+    body = [s for s in splice(resolved, {n: sections.builders[n] for n in owned}) if s]
+    title = "Backlog triage" if key == "backlog" else page(key).title
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
+        f"<title>{esc(title)} · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements, result)}\n{page_header('backlog', present)}\n"
-        f"{skew_banner(facts)}\n"
-        + "\n".join(sections)
-        + "\n<footer>Rendered by <code>fr triage render</code> from facts.json and "
+        + _masthead(
+            facts,
+            judgements,
+            sections.result,
+            title=title,
+            notes=[*notes, *moved_notes(resolved)],
+            rendered_at=rendered_at,
+        )
+        + f"\n{page_header(key, present)}\n{skew_banner(facts)}\n"
+        + "\n".join(body)
+        + "\n<footer>Rendered by <code>fr triage backlog</code> from facts.json and "
         "judgements.yaml. Stages are derived from the forge; re-run "
         "<code>fr triage collect</code> to refresh.</footer>\n"
-        f"</main>\n<script>{SCRIPT}{TABS_SCRIPT}{FOLD_SCRIPT}</script>\n</body>\n</html>\n"
+        f"</main>\n<script>{script}</script>\n</body>\n</html>\n"
     )
+
+
+def render_backlog(
+    facts: Facts,
+    judgements: Judgements,
+    since: SnapshotDiff | None = None,
+    resolved: Resolved | None = None,
+    *,
+    board: bool = False,
+    session_notes: Mapping[str, str] | None = None,
+    ci_none: Collection[str] = (),
+    present: Sequence[str] = ("backlog",),
+    stops: Mapping[str, MergeStop] | None = None,
+    notes: Sequence[str] = (),
+    rendered_at: Moment | None = None,
+) -> str:
+    """The Backlog, the decisions (triage-pages-ux R4): same inputs, same bytes.
+
+    *since* is the diff against the previous snapshot (`fr.triage.snapshot`); None means
+    there is none, and the page says so. *resolved* is the page's manifest
+    (`fragments.resolve_manifest` over `BACKLOG_GENERATED` and `BACKLOG_MOVED`): it orders
+    the generated sections and places authored fragments among them; None is the default
+    order, and a section it names that the Issues page owns is a page note. *board* links
+    the Batches page (`fr triage batches`) from the Batches section; the caller says
+    whether one exists. *session_notes* are blocked sessions' notes by item id
+    (cloud-triage R15), listed under Needs you now. *stops* are the driver's recorded merge
+    stops: a conflicting export PR's is listed too (merge-truth R12). *notes* are the
+    command's own page notes (a fragment-directory fallback, R3). *rendered_at* is the
+    moment the masthead states (R5).
+    """
+    sections = _sections(
+        facts, judgements, since, board=board, session_notes=session_notes, ci_none=ci_none,
+        stops=stops,
+    )  # fmt: skip
+    return _page(
+        "backlog", facts, judgements, sections,
+        resolved or Resolved(order=[Entry(g) for g in BACKLOG_GENERATED]),
+        notes=notes, present=present, rendered_at=rendered_at,
+        script=STAGE_FILTER_SCRIPT + KIND_FILTER_SCRIPT + PAGE_SCRIPT,
+    )  # fmt: skip
+
+
+def render_issues(
+    facts: Facts,
+    judgements: Judgements,
+    since: SnapshotDiff | None = None,
+    resolved: Resolved | None = None,
+    *,
+    present: Sequence[str] = ("issues",),
+    notes: Sequence[str] = (),
+    rendered_at: Moment | None = None,
+) -> str:
+    """The Issues page, the lists (triage-pages-ux R4): same inputs, same bytes. *since*
+    feeds the Debt panel's moves; *resolved*, *present*, *notes* and *rendered_at* are as
+    for `render_backlog`, over `ISSUES_GENERATED` and `ISSUES_MOVED`."""
+    sections = _sections(
+        facts, judgements, since, board=False, session_notes=None, ci_none=(), stops=None
+    )
+    return _page(
+        "issues", facts, judgements, sections,
+        resolved or Resolved(order=[Entry(g) for g in ISSUES_GENERATED]),
+        notes=notes, present=present, rendered_at=rendered_at, script=SCRIPT + PAGE_SCRIPT,
+    )  # fmt: skip

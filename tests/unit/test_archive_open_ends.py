@@ -209,6 +209,7 @@ def test_select_refuses_a_qid_that_is_not_an_open_end(tmp_path: Path) -> None:
 import subprocess  # noqa: E402
 
 import pytest  # noqa: E402
+from fr.archive_followups import OPEN_ENDS_LIST_LIMIT  # noqa: E402
 from fr.commands import archive_cmd  # noqa: E402
 from fr.ghclient import UnsupportedForgeOperation  # noqa: E402
 
@@ -309,7 +310,7 @@ def test_issues_all_files_every_end_marks_it_and_defers_the_finding(
     assert f"<!-- fr:journal plan/{SLUG}/f1 -->" in made[0]["body"]
     assert "body of f1" in made[0]["body"]
     assert f"docs/superpowers/implemented/journals/plans/{SLUG}.md" in made[0]["body"]
-    assert gh.list_args == [(OWN, "open", 200, "number,url,body,author")]
+    assert gh.list_args == [(OWN, "open", OPEN_ENDS_LIST_LIMIT, "number,url,body,author")]
     assert _states(repo) == {
         "f1": "deferred",
         "f2": "deferred",
@@ -360,9 +361,8 @@ def _f1_marker() -> str:
     [
         ([_issue(5, f"x\n{_f1_marker()}", author="mallory")], "me"),  # someone else's
         ([_issue(5, f"see {_f1_marker()} quoted\nmore text")], "me"),  # mid-body
-        ([_issue(5, f"x\n{_f1_marker()}")], ""),  # viewer_login fails
     ],
-    ids=["other-author", "mid-body", "no-viewer"],
+    ids=["other-author", "mid-body"],
 )
 def test_an_issue_that_is_not_ours_or_only_quotes_the_marker_is_not_reused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, issues: list[dict], viewer: str
@@ -398,6 +398,57 @@ def test_dedup_falls_back_to_none_when_the_forge_cannot_list(
     result = _archive(monkeypatch, repo, gh, "--issues", "all")
     assert result.exit_code == 0, result.output
     assert len(_created(gh)) == 2
+
+
+class FailingListGh(DedupGh):
+    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
+        raise FakeGhError("HTTP 502")
+
+
+class CappedListGh(DedupGh):
+    def list_issues(self, repo, state, limit, fields=None):  # noqa: ANN001, ANN201
+        self.list_args.append((repo, state, limit, fields))
+        return [_issue(1000 + i, "unrelated") for i in range(limit)]
+
+
+@pytest.mark.parametrize(
+    ("gh", "why"),
+    [
+        (FailingListGh(), "could not list the open issues"),
+        (CappedListGh(), "reached its limit"),
+        (DedupGh(viewer=""), "could not tell which account"),
+    ],
+    ids=["listing-fails", "listing-capped", "no-viewer"],
+)
+def test_an_unknown_dedup_answer_files_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gh: DedupGh, why: str
+) -> None:
+    """super-fr#1485: a listing that failed, reached its cap, or has no viewer to
+    match authors against cannot say "no issue carries this marker"; filing on that
+    guess is how a duplicate gets filed. Every chosen end stays open in the journal,
+    as `_existing_owed` does for owed actions."""
+    repo = _open_ends_repo(tmp_path)
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert _created(gh) == []
+    assert f"warning: could not file plan/{SLUG}/f1" in result.output
+    assert why in result.output
+    assert _states(repo)["f1"] == "open" and _states(repo)["f2"] == "out-of-scope"
+
+
+def test_the_marker_listing_is_wide_enough_for_a_busy_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cap fails closed now, so it must sit well above a real repo's open issues
+    (super-fr has ~170): 200 would refuse almost at once."""
+    from fr.archive_followups import OPEN_ENDS_LIST_LIMIT
+
+    repo = _open_ends_repo(tmp_path)
+    gh = DedupGh()
+    result = _archive(monkeypatch, repo, gh, "--issues", "all")
+    assert result.exit_code == 0, result.output
+    assert OPEN_ENDS_LIST_LIMIT >= 1000
+    assert [a[2] for a in gh.list_args] == [OPEN_ENDS_LIST_LIMIT]
 
 
 def test_a_per_finding_create_failure_is_reported_and_the_rest_proceed(

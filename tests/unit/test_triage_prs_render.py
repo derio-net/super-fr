@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fr.triage.model import Facts, Judgements, PullRequest
-from fr.triage.render import render
+from fr.triage.render import render_issues
 
 REPO = "derio-net/super-fr"
 
@@ -61,7 +61,7 @@ def _prs_section(page: str) -> str:
 
 def test_prs_section_lists_every_open_pr_after_the_backlog() -> None:
     prs = [_pr(1), _pr(2)]
-    page = render(_facts(prs), _judgements(("super-fr#2", {"delivery": "delivers"})))
+    page = render_issues(_facts(prs), _judgements(("super-fr#2", {"delivery": "delivers"})))
 
     section = _prs_section(page)
     assert 'data-key="super-fr#1"' in section
@@ -74,7 +74,7 @@ def test_judged_pr_shows_its_delivery_verdict_and_note() -> None:
     judgements = _judgements(
         ("super-fr#2", {"delivery": "partial", "delivery_note": "half the spec"})
     )
-    section = _prs_section(render(_facts(prs), judgements))
+    section = _prs_section(render_issues(_facts(prs), judgements))
 
     assert "delivery: partial" in section
     assert "half the spec" in section
@@ -82,7 +82,7 @@ def test_judged_pr_shows_its_delivery_verdict_and_note() -> None:
 
 
 def test_unjudged_pr_shows_unranked_delivery() -> None:
-    section = _prs_section(render(_facts([_pr(1)]), _judgements()))
+    section = _prs_section(render_issues(_facts([_pr(1)]), _judgements()))
 
     assert "delivery: unranked" in section
 
@@ -93,7 +93,7 @@ def test_badges_cover_fail_pending_pass_and_unknown_merge_verbatim() -> None:
         _pr(2, checks={"pass": 0, "fail": 0, "pending": 1}, merge_state="BEHIND"),
         _pr(3, merge_state="UNKNOWN", mergeable="UNKNOWN"),
     ]
-    section = _prs_section(render(_facts(prs), _judgements()))
+    section = _prs_section(render_issues(_facts(prs), _judgements()))
 
     assert "✗ CI fail" in section
     assert "● CI pending" in section
@@ -105,7 +105,7 @@ def test_badges_cover_fail_pending_pass_and_unknown_merge_verbatim() -> None:
 
 def test_red_ci_and_conflict_chips_match_row_attributes() -> None:
     prs = [_pr(1, checks={"pass": 0, "fail": 1, "pending": 0}, merge_state="CLEAN")]
-    page = render(_facts(prs), _judgements())
+    page = render_issues(_facts(prs), _judgements())
 
     assert 'data-filter="redci"' in page
     assert 'data-filter="conflicts"' in page
@@ -115,7 +115,7 @@ def test_red_ci_and_conflict_chips_match_row_attributes() -> None:
 
 def test_pr_rows_escape_hostile_text_and_stay_off_script() -> None:
     prs = [_pr(1, title='"><script>alert(1)</script>')]
-    page = render(_facts(prs), _judgements())
+    page = render_issues(_facts(prs), _judgements())
 
     assert "<script>alert(1)</script>" not in page
     assert "&lt;script&gt;" in page
@@ -127,12 +127,12 @@ def test_render_is_deterministic_with_prs() -> None:
     prs = [_pr(1), _pr(2, anchor="debug", anchor_path="j.md")]
     judgements = _judgements(("super-fr#2", {"delivery": "delivers"}))
 
-    assert render(_facts(prs), judgements) == render(_facts(prs), judgements)
+    assert render_issues(_facts(prs), judgements) == render_issues(_facts(prs), judgements)
 
 
 def test_empty_prs_section_says_so(tmp_path: Path) -> None:
     del tmp_path  # no filesystem needed; kept for symmetry with the render suite
-    section = _prs_section(render(_facts([]), _judgements()))
+    section = _prs_section(render_issues(_facts([]), _judgements()))
 
     assert "No open pull requests." in section
 
@@ -145,7 +145,7 @@ def test_blocked_is_not_a_conflict_on_the_triage_page() -> None:
         _pr(2, merge_state="DIRTY"),
         _pr(3, merge_state="BLOCKED", mergeable="CONFLICTING"),
     ]
-    section = _prs_section(render(_facts(prs), _judgements()))
+    section = _prs_section(render_issues(_facts(prs), _judgements()))
 
     rows = dict(re.findall(r'data-key="super-fr#(\d)".*?data-conflicts="(\d)"', section, re.S))
     assert rows == {"1": "0", "2": "1", "3": "1"}

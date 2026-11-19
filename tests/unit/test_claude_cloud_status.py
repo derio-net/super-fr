@@ -21,7 +21,7 @@ from fr.commands.triage_kanban_cmd import read_sessions, write_board
 from fr.triage.driver import CLOUD, HOST
 from fr.triage.kanban import NEEDS_YOU, build_board
 from fr.triage.model import load_facts, load_judgements
-from fr.triage.render import render
+from fr.triage.render import render_backlog
 from fr.triage.views import needs_you
 from fr_claude_cloud.runner import ClaudeCloudRunner
 from fr_dispatch.protocols import SessionNotes
@@ -231,9 +231,9 @@ def test_needs_you_now_lists_a_blocked_sessions_note_and_nothing_without_one(
     assert [n for n in without if n.kind == "session-blocked"] == []
     (need,) = [n for n in noted if n.kind == "session-blocked"]
     assert need.ref == "b1" and "approve the push" in need.text
-    page = render(facts, judgements, session_notes={B1: "approve the push"})
+    page = render_backlog(facts, judgements, session_notes={B1: "approve the push"})
     assert "approve the push" in page
-    assert render(facts, judgements) == render(facts, judgements, session_notes={})
+    assert render_backlog(facts, judgements) == render_backlog(facts, judgements, session_notes={})
 
 
 def SCOPE_OF(facts: Any) -> Any:  # noqa: N802 - a fixture-shaped helper
@@ -415,7 +415,7 @@ def _render(state: Path) -> Any:
     from fr.cli import app
     from typer.testing import CliRunner
 
-    return CliRunner().invoke(app, ["triage", "render", "--repo", REPO, "--dir", str(state)])
+    return CliRunner().invoke(app, ["triage", "backlog", "--repo", REPO, "--dir", str(state)])
 
 
 def test_render_probes_no_runner_that_gives_no_notes(
@@ -449,7 +449,7 @@ def test_render_reads_a_cloud_mailbox_without_writing_it(
     assert result.exit_code == 0, result.output
     assert sessions.read_bytes() == before
     assert not (tmp_path / "requests.yaml").exists()
-    assert "approve" in (tmp_path / "triage.html").read_text()
+    assert "approve" in (tmp_path / "backlog.html").read_text()
 
 
 # ------------------------------- p5-r7: adopt --list picks the scope's driver, CLI

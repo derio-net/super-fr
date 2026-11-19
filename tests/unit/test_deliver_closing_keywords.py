@@ -289,6 +289,36 @@ def test_a_live_body_must_close_every_listed_owed_issue(
         assert out.exit_code == 0, out.output
 
 
+@pytest.mark.parametrize(
+    ("host", "ok"),
+    [("github.com", True), ("evil.example", False), ("github.com.evil.example", False)],
+)
+def test_an_owed_issue_closed_by_url_must_be_on_the_forge_host(
+    tmp_path: Path,
+    live: dict[str, str],
+    discharged: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    ok: bool,
+) -> None:
+    """super-fr#1488: a lookalike URL on another host normalised to the owed issue, so
+    deliver accepted a body GitHub would not close it from."""
+    import fr._hosts
+
+    root = _at_deliver(tmp_path)
+    # the fixture's origin is a local bare; the forge host is what `own_issue` reads too
+    monkeypatch.setattr(fr._hosts, "origin_hostname", lambda _root: "github.com")
+    url = f"https://{host}/derio-net/super-fr/issues/7"
+    body = _rendered(root, live).replace(f"Closes {OWED_REF}", f"Closes {url}")
+    live["body"] = body
+    _rec, out = _deliver(root)
+    if ok:
+        assert out.exit_code == 0, out.output
+    else:
+        assert out.exit_code == 2, out.output
+        assert f"Closes {OWED_REF}" in out.output
+
+
 def test_a_held_owed_issue_is_rendered_refs_and_not_required(
     tmp_path: Path, live: dict[str, str], discharged: dict[str, str]
 ) -> None:

@@ -255,7 +255,10 @@ def test_page_has_a_real_title_the_three_theme_blocks_and_the_gutter() -> None:
     assert re.search(
         r"max-width: 480px\) \{\s*main \{ padding-left: 16px; padding-right: 16px", page
     )
-    assert "<script>" not in page  # no tabs here any more, so no script
+    # the page carries the shared tab and fold script, so a fragment's tab set works (R17)
+    from fr.triage.components import PAGE_SCRIPT
+
+    assert PAGE_SCRIPT in page
 
 
 def test_the_sections_are_summary_cards_size_table_then_authored() -> None:
@@ -567,8 +570,8 @@ def test_a_manifest_naming_a_moved_section_notes_the_owning_page(
     result = _run(state, checkout)
     assert result.exit_code == 0, result.output
     page = (state / "architecture.html").read_text(encoding="utf-8")
-    assert "`waves`, which is now on the board page" in page
-    assert "`timeline`, which is now on the history page" in page
+    assert "`waves`, which is now on the Backlog page" in page
+    assert "`timeline`, which is now on the History page" in page
     assert "no file" not in page and "no file" not in result.output
     assert 'id="waves"' not in page and "snapshot-timeline" not in page
     assert set(MOVED) >= {
@@ -601,12 +604,12 @@ def test_architecture_render_refreshes_the_nav_of_a_sibling_page(
 
     state = _state(tmp_path)
     (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
-    (state / "triage.html").write_text(
+    (state / "backlog.html").write_text(
         f"<html>{nav_html('backlog', ('backlog',))}</html>\n", encoding="utf-8"
     )
     result = _run(state, checkout)
     assert result.exit_code == 0, result.output
-    assert 'href="architecture.html"' in (state / "triage.html").read_text(encoding="utf-8")
+    assert 'href="architecture.html"' in (state / "backlog.html").read_text(encoding="utf-8")
 
 
 def test_architecture_render_writes_its_page_atomically(
@@ -623,3 +626,18 @@ def test_architecture_render_writes_its_page_atomically(
     (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
     assert _run(state, checkout).exit_code == 0
     assert state / "architecture.html" in written
+
+
+def test_a_subsystem_card_links_an_issue_only_through_an_https_url() -> None:
+    from tests.unit.triage_board_fixtures import facts, issue, j, judgements
+
+    f = facts([issue(1, url="javascript:alert(1)"), issue(2)])
+    jd = judgements({"widgets#1": j(), "widgets#2": j()})
+    page = render_architecture(
+        f, jd, subsystems=Subsystems(), measured={}, resolved=Resolved(order=[Entry("subsystems")])
+    )
+    assert "javascript:" not in page
+    item = re.search(r'<li data-issue="widgets#1">(.*?)</li>', page)
+    assert item and "<a " not in item.group(1) and "widgets#1" in item.group(1)
+    other = re.search(r'<li data-issue="widgets#2">(.*?)</li>', page)
+    assert other and 'href="https://github.com/example-org/widgets/issues/2"' in other.group(1)
