@@ -1603,3 +1603,44 @@ def test_a_mermaid_fence_is_the_renderers_to_place_and_is_not_checked() -> None:
     raw = "x\n\n```mermaid\nflowchart LR\n  a --> b\n```\n"
     assert bs.source_fences(raw) == []
     bs.check_fences_render(raw, '<pre class="mermaid">flowchart</pre>', "a.md")
+
+
+def _css_block(css: str, query: str) -> str:
+    """The body of the `@media (<query>){...}` block, braces balanced."""
+    start = css.index(f"@media ({query})")
+    open_at = css.index("{", start)
+    depth = 0
+    for i in range(open_at, len(css)):
+        depth += {"{": 1, "}": -1}.get(css[i], 0)
+        if depth == 0:
+            return css[open_at + 1 : i]
+    raise AssertionError(f"unbalanced @media ({query})")
+
+
+def test_the_bar_reads_as_two_rows_on_a_phone() -> None:
+    """R14: the site name alone on row 1, the four links in a no-wrap row 2."""
+    css = (bs.SITE_DIR / "bar.css").read_text(encoding="utf-8")
+    phone = re.sub(r"\s+", "", _css_block(css, "max-width:480px"))
+    assert ".site-bar.site-name{" in phone and "flex-basis:100%" in phone
+    assert "margin-right:0" in phone
+    # the links share one row: they may not wrap or be given a basis of their own
+    assert "white-space:nowrap" in phone
+    assert ".site-bara:not(.site-name){padding:.35rem0}" in phone  # a tap target of about 24px
+
+
+def test_the_landing_bar_takes_the_wrap_gutter_on_a_phone() -> None:
+    """R15: at 720px the landing bar's padding matches `.wrap`'s phone gutter."""
+    css = (bs.SITE_DIR / "landing.css").read_text(encoding="utf-8")
+    phone = re.sub(r"\s+", "", _css_block(css, "max-width:720px"))
+    gutter = re.search(r"\.wrap\{padding:0([\d.]+rem)\}", phone)
+    assert gutter is not None
+    assert (
+        f"body.landing.site-bar{{padding-left:{gutter.group(1)};padding-right:{gutter.group(1)}}}"
+        in phone
+    )
+
+
+def test_the_article_bar_follows_the_broadsheet_column() -> None:
+    """R15: the bar's text starts where the 720px article column does, at any width."""
+    css = re.sub(r"\s+", "", (bs.SITE_DIR / "bar.css").read_text(encoding="utf-8"))
+    assert "padding:.7remmax(1.25rem,calc((100%-720px)/2+1.25rem))" in css
