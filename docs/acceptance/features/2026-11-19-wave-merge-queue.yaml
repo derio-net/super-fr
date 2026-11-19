@@ -1,0 +1,137 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-wave-merge-queue
+repo: derio-net/super-fr
+rows:
+  - id: wave-queue-speculative-land
+    capability: wave merge queue
+    acceptance: The wave driver merges a wave's approved green PRs by testing speculative
+      combinations (main + PRs ahead + this PR) on fr-owned branches and moving main
+      to exactly the tested commit; no PR branch is ever updated because main moved
+      and no forge merge queue is used.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R1
+    - spec:2026-11-19-wave-merge-queue#R3
+    - spec:2026-11-19-wave-merge-queue#R4
+    - spec:2026-11-19-wave-merge-queue#R8
+    - spec:2026-11-19-wave-merge-queue#R9
+    - spec:2026-11-19-wave-merge-queue#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-land-methods
+    capability: wave merge queue
+    acceptance: Landing by atomic push leaves every landed PR reading MERGED on the
+      forge, with history in the repo's merge method (merge commits, or one squashed
+      commit per PR); landing by forge merge refuses rather than land an untested tree.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R5
+    - spec:2026-11-19-wave-merge-queue#R10
+    - spec:2026-11-19-wave-merge-queue#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-wave-exclusive
+    capability: wave merge queue
+    acceptance: While a wave's queue is open only that wave's PRs and its one close-out
+      enter it; later waves and no-wave batches wait until it drains.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R2
+    - spec:2026-11-19-wave-merge-queue#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-eject
+    capability: wave merge queue
+    acceptance: A combination that fails twice or conflicts takes only its own PR out
+      of the queue, hands it back to its session through the existing budgets, and rebuilds
+      only the combinations behind it.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R6
+    - spec:2026-11-19-wave-merge-queue#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-one-path
+    capability: wave merge queue
+    acceptance: 'The queue is the driver''s and batch merge''s only merge path: a repo
+      that requires a forge queue, refuses the push, or lacks queue CI is held with
+      what it needs, ci-none repos land without a CI wait, and a restarted driver never
+      lands twice.'
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R7
+    - spec:2026-11-19-wave-merge-queue#R20
+    - spec:2026-11-19-wave-merge-queue#R22
+    - spec:2026-11-19-wave-merge-queue#R23
+    - spec:2026-11-19-wave-merge-queue#R24
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-live-wave
+    capability: wave merge queue
+    acceptance: A real wave on super-fr drains through the queue with no PR updates,
+      one approval per PR and one release for the wave.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R1
+    - spec:2026-11-19-wave-merge-queue#R9
+    - spec:2026-11-19-wave-merge-queue#R10
+    - spec:2026-11-19-wave-merge-queue#R17
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: wave-queue-approval-content
+    capability: approval gate
+    acceptance: An approved-fr approval survives any push that leaves the PR's own diff
+      unchanged (a merge of main, an empty commit, the queue's own landing rewrite)
+      and is voided only by a change to that diff.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-release-hold
+    capability: release
+    acceptance: A repo cuts no release while a wave's queue drains and exactly one release
+      follows the drain (dispatched, or from the next push or the daily cron); a stale
+      hold older than a day is ignored with a warning.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R17
+    - spec:2026-11-19-wave-merge-queue#R18
+    - spec:2026-11-19-wave-merge-queue#R19
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-closeout-migrates
+    capability: collected close-out
+    acceptance: 'A wave''s close-out is never held by a stale artifact a registered
+      migration can move: it migrates what it archives on its own branch.'
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-migratable-validation
+    capability: artifact validation
+    acceptance: fr validate artifacts --allow-migratable passes a stale artifact a registered
+      migration can move and fails one it cannot, so a PR is not failed by another run's
+      stale cursor.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R21
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: wave-queue-visible
+    capability: triage board
+    acceptance: The pass, the board and the Batches page show each repo's queue line
+      (wave, base, entries and their state, hold), and an approved queued PR never reads
+      as awaiting approval.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R25
+    levels: {}
+    status: not-implemented
+    notes: ''

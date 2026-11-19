@@ -1,0 +1,80 @@
+schema_version: 2
+run: 2026-11-19-feat-wave-merge-queue
+captures:
+- host: h-0a0b10b6
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-19T21:24:05+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: a675f8da-621c-489c-90c0-07d7c601e9f7
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 90
+        cache_write: 401342
+        cache_read: 6368531
+        output: 43932
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 27
+      other:
+        usd: null
+        turns: 9
+      paperwork:
+        usd: null
+        turns: 11
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 6
+        cache_write: 82990
+        cache_read: 253330
+        output: 730
+      brainstorm:
+        usd: null
+        turns: 42
+        input: 84
+        cache_write: 318352
+        cache_read: 6115201
+        output: 43202
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 6
+          cache_write: 82990
+          cache_read: 253330
+          output: 730
+        brainstorm:
+          usd: null
+          turns: 20
+          input: 40
+          cache_write: 127608
+          cache_read: 3675366
+          output: 31810
+      subagent:
+        brainstorm:
+          usd: null
+          turns: 22
+          input: 44
+          cache_write: 190744
+          cache_read: 2439835
+          output: 11392
+    units:
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 22
+          input: 44
+          cache_write: 190744
+          cache_read: 2439835
+          output: 11392
+    briefs:
+      a142dee9015618bcb: 1958
