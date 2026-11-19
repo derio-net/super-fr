@@ -35,4 +35,4 @@ resolves:
   - {id: l-docs-accuracy-r2, state: fixed, body: "6f09a0ec2 and 61b658f7b: item 5 says the marker fills only alone on its line, outside a fenced block."}
 evidence:
   review: lens-review-1
-  reviewer: {tests: aecfa524080b57f16, docs-accuracy: a5f624b773e81a2c4}
+  reviewer: "tests=aecfa524080b57f16,docs-accuracy=a5f624b773e81a2c4"
