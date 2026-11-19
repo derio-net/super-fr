@@ -95,3 +95,265 @@ fr records one operator decision per answered question; these three answers came
 - Channels: Needs you + board, PR marker comments, wave report. No notify command.
 - Leaving a wave: the driver proposes deferral (spent budget, or stall_hours, default 4), and the operator decides with defer/requeue. The driver never defers on its own.
 - Also from the operator's message: later waves wait as PRs and only build their queue once the previous wave's release is cut; a wave needs a way for PRs to leave it and later request the next queue.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r1 · finding [open] (reviewer: in scope) · Patch-id approval ignores whitespace and binary content
+
+git patch-id --stable strips whitespace; plain git diff collapses binaries (approval.py:59-75 is exact-head today).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r2 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r2 · finding [open] (reviewer: in scope) · Under merge, the landing push leases no PR head
+
+R10/§D left head refs out of the push under merge, so a session push could be silently dropped.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r3 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r3 · finding [open] (reviewer: in scope) · Non-atomic fallback can leave PR branches carrying other PRs' changes
+
+Pushing heads first then main can strand stacked heads.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r4 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r4 · finding [open] (reviewer: in scope) · Patch-id 'survives the landing rewrite' is false
+
+Against either base the landed head's diff differs.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r5 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r5 · finding [open] (reviewer: in scope) · Hold commit identity is contradictory; ls-remote cannot read state
+
+A ref at main's sha has no own message; a commit on top is never contained by main.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r6 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r6 · finding [open] (reviewer: in scope) · A drain not carried by a main push starts no release
+
+land: merge, deferral and quiet drains push only fr-hold/*.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r7 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r7 · finding [open] (reviewer: in scope) · Test Plan 11 contradicts R17
+
+Item 11 said the final landing push deletes the hold.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r8 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r8 · finding [open] (reviewer: in scope) · R7 refuses ci none repos that R20 admits
+
+No-CI repos cannot declare ci: push.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r9 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r9 · finding [open] (reviewer: in scope) · Queue branch has two names
+
+R4 vs §C differed.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r10 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r10 · finding [open] (reviewer: in scope) · Two scopes on one repo would run two queues
+
+Hold and leases were keyed by scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r11 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r11 · finding [open] (reviewer: in scope) · Repo-level queue events and non-batch entries have no home in judgements
+
+Judgements events live on Batch (model.py:1209-1220).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r12 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r12 · finding [open] (reviewer: in scope) · DevOps stage 2 completion would let stage 3 run before the merge
+
+_merged accepts a recorded stage 2 (ops/gate.py:1136).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r13 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r13 · finding [open] (reviewer: in scope) · _archive and _export_merge are other merge paths
+
+triage_batch_cmd.py:6794-6807, :7099-7111 call pr_merge.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r14 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r14 · finding [open] (reviewer: in scope) · post_merge and post_merge_restart undefined for multi-batch landings
+
+post_merge ran per merged batch.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r15 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r15 · finding [open] (reviewer: in scope) · Wave selection and the in-flight cap can deadlock; a later wave could open first
+
+Lowest-ready selection and IN_FLIGHT counting pr-open (batch_drive.py:74, :2012).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r16 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r16 · finding [open] (reviewer: in scope) · Combinations do not run the acceptance gate
+
+acceptance-report.yml runs on PRs and main only.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r17 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r17 · finding [open] (reviewer: in scope) · Nothing cleans fr-queue branches; the cloud proxy cannot delete
+
+state_ref.py:18-24.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r18 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r18 · finding [open] (reviewer: in scope) · Merged-on-push does not hold for Gitea by default; the engine is GhClient-only
+
+ghclient.py:556-663; Gitea autodetect manual merge is off by default.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r19 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r19 · finding [open] (reviewer: in scope) · Restricted fr migrate artifacts does not exist
+
+migrate_cmd.py:134-143 takes only --yes/--adopt.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r20 created=2026-11-19T22:23:19+00:00 state=open review_scope=in -->
+### sr-r20 · finding [open] (reviewer: in scope) · Fast-forwarding a protected main needs a named identity
+
+The operator credential as bypass actor would let every session push to main.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r21 created=2026-11-19T22:23:19+00:00 state=open review_scope=out -->
+### sr-r21 · finding [open] (reviewer: out of scope) · Rebase method breaks release.py's first-parent PR cross-check
+
+AGENTS.md release gating: land by merge commit or squash.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-19T22:23:19+00:00 -->
+### spec-review-1 · review · independent spec review: 21 findings
+
+fr-spec-reviewer raised sr-r1..sr-r20 in scope and sr-r21 out of scope; decisions honoured in substance, defects in mechanism. All in-scope findings fixed in the spec (commit 'spec review fixes'); rows updated for R31-R36 and a post-merge row added.
+
+<!-- fr:journal kind=lens scope=spec id=lens-errors-1 created=2026-11-19T22:23:19+00:00 lens=errors step=spec-review -->
+### lens-errors-1 · lens · Many partial-failure windows: atomic push, crash between build/land and its event, hold handshake races, cloud proxy refusals (reviewer suggestion).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r1 -->
+### sr-r1-resolved · finding [fixed] · resolves sr-r1: Patch-id approval ignores whitespace and binary content
+
+R12 names `git diff --binary --full-index --no-color <mb> <head> | git patch-id --verbatim`; Test Plan 5 adds whitespace-only and binary edits that void.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r2-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r2 -->
+### sr-r2-resolved · finding [fixed] · resolves sr-r2: Under merge, the landing push leases no PR head
+
+R10 and §D push every landed head ref (unchanged under merge) with a lease; Test Plan 3 runs under squash and merge.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r3-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r3 -->
+### sr-r3-resolved · finding [fixed] · resolves sr-r3: Non-atomic fallback can leave PR branches carrying other PRs' changes
+
+The fallback is removed: a server refusing --atomic is held (R10, R22); Test Plan 3 covers it.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r4-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r4 -->
+### sr-r4-resolved · finding [fixed] · resolves sr-r4: Patch-id 'survives the landing rewrite' is false
+
+Claim dropped: R12 says the patch-id is read only before landing; a landed PR is merged and never re-read.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r5-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r5 -->
+### sr-r5-resolved · finding [fixed] · resolves sr-r5: Hold commit identity is contradictory; ls-remote cannot read state
+
+R17: a hold is a commit whose parent is the base (open) or drained main (drained); release clears when its base contains that parent. R18/§G: release.py fetches the ref and reads the message; --version runs are held; a superseded run clears nothing.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r6-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r6 -->
+### sr-r6-resolved · finding [fixed] · resolves sr-r6: A drain not carried by a main push starts no release
+
+R19: every drain reaches the release through the drained-hold push; release.yml runs on fr-hold/** pushes (not deletions); Test Plan 18 covers deferral and land: merge drains.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r7-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r7 -->
+### sr-r7-resolved · finding [fixed] · resolves sr-r7: Test Plan 11 contradicts R17
+
+Item 11 rewritten: the driver moves it to drained; only the release (or release: none) clears it, by a leased push.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r8-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r8 -->
+### sr-r8-resolved · finding [fixed] · resolves sr-r8: R7 refuses ci none repos that R20 admits
+
+R7 adds `queue.ci: none`, allowed only where services say ci none; R20 keyed on it; Test Plan 12/14.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r9-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r9 -->
+### sr-r9-resolved · finding [fixed] · resolves sr-r9: Queue branch has two names
+
+One name: bounded slots `fr-queue/<scope-id>/slot-<k>` (R4, §C).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r10-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r10 -->
+### sr-r10-resolved · finding [fixed] · resolves sr-r10: Two scopes on one repo would run two queues
+
+R31: one hold ref per repo (`fr-hold/queue`) taken by a leased push; another scope's hold blocks opening and landing with a Need; Test Plan 23.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r11-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r11 -->
+### sr-r11-resolved · finding [fixed] · resolves sr-r11: Repo-level queue events and non-batch entries have no home in judgements
+
+R24: schema 13 adds a `queues:` list with repo-level records and snake_case kinds registered in _EVENT_SCHEMAS; non-batch entries and their approvals live there.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r12-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r12 -->
+### sr-r12-resolved · finding [fixed] · resolves sr-r12: DevOps stage 2 completion would let stage 3 run before the merge
+
+R26/§J: stage 2 adds `fr-queue:release` and records nothing; _merged reads only the forge; the driver settles labels into events (no state-ref access from fr ops gate); a Need names `fr ops gate --run <id>` after landing.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r13-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r13 -->
+### sr-r13-resolved · finding [fixed] · resolves sr-r13: _archive and _export_merge are other merge paths
+
+R32: close-out, archive, export and housekeeping PRs are queue entries under their trust rules; §I lists the change; Test Plan 24.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r14-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r14 -->
+### sr-r14-resolved · finding [fixed] · resolves sr-r14: post_merge and post_merge_restart undefined for multi-batch landings
+
+R33: post_merge once per landing at the landed main, gating the next landing and the close-out start; failure pauses with a Need; Test Plan 25.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r15-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r15 -->
+### sr-r15-resolved · finding [fixed] · resolves sr-r15: Wave selection and the in-flight cap can deadlock; a later wave could open first
+
+R2/§B: open the lowest wave with a non-terminal batch; R36: PRs waiting on a later queue do not count against max_inflight; Test Plan 9.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r16-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r16 -->
+### sr-r16-resolved · finding [fixed] · resolves sr-r16: Combinations do not run the acceptance gate
+
+R7: every workflow reporting a required check must run on fr-queue/**; a check that never reports is a Need; this repo adds fr-queue/** to ci.yml and acceptance-report.yml.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r17-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r17 -->
+### sr-r17-resolved · finding [fixed] · resolves sr-r17: Nothing cleans fr-queue branches; the cloud proxy cannot delete
+
+R4: bounded slot branches reused by leased force-push, never deleted; R17: the hold is cleared by a `cleared` commit where deletion is refused.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r18-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r18 -->
+### sr-r18-resolved · finding [fixed] · resolves sr-r18: Merged-on-push does not hold for Gitea by default; the engine is GhClient-only
+
+Background corrected; R35: the queue runs on the GitHub clients (graphql and rest), glab/tea are held naming gh#611, Gitea needs autodetect, and every landed PR is read back (a still-open one is a Need).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r19-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r19 -->
+### sr-r19-resolved · finding [fixed] · resolves sr-r19: Restricted fr migrate artifacts does not exist
+
+R16 names a new repeatable `--path`, refusing non-per-file (retiring) hops; Test Plan 10.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r20-resolved created=2026-11-19T22:23:19+00:00 state=fixed resolves=sr-r20 -->
+### sr-r20-resolved · finding [fixed] · resolves sr-r20: Fast-forwarding a protected main needs a named identity
+
+R34: main must accept the direct push via a ruleset with no PR rule (required checks already passed on the tested sha) or a driver-dedicated bypass identity; fr never makes the operator's credential a bypass actor; a refusal holds with both remedies and land: merge.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r21-resolved created=2026-11-19T22:23:19+00:00 state=open resolves=sr-r21 out_of_scope=true -->
+### sr-r21-resolved · finding [out-of-scope] · resolves sr-r21: Rebase method breaks release.py's first-parent PR cross-check
+
+Out of scope: a forge rebase merge has the same effect today and this repo uses squash; not caused by this change.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-19T22:23:21+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  wave-queue-approval-content: none
+  wave-queue-broken-hold: none
+  wave-queue-closeout-migrates: none
+  wave-queue-devops-barrier: none
+  wave-queue-eject: none
+  wave-queue-land-methods: none
+  wave-queue-leave-wave: none
+  wave-queue-live-wave: tester
+  wave-queue-migratable-validation: none
+  wave-queue-one-path: none
+  wave-queue-operator-loop: none
+  wave-queue-post-merge: none
+  wave-queue-release-hold: none
+  wave-queue-speculative-land: none
+  wave-queue-visible: none
+  wave-queue-wave-exclusive: none
+row_kinds:
+  wave-queue-approval-content: candidate
+  wave-queue-broken-hold: candidate
+  wave-queue-closeout-migrates: candidate
+  wave-queue-devops-barrier: candidate
+  wave-queue-eject: candidate
+  wave-queue-land-methods: candidate
+  wave-queue-leave-wave: candidate
+  wave-queue-live-wave: live
+  wave-queue-migratable-validation: candidate
+  wave-queue-one-path: candidate
+  wave-queue-operator-loop: candidate
+  wave-queue-post-merge: candidate
+  wave-queue-release-hold: candidate
+  wave-queue-speculative-land: candidate
+  wave-queue-visible: candidate
+  wave-queue-wave-exclusive: candidate
+run_gate: none
+run_kind: candidate
+```
