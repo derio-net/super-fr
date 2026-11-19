@@ -23,9 +23,14 @@ rows:
       and the release's staged suite still run every test, scenarios included
     origin:
     - spec:2026-11-19-local-suite-cost#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_scenario_tier_commands.py#test_ci_collect_and_test_jobs_run_the_scenario_tier
+      - super-fr:tests/unit/test_scenario_tier_commands.py#test_the_release_staged_suite_runs_the_scenario_tier
+      - super-fr:tests/unit/test_scenario_tier_commands.py#test_the_default_local_run_keeps_only_the_tripwire_of_the_scenario_file
+    status: ci
+    notes: 'phase 3: every CI and release pytest command line pinned to run the scenario
+      tier; the local default keeps only the tripwire'
   - id: fast-tier-advisory-and-refused
     capability: Test tiers
     acceptance: '`--fr-scope <base>` runs changed, import-touched and smoke tests, prints
