@@ -581,3 +581,8 @@ df98ade1f: second cause, reset after a good write, per-page failure sets for His
 ### l-tests-r7-resolved · finding [out-of-scope] · resolves l-tests-r7: The Issues page filter script throws when its filter bar is absent
 
 Predates this change (the old triage.html had it; the split carried it over); filed as derio-net/super-fr#1557.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved-2 created=2026-11-19T06:36:28+00:00 state=open resolves=l-security-r3 tracked_by=derio-net/super-fr#1556 -->
+### l-security-r3-resolved-2 · finding [deferred → derio-net/super-fr#1556] · resolves l-security-r3: The carried snapshots hold issue keys the privacy guard never reads
+
+Predates this change; filed as derio-net/super-fr#1556.
