@@ -3850,6 +3850,147 @@ issues:
       as `PR_PAST_LIMIT` and stored nowhere, so 20 old judged PRs are unreachable and re-viewed on every
       driver pass.'
     note: Batch triage-hardening.
+  super-fr#1552:
+    tier: 3
+    theme: hooks
+    cx: S
+    severity: med
+    kind: defect
+    verified: false
+    detail: 'Consumer-delivery spec review follow-up (s-r13): the OpenCode plugin''s isolation gate and
+      pipeline sentinel also judge in the plugin''s own directory (`index.ts:281`, `:287`, `:291`).'
+    note: Batch consumer-followups.
+  super-fr#1553:
+    tier: 2
+    theme: ci
+    cx: XS
+    severity: med
+    kind: defect
+    verified: false
+    detail: 'Consumer-delivery follow-up (p2-r8): the Gitea matrix job''s checkout persists `gitea.token`
+      for PR code; pre-existing, R12 named only the debt job.'
+    note: Batch consumer-followups.
+  super-fr#1554:
+    tier: 4
+    theme: forge
+    cx: S
+    severity: low
+    kind: defect
+    verified: false
+    detail: 'Consumer-delivery follow-up (l-errors-r5): the tea fail-soft sites swallow the named login-page
+      `TeaError`; predates R14.'
+    note: Batch consumer-followups.
+  super-fr#1555:
+    tier: 3
+    theme: ci
+    cx: L
+    severity: med
+    kind: feature
+    verified: false
+    detail: 'Local full suite costs about 5.2 worker-hours (15,182 tests); investigation and scoped local
+      run. In progress outside the waves as PR #1559.'
+    note: Feature group Local suite cost.
+  super-fr#1556:
+    tier: 2
+    theme: triage-intake
+    cx: S
+    severity: high
+    kind: defect
+    verified: false
+    detail: 'Security lens on #1544: `privacy.state_keys` reads judgements and origins keys only, never
+      the carried `snapshots/`, so a public state repo can publish a private repo''s unjudged issue keys.'
+    note: Batch triage-hardening.
+  super-fr#1557:
+    tier: 4
+    theme: triage-pages
+    cx: XS
+    severity: low
+    kind: defect
+    verified: false
+    detail: 'Tests lens on #1544: the Issues page filter script calls `addEventListener` on `#q`/`#sort`
+      with no null check; a manifest without `backlog-by-tier` breaks the page''s fold links.'
+    note: Batch triage-hardening.
+  super-fr#1574:
+    tier: 3
+    theme: run-contracts
+    cx: S
+    severity: med
+    kind: defect
+    verified: false
+    detail: '#1559 review p3-r3: `run_cmd._read_suite_log` accepts any non-empty log, so a collect-only,
+      failing, crashed or killed run passes as `tests` evidence.'
+    note: 'Feature group Local suite cost: after #1559 merges (same code).'
+  super-fr#1575:
+    tier: 4
+    theme: ci
+    cx: XS
+    severity: low
+    kind: defect
+    verified: false
+    detail: '#1559 follow-up: `--fr-scope` with `nargs=''?''` takes a following test path as its base ref;
+      fails loudly.'
+    note: 'Feature group Local suite cost: after #1559.'
+  super-fr#1576:
+    tier: 2
+    theme: triage-drive
+    cx: L
+    severity: high
+    kind: feature
+    verified: true
+    detail: 'Operator request 2026-11-19: a forge-independent merge queue exclusive to a wave (no update
+      when main moves, approval pinned to content, one close-out and one release per wave). Brainstorm running
+      in session merge-queue-1576.'
+    note: Feature group Merge flow.
+  super-fr#1577:
+    tier: 3
+    theme: triage-drive
+    cx: M
+    severity: med
+    kind: feature
+    verified: true
+    detail: Flag batches whose plans touch the same files at wave planning, before they conflict at merge.
+    note: 'Feature group Merge flow; designed with #1576.'
+  super-fr#1578:
+    tier: 2
+    theme: triage-drive
+    cx: S
+    severity: high
+    kind: defect
+    verified: true
+    detail: 'Observed 2026-11-19 (#1560): the driver readies and merges an approved green draft whose run
+      is still at `deliver: running`; gc then reaped the workspace under the running suite.'
+    note: Batch merge-readiness.
+  super-fr#1579:
+    tier: 4
+    theme: ci
+    cx: XS
+    severity: low
+    kind: defect
+    verified: false
+    detail: '#1559 tests lens (l-tests-r5): the `_Advance` test stand-in exposes only exit_code, output
+      and stdout.'
+    note: 'Feature group Local suite cost: after #1559.'
+  super-fr#1580:
+    tier: 4
+    theme: ci
+    cx: XS
+    severity: med
+    kind: parked
+    verified: false
+    detail: 'Operator steps for acceptance row `ci-ok-required-on-main` (#1559 phase 4): bypass stage, one
+      app release, require stage.'
+    note: 'Operator''s own manual steps, not a batch. Step 3 accepts strict up-to-date branches, which would
+      add merge churn: weigh against #1576 first.'
+  super-fr#1581:
+    tier: 3
+    theme: triage-pages
+    cx: M
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Operator request 2026-11-19: each batch PR card leads with a readiness verdict (delivered,
+      CI at head, mergeable, approval, whose move), from the same function the driver merges by.'
+    note: Batch merge-readiness.
 patterns:
 - title: Archive must not infer delivery
   ids:
@@ -8877,6 +9018,8 @@ batches:
   - super-fr#1075
   - super-fr#1561
   - super-fr#1572
+  - super-fr#1556
+  - super-fr#1557
   rationale: triage-intake follow-ups plus the dedupe universe, in collect/intake/dedupe; waits on train-truth's
     triage changes.
   wave: 23
@@ -9101,6 +9244,22 @@ features:
   - super-fr#1544
   why: 'Operator priority 2026-11-18: the pages are long, unlinked and silently stale.'
   start: /fr-goal super-fr#1544
+- rank: 24
+  title: Merge flow
+  ids:
+  - super-fr#1576
+  - super-fr#1577
+  why: 'Operator priority 2026-11-19: the merge train repeats work every time main moves.'
+  start: '/fr-brainstorming derio-net/super-fr#1576 (running: merge-queue-1576)'
+- rank: 25
+  title: Local suite cost
+  ids:
+  - super-fr#1555
+  - super-fr#1574
+  - super-fr#1575
+  - super-fr#1579
+  why: 'The local suite dominates every run''s wall clock; follow-ups wait for PR #1559.'
+  start: 'PR #1559 (session suite-cost-1555); follow-ups after it merges'
 exports:
 - wave: '1'
   repo: derio-net/super-fr
