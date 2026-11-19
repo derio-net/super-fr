@@ -31,9 +31,13 @@ rows:
       were collected
     origin:
     - spec:2026-11-18-triage-pages-ux#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pages_split.py#test_every_page_states_when_it_was_rendered_beside_the_collected_time
+      - super-fr:tests/unit/test_triage_pages_split.py#test_the_stamp_and_the_command_are_one_span
+    status: ci
+    notes: Every page states its render time beside the collected time, in one span
+      with the command.
     verify: none
     visual:
       states:
