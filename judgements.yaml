@@ -8776,6 +8776,7 @@ batches:
   - super-fr#1545
   - super-fr#1075
   - super-fr#1561
+  - super-fr#1572
   rationale: triage-intake follow-ups plus the dedupe universe, in collect/intake/dedupe; waits on train-truth's
     triage changes.
   wave: 23
