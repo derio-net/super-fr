@@ -85,3 +85,13 @@ Trigger: operator-request. the operator asked whether a squash-chain variant wou
 ### d-devops-barrier · decision · gate:devops PRs are queue barriers
 
 Operator chose: the DevOps stage's stage-2 confirmation releases the PR to the queue instead of merging; the queue lands it alone and pauses until post-merge ops are recorded.
+
+<!-- fr:journal kind=discovery scope=spec id=d-round3-answers created=2026-11-19T21:44:47+00:00 -->
+### d-round3-answers · discovery · Operator answers from the same question round as d-devops-barrier
+
+fr records one operator decision per answered question; these three answers came in the same round (4 questions) as d-devops-barrier, so they are recorded here verbatim rather than as separate operator decisions.
+
+- RC counts: wave N+1's queue opens once wave N's release run finished (RC, final, or nothing installable) and cleared the hold. Tester-gated close-outs queue between waves after the gate passes.
+- Channels: Needs you + board, PR marker comments, wave report. No notify command.
+- Leaving a wave: the driver proposes deferral (spent budget, or stall_hours, default 4), and the operator decides with defer/requeue. The driver never defers on its own.
+- Also from the operator's message: later waves wait as PRs and only build their queue once the previous wave's release is cut; a wave needs a way for PRs to leave it and later request the next queue.
