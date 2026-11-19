@@ -295,3 +295,8 @@ Reclassifies ~30 _fail sites and the loop boundary; a misclassification either k
 ### phase-split-2026-11-19-batch-train-truth-p2 · decision · ask: the session-bound supervisor, drive status and the activity log (R11-R14, R22-R23)
 
 Process lifetime and visibility, reviewable apart from the boundary.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-batch-train-truth-p3 created=2026-11-19T11:08:33+00:00 -->
+### phase-split-2026-11-19-batch-train-truth-p3 · decision · ask: red and conflicting drafts handed back before approval, one fetch per pass (#1492, #1493, #1540)
+
+Merge-train walk and conflict probe; independent of the supervisor.
