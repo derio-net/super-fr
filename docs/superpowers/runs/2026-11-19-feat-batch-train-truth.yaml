@@ -62,8 +62,10 @@ steps:
         state: running
         attempts:
         - dispatched: '2026-11-19T11:09:37+00:00'
+          agent: ad552ea58d9f30aab
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: claude-opus-5-5
           session: 755bf926-d4e8-4f88-99cb-388408cbe75e
