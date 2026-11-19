@@ -42,6 +42,7 @@ rows:
     origin:
     - spec:2026-11-19-wave-merge-queue#R2
     - spec:2026-11-19-wave-merge-queue#R15
+    - spec:2026-11-19-wave-merge-queue#R17
     levels: {}
     status: not-implemented
     notes: ''
