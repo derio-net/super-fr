@@ -111,3 +111,91 @@ driver_record.py was written once with one load/save pair per file; nothing dupl
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 the filing engine sits in fr/triage/driver_failures.py and the command only resolves the target and policy; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1-a created=2026-11-19T23:47:11+00:00 phase=1 -->
+### review-phase-1-a · review · Independent review of phase 1 (R1-R10): 10 findings, all in scope (phase 1)
+
+Reviewer (Opus, read-only) checked the branch diff against R1-R10 and the executor's
+decisions. Classifier table, backoff arithmetic, the code-2 lease rule, host-locality,
+the driver-stopped need and the merge's render threading were found correct; no
+refusal can loop forever. Ten in-scope findings follow (p1a-r1..r10).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r1 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r1 · finding [open] (reviewer: in scope) · classify() takes str(typer.Exit) = "2" as the message: an exit-based refusal records/shows "2" on driver.yaml, ledger and board, and --once prints "error: 2" again (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r2 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r2 · finding [open] (reviewer: in scope) · non-rate-limit ForgeReadError keeps a fixed --interval and is not counted towards the 10-pass stop (nor resets it), contrary to R3/R5 as written (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r3 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r3 · finding [open] (reviewer: in scope) · drive failures --file re-files a cause whose issue is CLOSED even when its count has not grown (no recurrence), contrary to R10 (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r4 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r4 · finding [open] (reviewer: in scope) · closed-issue re-file ignores the open-marker adoption (cross-host duplicates), and a forge error mid-filing skips save_ledger, so reruns duplicate (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r5 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r5 · finding [open] (reviewer: in scope) · cloud drive pass: non-rate-limit ForgeReadError still _fail()s without writing the outbox or counting the failure in the ledger (R6, R9) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r6 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r6 · finding [open] (reviewer: in scope) · R7 tripwire guards _host_loop but the loop body moved to _loop/_wait, which are unguarded (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r7 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r7 · finding [open] (reviewer: in scope) · cloud drive pass refusal output does not name `fr triage drive failures --file --yes` (R10) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r8 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r8 · finding [open] (reviewer: in scope) · drive failures --file read-modify-writes the whole ledger, losing counts a running driver records meanwhile (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r9 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r9 · finding [open] (reviewer: in scope) · drive failures --checkout is never verified to be a clone of the target repo whose policy gates filing (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r10 created=2026-11-19T23:47:11+00:00 phase=1 state=open review_scope=in -->
+### p1a-r10 · finding [open] (reviewer: in scope) · the 10th-transient stop rewrites the cause's ledger kind to refusal, mislabelling a transient cause and its filed issue (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r1-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r1 -->
+### p1a-r1-resolved · finding [fixed] · resolves p1a-r1: classify() takes str(typer.Exit) = "2" as the message: an exit-based refusal records/shows "2" on driver.yaml, ledger and board, and --once prints "error: 2" again (phase 1)
+
+_fail raises drive_errors.fail_exit, carrying fr_message; classify reads it, and every printer skips a message already said (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r2-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r2 -->
+### p1a-r2-resolved · finding [fixed] · resolves p1a-r2: non-rate-limit ForgeReadError keeps a fixed --interval and is not counted towards the 10-pass stop (nor resets it), contrary to R3/R5 as written (phase 1)
+
+Spec R3/R5 as written: the fixed-interval ForgeReadError branch is gone; a non-rate-limit forge read is a forge-read transient with doubling backoff, counted towards the stop (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r3-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r3 -->
+### p1a-r3-resolved · finding [fixed] · resolves p1a-r3: drive failures --file re-files a cause whose issue is CLOSED even when its count has not grown (no recurrence), contrary to R10 (phase 1)
+
+A closed cause is re-filed only when count > filed_count; otherwise '<issue> closed, no recurrence' (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r4-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r4 -->
+### p1a-r4-resolved · finding [fixed] · resolves p1a-r4: closed-issue re-file ignores the open-marker adoption (cross-host duplicates), and a forge error mid-filing skips save_ledger, so reruns duplicate (phase 1)
+
+A recurring closed cause adopts an open marker issue first; a forge error mid-filing becomes a line, what was filed is saved, exit 2 (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r5-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r5 -->
+### p1a-r5-resolved · finding [fixed] · resolves p1a-r5: cloud drive pass: non-rate-limit ForgeReadError still _fail()s without writing the outbox or counting the failure in the ledger (R6, R9) (phase 1)
+
+The cloud drive pass turns a forge read into a forge-read transient via _pass_failed: outbox written, ledger recorded, exit with its code (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r6-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r6 -->
+### p1a-r6-resolved · finding [fixed] · resolves p1a-r6: R7 tripwire guards _host_loop but the loop body moved to _loop/_wait, which are unguarded (phase 1)
+
+The R7 tripwire guards _loop, _wait and every boundary helper, and fails if a guarded name disappears (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r7-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r7 -->
+### p1a-r7-resolved · finding [fixed] · resolves p1a-r7: cloud drive pass refusal output does not name `fr triage drive failures --file --yes` (R10) (phase 1)
+
+The cloud refusal prints 'driver stopped (<cause>); resume: ...; track it: fr triage drive failures --file --yes' (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r8-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r8 -->
+### p1a-r8-resolved · finding [fixed] · resolves p1a-r8: drive failures --file read-modify-writes the whole ledger, losing counts a running driver records meanwhile (phase 1)
+
+Filing re-loads the ledger at save and merges only issue/filed_count of the causes it changed (driver_record.save_filed) (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r9-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r9 -->
+### p1a-r9-resolved · finding [fixed] · resolves p1a-r9: drive failures --checkout is never verified to be a clone of the target repo whose policy gates filing (phase 1)
+
+--checkout is refused unless its origin is the target repo; without one the command says tracking was not checked (09dc9ce94).
+
+<!-- fr:journal kind=finding scope=plan id=p1a-r10-resolved created=2026-11-19T23:47:11+00:00 phase=1 state=fixed resolves=p1a-r10 -->
+### p1a-r10-resolved · finding [fixed] · resolves p1a-r10: the 10th-transient stop rewrites the cause's ledger kind to refusal, mislabelling a transient cause and its filed issue (phase 1)
+
+The 10th-transient stop keeps the ledger kind transient; only driver.yaml records the refusal (09dc9ce94).
