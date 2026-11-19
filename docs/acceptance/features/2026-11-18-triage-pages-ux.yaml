@@ -218,9 +218,13 @@ rows:
       it, stepping through the dates in order
     origin:
     - spec:2026-11-18-triage-pages-ux#R17
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_components.py#test_every_tab_of_a_rendered_page_controls_a_panel_a_hash_can_name
+      - super-fr:tests/unit/test_triage_components.py#test_every_renderer_includes_the_page_css_and_script
+    status: ci
+    notes: Architecture carries the shared tab CSS/script, so its dated diagrams are
+      one tabbed graph; browser walk in phase 2 review.
     verify: none
     visual:
       states:
