@@ -9,3 +9,9 @@
 - #1481: plugin spawns bare 'bash' (src/tui/segment.ts:47) and 'gh' (src/push.ts:35) via execFile; five hooks gate on command -v jq and then run bare jq.
 - #1508: scripts/install.sh uv tool install --force packages/fr with no lock/constraints; npm install -g @devcontainers/cli unversioned.
 - #1510: packages/fr-opencode-plugin/bun.lock holds glob 13.0.5 and minimatch 10.2.5 as exact pins of @opencode/util 2.1.0 (plus glob 10.x/minimatch 9.x via rimraf).
+
+<!-- fr:journal kind=hypothesis scope=debug id=11ead4405329 created=2026-11-19T19:25:01+00:00 -->
+### 11ead4405329 · hypothesis · Two root causes, not one
+
+A (#1509, #1484, #1481): helper binaries and interpreters are reached by bare name / command -v and run without isolation flags, instead of through the absolute-PATH-entry resolvers already used for git and fr (fr_git_resolve, fr_fr_resolve, plugin resolveGit/resolveFr). Fix: one resolver for jq/python3/bash/gh, used everywhere, python with -I.
+B (#1508, #1510): delivered dependencies are resolved at install time instead of from a tested lock: uv tool install without the workspace uv.lock as constraints, unversioned npm -g, and bun.lock carrying advisory versions pinned by an upstream package (needs overrides). Different mechanism, different files, different tests. Per batch rule, stop and ask before fixing.
