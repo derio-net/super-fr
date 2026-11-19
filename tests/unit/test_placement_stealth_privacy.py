@@ -372,3 +372,21 @@ def test_a_tracking_url_on_another_host_is_still_placed_by_its_url(
     stealth.check_privacy(ref, "git@forge.example:grp/widget.git", target_root=tmp_path)
     assert built == [("gitlab", "gitlab.com"), ("gitlab", "forge.example")]
     assert forge.asked == ["me/track", "grp/widget"]
+
+
+def test_a_tracking_url_on_the_targets_gitea_host_is_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lent forge type is gitea, whose client cannot be pinned to a host: fr refuses
+    rather than ask `gh` about a Gitea repo, as the URL-only reading did."""
+    wrong = _VisForge("private")
+    built = _backends(monkeypatch, wrong)
+    _checkout(monkeypatch, backend="gitea", declared="tea.example", origin=None)
+    ref = stealth.parse_ref("git@tea.example:me/track.git@main")
+    with pytest.raises(SettingsError, match="cannot read the visibility of git@tea.example"):
+        stealth.check_privacy(ref, "git@tea.example:me/widget.git", target_root=tmp_path)
+    assert built == [] and wrong.asked == []
+
+
+def test_a_malformed_tracking_url_lends_no_checkout(tmp_path: Path) -> None:
+    assert stealth._speaks_for("http://[x/me/track", tmp_path) is None

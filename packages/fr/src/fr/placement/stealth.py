@@ -586,8 +586,8 @@ def _speaks_for(repo: str, root: Path | None) -> Path | None:
     the URL-only reading, which takes every self-hosted host for GitHub (gh#1527)."""
     if root is None or is_local(repo):
         return None
-    host = _url_host(repo)
     try:
+        host = _url_host(repo)
         return root if host and _checkout_host(root) == host else None
     except Exception:  # noqa: BLE001 - an unreadable checkout speaks for nothing
         return None
