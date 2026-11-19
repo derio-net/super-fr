@@ -21,6 +21,7 @@ rows:
     - spec:2026-11-19-batch-train-truth#R4
     - spec:2026-11-19-batch-train-truth#R5
     - spec:2026-11-19-batch-train-truth#R6
+    - spec:2026-11-19-batch-train-truth#R7
     levels: {}
     status: not-implemented
     notes: ''
