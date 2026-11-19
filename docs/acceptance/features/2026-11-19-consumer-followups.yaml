@@ -1,0 +1,45 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-consumer-followups
+repo: derio-net/super-fr
+rows:
+  - id: opencode-gates-session-directory
+    capability: OpenCode isolation gates follow the session's checkout
+    acceptance: For an OpenCode session whose directory differs from the plugin's, the
+      shell gate, the edit gate's relative targets and the pipeline sentinel judge the
+      session's repo; with no usable session directory they judge the plugin's, as before.
+    origin:
+    - spec:2026-11-19-consumer-followups#R1
+    - spec:2026-11-19-consumer-followups#R2
+    - spec:2026-11-19-consumer-followups#R3
+    - spec:2026-11-19-consumer-followups#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gitea-matrix-no-persisted-token
+    capability: Scaffolded Gitea acceptance workflow keeps no credential for PR code
+    acceptance: The scaffolded Gitea acceptance workflow's matrix job checks out without
+      persisting gitea.token, so the PR's own code never runs with it in .git/config.
+    origin:
+    - spec:2026-11-19-consumer-followups#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: tea-fail-soft-login-page
+    capability: Gitea reads name an SSO login page instead of reading it as absent
+    acceptance: When a Gitea API behind an SSO or forward-auth proxy answers with a
+      login page or a redirect to one, fr's fail-soft Gitea reads (linked PRs, PR status,
+      default branch, PR for branch, file exists, list dir) raise the named cause; any
+      other Gitea error keeps their empty answer.
+    origin:
+    - spec:2026-11-19-consumer-followups#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none

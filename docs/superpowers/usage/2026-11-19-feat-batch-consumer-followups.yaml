@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-19-feat-batch-consumer-followups
+captures:
+- host: h-ddbf0074
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-19T22:22:32+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 70
+        cache_write: 163681
+        cache_read: 5132224
+        output: 17149
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 16
+      other:
+        usd: null
+        turns: 6
+      paperwork:
+        usd: null
+        turns: 11
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 96574
+        cache_read: 137680
+        output: 343
+      brainstorm:
+        usd: null
+        turns: 31
+        input: 64
+        cache_write: 67107
+        cache_read: 4994544
+        output: 16806
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 96574
+          cache_read: 137680
+          output: 343
+        brainstorm:
+          usd: null
+          turns: 31
+          input: 64
+          cache_write: 67107
+          cache_read: 4994544
+          output: 16806
