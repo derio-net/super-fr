@@ -8524,6 +8524,12 @@ batches:
     head_before: aa1e9d2b43e88aa04ec475cf31099067b2ed1e30
     head_after: 42c85a2e21e641abafb99345b2fd89e05b5a006c
     base: 5f1285223374d0676c434c0501d66b2fe566aab0
+  - kind: update
+    at: '2026-11-19T10:25:04.683701Z'
+    pr: 1550
+    head_before: 42c85a2e21e641abafb99345b2fd89e05b5a006c
+    head_after: a43b66450c553bf8e6451633989a09b28a42facb
+    base: 3350a9f27a97e13b568565a2f10787794e20be99
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -8604,6 +8610,11 @@ batches:
     handle: w3P:p5
     archive: chore/closeout-2026-11-19-1
     archived: 1563
+  - kind: claims_released
+    at: '2026-11-19T10:25:13.093416Z'
+    keys:
+    - super-fr#1499
+    - super-fr#1501
 - id: owed-followups
   title: 'Archive and owed follow-ups: symlinked live root, fail-closed marker read, unreadable default
     ref, host-pinned issue refs'
