@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-18-perf-test-suite-cost
+captures:
+- host: h-01adb55c
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-19T09:03:44+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: d2814f1b-87a4-4558-bbe3-e21fd24f245b
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 76
+        cache_write: 318786
+        cache_read: 5689107
+        output: 32389
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 21
+      other:
+        usd: null
+        turns: 6
+      paperwork:
+        usd: null
+        turns: 10
+    steps:
+      (outside run):
+        usd: null
+        turns: 1
+        input: 2
+        cache_write: 95040
+        cache_read: 29453
+        output: 328
+      brainstorm:
+        usd: null
+        turns: 36
+        input: 74
+        cache_write: 223746
+        cache_read: 5659654
+        output: 32061
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 1
+          input: 2
+          cache_write: 95040
+          cache_read: 29453
+          output: 328
+        brainstorm:
+          usd: null
+          turns: 36
+          input: 74
+          cache_write: 223746
+          cache_read: 5659654
+          output: 32061

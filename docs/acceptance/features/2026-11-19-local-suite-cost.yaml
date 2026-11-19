@@ -1,0 +1,57 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-local-suite-cost
+repo: derio-net/super-fr
+rows:
+  - id: git-answers-cached-per-invocation
+    capability: fr git access
+    acceptance: Within one fr invocation, fr asks git each default-remote, default-branch,
+      git-dir and toplevel question at most once per repository state, and an fr git
+      write in that invocation never leaves a stale answer
+    origin:
+    - spec:2026-11-19-local-suite-cost#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: scenario-tier-deselected-locally
+    capability: Test tiers
+    acceptance: A default local pytest run deselects the scenario tier, while CI's shards
+      and the release's staged suite still run every test, scenarios included
+    origin:
+    - spec:2026-11-19-local-suite-cost#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fast-tier-advisory-and-refused
+    capability: Test tiers
+    acceptance: '`--fr-scope <base>` runs changed, import-touched and smoke tests, prints
+      the advisory marker line, and fr refuses any tests log carrying that line at deliver
+      and at a phase unit'
+    origin:
+    - spec:2026-11-19-local-suite-cost#R6
+    - spec:2026-11-19-local-suite-cost#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: repo-declares-ci-tests-evidence
+    capability: Delivery evidence
+    acceptance: 'A repo whose .fr/ci.yaml declares `tests: ci` gets deliver and implement-phase
+      briefs naming CI as the suite evidence and the fast tier as the phase''s local
+      run'
+    origin:
+    - spec:2026-11-19-local-suite-cost#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: ci-ok-required-on-main
+    capability: Merge protection
+    acceptance: main refuses a merge whose ci-ok check is not green
+    origin:
+    - spec:2026-11-19-local-suite-cost#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
