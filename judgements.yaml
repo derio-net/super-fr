@@ -8598,6 +8598,12 @@ batches:
     runner: herdr
     handle: w3P:p5
     archive: chore/closeout-2026-11-19-1
+  - kind: closeout
+    at: '2026-11-19T10:20:28.999531Z'
+    runner: herdr
+    handle: w3P:p5
+    archive: chore/closeout-2026-11-19-1
+    archived: 1563
 - id: owed-followups
   title: 'Archive and owed follow-ups: symlinked live root, fail-closed marker read, unreadable default
     ref, host-pinned issue refs'
@@ -9320,6 +9326,7 @@ closeouts:
   planned:
   - dispatch-safety
   pr: 1563
+  merged: true
   head: 9c472cf9b7cbe0fb242be4a6bea70f5f45c7dd9f
   members:
   - dispatch-safety
