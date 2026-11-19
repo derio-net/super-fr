@@ -20,3 +20,19 @@ the R1 hint text appears in one message only; nothing to share
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 prose-only edits; the new test file is already minimal
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-11-19T11:33:06+00:00 phase=1 -->
+### p1-review · review · Phase 1 review (R1-R10): no findings (phase 1)
+
+A separate reviewer checked R1-R10 against the code: the ops gate hint
+(ops_gate_cmd.py:206-208), seal's target (helpers.py:164 shlex.quote),
+the rework help (plan_ops.rework_create), the rich-safe escapes and the
+bracket test (it walks every command and param help, and has a failing and
+a passing self-test), cli.md STE (no exemption, two exceptions pinned),
+the skill prose against is_debt/open_rows, the triage schema pin, the
+mirrors and the acceptance refs. Minor blind spots in the bracket test
+(epilog, short_help, substring masking) are noted but none apply today.
+The reviewer had no shell, so the orchestrator ran the checks: the sync
+--check runs, fr docs check, fr acceptance check, the STE checker (0
+FAIL) and the targeted tests, all green after merging origin/main.
+review-findings: none
