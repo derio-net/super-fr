@@ -35,10 +35,12 @@ rows:
     capability: Gitea reads name an SSO login page instead of reading it as absent
     acceptance: When a Gitea API behind an SSO or forward-auth proxy answers with a
       login page or a redirect to one, fr's fail-soft Gitea reads (linked PRs, PR status,
-      default branch, PR for branch, file exists, list dir) raise the named cause; any
-      other Gitea error keeps their empty answer.
+      default branch, PR for branch, file exists, list dir) raise the named cause, which
+      the DevOps gate and fr isolation report as a refusal; any other Gitea error keeps
+      their empty answer.
     origin:
     - spec:2026-11-19-consumer-followups#R6
+    - spec:2026-11-19-consumer-followups#R7
     levels: {}
     status: not-implemented
     notes: ''
