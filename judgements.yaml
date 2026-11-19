@@ -8399,6 +8399,10 @@ batches:
     runner: herdr
     handle: w3Q:p1
     branch: feat/batch-docs-wording
+  - kind: approval
+    at: '2026-11-19T18:55:53.126399Z'
+    pr: 1560
+    head: 2523640bc451751f3a6295516f92a850552fe444
 - id: retire-vk
   title: Retire VibeKanban support
   ids:
@@ -8602,6 +8606,17 @@ batches:
     runner: herdr
     handle: w3P:p4
     branch: feat/batch-train-truth
+  - kind: approval
+    at: '2026-11-19T18:55:53.126399Z'
+    pr: 1564
+    head: 4130cb284bd753c83fc9a6a8aade5053754c603f
+  - kind: red_handback
+    at: '2026-11-19T19:01:21.931824Z'
+    pr: 1564
+    head: 4130cb284bd753c83fc9a6a8aade5053754c603f
+    checks:
+    - 9 failing check(s)
+    delivered: none
 - id: run-durability
   title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
   ids:
@@ -8619,6 +8634,17 @@ batches:
     runner: herdr
     handle: w3P:p6
     branch: fix/batch-run-durability
+  - kind: approval
+    at: '2026-11-19T18:55:53.126399Z'
+    pr: 1568
+    head: af9f939e00589e500f7830d73819d0f0f8217adc
+  - kind: red_handback
+    at: '2026-11-19T19:01:26.952051Z'
+    pr: 1568
+    head: af9f939e00589e500f7830d73819d0f0f8217adc
+    checks:
+    - 2 failing check(s)
+    delivered: none
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
@@ -8738,6 +8764,16 @@ batches:
     runner: herdr
     handle: w3P:p9
     branch: fix/batch-stealth-gitlab
+  - kind: approval
+    at: '2026-11-19T18:55:53.126399Z'
+    pr: 1570
+    head: 45353e154254f438651a023c3357b2da11fdc3d0
+  - kind: update
+    at: '2026-11-19T19:01:49.680145Z'
+    pr: 1570
+    head_before: 45353e154254f438651a023c3357b2da11fdc3d0
+    head_after: 643719ac47415f16084afb2ad6f6503b0a23ca2b
+    base: e2e22e50cf0403561fb2c2128508a79992d92a47
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
@@ -8767,6 +8803,12 @@ batches:
   after:
   - consumer-delivery
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-19T19:02:00.072341Z'
+    runner: herdr
+    handle: w3R:p1
+    branch: fix/batch-hook-hardening
 - id: triage-hardening
   title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
     out of dedupe'
