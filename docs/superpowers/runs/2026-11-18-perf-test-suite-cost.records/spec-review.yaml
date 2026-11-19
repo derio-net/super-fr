@@ -1,0 +1,193 @@
+schema_version: 12
+run: 2026-11-18-perf-test-suite-cost
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-r1
+  title: '§2/§3.D misstate release.py: its shards and collect already clear addopts; only the one-process
+    path does not'
+  body: 'check/evidence: scripts/release.py:227,:301,:317 override addopts; :221/_run_staged_tests (via
+    :1046-1050) does not.'
+  review_scope: in
+- kind: finding
+  id: sr-r2
+  title: split-check cannot prove scenarios ran
+  body: 'check/evidence: collect and shards shrink together under a shared filter (ci.yml:87,:142,:196-203).'
+  review_scope: in
+- kind: finding
+  id: sr-r3
+  title: load_gate_checks ignores unknown keys today; rev unstated
+  body: 'check/evidence: ci_evidence.py:73-98 reads only gate_checks; :101 unions base and HEAD.'
+  review_scope: in
+- kind: finding
+  id: sr-r4
+  title: 'R8 tests_log: none contradicts agent and fr-goal §5/§6'
+  body: 'check/evidence: fr-phase-executor.md:139-148,:150-159; SKILL.md §5, §6.'
+  review_scope: in
+- kind: finding
+  id: sr-r5
+  title: Fingerprint misses config scopes, nested refs, reftable, worktrees, not-a-repo
+  body: 'check/evidence: git.py:193,:196,:234-241; conftest.py:266.'
+  review_scope: in
+- kind: finding
+  id: sr-r6
+  title: git-dir/toplevel lookups span ~20 call sites
+  body: 'check/evidence: commands/common.py:67, isolation/marker.py:52, artifacts/commit.py, settings/load.py,
+    …'
+  review_scope: in
+- kind: finding
+  id: sr-r7
+  title: Clear-at-CLI-entry does not scope library callers
+  body: 'check/evidence: cli.py:69-79; fr_dispatch, runner adapters call fr as a library.'
+  review_scope: in
+- kind: finding
+  id: sr-r8
+  title: 928 → ≤464 mixes subprocesses and git calls; for-each-ref misattributed
+  body: 'check/evidence: git.py:184-242 issues no for-each-ref.'
+  review_scope: in
+- kind: finding
+  id: sr-r9
+  title: Session template built outside sandbox; copies share origin and LAST_BRIEF
+  body: 'check/evidence: conftest.py:238-266; test_fr_goal_shape.py:174-177; record_support.py LAST_BRIEF;
+    test_run_cli.py _repo per branch.'
+  review_scope: in
+- kind: finding
+  id: sr-r10
+  title: R6 'reach' vs §3.E direct imports; changed helpers and untracked files missed
+  body: 'check/evidence: record_support.py is a helper, not test_*.py; git diff omits untracked files.'
+  review_scope: in
+- kind: finding
+  id: sr-r11
+  title: Default local run is partial after R5 yet unmarked
+  body: 'check/evidence: pyproject.toml:54; run_cmd.py:3273-3308.'
+  review_scope: in
+- kind: finding
+  id: sr-r12
+  title: R2, R3, R4, R10 lack rows; rows do not name their R
+  body: 'check/evidence: spec Verification.'
+  review_scope: in
+- kind: finding
+  id: sr-r13
+  title: --stage require preconditions and strict policy omitted
+  body: 'check/evidence: configure-main-protection.sh:67-69,:73-85,:93-96.'
+  review_scope: in
+- kind: finding
+  id: sr-r14
+  title: Agents procedure misses PINNED_AT_VERSION and the OpenCode mirror
+  body: 'check/evidence: agents/__init__.py:31-34; AGENTS.md.'
+  review_scope: in
+- kind: finding
+  id: sr-r15
+  title: q4's change fragment missing
+  body: 'check/evidence: q4-git-memo.'
+  review_scope: in
+- kind: finding
+  id: sr-r16
+  title: Durations refresh command would drop scenarios
+  body: 'check/evidence: AGENTS.md:436,:455; test_scenarios.py:200.'
+  review_scope: in
+- kind: finding
+  id: sr-r17
+  title: R7's reuse coverage implicit; match rule unstated
+  body: 'check/evidence: run_cmd.py:3191,:3600,:3442-3493.'
+  review_scope: in
+- kind: review
+  id: spec-review-1
+  title: 'independent spec review: 17 findings, all in scope, all fixed in the spec'
+  body: Reviewer fr-spec-reviewer raised sr-r1..sr-r17 (all in scope); each is fixed in the spec (see
+    resolutions). Decisions q1-q10 honoured; q4's fragment added.
+- kind: lens
+  lens: tests
+  title: 'shared fixtures are rewritten and tiers deselected: every level ref and scenario must still
+    run somewhere'
+- kind: lens
+  lens: errors
+  title: 'a cache over git state can go stale silently: its invalidation edges need a whole-feature look'
+resolves:
+- id: sr-r1
+  state: fixed
+  body: §2 now names the exact paths; §3.D puts `-m ""` on `_run_staged_tests` and pins every command
+    line.
+- id: sr-r2
+  state: fixed
+  body: §3.D adds a unit test parsing every CI/release pytest command line and asserting collect lists
+    both scenario files; the row cites it, not split-check.
+- id: sr-r3
+  state: fixed
+  body: 'R8/§3.F: new `declared_tests_mode` read at HEAD; load_gate_checks unchanged; unknown keys stay
+    ignored; only a bad `tests` value refused.'
+- id: sr-r4
+  state: fixed
+  body: §3.F lists the conditional edits to the agent (:139, :147, :150) and fr-goal §5, §6, §8.
+- id: sr-r5
+  state: fixed
+  body: '§3.A: repo located by parsing .git/commondir without git; fingerprint covers system/global/XDG/local
+    config and GIT_CONFIG_* env, packed-refs, remote HEAD and every consulted ref file; reftable, include/includeIf,
+    worktreeConfig, GIT_DIR and not-a-repo are never cached; tests for worktree, global defaultRemote,
+    fetch, set-head, remote add, packed-ref delete.'
+- id: sr-r6
+  state: fixed
+  body: R1 narrowed to remote_name and remote_default_ref; other lookups moved to §4 out of scope.
+- id: sr-r7
+  state: fixed
+  body: '§3.A: a ContextVar cache that is None unless _FrGroup.invoke opened a scope; a test pins that
+    a library call always runs git.'
+- id: sr-r8
+  state: fixed
+  body: §2 states 926 git of 928 subprocesses and attributes ~490 to the two helpers; the pin is git subprocesses
+    926 → ≤500.
+- id: sr-r9
+  state: fixed
+  body: '§3.B: template built under the same sandbox env through a shared helper; copies get their own
+    origin.git (set-url), repaired worktree, rewritten marker, restored LAST_BRIEF; test_run_cli templates
+    keyed per branch; tests for push isolation and sandboxed HOME.'
+- id: sr-r10
+  state: fixed
+  body: 'R6 and §3.E now say the same: direct or through tests/ helpers, not through source modules; changed
+    helpers and conftest.py select; untracked via ls-files --others; base defaults to remote_default_ref.'
+- id: sr-r11
+  state: fixed
+  body: 'R7: any session that is not the whole configured suite (incl. the default, which deselects scenarios)
+    prints the advisory line; `-m ""` is the full local run; R8 states deliver still accepts a full local
+    log (q10 is the operative decision over q8''s wording).'
+- id: sr-r12
+  state: fixed
+  body: Added row template-fixture-copies-independent (R2); each Verification line names its R; R3/R4/R10
+    carry a stated reason for no row and their evidence.
+- id: sr-r13
+  state: fixed
+  body: 'R9/§3.G: bypass → an app-pushed release → require; the strict up-to-date consequence is stated.'
+- id: sr-r14
+  state: fixed
+  body: §3.F lists PINNED_AT_VERSION, sync-opencode.py for the agent mirror, and sync-opencode.py + sync-hermes.py
+    for the skill.
+- id: sr-r15
+  state: fixed
+  body: §3.H names .changes/perf-test-suite-cost.yaml, bump minor.
+- id: sr-r16
+  state: fixed
+  body: R10 names `-m ""` in the refresh command and AGENTS.md:436 changes with it; the tripwire test
+    stays unmarked (R5, §3.D).
+- id: sr-r17
+  state: fixed
+  body: R7 states the reuse consequence and a whole-line match; §3.E adds a test that a quoting log is
+    accepted.
+acceptance:
+- row: git-answers-cached-per-invocation
+  op: reword
+  why: 'sr-r6: R1 narrowed to the two default-remote helpers'
+  acceptance: While a CLI invocation runs, fr asks git each default-remote and default-branch question
+    at most once per repository state, a change inside the invocation makes the next question go to git,
+    and a library caller outside a CLI invocation never uses the cache
+- id: template-fixture-copies-independent
+  capability: Test fixtures
+  acceptance: A started-run or isolated-workspace template is built once per test worker inside the test
+    sandbox, and each test's copy is an independent repository with its own origin and state that passes
+    the same workspace checks
+  origin:
+  - spec:2026-11-19-local-suite-cost#R2
+  status: not-implemented
+evidence:
+  review: spec-review-1
+  reviewer: a829bfd3396172ff1
