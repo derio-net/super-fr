@@ -9025,6 +9025,17 @@ batches:
   wave: 23
   after:
   - train-truth
+- id: merge-readiness
+  title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
+    one readiness verdict per PR'
+  ids:
+  - super-fr#1578
+  - super-fr#1581
+  rationale: 'Both need ''delivered'' read from the run cursor, and the page''s verdict must come from
+    the driver''s merge decision. After closeout-truth: same batch_drive.py merge paths.'
+  wave: 24
+  after:
+  - closeout-truth
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
