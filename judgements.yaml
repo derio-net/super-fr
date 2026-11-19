@@ -8816,6 +8816,11 @@ batches:
     checks:
     - 9 failing check(s)
     delivered: none
+  - kind: approval
+    at: '2026-11-19T23:23:34.259327Z'
+    pr: 1564
+    head: 4130cb284bd753c83fc9a6a8aade5053754c603f
+    voided_at: 18870d9a29c9e88d99abe43d2d7bc64ef3f9f951
 - id: run-durability
   title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
   ids:
