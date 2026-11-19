@@ -1,0 +1,81 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The driver keeps every page current (R6, R7)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - triage-pages-driver-refresh
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_history_cmd.py
+  - packages/fr/src/fr/commands/triage_origins_cmd.py
+  - packages/fr/src/fr/commands/triage_architecture_cmd.py
+  - packages/fr/src/fr/triage/snapshot.py
+  - tests/**/*.py
+  - docs/explainers/fr-wave-driver.md
+  - docs/triage/README.md
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: Callable page writers (spec §C)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests call `write_backlog(scope, target, now=…, warn=…, loader=…, prefix=…, ci_none=…)`, `write_history`, `write_origins` and `write_architecture(…, checkout=…, measured=None)` directly over a fixture state dir and get the bytes the commands write; `write_architecture` returns the measurement it used and, given one, makes no git call (a fake Checkout counting calls); `write_board` takes `now`.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: lift each command body into its writer; the commands call the writers. REFACTOR: the four commands share one warn helper.
+- number: 2
+  title: _write_pages and the wave-finish snapshot (spec §C, R6, R7)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_drive_cmd.py (fake clock, fixture state): a `--yes` pass that writes the board also writes backlog/issues/history, origins only when origins-facts.json exists, architecture only when subsystems.yaml exists; architecture measures on the first pass and on a wave-finish pass only, reusing the measurement otherwise; a plan-mode, quiet or essential-only pass writes none; a writer that raises warns once per distinct cause and the pass still completes; the cloud adapter's pass hands its runner loader and ci_none to write_backlog.
+  - id: P4.T2.S2
+    text: |-
+      RED: snapshots — the first page-writing pass of a drive stores one when it differs from the latest stored one and none when equal; a later pass stores one exactly when a wave in the previous pass's unfinished set is finished now (a wave finished by archive included); no other pass stores one.
+  - id: P4.T2.S3
+    text: |-
+      GREEN: add `_write_pages(wave_finished)` beside `_write_board` with per-page failure sets and the in-memory measurement; compute `wave_finished` from `self._unfinished` before it is reassigned; take the snapshot with `take_snapshot` and the checkout's acceptance rows for a single-repo scope (`acceptance_rows(None)` otherwise).
+- number: 3
+  title: Docs and suite
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Update docs/explainers/fr-wave-driver.md (what a pass now re-renders and when it snapshots) and docs/triage/README.md's regeneration notes, with their `reviewed` stamps; `uv run fr docs check` exits 0. Full suite into `$TMPDIR/p4-suite.log` after the last code commit; green; ruff and mypy clean.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-11-19T04:01:56+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-11-19T04:01:56+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-11-19T04:01:56+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-11-19T04:01:56+00:00'
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-11-19T04:01:56+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-11-19T04:01:56+00:00'
+      note: null
+  completion:
+    at: '2026-11-19T04:01:56+00:00'
+    note: null
+    observed_prs: []

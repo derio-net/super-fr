@@ -1,7 +1,7 @@
 """Render snapshots: what the board showed, kept so the next one can say what changed
 (wave-driver R17, design I).
 
-Every `fr triage render` stores `<state dir>/snapshots/<UTC timestamp>.json`, keeps the
+Every `fr triage backlog` stores `<state dir>/snapshots/<UTC timestamp>.json`, keeps the
 latest `KEEP`, and diffs the previous readable snapshot against the new one. The
 snapshot records batch id -> stage, issue key -> state and tier, PR -> state and checks,
 acceptance counts when the repo has a matrix, and the figures the page shows.

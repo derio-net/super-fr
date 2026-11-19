@@ -21,6 +21,7 @@ from tests.unit.triage_origins_fixtures import (
     SINCE,
     OriginsForge,
     classification_yaml,
+    raw_pr,
 )
 
 CAUSES = """causes:
@@ -117,6 +118,53 @@ def test_collect_needs_a_valid_since(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     r = _run(monkeypatch, "collect", tmp_path, "--since", "last tuesday")
     assert r.exit_code == 2
     assert not (tmp_path / "origins-facts.json").exists()
+
+
+def test_a_facts_file_with_no_prs_key_loads_as_no_prs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import load_origins_facts
+
+    _collect(monkeypatch, tmp_path)
+    path = tmp_path / "origins-facts.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["prs"]  # a file an earlier fr wrote
+    path.write_text(json.dumps(data), encoding="utf-8")
+    facts = load_origins_facts(path)
+    assert facts.prs == [] and len(facts.issues) == 15
+
+
+def test_collect_keeps_the_prs_merged_in_the_window_with_one_list_read_per_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    forge = OriginsForge()
+    # merged before --since: dropped; closed unmerged (303): never a merged PR
+    forge.prs.append({**raw_pr(300, True, []), "mergedAt": "2026-08-31T23:59:59Z"})
+    r = _run(monkeypatch, "collect", tmp_path, "--since", SINCE, forge=forge)
+    assert r.exit_code == 0, r.output
+    facts = json.loads((tmp_path / "origins-facts.json").read_text(encoding="utf-8"))
+    assert facts["prs"] == [
+        {
+            "repo": REPO,
+            "number": n,
+            "title": f"Widget change {n}",
+            "url": f"https://github.com/{REPO}/pull/{n}",
+            "merged_at": "2026-09-01T01:00:00Z",
+        }
+        for n in (301, 302)
+    ]
+    assert [c for c in forge.calls if c[0] == "list_prs"] == [("list_prs", "all")]
+
+
+def test_each_repo_of_a_group_keeps_its_own_merged_prs() -> None:
+    from fr.triage.model import Scope
+
+    forge = _ManyForge(["example-org/alpha", "example-org/beta"])
+    facts = _collect_scope(forge, Scope.group(["example-org/alpha", "example-org/beta"]))
+    assert [(p.repo, p.title, p.merged_at) for p in facts.prs] == [
+        ("example-org/alpha", "fix alpha", "2026-09-02T09:00:00Z"),
+        ("example-org/beta", "fix beta", "2026-09-02T09:00:00Z"),
+    ]
 
 
 # ------------------------------------------------------------------- check
@@ -250,18 +298,270 @@ def test_render_per_pr_leaderboards_list_the_producers(
     ]
 
 
-def test_render_issue_table_is_filterable_by_category(
+def _pr_row(page: str, pr: str, category: str = "new-feature") -> str:
+    board = re.search(
+        rf'<div data-board="{category}">.*?</table>', _section(page, "pr-leaderboards"), re.S
+    )
+    assert board
+    m = re.search(rf'<tr data-pr="{re.escape(pr)}".*?</tr>', board.group(0), re.S)
+    assert m, pr
+    return m.group(0)
+
+
+def test_a_collected_pr_shows_its_link_title_merge_date_and_the_issues_naming_it(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    row = _pr_row(_page_with_prs(monkeypatch, tmp_path), "example-org/widgets#102")
+    assert f'href="https://github.com/{REPO}/pull/102"' in row
+    assert "Widget change 102" in row
+    assert "2026-09-01 01:00 UTC" in row  # stamp_text of the PR's merged_at
+    assert "not collected" not in row
+    # a plain details of the group's issues naming it: new-feature #3 and #11, each linked
+    detail = re.search(r"<details>(.*?)</details>", row, re.S)
+    assert detail and "<summary>2</summary>" in detail.group(1)
+    links = re.findall(r'<a href="([^"]+)"[^>]*>([^<]*)</a>', detail.group(1))
+    assert links == [
+        (f"https://github.com/{REPO}/issues/3", "widgets#3"),
+        (f"https://github.com/{REPO}/issues/11", "widgets#11"),
+    ]
+    assert "Widget defect 3" in detail.group(1)
+
+
+def test_the_issues_of_another_group_that_name_the_pr_stay_in_their_own_leaderboard(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _page_with_prs(monkeypatch, tmp_path)
+    row = _pr_row(page, "example-org/widgets#102", "leftover")
+    assert re.findall(r">(widgets#\d+)</a>", row) == ["widgets#4"]
+
+
+def test_a_pr_the_facts_do_not_hold_shows_its_link_and_not_collected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    row = _pr_row(_page_with_prs(monkeypatch, tmp_path), "example-org/widgets#103")
+    assert f'href="https://github.com/{REPO}/issues/103"' in row  # github.com: redirects
+    assert "not collected" in row
+    assert "Widget change" not in row and "UTC" not in row
+
+
+def test_a_file_with_no_prs_renders_every_leaderboard_pr_as_not_collected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _collect(monkeypatch, tmp_path)
+    path = tmp_path / "origins-facts.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["prs"]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    (tmp_path / "origins.yaml").write_text(classification_yaml(causes=CAUSES), encoding="utf-8")
+    assert _run(monkeypatch, "render", tmp_path).exit_code == 0
+    page = (tmp_path / "origins.html").read_text(encoding="utf-8")
+    board = _section(page, "pr-leaderboards")
+    # new-feature names 102 and 103, leftover 103 and 102: four rows, none collected
+    assert board.count("not collected") == 4
+
+
+def test_a_pr_on_a_forge_the_inputs_do_not_know_stays_text() -> None:
+    from fr.triage.origins import Origin, OriginIssue, Origins, OriginsFacts, render_origins
+
+    issue = OriginIssue(
+        key="proj#1", repo="grp/proj", number=1, title="t", url="https://git.example.test/grp/proj/-/issues/1",
+        created_at="2026-09-01T00:00:00Z", state="open",
+    )  # fmt: skip
+    origins = Origins(
+        issues={
+            "proj#1": Origin(
+                category="new-feature", source="hand", severity="low", reason="r", pr="grp/proj#5"
+            )
+        }
+    )
+    page = render_origins(
+        OriginsFacts(
+            scope="grp/proj",
+            since="2026-09-01",
+            collected_at="2026-09-02T00:00:00Z",
+            issues=[issue],
+        ),
+        origins,
+    )
+    row = _pr_row(page, "grp/proj#5")
+    assert "grp/proj#5" in row and 'href="https://github.com/' not in row
+    assert not re.search(r"<a [^>]*>grp/proj#5</a>", row)
+
+
+def test_the_ended_cell_links_each_closing_pr_and_keeps_an_unsafe_one_as_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import (
+        ClosingPr,
+        OriginIssue,
+        Origins,
+        OriginsFacts,
+        render_origins,
+    )
+
+    page = _page_with_prs(monkeypatch, tmp_path)
+    ended = re.findall(r"<td>(closed completed in 6\.0 h by .*?)</td>", _row(page, "widgets#1"))
+    assert ended == [
+        f'closed completed in 6.0 h by <a href="https://github.com/{REPO}/pull/301" '
+        'rel="noopener noreferrer">#301</a>'
+    ]
+
+    def row_for(url: str, issue_url: str) -> str:
+        issue = OriginIssue(
+            key="b#1", repo="a/b", number=1, title="t", url=issue_url,
+            created_at="2026-09-01T00:00:00Z", state="closed", reason="completed",
+            closing_prs=[ClosingPr(repo="a/b", number=5, title="x", url=url)],
+        )  # fmt: skip
+        facts = OriginsFacts(
+            scope="a/b", since="2026-09-01", collected_at="2026-09-02T00:00:00Z", issues=[issue]
+        )
+        return _row(render_origins(facts, Origins()), "b#1")
+
+    unsafe = row_for("javascript:alert(1)", "http://example.test/a/b/issues/1")
+    assert "by #5" in unsafe and "javascript:" not in unsafe
+    assert not re.search(r"<a [^>]*>#5</a>", unsafe)
+    # the same PR with a known https url links to it
+    safe = row_for("https://example.test/a/b/pull/5", "https://example.test/a/b/issues/1")
+    assert 'href="https://example.test/a/b/pull/5"' in safe
+
+
+def test_a_non_https_pr_url_is_never_an_href() -> None:
+    from fr.triage.origins import (
+        MergedPr,
+        Origin,
+        OriginIssue,
+        Origins,
+        OriginsFacts,
+        render_origins,
+    )
+
+    issue = OriginIssue(
+        key="b#1", repo="a/b", number=1, title="t", url="https://example.test/a/b/issues/1",
+        created_at="2026-09-01T00:00:00Z", state="open",
+    )  # fmt: skip
+    origins = Origins(
+        issues={
+            "b#1": Origin(
+                category="new-feature", source="hand", severity="low", reason="r", pr="a/b#5"
+            )
+        }
+    )
+    facts = OriginsFacts(
+        scope="a/b", since="2026-09-01", collected_at="2026-09-02T00:00:00Z", issues=[issue],
+        prs=[MergedPr(repo="a/b", number=5, title="<img src=x onerror=1>",
+                      url="javascript:alert(1)", merged_at="2026-09-02T00:00:00Z")],
+    )  # fmt: skip
+    row = _pr_row(render_origins(facts, origins), "a/b#5")
+    assert "javascript:" not in row and "<img" not in row
+    assert "&lt;img src=x onerror=1&gt;" in row  # the title is shown, as text
+
+
+def _page_with_prs(
+    monkeypatch: pytest.MonkeyPatch, d: Path, *, merged: tuple[int, ...] = (102,)
+) -> str:
+    """The page with the PRs numbered *merged* collected: 102 is named by two new-feature
+    issues (3, 11) and one leftover (4); 103 is named but, by default, not collected."""
+    forge = OriginsForge()
+    forge.prs += [raw_pr(n, True, []) for n in merged]
+    assert _run(monkeypatch, "collect", d, "--since", SINCE, forge=forge).exit_code == 0
+    (d / "origins.yaml").write_text(classification_yaml(causes=CAUSES), encoding="utf-8")
+    (d / "judgements.yaml").write_text(JUDGEMENTS, encoding="utf-8")
+    assert _run(monkeypatch, "render", d).exit_code == 0
+    return (d / "origins.html").read_text(encoding="utf-8")
+
+
+def _folds(section: str) -> list[tuple[str, str, str]]:
+    """(category, count, body) of each group fold in the "Every issue" section."""
+    return re.findall(
+        r'<details id="issue-group-([a-z-]+)" class="fold"[^>]*><summary>[^<]*'
+        r'<span class="count">(\d+)</span></summary>(.*?)</details>',
+        section,
+        re.S,
+    )
+
+
+def test_every_issue_is_a_plain_section_with_a_state_filter_and_a_closed_fold_per_group(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import CATEGORIES
+
     page = _page(monkeypatch, tmp_path)
-    table = _section(page, "issue-table")
-    rows = re.findall(r'<tr data-category="([a-z-]+)" data-key="([^"]+)"', table)
-    assert len(rows) == 15 and ("regression", "widgets#2") in rows
+    section = _section(page, "issue-table")
+    assert re.search(r"<h2>Every issue</h2>", section)
+    assert 'id="issue-table-fold"' not in page  # no longer one fold around the table
+    folds = _folds(section)
+    # CATEGORIES order then unclassified, each closed, each with its count (by hand from ROWS)
+    assert [c for c, _, _ in folds] == [*CATEGORIES, "unclassified"]
+    assert [n for _, n, _ in folds] == ["3", "2", "3", "3", "2", "2", "0"]
+    assert not re.search(r'<details id="issue-group-[^>]*\bopen\b', section)
+    for category, count, body in folds:
+        rows = re.findall(r'<tr data-category="([a-z-]+)"', body)
+        assert rows == [category] * int(count), category
+    # the folds replace the category buttons
+    assert 'data-filter="' not in page
+
+
+def test_the_state_filter_is_three_toggles_with_all_pressed_and_hidden_without_scripts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    section = _section(_page(monkeypatch, tmp_path), "issue-table")
+    bar = re.search(r"<div[^>]*data-state-filter[^>]*>(.*?)</div>", section, re.S)
+    assert bar and re.search(
+        r"<div[^>]*\bhidden\b[^>]*data-state-filter|data-state-filter[^>]*\bhidden\b", section
+    )
+    buttons = re.findall(
+        r'<button[^>]*data-state="([a-z]+)"[^>]*aria-pressed="([a-z]+)"', bar.group(1)
+    )
+    assert buttons == [("open", "false"), ("closed", "false"), ("all", "true")]
+    # with scripts off every row shows
+    assert not re.search(r"<tr (?![^>]*class=\"none\")[^>]*\bhidden\b", section)
+
+
+def test_each_group_table_holds_a_hidden_placeholder_the_filter_shows_when_no_row_does(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.origins import STATE_FILTER_SCRIPT
+
+    section = _section(_page(monkeypatch, tmp_path), "issue-table")
+    folds = [(c, b) for c, n, b in _folds(section) if n != "0"]
+    assert len(folds) == 6
+    for category, body in folds:
+        placeholder = re.findall(r'<tr class="none"([^>]*)><td colspan="8">([^<]*)</td></tr>', body)
+        assert len(placeholder) == 1, category
+        attrs, text = placeholder[0]
+        assert "hidden" in attrs.split() and text == "No issue.", category
+        # inside the table body the script toggles, and not a data-state row the filter counts
+        assert body.index('class="none"') > body.index("<tbody>")
+        assert "data-state" not in attrs
+    # the script looks the placeholder up by the class the markup gives it
+    assert "tr.none" in STATE_FILTER_SCRIPT
+
+
+def test_each_row_carries_its_state_for_the_filter_to_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    section = _section(_page(monkeypatch, tmp_path), "issue-table")
+    states = {
+        key: state
+        for state, key in re.findall(r'data-state="([a-z]+)" data-key="([^"]+)"', section)
+    }
+    assert len(states) == 15
+    # by hand from ROWS: 3, 8, 11 and 13 are still open
+    assert {k for k, v in states.items() if v == "open"} == {
+        "widgets#3", "widgets#8", "widgets#11", "widgets#13"
+    }  # fmt: skip
+
+
+def test_the_state_filter_script_is_the_one_script_beside_the_shared_page_script(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage import origins
+    from fr.triage.components import PAGE_SCRIPT
+
+    page = _page(monkeypatch, tmp_path)
     assert page.count("<script") == 1
-    assert 'data-filter="regression"' in page
-    # with scripts off every row shows: the filter bar starts hidden, no row does
-    assert re.search(r'<div class="bar"[^>]*\bhidden\b', page)
-    assert not re.search(r"<tr [^>]*\bhidden\b", table)
+    assert not hasattr(origins, "FILTER_SCRIPT")
+    assert f"<script>{origins.STATE_FILTER_SCRIPT}{PAGE_SCRIPT}</script>" in page
 
 
 def test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch(
@@ -273,7 +573,7 @@ def test_render_ends_in_a_conclusion_linking_each_cause_to_its_batch(
     concl = _section(page, "conclusion")
     assert "Feature work lands half-done" in concl
     assert "Require a follow-up checklist before merge" in concl
-    assert 'href="triage.html#batch-finish-widgets"' in concl
+    assert 'href="backlog.html#batch-finish-widgets"' in concl
     # a batch the judgements do not hold is shown as unresolved, never dropped
     assert re.search(r'class="unresolved"[^>]*>[^<]*ghost-batch', concl)
     # a cause with no batch says so
@@ -294,10 +594,7 @@ def test_sections_follow_r7_and_the_issue_table_is_a_closed_fold(
         "issue-table",
     ]
     table = _section(page, "issue-table")
-    m = re.search(r'<details id="issue-table-fold" class="fold">', table)
-    assert m and "<table" in table[m.end() :]
-    assert "open" not in table[: table.index(">", m.start())].split()
-    assert re.search(r'<summary>Every issue <span class="count">15</span></summary>', table)
+    assert "<h2>Every issue</h2>" in table and "<table" in table
 
 
 def test_the_origins_page_carries_its_nav_and_goal(
@@ -641,6 +938,30 @@ def test_a_full_issue_list_and_a_full_pr_list_inside_the_window_each_refuse() ->
     assert quiet.warnings == []
 
 
+class _FullPrForge(_ManyForge):
+    """A PR list that reaches back before --since and is exactly as long as its limit."""
+
+    def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        (inside,) = super().list_prs(repo=repo, state=state, limit=limit)
+        older = {**inside, "number": 3, "createdAt": "2026-08-01T00:00:00Z"}
+        return [inside, older][:limit]
+
+
+def test_a_full_pr_list_warns_that_prs_created_before_the_page_may_be_missing() -> None:
+    """The PR list is ordered by creation: a PR created before --since but merged inside the
+    window can sit beyond a full page, so a full list is named, never silently trusted."""
+    from fr.triage.model import Scope
+
+    scope = Scope(kind="repo", target="example-org/alpha")
+    full = _collect_scope(_FullPrForge(["example-org/alpha"]), scope, pr_limit=2)
+    assert len(full.warnings) == 1
+    warning = full.warnings[0]
+    assert "example-org/alpha" in warning and "PR list" in warning and "not collected" in warning
+    # a list shorter than its limit read everything: no warning
+    short = _collect_scope(_FullPrForge(["example-org/alpha"]), scope, pr_limit=3)
+    assert short.warnings == []
+
+
 def test_origins_asks_for_its_own_issue_fields_and_triage_collect_is_unchanged() -> None:
     from fr import gh
     from fr.triage.model import Scope
@@ -838,8 +1159,9 @@ def test_related_pr_cell_shows_introduced_in_and_fixed_by(
     (tmp_path / "origins.yaml").write_text(text, encoding="utf-8")
     assert _run(monkeypatch, "render", tmp_path).exit_code == 0
     row = _row((tmp_path / "origins.html").read_text(encoding="utf-8"), "widgets#3")
-    assert "introduced in" in row and "widgets/pull/90" in row
-    assert "fixed by" in row and "widgets/pull/91" in row
+    # neither PR is in the facts, so the link is the github.com base plus the number (R11)
+    assert "introduced in" in row and "widgets/issues/90" in row
+    assert "fixed by" in row and "widgets/issues/91" in row
     assert "introduced in" not in _row(page, "widgets#3")
 
 
@@ -871,11 +1193,11 @@ def test_origins_render_refreshes_the_nav_of_a_sibling_page(
 ) -> None:
     from fr.triage.components import nav_html
 
-    (tmp_path / "triage.html").write_text(
+    (tmp_path / "backlog.html").write_text(
         f"<html>{nav_html('backlog', ('backlog',))}</html>\n", encoding="utf-8"
     )
     _page(monkeypatch, tmp_path)
-    sibling = (tmp_path / "triage.html").read_text(encoding="utf-8")
+    sibling = (tmp_path / "backlog.html").read_text(encoding="utf-8")
     assert 'href="origins.html"' in sibling
 
 

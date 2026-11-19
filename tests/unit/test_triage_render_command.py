@@ -35,7 +35,7 @@ def _state(tmp_path: Path) -> Path:
 
 def _render(state: Path, *extra: str, repo: str = SCOPE) -> str:
     result = CliRunner().invoke(
-        app, ["triage", "render", "--repo", repo, "--dir", str(state), *extra]
+        app, ["triage", "backlog", "--repo", repo, "--dir", str(state), *extra]
     )
     assert result.exit_code == 0, result.output
     return result.output
@@ -118,7 +118,7 @@ def test_a_checkout_of_another_repo_is_not_this_scopes_matrix(
     facts_doc["issues"].append(issue(40))
     (state / "facts.json").write_text(json.dumps(facts_doc), encoding="utf-8")
     _render(state)
-    page = (state / "triage.html").read_text(encoding="utf-8")
+    page = (state / "backlog.html").read_text(encoding="utf-8")
     assert "acceptance rows: not tracked for this scope" in page
     assert "Acceptance rows moved" not in page
 
@@ -133,7 +133,7 @@ def test_no_matrix_says_so_instead_of_dropping_the_group(
     _render(state)
     assert _stored_acceptance(state) is None
     _render(state)
-    page = (state / "triage.html").read_text(encoding="utf-8")
+    page = (state / "backlog.html").read_text(encoding="utf-8")
     assert "acceptance rows: not tracked for this scope" in page
 
 
@@ -163,11 +163,12 @@ def test_a_render_that_raises_leaves_no_snapshot(
     def boom(*_a: object, **_k: object) -> str:
         raise RuntimeError("render failed")
 
-    monkeypatch.setattr(cmd, "render", boom)
+    monkeypatch.setattr(cmd, "render_issues", boom)
     state = _state(tmp_path)
-    result = CliRunner().invoke(app, ["triage", "render", "--repo", SCOPE, "--dir", str(state)])
+    result = CliRunner().invoke(app, ["triage", "backlog", "--repo", SCOPE, "--dir", str(state)])
     assert result.exit_code != 0
-    assert _snaps(state) == [] and not (state / "triage.html").exists()
+    assert _snaps(state) == [] and not (state / "backlog.html").exists()
+    assert not (state / "issues.html").exists()
 
 
 def test_a_failed_prune_is_a_warning_not_an_error(
@@ -198,7 +199,7 @@ def test_a_failed_prune_is_a_warning_not_an_error(
     (state / "facts.json").write_text(json.dumps(facts_doc), encoding="utf-8")
     out = _render(state)
     assert "warning" in out and "cannot prune" in out
-    assert (state / "triage.html").is_file()
+    assert (state / "backlog.html").is_file()
 
 
 # ---------------------------------------------- ri-5: a re-render keeps "Since last report"
@@ -221,7 +222,7 @@ def test_two_identical_renders_store_one_snapshot_and_keep_the_earlier_diff(
     _render(state)
     _render(state)
     assert len(_snaps(state)) == 2, "an identical board is not stored again"
-    page = (state / "triage.html").read_text(encoding="utf-8")
+    page = (state / "backlog.html").read_text(encoding="utf-8")
     assert "<td>widgets#40</td>" in page, "the diff is still against the last different snapshot"
     assert "Nothing changed" not in page
 
@@ -236,7 +237,7 @@ def test_re_rendering_the_only_snapshot_says_nothing_changed(
     _render(state)
     _render(state)
     assert len(_snaps(state)) == 1
-    assert "Nothing changed" in (state / "triage.html").read_text(encoding="utf-8")
+    assert "Nothing changed" in (state / "backlog.html").read_text(encoding="utf-8")
 
 
 # ------------------------------------------------ the board link (batch-board R13)
@@ -245,7 +246,93 @@ def test_re_rendering_the_only_snapshot_says_nothing_changed(
 def test_the_render_command_links_the_board_only_when_board_html_exists(tmp_path: Path) -> None:
     state = _state(tmp_path)
     _render(state)
-    assert "board.html" not in (state / "triage.html").read_text(encoding="utf-8")
-    (state / "board.html").write_text("<html></html>", encoding="utf-8")
+    assert "batches.html" not in (state / "backlog.html").read_text(encoding="utf-8")
+    (state / "batches.html").write_text("<html></html>", encoding="utf-8")
     _render(state)
-    assert 'href="board.html"' in (state / "triage.html").read_text(encoding="utf-8")
+    assert 'href="batches.html"' in (state / "backlog.html").read_text(encoding="utf-8")
+
+
+# ------------------------------------- one name per page (triage-pages-ux R1-R3)
+
+
+def _invoke(state: Path, *words: str) -> tuple[int, str]:
+    result = CliRunner().invoke(app, ["triage", *words, "--repo", SCOPE, "--dir", str(state)])
+    return result.exit_code, result.output
+
+
+def test_fr_triage_backlog_writes_both_pages_and_removes_the_old_file(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    (state / "triage.html").write_text("stale", encoding="utf-8")
+    code, out = _invoke(state, "backlog")
+    assert code == 0, out
+    assert (state / "backlog.html").is_file() and (state / "issues.html").is_file()
+    assert not (state / "triage.html").exists(), "the old-named copy stays behind"
+    assert "is now" not in out
+
+
+def test_fr_triage_render_is_an_alias_that_says_so(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    (state / "triage.html").write_text("stale", encoding="utf-8")
+    code, out = _invoke(state, "render")
+    assert code == 0, out
+    assert "fr triage render is now fr triage backlog" in out
+    assert (state / "backlog.html").is_file() and (state / "issues.html").is_file()
+    assert not (state / "triage.html").exists()
+
+
+def test_the_aliases_are_hidden_from_help() -> None:
+    out = CliRunner().invoke(app, ["triage", "--help"]).output
+    assert "backlog" in out and "batches" in out
+    assert not any(line.split()[:1] in (["render"], ["board"]) for line in
+                   (raw.strip("│ ") for raw in out.splitlines()))  # fmt: skip
+
+
+def _section_ids(page: str) -> list[str]:
+    import re
+
+    return re.findall(r'<(?:section|details)[^>]*\bid="([a-z-]+)"', page)
+
+
+def test_with_only_board_both_pages_read_it_and_say_so(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    (state / "board").mkdir()
+    (state / "board" / "manifest.yaml").write_text(
+        yaml.safe_dump({"sections": ["batches", "prs", "needs", "since"]}), encoding="utf-8"
+    )
+    code, out = _invoke(state, "backlog")
+    assert code == 0, out
+    backlog = (state / "backlog.html").read_text(encoding="utf-8")
+    issues = (state / "issues.html").read_text(encoding="utf-8")
+    ids = _section_ids(backlog)
+    assert ids.index("batches") < ids.index("needs-you-now") < ids.index("since-last-report")
+    flat = " ".join(out.split())
+    for title in ("Backlog", "Issues"):
+        assert f"{title}: no {title.lower()}/ directory" in flat
+    assert "board/" in flat
+    assert "manifest names `prs`, which is now on the Issues page; skipped" in flat
+    assert "manifest names `needs`, which is now on the Backlog page; skipped" in flat
+    assert "now on the Issues page; skipped" in backlog and "board/" in backlog
+    assert "now on the Backlog page; skipped" in issues and "board/" in issues
+    assert 'id="prs"' in issues and 'id="prs"' not in backlog
+
+
+def test_a_backlog_directory_wins_over_board(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    for d in ("board", "backlog"):
+        (state / d).mkdir()
+    (state / "board" / "manifest.yaml").write_text("sections: [since]\n", encoding="utf-8")
+    (state / "backlog" / "manifest.yaml").write_text(
+        yaml.safe_dump({"sections": ["waves", "since"]}), encoding="utf-8"
+    )
+    code, out = _invoke(state, "backlog")
+    assert code == 0, out
+    assert "Backlog: no backlog/ directory" not in " ".join(out.split())
+    ids = _section_ids((state / "backlog.html").read_text(encoding="utf-8"))
+    assert ids.index("waves") < ids.index("since-last-report")
+    # the fallback is per page: Issues has no issues/ directory, so it still reads board/
+    flat = " ".join(out.split())
+    note = "Issues: no issues/ directory, so its manifest and fragments are read from board/"
+    assert note in flat
+    issues = (state / "issues.html").read_text(encoding="utf-8")
+    assert "Issues: no issues/ directory" in " ".join(issues.split())
+    assert "manifest names `since`, which is now on the Backlog page; skipped" in issues

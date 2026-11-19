@@ -115,13 +115,13 @@ def test_when_every_probe_is_a_304_nothing_is_collected_or_rendered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _setup(tmp_path)
-    (tmp_path / "board.html").write_text("kept")
+    (tmp_path / "batches.html").write_text("kept")
     _quiet_state(tmp_path)
     w = _Paced(tmp_path, monkeypatch, _Quota(_raw(5000, NOW + timedelta(hours=1))), _Probes(None))
     code, out = _board(tmp_path, "--watch")
     assert code == 0, out
     assert w.calls == [] and w.sleeps == [60]
-    assert (tmp_path / "board.html").read_text() == "kept"
+    assert (tmp_path / "batches.html").read_text() == "kept"
 
 
 def test_a_quiet_pass_with_no_board_yet_renders_it_once(

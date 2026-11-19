@@ -1,0 +1,275 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-18-triage-pages-ux
+repo: derio-net/super-fr
+rows:
+  - id: triage-page-names
+    capability: triage pages
+    acceptance: Each triage page's nav title, file, command and fragment directory share
+      one name (backlog, issues, batches, origins, architecture, history); `fr triage
+      render`/`board` still work as aliases and a render removes the old-named file
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R1
+    - spec:2026-11-18-triage-pages-ux#R2
+    - spec:2026-11-18-triage-pages-ux#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_triage_page_names.py#test_the_registry_names_every_scanned_file_name
+      - super-fr:tests/unit/test_tripwire_triage_page_names.py#test_no_module_names_a_page_file_outside_the_registry
+      - super-fr:tests/unit/test_triage_render_command.py#test_fr_triage_render_is_an_alias_that_says_so
+      - super-fr:tests/unit/test_triage_nav_pages.py#test_the_registry_names_every_page_once_in_nav_order
+    status: ci
+    notes: Registry tripwire and the renamed commands pin one name per page.
+    verify: none
+  - id: triage-pages-rendered-stamp
+    capability: triage pages
+    acceptance: Every triage page states when it was rendered, beside when its facts
+      were collected
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pages_split.py#test_every_page_states_when_it_was_rendered_beside_the_collected_time
+      - super-fr:tests/unit/test_triage_pages_split.py#test_the_stamp_and_the_command_are_one_span
+    status: ci
+    notes: Every page states its render time beside the collected time, in one span
+      with the command.
+    verify: none
+    visual:
+      states:
+      - backlog-stamp
+      - issues-stamp
+      - batches-stamp
+      - origins-stamp
+      - architecture-stamp
+      - history-stamp
+  - id: triage-pages-driver-refresh
+    capability: triage pages
+    acceptance: While the wave driver runs, each pass that collected re-renders every
+      page whose inputs are on disk, and a snapshot is stored when a wave finishes
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R6
+    - spec:2026-11-18-triage-pages-ux#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_yes_pass_writes_the_pages_whose_inputs_exist
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_origins_and_architecture_wait_for_their_inputs
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_plan_mode_writes_no_page
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_writer_that_raises_warns_once_per_cause_and_the_pass_completes
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_later_pass_stores_one_exactly_when_a_wave_finishes
+      - super-fr:tests/unit/test_triage_page_writers.py#test_write_backlog_writes_both_pages_with_the_moment_passed_in
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_new_process_sees_a_wave_that_finished_while_no_driver_ran
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_backlog_write_that_raises_keeps_the_snapshot_owed
+      - super-fr:tests/unit/test_triage_drive_pages.py#test_a_scope_with_no_usable_clone_says_so_once_and_probes_once
+      - super-fr:tests/unit/test_triage_drive_purity.py#test_the_drive_pass_reads_no_clock_and_starts_no_process
+    status: ci
+    notes: Drive passes write the pages whose inputs exist and snapshot at a wave's
+      finish; the page memory (drive-pages.json) carries the rules across processes
+      and cloud wakes.
+    verify: none
+  - id: triage-pages-folds
+    capability: triage pages
+    acceptance: Collapsible sections on every page use one shared fold component; a
+      link into a folded section opens it
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R8
+    - spec:2026-11-18-triage-pages-ux#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_components.py#test_a_fold_renders_its_summary_with_heading_and_count
+      - super-fr:tests/unit/test_triage_components.py#test_every_renderer_includes_the_page_css_and_script
+      - super-fr:tests/unit/test_triage_components.py#test_the_fold_targets_a_hash_can_reach_sit_inside_their_details
+      - super-fr:tests/unit/test_triage_history.py#test_the_timeline_is_a_closed_fold_with_its_count
+    status: ci
+    notes: One fold component on every page; a hash target sits inside its fold; browser
+      walk recorded in the phase reviews.
+    verify: none
+    visual:
+      states:
+      - backlog-decisions-open
+      - issues-lists-closed
+      - history-timeline-closed
+      - history-archived-notes
+      interactions:
+      - open-fold
+      - close-fold
+      - hash-opens-fold
+  - id: triage-pages-links
+    capability: triage pages
+    acceptance: Every PR and issue reference links to the forge, and a wave reference
+      jumps to that wave's tab on the page that holds it
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R11
+    - spec:2026-11-18-triage-pages-ux#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_components.py#test_a_known_key_links_to_its_own_url
+      - super-fr:tests/unit/test_triage_components.py#test_prose_cannot_make_an_href_or_inject_markup
+      - super-fr:tests/unit/test_triage_components.py#test_a_wave_tables_depends_on_links_each_batch_to_its_card
+      - super-fr:tests/unit/test_triage_board_views.py#test_next_up_shows_the_wave_as_a_linked_field_and_links_batch_and_dependencies
+      - super-fr:tests/unit/test_triage_origins.py#test_the_ended_cell_links_each_closing_pr_and_keeps_an_unsafe_one_as_text
+    status: ci
+    notes: Linker links forge references https-only and wave/batch refs to their cards.
+    verify: none
+    visual:
+      states:
+      - next-up-wave-links
+      - prose-issue-links
+      interactions:
+      - wave-link-selects-tab
+      - finished-wave-link-to-history
+  - id: triage-backlog-issues-split
+    capability: triage pages
+    acceptance: The Backlog holds the decisions and a separate Issues page holds the
+      lists; the Waves section filters by several issue kinds at once
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R4
+    - spec:2026-11-18-triage-pages-ux#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pages_split.py#test_the_backlog_holds_the_decisions_only
+      - super-fr:tests/unit/test_triage_pages_split.py#test_the_issues_page_holds_the_lists_only
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_kind_filter_has_the_structure_its_script_acts_on
+    status: ci
+    notes: Backlog holds the decisions, Issues the lists, with the kind filter's structure
+      pinned.
+    verify: none
+    visual:
+      states:
+      - backlog-page
+      - issues-page
+      - waves-all-kinds
+      interactions:
+      - kinds-toggle-several
+      - kinds-none-selected
+  - id: triage-batches-columns-cutoff
+    capability: triage pages
+    acceptance: On the Batches page every column collapses and expands and keeps that
+      across refresh, and a wave cutoff shows only the waves active in the last 30 days
+      by default
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R10
+    - spec:2026-11-18-triage-pages-ux#R18
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_every_column_header_holds_a_toggle_that_says_whether_it_is_expanded
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_server_marks_the_cards_of_the_waves_the_cutoff_hides
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_marker_follows_the_thirty_day_boundary_to_the_second
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_each_terminal_kind_is_terminal
+    status: ci
+    notes: Column toggles and the server-decided wave cutoff pinned at a fixed clock.
+    verify: none
+    visual:
+      states:
+      - empty-column-collapsed
+      - cutoff-on
+      - cutoff-off
+      interactions:
+      - collapse-column
+      - expand-empty-column
+      - state-survives-reload
+      - toggle-cutoff
+  - id: triage-origins-groups-prs
+    capability: triage pages
+    acceptance: Origins shows each origin group as a fold with a state filter (open,
+      closed, all), and each PR with its title, merge date and the issues naming it
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R14
+    - spec:2026-11-18-triage-pages-ux#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_origins.py#test_every_issue_is_a_plain_section_with_a_state_filter_and_a_closed_fold_per_group
+      - super-fr:tests/unit/test_triage_origins.py#test_a_collected_pr_shows_its_link_title_merge_date_and_the_issues_naming_it
+      - super-fr:tests/unit/test_triage_origins.py#test_a_file_with_no_prs_renders_every_leaderboard_pr_as_not_collected
+      - super-fr:tests/unit/test_triage_origins.py#test_collect_keeps_the_prs_merged_in_the_window_with_one_list_read_per_repo
+    status: ci
+    notes: Origin group folds, state filter and merged-PR detail with not-collected
+      fallback.
+    verify: none
+    visual:
+      states:
+      - origin-groups-folded
+      - pr-detail
+      - pr-not-in-facts
+      interactions:
+      - state-filter-open
+      - state-filter-closed
+      - state-filter-all
+  - id: triage-history-pr-summary
+    capability: triage pages
+    acceptance: History's finished waves show each batch's PR with its title and merge
+      date, and its timeline and dated notes fold
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R16
+    - spec:2026-11-18-triage-pages-ux#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_history.py#test_a_finished_batch_with_a_merged_pr_shows_link_title_and_merge_date
+      - super-fr:tests/unit/test_triage_history.py#test_a_finished_batch_with_no_pr_shows_a_dash
+    status: ci
+    notes: Finished batches show PR link, title and merge date, or a dash.
+    verify: none
+    visual:
+      states:
+      - finished-wave-pr-column
+      - batch-without-pr
+  - id: triage-architecture-pipeline-tabs
+    capability: triage pages
+    acceptance: Architecture's pipeline diagram reads as one graph with dated tabs above
+      it, stepping through the dates in order
+    origin:
+    - spec:2026-11-18-triage-pages-ux#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_components.py#test_every_tab_of_a_rendered_page_controls_a_panel_a_hash_can_name
+      - super-fr:tests/unit/test_triage_components.py#test_every_renderer_includes_the_page_css_and_script
+    status: ci
+    notes: Architecture carries the shared tab CSS/script, so its dated diagrams are
+      one tabbed graph; browser walk in phase 2 review.
+    verify: none
+    visual:
+      states:
+      - one-graph-latest-tab
+      interactions:
+      - step-through-dated-tabs
+amendments:
+  - row: board-decision-views
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_board_views.py#test_the_backlog_is_ordered_since_needs_next_waves_then_batches
+    why: the triage-pages-ux split renamed this test
+  - row: board-decision-views
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_then_the_folds
+    why: the triage-pages-ux split renamed this test
+  - row: triage-board-first-screen
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_board_views.py#test_the_backlog_is_ordered_since_needs_next_waves_then_batches
+    why: the triage-pages-ux split renamed this test
+  - row: triage-board-first-screen
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_then_the_folds
+    why: the triage-pages-ux split renamed this test
+  - row: triage-page-goals
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_six_pages
+    why: 'the triage-pages-ux split renamed this test: a sixth page (Issues)'
+  - row: triage-page-goals
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_five_pages
+    why: the triage-pages-ux split renamed this test

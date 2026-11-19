@@ -1,0 +1,153 @@
+schema_version: 2
+phase:
+  number: 1
+  title: One name per page, the Backlog/Issues split and the render stamp (R1-R5)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-page-names
+  - triage-pages-rendered-stamp
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/history.py
+  - packages/fr/src/fr/triage/origins.py
+  - packages/fr/src/fr/triage/architecture.py
+  - packages/fr/src/fr/triage/snapshot.py
+  - packages/fr/src/fr/triage/drive_lock.py
+  - packages/fr/src/fr/triage/fragments.py
+  - packages/fr/src/fr/commands/triage_*.py
+  - tests/**/*.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - plugins/super-fr/skills/fr-audit/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - README.md
+  - AGENTS.md
+  - docs/reference/cli.md
+  - docs/explainers/fr-triage.md
+  - docs/explainers/fr-wave-driver.md
+  - docs/triage/README.md
+  - .changes/feat-batch-triage-pages.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — the triage page suites green on the unchanged tree, plus the change
+    fragment
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest -q --no-cov -n auto tests/unit/test_triage_render.py tests/unit/test_triage_render_command.py tests/unit/test_triage_nav_pages.py tests/unit/test_triage_kanban_render.py tests/unit/test_triage_kanban_cmd.py tests/unit/test_triage_history.py tests/unit/test_triage_origins.py tests/unit/test_triage_architecture.py tests/unit/test_triage_fragments.py` on the unchanged tree; green (a red is a discovery, not fixed here).
+  - id: P1.T1.S2
+    text: |-
+      Add `.changes/feat-batch-triage-pages.yaml` (`bump: minor`, summary: "triage pages: one name per page (backlog.html, issues.html, batches.html; `fr triage backlog`/`batches`, old names kept as aliases), folds, forge and wave links, filters, and the driver keeps every page current — a publish command naming board.html must now name batches.html"). Commit and `fr push`; the draft PR's CI is the smoke.
+- number: 2
+  title: The page registry (spec §A, R1)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_nav_pages.py assert `components.PAGES` keys/files/titles in nav order are backlog/backlog.html/Backlog, issues/issues.html/Issues, batches/batches.html/Batches, origins, architecture, history; that `Page.dir` is `backlog`, `issues`, None, `origins`, `architecture`, `history`; and that `Page.legacy` names `triage.html`+`board/` for backlog, `board/` (dir only) for issues and `board.html` for batches.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: extend `Page` with `dir` and `legacy` (a small NamedTuple `Legacy(file, dir)` or None), add the Issues entry with goal "What is open, and how is it ranked?", and add a `page(key)` lookup. Replace every file/dir constant with a registry read: `triage_cmd.BOARD_DIR`, `triage_kanban_cmd.BOARD_FILE`, `history.BOARD_FILE`/`PAGE_FILE`/`HISTORY_DIR`, `origins.PAGE_FILE`/`ORIGINS_DIR`, `architecture.PAGE_FILE`/`ARCHITECTURE_DIR`, the `board.html`/`history.html` hrefs in render.py and `triage.html#` in origins.py. `MOVED` maps hold page keys; their notes print `page(key).title`.
+  - id: P1.T2.S3
+    text: |-
+      RED then GREEN: add tests/unit/test_tripwire_triage_page_names.py scanning every `packages/fr/src/fr/triage/*.py` and `packages/fr/src/fr/commands/triage_*cmd.py` (docstrings and help text included, components.py excepted) for any of `triage.html`, `board.html`, `backlog.html`, `issues.html`, `batches.html`, `origins.html`, `architecture.html`, `history.html`; reword the docstrings and help that name them (name the command or the page title instead). REFACTOR: drop constants left unused.
+- number: 3
+  title: Commands, aliases, legacy-file removal and the board/ fallback (R1-R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_render_command.py, via the Typer CliRunner over a fixture state dir: `fr triage backlog` writes backlog.html and issues.html and removes a pre-existing triage.html; `fr triage render` prints `fr triage render is now fr triage backlog` and does the same; with only `board/manifest.yaml` present both pages render its order, the stderr and page notes name the fallback, and a section owned by the other page is skipped with "now on the Issues page; skipped" (resp. Backlog). In tests/unit/test_triage_kanban_cmd.py: `fr triage batches` writes batches.html and removes board.html; `fr triage board` prints its alias line; `publish` hands over a file named batches.html.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: rename the commands (`backlog` in triage_cmd.py, `batches` in triage_kanban_cmd.py), register hidden `render`/`board` aliases that print the line and call them, add `components.fragment_dir(state_dir, page) -> (Path, note | None)` and `components.remove_legacy(state_dir, page)`, and call both from each write. Help strings name the new commands.
+- number: 4
+  title: Split Backlog and Issues (spec §B, R4)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_triage_render.py assert `render_backlog` emits exactly the sections since, needs, next-up, waves, batches (ids since-last-report, needs-you-now, next-up, waves, batches) and `render_issues` exactly possible-duplicates, backlog, features, parked, awaiting-live, closed-in-progress, patterns, debt, prs, with the FILTER_BAR on Issues and the stage filter on the Backlog; a backlog manifest naming `prs` yields the "now on the Issues page" note.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: split `render.render()` into `render_backlog()`/`render_issues()` with their own `GENERATED`/`MOVED`, sharing the masthead, skew banner and CSS; rename the stage-filter part of `render.FOLD_SCRIPT` to `STAGE_FILTER_SCRIPT`. Update every existing test that called `render()` (keep the assertions, move them to the page that now owns the section). REFACTOR: remove the old `render` name.
+- number: 5
+  title: The rendered stamp on every page (R5)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: one parametrised test per renderer (render_backlog, render_issues, render_board, render_origins, render_architecture, render_history) passing `rendered_at=datetime(2026,11,18,9,30,tzinfo=UTC)` asserts `rendered 2026-11-18 09:30 UTC` in the masthead beside the collected time, and that two renders with equal inputs are byte-identical.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: add the `rendered_at` keyword to every `render_*` (render_board already prints one; route it through `components.when`), and have each command pass `datetime.now(UTC)`.
+- number: 6
+  title: Docs, skill and mirrors
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Update docs/explainers/fr-triage.md, docs/explainers/fr-wave-driver.md, docs/triage/README.md, AGENTS.md's fr/triage paragraph, plugins/super-fr/skills/fr-triage/SKILL.md and fr-audit's SKILL.md to the new names and commands (and the Issues page); move each touched page's `reviewed` stamp; run `uv run --no-project python scripts/sync-readme.py`, `scripts/sync-opencode.py` and `scripts/sync-hermes.py`; `uv run fr docs check` exits 0.
+  - id: P1.T6.S2
+    text: |-
+      Run the full suite into a host-visible log after the last code commit: `uv run pytest -q --no-cov -n auto > $TMPDIR/p1-suite.log 2>&1`; green; ruff check/format and mypy clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-18T20:10:06+00:00'
+      note: null
+  completion:
+    at: '2026-11-18T20:10:06+00:00'
+    note: null
+    observed_prs: []

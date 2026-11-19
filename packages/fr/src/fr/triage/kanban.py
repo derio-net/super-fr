@@ -11,9 +11,9 @@ what it would do (`drive_pass` over `drive_snapshot`) and falls back per column.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from fr.triage.batch import (
@@ -303,6 +303,9 @@ class HeldIssue:
     line: str  # `claims.held_line`: the same words the drive and the batch verbs use
 
 
+_TERMINAL_STAGES: frozenset[BatchStage] = frozenset({"merged", "cancelled", "abandoned"})
+
+
 @dataclass(frozen=True)
 class Card:
     batch: Batch
@@ -338,6 +341,37 @@ class Card:
         if self.closeout_status in (None, "absent", "unknown"):
             return "batch"
         return "closeout"
+
+    @property
+    def terminal(self) -> bool:
+        """Merged (archived or not), cancelled or abandoned, or a close-out that archived
+        (R18): the engine's own stage and close-out state, never the column the card sits
+        in, so a merged batch still owed its close-out is terminal."""
+        return self.stage in _TERMINAL_STAGES or closeout_state(self.batch) == "archived"
+
+    @property
+    def active_at(self) -> datetime | None:
+        """When the batch's latest event happened; None when it has none."""
+        return max((e.at for e in self.events), default=None)
+
+
+def cutoff_hidden_waves(
+    cards: Iterable[Card], rendered_at: datetime, days: int = 30
+) -> frozenset[str]:
+    """The waves the Batches page's cutoff hides (R18): every batch of the wave is terminal
+    and none had an event on or after *days* before *rendered_at*. A wave with any other
+    batch shows, and a card with no wave is never part of one. The render marks each card of
+    these waves with `data-cutoff-hidden`; the page's script only applies the marker."""
+    since = rendered_at - timedelta(days=days)
+    quiet: dict[str, bool] = {}
+    for card in cards:
+        if card.wave is None:
+            continue
+        key = str(card.wave)
+        active = card.active_at
+        settled = card.terminal and (active is None or active < since)
+        quiet[key] = quiet.get(key, True) and settled
+    return frozenset(k for k, ok in quiet.items() if ok)
 
 
 @dataclass(frozen=True)
