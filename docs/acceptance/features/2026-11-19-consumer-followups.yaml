@@ -17,9 +17,15 @@ rows:
     - spec:2026-11-19-consumer-followups#R2
     - spec:2026-11-19-consumer-followups#R3
     - spec:2026-11-19-consumer-followups#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/session.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/session-gates.test.ts
+    status: ci
+    notes: 'bun tests (opencode-plugin-test CI job): the resolver''s cache, fallback
+      on a failed, foreign, empty and hanging lookup; the shell gate, push guard, relative
+      edit targets, unresolvable-patch probe and sentinel judged in a session directory
+      unlike the plugin''s'
     verify: none
   - id: gitea-matrix-no-persisted-token
     capability: Scaffolded Gitea acceptance workflow keeps no credential for PR code
