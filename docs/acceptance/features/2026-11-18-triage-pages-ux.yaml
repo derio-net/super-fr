@@ -262,3 +262,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_six_pages
     why: 'the triage-pages-ux split renamed this test: a sixth page (Issues)'
+  - row: triage-page-goals
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_five_pages
+    why: the triage-pages-ux split renamed this test
