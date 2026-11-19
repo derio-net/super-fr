@@ -61,9 +61,15 @@ rows:
     origin:
     - spec:2026-11-19-batch-docs-wording#R11
     - spec:2026-11-19-batch-docs-wording#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_a_fence_that_renders_without_pre_is_refused_and_no_page_is_written
+      - super-fr:tests/unit/test_build_site.py#test_a_top_level_fence_builds_and_an_indented_block_in_a_list_is_no_fence
+      - super-fr:tests/unit/test_build_site.py#test_a_pre_elsewhere_on_the_page_does_not_satisfy_a_fence
+    status: ci
+    notes: 'R11/R12: the four list fences are indented code blocks (a fence inside a
+      list item is not read by the pinned renderer); the build refuses a fence that
+      renders without pre, naming page:line; CI site-build builds every page'
     verify: none
   - id: site-pages-marker-own-line
     capability: published-docs
