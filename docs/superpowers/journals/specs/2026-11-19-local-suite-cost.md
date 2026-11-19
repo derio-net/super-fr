@@ -326,3 +326,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-local-suite-cost-p1 created=2026-11-19T09:19:52+00:00 -->
 ### tier-2026-11-19-local-suite-cost-p1 · decision · hard: a correctness cache over git state on the default-ref path every merge, archive and dispatch check relies on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-local-suite-cost-p3 created=2026-11-19T09:19:55+00:00 -->
+### tier-2026-11-19-local-suite-cost-p3 · decision · hard: changes what deliver accepts as tests evidence (a gate) and the agents artifact kind
