@@ -204,12 +204,13 @@ def test_the_cloud_pass_with_an_unreadable_visibility_exits_2(
 
 
 def test_a_skipped_save_that_installed_a_newer_fr_restarts_instead_of_sleeping(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class Stub:
         yes = True
         restart_to = "9.9.9"
         read_failures: set[str] = set()
+        target = tmp_path
 
     def one_pass(driver: Any) -> Any:
         raise triage_batch_cmd.ForgeReadError("cannot read the visibility", code=2)
@@ -220,7 +221,8 @@ def test_a_skipped_save_that_installed_a_newer_fr_restarts_instead_of_sleeping(
     monkeypatch.setattr(triage_batch_cmd, "one_pass", one_pass)
     monkeypatch.setattr(triage_batch_cmd, "_sleep", sleep)
 
-    assert triage_batch_cmd._host_loop(Stub(), once=False, interval=5) == "9.9.9"  # type: ignore[arg-type]
+    end = triage_batch_cmd._host_loop(Stub(), once=False, interval=5)  # type: ignore[arg-type]
+    assert end == triage_batch_cmd.LoopEnd(0, "9.9.9")
 
 
 def test_a_leak_still_ends_a_looping_driver(

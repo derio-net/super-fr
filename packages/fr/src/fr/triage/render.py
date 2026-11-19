@@ -43,6 +43,7 @@ from fr.triage.components import (
     tabs,
 )
 from fr.triage.debt import digest_for, issue_figures, untrusted_for
+from fr.triage.driver_record import DriverView
 from fr.triage.fragments import Entry, Resolved, splice
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
@@ -858,8 +859,12 @@ def _needs_section(
     session_notes: Mapping[str, str] | None = None,
     ci_none: Collection[str] = (),
     stops: Mapping[str, MergeStop] | None = None,
+    driver: DriverView = (None, None),
 ) -> str:
-    rows = needs_you(facts, judgements, session_notes, ci_none=ci_none, stops=stops)
+    rows = needs_you(
+        facts, judgements, session_notes, ci_none=ci_none, stops=stops,
+        driver=driver[0], last_pass=driver[1],
+    )  # fmt: skip
     head = '<section class="decide" id="needs-you-now"><h2>Needs you now</h2>'
     if not rows:
         return f'{head}<p class="quiet">Nothing needs you now.</p></section>'
@@ -1162,6 +1167,7 @@ def render(
     ci_none: Collection[str] = (),
     present: Sequence[str] = ("backlog",),
     stops: Mapping[str, MergeStop] | None = None,
+    driver: DriverView = (None, None),
 ) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
 
@@ -1173,6 +1179,8 @@ def render(
     section; the caller says whether one exists. *session_notes* are blocked sessions'
     notes by item id (cloud-triage R15), listed under Needs you now. *stops* are the
     driver's recorded merge stops: a conflicting export PR's is listed too (merge-truth R12).
+    *driver* is the scope's `driver.yaml` and the lease's last pass (`driver_record.view_inputs`):
+    a driver stopped on a refusal is listed first (batch-train-truth R8).
     """
     show_repo = facts.kind != "repo"
     result = classify(facts, judgements)  # the one classification, shared below
@@ -1242,7 +1250,7 @@ def render(
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
-        "needs": lambda: _needs_section(facts, judgements, session_notes, ci_none, stops),
+        "needs": lambda: _needs_section(facts, judgements, session_notes, ci_none, stops, driver),
         "next-up": lambda: _next_section(facts, judgements),
         "waves": lambda: _waves_section(facts, judgements),
         "possible-duplicates": lambda: _possible_duplicates(result.candidates, by_key),

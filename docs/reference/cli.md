@@ -200,6 +200,7 @@ one artifact kind.
   - `fr triage drive`: The cloud driver's one pass per wake, and the record of its session results.
     - `fr triage drive pass`: One pass of the cloud driver: restore the state from its ref when it is missing or older, renew the drive lease (pushed), collect, plan and act with the host driver's own policy, run every forge action itself, and write the session requests to --outbox for the agent to execute.
     - `fr triage drive record`: Apply every result the agent recorded for the outbox's requests to the scope's state (through the cloud runner's mailbox), empty the outbox, and push the state ref.
+    - `fr triage drive failures`: The wave driver's failure ledger, most frequent cause first.
   - `fr triage history`: The history page: the snapshot timeline and the finished waves.
     - `fr triage history render`: Write history.html: the snapshot timeline, the finished waves as tabs, then the authored fragments `history/manifest.yaml` places among them.
   - `fr triage origins`: Defect origins: collect issues filed since a date, classify them, render the page.

@@ -23,7 +23,7 @@ from fr.triage import batch_drive
 from fr.triage.lease import driver_identity, holder_of, lease_duration, load_lease, take_or_renew
 from fr.triage.model import Scope, load_judgements
 from fr.triage.scope_config import scope_id
-from fr.triage.state_ref import ref_name
+from fr.triage.state_ref import StateRefConflict, StateRefPushRefused, ref_name
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_dispatch import FakeRunner
@@ -729,3 +729,49 @@ def test_sigterm_releases_the_host_drivers_lease_and_restores_the_handler(
     assert result.exit_code != 0
     assert load_lease(state) is None, "released on SIGTERM"
     assert signal.getsignal(signal.SIGTERM) == before
+
+
+# ------------------------------------- the pass's one boundary (batch-train-truth R6)
+
+
+@pytest.mark.parametrize(
+    ("failure", "code", "cause"),
+    [
+        (lambda: StateRefConflict("another writer moved the ref"), 2, "state-ref-conflict"),
+        (lambda: StateRefPushRefused("the remote refused the push"), 2, "push-refused"),
+        (lambda: ValueError("an fr bug"), 2, "unexpected:ValueError"),
+    ],
+)
+def test_a_failed_pass_writes_its_outbox_and_exits_with_the_carried_code(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Any,
+    code: int,
+    cause: str,
+) -> None:
+    from fr.triage.driver_record import load_ledger
+
+    state = tmp_path / "state"
+    _world(world, state)
+    outbox = tmp_path / "outbox.json"
+    real = triage_batch_cmd.one_pass
+
+    def failing(driver: Any, **kw: Any) -> Any:
+        real(driver, **kw)  # the pass asked the runner for sessions, then failed
+        raise failure()
+
+    monkeypatch.setattr(triage_batch_cmd, "one_pass", failing)
+    result = _pass(state, outbox)
+
+    assert result.exit_code == code, result.output
+    assert str(failure()) in " ".join(result.output.split())
+    requests = json.loads(outbox.read_text())["requests"]
+    assert [r["item"] for r in requests] == [
+        "derio-net/super-fr/run/batch-b1",
+        "derio-net/super-fr/run/batch-b2",
+    ]
+    assert load_ledger(state).causes[cause].count == 1

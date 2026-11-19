@@ -241,9 +241,17 @@ from fr.triage.claims import Claim, expired, held_line, held_map, held_members, 
 from fr.triage.claims import stale as claim_stale
 from fr.triage.cursor import read_cursor
 from fr.triage.dedupe import candidates
+from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
+from fr.triage.driver_record import (
+    FAILURES_COMMAND,
+    FailureKind,
+    record_failure,
+    record_pass,
+    record_refusal,
+)
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.intake import (
@@ -3318,6 +3326,10 @@ class SinglePass:
     allowed: bool
 
 
+SINGLE_PASS_RESUME = "run the looping command the notice names, or add --single-pass"
+"""How the single-pass guard's refusal is resumed (spec 2026-11-19-batch-train-truth R2)."""
+
+
 def loop_command(
     *,
     batch_ids: list[str] | None,
@@ -3508,6 +3520,24 @@ def _report_read_failure(driver: _Driver, message: str, action: str) -> None:
         err_console.print(f"[yellow]warning:[/yellow] {escape(message)}; {action}", soft_wrap=True)
 
 
+class _WaitEnded(BaseException):
+    """An exception out of a wait (`_sleep`), carried past the loop's boundary untouched:
+    a wait is never a pass failure. A real sleep raises nothing but an interrupt; this is
+    how a test's sleep hook ends the loop (batch-train-truth R1)."""
+
+    def __init__(self, original: Exception) -> None:
+        super().__init__(str(original))
+        self.original = original
+
+
+def _wait(seconds: float) -> None:
+    """The loop's every wait: `_sleep`, its exceptions carried as `_WaitEnded`."""
+    try:
+        _sleep(seconds)
+    except Exception as exc:  # noqa: BLE001 - re-raised as itself past the boundary
+        raise _WaitEnded(exc) from exc
+
+
 # A wait that outlives the lease renews it this long before it would lapse (R16).
 LEASE_MARGIN = timedelta(minutes=5)
 RENEW_RETRY_S = 60
@@ -3530,7 +3560,7 @@ def wait_out(driver: _Driver, pace: Pace) -> None:
                 _report_read_failure(driver, str(exc), f"renewal retried every {RENEW_RETRY_S}s")
                 room = RENEW_RETRY_S
         chunk = left if room is None else min(left, room)
-        _sleep(chunk)
+        _wait(chunk)
         left -= chunk
 
 
@@ -3996,7 +4026,7 @@ class _Driver:
         except VisibilityUnreadable as exc:  # a looping drive skips the pass (gh#1134)
             raise ForgeReadError(str(exc), code=2) from exc
         except TriageError as exc:
-            _fail(str(exc))
+            raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
         self.leased = True
 
     def save_pass(self) -> None:
@@ -4010,7 +4040,7 @@ class _Driver:
         except VisibilityUnreadable as exc:  # the next pass pushes what this one left
             raise ForgeReadError(str(exc), code=2) from exc
         except TriageError as exc:
-            _fail(str(exc))
+            raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
 
     def warn_single_pass(self) -> None:
         """Once: the single-pass notice, when this pass planned a dispatch (R4). It is
@@ -4090,10 +4120,8 @@ class _Driver:
                 method = choose_method(
                     None, self._allowed[repo], configured=facts.config_for(repo).merge_method
                 )
-            except UnsupportedForgeOperation as exc:
-                _fail(str(exc))
             except TriageError as exc:
-                _fail(str(exc))
+                raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
             except FORGE_ERRORS as exc:
                 raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
             self._merge[repo] = MergeContext(
@@ -4114,7 +4142,7 @@ class _Driver:
         try:  # the allowed methods were read at the build: no forge read here
             ctx.method = choose_method(None, self._allowed[repo], configured=config.merge_method)
         except TriageError as exc:
-            _fail(str(exc))
+            raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
         return ctx
 
     def _base_rules(self, facts: Facts, repo: str) -> BaseRules:
@@ -4161,10 +4189,7 @@ class _Driver:
         and merging as if it had none could bypass one."""
         from fr import forgeapi
 
-        try:
-            rest = forgeapi.resolve() == "rest"
-        except forgeapi.ForgeApiError as exc:
-            _fail(str(exc))
+        rest = forgeapi.resolve() == "rest"
         by_repo: dict[str, list[QueueEntry]] = {}
         for e in queue:
             pr = live.get(e.batch.id)
@@ -4358,8 +4383,6 @@ class _Driver:
                 if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
                     stale.append(b)
             queue_reads = self._queue_reads(facts, queue, repos, live, approvals)
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
@@ -4620,8 +4643,6 @@ class _Driver:
                     )
                     first = next(b for b in due if repos.get(b.id) == repo)
                     probe(str(self._launch(facts, first, repo).runner), item, repo, first)
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         live: set[str] = set()
@@ -4781,8 +4802,6 @@ class _Driver:
                     )
                     pick = replace(pick, checks=verdict, failing=failing)
                 prs[(repo, target.wave)] = pick
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return prs, orphans
@@ -4976,7 +4995,9 @@ class _Driver:
                 runner = self.runner(name)
                 refusal = runner.preflight(probes)
                 if refusal:
-                    _fail(f"runner `{name}` refused: {refusal}")
+                    raise DriverRefusal(
+                        f"runner-refused:{name}", f"runner `{name}` refused: {refusal}"
+                    )
             found |= runner.existing_dispatches(probes)
             asked.update(p.id for p in probes)
         return frozenset(found), frozenset(asked)
@@ -5147,7 +5168,7 @@ class _Driver:
                 batch, facts.config_for(repo), orchestrator=_orchestrator(self.checkout(repo).path)
             ).launch
         except TriageError as exc:
-            _fail(str(exc))
+            raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
 
     # ------------------------------------------------------------------- execute
 
@@ -5196,8 +5217,6 @@ class _Driver:
                 client = self.client(facts, repo)
                 ensure_approval_label(client, repo, _say, seen=self._label_seen)
                 settle_approvals(client, record, repo, open_prs, _say, now=_now())
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return wrote, voided
@@ -5301,7 +5320,7 @@ class _Driver:
             self.planned_dispatch = any(a.kind == "dispatch" for a in plan.actions)
             if self.planned_dispatch and not self.single_pass.allowed:
                 self.release_lease()
-                _fail(self.single_pass.notice, code=2)
+                raise DriverRefusal("single-pass", self.single_pass.notice, SINGLE_PASS_RESUME)
         self.held_by = plan.held_by
         self._unfinished = unfinished_waves(snap)
         acted = False
@@ -5635,10 +5654,7 @@ class _Driver:
         failed write is reported, makes `--once` exit 1, and is retried next pass."""
         assert self._claims is not None
         op = ClaimOp(action.kind, action.key, action.batch or None)  # type: ignore[arg-type]
-        try:
-            result = execute(self._claims, [op], _now())
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
+        result = execute(self._claims, [op], _now())
         if result.held:
             line = held_line(op.key, result.held[0].holder, _now())
             self._held_now.setdefault(action.batch, line)
@@ -5823,8 +5839,6 @@ class _Driver:
                 writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
             )
             attempt = merge_ready(ctx, slots[0], None)
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except MergeConflictError as exc:
             line, acted = self._conflict(exc, action, facts, judgements, batch, repo)
             return _MergeOutcome(line, acted, in_flight, _stops_train(exc))
@@ -5834,7 +5848,7 @@ class _Driver:
             return _MergeOutcome(self._stopped_line(batch, action, exc), False, in_flight,
                                  _stops_train(exc))  # fmt: skip
         except TriageError as exc:
-            _fail(str(exc))
+            raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
         except FORGE_ERRORS as exc:  # a re-read of the PR or its checks; the merge's own
             # refusal is a MergeStopError above, so no write failure lands here
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
@@ -5909,8 +5923,6 @@ class _Driver:
                                  base=base, outcome="refused", detail=str(exc).strip()[:300]),
                 )  # fmt: skip
                 return f"held: PR #{n} enqueue refused: {exc}", False
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except (GitError, TriageError) as exc:
             why = f"the base could not be read ({exc}): retried next pass"
             return self._said_once(batch, action, "enqueue-base", why), False
@@ -6137,14 +6149,12 @@ class _Driver:
                 writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
             )
             attempt = update_failing(ctx, slots[0])
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except MergeConflictError as exc:
             return self._conflict(exc, action, facts, judgements, batch, repo)
         except (MergeStopError, GitError) as exc:
             return self._stopped_line(batch, action, exc), False
         except TriageError as exc:
-            _fail(str(exc))
+            raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return (
@@ -6295,16 +6305,23 @@ class _Driver:
         which case it is only recorded. A runner that refuses ends the pass."""
         runner = self.runner(name)
         if not runner.can_dispatch(item):
-            _fail(f"runner `{name}` does not take run-unit work")
+            raise DriverRefusal(
+                f"runner-no-run-unit:{name}", f"runner `{name}` does not take run-unit work"
+            )
         refusal = runner.preflight([item])
         if refusal:
-            _fail(f"runner `{name}` refused: {refusal}")
+            raise DriverRefusal(f"runner-refused:{name}", f"runner `{name}` refused: {refusal}")
         if item.id in runner.existing_dispatches([item]):
             return item.id, True
         try:
             handle = runner.dispatch(item)
         except Exception as err:  # the runner's own failure: nothing is written
-            _fail(f"runner `{name}` failed to dispatch {item.id}: {err}", code=1)
+            raise TransientPassFailure(
+                f"dispatch-failed:{name}",
+                f"runner `{name}` failed to dispatch {item.id}: {err}",
+                code=1,
+                original=err,
+            ) from err
         return handle or item.id, False
 
     def _post_merge(
@@ -6395,10 +6412,15 @@ class _Driver:
         )
         runner = self.runner(str(launch.runner))
         if not runner.can_dispatch(item):
-            _fail(f"runner `{launch.runner}` does not take run-unit work")
+            raise DriverRefusal(
+                f"runner-no-run-unit:{launch.runner}",
+                f"runner `{launch.runner}` does not take run-unit work",
+            )
         refusal = runner.preflight([item])
         if refusal:
-            _fail(f"runner `{launch.runner}` refused: {refusal}")
+            raise DriverRefusal(
+                f"runner-refused:{launch.runner}", f"runner `{launch.runner}` refused: {refusal}"
+            )
         # Recorded BEFORE the tab starts (gh#883). The runner only knows the tabs it
         # holds open: one that ran and ended before a restart is invisible to
         # `existing_dispatches`, so a close-out recorded only after `dispatch` returned
@@ -6467,10 +6489,15 @@ class _Driver:
         )  # fmt: skip
         runner = self.runner(str(launch.runner))
         if not runner.can_dispatch(item):
-            _fail(f"runner `{launch.runner}` does not take run-unit work")
+            raise DriverRefusal(
+                f"runner-no-run-unit:{launch.runner}",
+                f"runner `{launch.runner}` does not take run-unit work",
+            )
         refusal = runner.preflight([item])
         if refusal:
-            _fail(f"runner `{launch.runner}` refused: {refusal}")
+            raise DriverRefusal(
+                f"runner-refused:{launch.runner}", f"runner `{launch.runner}` refused: {refusal}"
+            )
         # The start marker, recorded BEFORE the tab starts (gh#883): it is the dedupe key,
         # never membership, which only the verb records (p6-r1).
         path = self.target / "judgements.yaml"
@@ -6643,8 +6670,6 @@ class _Driver:
                 ctx.client.pr_ready(repo, action.pr)
                 step = "refused the merge"
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except FORGE_ERRORS as exc:
             # As a refused batch-PR merge (rg-4): reported in full once per batch, head
             # and reason, merged again on a later pass; `--once` exits 1 (gh#921).
@@ -6835,7 +6860,7 @@ class _Driver:
         try:
             save_exports(path, exports, read=read)
         except TriageError as exc:
-            _fail(str(exc))
+            raise classify(exc) from exc  # the loop's boundary decides (R2, R3)
 
     def _export_failed(self, wave: str, message: str) -> str:
         """A git or forge write of the export failed (gh#1025): as a refused archive
@@ -6920,8 +6945,6 @@ class _Driver:
                         + (f"\n\n{_ignored_count(left)}" if left else "")
                     ),
                 )
-            except UnsupportedForgeOperation as exc:
-                _fail(str(exc))
             except FORGE_ERRORS as exc:
                 return self._export_failed(
                     wave, f"export wave {wave}: the forge refused the PR: {exc}"
@@ -6947,8 +6970,6 @@ class _Driver:
             if action.draft:  # a collected close-out's PR is readied once clean (R15)
                 ctx.client.pr_ready(repo, action.pr)
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
         except FORGE_ERRORS as exc:
             return self._export_failed(
                 wave, f"export PR #{action.pr}: the forge refused the merge: {exc}"
@@ -7234,78 +7255,191 @@ def _sigterm_interrupts() -> Iterator[None]:
         signal.signal(signal.SIGTERM, previous)
 
 
+@dataclass(frozen=True)
+class LoopEnd:
+    """How `_host_loop` ended (batch-train-truth R7): the exit code, and the newer fr a
+    `post_merge` installed when it stopped to restart on it (gh#998)."""
+
+    code: int = 0
+    restart_to: str | None = None
+
+
+MAX_FAILED_PASSES = 10  # consecutive failed passes before the loop stops as a refusal (R5)
+BACKOFF_CAP_S = 900  # the longest backoff, unless --interval is longer (R3)
+
+
+def backoff(interval: int, failed: int) -> int:
+    """The wait after the *failed*-th failed pass in a row: --interval, doubling, capped at
+    15 minutes or --interval when that is longer (R3)."""
+    return int(min(interval * 2 ** (failed - 1), max(BACKOFF_CAP_S, interval)))
+
+
 def _host_loop(
     driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None = None
-) -> str | None:
-    """`fr triage batch drive`'s loop around `one_pass` (the host adapter, R10). The newer
-    fr a `post_merge` installed, when the loop stopped to restart on it; else None.
+) -> LoopEnd:
+    """`fr triage batch drive`'s loop around `one_pass` (the host adapter, R10), ended by a
+    returned `LoopEnd`, never an exit (batch-train-truth R7).
     With a *pacer*, a looping drive reads the budget before each pass, waits out an
     exhausted one, and backs off a rate limit instead of retrying it (R2-R4)."""
+    try:
+        return _loop(driver, once=once, interval=interval, pacer=pacer)
+    except _WaitEnded as ended:
+        raise ended.original from None
+
+
+def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) -> LoopEnd:
+    """The loop proper. Its whole iteration (pacing wait, `wait_out`, lease renewal and
+    `one_pass`) runs inside ONE boundary (batch-train-truth R1): a failure there is
+    classified (`fr.triage.drive_errors.classify`), recorded and reported once per cause,
+    and either stops the loop (a refusal, or the tenth failed pass in a row) or ends only
+    the pass, the next one starting after `backoff`."""
     paced = pacer if pacer is not None and driver.yes and not once else None
     driver.pacer = paced
     pace: Pace | None = None
+    failed = 0  # failed passes in a row (R3, R5)
     while True:
-        if paced is not None:
-            pace = paced.before_pass()
-            if pace.kind == "wait":
-                _say(paced.line(pace))
-                wait_out(driver, pace)
-                continue
-            driver.pace = pace
-            if pace.essential:  # below the floor: the essential-only pass (R7, R13)
-                _say(paced.line(pace))
-                paced.stretch(pace.until)
         try:
-            acted, summary, blocked = one_pass(driver)
-        except ForgeReadError as exc:
-            if once or not driver.yes:
-                _fail(str(exc), code=exc.code)
-            if paced is not None and paced.limited(str(exc)):
+            if paced is not None:
+                pace = paced.before_pass()
+                if pace.kind == "wait":
+                    _say(paced.line(pace))
+                    wait_out(driver, pace)
+                    continue
+                driver.pace = pace
+                if pace.essential:  # below the floor: the essential-only pass (R7, R13)
+                    _say(paced.line(pace))
+                    paced.stretch(pace.until)
+            try:
+                acted, summary, blocked = one_pass(driver)
+            except ForgeReadError as exc:
+                if once or not driver.yes:
+                    _error(str(exc))
+                    return LoopEnd(exc.code)
+                if paced is not None and paced.limited(str(exc)):
+                    pace = paced.rate_limited()
+                    _say(paced.line(pace))
+                    if driver.restart_to is not None:
+                        return LoopEnd(0, driver.restart_to)
+                    wait_out(driver, pace)
+                    continue
+                # Like a refused merge (rg-4), a degraded forge ends neither the run nor
+                # the loop: reported once per cause, then read again (gh#910).
+                _ledger(driver, "transient", "forge-read", str(exc), type(exc).__name__)
+                _report_read_failure(driver, str(exc), f"pass skipped, retrying every {interval}s")
+                if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
+                    return LoopEnd(0, driver.restart_to)  # post_merge installed a newer fr
+                _wait(interval)
+                continue
+            failed = 0
+            driver.read_failures.clear()
+            if driver.yes and not once:
+                _driver_pass(driver)
+            if paced is not None and driver.failed_write and paced.limited():
+                # a failed write with the budget gone is the limit, not a clean pass (p1-r2)
                 pace = paced.rate_limited()
                 _say(paced.line(pace))
                 if driver.restart_to is not None:
-                    return driver.restart_to
+                    return LoopEnd(0, driver.restart_to)
                 wait_out(driver, pace)
                 continue
-            # Like a refused merge (rg-4), a degraded forge ends neither the run nor
-            # the loop: reported once per cause, then read again (gh#910).
-            _report_read_failure(driver, str(exc), f"pass skipped, retrying every {interval}s")
-            if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
-                return driver.restart_to  # post_merge installed a newer fr (gh#998)
-            _sleep(interval)
-            continue
-        driver.read_failures.clear()
-        if paced is not None and driver.failed_write and paced.limited():
-            # a failed write with the budget gone is the limit, not a clean pass (p1-r2)
-            pace = paced.rate_limited()
-            _say(paced.line(pace))
+            if paced is not None:
+                paced.clean()
+            if not driver.yes:
+                return LoopEnd(0)  # the plan of one pass, in loop mode too
+            if once:
+                driver.warn_single_pass()
+                return LoopEnd(pass_exit(driver, acted, summary))
+            if summary.done:
+                if driver.observation_owed():
+                    continue  # the last wave's transition is seen only by one more pass
+                return LoopEnd(0)
             if driver.restart_to is not None:
-                return driver.restart_to
-            wait_out(driver, pace)
-            continue
-        if paced is not None:
-            paced.clean()
-        if not driver.yes:
-            return None  # the plan of one pass, in loop mode too
-        if once:
-            driver.warn_single_pass()
-            code = pass_exit(driver, acted, summary)
-            if code:
-                raise typer.Exit(code=code)
-            return None
-        if summary.done:
-            if driver.observation_owed():
-                continue  # the last wave's transition is seen only by one more pass
-            return None
-        if driver.restart_to is not None:
-            return driver.restart_to
-        if summary.stalled:
-            _say(_stalled_line(blocked, driver.held_by))
-            raise typer.Exit(code=3)
-        if pace is not None and pace.essential and pace.until is not None:
-            wait_out(driver, Pace("wait", pace.until, "below floor"))  # 4x, lease-safe (R16)
-            continue
-        _sleep(interval)
+                return LoopEnd(0, driver.restart_to)
+            if summary.stalled:
+                _say(_stalled_line(blocked, driver.held_by))
+                return LoopEnd(3)
+            if pace is not None and pace.essential and pace.until is not None:
+                wait_out(driver, Pace("wait", pace.until, "below floor"))  # 4x, lease-safe (R16)
+                continue
+            _wait(interval)
+        except Exception as exc:  # noqa: BLE001 - THE boundary: every failure is classified
+            failure = classify(exc)
+            if once or not driver.yes:  # R6: today's exit code, from the carried code
+                if failure.message:
+                    _error(failure.message)
+                if driver.yes:
+                    _ledger_failure(driver, failure)
+                return LoopEnd(failure.code)
+            failed += 1
+            if isinstance(failure, TransientPassFailure) and failed >= MAX_FAILED_PASSES:
+                failure = DriverRefusal(
+                    failure.cause,
+                    f"{MAX_FAILED_PASSES} passes in a row failed, the last with: "
+                    f"{failure.message or failure.cause}",
+                )
+            if isinstance(failure, DriverRefusal):
+                _stop(driver, failure)
+                return LoopEnd(failure.code)
+            _ledger_failure(driver, failure)
+            wait = backoff(interval, failed)
+            if failure.cause not in driver.read_failures:
+                driver.read_failures.add(failure.cause)
+                said = f"{escape(failure.message)} " if failure.message else ""
+                err_console.print(
+                    f"[yellow]warning:[/yellow] {said}({failure.cause}); the pass ended, "
+                    f"its state kept; the next pass in {wait}s",
+                    soft_wrap=True,
+                )
+            if driver.restart_to is not None:
+                return LoopEnd(0, driver.restart_to)
+            _wait(wait)
+
+
+def _error(message: str) -> None:
+    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
+
+
+def _ledger(driver: _Driver, kind: FailureKind, cause: str, message: str, exc: str) -> None:
+    """Count one failure in the scope's ledger (R9). The ledger is a record, never a reason
+    to fail: a write that fails is one warning."""
+    try:
+        record_failure(driver.target, kind, cause, message, _now(), __version__, exception=exc)
+    except (OSError, TriageError) as err:
+        _report_read_failure(driver, f"the driver failure ledger: {err}", "not recorded")
+
+
+def _ledger_failure(driver: _Driver, failure: DriverRefusal | TransientPassFailure) -> None:
+    kind: FailureKind = "refusal" if isinstance(failure, DriverRefusal) else "transient"
+    original = failure.original if isinstance(failure, TransientPassFailure) else None
+    exc = type(original if original is not None else failure).__name__
+    _ledger(driver, kind, failure.cause, failure.message, exc)
+
+
+def _driver_pass(driver: _Driver) -> None:
+    """A looping driver's clean pass, on `driver.yaml` (R8, R14)."""
+    try:
+        record_pass(driver.target, _now())
+    except (OSError, TriageError) as err:
+        _report_read_failure(driver, f"the driver record: {err}", "not recorded")
+
+
+def _stop(driver: _Driver, refusal: DriverRefusal) -> None:
+    """A refusal ends the looping driver (R8): recorded on `driver.yaml` and in the ledger,
+    the board rendered once to show it, and the stop said with how to resume and file it."""
+    _ledger_failure(driver, refusal)
+    try:
+        record_refusal(driver.target, refusal.cause, refusal.message, refusal.resume, _now(),
+                       __version__)  # fmt: skip
+    except (OSError, TriageError) as err:
+        _report_read_failure(driver, f"the driver record: {err}", "not recorded")
+    if refusal.message:
+        _error(refusal.message)
+    driver._write_board()
+    err_console.print(
+        f"[red]driver stopped[/red] ({refusal.cause}); resume: {escape(refusal.resume)}; "
+        f"track it: {FAILURES_COMMAND}",
+        soft_wrap=True,
+    )
 
 
 @batch_app.command("drive")
@@ -7397,21 +7531,21 @@ def batch_drive_command(
         lease=_host_lease(scope, target, interval) if yes else None,
         single_pass=guard,
     )
-    restart: str | None = None
+    end = LoopEnd(0)
     with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
         try:
             with _sigterm_interrupts():
-                restart = _host_loop(driver, once=once, interval=interval, pacer=pacer)
+                end = _host_loop(driver, once=once, interval=interval, pacer=pacer)
         except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
             driver.release_lease()
             raise
-        except typer.Exit as stop:
-            if once:
-                driver.warn_single_pass()
-            if stop.exit_code != 2:  # a clean stop; a refusal keeps what it found
-                driver.release_lease()
-            raise
-        driver.release_lease()
+        if once:
+            driver.warn_single_pass()
+        if end.code != 2:  # a clean stop; a refusal keeps what it found
+            driver.release_lease()
+    if end.code:
+        raise typer.Exit(code=end.code)
+    restart = end.restart_to
     if restart is not None:
         # A `post_merge` installed a newer fr: this process still runs the code it
         # imported, which reads the state and config the new one writes (gh#998,

@@ -60,6 +60,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.driver_record import DriverRecord, stopped, stopped_line
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
@@ -187,7 +188,7 @@ class Need:
     #   (a collected close-out PR the driver will not merge unasked, R15)
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
-    # | archive-conflict
+    # | archive-conflict | driver-stopped (a looping driver stopped on a refusal, R8)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -207,6 +208,7 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "archive-conflict": "Archive PR conflict",
+    "driver-stopped": "Driver stopped",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
     "gated-unread": "Gate labels unread",
@@ -281,12 +283,16 @@ def needs_you(
     *,
     ci_none: Collection[str] = (),
     stops: Mapping[str, MergeStop] | None = None,
+    driver: DriverRecord | None = None,
+    last_pass: datetime | None = None,
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
     (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is.
     *stops* are the driver's recorded merge stops (`merge_stops.load_stops`): a
-    conflicting export PR's, keyed `export:<repo>`, is a row (merge-truth R12)."""
+    conflicting export PR's, keyed `export:<repo>`, is a row (merge-truth R12). *driver*
+    is the scope's `driver.yaml` and *last_pass* the lease's: a refusal newer than the last
+    pass is a stopped driver, the first row (batch-train-truth R8)."""
     snap = drive_snapshot(facts, judgements, ci_none=ci_none)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
@@ -295,6 +301,8 @@ def needs_you(
         for found in found_all
     }  # fmt: skip
     out: list[Need] = []
+    if (refusal := stopped(driver, last_pass)) is not None:
+        out.append(Need("driver-stopped", refusal.cause, stopped_line(refusal), None))
 
     # The approval gate (merge-train-safety §A, R5): a green batch PR, draft or not,
     # merges only once the operator labels it; a voided label is asked for again.

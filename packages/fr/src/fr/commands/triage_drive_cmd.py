@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any, Literal, NoReturn
 
 import typer
 from rich.markup import escape
@@ -39,6 +39,7 @@ from fr.commands.triage_cmd import (
     resolve_state_dir,
     triage_app,
 )
+from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
 from fr.triage.errors import TriageError
 from fr.triage.lease import (
     DEFAULT_INTERVAL_MIN,
@@ -598,6 +599,13 @@ def drive_pass_command(
         _write_outbox(outbox, driver.outbox())
         console.print(pacer.line(pacer.rate_limited()), markup=False, soft_wrap=True)
         raise typer.Exit(code=3) from exc
+    except Exception as exc:  # noqa: BLE001 - the pass's one boundary (batch-train-truth R6)
+        failure = classify(exc)
+        _write_outbox(outbox, driver.outbox())  # what the pass asked so far is still owed
+        _record_failure(target, failure)
+        if failure.message:
+            err_console.print(f"[red]error:[/red] {escape(failure.message)}", soft_wrap=True)
+        raise typer.Exit(code=failure.code) from exc
     pacer.clean()
     if newer is not None:
         _stop_superseded(outbox, newer, generation, "it drove nothing")
@@ -617,6 +625,25 @@ def drive_pass_command(
     code = batch.pass_exit(driver, acted, summary)
     if code:
         raise typer.Exit(code=code)
+
+
+def _record_failure(target: Path, failure: DriverRefusal | TransientPassFailure) -> None:
+    """Count the pass's failure in the scope's ledger (R9); a ledger that cannot be written
+    is a warning, never the pass's exit."""
+    from fr import __version__
+    from fr.triage.driver_record import record_failure
+
+    kind: Literal["refusal", "transient"] = (
+        "refusal" if isinstance(failure, DriverRefusal) else "transient"
+    )
+    original = failure.original if isinstance(failure, TransientPassFailure) else None
+    exc = type(original if original is not None else failure).__name__
+    try:
+        record_failure(target, kind, failure.cause, failure.message, _now(), __version__,
+                       exception=exc)  # fmt: skip
+    except (OSError, TriageError) as err:
+        warning = f"the driver failure ledger: {escape(str(err))}"
+        err_console.print(f"[yellow]warning:[/yellow] {warning}", soft_wrap=True)
 
 
 @drive_app.command("record")
@@ -701,3 +728,107 @@ def _record(target: Path, outbox: Path, result: Path) -> None:
             _fail(f"no pending request is named {', '.join(unknown)}; the rest were recorded")
     _write_outbox(outbox, [])
     console.print(f"recorded {len(results) + len(mine)} result(s)", markup=False)
+
+
+def make_failures_client(repo: str, host: str = "github.com") -> Any:
+    """The forge adapter `drive failures --file` writes through (§3.J); tests replace it."""
+    from fr.hostclient import client_for_url
+
+    return client_for_url(f"https://{host}/{repo}")
+
+
+def failure_policy(client: Any, repo: str, checkout: Path | None) -> Any:
+    """*repo*'s forge policy (R9 of repo-feature-settings): its clone's when given (the
+    settings and `tracking: none`), else its `.fr/settings.yaml` read through the forge."""
+    from fr.settings.remote import local_policy, remote_policy
+
+    return local_policy(checkout) if checkout is not None else remote_policy(client, repo)
+
+
+def _failures_host(target: Path, repo: str) -> str:
+    """The forge host of *repo*, from the scope's collected facts when they name it."""
+    from urllib.parse import urlparse
+
+    from fr.triage.model import load_facts
+
+    try:
+        facts = load_facts(target / "facts.json")
+    except (OSError, TriageError, ValueError):
+        return "github.com"
+    for issue in facts.issues:
+        if issue.repo.lower() == repo.lower() and (host := urlparse(issue.url).hostname):
+            return host
+    return "github.com"
+
+
+@drive_app.command("failures")
+def drive_failures_command(
+    file: Annotated[
+        bool, typer.Option("--file", help="File one issue per cause that has none.")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="With --file: write; else the plan.")] = False,
+    checkout: Annotated[
+        Path | None,
+        typer.Option("--checkout", help="The target repo's clone: its policy, tracking included."),
+    ] = None,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """The wave driver's failure ledger, most frequent cause first (batch-train-truth R10).
+
+    With --file --yes, one issue per cause in the scope's state repo (else the scope's own
+    repo): filed once, commented when its count grew, filed anew when it recurred after its
+    issue closed. Its labels, marker and counts are written; the message never is."""
+    from fr.settings import SettingsError
+    from fr.triage.driver_failures import file_failures
+    from fr.triage.driver_record import load_ledger, save_ledger
+    from fr.triage.scope_config import load_durable
+
+    if yes and not file:
+        _fail("--yes only applies with --file")
+    scope = triage_cmd._scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    try:
+        ledger = load_ledger(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    if not ledger.causes:
+        console.print("no driver failures recorded", markup=False)
+    for cause, entry in ledger.by_count():
+        console.print(
+            f"{entry.count:>5}  {cause}  ({entry.kind}, last {entry.last.isoformat()}, "
+            f"fr {entry.fr_version}, issue {entry.issue or '-'})",
+            markup=False,
+            soft_wrap=True,
+        )
+        console.print(f"       {entry.message}", markup=False, soft_wrap=True)
+    if not file or not ledger.causes:
+        return
+    try:
+        state_repo = load_durable(target).state_repo
+    except TriageError as exc:
+        _fail(str(exc))
+    if state_repo is not None:
+        where = state_repo
+    elif scope.kind == "repo":
+        where = scope.target
+    else:
+        _fail(
+            f"the {scope.kind} scope {scope.name} has no state repo, so there is no one repo "
+            "to file its driver failures in: choose one at `fr triage collect`, or file them by "
+            "hand from the list above"
+        )
+    client = make_failures_client(where, _failures_host(target, where))
+    try:
+        policy = failure_policy(client, where, checkout)
+    except SettingsError as exc:
+        _fail(str(exc))
+    filing = file_failures(ledger, client, where, policy, write=yes)
+    for line in filing.lines:
+        console.print(line, markup=False, soft_wrap=True)
+    if not yes:
+        console.print("nothing written: add --yes to file", markup=False)
+    if filing.changed:
+        save_ledger(target, ledger)

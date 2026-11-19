@@ -1,3 +1,4 @@
+# ruff: noqa: F811 - pytest fixtures imported from the sibling test modules
 """The looping driver's pass boundary (spec 2026-11-19-batch-train-truth R1-R7).
 
 `fr.triage.drive_errors.classify` sorts every failure into a driver refusal (only the
@@ -24,6 +25,13 @@ from fr.triage.gitseam import GitError
 from fr.triage.lease import Lease, LeaseExpired, LeaseHeld
 from fr.triage.privacy import PrivacyError
 from fr.triage.state_ref import StateRefConflict, StateRefPushRefused
+
+from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
+    _sandbox,
+    checkout_fixture,
+    world_fixture,
+)
+from tests.unit.test_triage_driver_pass import clock, remote, runners, visibility  # noqa: F401
 
 NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
 _LEASE = Lease(holder="x:host:1", started=NOW, expires=NOW)
@@ -153,7 +161,7 @@ class StubDriver:
     def take_lease(self) -> None:
         self.renewed += 1
 
-    def write_board(self) -> None:
+    def _write_board(self) -> None:
         self.boards += 1
 
 
@@ -212,11 +220,11 @@ def test_a_persistent_failure_is_reported_once_and_backs_off_to_its_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float],
     capsys: pytest.CaptureFixture[str],
 ) -> None:  # fmt: skip
-    failures = [StateRefPushRefused("refused") for _ in range(8)]
+    failures = [StateRefPushRefused("the remote said no") for _ in range(8)]
     _script(monkeypatch, *failures, True)
     assert _loop(StubDriver(tmp_path), interval=60) == triage_batch_cmd.LoopEnd(0)
     assert sleeps == [60, 120, 240, 480, 900, 900, 900, 900]
-    assert capsys.readouterr().err.count("refused") == 1
+    assert capsys.readouterr().err.count("the remote said no") == 1
 
 
 def test_the_backoff_cap_is_the_interval_when_that_is_longer(
@@ -278,7 +286,9 @@ def test_a_renewal_that_fails_inside_wait_out_is_classified_not_a_traceback(
     from fr.triage.quota import Pace
 
     class Leased(StubDriver):
-        leased = True
+        def __init__(self, target: Path) -> None:
+            super().__init__(target)
+            self.leased = True
 
         def take_lease(self) -> None:
             raise LeaseHeld("held by another driver", _LEASE)
@@ -352,3 +362,68 @@ def test_keyboard_interrupt_passes_through_the_boundary(
     _script(monkeypatch, KeyboardInterrupt())
     with pytest.raises(KeyboardInterrupt):
         _loop(StubDriver(tmp_path))
+
+
+# ------------------------------------------- a refused push, with the real driver (R3)
+
+
+def test_a_refused_push_mid_loop_is_pushed_by_the_next_pass_with_no_event_twice(
+    tmp_path: Path,
+    world: Any,
+    checkout: Any,
+    runners: Any,
+    clock: list[Any],
+    remote: Path,
+    visibility: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+
+    import yaml
+    from fr.cli import app
+    from fr.triage.scope_config import scope_id
+    from fr.triage.state_ref import ref_name
+    from typer.testing import CliRunner
+
+    from tests.unit.test_triage_batch_drive_cmd import REPO, _naps_until
+    from tests.unit.test_triage_batch_drive_cmd import _StopError as StopLoop
+    from tests.unit.test_triage_driver_pass import SCOPE, _workspace, _world
+
+    _, state = _workspace(tmp_path, "a")
+    _world(world, state)
+    (state / "scope-durable.yaml").write_text(f"state_repo: {REPO}\n")
+    pushes: list[int] = []
+    real = triage_batch_cmd.push_now
+
+    def push(scope: Any, target: Path) -> Any:
+        pushes.append(1)
+        if len(pushes) == 2:  # the first pass's save: nothing on the remote moved
+            raise StateRefPushRefused("the proxy answered HTTP 403")
+        return real(scope, target)
+
+    monkeypatch.setattr(triage_batch_cmd, "push_now", push)
+    naps = _naps_until(monkeypatch, 2)
+    result = CliRunner().invoke(
+        app, ["triage", "batch", "drive", "--yes", "--interval", "30", "--repo", REPO,
+              "--dir", str(state)],
+    )  # fmt: skip
+
+    assert isinstance(result.exception, StopLoop), result.output
+    assert " ".join(result.output.split()).count("the proxy answered HTTP 403") == 1
+    assert naps == [30, 30]
+    assert len(pushes) >= 4  # the second pass renewed and saved, both pushed
+    head = subprocess.run(
+        ["git", "rev-parse", ref_name(scope_id(SCOPE))], cwd=remote, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()  # fmt: skip
+    pushed = yaml.safe_load(
+        subprocess.run(["git", "show", f"{head}:judgements.yaml"], cwd=remote, check=True,
+                       capture_output=True, text=True).stdout
+    )  # fmt: skip
+    for batch in pushed["batches"]:
+        kinds = [e["kind"] for e in batch.get("events") or []]
+        assert kinds.count("dispatch") <= 1, (batch["id"], kinds)
+    assert any(
+        "dispatch" in [e["kind"] for e in b.get("events") or []]
+        for b in pushed["batches"] if b["id"] == "b1"
+    ), "the first pass's dispatch reached the remote with the second pass's push"  # fmt: skip

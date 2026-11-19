@@ -62,6 +62,7 @@ from fr.triage.check import clearing_rule
 from fr.triage.components import pages_present, refresh_navs, skew_banner, strip_nav
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
+from fr.triage.driver_record import stopped, stopped_line, view_inputs
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.kanban import BoardStatus, build_board
@@ -412,6 +413,8 @@ def write_board(
     if (labels_note := in_progress_note(facts, scope_args)) is not None:
         notes.append(labels_note)
     notes.extend(gated_notes(facts))
+    if (refusal := stopped(*view_inputs(target))) is not None:  # batch-train-truth R8
+        notes.insert(0, stopped_line(refusal))
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,

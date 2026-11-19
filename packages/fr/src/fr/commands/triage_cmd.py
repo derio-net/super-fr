@@ -51,6 +51,7 @@ from fr.triage.collect import (
     collect_facts_counted,
 )
 from fr.triage.components import pages_present, refresh_navs
+from fr.triage.driver_record import view_inputs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.merge_stops import load_stops
@@ -1083,7 +1084,7 @@ def render_command(
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
         session_notes=noted, ci_none=local_ci_none(facts), stops=load_stops(target_dir),
-        present=pages_present(target_dir, "backlog"),
+        present=pages_present(target_dir, "backlog"), driver=view_inputs(target_dir),
     )  # fmt: skip
     write_text_atomic(out, page)
     refresh_navs(target_dir, "backlog", warn=warn_nav)
