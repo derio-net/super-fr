@@ -181,4 +181,6 @@ strategy: candidate
 
 ## Implementation Plans
 
-- (written at `plan`)
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-19-consumer-followups | `derio-net/super-fr` | `2026-11-19-consumer-followups` | — |

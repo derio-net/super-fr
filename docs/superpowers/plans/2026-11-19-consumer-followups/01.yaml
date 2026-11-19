@@ -1,0 +1,174 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Gates follow the session; Gitea matrix keeps no token; tea names a login
+    page (R1-R7)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-gates-session-directory
+  - gitea-matrix-no-persisted-token
+  - tea-fail-soft-login-page
+  tier: hard
+  files:
+  - packages/fr-opencode-plugin/src/**
+  - packages/fr-opencode-plugin/test/**
+  - packages/fr-opencode-plugin/README.md
+  - packages/fr/src/fr/acceptance/scaffold.py
+  - packages/fr/src/fr/tea.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/ops/gate.py
+  - tests/unit/**
+  - tests/fixtures/acceptance_scaffold/**
+  - docs/**
+  - .changes/feat-batch-consumer-followups.yaml
+  - docs/acceptance/features/2026-11-19-consumer-followups.yaml
+  estimate_lines: 550
+tasks:
+- number: 1
+  title: Change fragment
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `.changes/feat-batch-consumer-followups.yaml` with `bump: patch` and `summary: OpenCode isolation gates judge in the session's own directory; the scaffolded Gitea acceptance workflow no longer persists gitea.token; Gitea reads name an SSO login page instead of reading it as absent.` Commit.
+- number: 2
+  title: Session-directory resolver for the gates (R4)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in packages/fr-opencode-plugin/test/ (a new `session.test.ts`, using `fake.ts`'s helpers where they fit) test a new exported resolver in `src/session.ts`, e.g. `createSessionDirectoryResolver({session, fallback, timeoutMs, cache})` returning `(sessionID) => Promise<string>`: (a) a lookup answering `{id, location: {directory: D}}` returns D and a second call for the same id does NOT call `get` again (cached); (b) a throwing `get`, an answer whose `id` differs, an answer with no/empty `location.directory`, and a `get` that never resolves (timeoutMs small, e.g. 20) each return the fallback, and the next call calls `get` again (not cached); (c) a child session (answer with `parentID`) returns ITS OWN directory; (d) the resolver never rejects. Run `bun test test/session.test.ts` in packages/fr-opencode-plugin: fails (no export).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement the resolver in `src/session.ts`: `Promise.race` of `session.get({sessionID})` against a timer of `timeoutMs` (default 2000, per spec R4), clearing the timer; cache only a found directory, in a module-level Map shared across plugin reloads the way `sharedClaimed()` (claim.ts:58) and `sharedServed()` (nag.ts:74) share theirs (export a `sharedSessionDirectories()`); everything wrapped so it never throws. Reuse `sessionDirectory(info, fallback)` for the field read. Comment: the gates follow the session (gh#1371, #1552). `bun test test/session.test.ts` green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: if bind.ts's `parentInfo` id-check duplicates the resolver's, leave bind's child rule intact (spec §A) and only share what is identical; otherwise record `refactor: {P1.T2: "<why>"}` in the step record.
+- number: 3
+  title: Shell gate, edit gate and sentinel use the session's directory (R1-R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: extend the plugin tests (index.test.ts / wiring.test.ts / plugin.test.ts, whichever drive `setup` with a fake ctx — read them first) with a fake ctx whose `location.directory` is repo A (a temp git repo, fr-enabled: a `docs/superpowers/plans/` dir, no marker) and whose `session.get` answers repo B's path for the event's session: (a) shell gate: a pipeline sentinel armed for B and a base-clone command with no `workdir` is refused judged in B; a relative `workdir` resolves against B (assert via the cwd decideShell/decidePush receive, or an observable refusal); (b) edit gate: a `write` with a RELATIVE filePath is judged in B (refused in B's base clone, allowed when B holds a valid marker); (c) the unresolvable-patch probe (`patch` text with no `*** ... File:` line) is judged in B; (d) sentinel: a completed pipeline `skill` call writes the sentinel with `repo_root` = B; (e) fallback: `get` throwing → every case judged in A, as today. Existing gate tests stay unchanged. `bun test`: the new cases fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in `src/index.ts` setup, build one resolver (fallback `ctx.location.directory`, `sharedSessionDirectories()`); in `execute.before`, after `claimChild`, `const here = await resolveDir(event.sessionID)` and pass `here` to `shellCwd(here, input.workdir)` and `gate(here, event)`; in `execute.after`, pass it to `writePipelineSentinel(event, here)`. A non-string/empty sessionID uses the fallback with no lookup. Update the header comment block (sentinel/guard lines) to say the gates judge in the session's directory (#1552). Full `bun test` in packages/fr-opencode-plugin green; `bunx tsc --noEmit` (or the package's typecheck script in package.json) clean.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: remove any now-dead use of the plugin directory in index.ts's gate paths; keep unbind on the plugin directory (consumer-delivery R7) and say so in its comment if not already. Re-run `bun test`.
+- number: 4
+  title: Gitea matrix checkout persists no credential (R5)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_acceptance_scaffold_publish.py (or the scaffold test that already parses rendered workflows), add a test that renders `render_workflow("gitea-actions", ...)` for every debt/pages combination it supports, parses it with yaml, and asserts every `actions/checkout` step in every job has `with.persist-credentials: false`. Fails today on the matrix job (scaffold.py:239).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `persist-credentials: false` after `fetch-depth: 0` in `WORKFLOW_TEMPLATE_GITEA`'s matrix checkout (scaffold.py:239-241), same indentation and comment style as the GitHub template (:155-157). Regenerate `tests/fixtures/acceptance_scaffold/gitea-actions.golden` and `gitea-actions.published.golden` the way their test documents (read the test for its regeneration switch; otherwise write the rendered output); `git diff` shows exactly the one added line in each. Run `uv run pytest -q --no-cov tests/unit/test_acceptance_scaffold_publish.py tests/unit/test_acceptance_scaffold_debt_jobs.py tests/unit/test_acceptance_refresh_ci.py`: green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: none expected (one template line); record `refactor: {P1.T4: "one template line and its goldens"}` in the step record.
+- number: 5
+  title: tea fail-soft sites re-raise a named login page (R6)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: in tests/unit/test_forge_sso_html.py (reuse its `sso_login_page.html` fixture and `_html_everywhere` style), add one test parametrised over the six RealTeaClient methods (`list_linked_prs`, `pr_status_by_url`, `default_branch`, `pr_for_branch`, `file_exists`, `list_dir`) with their arguments, run with `tea api -i` answering (i) the HTML login page with `HTTP/2 200` and (ii) a `HTTP/2 302` with a `location:` header to a login URL (RFC 2606 host, e.g. `https://sso.example.com/login`): each raises `TeaError` naming the cause. Add a second parametrised test: a non-login TeaError (e.g. `HTTP/2 404` JSON `{"message":"not found"}`, and a non-zero tea exit) keeps each site's empty answer (`[]`, `None`, `None`, `None`, `False`, `[]`). Add unit tests for a new `fr.tea.names_login_page(err)`: true for both forms, false for a 404. Fails today.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: in `fr/tea.py` add a module constant for the 3xx redirect refusal's fixed text (used by `api_result`, :103-107) and `names_login_page(err: TeaError) -> bool` (true when `forge_body.names_login_page(str(err))` or the message carries that constant). In `real_teaclient.py` change each of the six `except _tea.TeaError:` sites (:84, :128, :274, :295, :326, :333) to `except _tea.TeaError as exc: if _tea.names_login_page(exc): raise` then the existing empty return; update the docstrings that say "fails soft"/"any error" to name the exception. The pytest run of tests/unit/test_forge_sso_html.py, tests/unit/test_real_teaclient.py, tests/unit/test_tea*.py is green.
+- number: 6
+  title: Callers report the raised login page as a refusal (R7)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: (a) a test of `fr.ops.gate.Gate.default` (find the existing ops gate tests under tests/unit, e.g. `grep -l "Gate(" tests/unit/test_ops_gate*.py`) with a forge whose `default_branch` raises `TeaError("HTTP 200 with <the login-page cause>")`: `Gate.default` raises `StageFailed` with code 2 whose text names the cause (today a raw TeaError escapes). (b) a test that the isolation lifecycle's default-branch read (`isolation/local.py:3024-3031`) with a tea client raising the login page refuses with `_forge_refused`'s IsolationError naming the cause instead of returning "main" (find the existing test of that path: `grep -rn "_forge_refused\|default_branch" tests/unit/test_isolation*.py`; extend it). (b) may already pass once T5 lands; then it is a pin, not a red, and say so in the step note.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: in `ops/gate.py` `Gate.default` (:330-345) wrap `self.forge.default_branch(...)` in `try/except FORGE_ERRORS as exc` (import from `fr.hostclient`) raising `StageFailed(f"cannot read the default branch from the forge: {exc}", code=2) from exc`. Tests green.
+- number: 7
+  title: Docs, acceptance rows and the full gate
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      Run `uv run fr docs check --base origin/main`; for each page it names, edit the page if what it says changed (the OpenCode plugin page if it says the gates judge in the plugin's directory; the acceptance page on the Gitea workflow; fr-devops-gate on the refusal), else update its `reviewed:` stamp with a dated note saying it is still true. Re-run until exit 0.
+  - id: P1.T7.S2
+    text: |-
+      Move the three rows (opencode-gates-session-directory, gitea-matrix-no-persisted-token, tea-fail-soft-login-page) to `ci` with their level refs, through the step record's `acceptance:` section or `uv run fr acceptance set-status --id <row> --status ci --level unit=derio-net/super-fr:<test path>#<test name> --notes "<why>"` (bun tests are run in CI by the opencode-plugin-test job; anchor them by test name). `uv run fr acceptance check` green.
+  - id: P1.T7.S3
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the mypy command from AGENTS.md, `bun test` in packages/fr-opencode-plugin, and LAST, after the final code commit, the full suite `uv run pytest -q --no-cov -n auto > <host-visible log outside the repo> 2>&1`; all green. Commit, `uv run fr push`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
