@@ -59,6 +59,14 @@
 // Each of those modules carries its own `super-fr-parity:` marker, on the
 // handler it credits; parity.yaml declares their OpenCode cells.
 //
+// The shell gate, the push guard, the edit gate and the sentinel judge in the
+// SESSION's directory — the `location.directory` of the session the event names,
+// looked up once per session (./session) — never the plugin's, because one
+// OpenCode server can hold sessions in another checkout (gh#1371, #1552). Claude
+// Code's hooks read the session's `cwd` from the hook input, so the two now agree.
+// A failed lookup falls back to the plugin's directory. Unbind alone stays in the
+// plugin's directory (consumer-delivery R7): a deleted session has nothing to ask.
+//
 // EXPORT DISCIPLINE: this module's only export is the default definition.
 // Helpers live in ./marker, ./idle, ./claim, ./pin, ./sentinel, ./guard,
 // ./push, ./nag, ./bind, ./rules and ./spawn.
@@ -77,6 +85,7 @@ import { createPinHandler, type ShellCreateEvent } from "./pin";
 import { decidePush } from "./push";
 import { createRulesHandler } from "./rules";
 import { writePipelineSentinel } from "./sentinel";
+import { createSessionDirectoryResolver, sharedSessionDirectories } from "./session";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. The shell tool (`shell` in OpenCode 2,
@@ -271,30 +280,38 @@ const plugin: Plugin.Plugin = {
     const exportPin = createPinHandler();
     const idle = createIdleHandler({ session: ctx.session, directory, actedOn: sharedActedOn() });
     const bind = createBindHandler({ session: ctx.session, directory });
+    // Unbind stays in the plugin's directory (consumer-delivery R7).
     const unbind = createUnbindHandler({ directory });
     const rules = createRulesHandler({ rulesDir: join(dirname(fileURLToPath(import.meta.url)), "rules") });
     const nag = createNagHandler({ session: ctx.session, directory, served: sharedServed() });
+    // Where the gates judge: the event's session's own directory, else the plugin's.
+    const sessionDir = createSessionDirectoryResolver({
+      session: ctx.session,
+      fallback: directory,
+      cache: sharedSessionDirectories(),
+    });
 
     await ctx.tool.hook("execute.before", async (event) => {
       // Before the gate, and whatever the tool: a child's first call of ANY
       // kind is the earliest moment it can be named. Neither throws.
       await claimChild(event);
+      const here = await sessionDir(event.sessionID);
       if (event.tool === "shell") {
         // The shell gate decides on the WHOLE command line, before any path
         // inspection (R3); a refusal rejects this call alone.
         const input = (event.input ?? {}) as { command?: unknown; workdir?: unknown };
         const command = typeof input.command === "string" ? input.command : "";
-        const cwd = shellCwd(directory, input.workdir);
+        const cwd = shellCwd(here, input.workdir);
         const refusal = decideShell(command, cwd, event.sessionID);
         if (refusal) throw new Error(refusal);
         const pushRefusal = await decidePush(command, cwd, event.sessionID);
         if (pushRefusal) throw new Error(pushRefusal);
       }
-      await gate(directory, event);
+      await gate(here, event);
     });
     await ctx.tool.hook("execute.after", async (event) => {
       // Neither throws: they follow a call that already ran.
-      writePipelineSentinel(event, directory);
+      writePipelineSentinel(event, await sessionDir(event.sessionID));
       await bind(event);
     });
     await ctx.session.hook("context", async (event) => {
