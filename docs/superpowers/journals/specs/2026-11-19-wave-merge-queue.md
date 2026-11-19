@@ -375,3 +375,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p7 created=2026-11-19T22:27:58+00:00 decided_by=agent -->
 ### phase-split-2026-11-19-wave-merge-queue-p7 · decision · ask: the operator's view and leaving a wave (R25, R28, R29)
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-wave-merge-queue-p1 created=2026-11-19T22:28:01+00:00 decided_by=agent -->
+### tier-2026-11-19-wave-merge-queue-p1 · decision · hard: changes the approval gate every merge path relies on (head SHA to patch-id) and the judgements schema
