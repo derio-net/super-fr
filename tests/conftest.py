@@ -10,6 +10,7 @@ import pytest
 
 from tests.unit.fixture_templates import (
     FixtureTemplates,
+    build_paths,
     forget_baseline,
     home_sandbox,
     note_baseline,
@@ -290,7 +291,7 @@ def fixture_templates(
     home = tmp_path_factory.mktemp("template-home")
     factory = FixtureTemplates(
         tmp_path_factory.mktemp("templates"),
-        home_sandbox(home, OPERATOR_GIT_IDENTITY, OPERATOR_HOME),
+        {**home_sandbox(home, OPERATOR_GIT_IDENTITY, OPERATOR_HOME), **build_paths(home)},
     )
     install_templates(factory)
     yield factory

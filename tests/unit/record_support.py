@@ -156,6 +156,13 @@ def _build_started_run(directory: Path) -> dict[str, object]:
     brief = _drive_to_implement(root, RUN, "feat/rec", "docs/spec.md", PLAN_REL)
     assert (brief["step"], brief["item"]) == ("implement-phase", "phase/1"), brief
     commit_all(root, "cursor")
+    # the self-check: a template built wrong fails here, naming itself (review p2-r1)
+    from fr.run import units
+    from fr.run.model import load_run_state
+
+    state = load_run_state(root, RUN)
+    assert units.last_attempt(state, "phase/1/implement-phase") is not None, "not briefed"
+    assert git(root, "status", "--porcelain").strip() == "", "the template tree is dirty"
     return brief
 
 

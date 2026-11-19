@@ -497,6 +497,8 @@ def _build_at_spec_review(tmp_path: Path) -> None:
         out = fr(root, argv)
         assert out.exit_code == 0, (argv, out.output)
     commit_all(root, "at spec-review")
+    # the self-check: a template built wrong fails here, naming itself (review p2-r1)
+    assert load_run_state(root, RUN).steps["spec-review"].state == "running", "no spec-review"
 
 
 def _at_spec_review(

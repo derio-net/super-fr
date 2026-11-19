@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+from _pytest.monkeypatch import notset
 from fr.isolation.marker import valid_workspace
+from fr.run.code_tree import newest_code_mtime
 
 from tests.conftest import OPERATOR_HOME
+from tests.unit import fixture_templates as ft
 from tests.unit import record_support
+from tests.unit.fixture_templates import TemplateBuildError
 from tests.unit.record_support import LAST_BRIEF, RUN, fr, git, snapshot, started_run
 
 
@@ -146,3 +153,186 @@ def test_a_template_is_built_without_the_patches_of_the_test_that_asked_for_it(
     assert _Probe.value == "patched by this test"
     assert os.environ["TEMPLATE_PROBE_ENV"] == "patched by this test"
     assert os.environ["TEMPLATE_PROBE_ITEM"] == "x"
+
+
+# ── review p2-r1: a template is checked after it is built ───────────────
+
+
+def _repo_with_worktree(directory: Path, *, remotes: tuple[str, ...] = ()) -> None:
+    base = directory / "base"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(base)], check=True)
+    git(base, "config", "user.email", "t@example.com")
+    git(base, "config", "user.name", "T")
+    (base / "s").write_text("s")
+    git(base, "add", "-A")
+    git(base, "commit", "-qm", "s")
+    git(base, "worktree", "add", "-q", "-b", "b", str(directory / "workspace"))
+    for name in remotes:
+        git(base, "remote", "add", name, "file:///nonexistent")
+
+
+def test_a_template_that_fails_to_build_names_itself(tmp_path, fixture_templates):
+    def build(directory: Path) -> None:
+        raise AssertionError("deliver not briefed")
+
+    with pytest.raises(TemplateBuildError, match=r"template 'broken' .*deliver not briefed"):
+        fixture_templates.copy("broken", build, tmp_path / "c")
+
+
+def test_a_template_with_a_wrong_marker_fails_at_build_not_in_a_later_test(
+    tmp_path, fixture_templates
+):
+    def build(directory: Path) -> None:
+        _repo_with_worktree(directory)
+        (directory / "workspace" / ".fr-isolation").write_text(
+            json.dumps({"toplevel": "/somewhere/else", "branch": "b"})
+        )
+
+    with pytest.raises(TemplateBuildError, match=r"template 'bad-marker' .*names /somewhere/else"):
+        fixture_templates.copy("bad-marker", build, tmp_path / "c")
+
+
+def test_a_template_with_a_missing_worktree_fails_at_build(tmp_path, fixture_templates):
+    def build(directory: Path) -> None:
+        _repo_with_worktree(directory)
+        shutil.rmtree(directory / "workspace")
+
+    with pytest.raises(TemplateBuildError, match=r"template 'gone' .*registered but missing"):
+        fixture_templates.copy("gone", build, tmp_path / "c")
+
+
+def test_the_at_deliver_template_checks_its_own_state(tmp_path, fixture_templates):
+    """The flake's candidate cause, now a build-time assertion: `suite.log` must postdate every
+    code path, else `deliver` refuses it and the later test sees only a refusal."""
+    from tests.unit.test_deliver_pr_body import _at_deliver, _build_at_deliver
+
+    root = _at_deliver(tmp_path)
+    newest = newest_code_mtime(root, None, ignore=[root / "suite.log"])
+    assert newest is not None and (root / "suite.log").lstat().st_mtime >= newest[0]
+    src = inspect.getsource(_build_at_deliver)
+    assert "stale" in src and "not briefed" in src
+
+
+# ── review p2-r2: what a build cannot take off, it refuses ──────────────
+
+
+def test_a_build_is_refused_under_an_active_chdir(tmp_path, fixture_templates, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(TemplateBuildError, match="chdir"):
+        fixture_templates.copy("chdir-probe", lambda d: None, tmp_path / "c")
+
+
+def test_a_build_is_refused_under_an_active_syspath_prepend(
+    tmp_path, fixture_templates, monkeypatch
+):
+    monkeypatch.syspath_prepend(str(tmp_path))
+    with pytest.raises(TemplateBuildError, match="syspath_prepend"):
+        fixture_templates.copy("syspath-probe", lambda d: None, tmp_path / "c")
+
+
+def test_a_build_is_refused_after_a_mid_test_undo(tmp_path, fixture_templates, monkeypatch):
+    monkeypatch.undo()  # takes the autouse sandbox off too
+    with pytest.raises(TemplateBuildError, match="undone"):
+        fixture_templates.copy("undo-probe", lambda d: None, tmp_path / "c")
+
+
+def test_a_build_inside_a_test_with_no_baseline_is_refused(tmp_path, fixture_templates):
+    held = ft._BASELINE
+    ft.forget_baseline()
+    try:
+        with pytest.raises(TemplateBuildError, match="no baseline"):
+            fixture_templates.copy("no-baseline-probe", lambda d: None, tmp_path / "c")
+    finally:
+        ft._BASELINE = held
+
+
+def test_the_private_pytest_apis_the_guard_reads_are_still_there(request, monkeypatch):
+    """Each private API the build guard uses, pinned one by one: a pytest upgrade that moves
+    one fails here and says which."""
+    assert isinstance(monkeypatch._setattr, list), "MonkeyPatch._setattr is no longer a list"
+    monkeypatch.setattr(_Probe, "value", "x")
+    obj, name, old = monkeypatch._setattr[-1]
+    assert (obj, name) == (_Probe, "value") and old == "real", "_setattr entry shape changed"
+    monkeypatch.setitem(os.environ, "PIN_PROBE", "1")
+    dic, key, old = monkeypatch._setitem[-1]
+    assert (dic, key) == (os.environ, "PIN_PROBE") and old is notset, "_setitem entry changed"
+    assert monkeypatch._cwd is None, "MonkeyPatch._cwd is gone or no longer None at rest"
+    assert monkeypatch._savesyspath is None, "MonkeyPatch._savesyspath changed"
+    monkeypatch.chdir(Path.cwd())
+    assert monkeypatch._cwd is not None, "chdir no longer records MonkeyPatch._cwd"
+    monkeypatch.syspath_prepend(str(Path.cwd()))
+    assert monkeypatch._savesyspath is not None, "syspath_prepend no longer records it"
+    assert inspect.isclass(type(notset)) and repr(notset), "_pytest.monkeypatch.notset gone"
+    names = request.session._fixturemanager._getautousenames(request.node)
+    assert "_template_baseline" in list(names), "_getautousenames no longer lists autouse names"
+
+
+# ── review p2-r5: a copy repairs one worktree and one origin, or refuses ─
+
+
+def test_a_template_with_a_second_worktree_or_remote_is_refused_without_relink(
+    tmp_path, fixture_templates
+):
+    def two_worktrees(directory: Path) -> None:
+        _repo_with_worktree(directory)
+        git(directory / "base", "worktree", "add", "-q", "-b", "c", str(directory / "other"))
+
+    def two_remotes(directory: Path) -> None:
+        _repo_with_worktree(directory, remotes=("origin", "upstream"))
+
+    with pytest.raises(TemplateBuildError, match="2 linked worktrees"):
+        fixture_templates.copy("two-wt", two_worktrees, tmp_path / "a")
+    with pytest.raises(TemplateBuildError, match="upstream"):
+        fixture_templates.copy("two-remotes", two_remotes, tmp_path / "b")
+    # a builder's caller that repairs the rest says so
+    fixture_templates.copy("two-wt", two_worktrees, tmp_path / "c", relink=lambda dest: None)
+
+
+def test_remap_rewrites_a_path_and_refuses_what_it_cannot_remap():
+    payload = {"p": Path("/t/x"), "l": [Path("/t/y"), "a/t/z"], "n": 1, "none": None}
+    got = ft._remap(payload, ("/t",), "/d")
+    assert got == {"p": Path("/d/x"), "l": [Path("/d/y"), "a/d/z"], "n": 1, "none": None}
+    with pytest.raises(TypeError, match="object"):
+        ft._remap({"x": object()}, ("/t",), "/d")
+
+
+def test_a_template_payload_that_cannot_be_remapped_fails_at_build(tmp_path, fixture_templates):
+    with pytest.raises(TemplateBuildError, match="template 'odd-payload' .*object"):
+        fixture_templates.copy("odd-payload", lambda d: object(), tmp_path / "c")
+
+
+# ── review p2-r6: a build writes inside its own sandbox ─────────────────
+
+
+def test_a_build_points_the_autouse_path_variables_into_its_own_sandbox(
+    tmp_path, fixture_templates
+):
+    seen: dict[str, str | None] = {}
+    watched = tuple(ft.build_paths(tmp_path / "probe"))
+
+    def build(directory: Path) -> None:
+        seen.update({k: os.environ.get(k) for k in watched})
+
+    outside = {k: os.environ.get(k) for k in watched}
+    fixture_templates.copy("paths-probe", build, tmp_path / "c")
+    home = Path(fixture_templates.env["HOME"])
+    for key in watched:
+        assert seen[key] and Path(seen[key]).is_relative_to(home), (key, seen[key])
+        assert not Path(seen[key]).is_relative_to(tmp_path), key
+    assert {k: os.environ.get(k) for k in watched} == outside  # restored
+
+
+def test_every_autouse_path_variable_that_names_a_tests_dir_is_in_the_build_sandbox(
+    tmp_path_factory, fixture_templates
+):
+    """An autouse fixture that points a new variable at a test's own directory must be added
+    to `build_paths`, or a build writes its side effects into whichever test asked first."""
+    base = str(tmp_path_factory.getbasetemp())
+    in_a_tests_dir = {
+        k
+        for k, v in os.environ.items()
+        if v.startswith(base) and k not in {"HOME", "GIT_CONFIG_GLOBAL", "PYTEST_CURRENT_TEST"}
+    }
+    assert in_a_tests_dir <= set(fixture_templates.env), sorted(
+        in_a_tests_dir - set(fixture_templates.env)
+    )

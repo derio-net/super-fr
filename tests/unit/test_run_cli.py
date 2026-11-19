@@ -2155,11 +2155,45 @@ steps:
 _FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
+def _git_side(base: Path) -> tuple[str, str, bool, tuple[str, ...]]:
+    """What a caller can have put into `base/.git` that the worktree files do not show: its
+    refs, its local config, any `.git/fr` isolation state and the worktree admin entries."""
+
+    def out(*args: str) -> str:
+        done = subprocess.run(
+            ["git", "-C", str(base), *args], capture_output=True, text=True, check=False
+        )
+        return done.stdout + (f"!{done.returncode}" if done.returncode else "")
+
+    admin = base / ".git" / "worktrees"
+    entries = (
+        tuple(sorted(p.relative_to(admin).as_posix() for p in admin.rglob("*")))
+        if admin.is_dir()
+        else ()
+    )
+    return (
+        out("for-each-ref"),
+        out("config", "--local", "--list"),
+        (base / ".git" / "fr").exists(),
+        entries,
+    )
+
+
 def _pristine(repo: Path, shipped: Path, shape: str | None = None) -> bool:
     """Is `repo` exactly what `_repo(tmp_path)` copied (branch `b`, nothing added) and
     `shipped` empty or holding only `<shape name>.yaml` as given? A template stands in for
-    a walk only over that starting point, else the walk runs as written."""
+    a walk only over that starting point, else the walk runs as written. The walkers
+    replace `base/` wholesale, so what a caller put into `base/.git` (refs, config,
+    `.git/fr`) counts too: it is compared with the template's, and a caller that changed
+    any of it takes the original walk instead of losing it."""
+    from tests.unit import fixture_templates
+
     if not (repo.parent / "base").is_dir() or repo != repo.parent / "workspace":
+        return False
+    template = fixture_templates.current().template_path(
+        "run_cli:b", lambda directory: _build_repo(directory, "b")
+    )
+    if _git_side(repo.parent / "base") != _git_side(template / "base"):
         return False
     seen = {
         p.relative_to(repo).as_posix()
@@ -7113,3 +7147,23 @@ def test_fr_goal_triggers_the_tier_question_from_the_brief() -> None:
     ).read_text()
     assert "unbound_tiers" in skill
     assert "a model-per-tier one if `fr models resolve` is unbound" not in skill
+
+
+@pytest.mark.parametrize("change", ["ref", "config", "fr-state"])
+def test_a_caller_that_put_state_into_the_base_git_dir_is_not_pristine(
+    tmp_path: Path, change: str
+) -> None:
+    """The walkers replace `base/` wholesale, so a `_pristine` that read only the worktree files
+    would discard a ref, a config key or `.git/fr` state a caller put there (review p2-r4)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    assert _pristine(repo, shipped)
+    base = tmp_path / "base"
+    if change == "ref":
+        subprocess.run(["git", "-C", str(base), "branch", "extra"], check=True)
+    elif change == "config":
+        subprocess.run(["git", "-C", str(base), "config", "local.key", "v"], check=True)
+    else:
+        (base / ".git" / "fr").mkdir()
+        (base / ".git" / "fr" / "state.json").write_text("{}")
+    assert not _pristine(repo, shipped)

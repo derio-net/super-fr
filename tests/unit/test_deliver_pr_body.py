@@ -14,6 +14,7 @@ from tests.unit.record_support import (
     RUN,
     commit_all,
     fr,
+    git,
     implement_record,
     resolve_empty_lens_review,
     snapshot,
@@ -71,6 +72,16 @@ def _build_at_deliver(tmp_path: Path) -> None:
     account_seeded_row(root)
     commit_all(root, "at deliver")
     (root / "suite.log").write_text("n passed\n")
+    # the self-check: a template built wrong fails here, naming itself (review p2-r1)
+    from fr.run.code_tree import newest_code_mtime
+
+    assert load_run_state(root, RUN).steps["deliver"].state == "running", "deliver not briefed"
+    assert git(root, "status", "--porcelain").strip() == "?? suite.log", "tree not at deliver"
+    newest = newest_code_mtime(root, None, ignore=[root / "suite.log"])
+    assert newest is not None
+    assert (root / "suite.log").lstat().st_mtime >= newest[0], (
+        f"suite.log is older than {newest[1]}: deliver would refuse it as stale"
+    )
 
 
 def account_seeded_row(root: Path) -> None:
