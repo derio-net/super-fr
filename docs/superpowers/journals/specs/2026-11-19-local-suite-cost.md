@@ -314,3 +314,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-local-suite-cost-p2 created=2026-11-19T09:19:42+00:00 -->
+### phase-split-2026-11-19-local-suite-cost-p2 · decision · ask: the test diet (R2-R4) is its own ask, reviewable apart from the cache
