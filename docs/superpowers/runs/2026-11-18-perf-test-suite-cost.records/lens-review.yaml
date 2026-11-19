@@ -1,0 +1,169 @@
+schema_version: 12
+run: 2026-11-18-perf-test-suite-cost
+step: lens-review
+outcome: done
+journal:
+- kind: finding
+  id: l-docs-accuracy-r1
+  title: AGENTS.md said the scenario tier is 145 tests; it is 144
+  body: Raised by the docs-accuracy lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-tests-r1
+  title: --fr-scope selection hook had no end-to-end test; a pass mutation left test_fr_scope green
+  body: Raised by the tests lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-tests-r2
+  title: Advisory reasons for the default local run were tested only against a SimpleNamespace stand-in
+  body: Raised by the tests lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-tests-r3
+  title: Acceptance rows for R1 and R2 had empty levels although their tests exist
+  body: Raised by the tests lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-tests-r4
+  title: test_gate_cmd forge fixture in an empty checkout lost the journal and plan read paths
+  body: Raised by the tests lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-tests-r5
+  title: The _Advance stand-in exposes only exit_code, output and stdout
+  body: Raised by the tests lens reviewer; verified against the code by the orchestrator.
+  review_scope: out
+  global: true
+- kind: finding
+  id: l-errors-r1
+  title: _tests_brief turned a GitRefusal or None default ref into a blank {base}
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r2
+  title: git_cache decline on an unknown system config was silent and unmemoized
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r3
+  title: _default_ref_of read any non-zero rev-parse/symbolic-ref as absent and cached it
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r4
+  title: _ci_yaml_at_head mapped every git show failure and non-mapping YAML to None
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r5
+  title: fr_scope.resolve_base dropped the GitRefusal reason
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r6
+  title: fixture_templates hid git stderr, leaked raw errors past TemplateBuildError, and _remap matched
+    t1 inside t10
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r7
+  title: The advisory line carried no reason and --collect-only was not advisory
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r8
+  title: fr_scope.imported_names swallowed SyntaxError
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r9
+  title: 'Locate-before-stamp window: an include added between locate and the stamp was untracked'
+  body: Raised by the errors lens reviewer; verified against the code by the orchestrator.
+  review_scope: in
+  global: true
+- kind: review
+  id: review-lens-1
+  global: true
+  title: 'Lens review (docs-accuracy, errors, tests): 15 findings, 14 in scope and fixed, 1 out of scope'
+  body: 'Three reviewers (general-purpose, separate contexts), one per lens, reviewed the whole feature
+    diff from merge base 28f2c623e. The errors lens probed 8 git-state mutation sequences against the
+    cache and found no stale answer. The tests lens proved l-tests-r1 with a mutation probe. Fixes: 9bf334e0d,
+    a54678fa9, 654b26c7e, with spec amendments to R1, R7, R8 and §3.A; each code fix red-first (l-tests-r4
+    shown to bite by a seed flip; l-docs-accuracy-r1 prose only).'
+resolves:
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: 'Fixed in 9bf334e0d: AGENTS.md:494 says 144 (pytest -m scenario --collect-only; 870 s re-summed
+    over those ids).'
+- id: l-tests-r1
+  state: fixed
+  body: 'Fixed in 9bf334e0d: test_the_fast_tier_collects_exactly_the_dependents_and_the_smoke_set runs
+    a real `pytest --collect-only --fr-scope HEAD` in a temp repo and asserts the exact ids; red under
+    the `items[:] = kept` -> pass mutation.'
+- id: l-tests-r2
+  state: fixed
+  body: 'Fixed in 9bf334e0d: real subprocess sessions for the default addopts and for -k, plus the whole-suite
+    negative case.'
+- id: l-tests-r3
+  state: fixed
+  body: 'Fixed in a54678fa9/654b26c7e: git-answers-cached-per-invocation and template-fixture-copies-independent
+    moved to ci with their level refs. ci-ok-required-on-main stays not-implemented: it is the manual
+    phase-4 row, verified live post-merge per the spec''s Verification.'
+- id: l-tests-r4
+  state: fixed
+  body: 'Fixed in 9bf334e0d: test_a_pass_reads_the_checkouts_journal_and_plan_for_the_discharge seeds
+    a plan and journal; shown to bite by flipping the seed.'
+- id: l-tests-r5
+  state: out-of-scope
+  body: 'Not caused as a defect: a later caller reading another attribute fails loudly with AttributeError,
+    and no current caller does.'
+- id: l-errors-r1
+  state: fixed
+  body: 'Fixed in 9bf334e0d: a declared fast_tier with no nameable base refuses the brief (exit 2) with
+    git''s reason and the set-head / checkout.defaultRemote fix; spec R8 amended.'
+- id: l-errors-r2
+  state: fixed
+  body: 'Fixed in 9bf334e0d: _UNKNOWN memoized in _SYSTEM_MEMO; FR_GIT_CACHE_DEBUG=1 names every decline
+    on stderr; spec R1 and §3.A amended.'
+- id: l-errors-r3
+  state: fixed
+  body: 'Fixed in 9bf334e0d: exit 1 is not-found; any other exit is a GitRefusal carrying stderr and is
+    never cached; forced-128 tests.'
+- id: l-errors-r4
+  state: fixed
+  body: 'Fixed in 9bf334e0d: only git''s path-not-in-HEAD messages or an empty file mean absent; unborn
+    HEAD, corrupt object and non-mapping content refuse; spec R8 amended.'
+- id: l-errors-r5
+  state: fixed
+  body: 'Fixed in 9bf334e0d: the error carries ref.reason.'
+- id: l-errors-r6
+  state: fixed
+  body: 'Fixed in 9bf334e0d: git failures raise TemplateBuildError with the template and stderr; non-object
+    markers handled at build and copy; _remap replaces only on a path boundary.'
+- id: l-errors-r7
+  state: fixed
+  body: 'Fixed in 9bf334e0d: a `fr-scope: advisory because ...` line precedes the byte-identical advisory
+    line; --collect-only is a reason; the refusal text names what makes a log advisory; spec R7 amended.'
+- id: l-errors-r8
+  state: fixed
+  body: 'Fixed in 9bf334e0d: unparseable test files are recorded and named on their own line under --fr-scope.'
+- id: l-errors-r9
+  state: fixed
+  body: 'Fixed in 9bf334e0d: _through_cache re-locates after compute and stores nothing when the result
+    differs (a stale hit was already impossible; this removes an entry stamped over an incomplete list).'
+evidence:
+  review: review-lens-1
+  reviewer: docs-accuracy=a66fc0ae0663d3833,errors=aa41c0cad65c0d47f,tests=a59ca047a6492ecf8
