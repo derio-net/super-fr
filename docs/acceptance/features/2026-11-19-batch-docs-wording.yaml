@@ -33,9 +33,12 @@ rows:
       to Rich markup; a test over every command fails naming the one that does.
     origin:
     - spec:2026-11-19-batch-docs-wording#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_cli_help_brackets.py#test_every_fr_help_shows_its_bracketed_text
+      - super-fr:tests/unit/test_cli_help_brackets.py#test_the_checker_reports_an_unescaped_bracket
+    status: ci
+    notes: 'R5: every command''s rendered --help holds its bracketed help text'
     verify: none
   - id: cli-reference-ste
     capability: published-docs
