@@ -36,7 +36,7 @@ from fr.triage.batch_version import (
     read_source,
     slot_versions,
 )
-from fr.triage.errors import TriageError
+from fr.triage.errors import ConfigError, TriageError
 from fr.triage.model import BatchEvent, UpdateEvent, VersionBlock
 
 FAILING_BUCKETS = frozenset({"fail", "cancel"})
@@ -169,10 +169,10 @@ def choose_method(
     """
     allowed = sorted(str(m) for m in methods.get("allowed") or [] if m in MERGE_METHODS)
     if not allowed:
-        raise TriageError("the repo allows no merge method fr knows (merge, squash, rebase)")
+        raise ConfigError("the repo allows no merge method fr knows (merge, squash, rebase)")
     if explicit is not None:
         if explicit not in allowed:
-            raise TriageError(
+            raise ConfigError(
                 f"--method {explicit}: the repo does not allow it (allowed: {', '.join(allowed)})"
             )
         return explicit
@@ -181,14 +181,14 @@ def choose_method(
         return str(default)
     if configured is not None:
         if configured not in allowed:
-            raise TriageError(
+            raise ConfigError(
                 f"merge_method: {configured} in {TRIAGE_CONFIG_PATH}: the repo does not allow it "
                 f"(allowed: {', '.join(allowed)}); change it, or give --method"
             )
         return configured
     if len(allowed) == 1:
         return allowed[0]
-    raise TriageError(
+    raise ConfigError(
         "the repo names no default merge method you may use; set `merge_method` in "
         f"{TRIAGE_CONFIG_PATH} or give --method ({', '.join(allowed)})"
     )
