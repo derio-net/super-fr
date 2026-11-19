@@ -8541,6 +8541,12 @@ batches:
     item: derio-net/super-fr/run/closeout-2026-11-19-2
     reason: '`fr archive --branch feat/batch-triage-pages --no-issues` exited 2: bypass (recovery only):  FR_SKIP_MIGRATION=1
       fr <command>'
+  - kind: closeout
+    at: '2026-11-19T11:31:00.118358Z'
+    runner: herdr
+    handle: w3P:p7
+    run: 2026-11-18-feat-batch-triage-pages
+    archive: chore/closeout-2026-11-19-2
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -9374,4 +9380,31 @@ closeouts:
   handle: w3P:p7
   planned:
   - triage-pages
+  pr: 1566
   closed: true
+  head: a63d384b8e69604bfd36528b479cd3f9cc3018e3
+  members:
+  - triage-pages
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-18-triage-pages-ux.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-18-triage-pages-ux.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-triage-pages-ux/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-triage-pages-ux/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-triage-pages-ux/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-triage-pages-ux/04.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-triage-pages-ux/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-triage-pages-ux/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-18-feat-batch-triage-pages.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-18-triage-pages-ux-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-18-feat-batch-triage-pages.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-18-triage-pages-ux.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-18-triage-pages-ux.md"
+  - "D\tdocs/superpowers/plans/2026-11-18-triage-pages-ux/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-triage-pages-ux/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-triage-pages-ux/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-triage-pages-ux/04.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-triage-pages-ux/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-triage-pages-ux/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-18-feat-batch-triage-pages.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-18-triage-pages-ux-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-18-feat-batch-triage-pages.yaml"
