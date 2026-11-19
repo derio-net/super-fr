@@ -45,6 +45,19 @@ NO_CI_WAIT_SECONDS = 15 * 60
 after that `verify_ci` refuses "no CI ran" (§I step 5, p2-r5)."""
 
 
+ADVISORY_LINE = "fr-scope: advisory — not deliver evidence"
+"""The line a pytest session that is not the whole configured suite prints on a
+line of its own (this repo's `tests/conftest.py`, spec 2026-11-19-local-suite-cost
+R7). `run_cmd._read_suite_log` refuses a `tests` log holding it as a whole line."""
+
+
+def is_advisory_log(data: bytes) -> bool:
+    """True when some line of `data`, stripped, is exactly `ADVISORY_LINE`. A log
+    that only quotes the string inside other output is not advisory."""
+    text = data.decode("utf-8", errors="replace")
+    return any(line.strip() == ADVISORY_LINE for line in text.splitlines())
+
+
 class CiEvidenceRefused(Exception):  # noqa: N818 — the name the plan (P2.T2) fixes
     """`tests: ci` cannot be accepted; the message says why (exit 2)."""
 

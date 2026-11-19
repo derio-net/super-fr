@@ -651,3 +651,61 @@ def _fr_release_pin_never_hits_the_network(monkeypatch: pytest.MonkeyPatch) -> N
 
     stub.real = pin.default_ls_remote  # type: ignore[attr-defined]
     monkeypatch.setattr(pin, "default_ls_remote", stub)
+
+
+# -- the fast advisory tier and its advisory line (spec 2026-11-19-local-suite-cost R6, R7)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    from tests.fr_scope import DEFAULT_BASE
+
+    parser.addoption(
+        "--fr-scope",
+        nargs="?",
+        const=DEFAULT_BASE,
+        default=None,
+        metavar="BASE",
+        help=(
+            "fast advisory tier: only the tests the changes since the merge-base with "
+            "BASE (default: the remote default ref) reach, plus the smoke set; never "
+            "deliver evidence (tests/fr_scope.py)"
+        ),
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    value = config.getoption("--fr-scope")
+    if value is None:
+        return
+    from tests.fr_scope import ImportIndex, ScopeError, changed_paths, keep_item, resolve_base
+    from tests.fr_scope import select as scope_select
+
+    root = config.rootpath
+    try:
+        changed = changed_paths(root, resolve_base(root, value))
+    except ScopeError as exc:
+        raise pytest.UsageError(str(exc)) from exc
+    selected = scope_select(ImportIndex.build(root), changed)
+    kept, dropped = [], []
+    for item in items:
+        rel = item.path.relative_to(root).as_posix()
+        marks = [m.name for m in item.iter_markers()]
+        (kept if keep_item(rel, marks, selected) else dropped).append(item)
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+        items[:] = kept
+
+
+def pytest_terminal_summary(terminalreporter: object, config: pytest.Config) -> None:
+    from tests.fr_scope import ADVISORY_LINE, advisory_reasons
+
+    reasons = advisory_reasons(
+        fr_scope=config.getoption("--fr-scope"),
+        markexpr=config.option.markexpr or "",
+        keyword=config.option.keyword or "",
+        explicit_args=config.args_source == pytest.Config.ArgsSource.ARGS,
+        last_failed=bool(getattr(config.option, "lf", False)),
+        stepwise=bool(getattr(config.option, "stepwise", False)),
+    )
+    if reasons:
+        terminalreporter.write_line(ADVISORY_LINE)  # type: ignore[attr-defined]

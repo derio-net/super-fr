@@ -3320,6 +3320,20 @@ def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    from fr.run.ci_evidence import ADVISORY_LINE, is_advisory_log
+
+    if is_advisory_log(data):
+        # Spec 2026-11-19-local-suite-cost R7: a narrowed pytest session (the fast
+        # tier, `-m`/`-k`, explicit paths, --lf/--sw) marks itself advisory. It is
+        # not the whole suite, so it is no `tests` evidence, and a phase log refused
+        # here is never a witness `tests: reuse` could carry into `deliver`.
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} holds the line `{ADVISORY_LINE}`: it is "
+            'not the whole suite. Run the full suite with `pytest -m ""` into a log and '
+            "name that file, or offer `tests: ci`.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     return path, data
 
 
