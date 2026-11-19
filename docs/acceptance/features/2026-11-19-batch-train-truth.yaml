@@ -81,7 +81,7 @@ rows:
     acceptance: Within one pass a repo whose fetch failed is not fetched again, and
       its later reads fail as a transient failure
     origin:
-    - spec:2026-11-19-batch-train-truth#R18
+    - spec:2026-11-19-batch-train-truth#R19
     levels: {}
     status: not-implemented
     notes: ''
