@@ -330,3 +330,83 @@ tests/fr_scope.py was written pure from the start (selection, keep_item, advisor
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 declared_tests_mode reuses load_gate_checks' read shape (git show HEAD:.fr/ci.yaml) and the one brief helper `_tests_brief` serves both builders; the agent/skill edits are prose. Nothing to fold.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-19T20:38:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · The tests-ci brief's fast_tier command used --fr-scope, which only this repo's own tests/conftest.py defines, for any repo declaring tests ci (phase 3)
+
+Raised by the phase-3 independent reviewer; verified against run_cmd.py and tests/conftest.py by the orchestrator. A spec defect (R8, §3.F), fixed in the spec.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-19T20:38:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Narrowed sessions printed no advisory line (subdirectory run, --ignore/--ignore-glob/--deselect, -o testpaths=, -x/--maxfail) (phase 3)
+
+Raised by the phase-3 independent reviewer, reproduced by it at HEAD.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-19T20:38:35+00:00 phase=3 state=open review_scope=out -->
+### p3-r3 · finding [open] (reviewer: out of scope) · _read_suite_log never checks that a tests log shows a passing, complete run (phase 3)
+
+Raised by the phase-3 independent reviewer. Predates this change.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-19T20:38:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · fr_scope.changed_paths lost a renamed module's old name (git rename detection) (phase 3)
+
+Raised by the phase-3 independent reviewer; verified by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-19T20:38:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · A non-Python change selected only the smoke set, silently (phase 3)
+
+Raised by the phase-3 independent reviewer; verified by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-19T20:38:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · declared_tests_mode accepted tests ci without gate_checks, which load_gate_checks refuses at deliver (phase 3)
+
+Raised by the phase-3 independent reviewer; verified against ci_evidence.py by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-19T20:38:35+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · R10 named a local refresh but .test_durations came from merged CI shard durations; the spec was not amended (phase 3)
+
+Raised by the phase-3 independent reviewer; verified against the journal by the orchestrator.
+
+<!-- fr:journal kind=review scope=plan id=review-p3-1 created=2026-11-19T20:38:35+00:00 phase=3 -->
+### review-p3-1 · review · Phase 3 independent review: 7 findings, 6 in scope and fixed, 1 out of scope and filed (phase 3)
+
+Reviewer (general-purpose, hard tier, separate context) reviewed the phase-3 commits 847f8242e..cd2b2d655 without merges against spec R5-R10 and §3.D-§3.H. It confirmed: scenarios still run in every CI and release path, and the command-line pin fails if the override is dropped; the tripwire stays unmarked; the agents kind 5 to 6 is complete (sha, migration, re-render, mirrors); the advisory refusal is whole-line and covers deliver, the phase unit and tests reuse; an unresolvable base fails loudly. Raised p3-r1..p3-r7. Fixes: 01d48582f and 119ed12e3 (p3-r1, r2, r4, r5, r6, with spec amendments to R6, R7, R8, R10, §3.E and §3.F); p3-r3 filed as derio-net/super-fr#1574. The executor finding p3-f-fr-scope-optional-value is deferred to derio-net/super-fr#1575. CI flakes seen during the phase and not caused by it: tests/scenarios/placement-move-and-drift.sh (py3.14 once, not reproduced locally with or without CI=true) and test_hooks_worktree.py::test_two_concurrent_removals_do_not_overlap (py3.11 once, stubbed fr; the rerun passed). Assessment: with fixes.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: The tests-ci brief's fast_tier command used --fr-scope, which only this repo's own tests/conftest.py defines, for any repo declaring tests ci (phase 3)
+
+Fixed in 01d48582f/119ed12e3: FAST_TIER_COMMAND is gone. `declared_fast_tier` (ci_evidence.py) reads `.fr/ci.yaml` `fast_tier` at HEAD; it must be a string with `{base}` as its only placeholder and needs `tests: ci`. The brief carries `{mode: ci}` and adds `fast_tier` only when declared. This repo declares its own. The spec (R8, §3.F) says fr ships no fast tier. The agent, fr-goal §5/§8, 01-fr-goal.md and AGENTS.md were reworded; the agents sha was re-pinned within the unreleased version 6.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Narrowed sessions printed no advisory line (subdirectory run, --ignore/--ignore-glob/--deselect, -o testpaths=, -x/--maxfail) (phase 3)
+
+Fixed in 01d48582f: `session_reasons` counts as narrowed any args_source other than TESTPATHS, non-empty ignore/ignore_glob/deselect, maxfail > 0 (-x) and an overridden testpaths; spec R7 lists them. Red first: a subdirectory `-m ""` collect printed no line at HEAD.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=open resolves=p3-r3 out_of_scope=true -->
+### p3-r3-resolved · finding [out-of-scope] · resolves p3-r3: _read_suite_log never checks that a tests log shows a passing, complete run (phase 3)
+
+Predates this change: `_read_suite_log` checked only non-empty, location and (now) the advisory line before phase 3. Filed as derio-net/super-fr#1574.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: fr_scope.changed_paths lost a renamed module's old name (git rename detection) (phase 3)
+
+Fixed in 01d48582f: changed_paths uses `--no-renames`; test_a_renamed_module_keeps_its_old_name_in_the_changed_set went red with the flag removed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: A non-Python change selected only the smoke set, silently (phase 3)
+
+Fixed in 01d48582f: a non-Python changed path selects the tests whose source names its file, and `--fr-scope` prints one `fr-scope: no test reaches <n> changed paths: …` line for the rest.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: declared_tests_mode accepted tests ci without gate_checks, which load_gate_checks refuses at deliver (phase 3)
+
+Fixed in 01d48582f: `declared_tests_mode` refuses `tests: ci` unless the same file's gate_checks validate; three red-first cases (missing, empty, scalar).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: R10 named a local refresh but .test_durations came from merged CI shard durations; the spec was not amended (phase 3)
+
+Fixed in the spec (01d48582f): R10 allows the local `-m "" --store-durations` run or merging a green CI run's shard durations with scripts/split_check.py merge, with the reason; AGENTS.md already described the merge route.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f-fr-scope-optional-value-resolved created=2026-11-19T20:38:35+00:00 phase=3 state=open resolves=p3-f-fr-scope-optional-value tracked_by=derio-net/super-fr#1575 -->
+### p3-f-fr-scope-optional-value-resolved · finding [deferred → derio-net/super-fr#1575] · resolves p3-f-fr-scope-optional-value: `--fr-scope` with nargs='?' swallows a following path as its base (`--fr-scope tests/unit/x.py`) (phase 3)
+
+Caused by R6's `--fr-scope [<base>]` form, but it fails loudly (a usage error naming the path), and the declared fast_tier always puts the base right after the option. Changing the option shape is tracked in derio-net/super-fr#1575.

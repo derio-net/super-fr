@@ -3,7 +3,7 @@ run: 2026-11-18-perf-test-suite-cost
 workflow: fr-goal@1
 branch: perf/test-suite-cost
 started: '2026-11-18T18:52:45+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: "[warn] orphan phase-split decision phase-split-2026-11-19-local-suite-cost-p4\
       \ \nnames no agentic phase; it waives nothing.\n"
   implement:
-    state: running
-    at: '2026-11-19T20:17:36+00:00'
+    state: done
+    at: '2026-11-19T20:38:36+00:00'
     members:
     - implement-phase
     - review-phase
@@ -139,13 +139,20 @@ steps:
           tests: ci:1d604acb21894b66e28d58431f2c201b60cebc24+28f2c623e22226df18937a4b3db24d1325c9d321;tree=aadea86aac254860ed6bd7332bea3fe2d195e4e347a38e0aeadfd0b9e56b7aa9
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-19T20:17:36+00:00'
           agent: a2e245c7f99964b20
           harness: claude-code
           model: claude-opus-5-5
           session: d2814f1b-87a4-4558-bbe3-e21fd24f245b
+          returned: '2026-11-19T20:38:36+00:00'
+          outcome: done
+        evidence:
+          review: review-p3-1
+          reviewer: a2e245c7f99964b20
+          visual: none
+          findings: p3-f-fr-scope-optional-value,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7
   journal-check:
     state: pending
   lens-review:
