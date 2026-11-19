@@ -4,8 +4,8 @@ step: brainstorm
 outcome: done
 questions:
   rounds: 2
-  trigger: design-risk
-  reason: round 1's answer on #1491 asked why the driver keeps crashing; the code check (31 _fail sites inside the pass, one ForgeReadError boundary) opened the root-fix and refusal-handling decisions
+  trigger: operator-request
+  reason: "the operator's round-1 answer on #1491 asked a question back (why does the driver keep crashing, is there a design defect); answering it from the code (31 _fail sites inside the pass, one ForgeReadError boundary) needed the root-fix and refusal-handling decisions"
 journal:
   - kind: discovery
     input: true
