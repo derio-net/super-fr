@@ -231,3 +231,10 @@ rows:
       - one-graph-latest-tab
       interactions:
       - step-through-dated-tabs
+amendments:
+  - row: board-decision-views
+    op: add-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_board_views.py#test_the_backlog_is_ordered_since_needs_next_waves_then_batches
+    why: the triage-pages-ux split renamed this test
