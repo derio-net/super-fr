@@ -10,6 +10,7 @@ triage state directory (`origins-facts.json`, `origins.yaml` and the Origins pag
 from __future__ import annotations
 
 import webbrowser
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -22,11 +23,13 @@ from fr.artifacts.atomic import write_text_atomic
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    PageWritten,
     RepoOpt,
     WorkspaceOpt,
     console,
     err_console,
     resolve_state_dir,
+    say_warning,
     triage_app,
 )
 from fr.triage.components import fragment_dir, page, pages_present, refresh_navs
@@ -156,6 +159,49 @@ def check_command(
         console.print(f"  {escape(key)}", soft_wrap=True)
 
 
+def write_origins(
+    scope: Scope,
+    target: Path,
+    *,
+    now: datetime,
+    warn: Callable[[str], None] | None = None,
+) -> PageWritten:
+    """Render the Origins page into the state directory *target* with *now* as the render
+    time (spec 2026-11-18-triage-pages-ux §C). Raises `TriageError` for missing or
+    unreadable origins facts or a broken manifest."""
+    say = warn or say_warning
+    facts_path = target / FACTS_FILE
+    if not facts_path.exists():
+        flag = "org" if scope.kind == "org" else "repo"
+        raise TriageError(
+            f"no origins facts at {facts_path}; run "
+            f"`fr triage origins collect --{flag} {scope.target} --since YYYY-MM-DD` first"
+        )
+    facts = load_scope_origins_facts(facts_path, scope)
+    origins = load_origins(target / CLASSIFICATION_FILE)
+    judgements = _judgements(target)
+    folder, _ = fragment_dir(target, "origins")
+    resolved = resolve_manifest(folder, GENERATED)
+    notes = [f"manifest entry {name} has no file in {folder.name}/" for name in resolved.missing]
+    if resolved.appended:
+        notes.append(
+            f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
+            "the entries it lists, in the default order"
+        )
+    for note in notes:
+        say(note)
+    out = target / page("origins").file
+    present = pages_present(target, "origins")
+    write_text_atomic(
+        out,
+        render_origins(
+            facts, origins, judgements, resolved, notes, present=present, rendered_at=now
+        ),
+    )
+    refresh_navs(target, "origins", warn=triage_cmd.warn_nav)
+    return PageWritten(out, f"{out} ({plural(len(facts.issues), 'issue')})")
+
+
 @origins_app.command("render")
 def render_command(
     repo: RepoOpt = None,
@@ -167,42 +213,14 @@ def render_command(
     """Write the Origins page from origins-facts.json, origins.yaml and (for links) judgements.yaml,
     with the fragments `origins/manifest.yaml` places among the sections."""
     scope = triage_cmd._scope(repo, org)
-    target, facts, origins = _load(scope, dir_override, workspace)
-    judgements = _judgements(target)
+    target, _, _ = _load(scope, dir_override, workspace)
     try:
-        folder, _ = fragment_dir(target, "origins")
-        resolved = resolve_manifest(folder, GENERATED)
+        written = write_origins(scope, target, now=datetime.now(UTC))
     except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
-        raise typer.Exit(code=2) from exc
-    notes = [f"manifest entry {name} has no file in {folder.name}/" for name in resolved.missing]
-    if resolved.appended:
-        notes.append(
-            f"the manifest does not name {', '.join(resolved.appended)}; they are shown after "
-            "the entries it lists, in the default order"
-        )
-    for note in notes:
-        err_console.print(f"[yellow]warning:[/yellow] {escape(note)}", soft_wrap=True)
-    out = target / page("origins").file
-    present = pages_present(target, "origins")
-    write_text_atomic(
-        out,
-        render_origins(
-            facts,
-            origins,
-            judgements,
-            resolved,
-            notes,
-            present=present,
-            rendered_at=datetime.now(UTC),
-        ),  # fmt: skip
-    )
-    refresh_navs(target, "origins", warn=triage_cmd.warn_nav)
-    console.print(
-        f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
-    )
+        raise _fail(str(exc)) from exc
+    console.print(f"wrote {written.detail}", markup=False, soft_wrap=True)
     if open_:
-        webbrowser.open(out.resolve().as_uri())
+        webbrowser.open(written.path.resolve().as_uri())
 
 
 def _judgements(target: Path) -> Judgements | None:
@@ -210,7 +228,4 @@ def _judgements(target: Path) -> Judgements | None:
     path = target / "judgements.yaml"
     if not path.exists():
         return None
-    try:
-        return load_judgements(path)
-    except TriageError as exc:
-        raise _fail(str(exc)) from exc
+    return load_judgements(path)

@@ -402,15 +402,17 @@ def write_board(
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
     loader: Callable[[str], Runner] | None = None,
     ci_none: Collection[str] | None = None,
+    now: datetime | None = None,
 ) -> tuple[Path, int]:
     """Render the Batches page into the state directory *target* from the facts and
     judgements on disk now, with live session statuses, and remove the page's old-named
-    file (triage-pages-ux R3). Returns the path written and its card count."""
+    file (triage-pages-ux R3). *now* is the render time and the idle clock (the wall clock when
+    None). Returns the path written and its card count."""
     _, facts, judgements = _load_state(scope, target, None)
     reads = read_sessions(judgements, facts, prefix=prefix, target=target, loader=loader)
     statuses, notes = reads.statuses, reads.notes
-    rendered_at = datetime.now(UTC)
-    # The wall clock: session status is read live above, so idle minutes must be real.
+    rendered_at = now or datetime.now(UTC)
+    # The wall clock by default: session status is read live above, so idle minutes are real.
     try:
         me: str | None = scope_id(facts.scope)
     except TriageError as exc:  # the board is a view: say what it cannot show, never refuse

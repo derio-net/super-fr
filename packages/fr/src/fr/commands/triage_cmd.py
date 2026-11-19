@@ -24,11 +24,11 @@ from __future__ import annotations
 
 import json
 import webbrowser
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, NamedTuple
 from urllib.parse import urlparse
 
 import typer
@@ -43,6 +43,7 @@ from fr.hostclient import client_for_backend
 from fr.labels import APPROVED_FR
 from fr.triage.approval import approval_label_missing
 from fr.triage.batch import last_dispatch, lifecycle_events
+from fr.triage.batch_drive import DEFAULT_WORKSPACE_PREFIX
 from fr.triage.check import CLEARING_RULE, ClaimSets, classify, clean_label_targets
 from fr.triage.collect import (
     PR_LIMIT,
@@ -83,6 +84,7 @@ from fr.triage.render import (
 )
 from fr.triage.scope_config import load_durable, mirror_state_repo, scope_id, write_durable
 from fr.triage.snapshot import (
+    Snapshot,
     acceptance_rows,
     diff_snapshots,
     latest_snapshot,
@@ -1042,28 +1044,102 @@ MatrixOpt = Annotated[
 OpenBacklogOpt = Annotated[bool, typer.Option("--open", help="Open the Backlog in a browser.")]
 
 
-def _say_warning(text: str) -> None:
+def say_warning(text: str) -> None:
     err_console.print(f"[yellow]warning:[/yellow] {escape(text)}", soft_wrap=True)
 
 
+class PageWritten(NamedTuple):
+    """What a page writer wrote: the page's path, the parenthetical its command prints,
+    and what only some writers have (the backlog's snapshot, the architecture's
+    measurement the driver reuses)."""
+
+    path: Path
+    detail: str
+    snapshot: Snapshot | None = None
+    measured: dict[str, Any] | None = None
+
+
 def _page_manifest(
-    target_dir: Path, key: str, generated: tuple[str, ...], moved: dict[str, str]
+    target_dir: Path,
+    key: str,
+    generated: tuple[str, ...],
+    moved: dict[str, str],
+    warn: Callable[[str], None],
 ) -> tuple[Any, list[str]]:
     """Page *key*'s resolved manifest and its page notes (R3, R4): the fragment-directory
-    fallback and each section another page owns, each also said on stderr, plus a warning
-    per manifest entry with no file. A broken manifest exits 2."""
+    fallback and each section another page owns, each also said to *warn*, plus a warning
+    per manifest entry with no file. A broken manifest raises `TriageError`."""
     folder, fallback = fragment_dir(target_dir, key)
-    try:
-        resolved = resolve_manifest(folder, generated, moved)
-    except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
-        raise typer.Exit(code=2) from exc
+    resolved = resolve_manifest(folder, generated, moved)
     for name in resolved.missing:
-        _say_warning(f"manifest entry {name} has no file in {folder.name}/")
+        warn(f"manifest entry {name} has no file in {folder.name}/")
     notes = [fallback] if fallback else []
     for note in [*notes, *(f"{page(key).title}: {m}" for m in moved_notes(resolved))]:
-        _say_warning(note)
+        warn(note)
     return resolved, notes
+
+
+def refuse(exc: TriageError) -> typer.Exit:
+    """A page writer's refusal as the command's exit 2."""
+    err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+    return typer.Exit(code=2)
+
+
+def write_backlog(
+    scope: Scope,
+    target: Path,
+    *,
+    now: datetime,
+    warn: Callable[[str], None] = say_warning,
+    loader: Callable[[str], Any] | None = None,
+    prefix: str = DEFAULT_WORKSPACE_PREFIX,
+    ci_none: Collection[str] | None = None,
+    matrix: Path | None = None,
+) -> PageWritten:
+    """Render the Backlog and Issues pages into the state directory *target* from the
+    facts and judgements on disk (spec 2026-11-18-triage-pages-ux §C), with *now* as the
+    render time. Needs you now reads sessions through *loader* and *prefix*, and the repos
+    judged `ci none` from *ci_none* (the local clone's when None). *matrix* is the checkout
+    whose acceptance rows the snapshot counts. Raises `TriageError` for a broken manifest.
+    Takes no snapshot into the store: the caller stores the one it returns, or not."""
+    from fr.commands.triage_kanban_cmd import local_ci_none, read_sessions  # it imports this
+
+    _, facts, judgements = _load_state(scope, target, None, read_only=True)
+    snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix))
+    since = diff_snapshots(previous_snapshot(target, snap), snap)
+    backlog_resolved, backlog_notes = _page_manifest(
+        target, "backlog", BACKLOG_GENERATED, BACKLOG_MOVED, warn
+    )
+    issues_resolved, issues_notes = _page_manifest(
+        target, "issues", ISSUES_GENERATED, ISSUES_MOVED, warn
+    )
+    # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
+    # runner that cannot say leaves Needs you now as it was.
+    noted = read_sessions(
+        judgements, facts, prefix=prefix, target=target, loader=loader, notes_only=True
+    ).session_notes
+    present = pages_present(target, "backlog", "issues")
+    out = target / page("backlog").file
+    backlog = render_backlog(
+        facts, judgements, since, backlog_resolved,
+        board=(target / page("batches").file).is_file(), session_notes=noted,
+        ci_none=local_ci_none(facts) if ci_none is None else ci_none,
+        stops=load_stops(target), present=present, notes=backlog_notes, rendered_at=now,
+    )  # fmt: skip
+    issues = render_issues(
+        facts, judgements, since, issues_resolved, present=present, notes=issues_notes,
+        rendered_at=now,
+    )  # fmt: skip
+    write_text_atomic(out, backlog)
+    write_text_atomic(target / page("issues").file, issues)
+    for key in ("backlog", "issues"):
+        try:
+            remove_legacy(target, key)
+        except OSError as exc:
+            warn(f"the {page(key).title} page's old file was not removed: {exc}")
+    refresh_navs(target, "backlog", warn=warn_nav)
+    detail = f"{out} and {page('issues').file} ({plural(len(facts.issues), 'issue')})"
+    return PageWritten(out, detail, snap)
 
 
 @triage_app.command("backlog")
@@ -1097,54 +1173,22 @@ def backlog_command(
         matrix_path: Path | None = matrix
     else:
         matrix_path = matrix_for_scope(scope.target if scope.kind == "repo" else None, Path.cwd())
-    snap = take_snapshot(facts, judgements, acceptance=acceptance_rows(matrix_path))
-    since = diff_snapshots(previous_snapshot(target_dir, snap), snap)
-    backlog_resolved, backlog_notes = _page_manifest(
-        target_dir, "backlog", BACKLOG_GENERATED, BACKLOG_MOVED
-    )
-    issues_resolved, issues_notes = _page_manifest(
-        target_dir, "issues", ISSUES_GENERATED, ISSUES_MOVED
-    )
-    from fr.commands.triage_kanban_cmd import local_ci_none, read_sessions  # it imports this
-
-    # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
-    # runner that cannot say leaves Needs you now as it was.
-    noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
-    rendered_at = datetime.now(UTC)
-    present = pages_present(target_dir, "backlog", "issues")
-    out = target_dir / page("backlog").file
-    backlog = render_backlog(
-        facts, judgements, since, backlog_resolved,
-        board=(target_dir / page("batches").file).is_file(), session_notes=noted,
-        ci_none=local_ci_none(facts), stops=load_stops(target_dir), present=present,
-        notes=backlog_notes, rendered_at=rendered_at,
-    )  # fmt: skip
-    issues = render_issues(
-        facts, judgements, since, issues_resolved, present=present, notes=issues_notes,
-        rendered_at=rendered_at,
-    )  # fmt: skip
-    write_text_atomic(out, backlog)
-    write_text_atomic(target_dir / page("issues").file, issues)
-    for key in ("backlog", "issues"):
-        try:
-            remove_legacy(target_dir, key)
-        except OSError as exc:
-            _say_warning(f"the {page(key).title} page's old file was not removed: {exc}")
-    refresh_navs(target_dir, "backlog", warn=warn_nav)
+    try:
+        written = write_backlog(scope, target_dir, now=datetime.now(UTC), matrix=matrix_path)
+    except TriageError as exc:
+        raise refuse(exc) from exc
+    out = written.path
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".
-    if snap != latest_snapshot(target_dir):
+    snap = written.snapshot
+    if snap is not None and snap != latest_snapshot(target_dir):
         store_snapshot(
             target_dir,
             snap,
             datetime.now(UTC),
             warn=lambda m: err_console.print(f"warning: {escape(m)}", soft_wrap=True),
         )
-    console.print(
-        f"wrote {out} and {page('issues').file} ({plural(len(facts.issues), 'issue')})",
-        markup=False,
-        soft_wrap=True,
-    )
+    console.print(f"wrote {written.detail}", markup=False, soft_wrap=True)
     if open_:
         webbrowser.open(out.resolve().as_uri())
 
