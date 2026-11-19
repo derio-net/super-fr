@@ -20,3 +20,8 @@ B (#1508, #1510): delivered dependencies are resolved at install time instead of
 ### 46e27da33460 · root-cause · A: hooks and plugin reach jq/python3/bash/gh by bare name, python without -I
 
 The resolvers for git (fr_git_resolve, plugin resolveGit) and fr (fr_fr_resolve, resolveFr) walk absolute PATH entries only; the JSON parser resolver used command -v (relative entries count) and ran python3 -c (cwd on sys.path); the Claude edit gate and ten other hooks run bare jq; the plugin execFiles bare bash and gh. Operator chose to fix A and B in one PR.
+
+<!-- fr:journal kind=root-cause scope=debug id=07300a16a16e created=2026-11-19T20:17:13+00:00 -->
+### 07300a16a16e · root-cause · B: installs resolve dependencies afresh instead of from the tested lock
+
+install.sh's uv tool install takes no constraints from uv.lock; npm -g @devcontainers/cli is unversioned; bun.lock carries glob 13.0.5/10.5.0 and minimatch 10.2.5/9.0.9 pinned by @opencode/util 2.1.0 and rimraf 5, inside GHSA-3g3m-2fjr-6pw4 (glob >=9.0.0 <=14.0.1, fix 14.0.2) and GHSA-g3hv-75wg-m249 (minimatch >=7.0.0 <11.0.1, fix 11.0.1), ranges re-read from the advisory database. Dev graph only: delivery copies src/, the plugin imports types only.
