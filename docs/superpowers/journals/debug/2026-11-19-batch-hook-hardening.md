@@ -30,3 +30,8 @@ install.sh's uv tool install takes no constraints from uv.lock; npm -g @devconta
 ### eccd12d862b2 · finding [fixed] · A fixed: tools resolved from absolute PATH entries, python -I, edit gate denies without jq
 
 lib: fr_which/_fr_first_candidate replace command -v; fr_jq/fr_gh/fr_jq_resolve/fr_gh_resolve; python3 -I -c; a python3 that cannot run is skipped. fr-isolation-required.sh: parses via fr_json_field, every read guarded, denies on no parser / failing parser / unreadable payload (deny_fixed needs no parser). Ten hooks + Hermes push guard call fr_jq/fr_gh. Plugin: src/tools.ts resolveTool; segment.ts and push.ts spawn the resolved bash/gh. Tests first: tests/unit/test_hooks_planted_tools.py, packages/fr-opencode-plugin/test/tools.test.ts (commit ee6da13e8).
+
+<!-- fr:journal kind=finding scope=debug id=007b308a9c60 created=2026-11-19T20:41:46+00:00 state=fixed -->
+### 007b308a9c60 · finding [fixed] · B fixed: install constrained to uv.lock, devcontainer CLI pinned, plugin lock out of both advisory ranges
+
+install.sh exports uv.lock (--frozen --all-packages --no-dev --no-emit-workspace) to ~/.local/share/fr/install-constraints.txt and passes --constraints to both uv tool installs when uv supports it; warns otherwise. Real unstubbed install verified: typer 0.24.1, pydantic 2.13.4 as locked. npm installs @devcontainers/cli@0.87.0 (FR_DEVCONTAINER_CLI_VERSION overrides). package.json overrides glob 14.0.3, minimatch 11.0.4: newest patched releases older than two weeks; bun test 337 pass, tsc clean. Tests: tests/integration/test_install_locked_deps.py, tests/unit/test_opencode_plugin_lock_advisories.py.
