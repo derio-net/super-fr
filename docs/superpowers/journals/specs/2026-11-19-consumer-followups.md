@@ -125,3 +125,6 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-consumer-followups-p1 created=2026-11-19T22:32:03+00:00 -->
+### tier-2026-11-19-consumer-followups-p1 · decision · hard: R1-R4 change what the OpenCode isolation gates judge on every tool call of every session
