@@ -8603,6 +8603,13 @@ batches:
     pr: 1567
     head: 93acf9e02f7e2d9366e14855059b912724a2f028
     reason: 1 failing check(s)
+  - kind: closeout
+    at: '2026-11-19T22:05:15.399237Z'
+    runner: herdr
+    handle: w3P:p8
+    run: 2026-11-18-feat-batch-triage-pages
+    archive: chore/closeout-2026-11-19-3
+    archived: 1567
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -9550,6 +9557,7 @@ closeouts:
   planned:
   - triage-pages
   pr: 1567
+  merged: true
   head: 93acf9e02f7e2d9366e14855059b912724a2f028
   members:
   - triage-pages
