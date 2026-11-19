@@ -87,9 +87,16 @@ rows:
       with its own origin and state that passes the same workspace checks
     origin:
     - spec:2026-11-19-local-suite-cost#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fixture_templates.py#test_a_copied_started_run_is_a_valid_workspace_with_a_working_run
+      - super-fr:tests/unit/test_fixture_templates.py#test_a_push_in_one_copy_leaves_the_other_copys_origin_alone
+      - super-fr:tests/unit/test_fixture_templates.py#test_a_write_in_a_copy_leaves_the_template_unchanged
+      - super-fr:tests/unit/test_fixture_templates.py#test_the_templates_home_and_git_config_are_the_sandboxs_not_the_operators
+    status: ci
+    notes: 'R2 pinned by unit tests in CI: a copied started run is a valid workspace
+      with a working run, copies do not share an origin or touch the template, and builds
+      run in the sandbox home'
 amendments:
   - row: git-answers-cached-per-invocation
     op: reword
