@@ -133,6 +133,7 @@ def test_ref_files_is_the_one_list_and_names_the_durable_export_set() -> None:
         "requests.yaml",
         "sessions.yaml",
         "rehomes.yaml",
+        "drive-pages.json",
     )
     files = {e for e in REF_FILES if not e.endswith("/")}
     dirs = tuple(e.rstrip("/") for e in REF_FILES if e.endswith("/"))

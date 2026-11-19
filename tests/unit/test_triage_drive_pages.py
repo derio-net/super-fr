@@ -6,6 +6,7 @@ moves one hour per read, so every snapshot the drive stores has its own file nam
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -287,3 +288,105 @@ def test_a_scope_with_no_usable_clone_says_so_once_and_probes_once(
     assert len(probes) == 1
     err = capfd.readouterr().err
     assert err.count("renders with no measurement") == 1 and "error:" not in err
+
+
+# ------------------------------------- p4-r2, p4-r4: the drive's page memory outlives a process
+
+
+def _clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = [NOW]
+
+    def tick() -> Any:
+        now[0] += timedelta(hours=1)
+        return now[0]
+
+    monkeypatch.setattr(triage_batch_cmd, "_now", tick)
+
+
+def _cancel(state: Path, batch: str = "b1") -> None:
+    text = (state / "judgements.yaml").read_text(encoding="utf-8")
+    needle = f"branch: feat/batch-{batch}}}\n"
+    (state / "judgements.yaml").write_text(text.replace(needle, needle + CANCEL), encoding="utf-8")
+
+
+def _running(world: World, state: Path, *waves: int) -> None:
+    batches = []
+    for n, wave in enumerate(waves, 1):
+        world.issues[n] = "open"
+        world.pr(100 + n, f"feat/batch-b{n}", [n], draft=True, labels=[])
+        batches.append(_batch(f"b{n}", n, wave=wave, events=_dispatch_event(f"b{n}")))
+    _state(state, world, *batches)
+
+
+def test_a_new_process_sees_a_wave_that_finished_while_no_driver_ran(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    calls = _spy_measure(monkeypatch)
+    _clock(monkeypatch)
+    _running(world, tmp_path, 1)
+    _subsystems(tmp_path)
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 1 and len(calls) == 1
+    _drive(tmp_path, "--once", "--yes")  # nothing changed: no snapshot, no new measurement
+    assert _snapshots(tmp_path) == 1 and len(calls) == 1
+    _cancel(tmp_path)  # a wave finishes (as a pass's own archive leaves it) between drives
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 2 and len(calls) == 2
+    _drive(tmp_path, "--once", "--yes")
+    assert _snapshots(tmp_path) == 2 and len(calls) == 2
+
+
+def test_the_memory_file_is_written_beside_the_state_and_carried_by_the_ref(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    from fr.triage.state_ref import REF_FILES
+
+    _running(world, tmp_path, 1)
+    _drive(tmp_path, "--once", "--yes")
+    memory = json.loads((tmp_path / "drive-pages.json").read_text(encoding="utf-8"))
+    assert memory["unfinished"] == ["1"] and memory["owed"] is False
+    assert "drive-pages.json" in REF_FILES
+
+
+def test_a_backlog_write_that_raises_keeps_the_snapshot_owed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _running(world, tmp_path, 1, 2)
+    real = triage_cmd.write_backlog
+    broken = [False]
+
+    def flaky(*a: Any, **kw: Any) -> Any:
+        if broken[0]:
+            raise OSError("disk full")
+        return real(*a, **kw)
+
+    monkeypatch.setattr(triage_cmd, "write_backlog", flaky)
+    loop = Loop(monkeypatch, tmp_path, 4)
+    seen: list[int] = []
+
+    def finish_one() -> None:
+        _cancel(tmp_path)
+        broken[0] = True
+
+    def mend() -> None:
+        seen.append(_snapshots(tmp_path))
+        broken[0] = False
+
+    loop.between.update({1: finish_one, 2: mend})
+    loop.run()
+    assert seen == [1] and _snapshots(tmp_path) == 2  # stored by the pass after the failure
+
+
+def test_the_memory_round_trips_and_an_unreadable_file_is_no_memory(tmp_path: Path) -> None:
+    from fr.triage.architecture import Measure
+    from fr.triage.drive_pages import PAGES_FILE, PagesMemory, load_memory, save_memory
+
+    measured = {"src": Measured(then=Measure("HEAD", "abc", 3, 40), now=None)}
+    save_memory(tmp_path, PagesMemory(frozenset({"2", "1"}), True, measured))
+    assert load_memory(tmp_path) == PagesMemory(frozenset({"1", "2"}), True, measured)
+    (tmp_path / PAGES_FILE).write_text("{not json", encoding="utf-8")
+    assert load_memory(tmp_path) is None
+    (tmp_path / PAGES_FILE).unlink()
+    assert load_memory(tmp_path) is None

@@ -3829,8 +3829,12 @@ class _Driver:
         self._measured: dict[str, Any] | None = None  # architecture's last measurement
         self._clone_probed = False  # the pages' clone was looked for (R6)
         self._pages_clone: Checkout | None = None
-        self._baselined = False  # the drive's first snapshot decision was made (R7)
-        self._wave_owed = False  # a wave finished since the pages were last written (R7)
+        # What the last page-writing pass left (`drive-pages.json`, read at the first pages
+        # of this process: the cloud driver's state arrives with its lease): R7
+        self._memory_read = False
+        self._baselined = False  # a snapshot decision was made, here or by an earlier process
+        self._owed = False  # a wave finish is still owed its snapshot
+        self._paged_unfinished: frozenset[str] | None = None
         self.workspace_prefix = workspace_prefix
         self.keep_sessions = keep_sessions
         self.checkout_paths = checkouts
@@ -5312,10 +5316,7 @@ class _Driver:
                 self.release_lease()
                 _fail(self.single_pass.notice, code=2)
         self.held_by = plan.held_by
-        now_unfinished = unfinished_waves(snap)
-        if self._unfinished is not None and self._unfinished - now_unfinished:
-            self._wave_owed = True  # a wave of the last pass's unfinished set is finished now
-        self._unfinished = now_unfinished
+        self._unfinished = unfinished_waves(snap)
         acted = False
         in_flight = sum(1 for b in snap.batches if snap.stages[b.id] in LIVE_STAGES)
         try:  # a pass that aborts after a post_merge still restarts what it owes (p2-r1)
@@ -5366,8 +5367,7 @@ class _Driver:
         if self.yes:
             if paced is None or paced.kind != "essential":
                 self._write_board()  # an essential-only pass keeps the last board (R14)
-                finished, self._wave_owed = self._wave_owed, False
-                self._write_pages(finished)  # nor does it write the pages (R6)
+                self._write_pages(False)  # nor does it write the pages (R6)
         else:
             _say("nothing done; re-run with --yes to act")
         stuck = [a.batch for a in plan.actions if a.kind == "blocked"]
@@ -5492,20 +5492,37 @@ class _Driver:
         """Re-render, after the board, every page whose inputs are on disk, in registry order
         (R6): Backlog and Issues, Origins (when `origins-facts.json` exists), Architecture
         (when `subsystems.yaml` exists) and History. A page that cannot be written is one
-        warning per distinct cause. Takes the drive's snapshot when R7 says so: on its first
-        page-writing pass when it differs from the latest stored one, then on a pass in which
-        *wave_finished*. Architecture measures on the first pass and a wave-finish pass only."""
+        warning per distinct cause. Takes the drive's snapshot when R7 says so: on the first
+        page-writing pass of a scope with no `drive-pages.json` when it differs from the latest
+        stored one, then on a pass that finds a wave finished: *wave_finished*, a wave of the
+        remembered unfinished set that is finished now, or one a failed write still owes.
+        Architecture measures on the first pass and a wave-finish pass only. What the pass
+        leaves is written to `drive-pages.json`, so another process carries on from it."""
         from fr.commands import (
             triage_architecture_cmd,
             triage_history_cmd,
             triage_origins_cmd,
         )
         from fr.triage.architecture import SUBSYSTEMS_FILE
+        from fr.triage.drive_pages import PagesMemory, load_memory, save_memory
         from fr.triage.origins import FACTS_FILE as ORIGINS_FACTS
         from fr.triage.snapshot import latest_snapshot, store_snapshot
 
+        if not self._memory_read:
+            self._memory_read = True
+            if (memory := load_memory(self.target)) is not None:
+                self._baselined, self._owed = True, memory.owed
+                self._paged_unfinished = memory.unfinished
+                self._measured = memory.measured
+        gone = (
+            self._paged_unfinished is not None
+            and self._unfinished is not None
+            and bool(self._paged_unfinished - self._unfinished)
+        )
+        finished = wave_finished or self._owed or gone
         now = _now()
         clone = self._scope_clone()
+        wrote_backlog = False
 
         def said_once(key: str, message: str) -> None:
             self._report_once(key, message)
@@ -5514,6 +5531,7 @@ class _Driver:
             return lambda message: said_once(f"page\0{key}\0{message}", message)
 
         def write_backlog() -> None:
+            nonlocal wrote_backlog
             written = triage_cmd.write_backlog(
                 self.scope,
                 self.target,
@@ -5527,21 +5545,21 @@ class _Driver:
                 matrix=clone.path if clone is not None else None,
             )
             snap = written.snapshot
-            store = wave_finished
+            store = finished
             if not self._baselined:
                 store = snap is not None and snap != latest_snapshot(self.target)
-                self._baselined = True
             if snap is not None and store:
                 store_snapshot(
                     self.target, snap, now,
                     warn=lambda m: said_once(f"snapshot\0{m}", m),
                 )  # fmt: skip
+            self._baselined = wrote_backlog = True
 
         def write_origins() -> None:
             triage_origins_cmd.write_origins(self.scope, self.target, now=now, warn=warn("origins"))
 
         def write_architecture() -> None:
-            remeasure = self._measured is None or wave_finished
+            remeasure = self._measured is None or finished
             written = triage_architecture_cmd.write_architecture(
                 self.scope,
                 self.target,
@@ -5571,6 +5589,18 @@ class _Driver:
                 self._page_failed(key, exc)
             else:
                 self.page_failures.pop(key, None)
+        # A failed Backlog write keeps the snapshot owed for the next pass (p4-r4).
+        self._owed = self._owed or finished
+        if wrote_backlog:
+            self._owed = False
+        if self._unfinished is not None:
+            self._paged_unfinished = self._unfinished
+            try:
+                save_memory(self.target, PagesMemory(self._unfinished, self._owed, self._measured))
+            except OSError as exc:
+                self._report_once(
+                    f"pages-memory\0{exc}", f"could not remember the pages' state: {exc}"
+                )
 
     def _act(self, action: Action, facts: Facts, in_flight: int) -> tuple[str, bool, int]:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
