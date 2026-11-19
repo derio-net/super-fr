@@ -410,3 +410,158 @@ Fixed in the spec (01d48582f): R10 allows the local `-m "" --store-durations` ru
 ### p3-f-fr-scope-optional-value-resolved · finding [deferred → derio-net/super-fr#1575] · resolves p3-f-fr-scope-optional-value: `--fr-scope` with nargs='?' swallows a following path as its base (`--fr-scope tests/unit/x.py`) (phase 3)
 
 Caused by R6's `--fr-scope [<base>]` form, but it fails loudly (a usage error naming the path), and the declared fast_tier always puts the base right after the option. Changing the option shape is tracked in derio-net/super-fr#1575.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · AGENTS.md said the scenario tier is 145 tests; it is 144
+
+Raised by the docs-accuracy lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · --fr-scope selection hook had no end-to-end test; a pass mutation left test_fr_scope green
+
+Raised by the tests lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · Advisory reasons for the default local run were tested only against a SimpleNamespace stand-in
+
+Raised by the tests lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · Acceptance rows for R1 and R2 had empty levels although their tests exist
+
+Raised by the tests lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · test_gate_cmd forge fixture in an empty checkout lost the journal and plan read paths
+
+Raised by the tests lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-19T21:10:26+00:00 state=open review_scope=out -->
+### l-tests-r5 · finding [open] (reviewer: out of scope) · The _Advance stand-in exposes only exit_code, output and stdout
+
+Raised by the tests lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · _tests_brief turned a GitRefusal or None default ref into a blank {base}
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · git_cache decline on an unknown system config was silent and unmemoized
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · _default_ref_of read any non-zero rev-parse/symbolic-ref as absent and cached it
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · _ci_yaml_at_head mapped every git show failure and non-mapping YAML to None
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · fr_scope.resolve_base dropped the GitRefusal reason
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · fixture_templates hid git stderr, leaked raw errors past TemplateBuildError, and _remap matched t1 inside t10
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · The advisory line carried no reason and --collect-only was not advisory
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r8 · finding [open] (reviewer: in scope) · fr_scope.imported_names swallowed SyntaxError
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9 created=2026-11-19T21:10:26+00:00 state=open review_scope=in -->
+### l-errors-r9 · finding [open] (reviewer: in scope) · Locate-before-stamp window: an include added between locate and the stamp was untracked
+
+Raised by the errors lens reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=review scope=plan id=review-lens-1 created=2026-11-19T21:10:26+00:00 -->
+### review-lens-1 · review · Lens review (docs-accuracy, errors, tests): 15 findings, 14 in scope and fixed, 1 out of scope
+
+Three reviewers (general-purpose, separate contexts), one per lens, reviewed the whole feature diff from merge base 28f2c623e. The errors lens probed 8 git-state mutation sequences against the cache and found no stale answer. The tests lens proved l-tests-r1 with a mutation probe. Fixes: 9bf334e0d, a54678fa9, 654b26c7e, with spec amendments to R1, R7, R8 and §3.A; each code fix red-first (l-tests-r4 shown to bite by a seed flip; l-docs-accuracy-r1 prose only).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: AGENTS.md said the scenario tier is 145 tests; it is 144
+
+Fixed in 9bf334e0d: AGENTS.md:494 says 144 (pytest -m scenario --collect-only; 870 s re-summed over those ids).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: --fr-scope selection hook had no end-to-end test; a pass mutation left test_fr_scope green
+
+Fixed in 9bf334e0d: test_the_fast_tier_collects_exactly_the_dependents_and_the_smoke_set runs a real `pytest --collect-only --fr-scope HEAD` in a temp repo and asserts the exact ids; red under the `items[:] = kept` -> pass mutation.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: Advisory reasons for the default local run were tested only against a SimpleNamespace stand-in
+
+Fixed in 9bf334e0d: real subprocess sessions for the default addopts and for -k, plus the whole-suite negative case.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: Acceptance rows for R1 and R2 had empty levels although their tests exist
+
+Fixed in a54678fa9/654b26c7e: git-answers-cached-per-invocation and template-fixture-copies-independent moved to ci with their level refs. ci-ok-required-on-main stays not-implemented: it is the manual phase-4 row, verified live post-merge per the spec's Verification.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: test_gate_cmd forge fixture in an empty checkout lost the journal and plan read paths
+
+Fixed in 9bf334e0d: test_a_pass_reads_the_checkouts_journal_and_plan_for_the_discharge seeds a plan and journal; shown to bite by flipping the seed.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-19T21:10:26+00:00 state=open resolves=l-tests-r5 out_of_scope=true -->
+### l-tests-r5-resolved · finding [out-of-scope] · resolves l-tests-r5: The _Advance stand-in exposes only exit_code, output and stdout
+
+Not caused as a defect: a later caller reading another attribute fails loudly with AttributeError, and no current caller does.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: _tests_brief turned a GitRefusal or None default ref into a blank {base}
+
+Fixed in 9bf334e0d: a declared fast_tier with no nameable base refuses the brief (exit 2) with git's reason and the set-head / checkout.defaultRemote fix; spec R8 amended.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: git_cache decline on an unknown system config was silent and unmemoized
+
+Fixed in 9bf334e0d: _UNKNOWN memoized in _SYSTEM_MEMO; FR_GIT_CACHE_DEBUG=1 names every decline on stderr; spec R1 and §3.A amended.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: _default_ref_of read any non-zero rev-parse/symbolic-ref as absent and cached it
+
+Fixed in 9bf334e0d: exit 1 is not-found; any other exit is a GitRefusal carrying stderr and is never cached; forced-128 tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: _ci_yaml_at_head mapped every git show failure and non-mapping YAML to None
+
+Fixed in 9bf334e0d: only git's path-not-in-HEAD messages or an empty file mean absent; unborn HEAD, corrupt object and non-mapping content refuse; spec R8 amended.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: fr_scope.resolve_base dropped the GitRefusal reason
+
+Fixed in 9bf334e0d: the error carries ref.reason.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: fixture_templates hid git stderr, leaked raw errors past TemplateBuildError, and _remap matched t1 inside t10
+
+Fixed in 9bf334e0d: git failures raise TemplateBuildError with the template and stderr; non-object markers handled at build and copy; _remap replaces only on a path boundary.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [fixed] · resolves l-errors-r7: The advisory line carried no reason and --collect-only was not advisory
+
+Fixed in 9bf334e0d: a `fr-scope: advisory because ...` line precedes the byte-identical advisory line; --collect-only is a reason; the refusal text names what makes a log advisory; spec R7 amended.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r8 -->
+### l-errors-r8-resolved · finding [fixed] · resolves l-errors-r8: fr_scope.imported_names swallowed SyntaxError
+
+Fixed in 9bf334e0d: unparseable test files are recorded and named on their own line under --fr-scope.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9-resolved created=2026-11-19T21:10:26+00:00 state=fixed resolves=l-errors-r9 -->
+### l-errors-r9-resolved · finding [fixed] · resolves l-errors-r9: Locate-before-stamp window: an include added between locate and the stamp was untracked
+
+Fixed in 9bf334e0d: _through_cache re-locates after compute and stores nothing when the result differs (a stale hit was already impossible; this removes an entry stamped over an incomplete list).
