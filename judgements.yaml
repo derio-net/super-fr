@@ -9055,6 +9055,10 @@ batches:
     runner: herdr
     handle: w3R:p1
     branch: fix/batch-hook-hardening
+  - kind: approval
+    at: '2026-11-19T22:28:43.014985Z'
+    pr: 1573
+    head: 8c4ff18058d54ad3127b6ef1b25eb0890d6f2bcc
 - id: triage-hardening
   title: 'Triage intake hardening: withhold ineligible titles, pin ready-fr to content, owed trackers
     out of dedupe'
