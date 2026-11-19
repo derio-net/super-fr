@@ -9044,6 +9044,12 @@ batches:
   - super-fr#1554
   rationale: Follow-ups filed by the consumer-delivery run (wave 20).
   wave: 24
+  events:
+  - kind: dispatch
+    at: '2026-11-19T22:16:12.643659Z'
+    runner: herdr
+    handle: w3T:p1
+    branch: feat/batch-consumer-followups
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
