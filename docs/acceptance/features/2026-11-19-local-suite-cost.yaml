@@ -55,3 +55,22 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+  - id: template-fixture-copies-independent
+    capability: Test fixtures
+    acceptance: A started-run or isolated-workspace template is built once per test
+      worker inside the test sandbox, and each test's copy is an independent repository
+      with its own origin and state that passes the same workspace checks
+    origin:
+    - spec:2026-11-19-local-suite-cost#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+amendments:
+  - row: git-answers-cached-per-invocation
+    op: reword
+    base: 0
+    acceptance: While a CLI invocation runs, fr asks git each default-remote and default-branch
+      question at most once per repository state, a change inside the invocation makes
+      the next question go to git, and a library caller outside a CLI invocation never
+      uses the cache
+    why: 'sr-r6: R1 narrowed to the two default-remote helpers'

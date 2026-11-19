@@ -109,3 +109,208 @@ Round 2, from the finding that nothing marks a log partial: operator chose that 
 ### gate-question-rounds-brainstorm · decision · Operator gate `brainstorm` took two question rounds
 
 Trigger: design-risk. Round 1's evidence-model choice decided which sub-decisions exist (phase behaviour, fast-tier contents, local-log policy) and the scenario answer needed checking against CI's addopts override.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r1 · finding [open] (reviewer: in scope) · §2/§3.D misstate release.py: its shards and collect already clear addopts; only the one-process path does not
+
+check/evidence: scripts/release.py:227,:301,:317 override addopts; :221/_run_staged_tests (via :1046-1050) does not.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r2 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r2 · finding [open] (reviewer: in scope) · split-check cannot prove scenarios ran
+
+check/evidence: collect and shards shrink together under a shared filter (ci.yml:87,:142,:196-203).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r3 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r3 · finding [open] (reviewer: in scope) · load_gate_checks ignores unknown keys today; rev unstated
+
+check/evidence: ci_evidence.py:73-98 reads only gate_checks; :101 unions base and HEAD.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r4 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r4 · finding [open] (reviewer: in scope) · R8 tests_log: none contradicts agent and fr-goal §5/§6
+
+check/evidence: fr-phase-executor.md:139-148,:150-159; SKILL.md §5, §6.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r5 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r5 · finding [open] (reviewer: in scope) · Fingerprint misses config scopes, nested refs, reftable, worktrees, not-a-repo
+
+check/evidence: git.py:193,:196,:234-241; conftest.py:266.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r6 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r6 · finding [open] (reviewer: in scope) · git-dir/toplevel lookups span ~20 call sites
+
+check/evidence: commands/common.py:67, isolation/marker.py:52, artifacts/commit.py, settings/load.py, …
+
+<!-- fr:journal kind=finding scope=spec id=sr-r7 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r7 · finding [open] (reviewer: in scope) · Clear-at-CLI-entry does not scope library callers
+
+check/evidence: cli.py:69-79; fr_dispatch, runner adapters call fr as a library.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r8 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r8 · finding [open] (reviewer: in scope) · 928 → ≤464 mixes subprocesses and git calls; for-each-ref misattributed
+
+check/evidence: git.py:184-242 issues no for-each-ref.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r9 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r9 · finding [open] (reviewer: in scope) · Session template built outside sandbox; copies share origin and LAST_BRIEF
+
+check/evidence: conftest.py:238-266; test_fr_goal_shape.py:174-177; record_support.py LAST_BRIEF; test_run_cli.py _repo per branch.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r10 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r10 · finding [open] (reviewer: in scope) · R6 'reach' vs §3.E direct imports; changed helpers and untracked files missed
+
+check/evidence: record_support.py is a helper, not test_*.py; git diff omits untracked files.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r11 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r11 · finding [open] (reviewer: in scope) · Default local run is partial after R5 yet unmarked
+
+check/evidence: pyproject.toml:54; run_cmd.py:3273-3308.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r12 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r12 · finding [open] (reviewer: in scope) · R2, R3, R4, R10 lack rows; rows do not name their R
+
+check/evidence: spec Verification.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r13 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r13 · finding [open] (reviewer: in scope) · --stage require preconditions and strict policy omitted
+
+check/evidence: configure-main-protection.sh:67-69,:73-85,:93-96.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r14 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r14 · finding [open] (reviewer: in scope) · Agents procedure misses PINNED_AT_VERSION and the OpenCode mirror
+
+check/evidence: agents/__init__.py:31-34; AGENTS.md.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r15 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r15 · finding [open] (reviewer: in scope) · q4's change fragment missing
+
+check/evidence: q4-git-memo.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r16 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r16 · finding [open] (reviewer: in scope) · Durations refresh command would drop scenarios
+
+check/evidence: AGENTS.md:436,:455; test_scenarios.py:200.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r17 created=2026-11-19T09:16:34+00:00 state=open review_scope=in -->
+### sr-r17 · finding [open] (reviewer: in scope) · R7's reuse coverage implicit; match rule unstated
+
+check/evidence: run_cmd.py:3191,:3600,:3442-3493.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-19T09:16:34+00:00 -->
+### spec-review-1 · review · independent spec review: 17 findings, all in scope, all fixed in the spec
+
+Reviewer fr-spec-reviewer raised sr-r1..sr-r17 (all in scope); each is fixed in the spec (see resolutions). Decisions q1-q10 honoured; q4's fragment added.
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-19T09:16:34+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · shared fixtures are rewritten and tiers deselected: every level ref and scenario must still run somewhere
+
+<!-- fr:journal kind=lens scope=spec id=lens-errors-1 created=2026-11-19T09:16:34+00:00 lens=errors step=spec-review -->
+### lens-errors-1 · lens · a cache over git state can go stale silently: its invalidation edges need a whole-feature look
+
+<!-- fr:journal kind=finding scope=spec id=sr-r1-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r1 -->
+### sr-r1-resolved · finding [fixed] · resolves sr-r1: §2/§3.D misstate release.py: its shards and collect already clear addopts; only the one-process path does not
+
+§2 now names the exact paths; §3.D puts `-m ""` on `_run_staged_tests` and pins every command line.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r2-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r2 -->
+### sr-r2-resolved · finding [fixed] · resolves sr-r2: split-check cannot prove scenarios ran
+
+§3.D adds a unit test parsing every CI/release pytest command line and asserting collect lists both scenario files; the row cites it, not split-check.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r3-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r3 -->
+### sr-r3-resolved · finding [fixed] · resolves sr-r3: load_gate_checks ignores unknown keys today; rev unstated
+
+R8/§3.F: new `declared_tests_mode` read at HEAD; load_gate_checks unchanged; unknown keys stay ignored; only a bad `tests` value refused.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r4-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r4 -->
+### sr-r4-resolved · finding [fixed] · resolves sr-r4: R8 tests_log: none contradicts agent and fr-goal §5/§6
+
+§3.F lists the conditional edits to the agent (:139, :147, :150) and fr-goal §5, §6, §8.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r5-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r5 -->
+### sr-r5-resolved · finding [fixed] · resolves sr-r5: Fingerprint misses config scopes, nested refs, reftable, worktrees, not-a-repo
+
+§3.A: repo located by parsing .git/commondir without git; fingerprint covers system/global/XDG/local config and GIT_CONFIG_* env, packed-refs, remote HEAD and every consulted ref file; reftable, include/includeIf, worktreeConfig, GIT_DIR and not-a-repo are never cached; tests for worktree, global defaultRemote, fetch, set-head, remote add, packed-ref delete.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r6-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r6 -->
+### sr-r6-resolved · finding [fixed] · resolves sr-r6: git-dir/toplevel lookups span ~20 call sites
+
+R1 narrowed to remote_name and remote_default_ref; other lookups moved to §4 out of scope.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r7-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r7 -->
+### sr-r7-resolved · finding [fixed] · resolves sr-r7: Clear-at-CLI-entry does not scope library callers
+
+§3.A: a ContextVar cache that is None unless _FrGroup.invoke opened a scope; a test pins that a library call always runs git.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r8-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r8 -->
+### sr-r8-resolved · finding [fixed] · resolves sr-r8: 928 → ≤464 mixes subprocesses and git calls; for-each-ref misattributed
+
+§2 states 926 git of 928 subprocesses and attributes ~490 to the two helpers; the pin is git subprocesses 926 → ≤500.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r9-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r9 -->
+### sr-r9-resolved · finding [fixed] · resolves sr-r9: Session template built outside sandbox; copies share origin and LAST_BRIEF
+
+§3.B: template built under the same sandbox env through a shared helper; copies get their own origin.git (set-url), repaired worktree, rewritten marker, restored LAST_BRIEF; test_run_cli templates keyed per branch; tests for push isolation and sandboxed HOME.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r10-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r10 -->
+### sr-r10-resolved · finding [fixed] · resolves sr-r10: R6 'reach' vs §3.E direct imports; changed helpers and untracked files missed
+
+R6 and §3.E now say the same: direct or through tests/ helpers, not through source modules; changed helpers and conftest.py select; untracked via ls-files --others; base defaults to remote_default_ref.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r11-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r11 -->
+### sr-r11-resolved · finding [fixed] · resolves sr-r11: Default local run is partial after R5 yet unmarked
+
+R7: any session that is not the whole configured suite (incl. the default, which deselects scenarios) prints the advisory line; `-m ""` is the full local run; R8 states deliver still accepts a full local log (q10 is the operative decision over q8's wording).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r12-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r12 -->
+### sr-r12-resolved · finding [fixed] · resolves sr-r12: R2, R3, R4, R10 lack rows; rows do not name their R
+
+Added row template-fixture-copies-independent (R2); each Verification line names its R; R3/R4/R10 carry a stated reason for no row and their evidence.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r13-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r13 -->
+### sr-r13-resolved · finding [fixed] · resolves sr-r13: --stage require preconditions and strict policy omitted
+
+R9/§3.G: bypass → an app-pushed release → require; the strict up-to-date consequence is stated.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r14-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r14 -->
+### sr-r14-resolved · finding [fixed] · resolves sr-r14: Agents procedure misses PINNED_AT_VERSION and the OpenCode mirror
+
+§3.F lists PINNED_AT_VERSION, sync-opencode.py for the agent mirror, and sync-opencode.py + sync-hermes.py for the skill.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r15-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r15 -->
+### sr-r15-resolved · finding [fixed] · resolves sr-r15: q4's change fragment missing
+
+§3.H names .changes/perf-test-suite-cost.yaml, bump minor.
+
+<!-- fr:journal kind=finding scope=spec id=sr-r16-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r16 -->
+### sr-r16-resolved · finding [fixed] · resolves sr-r16: Durations refresh command would drop scenarios
+
+R10 names `-m ""` in the refresh command and AGENTS.md:436 changes with it; the tripwire test stays unmarked (R5, §3.D).
+
+<!-- fr:journal kind=finding scope=spec id=sr-r17-resolved created=2026-11-19T09:16:34+00:00 state=fixed resolves=sr-r17 -->
+### sr-r17-resolved · finding [fixed] · resolves sr-r17: R7's reuse coverage implicit; match rule unstated
+
+R7 states the reuse consequence and a whole-line match; §3.E adds a test that a quoting log is accepted.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-19T09:16:40+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  ci-ok-required-on-main: developer
+  fast-tier-advisory-and-refused: none
+  git-answers-cached-per-invocation: none
+  repo-declares-ci-tests-evidence: none
+  scenario-tier-deselected-locally: none
+  template-fixture-copies-independent: none
+row_kinds:
+  ci-ok-required-on-main: live
+  fast-tier-advisory-and-refused: none
+  git-answers-cached-per-invocation: none
+  repo-declares-ci-tests-evidence: none
+  scenario-tier-deselected-locally: none
+  template-fixture-copies-independent: none
+run_gate: developer
+run_kind: candidate
+```
