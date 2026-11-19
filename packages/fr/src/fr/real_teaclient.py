@@ -78,10 +78,14 @@ class RealTeaClient(UnsupportedBatchOps):
 
     def list_linked_prs(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
         """PRs referencing this Issue, derived from its timeline (no
-        dedicated endpoint exists — see module docstring). Fails soft."""
+        dedicated endpoint exists — see module docstring). Fails soft: `[]` on
+        a TeaError, except one naming a login page (`tea.names_login_page`),
+        which is re-raised so the caller can name it (gh#1554)."""
         try:
             events = _tea.api_json(f"/repos/{repo}/issues/{issue_number}/timeline")
-        except _tea.TeaError:
+        except _tea.TeaError as exc:
+            if _tea.names_login_page(exc):
+                raise
             return []
         if not isinstance(events, list):
             return []
@@ -118,14 +122,17 @@ class RealTeaClient(UnsupportedBatchOps):
         """No lookup takes a bare URL (same reasoning as GitLab's `mr view`)
         — parse (repo, index) from the URL, then read the PR from the API
         (`tea pulls <n>` renders merge state as `hasMerged` and drops
-        `draft`). Fails soft: None on any error or unparseable URL."""
+        `draft`). Fails soft: None on an unparseable URL or a TeaError, except
+        one naming a login page, which is re-raised (gh#1554)."""
         m = _PR_URL_RE.match(url)
         if not m:
             return None
         repo, index = m.group(1), m.group(2)
         try:
             raw = _tea.api_json(f"/repos/{repo}/pulls/{index}")
-        except _tea.TeaError:
+        except _tea.TeaError as exc:
+            if _tea.names_login_page(exc):
+                raise
             return None
         if not isinstance(raw, dict):
             return None
@@ -269,9 +276,13 @@ class RealTeaClient(UnsupportedBatchOps):
     def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
         # `tea repos` LISTS repos and has no default_branch field; the API's
         # Repository does, and `{owner}/{repo}` resolves from the checkout at cwd.
+        # None on a TeaError; a login page is re-raised, never read as "no
+        # default branch" (gh#1554).
         try:
             parsed = _tea.api_json("/repos/{owner}/{repo}", cwd=cwd, run=run)
-        except _tea.TeaError:
+        except _tea.TeaError as exc:
+            if _tea.names_login_page(exc):
+                raise
             return None
         branch = parsed.get("default_branch") if isinstance(parsed, dict) else None
         return branch if isinstance(branch, str) and branch else None
@@ -285,14 +296,18 @@ class RealTeaClient(UnsupportedBatchOps):
         degradation vs. gh/glab, not a bug. The API, not `tea pulls list`:
         tea's listing has no `merged` field and no merge time. `label`, not
         `ref`: a same-repo PR's label is the bare branch, a fork's is
-        `owner:branch`, so a fork's same-named branch is not this one."""
+        `owner:branch`, so a fork's same-named branch is not this one. None on
+        a TeaError, except one naming a login page, which is re-raised: an
+        unreachable forge is not "no PR" (gh#1554)."""
         try:
             entries = _tea.api_json(
                 "/repos/{owner}/{repo}/pulls?state=all&sort=recentupdate&limit=50",
                 cwd=cwd,
                 run=run,
             )
-        except _tea.TeaError:
+        except _tea.TeaError as exc:
+            if _tea.names_login_page(exc):
+                raise
             return None
         if not isinstance(entries, list):
             return None
@@ -317,20 +332,26 @@ class RealTeaClient(UnsupportedBatchOps):
         return None
 
     def file_exists(self, repo: str, path: str) -> bool:
-        """Contents-API existence probe. Any error reads as "not found"
-        — the safe direction (same posture as the GitHub/GitLab adapters).
+        """Contents-API existence probe. A TeaError reads as "not found" — the
+        safe direction (same posture as the GitHub/GitLab adapters) — except one
+        naming a login page, which is re-raised (gh#1554).
         `api_json` is what makes a 404 an error: tea itself exits 0."""
         try:
             _tea.api_json(f"/repos/{repo}/contents/{path}")
             return True
-        except _tea.TeaError:
+        except _tea.TeaError as exc:
+            if _tea.names_login_page(exc):
+                raise
             return False
 
     def list_dir(self, repo: str, path: str) -> list[str]:
-        """Entry names under `path`. `[]` on any TeaError."""
+        """Entry names under `path`. `[]` on a TeaError, except one naming a
+        login page, which is re-raised (gh#1554)."""
         try:
             entries = _tea.api_json(f"/repos/{repo}/contents/{path}")
-        except _tea.TeaError:
+        except _tea.TeaError as exc:
+            if _tea.names_login_page(exc):
+                raise
             return []
         if not isinstance(entries, list):
             return []
