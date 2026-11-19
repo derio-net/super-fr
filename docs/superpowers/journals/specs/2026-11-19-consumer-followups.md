@@ -39,3 +39,89 @@ Operator chose CI tests and no post-merge walk over adding a live OpenCode walk 
 
 <!-- fr:journal kind=lens scope=spec id=lens-security-1 created=2026-11-19T22:22:30+00:00 lens=security step=brainstorm -->
 ### lens-security-1 · lens · R1-R4 change what the isolation gates judge, and R5 removes a persisted CI token; examine both for a new allow path
+
+<!-- fr:journal kind=finding scope=spec id=s-r1 created=2026-11-19T22:29:53+00:00 state=open review_scope=in -->
+### s-r1 · finding [open] (reviewer: in scope) · §C 'Callers already handle a raised forge error' is unverified and wrong for some callers of the six tea sites
+
+ops/gate.py:336 Gate.default lets a raised TeaError become a traceback; isolation/local.py:3030/:3167 turn it into a refusal (behaviour change); migrate.py:934 hides it. glab re-raises at only three sites (:402, :428, :465). Fix: list each site's callers, map FORGE_ERRORS to StageFailed in Gate.default, state the isolation change as intended.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2 created=2026-11-19T22:29:53+00:00 state=open review_scope=in -->
+### s-r2 · finding [open] (reviewer: in scope) · The session lookup on execute.before's hot path has no timeout and is retried on every call while it fails
+
+index.ts:278-294 would await session.get on every tool call; a hanging get stalls every call. Fix: bound the lookup; a timeout is the fallback, uncached.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3 created=2026-11-19T22:29:53+00:00 state=open review_scope=in -->
+### s-r3 · finding [open] (reviewer: in scope) · R2 covers only relative targets; the edit gate's unresolvable-patch probe also moves to the session's repo
+
+index.ts:197 normalizeTarget(directory, '.fr-unresolvable-patch-target'). Fix: state it in R2 and test it.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4 created=2026-11-19T22:29:53+00:00 state=open review_scope=in -->
+### s-r4 · finding [open] (reviewer: in scope) · §B says 'golden files, if any', but two Gitea goldens exist; the new per-run fetch warning is not stated
+
+tests/fixtures/acceptance_scaffold/gitea-actions.golden:48 and gitea-actions.published.golden; amend.py:349-358 warning on a private repo.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5 created=2026-11-19T22:29:53+00:00 state=open review_scope=out -->
+### s-r5 · finding [open] (reviewer: out of scope) · In CI, a Gitea checkout with a default branch outside main/master/trunk/develop has no default ref, so the check refuses
+
+amend.py:322-336; pre-existing, independent of the credential.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6 created=2026-11-19T22:29:53+00:00 state=open review_scope=out -->
+### s-r6 · finding [open] (reviewer: out of scope) · Child sessions have no sentinel of their own, so the shell and push guards never fire for them in any directory
+
+guard.ts:184-190, push.ts:48-53, sentinel.ts:209-228; pre-existing, independent of the directory.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-19T22:29:53+00:00 -->
+### spec-review-1 · review · independent spec review: 6 findings (4 in scope, all fixed; 2 out)
+
+fr-spec-reviewer (separate context) verified q1-q4 are honoured and checked every cited file:line, plus the callers of the six tea sites. s-r1..s-r4 fixed in the spec (07bcac956, R7 added and the tea row's origins corrected); s-r5, s-r6 out of scope, named in Out of scope.
+
+<!-- fr:journal kind=lens scope=spec id=lens-errors-1 created=2026-11-19T22:29:53+00:00 lens=errors step=spec-review -->
+### lens-errors-1 · lens · R6 turns six fail-soft reads into raises; every caller's handling of a raised TeaError (ops gate, isolation, migrate) needs examining
+
+<!-- fr:journal kind=finding scope=spec id=s-r1-resolved created=2026-11-19T22:29:53+00:00 state=fixed resolves=s-r1 -->
+### s-r1-resolved · finding [fixed] · resolves s-r1: §C 'Callers already handle a raised forge error' is unverified and wrong for some callers of the six tea sites
+
+§C lists each site's callers; R7 added (Gate.default maps FORGE_ERRORS to StageFailed; isolation refusal stated as intended; migrate degrade kept, with reason).
+
+<!-- fr:journal kind=finding scope=spec id=s-r2-resolved created=2026-11-19T22:29:53+00:00 state=fixed resolves=s-r2 -->
+### s-r2-resolved · finding [fixed] · resolves s-r2: The session lookup on execute.before's hot path has no timeout and is retried on every call while it fails
+
+R4 and §A bound the lookup at 2 s; a timeout is the fallback, uncached; verification covers a hanging lookup.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3-resolved created=2026-11-19T22:29:53+00:00 state=fixed resolves=s-r3 -->
+### s-r3-resolved · finding [fixed] · resolves s-r3: R2 covers only relative targets; the edit gate's unresolvable-patch probe also moves to the session's repo
+
+R2 and §A name the unresolvable-patch probe; verification covers it.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4-resolved created=2026-11-19T22:29:53+00:00 state=fixed resolves=s-r4 -->
+### s-r4-resolved · finding [fixed] · resolves s-r4: §B says 'golden files, if any', but two Gitea goldens exist; the new per-run fetch warning is not stated
+
+§B names both goldens and states the per-run fetch warning on a private repo.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5-resolved created=2026-11-19T22:29:53+00:00 state=open resolves=s-r5 out_of_scope=true -->
+### s-r5-resolved · finding [out-of-scope] · resolves s-r5: In CI, a Gitea checkout with a default branch outside main/master/trunk/develop has no default ref, so the check refuses
+
+Predates this change: R5 changes only whether the fetch is authenticated, not how the default ref is found. Named in Out of scope.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6-resolved created=2026-11-19T22:29:53+00:00 state=open resolves=s-r6 out_of_scope=true -->
+### s-r6-resolved · finding [out-of-scope] · resolves s-r6: Child sessions have no sentinel of their own, so the shell and push guards never fire for them in any directory
+
+Predates this change: no sentinel for a child is independent of which directory is judged. Named in Out of scope.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-19T22:29:55+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  gitea-matrix-no-persisted-token: none
+  opencode-gates-session-directory: none
+  tea-fail-soft-login-page: none
+row_kinds:
+  gitea-matrix-no-persisted-token: none
+  opencode-gates-session-directory: none
+  tea-fail-soft-login-page: none
+run_gate: none
+run_kind: candidate
+```
