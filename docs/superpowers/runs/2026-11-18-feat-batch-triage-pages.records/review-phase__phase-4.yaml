@@ -1,0 +1,58 @@
+schema_version: 12
+run: 2026-11-18-feat-batch-triage-pages
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+  - kind: review
+    id: review-p4
+    phase: 4
+    title: "Phase 4 review: the driver re-renders every page and snapshots at a wave's finish"
+    body: |
+      Independent review of 2adefd2..a322faa42 against R6, R7 and design §C, after reading batch_drive.py,
+      driver.py, the drive loop in triage_batch_cmd.py and fr triage drive pass end to end. Holds: the drive
+      pass stays pure; pages are written only on --yes passes that are neither quiet nor essential-only; Origins
+      and Architecture wait for their inputs; per-page failure sets warn once per cause; atomic writes; the
+      refactored commands keep their output, refusals and warnings; the cloud loader and ci_none are passed.
+      Five findings, all in scope, all fixed: chiefly the drive's page memory now persists in drive-pages.json,
+      carried by the state ref, so host restarts and cloud wakes keep the R6/R7 rules.
+  - kind: finding
+    id: p4-r1
+    phase: 4
+    review_scope: in
+    title: "A single-repo scope with no usable clone prints a red error line every pass"
+    body: _scope_clone went through _open_checkout/_fail, printing before raising, uncached and not once per cause.
+  - kind: finding
+    id: p4-r2
+    phase: 4
+    review_scope: in
+    title: "The cloud driver builds a fresh _Driver per wake, losing the drive's page memory"
+    body: Architecture re-measured every wake, a snapshot whenever the board changed, and the wave-finish rule never fired.
+  - kind: finding
+    id: p4-r3
+    phase: 4
+    review_scope: in
+    title: "Docs state the measurement and snapshot rules without saying they held only for the host loop"
+    body: fr-wave-driver.md and docs/triage/README.md misled a cloud-driver reader.
+  - kind: finding
+    id: p4-r4
+    phase: 4
+    review_scope: in
+    title: "A wave-finish snapshot is lost on an early drive exit or a failing Backlog write"
+    body: The finish was seen only by a later pass the drive might not run, and the owed flag was cleared before the write.
+  - kind: finding
+    id: p4-r5
+    phase: 4
+    review_scope: in
+    title: "The purity test only greps for datetime.now"
+    body: Other clock, git or subprocess use in batch_drive.py passed it.
+resolves:
+  - {id: p4-r1, state: fixed, body: "f7427b4f8: _scope_clone probes with _checkout_refusal once per driver, caches hit or miss, and a miss is one once-per-cause warning."}
+  - {id: p4-r2, state: fixed, body: "209f66595: drive-pages.json (fr/triage/drive_pages.py) holds the unfinished waves, the owed flag and the serialised measurement, written atomically and carried by state_ref.REF_FILES; two drives in sequence keep the rules."}
+  - {id: p4-r3, state: fixed, body: "958b8df56: both pages describe the memory file for host and cloud drivers, with reviewed stamps."}
+  - {id: p4-r4, state: fixed, body: "209f66595: a new process sees a wave finished while no driver ran; the owed flag clears only after the Backlog write and snapshot succeed."}
+  - {id: p4-r5, state: fixed, body: "b8ff83fdd: an AST check refuses clock calls, time/subprocess/gitseam imports in batch_drive.py, and is shown to catch an impure source."}
+evidence:
+  review: review-p4
+  reviewer: a0903814668fa9c69
+  model: claude-opus-5-5
