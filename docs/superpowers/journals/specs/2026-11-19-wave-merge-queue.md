@@ -381,3 +381,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-wave-merge-queue-p2 created=2026-11-19T22:28:05+00:00 decided_by=agent -->
 ### tier-2026-11-19-wave-merge-queue-p2 · decision · hard: the queue's ordering, exclusivity and ejection rules are the concurrency core every landing relies on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-wave-merge-queue-p3 created=2026-11-19T22:28:08+00:00 decided_by=agent -->
+### tier-2026-11-19-wave-merge-queue-p3 · decision · hard: leased atomic pushes to main and PR heads, and crash-window resumption
