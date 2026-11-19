@@ -1,0 +1,27 @@
+schema_version: 11
+run: 2026-11-19-feat-batch-train-truth
+workflow: fr-goal@1
+branch: feat/batch-train-truth
+started: '2026-11-19T09:47:34+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 8.3.0rc1
