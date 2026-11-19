@@ -99,7 +99,7 @@ rows:
     acceptance: '`batch cancel --yes` of a batch with no dispatch event needs no --checkout,
       writes no label or comment, releases this scope''s claims and records the cancel'
     origin:
-    - spec:2026-11-19-batch-train-truth#R20
+    - spec:2026-11-19-batch-train-truth#R21
     levels: {}
     status: not-implemented
     notes: ''
