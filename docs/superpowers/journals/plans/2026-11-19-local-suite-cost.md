@@ -210,3 +210,68 @@ Wall seconds, first baseline vs final run, the two big files as samples (run_cli
 ### p2-m-total-2 · discovery · Phase 2 totals, restated: subprocess starts and CPU are the claim; wall-time aggregates are load-confounded and are not (supersedes p2-m-total) (phase 2)
 
 Supersedes p2-m-total, whose run_cli figures (158.9/153.0) and gate_cmd baseline (236.2) match no per-file entry, and whose -18% and -42% headlines summed wall times taken at host loads from 13 to 239. Those sums are withdrawn: wall-time aggregates here are load-confounded and are NOT the claim. LOAD-INDEPENDENT EVIDENCE (the claim). Subprocess starts before -> after: record_review_fixes 6446 -> 1411 (-78%), record_apply 5683 -> 1702 (-71%), question_rounds 5975 -> 1859 (-69%), exit_label_sync_points 6463 -> 3156 (-51%), deliver_pr_body 4910 -> 2101 (-57%), forge_quiet_pr_body 4052 -> 1712 (-58%), run_cli templated sample (18 ids) 2647 -> 1202 (-55%), gate_cmd 877 -> 755, gatebackfill_closes 5727 -> 4984 (-13%), release_script 6900 -> 6212 (-10%), install_sh 58 -> 52 installs. The first run_cli sample (13 ids) holds almost no templated test: 1213 -> 1124 starts, CPU 28.3 -> 26.5 s. CPU seconds: gate_cmd 80.8 -> 21.0 (-74%), run_cli templated sample 62.9 -> 32.0 (-49%), exit_label_sync_points 66.0 after (no before captured). WALL SECONDS, each with its host load, per file, before -> after: run_cli first sample 158.9 (load 48) -> 221.6 (load 76; unreliable); run_cli templated sample 325.6 -> 244.9 (load rose to 239 during the run); scenarios (unchanged code) 69.7 (22) -> 124.5 (82); question_rounds 335.6 (24) -> 152.3 (13); record_review_fixes 249.3 (70) -> 62.4 (26); release_script 740.0 (35) -> 1276.6 (32 at start, 75 at end); install_sh 370.7 (18.5) -> 375.2 (22); record_apply 261.1 (16) -> 76.7 (19); exit_label_sync_points 554.4 (83) -> 419.9 (24); deliver_pr_body 384.5 (48 to 83) -> 132.3 (16); forge_quiet_pr_body 243.1 (18) -> 111.4 (24); gate_cmd 249.9 (18) -> 108.5 (18); gatebackfill_closes 277.7 (23) -> 199.8 (27). The scenarios pair (identical code, +79% wall) and the release_script pair (fewer starts, +72% wall) show the noise is larger than most effects, so no total is stated. Whole-suite cost and tiering stay phase 3's.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-19T19:20:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · Exit-label flake (two tests, one worker, one shared at_deliver template) unexplained; no template self-check (phase 2)
+
+Raised by the phase-2 independent reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-19T19:20:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Patch stripping covered only the asker's setattr/setitem; chdir, syspath_prepend, mid-test undo leaked silently (phase 2)
+
+Raised by the phase-2 independent reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-19T19:20:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · p2-m-total quoted run_cli and gate_cmd figures the per-file entries do not support; load-confounded headline (phase 2)
+
+Raised by the phase-2 independent reviewer; verified against the journal by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-19T19:20:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · _pristine ignored base/.git state (refs, config, isolation state) before the walkers rmtree base (phase 2)
+
+Raised by the phase-2 independent reviewer; verified against the code by the orchestrator. Latent.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-19T19:20:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · copy() repaired one worktree and one origin only; _remap silently skipped Path and other payload types (phase 2)
+
+Raised by the phase-2 independent reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-19T19:20:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · Autouse path env (sessions, transcripts, opencode db) named the asker's tmp_path during a build (phase 2)
+
+Raised by the phase-2 independent reviewer; verified against the code by the orchestrator. Latent.
+
+<!-- fr:journal kind=review scope=plan id=review-p2-1 created=2026-11-19T19:20:29+00:00 phase=2 -->
+### review-p2-1 · review · Phase 2 independent review: 6 findings, all in scope, all fixed (phase 2)
+
+Reviewer (general-purpose, separate context) reviewed the phase-2 commits eef63da9f, e7c705eb7, dd9d87fb9, 4068595ab, b45e98d0f against spec R2-R4; it built three templates by hand in a sandbox HOME and confirmed worktree relinking, mtime preservation, per-worker builds and that no test case was dropped. Raised p2-r1..p2-r6 (all in scope). Two out-of-scope notes, not caused by this change: home_sandbox does not neutralise XDG_CONFIG_HOME/GIT_CONFIG_SYSTEM (parity with the old per-test sandbox), and `fr acceptance check` errors from specs newer than the branch base. Fixes: 7d48489e1 (p2-r3) and 546bf5173 (p2-r1, r2, r4, r5, r6). The fixer wrote code before tests for r1, r2, r5, r6; the orchestrator restored the pre-fix fixture_templates.py and conftest.py and the new test module failed (collection error on the missing names), then restored the fix. Assessment: with fixes.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-19T19:20:29+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: Exit-label flake (two tests, one worker, one shared at_deliver template) unexplained; no template self-check (phase 2)
+
+Fixed in 546bf5173: every template build runs `_check_shape` and the builder's own state asserts (started_run step, at_deliver step running with a clean tree and a suite.log no older than the newest code path, at_spec_review); a build error is a TemplateBuildError naming the template, so a bad template fails at build, never as downstream refusals. The flake's cause was searched for and not established: the at_deliver builder has no wall-clock or timeout dependence beyond the suite.log mtime ordering, which copies preserve.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-19T19:20:29+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Patch stripping covered only the asker's setattr/setitem; chdir, syspath_prepend, mid-test undo leaked silently (phase 2)
+
+Fixed in 546bf5173: a build refuses an active chdir or syspath_prepend, a mid-test undo below the baseline, and a missing baseline inside a test; the helper documents what cannot be detected (monkeypatch.context(), unittest.mock, direct os.environ writes) and the private APIs read; test_the_private_pytest_apis_the_guard_reads_are_still_there pins them, so a pytest change fails one named test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-19T19:20:29+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: p2-m-total quoted run_cli and gate_cmd figures the per-file entries do not support; load-confounded headline (phase 2)
+
+Fixed in 7d48489e1: journal discovery p2-m-total-2 supersedes p2-m-total, reconciles each figure with its per-file entry, states the load for every wall figure, leads with subprocess starts and CPU, and withdraws the wall-time totals as load-confounded.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-19T19:20:29+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: _pristine ignored base/.git state (refs, config, isolation state) before the walkers rmtree base (phase 2)
+
+Fixed in 546bf5173: test_run_cli `_pristine` also compares the base .git side (refs, local config, .git/fr, worktree admin entries) with the template's, so a caller with such state takes the slow path; parametrized test for ref, config and fr-state.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-19T19:20:29+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: copy() repaired one worktree and one origin only; _remap silently skipped Path and other payload types (phase 2)
+
+Fixed in 546bf5173: `_remap` rewrites Path and raises TypeError on any other non-scalar; `copy` raises TemplateBuildError for a second linked worktree or a non-origin remote unless relink is given; `_check_shape` catches an unremappable payload at build.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-19T19:20:29+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: Autouse path env (sessions, transcripts, opencode db) named the asker's tmp_path during a build (phase 2)
+
+Fixed in 546bf5173: `build_paths` points FR_SESSIONS_DIR, FR_TRANSCRIPT_ROOT, FR_OPENCODE_DB, FR_MODELS_CACHE_DIR, FR_OPS_TRUST_DIR and FR_OPS_GATE_DIR into the factory's sandbox for the build; a guard test fails if a future autouse fixture adds an uncovered path variable.
