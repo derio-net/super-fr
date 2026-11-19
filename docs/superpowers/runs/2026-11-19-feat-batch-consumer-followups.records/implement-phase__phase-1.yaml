@@ -3,8 +3,52 @@ run: 2026-11-19-feat-batch-consumer-followups
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1]
-refactor: {}
-journal: []
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T6.S1, P1.T6.S2, P1.T7.S1, P1.T7.S2, P1.T7.S3]
+refactor:
+  P1.T2: "bind.ts's parentInfo is not identical to the resolver: it returns the session info and a child flag for bind's child rule (a child never rebinds its parent, spec §A), so only sessionDirectory() is shared, as before"
+  P1.T4: "one template line and its goldens"
+  P1.T5: "six identical two-line guards over one new predicate; the redirect text became one constant shared by the raise and the predicate, nothing else to fold"
+  P1.T6: "one try/except around one forge call; the isolation side needed no code change"
+  P1.T7: "docs, acceptance rows and the gate run only; no code to clean"
+journal:
+  - kind: discovery
+    id: p1-gates-second-session-get
+    phase: 1
+    title: The gates' session lookup is a second session.get beside the claim's, until the directory is cached
+    body: |
+      `execute.before` now calls `claimChild` (its own `session.get`) and then the
+      session-directory resolver (another `session.get`, once per session while it
+      succeeds, R4). `claim.test.ts`'s wired test asserted exactly one lookup; it now
+      pre-seeds `sharedSessionDirectories()` so every lookup left is the claim's, keeping
+      the assertion strict. Sharing one lookup between claim and the resolver was not
+      done: claim reads `parentID`/`agent`, the resolver `id`/`location`, and the spec
+      leaves the claim handler unchanged.
+  - kind: discovery
+    id: p1-isolation-login-pin
+    phase: 1
+    title: P1.T6.S1(b) is a pin, not a red — the isolation lifecycle refuses a Gitea login page once T5 re-raises it
+    body: |
+      `test_isolation_forge_refusal.py::test_a_gitea_login_page_is_refused_by_name_not_read_as_main_or_no_pr`
+      passed as soon as `RealTeaClient` re-raised the login page (the lifecycle already
+      catches `FORGE_ERRORS`). Checked against the pre-T5 `real_teaclient.py`: both
+      parametrisations fail there (main / no PR), so the test does pin R7.
+  - kind: decision
+    id: p1-gate-tests-new-file
+    phase: 1
+    title: The R1-R4 wiring tests live in a new test/session-gates.test.ts, not in index/wiring tests
+    body: |
+      They need two fr-enabled repos, a workspace of the second, a fake `gh` on PATH and a
+      sentinel armed directly for the session's repo; neither existing file's fixture has
+      that shape, and the existing gate tests stay unchanged (P1.T3.S1). The bun level
+      refs on the acceptance row are file-level, as every existing bun ref in the matrix is.
+  - kind: discovery
+    id: p1-nag-quiet-placement-flake
+    phase: 1
+    title: nag.test.ts's quiet-placement case failed once under a loaded host and passed on rerun
+    body: |
+      "the nag's acceptance directory (R1, R26) > under the quiet placement the fragments
+      live where fr settings paths says" failed once in a full `bun test` run (263 ms) and
+      passed alone and in the next full run. Not touched by this change (nag is unchanged);
+      recorded in case it recurs in CI.
 resolves: []
 evidence: {}
