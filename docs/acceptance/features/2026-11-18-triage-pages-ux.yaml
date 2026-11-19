@@ -100,9 +100,15 @@ rows:
     origin:
     - spec:2026-11-18-triage-pages-ux#R11
     - spec:2026-11-18-triage-pages-ux#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_components.py#test_a_known_key_links_to_its_own_url
+      - super-fr:tests/unit/test_triage_components.py#test_prose_cannot_make_an_href_or_inject_markup
+      - super-fr:tests/unit/test_triage_components.py#test_a_wave_tables_depends_on_links_each_batch_to_its_card
+      - super-fr:tests/unit/test_triage_board_views.py#test_next_up_shows_the_wave_as_a_linked_field_and_links_batch_and_dependencies
+      - super-fr:tests/unit/test_triage_origins.py#test_the_ended_cell_links_each_closing_pr_and_keeps_an_unsafe_one_as_text
+    status: ci
+    notes: Linker links forge references https-only and wave/batch refs to their cards.
     verify: none
     visual:
       states:
