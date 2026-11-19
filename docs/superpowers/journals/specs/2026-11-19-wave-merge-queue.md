@@ -80,3 +80,8 @@ Operator chose: the wave queue is the only merge path; a repo whose base require
 ### gate-question-rounds-brainstorm · decision · Operator gate `brainstorm` took two question rounds
 
 Trigger: operator-request. the operator asked whether a squash-chain variant would work; one follow-up settled it and the queue CI trigger
+
+<!-- fr:journal kind=decision scope=spec id=d-devops-barrier created=2026-11-19T21:44:18+00:00 decided_by=operator -->
+### d-devops-barrier · decision · gate:devops PRs are queue barriers
+
+Operator chose: the DevOps stage's stage-2 confirmation releases the PR to the queue instead of merging; the queue lands it alone and pauses until post-merge ops are recorded.
