@@ -102,12 +102,14 @@ from fr.run.model import (
     AnsweredBy,
     DispatchOutcome,
     RunState,
+    RunStateConflictError,
     RunStateError,
     StepRecord,
     current_run_schema_version,
     existing_run_id_colliding_with,
     load_run_state,
     parse_run_state,
+    read_run_state,
     run_path,
     save_run_state,
     validate_run_id,
@@ -369,7 +371,12 @@ def _remember(path: Path) -> None:
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
     """`save_run_state`, noted for the command's closing commit."""
     _remember(run_path(repo_root, state.run))
-    path = save_run_state(repo_root, state)
+    try:
+        path = save_run_state(repo_root, state)
+    except RunStateConflictError as e:
+        # super-fr#1511: a refusal, not a crash — nothing was written.
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
     _note_record_write(repo_root, path, state)
     return path
 
@@ -5278,7 +5285,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
         return None
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except (RunStateError, OSError):
             continue  # a broken run file is a different problem
         if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
@@ -5806,7 +5813,7 @@ def adopt_cmd(
             dry_run=not yes,
             superseded=effects,
         )
-    except AdoptError as e:
+    except (AdoptError, RunStateConflictError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     if effects.old and not effects.written_new:
@@ -6041,7 +6048,7 @@ def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
     same fallback `load_run_usage` makes for the usage file (review p2-r1), so
     a closed-out run keeps its per-phase table. `None` when neither reads: an
     archived cursor older than the live model prints the step table only."""
-    from fr.run.model import archived_run_path, parse_run_state
+    from fr.run.model import archived_run_path
 
     try:
         return load_run_state(repo_root, run_id)
@@ -8658,7 +8665,7 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     found: list[RunState] = []
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except (RunStateError, OSError):
             continue
         if state.branch == branch:
