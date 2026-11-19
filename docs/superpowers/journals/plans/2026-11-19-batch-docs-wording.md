@@ -155,3 +155,34 @@ Predates this change; an unclosed fence breaks the renderer's page as a whole, a
 ### p2b-r3-resolved · finding [out-of-scope] · resolves p2b-r3: a fence inside an HTML comment or an indented fence example is still recorded (phase 2)
 
 Source scanning is line-based by design; no page has a fence in a comment or an indented fence example.
+
+<!-- fr:journal kind=decision scope=plan id=p3-article-bar-follows-column created=2026-11-19T14:46:28+00:00 phase=3 -->
+### p3-article-bar-follows-column · decision · The article bar's padding follows the 720px column, not only the phone gutter (phase 3)
+
+Screenshots at 1280 px showed the article bar's text at x=21 while the h1 sat at x=280
+(the bar is pulled out to the viewport edge; the column is 720px centred). R15 names
+desktop widths, so bar.css's padding is now max(1.25rem, (100% - 720px)/2 + 1.25rem);
+the added 1.25rem is because a padding percentage resolves against the body's content
+box, 2.5rem narrower than the bar. Measured: name text and h1 both at 280 at 1280,
+both at 21.3 at 320 and 390. Landing: both at 18.4 (320, 390), 105.5 (1280).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-link-tap-height created=2026-11-19T14:46:28+00:00 phase=3 -->
+### p3-link-tap-height · discovery · Bar links were 17px tall on a phone; a 0.35rem vertical padding gives about 29px (phase 3)
+
+The vertical padding applies to the four links only (a:not(.site-name)) inside the
+480px rule, so the name row keeps its height. Link boxes at 320: x 21-96 / 111-156 /
+171-239 / 253-299, none overlapping, all in one row (top 46.1).
+
+<!-- fr:journal kind=finding scope=plan id=p3-article-table-overflow created=2026-11-19T14:46:28+00:00 phase=3 state=open review_scope=out -->
+### p3-article-table-overflow · finding [open] (reviewer: out of scope) · 01-fr-goal.html scrolls horizontally on a phone because of a wide table, not the bar (phase 3)
+
+document.documentElement.scrollWidth is 597 at 320 and 390 on 01-fr-goal.html; the
+offender is a TABLE in the article (right edge 597). The bar itself is exactly the
+viewport wide (scrollWidth == clientWidth). fr-audit, a guide and a reference page
+measure scrollWidth == innerWidth at 320/390. The table is article content from the
+renderer, outside R14's bar scope; not fixed here.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-19T14:46:28+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+CSS and a measuring script only; the code of T1 had nothing left to tidy beyond its own S3
