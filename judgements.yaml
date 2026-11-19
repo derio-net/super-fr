@@ -8661,6 +8661,11 @@ batches:
     - docs/reference/cli.md
     delivered: session
     handle: derio-net/super-fr/run/batch-owed-followups
+  - kind: approval
+    at: '2026-11-19T11:29:02.586637Z'
+    pr: 1551
+    head: 96fe52fa01b3d838e6ddf158489ad377de195d07
+    voided_at: eb84ee6a85ede77015a52ef01e93d4f4d463ad64
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
