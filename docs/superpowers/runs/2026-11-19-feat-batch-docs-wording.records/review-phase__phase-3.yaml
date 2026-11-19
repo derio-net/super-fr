@@ -1,0 +1,40 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-docs-wording
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - {kind: finding, id: p3-r1, phase: 3, review_scope: out, title: "guides/ops.html and reference/install.html scroll horizontally at 320px from wide code blocks", body: "scrollWidth 379 and 376 at 320 px; the bar's own scrollWidth is 320. Wide yaml/bash code blocks, not the bar."}
+  - kind: review
+    id: p3-review
+    phase: 3
+    title: "Phase 3 review (R14-R15): no in-scope findings"
+    body: |
+      A separate reviewer built the site, captured its own screenshots with its own script
+      (headless Chromium 1243, file:// URLs) and measured with JS: at 320/390 the site name
+      is alone on row 1 and the four links share row 2 with no overlap (links 29.5px tall,
+      27.8 on the landing); bar scrollWidth == clientWidth; fr-audit.html and index.html
+      scrollWidth == innerWidth at 320/390/1280; bar text left edge == h1 left edge (21.25
+      article/guide/reference, 18.4 landing at phone widths; 280 and 105.5 at 1280). The
+      padding max() resolves against the viewport (bar bleeds to full width). Light and dark
+      give identical geometry. The 480px-rule and padding tests would fail without the rules.
+      fr docs check and fr acceptance check clean. Only finding: p3-r1 (out of scope).
+resolves:
+  - {id: p3-r1, state: out-of-scope, body: "The page overflow comes from wide code blocks in the page body, which this change does not touch; R14 is about the bar, whose own width fits at 320 px."}
+  - {id: p3-article-table-overflow, state: out-of-scope, body: "01-fr-goal.html overflows on phones from a wide article table in its body, not the bar; this change does not touch article content or table styling."}
+evidence:
+  review: p3-review
+  reviewer: a00648e9ea26db445
+  model: claude-sonnet-5
+visual:
+  - row: site-top-bar-phone-layout
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/shoot.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/fr-audit.html-320-dark.png, shows: [article-320, bar-links-tappable-at-320]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/fr-audit.html-390-dark.png, shows: [article-390]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/fr-audit.html-1280-dark.png, shows: [article-1280]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/index.html-320-dark.png, shows: [landing-320, bar-links-tappable-at-320]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/index.html-390-light.png, shows: [landing-390]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/index.html-1280-dark.png, shows: [landing-1280]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/guides_ops.html-390-dark.png, shows: [guide-390]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/review-p3/reference_install.html-390-dark.png, shows: [reference-390]}
