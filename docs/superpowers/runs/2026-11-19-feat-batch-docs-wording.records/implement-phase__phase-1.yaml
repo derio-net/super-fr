@@ -1,0 +1,21 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-docs-wording
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1]
+refactor:
+  P1.T3: "the R1 hint text appears in one message only; nothing to share"
+  P1.T4: "prose-only edits; the new test file is already minimal"
+journal:
+  - kind: discovery
+    id: p1-bracket-set
+    phase: 1
+    title: R5's test flagged more strings than the spec listed
+    body: "Besides init scaffold --tool, acceptance_cmd.py:755,1137,1141 and triage_batch_cmd.py:773, `fr plan create`'s docstring (`[row-ids]`, `[globs]`) lost its brackets too; all escaped."
+  - kind: discovery
+    id: p1-ste-first-sentence
+    phase: 1
+    title: cli.md STE FAILs came from 13 help first sentences
+    body: "The tree carries only the first sentence (sync-readme.first_sentence), so each fix split the docstring's opening into a short first sentence and kept the remaining facts as following sentences; the pinned checker reports no FAIL."
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6c571a27-d120-4bc7-bbad-052e840f51cd/scratchpad/p1-suite.log}
