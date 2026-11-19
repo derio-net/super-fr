@@ -194,3 +194,20 @@ def test_a_broken_manifest_raises_for_the_caller_and_the_command_exits_2(tmp_pat
         app, ["triage", "history", "render", "--repo", REPO, "--dir", str(state)]
     )
     assert result.exit_code == 2
+
+
+def test_a_legacy_file_that_cannot_be_removed_is_a_warning_not_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(target: Path, key: str) -> None:
+        raise OSError("read-only file system")
+
+    state = _state(tmp_path)
+    for module in (triage_cmd, triage_kanban_cmd):
+        monkeypatch.setattr(module, "remove_legacy", refuse)
+    for verb in ("backlog", "batches"):
+        result = CliRunner().invoke(app, ["triage", verb, "--repo", REPO, "--dir", str(state)])
+        assert result.exit_code == 0, result.output
+        assert "old file was not removed" in result.output and "read-only" in result.output
+    assert (state / "backlog.html").is_file() and (state / "issues.html").is_file()
+    assert (state / "batches.html").is_file()
