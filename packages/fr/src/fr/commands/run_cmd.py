@@ -6563,24 +6563,60 @@ def _run_cli_command(command: str, cwd: Path, timeout: float | None) -> tuple[in
 
     The shell leads its own process group, so a timeout kills the whole
     pipeline: killing only the shell leaves `sleep 30 | cat`'s children holding
-    stdout open, and the read would still wait for them."""
+    stdout open, and the read would still wait for them.
+
+    A group of its own is also out of reach of the Ctrl-C or kill that stops
+    fr, so any exception here (KeyboardInterrupt included) kills the group
+    before it propagates, as `subprocess.run` killed its child. After a kill the
+    read waits only briefly: a process that left the group (`setsid`) may hold
+    stdout open for as long as it likes."""
     proc = subprocess.Popen(  # noqa: S602 — manifest is operator-authored; values are shlex-quoted
         command,
         shell=True,
         cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         start_new_session=True,
     )
-    try:
-        stdout, _ = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        with contextlib.suppress(ProcessLookupError):
+
+    def kill_group() -> None:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(proc.pid, signal.SIGKILL)
-        stdout, _ = proc.communicate()
-        return CLI_STEP_TIMEOUT_EXIT, stdout or "", True
+
+    try:
+        try:
+            stdout, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            kill_group()
+            try:
+                stdout, _ = proc.communicate(timeout=_CLI_STEP_DRAIN_SECONDS)
+            except subprocess.TimeoutExpired as drained:
+                stdout = _partial_text(drained.stdout)
+                for pipe in (proc.stdout, proc.stderr):
+                    if pipe is not None:
+                        pipe.close()
+                proc.wait()
+            return CLI_STEP_TIMEOUT_EXIT, stdout or "", True
+    except BaseException:
+        kill_group()
+        proc.wait()
+        raise
     return proc.returncode, stdout or "", False
+
+
+_CLI_STEP_DRAIN_SECONDS = 5.0
+
+
+def _partial_text(data: str | bytes | None) -> str:
+    """What `communicate` had read before it timed out: bytes on POSIX even in
+    text mode."""
+    if data is None:
+        return ""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data
 
 
 def _bounded_stdout(stdout: str) -> str:

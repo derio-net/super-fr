@@ -297,3 +297,59 @@ def test_a_malformed_timeout_is_refused_and_runs_nothing(
     assert "FR_CLI_STEP_TIMEOUT" in result.output
     assert not marker.exists()
     assert state.steps["step"].state != "done"
+
+
+def test_a_timed_out_step_does_not_wait_for_a_process_outside_its_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A grandchild that left the group (setsid) still holds stdout; the
+    advance must not wait for it once the group is killed."""
+    import time
+
+    monkeypatch.setenv("FR_CLI_STEP_TIMEOUT", "1")
+    escape = (
+        'python3 -c "import os, time\n'
+        "if os.fork() == 0:\n    os.setsid(); time.sleep(30)\n"
+        'else:\n    time.sleep(30)"'
+    )
+    began = time.monotonic()
+    result, state = _cli_run(tmp_path, escape)
+    assert time.monotonic() - began < 20, "advance waited for a process outside the group"
+    assert state.steps["step"].exit == 124, result.output
+
+
+def test_an_interrupted_advance_kills_the_step_it_started(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ctrl-C (or a harness killing fr) must not leave the step running in
+    its own session, as `subprocess.run` never did."""
+    from fr.commands import run_cmd
+
+    started: list[subprocess.Popen[str]] = []
+    real_popen = subprocess.Popen
+
+    def popen(*args, **kwargs):  # type: ignore[no-untyped-def]
+        proc = real_popen(*args, **kwargs)
+        started.append(proc)
+        return proc
+
+    def interrupted(self, timeout=None):  # type: ignore[no-untyped-def]
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(run_cmd.subprocess, "Popen", popen)
+    monkeypatch.setattr(real_popen, "communicate", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        run_cmd._run_cli_command("sleep 30", tmp_path, 60.0)
+    monkeypatch.undo()
+
+    (proc,) = started
+    assert proc.wait(timeout=5) != 0, "the step's shell is still running"
+    with pytest.raises(ProcessLookupError):
+        os.killpg(proc.pid, 0)
+
+
+def test_non_utf8_stdout_is_stored_not_a_traceback(tmp_path: Path) -> None:
+    result, state = _cli_run(tmp_path, "printf 'ok \\377\\n'")
+    assert result.exit_code == 0, result.output
+    assert state.steps["step"].stdout is not None
+    assert state.steps["step"].stdout.startswith("ok ")
