@@ -8292,6 +8292,14 @@ batches:
     at: '2026-11-19T09:06:58.914042Z'
     pr: 1548
     head: 082bef2ffe36a902ef3e20f9a1519d9f3b76a2a1
+  - kind: claims_released
+    at: '2026-11-19T09:15:38.052854Z'
+    keys:
+    - super-fr#1186
+    - super-fr#1271
+    - super-fr#1308
+    - super-fr#1375
+    - super-fr#1402
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
