@@ -8568,6 +8568,13 @@ batches:
     handle: w3Q:p3
     run: 2026-11-19-feat-batch-docs-wording
     archive: chore/closeout-2026-11-19-4
+  - kind: closeout
+    at: '2026-11-19T22:20:58.197258Z'
+    runner: herdr
+    handle: w3Q:p3
+    run: 2026-11-19-feat-batch-docs-wording
+    archive: chore/closeout-2026-11-19-4
+    archived: 1582
 - id: retire-vk
   title: Retire VibeKanban support
   ids:
@@ -8932,6 +8939,12 @@ batches:
     runner: herdr
     handle: w3Q:p3
     archive: chore/closeout-2026-11-19-4
+  - kind: closeout
+    at: '2026-11-19T22:20:58.197369Z'
+    runner: herdr
+    handle: w3Q:p3
+    archive: chore/closeout-2026-11-19-4
+    archived: 1582
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
@@ -8973,6 +8986,13 @@ batches:
     handle: w3Q:p3
     run: 2026-11-19-fix-batch-stealth-gitlab
     archive: chore/closeout-2026-11-19-4
+  - kind: closeout
+    at: '2026-11-19T22:20:58.197398Z'
+    runner: herdr
+    handle: w3Q:p3
+    run: 2026-11-19-fix-batch-stealth-gitlab
+    archive: chore/closeout-2026-11-19-4
+    archived: 1582
 - id: closeout-truth
   title: 'Collected close-out truth: re-record a handed-back head, approved-fr releases needs-review,
     close the session'
@@ -9802,6 +9822,7 @@ closeouts:
   - owed-followups
   - stealth-gitlab
   pr: 1582
+  merged: true
   head: f1502c509e32476693fac6aeb098ea2cb69fef81
   members:
   - docs-wording
