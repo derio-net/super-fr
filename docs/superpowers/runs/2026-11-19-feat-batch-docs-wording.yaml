@@ -3,7 +3,7 @@ run: 2026-11-19-feat-batch-docs-wording
 workflow: fr-goal@1
 branch: feat/batch-docs-wording
 started: '2026-11-19T09:10:20+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -147,7 +147,11 @@ steps:
           visual: site-top-bar-phone-layout:8:36c1ddfd4159
           findings: p3-article-table-overflow,p3-r1
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-19T14:50:23+00:00'
+    exit: 0
+    stdout: "7 out-of-scope finding(s): p2-r3, p2-r4, p2-r5, p2b-r2, p2b-r3, \np3-article-table-overflow,\
+      \ p3-r1\n"
   lens-review:
     state: pending
   deliver:
