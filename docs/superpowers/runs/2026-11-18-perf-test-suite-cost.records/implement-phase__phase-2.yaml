@@ -1,0 +1,193 @@
+# Step record. Applied by `fr run resolve --record` (spec 2026-09-25 §5.C).
+schema_version: 12
+run: 2026-11-18-perf-test-suite-cost
+step: implement-phase
+item: phase/2
+outcome: done
+ticks:
+- P2.T1.S1
+- P2.T2.S1
+- P2.T2.S2
+- P2.T2.S3
+- P2.T3.S1
+- P2.T3.S2
+- P2.T3.S3
+refactor: {}
+journal:
+- kind: discovery
+  id: p2-m-run-cli
+  title: 'tests/unit/test_run_cli.py: sample measured (13 of 277 ids, every 23rd), remedy: per-branch
+    template + three walk templates'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (sample, HEAD, load 48 at start): 158.9 s wall, setup 0.1 / call 154.1, 1213 subprocess starts (git
+    rev-parse --verify 176, rev-parse --git-dir 141, config --get 97, ls-tree 91, init.defaultBranch 87,
+    git add/commit 54 each); CPU 28.3 s (re-run, load 26). The slowest samples were the nine `_fr_goal_at_implement`
+    tests (33.7 s, 23.1 s, 19.2 s ...), each walking eleven `fr run` calls. Remedy: `_repo` copies a per-branch
+    template (`run_cli:<branch>`); `_fr_goal_at_implement`, `_started_grouped_with_plan` (default plan,
+    per tier) and `_started_emitter` copy templates of the walked run, guarded by `_pristine` (a caller
+    that already changed the repo or shape takes the original walk). AFTER (same 13 ids): 221.6 s at load
+    76 (unreliable), CPU 26.5 s at load 19, 1124 starts: the sample holds almost no templated test. SECOND
+    SAMPLE, the templated tests (18 of 70, every 4th): before 325.6 s, CPU 62.9 s, 2647 starts; after
+    244.9 s (load rose to 239 during the run), CPU 32.0 s, 1202 starts. Not projected to the whole file
+    (heavy tail: one sampled test is 10x the median). The whole file passes: 288 passed under -n 4.'
+  phase: 2
+- kind: discovery
+  id: p2-m-scenarios
+  title: 'tests/integration/test_scenarios.py: sample measured (8 of 88, every 11th); no remedy here,
+    left to phase 3'
+  body: 'BEFORE (HEAD, load 22): 69.7 s wall, setup 5.3 / call 63.9, 23 subprocess starts of this process:
+    the cost is the installed fr''s own work inside each scenario (gate-backfill-apply 22.5 s, repo-settings-file
+    14.8 s, cloud-triage-state-ref 9.9 s, review-lenses-effective-set 8.9 s). AFTER (file unchanged):
+    124.5 s at load 82, same 23 starts. That pair is the measure of the noise: identical code, +79% wall
+    from load alone. Projection from the sample: about 11x = 770 s at load 22. No fixture remedy: a scenario
+    installs fr and runs it in a child process, so a template saves nothing; tiering is phase 3''s.'
+  phase: 2
+- kind: discovery
+  id: p2-m-question-rounds
+  title: 'tests/unit/test_run_question_rounds.py: 66 tests, remedy: template of the run blocked on its
+    brainstorm gate'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 24): 335.6 s, setup 0.5 / call 333.7, 5975 starts. Every test walked `_workspace` plus `run
+    start`, `advance` (a blocked gate) and a seeded spec. Remedy: `_build_blocked` builds that once per
+    driver (none, standalone) and `_copy_blocked` copies it and sets the harness env. AFTER (load 13):
+    152.3 s, setup 0.5 / call 150.4, 1859 starts (-69%). 66 passed.'
+  phase: 2
+- kind: discovery
+  id: p2-m-record-review-fixes
+  title: 'tests/unit/test_record_review_fixes.py: 12 tests, remedy: `started_run` template (P2.T2)'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 70 at start): 249.3 s, setup 0.0 / call 247.6, 6446 starts, because each test called `started_run`
+    (about 25 git starts and eight `fr run` calls). AFTER (load 26): 62.4 s, setup 0.1 / call 60.4, 1411
+    starts (-78%). All passed.'
+  phase: 2
+- kind: discovery
+  id: p2-m-release-script
+  title: 'tests/unit/test_release_script.py: 180 tests, remedy: template of the three-repository World'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 35): 740.0 s, setup 125.9 / call 612.3, 6900 starts. `World.__init__` ran about nine git commands
+    per test (seed repo, tag, bare clone, two clones). Remedy: `_build_world` builds it once per worker
+    (no global git identity, as the `world` fixture runs) and `_relink_world` repoints the clones'' `origin`.
+    AFTER (load 32 at start, 75 at end): 1276.6 s wall (worse, because the host was loaded: call 1179.6,
+    setup 95.8), 6212 starts (-10%). The load-independent figures are the setup seconds (125.9 to 95.8)
+    and the starts; the rest of the starts are release.py''s own git work (diff 1133, tag 729, rev-parse
+    684, log 515, push 456) which is the code under test. All 180 passed.'
+  phase: 2
+- kind: discovery
+  id: p2-m-install-sh
+  title: 'tests/integration/test_install_sh.py: 57 tests, remedy: two module-scoped installed homes for
+    the read-only tests'
+  body: 'BEFORE (load 18.5): 370.7 s, setup 0.9 / call 369.4, 58 `bash install.sh` runs (each about 6
+    s; the rsync of the whole repository is install.sh''s own work). Remedy: `installed_home` and `installed_home_with_plugins`
+    (module scope) run install.sh once each, and six tests that only READ what a plain install leaves
+    (rule file, registration, three workflow-manifest checks, three plugin-cache checks) use them instead
+    of installing again. Every case is kept; none merged. AFTER (load 22): 375.2 s, setup 20.9 / call
+    353.3, 52 runs (-6). Wall is inside the load noise (+1%); the saving is 6 of 58 installs, about 10%,
+    and no more is available without dropping a case: the other 52 each seed a different home state. 57
+    passed.'
+  phase: 2
+- kind: discovery
+  id: p2-m-record-apply
+  title: 'tests/unit/test_record_apply.py: 31 tests, remedy: `started_run` and `_at_spec_review` templates'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 16): 261.1 s, setup 0.2 / call 259.9, 5683 starts. AFTER (load 19): 76.7 s, setup 0.1 / call
+    75.3, 1702 starts (-71%). 31 passed. `_at_spec_review` is a template of the run before any finding
+    is written; `finding_scope` is applied to the copy.'
+  phase: 2
+- kind: discovery
+  id: p2-m-exit-label-sync-points
+  title: 'tests/unit/test_exit_label_sync_points.py: 13 tests, remedy: `_at_deliver` and `_at_spec_review`
+    templates'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 83 at start): 554.4 s, call 551.8, 6463 starts. AFTER, first run (load 42): 242.8 s, 3042 starts,
+    one failure (below); second run after the fix (load 24): 419.9 s, CPU 66.0 s, 3156 starts (-51%).
+    13 passed. The failure: `test_resolving_spec_review_syncs_the_labels` counts the label sync of the
+    setup''s own brainstorm resolve, which a template no longer runs. It builds its run in place (`_at_spec_review(fresh=True)`),
+    keeping the assertion. What is left is mostly `deliver` itself: `_ready_deliver` still runs one refused
+    deliver per test, with the `live` patch in play.'
+  phase: 2
+- kind: discovery
+  id: p2-m-deliver-pr-body
+  title: 'tests/unit/test_deliver_pr_body.py: 11 tests, remedy: `_at_deliver` template'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 48 at start, 83 at end): 384.5 s, setup 0.0 / call 382.7, 4910 starts: each test walked implement,
+    review, lens-review and the acceptance row (about 35 s). Remedy: `_build_at_deliver` builds the run
+    at `deliver` once (on the `started_run` template, a template built from a template) and `_at_deliver`
+    copies it. AFTER (load 16): 132.3 s, call 129.6, 2101 starts (-66%): the rest is the `deliver` resolve
+    each test makes. 11 passed. The importers (`test_forge_quiet_pr_body`, `test_exit_label_sync_points`,
+    ...) gain too.'
+  phase: 2
+- kind: discovery
+  id: p2-m-forge-quiet-pr-body
+  title: 'tests/unit/test_forge_quiet_pr_body.py: 5 tests (8 ids), remedy: through `_at_deliver`'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 18): 243.1 s, setup 150.6 / call 90.4, 4052 starts. AFTER (load 24): 111.4 s, setup 59.8 (it
+    includes building the two templates once) / call 49.7, 1712 starts (-58%). All passed. A first run
+    exposed a bug in the factory (a template that builds another reused a directory name); `test_a_template_may_be_built_from_another_template`
+    pins it.'
+  phase: 2
+- kind: discovery
+  id: p2-m-gate-cmd
+  title: 'tests/unit/test_gate_cmd.py: 54 tests, remedy: the `forge` fixture runs from an empty checkout
+    of its own'
+  body: 'FIRST: a baseline taken in a copy of HEAD with no git history failed (`--keep needs a checkout`),
+    so it was taken again in a git copy. BEFORE (load 18): 249.9 s wall, CPU 80.8 s, setup 5.0 / call
+    243.0, 877 starts: low, yet one test took 27 s. A cProfile of it showed 41 s inside `gatebackfill.trackers._journal_resolve`
+    and `debt.engine.read_journals` parsing every journal of THIS repository, 770 files and 135000 entries,
+    for each key, because the `--keep` tests never leave the working directory they run in: they read
+    the repo under test. Remedy: `forge` makes `tmp_path/checkout` (one `git init`) and `chdir`s there,
+    so the verbs read an empty journal tree. Pure fixture change: no assertion edited, no case removed.
+    AFTER (load 18): 108.5 s wall, CPU 21.0 s (-74% CPU), setup 8.9 / call 95.9, 755 starts. 54 passed.
+    The O(keys x journals) parse in `_journal_resolve` is a product cost for a real checkout; it is out
+    of this phase''s scope.'
+  phase: 2
+- kind: discovery
+  id: p2-m-gatebackfill-closes
+  title: 'tests/unit/test_gatebackfill_closes.py: 56 tests, remedy: template of the checkout and its bare
+    origin'
+  body: 'Host load was 15-80 (other sessions) and moved during every run, so wall seconds compare badly;
+    subprocess counts and, where captured, process CPU seconds are the load-independent figures. BEFORE
+    (load 23): 277.7 s, setup 40.3 / call 235.6, 5727 starts (git rev-parse --verify 1433, config --get
+    708, remote 618, rev-parse --show-toplevel 548, symbolic-ref 486, ls-tree 428). Remedy: `_build_checkout`
+    and `_relink_checkout` (the copy''s `url.<bare>.insteadOf` points at the copy''s own origin.git).
+    The fixture sets its own committer identity (`git` passes `-c`). AFTER (load 27): 199.8 s, setup 10.7
+    / call 187.4, 4984 starts (-13%). Only setup shrinks: 5000 of the starts are `fr gate backfill`''s
+    own reads, repeated by every dry run, which is the code under test. 56 passed.'
+  phase: 2
+- kind: discovery
+  id: p2-t2-order
+  title: 'Task 2 was written implementation-first: the template tests were first run after the factory
+    existed'
+  body: tests/unit/fixture_templates.py was written before tests/unit/test_fixture_templates.py. The first
+    run of the tests was GREEN for five of six, and RED (missing fixture, then a wrong `valid_workspace`
+    call in the test) for the rest; the wiring through conftest, `started_run` and `_repo` was seen RED
+    (the `fixture_templates` fixture did not exist) and then GREEN. The nested-template defect was found
+    by `test_forge_quiet_pr_body` and pinned afterwards by a test written for it.
+  phase: 2
+- kind: discovery
+  id: p2-env-for-the-build
+  title: A template builds under the first test's environment with only HOME, GIT_CONFIG_GLOBAL and the
+    uv paths replaced
+  body: The factory is session-scoped but builds lazily, inside the first test that needs a template,
+    so the build sees every other autouse variable (migration gate, CI context, terminal width). Only
+    the sandbox variables come from `home_sandbox(...)` of the factory's own home. A test that monkeypatches
+    the environment before its first `started_run` could leak into a template; none does.
+  phase: 2
+- kind: decision
+  id: p2-d-no-case-removed
+  title: No case was merged or removed in this phase
+  body: Every remedy shares or copies state; none drops a test. The six install.sh tests that share an
+    installed home keep their own assertions; `test_resolving_spec_review_syncs_the_labels` builds its
+    run in place rather than lose its count of the brainstorm sync (no other test in the file asserts
+    it). `fr acceptance check` is run at the end.
+  phase: 2
+resolves: []
+evidence:
+  tests: ci
