@@ -138,7 +138,7 @@ def seal(encrypt: str, target: Path, plaintext: bytes, *, repo_root: Path) -> in
 
     `{in}`: a 0600 plaintext temp file under `$TMPDIR` (refused when that is inside the
     repo); `{out}`: an empty 0600 temp file beside the target; `{target}`: the target's
-    path as a name. Every substitution is shell-quoted. The target is replaced, as
+    path, shell-quoted. Every substitution is shell-quoted. The target is replaced, as
     bytes, only when the command exited 0 and `{out}` is non-empty; on any other end the
     target is untouched, both temps are gone and the return is non-zero."""
     tmp_root = Path(tempfile.gettempdir())

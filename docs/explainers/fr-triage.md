@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -66,14 +66,16 @@ issues:
 `tier` is the priority group, `severity` is `low`, `med` or `high` (`check` lists a judged
 issue that has none), and `cx` is your size estimate of the fix: `XS`, `S`, `S-M`, `M` or `L`.
 
-Then draw the page:
+Then draw the pages:
 
 ```bash
-fr triage render --repo example-org/example-repo --open
+fr triage backlog --repo example-org/example-repo --open
 ```
 
-You get `triage.html`: what changed since the last report, what needs you right now, the
-driver's order for what is next, and the backlog by tier. When several judged issues share a
+You get two pages. `backlog.html` holds the decisions: what changed since the last report,
+what needs you right now, the driver's order for what is next, the waves and the batches.
+`issues.html` holds the lists: the backlog by tier, ranked features, parked issues, debt and
+open pull requests. (`fr triage render` is the old name of this command and still works.) When several judged issues share a
 subsystem, propose them as a batch:
 
 ```bash
@@ -91,7 +93,7 @@ owner for `--org`; `--repo A/B,C/D` is a group.
 |---|---|---|
 | `facts.json` | `fr triage collect` | forge data: issues, labels, PRs (it only reads the forge) |
 | `judgements.yaml` | **you**, plus the `batch` verbs | tiers, rankings, kinds, patterns, batches |
-| `triage.html`, `board.html` | `render`, `board` | the pages |
+| `backlog.html`, `issues.html`, `batches.html` | `backlog`, `batches` | the pages |
 
 Never write the facts yourself. fr does not commit the state by default; its durable copy
 is an orphan branch, `refs/heads/fr-triage/<scope-id>`, which fr fetches before reading and pushes after
@@ -151,12 +153,15 @@ train), closes out what has landed, and dispatches what may start. Merging a bat
 pull request needs the operator's `approved-fr` label. The driver never approves its own
 work.
 
-`fr triage board` draws `board.html`, a Kanban of every batch by lifecycle column. It has
+`fr triage batches` draws `batches.html`, a Kanban of every batch by lifecycle column. It has
 four "Needs you" lanes (developer, reviewer, tester, devops), which the board decides from
-the run's cursor and the merged PR's gate labels, never from a session's status. On a wide
-screen a column
-with no cards folds to a narrow strip with its title turned on its side, so the columns that
-hold cards get the room.
+the run's cursor and the merged PR's gate labels, never from a session's status. Every column
+has a button in its header that folds it and opens it again. A column with no cards starts
+folded, and on a wide screen a folded column is a narrow strip with its title turned on its
+side, so the columns that hold cards get the room. The page remembers each column in your
+browser, so the automatic reload keeps what you chose. A toggle, "last 30 days" by default,
+hides every wave whose batches are all finished and have had no event in the last 30 days;
+"all waves" shows them again, and the page remembers that choice too.
 
 Several scopes can work one repo, so a scope **claims** each issue it plans to act on with an
 `fr:claimed` label and a marker comment. Another scope's claim is hands-off. Taking one over
@@ -180,7 +185,15 @@ fr triage origins render  --repo example-org/example-repo
 
 `collect` writes `origins-facts.json`; you write `origins.yaml`, one classification per
 issue; `render` builds `origins.html`. Collect refuses a window wider than one page, and
-names a `--since` that the page does cover. The categories describe what the defect *is*, not who noticed it:
+names a `--since` that the page does cover. It also keeps the pull requests merged since
+that date, so the page can show each one's title and merge date. The "Every issue" section
+has a filter for open, closed or all issues and one fold for each category below, each with
+its count; the filter updates the counts. In the list of pull requests that left work
+behind, each row opens to the issues that name it. The PR list is read once per repo,
+newest created first. When it comes back full, collect warns: a PR created before the
+oldest one read but merged inside the window can lie beyond it, and then shows
+"not collected". A pull request the file does not hold
+(merged before the window, or collected by an older fr) shows "not collected". The categories describe what the defect *is*, not who noticed it:
 
 - **latent**: always there, nothing changed it;
 - **regression**: a change broke something that worked, and you can name the pull request;

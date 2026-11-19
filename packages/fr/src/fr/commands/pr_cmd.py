@@ -147,7 +147,19 @@ def create_cmd(
         repo = origin_slug(repo_root)
         if repo is None:
             raise PushRefusedError("cannot read the forge repository from the origin remote")
-        target = base or _default_branch(repo_root)
+        recorded_target = state.base_branch if state is not None else None
+        if state is not None and recorded_target is None and base is not None:
+            if base != _default_branch(repo_root):
+                raise PushRefusedError(
+                    "record a non-default merge target with `fr run target <run> --base <branch>` "
+                    "before lens review; --base at PR creation cannot change the reviewed diff"
+                )
+        if recorded_target is not None and base is not None and base != recorded_target:
+            raise PushRefusedError(
+                f"--base {base!r} differs from the recorded merge target {recorded_target!r}; "
+                "the PR must use the target reviewed by this run"
+            )
+        target = base or recorded_target or _default_branch(repo_root)
         try:
             made = client_for(repo_root).create_pr(
                 repo, head=branch, base=target, title=title, body=body, draft=True

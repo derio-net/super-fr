@@ -1,0 +1,95 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Every fenced block renders; the page marker fills only on its own line (R11–R13)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - site-code-blocks-render
+  - site-pages-marker-own-line
+  tier: standard
+  files:
+  - scripts/build-site.py
+  - tests/unit/test_build_site.py
+  - docs/explainers/fr-acceptance.md
+  - docs/explainers/fr-exit-gates.md
+  - docs/docs-currency.md
+  - .claude/rules/explainers-currency.md
+  - .opencode/instructions/explainers-currency.md
+  - docs/**/*.md
+  - docs/acceptance/features/*.yaml
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: fill_pages matches the marker only on its own line (R13)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_build_site.py, call `fill_pages` on text holding the marker inside inline code within a numbered list item and also on a line of its own (and one with surrounding spaces); assert the inline one is untouched and the own-line ones are replaced. Run; the inline case fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in scripts/build-site.py `fill_pages`, match `(?m)^[ \t]*<!-- site:pages -->[ \t]*$` with a function replacement (so backslashes in the list stay literal); keep the early return when no own-line marker exists. Tests pass, including the landing tests.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: name the regex as a module constant beside MARKER; re-run tests/unit/test_build_site.py.
+- number: 2
+  title: The build refuses a fence that does not render as a code block (R12)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_build_site.py, fixture sources: (a) a list item with a 2-space-indented ```bash fence; (b) a bare ``` fence (no info word) inside a 3-space list item; (c) a correct 4-space fence plus a top-level fence. Building (a) or (b) raises BuildError naming the page and the fence's line in the source file as on disk (also when a figure or site:pages marker precedes it) and writes no page; (c) builds. Reuse the module's fixture-build helpers (see test_a_page_that_cannot_take_the_bar_leaves_no_file_in_the_output). Run; (a)/(b) fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in scripts/build-site.py add the check to the refusal pass: collect the source's fences (paired via `_FENCE`, any indent, line numbers from the file as read), and require each fence's body text to appear inside a `<pre>` of the rendered article (compare after HTML-unescaping and whitespace normalisation); the first that does not raises BuildError naming `<page>:<line>` and saying to indent it 4 spaces inside a list item. Matching by body means figure, raw-HTML and chrome `<pre>` blocks cannot satisfy a fence. Tests pass.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: keep the check one small function with a docstring citing R12; re-run tests/unit/test_build_site.py.
+- number: 3
+  title: Fix the four pages and document the rule (R11)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Re-indent, whitespace only: docs/explainers/fr-acceptance.md backfill list (continuations and step 3's fence at 4 spaces, blank line before step 4); docs/explainers/fr-exit-gates.md Tester bullet's fence to 4 spaces; docs/docs-currency.md's CI YAML fence under "Where it runs" and the preview bash fence to 4 spaces. Add to docs-currency.md's "Write a page that builds" list that a fence inside a list item is indented 4 spaces and the build refuses one that is not; add the refusal to the build-failure list in .claude/rules/explainers-currency.md and run `scripts/sync-opencode.py`.
+  - id: P2.T3.S2
+    text: |-
+      Build the site with the pinned blog-craft into a scratch dir outside the repo (`uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py <out> --blog-craft <bc>`): it succeeds; the output holds no `<p><code>bash` or `<p><code>yaml`, and docs-currency's "How this repo builds its site" list holds items 1–6 with the marker shown as code. Run `bash scripts/check-writing-standards.sh <bc>` (no FAIL) and `uv run fr docs check` (edit or stamp what it names); set this phase's two rows to `ci` with their test refs; run the full suite last into a host-visible log.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-19T13:47:20+00:00'
+      note: null
+  completion:
+    at: '2026-11-19T13:47:20+00:00'
+    note: null
+    observed_prs: []

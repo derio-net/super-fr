@@ -28,7 +28,6 @@ GROUPS = {
 EXCEPTIONS = {
     "docs/explainers/why-fr.md": "elements-of-style",
     "docs/explainers/index.md": "none",
-    "docs/reference/cli.md": "none",
 }
 
 
@@ -61,7 +60,7 @@ def test_the_script_covers_exactly_the_docs_config_pages() -> None:
     assert sorted(covered) == sorted(_page_globs())
 
 
-def test_only_the_three_exceptions_carry_a_writing_standard_key() -> None:
+def test_only_the_two_exceptions_carry_a_writing_standard_key() -> None:
     carried = {}
     for glob in _page_globs():
         for page in sorted(REPO.glob(glob)):

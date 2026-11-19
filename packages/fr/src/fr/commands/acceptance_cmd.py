@@ -752,7 +752,7 @@ def set_status_cmd(
     level: list[str] = typer.Option(
         [],
         "--level",
-        help="'<level>=<repo>:<path>[#test_name]' evidence to ADD (repeatable) — the other "
+        help="'<level>=<repo>:<path>\\[#test_name]' evidence to ADD (repeatable) — the other "
         "half of the documented transition.",
     ),
     drop_level: list[str] = typer.Option(
@@ -1134,11 +1134,11 @@ def add_cmd(
     origin: list[str] = typer.Option(
         [],
         "--origin",
-        help="'spec:<slug>[#R<n>]', 'plan:<slug>' or '<repo>:<path>[#anchor]' ref "
+        help="'spec:<slug>\\[#R<n>]', 'plan:<slug>' or '<repo>:<path>\\[#anchor]' ref "
         "(repeatable; a spec or plan path is written as its logical ref).",
     ),
     level: list[str] = typer.Option(
-        [], "--level", help="'<level>=<repo>:<path>[#test_name]' test ref (repeatable)."
+        [], "--level", help="'<level>=<repo>:<path>\\[#test_name]' test ref (repeatable)."
     ),
     status: str = typer.Option(
         ...,
@@ -1190,9 +1190,11 @@ def add_cmd(
         "not name it.",
     ),
 ) -> None:
-    """Insert a schema-validated row into the fragment of the feature that owns it
-    (its one origin spec, or --feature), after its capability's last row (agents
-    never hand-edit YAML shapes); a new capability goes at the end of `rows:`.
+    """Insert a schema-validated row into the fragment of the feature that owns it.
+
+    The fragment is the row's one origin spec, or --feature. The row goes after its
+    capability's last row, and a new capability goes at the end of `rows:`. Agents
+    never hand-edit YAML shapes.
 
     `add` CREATES rows; moving an existing row's status is
     `fr acceptance set-status` (re-adding an id is refused below, by design).

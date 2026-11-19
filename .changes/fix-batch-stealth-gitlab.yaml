@@ -1,0 +1,2 @@
+bump: patch
+summary: The stealth privacy check reads a tracking repo on the target's self-hosted forge (a GitLab bare clone URL, say) with the target's declared forge type instead of assuming GitHub and refusing.

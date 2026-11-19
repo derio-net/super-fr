@@ -12,9 +12,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import pytest
 from fr.triage.batch_drive import drive_pass
 from fr.triage.model import Facts, Judgements
-from fr.triage.render import render, wave_table
+from fr.triage.render import render_backlog, render_issues, wave_table
 from fr.triage.snapshot import diff_snapshots, take_snapshot
 from fr.triage.views import (
     drive_snapshot,
@@ -29,6 +30,7 @@ from tests.unit.triage_board_fixtures import (
     batch,
     busy,
     dispatch,
+    element_by_id,
     facts,
     healthy,
     issue,
@@ -39,9 +41,7 @@ from tests.unit.triage_board_fixtures import (
 
 
 def _section(page: str, sid: str) -> str:
-    m = re.search(rf'<section[^>]*id="{sid}".*?</section>', page, flags=re.S)
-    assert m, f"no section {sid}"
-    return m.group(0)
+    return element_by_id(page, sid)
 
 
 def _needs(page: str) -> list[tuple[str, str]]:
@@ -63,8 +63,8 @@ def _with_pattern() -> tuple[Facts, Judgements]:
     )
 
 
-def test_the_board_is_ordered_since_needs_next_waves_then_the_folds() -> None:
-    page = render(*_with_pattern())
+def test_the_backlog_is_ordered_since_needs_next_waves_then_batches() -> None:
+    page = render_backlog(*_with_pattern())
     at = _order(
         page,
         'class="mast"',
@@ -72,27 +72,63 @@ def test_the_board_is_ordered_since_needs_next_waves_then_the_folds() -> None:
         'id="needs-you-now"',
         'id="next-up"',
         'id="waves"',
-        'id="backlog-by-tier"',
-        'id="ranked-features"',
-        'id="parked"',
-        'id="patterns"',
-        'id="prs"',
         'id="batches"',
     )
     assert at == sorted(at) and len(set(at)) == len(at)
 
 
-def test_below_the_waves_every_section_is_a_closed_fold_with_its_count() -> None:
-    page = render(*_with_pattern())
-    for sid in ("backlog-by-tier", "ranked-features", "parked", "patterns", "prs", "batches"):
+def test_the_issues_page_is_ordered_tiers_features_parked_patterns_then_prs() -> None:
+    page = render_issues(*_with_pattern())
+    at = _order(
+        page,
+        'class="mast"',
+        'id="backlog-by-tier"',
+        'id="ranked-features"',
+        'id="parked"',
+        'id="patterns"',
+        'id="prs"',
+    )
+    assert at == sorted(at) and len(set(at)) == len(at)
+
+
+@pytest.mark.parametrize(
+    ("render_page", "sids"),
+    [
+        (render_issues, ("backlog-by-tier", "ranked-features", "parked", "patterns", "prs")),
+    ],
+)
+def test_the_issues_page_sections_are_closed_folds_with_their_count(
+    render_page: Any, sids: tuple[str, ...]
+) -> None:
+    page = render_page(*_with_pattern())
+    for sid in sids:
         m = re.search(rf'<details id="{sid}" class="fold"([^>]*)>(.*?)</summary>', page, re.S)
         assert m, sid
         assert "open" not in m.group(1), sid
         assert re.search(r'<span class="count">\d+</span>', m.group(2)), sid
 
 
+def test_the_backlog_sections_are_open_folds_keeping_their_ids_and_headings() -> None:
+    page = render_backlog(*_with_pattern())
+    for sid, title in (
+        ("since-last-report", "Since last report"),
+        ("needs-you-now", "Needs you now"),
+        ("next-up", "Next up"),
+        ("waves", "Waves"),
+        ("batches", "Batches"),
+    ):
+        assert re.search(
+            rf'<details id="{sid}" class="fold" open><summary><h2>{title}</h2>', page
+        ), sid
+
+
+def test_the_issues_debt_section_is_a_closed_fold_with_a_heading() -> None:
+    page = render_issues(*busy())
+    assert re.search(r'<details id="debt" class="fold"><summary><h2>Debt</h2>', page)
+
+
 def test_the_backlog_has_one_nested_fold_per_tier_and_unranked_with_the_filter_bar_inside() -> None:
-    page = render(*busy())
+    page = render_issues(*busy())
     start = page.index('<details id="backlog-by-tier"')
     end = page.index('id="ranked-features"')
     backlog = page[start:end]
@@ -105,30 +141,32 @@ def test_the_backlog_has_one_nested_fold_per_tier_and_unranked_with_the_filter_b
 
 def test_everything_the_board_showed_before_is_still_there() -> None:
     f, jd = busy()
-    page = render(f, jd)
+    backlog, issues = render_backlog(f, jd), render_issues(f, jd)
+    for needle in ('class="mast"', 'id="batches"', "Backlog triage", "<footer>"):
+        assert needle in backlog, needle
     for needle in (
         'class="mast"',  # masthead and its counts
         'id="q"',  # the filter bar
         'id="prs"',  # PRs
-        'id="batches"',  # Batches and the planned merge order
         'data-tier="unranked"',  # unranked
         'data-tier="1"',
         'data-tier="2"',
-        "Backlog triage",
+        "Issues",
         "<footer>",
     ):
-        assert needle in page, needle
+        assert needle in issues, needle
     for key in ("widgets#3", "widgets#9", "widgets#13"):
-        assert f'data-key="{key}"' in page, key
-    # the pre-existing sections sit BELOW the new decision sections
-    assert page.index('id="waves"') < page.index('data-tier="unranked"') < page.index('id="prs"')
+        assert f'data-key="{key}"' in issues, key
+    # the lists moved to their own page (triage-pages-ux R4)
+    assert issues.index('data-tier="unranked"') < issues.index('id="prs"')
+    assert 'data-tier="unranked"' not in backlog
 
 
 # ------------------------------------------------------- since last report (R17)
 
 
 def test_the_first_render_says_there_is_no_earlier_snapshot() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     assert "No earlier snapshot" in _section(page, "since-last-report")
 
 
@@ -143,7 +181,7 @@ def _changed() -> tuple[Facts, Judgements, str]:
     issues.append(issue(14))
     f2 = facts(issues)
     after = take_snapshot(f2, jd, acceptance={"row-a": "ci"})
-    return f2, jd, render(f2, jd, diff_snapshots(before, after))
+    return f2, jd, render_backlog(f2, jd, diff_snapshots(before, after))
 
 
 def _rows(sect: str) -> list[list[str]]:
@@ -181,7 +219,7 @@ def test_a_batch_row_links_to_its_card() -> None:
 
 
 def test_needs_you_now_lists_each_kind_and_the_unplaced_issues() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     got = set(_needs(page))
     assert got == {
         ("approve-pr", "b-draft"),
@@ -196,7 +234,7 @@ def test_needs_you_now_lists_each_kind_and_the_unplaced_issues() -> None:
 
 
 def test_every_need_row_names_and_links_its_pr_issue_or_batch() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     rows = re.findall(r'<li class="need".*?</li>', _section(page, "needs-you-now"), flags=re.S)
     assert len(rows) == 8
     for row in rows:
@@ -209,7 +247,7 @@ def test_every_need_row_names_and_links_its_pr_issue_or_batch() -> None:
 
 
 def test_a_healthy_board_needs_nothing() -> None:
-    page = render(*healthy())
+    page = render_backlog(*healthy())
     assert _needs(page) == []
     assert "Nothing needs you now" in _section(page, "needs-you-now")
 
@@ -243,7 +281,7 @@ def test_a_foreign_pr_on_a_batch_branch_needs_the_operator() -> None:
     rows = [r for r in needs_you(f, jd) if r.kind == "foreign-pr"]
     assert [(r.ref, r.href) for r in rows] == [("x", f"{URL}/pull/40")]
     assert "opened from a fork" in rows[0].text
-    assert ("foreign-pr", "x") in _needs(render(f, jd))
+    assert ("foreign-pr", "x") in _needs(render_backlog(f, jd))
     assert not [r for r in needs_you(f, jd) if r.kind == "approve-pr"]
 
 
@@ -308,7 +346,7 @@ def test_next_up_carries_tier_size_dependencies_and_the_reason() -> None:
     rows = {r.ref: r for r in next_up(f, jd, max_inflight=3)}
     first = rows["w1-first"]
     assert (first.tier, first.size, first.deps) == (2, "S", ())
-    assert "wave 1" in first.reason
+    assert first.wave == "1" and "wave" not in first.reason
     late = rows["w2-late"]
     assert late.waiting and late.deps == ("w1-first",)
     assert "w1-first" in late.reason
@@ -318,7 +356,7 @@ def test_next_up_carries_tier_size_dependencies_and_the_reason() -> None:
 
 def test_next_up_page_rows_follow_that_order_and_features_follow_in_rank_order() -> None:
     f, jd = busy()
-    page = render(f, jd)
+    page = render_backlog(f, jd)
     refs = re.findall(r'data-next="([a-z]+)" data-ref="([^"]*)"', _section(page, "next-up"))
     assert refs == [
         ("batch", "e-next"),
@@ -333,29 +371,29 @@ def test_next_up_page_rows_follow_that_order_and_features_follow_in_rank_order()
 
 
 def test_the_closing_order_counts_kinds_and_draws_waves_features_and_parked() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     sect = _section(page, "waves")
     counts = dict(re.findall(r'data-kind="([a-z-]+)"><b>(\d+)</b>', sect))
     assert counts == {"defect": "7", "feature": "2", "parked": "1", "unkinded": "1"}
     for header in ("Batch", "Skill", "Issues", "Why", "Size", "Depends on", "Stage"):
         assert f"<th>{header}</th>" in sect, header
     assert "needs z" in sect and "z-cancelled" in sect
-    # the ranked features and the parked list are their own folds now, below the waves
-    features = re.search(r'<details id="ranked-features".*?</details>', page, re.S)
+    # the ranked features and the parked list are their own folds, on the Issues page
+    issues = render_issues(*busy())
+    features = re.search(r'<details id="ranked-features".*?</details>', issues, re.S)
     assert features and features.group(0).index("First feature") < features.group(0).index(
         "Second feature"
     )
     assert "First feature" not in sect
-    parked = re.search(r'<details id="parked".*?</details>', page, re.S)
+    parked = re.search(r'<details id="parked".*?</details>', issues, re.S)
     assert parked and "widgets#10" in parked.group(0)
 
 
 def test_a_file_without_kind_renders_the_old_page_plus_empty_closing_order() -> None:
     f = facts([issue(1)])
     jd = judgements({"widgets#1": j()})
-    page = render(f, jd)
-    assert 'data-kind="unkinded"><b>1</b>' in page
-    assert 'data-key="widgets#1"' in page
+    assert 'data-kind="unkinded"><b>1</b>' in render_backlog(f, jd)
+    assert 'data-key="widgets#1"' in render_issues(f, jd)
 
 
 # -------------------------------------------------------------- wave tabs (R16)
@@ -368,7 +406,7 @@ def _tabs(page: str) -> list[dict[str, str]]:
 
 
 def test_the_wave_tabs_are_an_aria_tablist_with_roving_focus() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     sect = _section(page, "waves")
     assert 'role="tablist"' in sect
     tabs = _tabs(page)
@@ -385,7 +423,7 @@ def test_the_wave_tabs_are_an_aria_tablist_with_roving_focus() -> None:
 def test_the_most_recent_unmerged_wave_is_preselected() -> None:
     f, jd = busy()
     assert preselected_wave(f, jd) == 3  # e-next is unmerged in wave 3
-    selected = next(t for t in _tabs(render(f, jd)) if t["aria-selected"] == "true")
+    selected = next(t for t in _tabs(render_backlog(f, jd)) if t["aria-selected"] == "true")
     assert selected["data-key"] == "3"
 
 
@@ -430,7 +468,7 @@ def test_an_earlier_wave_is_preselected_while_it_is_the_one_with_unmerged_work()
 
 
 def test_with_scripts_disabled_every_wave_is_shown() -> None:
-    sect = _section(render(*busy()), "waves")
+    sect = _section(render_backlog(*busy()), "waves")
     panels = re.findall(r'<div[^>]*role="tabpanel"[^>]*>', sect)
     assert panels and not any(" hidden" in p for p in panels), "no panel is hidden in the markup"
     tablist = re.search(r'<div[^>]*role="tablist"[^>]*>', sect)
@@ -446,7 +484,7 @@ def test_with_scripts_disabled_every_wave_is_shown() -> None:
 
 
 def test_with_scripts_enabled_the_label_is_visually_hidden_but_stays_in_the_dom() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     script = next(
         s for s in re.findall(r"<script\b[^>]*>(.*?)</script>", page, flags=re.S) if "tablist" in s
     )
@@ -461,7 +499,7 @@ def test_with_scripts_enabled_the_label_is_visually_hidden_but_stays_in_the_dom(
 
 
 def test_the_tab_script_hides_panels_with_the_hidden_attribute_and_handles_the_keys() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     script = re.findall(r"<script\b[^>]*>(.*?)</script>", page, flags=re.S)
     tabs_script = next(s for s in script if "tablist" in s)
     for token in ("ArrowRight", "ArrowLeft", "Home", "End", "hidden", "tabindex", "aria-selected"):
@@ -482,7 +520,7 @@ def test_the_tab_component_is_one_reusable_function() -> None:
 
 
 def test_the_page_has_a_real_title_and_the_three_theme_variants() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     assert re.search(r"<title>[^<]*widgets[^<]*</title>", page)
     css = re.search(r"<style>(.*?)</style>", page, flags=re.S)
     assert css is not None
@@ -493,7 +531,7 @@ def test_the_page_has_a_real_title_and_the_three_theme_variants() -> None:
 
 
 def test_the_phone_gutter_is_sixteen_pixels() -> None:
-    css = re.search(r"<style>(.*?)</style>", render(*busy()), flags=re.S).group(1)  # type: ignore[union-attr]
+    css = re.search(r"<style>(.*?)</style>", render_backlog(*busy()), flags=re.S).group(1)  # type: ignore[union-attr]
     phone = re.findall(r"@media \(max-width: 4\d\dpx\) \{(.*?)\n\}", css, flags=re.S)
     assert phone
     assert any(re.search(r"main \{[^}]*padding-left: 16px; padding-right: 16px", p) for p in phone)
@@ -502,18 +540,18 @@ def test_the_phone_gutter_is_sixteen_pixels() -> None:
 
 def test_render_stays_deterministic_and_escapes_new_text() -> None:
     f, jd = busy()
-    assert render(f, jd) == render(f, jd)
+    assert render_backlog(f, jd) == render_backlog(f, jd)
     evil = judgements(
         {"widgets#1": j()},
         [batch("x", [1], wave=1, rationale="<script>alert(1)</script>")],
     )
-    page = render(facts([issue(1)]), evil)
+    page = render_backlog(facts([issue(1)]), evil)
     assert "<script>alert(1)</script>" not in page
 
 
 def test_no_waves_means_no_tabs() -> None:
     f = facts([issue(1)])
-    page = render(f, judgements({"widgets#1": j()}))
+    page = render_backlog(f, judgements({"widgets#1": j()}))
     assert '<div role="tablist"' not in page
     assert "No waves" in _section(page, "waves")
 
@@ -618,7 +656,7 @@ def test_batch_stages_derives_every_batch() -> None:
 
 
 def test_the_wave_table_has_a_tier_column_after_batch() -> None:
-    page = render(*busy())
+    page = render_backlog(*busy())
     heads = re.findall(r"<th(?:\s[^>]*)?>(.*?)</th>", _section(page, "waves"))
     assert heads[:8] == [
         "Batch",
@@ -648,7 +686,7 @@ def test_the_wave_tables_scroll_sideways_instead_of_wrapping_by_the_letter() -> 
     from fr.triage.components import GRID_CSS
 
     assert "min-width" in GRID_CSS and "white-space: nowrap" in GRID_CSS
-    page = render(*busy())
+    page = render_backlog(*busy())
     assert GRID_CSS in page
     assert 'class="tablewrap"' in _section(page, "waves")
 
@@ -668,9 +706,10 @@ def test_a_wave_that_left_the_board_because_it_was_cancelled_is_named() -> None:
             batch("b", [2], wave=2, events=[dispatch("b")]),
         ],
     )
-    sect = _section(render(f, jd), "waves")
+    sect = _section(render_backlog(f, jd), "waves")
     assert "wave-tab-1" not in sect
-    assert "Wave 1 was cancelled" in sect and 'href="history.html"' in sect
+    assert "Wave 1</a> was cancelled" in sect and 'href="history.html"' in sect
+    assert 'href="history.html#history-wave-panel-1">Wave 1</a>' in sect  # R12: its History tab
 
 
 # ------------------------------------------------- phone width (gh#1001)
@@ -684,7 +723,7 @@ def test_the_wave_table_stacks_into_labelled_cards_at_phone_width() -> None:
     assert 'class="grid stack"' in table
     cells = re.findall(r'<td[^>]*data-label="([^"]+)"', table)
     assert cells[:8] == ["Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage"]
-    page = render(f, jd)
+    page = render_backlog(f, jd)
     assert re.search(r"@media \(max-width: 480px\) \{[^}]*table\.grid\.stack", page)
 
 
@@ -779,3 +818,111 @@ def test_the_board_plan_blocks_a_batch_with_an_untrusted_member() -> None:
     assert set(snap.rejected) == {proposed.id}
     plan = drive_pass(snap)
     assert proposed.id in {a.batch for a in plan.actions if a.kind == "blocked"}
+
+
+# --------------------------------------------------- wave and batch links (R12), prose (R11)
+
+
+def test_next_up_shows_the_wave_as_a_linked_field_and_links_batch_and_dependencies() -> None:
+    page = render_backlog(*busy())
+    sect = _section(page, "next-up")
+    row = re.search(r'<li class="next" data-next="batch" data-ref="e-next".*?</li>', sect, re.S)
+    assert row
+    assert 'href="backlog.html#batch-e-next"' in row.group(0)
+    assert '<span class="tag wave"><a href="backlog.html#wave-panel-3">wave 3</a></span>' in (
+        row.group(0)
+    )
+
+
+def test_a_waiting_batch_links_its_dependencies_to_their_cards() -> None:
+    f, jd = _free_batches()
+    sect = _section(render_backlog(f, jd), "next-up")
+    deps = re.findall(r'after <a href="(backlog\.html#batch-[^"]+)">', sect)
+    assert deps and "backlog.html#batch-w1-first" in deps
+
+
+def test_a_feature_row_has_no_wave_field() -> None:
+    page = render_backlog(*busy())
+    sect = _section(page, "next-up")
+    row = re.search(r'<li class="next" data-next="feature".*?</li>', sect, re.S)
+    assert row and 'class="tag wave"' not in row.group(0)
+
+
+def test_next_up_wave_links_go_to_the_backlog_tab_since_only_live_batches_are_listed() -> None:
+    cancel = {"kind": "cancel", "at": "2026-10-01T12:00:00Z"}
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {"widgets#1": j(), "widgets#2": j()},
+        [
+            batch("a", [1], wave=1, events=[dispatch("a"), cancel]),
+            batch("b", [2], wave=1),
+        ],
+    )
+    rows = next_up(f, jd)
+    assert [r.wave for r in rows if r.ref == "b"] == ["1"]
+    sect = _section(render_backlog(f, jd), "next-up")
+    # a batch Next up lists is not terminal, so its wave is never finished: never a History link
+    assert "history.html" not in sect
+    assert 'href="backlog.html#wave-panel-1">wave 1</a>' in sect
+
+
+def test_reasons_and_rationale_link_forge_references_outside_code() -> None:
+    f = facts([issue(1), issue(2)])
+    jd = judgements(
+        {"widgets#1": j(), "widgets#2": j()},
+        [batch("a", [1], wave=1, rationale="fixes #2, see `#1` and example-org/widgets#1")],
+    )
+    sect = _section(render_backlog(f, jd), "waves")
+    assert 'href="https://github.com/example-org/widgets/issues/2"' in sect
+    assert "<code>#1</code>" in sect
+    assert sect.count(">example-org/widgets#1</a>") == 1  # the prose; `#1` is code
+
+
+# ------------------------------------------------------------ the kind filter (R13)
+
+
+def test_the_closing_order_kinds_are_pressed_toggles_in_a_toolbar() -> None:
+    sect = _section(render_backlog(*busy()), "closing-order")
+    assert 'role="toolbar"' in sect
+    buttons = re.findall(r"<button[^>]*>", sect)
+    assert len(buttons) == 4
+    assert all('aria-pressed="true"' in b and 'type="button"' in b for b in buttons)
+    assert [re.search(r'data-kind="([a-z]+)"', b).group(1) for b in buttons] == [  # type: ignore[union-attr]
+        "defect", "feature", "parked", "unkinded",
+    ]  # fmt: skip
+
+
+def test_each_wave_row_names_its_kinds_and_each_panel_holds_a_hidden_message() -> None:
+    f = facts([issue(n) for n in range(1, 4)])
+    jd = judgements(
+        {"widgets#1": j(kind="defect"), "widgets#2": j(kind="feature"), "widgets#3": j()},
+        [
+            batch("a", [1, 2], wave=1),
+            batch("b", [3], wave=1),
+        ],
+    )
+    sect = _section(render_backlog(f, jd), "waves")
+    kinds = dict(re.findall(r'<tr data-batch="([^"]+)" data-kinds="([^"]*)"', sect))
+    assert kinds == {"a": "defect feature", "b": "unkinded"}
+    panels = re.findall(r'<div role="tabpanel".*?</div></div>', sect, re.S)
+    assert panels and all(
+        '<p class="quiet kinds-empty" hidden>No batch of the selected kinds.</p>' in p
+        for p in panels
+    )
+
+
+def test_the_kind_filter_has_the_structure_its_script_acts_on() -> None:
+    from fr.triage.render import KIND_FILTER_SCRIPT
+
+    page = render_backlog(*busy())
+    assert KIND_FILTER_SCRIPT in page and KIND_FILTER_SCRIPT not in render_issues(*busy())
+    waves = _section(page, "waves")
+    closed = {"defect", "feature", "parked", "unkinded"}
+    kinds = re.findall(r'<tr data-batch="[^"]+" data-kinds="([^"]*)"', waves)
+    assert kinds and all(set(k.split(" ")) <= closed and k for k in kinds)
+    toolbar = _section(page, "closing-order")
+    assert re.findall(r'aria-pressed="([a-z]+)"', toolbar) == ["true"] * 4
+    # every panel the script looks in holds rows and its message, hidden to start with
+    panels = re.findall(r'<div role="tabpanel".*?<p class="quiet kinds-empty"([^>]*)>', waves, re.S)
+    assert panels and all(" hidden" in p for p in panels)
+    assert waves.count("<tr data-batch=") == len(kinds)

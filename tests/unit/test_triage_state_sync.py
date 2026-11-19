@@ -41,7 +41,7 @@ def _state(root: Path) -> Path:
         "subsystems.yaml": "subsystems: []\n",
         "facts.json": "{}\n",
         "origins-facts.json": "{}\n",
-        "triage.html": "<html></html>\n",
+        "backlog.html": "<html></html>\n",
         "history.html": "<html></html>\n",
         "drive.lock": "123\n",
         "board/manifest.yaml": "sections: []\n",
@@ -94,6 +94,8 @@ def test_the_durable_set_is_the_specs() -> None:
     assert DURABLE_FILES == ("judgements.yaml", "origins.yaml", "subsystems.yaml")
     assert DURABLE_DIRS == (
         "board",
+        "backlog",
+        "issues",
         "origins",
         "architecture",
         "history",

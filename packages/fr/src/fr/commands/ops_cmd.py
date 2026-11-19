@@ -472,10 +472,11 @@ def trust(
     plan: Annotated[Path | None, PLAN_OPTION] = None,
     runbook: Annotated[bool, RUNBOOK_OPTION] = False,
 ) -> None:
-    """Show every probe and command of the selected ops and, confirmed at a
-    terminal, record that you trust this exact set — in your own store outside the
-    repo (a plan-journal line records it for audit). Probes are repo-authored code;
-    nothing runs them until then."""
+    """Show every probe and command of the selected ops, then record your trust.
+
+    The record needs a confirmation at a terminal. It says that you trust this exact
+    set, and lives in your own store outside the repo (a plan-journal line records it
+    for audit). Probes are repo-authored code; nothing runs them until then."""
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
     from fr.ops.trust import describe, grant_trust, load_trust, set_hash
 
@@ -533,7 +534,7 @@ def seal(
         typer.Option(
             "--encrypt",
             help="Command that writes ciphertext to {out}; {in} is a 0600 plaintext temp "
-            "file outside the repo (filled from stdin), {target} the target's name.",
+            "file outside the repo (filled from stdin), {target} the target's path, shell-quoted.",
         ),
     ],
     target: Annotated[Path, typer.Option("--target", help="The file to replace with {out}.")],

@@ -25,6 +25,7 @@ import fnmatch
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -34,19 +35,20 @@ from fr.triage.components import (
     BASE_CSS,
     CHROME_CSS,
     GUTTER_CSS,
+    PAGE_CSS,
+    PAGE_SCRIPT,
     TOKENS_CSS,
     page_header,
+    rendered_by,
 )
 from fr.triage.errors import TriageError
 from fr.triage.fragments import Resolved, splice
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.model import Facts, Issue, Judgements
-from fr.triage.render import FONTS, esc, plural
+from fr.triage.render import FONTS, _safe_url, esc, plural
 
 DASH = "—"
 OTHER = "Other"
-PAGE_FILE = "architecture.html"
-ARCHITECTURE_DIR = "architecture"
 SUBSYSTEMS_FILE = "subsystems.yaml"
 
 # The generated sections, in the default order; fragments interleave where the manifest says.
@@ -54,8 +56,8 @@ GENERATED = ("summary", "subsystems", "size-table")
 
 # Sections an older manifest may still name that another page owns now (R6).
 MOVED = {
-    "waves": "board",
-    "operator-actions": "board",
+    "waves": "backlog",
+    "operator-actions": "backlog",
     "filings-per-day": "origins",
     "origin-counts": "origins",
     "timeline": "history",
@@ -169,6 +171,7 @@ article.subsystem ul { margin: 6px 0 0; padding-left: 18px; font-size: .85rem; }
 .bar-row .v { font-family: var(--mono); text-align: right; }
 """
     + CHROME_CSS
+    + PAGE_CSS
     + GUTTER_CSS
 )
 
@@ -178,7 +181,7 @@ def _delta(a: int | None, b: int | None) -> str:
 
 
 def _num(n: int | None) -> str:
-    return DASH if n is None else str(n)
+    return DASH if n is None else str(int(n))
 
 
 def _place(facts: Facts, judgements: Judgements, subsystems: Subsystems) -> dict[str, list[Issue]]:
@@ -210,6 +213,12 @@ def _bar(label: str, m: Measure | None, scale: int) -> str:
     )
 
 
+def _issue_ref(issue: Issue) -> str:
+    """An issue's key, a link only when its url is https (the same rule as the Backlog's)."""
+    url = _safe_url(issue.url)
+    return f'<a href="{url}">{esc(issue.key)}</a>' if url else esc(issue.key)
+
+
 def _subsystems(
     facts: Facts,
     judgements: Judgements,
@@ -232,9 +241,7 @@ def _subsystems(
             body += _bar("then", ms.then if ms else None, scale)
             body += _bar("now", ms.now if ms else None, scale)
         items = "".join(
-            f'<li data-issue="{esc(i.key)}"><a href="{esc(i.url)}">{esc(i.key)}</a> '
-            f"{esc(i.title)}</li>"
-            for i in issues
+            f'<li data-issue="{esc(i.key)}">{_issue_ref(i)} {esc(i.title)}</li>' for i in issues
         )
         cards.append(
             f'<article class="subsystem" id="subsystem-{esc(_slug(name))}" '
@@ -354,9 +361,11 @@ def render_architecture(
     resolved: Resolved,
     notes: Sequence[str] = (),
     present: Sequence[str] = ("architecture",),
+    rendered_at: datetime | None = None,
 ) -> str:
     """The page: same inputs, same bytes. The generated sections and the authored fragments
-    in the order *resolved* (the manifest) gives, a fragment exactly where it is listed."""
+    in the order *resolved* (the manifest) gives, a fragment exactly where it is listed;
+    *rendered_at* is the moment the masthead states (triage-pages-ux R5)."""
     generated = {
         "summary": lambda: _summary(facts, judgements, subsystems, measured),
         "subsystems": lambda: _subsystems(facts, judgements, subsystems, measured),
@@ -371,9 +380,10 @@ def render_architecture(
         f"<title>{esc(title)}</title>\n{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
         f'<header class="mast"><h1>{esc(title)}</h1><div class="meta">'
         f"<span>collected {esc(facts.collected_at)}</span>"
-        "<span>rendered by <code>fr triage architecture render</code></span></div>"
+        + rendered_by(rendered_at, "fr triage architecture render")
+        + "</div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
         f"{page_header('architecture', present)}\n"
         + "\n".join(body)
-        + "\n</main>\n</body>\n</html>\n"
+        + f"\n</main>\n<script>{PAGE_SCRIPT}</script>\n</body>\n</html>\n"
     )

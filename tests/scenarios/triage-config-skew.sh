@@ -10,19 +10,19 @@ state="$(mktemp -d)"
 trap 'rm -rf "$state"' EXIT
 cp "$here/fixtures/config-skew-facts.json" "$state/facts.json"
 
-run_fr out triage render --org example-org --dir "$state"
+run_fr out triage backlog --org example-org --dir "$state"
 require_exit 0 "$out"
-html="$(cat "$state/triage.html")"
-expect_grep 'role="alert"' "$html" "the skew banner is on triage.html"
+html="$(cat "$state/backlog.html")"
+expect_grep 'role="alert"' "$html" "the skew banner is on backlog.html"
 expect_grep 'future_key' "$html" "the ignored key is named"
 expect_grep 'example-org/gadgets' "$html" "the skipped repo is named"
 
-run_fr out triage board --org example-org --dir "$state"
+run_fr out triage batches --org example-org --dir "$state"
 require_exit 0 "$out"
-board="$(cat "$state/board.html")"
-expect_grep 'role="alert"' "$board" "the skew banner is on board.html"
-expect_grep 'future_key' "$board" "board.html names the ignored key"
-expect_grep 'example-org/gadgets' "$board" "board.html names the skipped repo"
+board="$(cat "$state/batches.html")"
+expect_grep 'role="alert"' "$board" "the skew banner is on batches.html"
+expect_grep 'future_key' "$board" "batches.html names the ignored key"
+expect_grep 'example-org/gadgets' "$board" "batches.html names the skipped repo"
 
 run_fr out triage check --org example-org --dir "$state" --json
 require_exit 0 "$out"

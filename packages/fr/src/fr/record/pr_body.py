@@ -294,16 +294,23 @@ def shared_closing_keywords(body: str) -> list[tuple[str, list[str]]]:
     return out
 
 
-_URL_REF = re.compile(r"^https?://[^/\s]+/(?P<path>.+?)(?:/-)?/issues/(?P<n>\d+)$")
+_URL_REF = re.compile(r"^https?://(?P<host>[^/\s]+)/(?P<path>.+?)(?:/-)?/issues/(?P<n>\d+)$")
 
 
-def normalize_issue_ref(ref: str, identity: tuple[str, str]) -> str | None:
+def normalize_issue_ref(
+    ref: str, identity: tuple[str, str], *, host: str | None = None
+) -> str | None:
     """`owner/repo#n` for a reference as a PR body writes it — a bare `#n` or
     `GH-n` takes `identity` (`(org, repo)`, no forge call), an `owner/repo#n` is
     kept, and a GitHub or GitLab issue URL (`.../issues/n`, `.../-/issues/n`)
     becomes the same shape. Owner and repo are lowercased: GitHub matches them
     case-insensitively, so `Derio-Net/Super-FR#9` is `derio-net/super-fr#9`
-    (review p3-r4). `None` for anything else."""
+    (review p3-r4). `None` for anything else.
+
+    With *host* (the forge's hostname), a URL counts only on that host, compared
+    case-insensitively; `""` (the host is unknown) counts no URL. The path alone
+    cannot tell this repo's issue from a lookalike on another host, which a merge
+    never closes (super-fr#1488). Without *host*, any host is read."""
     here = f"{identity[0]}/{identity[1]}".lower()
     if ref.startswith("#"):
         return f"{here}{ref}"
@@ -311,6 +318,8 @@ def normalize_issue_ref(ref: str, identity: tuple[str, str]) -> str | None:
     if gh:
         return f"{here}#{gh.group(1)}"
     url = _URL_REF.match(ref)
+    if url and host is not None and url.group("host").lower() != host.lower():
+        return None
     if url:
         return f"{url.group('path').lower()}#{url.group('n')}"
     if re.fullmatch(r"[\w.-]+/[\w.-]+#\d+", ref):
@@ -1217,6 +1226,7 @@ def _tests(repo_root: Path, state: RunState) -> str | None:
 def _proportionality(repo_root: Path, state: RunState) -> str:
     from fr.parser import PlanSchemaError, parse
     from fr.proportionality import run_report
+    from fr.run.target import TargetError, target_ref
 
     plan_rel = next(
         (r.emitted["plan"] for r in state.steps.values() if r.emitted and "plan" in r.emitted),
@@ -1225,8 +1235,12 @@ def _proportionality(repo_root: Path, state: RunState) -> str:
     if plan_rel is None:
         return "No plan recorded for this run."
     try:
-        report = run_report(repo_root, parse(emitted_path(repo_root, plan_rel)), None)
-    except (PlanSchemaError, OSError) as e:
+        report = run_report(
+            repo_root,
+            parse(emitted_path(repo_root, plan_rel)),
+            target_ref(repo_root, state.base_branch),
+        )
+    except (PlanSchemaError, OSError, TargetError) as e:
         return _unavailable(repo_root, e)
     return f"```text\n{report.text.rstrip()}\n```"
 

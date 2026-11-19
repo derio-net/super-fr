@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from fr.triage.model import Facts, Issue, Judgements, PullRequest
-from fr.triage.render import IN_FLIGHT, render
+from fr.triage.render import IN_FLIGHT, render_backlog, render_issues
 
 REPO = "derio-net/super-fr"
 SHARED = "packages/fr/src/fr/isolation/local.py"
@@ -116,14 +116,15 @@ def _section(html: str) -> str:
     return match.group(0)
 
 
-def test_the_batches_fold_sits_below_the_tiers() -> None:
-    html = render(FACTS, JUDGEMENTS)
-    assert html.index('<section class="tier') < html.index('<section class="batches">')
-    assert html.index('<details id="batches" class="fold">') > html.index('id="prs"')
+def test_the_batches_fold_is_on_the_backlog_and_the_tiers_on_issues() -> None:
+    backlog, issues = render_backlog(FACTS, JUDGEMENTS), render_issues(FACTS, JUDGEMENTS)
+    assert '<section class="batches">' in backlog and '<section class="tier' not in backlog
+    assert '<section class="tier' in issues and '<section class="batches">' not in issues
+    assert backlog.index('<details id="batches" class="fold" open>') > backlog.index('id="waves"')
 
 
 def test_each_batch_card_shows_members_stage_version_and_pr() -> None:
-    section = _section(render(FACTS, JUDGEMENTS))
+    section = _section(render_backlog(FACTS, JUDGEMENTS))
     card = re.search(r'<details class="batch" data-batch="lifecycle".*?</details>', section, re.S)
     assert card
     body = card.group(0)
@@ -136,13 +137,13 @@ def test_each_batch_card_shows_members_stage_version_and_pr() -> None:
 
 
 def test_batch_titles_are_escaped() -> None:
-    section = _section(render(FACTS, JUDGEMENTS))
+    section = _section(render_backlog(FACTS, JUDGEMENTS))
     assert "Docs &lt;sweep&gt;" in section
     assert "<sweep>" not in section
 
 
 def test_pr_open_batches_show_the_planned_order_with_shared_files() -> None:
-    section = _section(render(FACTS, JUDGEMENTS))
+    section = _section(render_backlog(FACTS, JUDGEMENTS))
     plan = re.search(r'<ol class="merge-order">.*?</ol>', section, re.S)
     assert plan
     steps = re.findall(r"<li.*?</li>", plan.group(0), re.S)
@@ -155,7 +156,7 @@ def test_pr_open_batches_show_the_planned_order_with_shared_files() -> None:
 
 
 def test_members_render_in_their_tier_with_a_batch_chip() -> None:
-    html = render(FACTS, JUDGEMENTS)
+    html = render_issues(FACTS, JUDGEMENTS)
     row = re.search(r'<details class="row"[^>]*data-key="super-fr#577".*?</details>', html, re.S)
     assert row
     assert '<span class="tag batch">batch lifecycle</span>' in row.group(0)
@@ -163,7 +164,7 @@ def test_members_render_in_their_tier_with_a_batch_chip() -> None:
 
 def test_in_progress_is_in_flight_with_its_own_pill() -> None:
     assert "in-progress" in IN_FLIGHT
-    html = render(FACTS, JUDGEMENTS)
+    html = render_issues(FACTS, JUDGEMENTS)
     row = re.search(r'<details class="row"[^>]*data-key="super-fr#438"[^>]*>', html)
     assert row and 'data-inflight="1"' in row.group(0)
     assert '<span class="pill stage-in-progress">in-progress</span>' in html
@@ -172,17 +173,17 @@ def test_in_progress_is_in_flight_with_its_own_pill() -> None:
 
 def test_no_batches_renders_no_batches_section() -> None:
     plain = Judgements.model_validate({"schema": 1, "tiers": [{"n": 1, "title": "Now"}]})
-    assert '<section class="batches">' not in render(FACTS, plain)
+    assert '<section class="batches">' not in render_backlog(FACTS, plain)
 
 
 def test_the_board_is_deterministic_with_batches() -> None:
-    assert render(FACTS, JUDGEMENTS) == render(FACTS, JUDGEMENTS)
+    assert render_backlog(FACTS, JUDGEMENTS) == render_backlog(FACTS, JUDGEMENTS)
 
 
 def test_every_card_is_a_closed_details_with_its_stage_and_a_linkable_id() -> None:
     from fr.triage.batch import derive_batch_stage
 
-    section = _section(render(FACTS, JUDGEMENTS))
+    section = _section(render_backlog(FACTS, JUDGEMENTS))
     cards = re.findall(r'<details class="batch"[^>]*>', section)
     assert len(cards) == len(JUDGEMENTS.batches) == 3
     for tag, b in zip(cards, JUDGEMENTS.batches, strict=True):
@@ -192,7 +193,7 @@ def test_every_card_is_a_closed_details_with_its_stage_and_a_linkable_id() -> No
 
 
 def test_the_stage_filter_is_hidden_with_one_checked_box_per_stage_present() -> None:
-    section = _section(render(FACTS, JUDGEMENTS))
+    section = _section(render_backlog(FACTS, JUDGEMENTS))
     fieldset = re.search(r"<fieldset[^>]*>.*?</fieldset>", section, re.S)
     assert fieldset and " hidden" in re.match(r"<fieldset[^>]*>", fieldset.group(0)).group(0)  # type: ignore[union-attr]
     boxes = re.findall(r"<input[^>]*>", fieldset.group(0))
@@ -202,39 +203,47 @@ def test_the_stage_filter_is_hidden_with_one_checked_box_per_stage_present() -> 
 
 
 def test_no_batches_means_no_filter_and_the_fold_script_ships_once() -> None:
-    page = render(FACTS, JUDGEMENTS)
-    assert page.count("function reveal()") == 1
+    page = render_backlog(FACTS, JUDGEMENTS)
+    from fr.triage.components import FOLD_SCRIPT
+    from fr.triage.render import STAGE_FILTER_SCRIPT
+
+    assert page.count(STAGE_FILTER_SCRIPT) == 1 and page.count(FOLD_SCRIPT) == 1
     plain = Judgements.model_validate({"schema": 1, "tiers": [{"n": 1, "title": "Now"}]})
-    assert "<fieldset" not in render(FACTS, plain)
+    assert "<fieldset" not in render_backlog(FACTS, plain)
 
 
-def test_the_fold_script_toggles_by_stage_and_opens_every_ancestor_then_scrolls() -> None:
-    from fr.triage.render import FOLD_SCRIPT
+def test_the_stage_script_only_checks_the_targets_stage_and_leaves_opening_to_the_fold_script() -> (
+    None
+):
+    from fr.triage.components import FOLD_SCRIPT
+    from fr.triage.render import STAGE_FILTER_SCRIPT
 
-    assert "dataset.stage" in FOLD_SCRIPT and ".hidden" in FOLD_SCRIPT
-    assert "hashchange" in FOLD_SCRIPT and "location.hash" in FOLD_SCRIPT
-    assert 'tagName === "DETAILS"' in FOLD_SCRIPT and "parentElement" in FOLD_SCRIPT
-    assert "scrollIntoView" in FOLD_SCRIPT
+    assert "dataset.stage" in STAGE_FILTER_SCRIPT and ".hidden" in STAGE_FILTER_SCRIPT
+    assert "hashchange" in STAGE_FILTER_SCRIPT and "location.hash" in STAGE_FILTER_SCRIPT
+    # opening every ancestor and scrolling are the shared fold script's job, once (p2-r3)
+    for duplicated in ('tagName === "DETAILS"', "parentElement", "scrollIntoView"):
+        assert duplicated not in STAGE_FILTER_SCRIPT
+        assert duplicated in FOLD_SCRIPT
 
 
 def test_an_empty_filter_says_so_and_the_merge_order_follows_it() -> None:
     """Review p2-r1, p2-r3: with every stage off the fold says nothing matches, and the
     merge-order rows hide with their batch's card."""
-    from fr.triage.render import FOLD_SCRIPT
+    from fr.triage.render import STAGE_FILTER_SCRIPT
 
-    section = _section(render(FACTS, JUDGEMENTS))
+    section = _section(render_backlog(FACTS, JUDGEMENTS))
     empty = re.search(r'<p class="filter-empty"[^>]*>([^<]*)</p>', section)
     assert empty and " hidden" in empty.group(0) and "No batches match" in empty.group(1)
-    assert ".filter-empty" in FOLD_SCRIPT
-    assert "ol.merge-order li" in FOLD_SCRIPT and "dataset.batch" in FOLD_SCRIPT
+    assert ".filter-empty" in STAGE_FILTER_SCRIPT
+    assert "ol.merge-order li" in STAGE_FILTER_SCRIPT and "dataset.batch" in STAGE_FILTER_SCRIPT
 
 
 def test_a_link_reveals_once_and_only_the_same_hash_needs_the_click_path() -> None:
     """Review p2-r4: `hashchange` reveals a new hash; the click handler only covers a link
     to the hash already shown, which fires no `hashchange`."""
-    from fr.triage.render import FOLD_SCRIPT
+    from fr.triage.render import STAGE_FILTER_SCRIPT
 
-    assert "a.hash === location.hash" in FOLD_SCRIPT
+    assert "a.hash === location.hash" in STAGE_FILTER_SCRIPT
 
 
 def test_wide_tables_show_that_they_scroll() -> None:
@@ -249,10 +258,10 @@ def test_wide_tables_show_that_they_scroll() -> None:
 def test_the_merge_plan_hides_whole_when_no_step_is_shown() -> None:
     """Review p2-r5: the plan's intro and list sit in one `.merge-plan` the script hides
     when the filter leaves no step visible, so no intro is orphaned above an empty list."""
-    from fr.triage.render import FOLD_SCRIPT
+    from fr.triage.render import STAGE_FILTER_SCRIPT
 
-    assert "div.merge-plan" in FOLD_SCRIPT
-    section = _section(render(FACTS, JUDGEMENTS))
+    assert "div.merge-plan" in STAGE_FILTER_SCRIPT
+    section = _section(render_backlog(FACTS, JUDGEMENTS))
     if 'class="merge-order"' in section:
         plan = re.search(r'<div class="merge-plan">(.*?)</div>', section, re.S)
         assert (
@@ -260,3 +269,34 @@ def test_the_merge_plan_hides_whole_when_no_step_is_shown() -> None:
             and 'class="merge-order"' in plan.group(1)
             and "Planned merge order" in plan.group(1)
         )
+
+
+def _attribute_matches(selector: str, value: str) -> bool:
+    """Whether a CSS `[attr op "text"]` selector's operator accepts *value* (the operators
+    the scripts use)."""
+    m = re.search(r'\[[\w-]+([*^$|~]?=)"([^"]*)"\]', selector)
+    assert m, selector
+    op, text = m.groups()
+    return {
+        "=": value == text,
+        "*=": text in value,
+        "^=": value.startswith(text),
+        "$=": value.endswith(text),
+    }[op]
+
+
+def test_the_stage_scripts_link_selector_matches_the_batch_links_the_page_carries() -> None:
+    from fr.triage.render import STAGE_FILTER_SCRIPT
+
+    page = render_backlog(FACTS, JUDGEMENTS)
+    hrefs = re.findall(r'<a [^>]*href="([^"]*#batch-[^"]*)"', page)
+    assert hrefs and any(h.startswith("backlog.html#batch-") for h in hrefs)
+    selector = re.search(r"closest\('([^']+)'\)", STAGE_FILTER_SCRIPT)
+    assert selector
+    for href in hrefs:
+        assert _attribute_matches(selector.group(1), href), (selector.group(1), href)
+
+
+def test_the_checker_refuses_a_prefix_selector_against_a_page_qualified_href() -> None:
+    assert _attribute_matches('a[href*="#batch-"]', "backlog.html#batch-b1")
+    assert not _attribute_matches('a[href^="#batch-"]', "backlog.html#batch-b1")

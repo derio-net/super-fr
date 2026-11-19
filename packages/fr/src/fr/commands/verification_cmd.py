@@ -346,9 +346,10 @@ def prerelease_cmd(
         False, "--dry-run", help="Print the dispatch and the rc tag; call nothing."
     ),
 ) -> None:
-    """Cut an on-demand pre-release of BRANCH (spec §H, R24): dispatch the
-    `prerelease.yml` workflow, then print the rc tag and the install source
-    (`git+<remote>@<tag>`) the `prerelease` strategy installs from."""
+    """Cut an on-demand pre-release of BRANCH (spec §H, R24).
+
+    It dispatches the `prerelease.yml` workflow, then prints the rc tag and the install
+    source (`git+<remote>@<tag>`) that the `prerelease` strategy installs from."""
     from fr import hostclient
     from fr._hosts import slug_from_url
     from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation

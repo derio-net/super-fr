@@ -63,6 +63,7 @@ class Rig:
         self.world = world
         self.collects: list[frozenset[str] | None] = []
         self.boards = 0
+        self.pages = 0
         self.leases = 0
         self.naps: list[float] = []
         self.stop_after = 1
@@ -77,6 +78,7 @@ class Rig:
         monkeypatch.setattr(triage_batch_cmd, "recollect", self.recollect)
         monkeypatch.setattr(triage_batch_cmd, "_sleep", self.nap)
         monkeypatch.setattr(triage_batch_cmd._Driver, "_write_board", lambda d: self.board())
+        monkeypatch.setattr(triage_batch_cmd._Driver, "_write_pages", lambda d, w: self.page())
         real_take = triage_batch_cmd._Driver.take_lease
 
         def take(driver: Any) -> None:
@@ -99,6 +101,9 @@ class Rig:
 
     def board(self) -> None:
         self.boards += 1
+
+    def page(self) -> None:
+        self.pages += 1
 
     def nap(self, seconds: float) -> None:
         self.naps.append(seconds)
@@ -144,7 +149,7 @@ def test_a_quiet_pass_reads_nothing_plans_nothing_and_renews_the_lease(
 
     assert rig.collects == [], "no collect: no list_issues, list_prs or anything else"
     assert "pr_view 101" not in world.calls and world.merged == []
-    assert rig.boards == 0
+    assert rig.boards == 0 and rig.pages == 0
     assert rig.leases == 1, "the lease is still taken every pass"
     assert "quiet: 3 probes unchanged" in out, out
     assert all(etag is not None for _, etag in rig.forge.probe_calls), "conditional probes"
@@ -167,7 +172,7 @@ def test_an_edited_judgements_file_is_never_quiet_and_a_carried_repo_reads_nothi
     assert "pr_view 101" not in world.calls and world.merged == []
     assert not [line for line in out.splitlines() if line.startswith("merge ")]
     assert "was not read this pass" not in out
-    assert rig.boards == 1
+    assert rig.boards == 1 and rig.pages == 1
     assert pacing_state.load(tmp_path)[0].judgements_digest == judgements_digest(
         tmp_path / "judgements.yaml"
     )
@@ -211,7 +216,7 @@ def test_below_the_floor_nothing_is_dispatched_and_the_drive_keeps_going(
     assert "below floor 20%: essential-only pass, dispatch held, next pass in 8m" in flat
     assert code != 3, "a below-floor pass never ends the drive as stalled"
     assert rig.naps == [4 * 120]
-    assert rig.boards == 0
+    assert rig.boards == 0 and rig.pages == 0
     assert "re-run with --yes" not in out, "an essential pass with --yes acted (p2-r4)"
     assert pacing_state.load(tmp_path)[0].next_pass_at == NOW + timedelta(seconds=480)
 

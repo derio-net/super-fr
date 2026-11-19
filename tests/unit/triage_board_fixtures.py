@@ -184,3 +184,50 @@ def healthy() -> tuple[Facts, Judgements]:
 
 def make_pr(**kw: Any) -> PullRequest:
     return PullRequest.model_validate(pr(**kw))
+
+
+def element_by_id(page: str, sid: str) -> str:
+    """The whole element (`section`, `details` or `div`) whose id is *sid*, nested elements of
+    the same tag counted: a section is a fold now, and a fold holds more folds."""
+    import re
+
+    m = re.search(rf'<(section|details|div)[^>]*\bid="{re.escape(sid)}"', page)
+    assert m, f"no element with id {sid}"
+    tag = m.group(1)
+    depth, pos = 0, m.start()
+    for t in re.finditer(rf"<(/?){tag}\b", page[m.start() :]):
+        depth += -1 if t.group(1) else 1
+        if depth == 0:
+            return page[m.start() : m.start() + t.end() + len(">")]
+        pos = t.end()
+    raise AssertionError(f"element {sid} never closes ({pos})")
+
+
+def id_ancestors(page: str) -> dict[str, tuple[tuple[str, str | None], ...]]:
+    """Every id on *page* with the chain of elements around it, outermost first, each as
+    `(tag, id or None)`: what a hash link's script walks (`details` to open, a `tabpanel` to
+    select). Void elements open nothing."""
+    from html.parser import HTMLParser
+
+    void = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "wbr"}
+
+    class P(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stack: list[tuple[str, str | None]] = []
+            self.found: dict[str, tuple[tuple[str, str | None], ...]] = {}
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            ident = dict(attrs).get("id")
+            if ident:
+                self.found[ident] = tuple(self.stack)
+            if tag not in void:
+                self.stack.append((tag, ident))
+
+        def handle_endtag(self, tag: str) -> None:
+            while self.stack and self.stack.pop()[0] != tag:
+                pass
+
+    p = P()
+    p.feed(page)
+    return p.found

@@ -548,6 +548,7 @@ class NextRow:
     reason: str
     waiting: bool = False  # a batch the driver would NOT start this pass
     severity: Severity | None = None  # the most severe member's (R11)
+    wave: str | None = None  # a batch's wave key (`str(batch.wave)`); None for none (R12)
 
 
 def size_of(keys: Sequence[str], issues: Mapping[str, Judgement]) -> str:
@@ -595,14 +596,13 @@ def next_up(
             reason,
             waiting,
             max_severity(b.ids, issues),
+            str(b.wave) if b.wave is not None else None,
         )
 
     for bid in started:
         b = by_id[bid]
-        order = f", merge order {b.order}" if b.order is not None else ""
-        deps = f", after {', '.join(b.after)} merged" if b.after else ", no dependencies"
-        wave = f"wave {b.wave}" if b.wave is not None else "no wave"
-        rows.append(row(b, f"{wave}{order}{deps}", False))
+        reason = f"merge order {b.order}" if b.order is not None else "the driver starts it next"
+        rows.append(row(b, reason, False))
 
     # The driver's own hold is the one rule (spec §F, R18): a batch that awaits a live
     # walk is no work, so it is neither started nor waiting.

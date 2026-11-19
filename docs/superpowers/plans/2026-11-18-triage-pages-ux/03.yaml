@@ -1,0 +1,119 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Batches columns and cutoff; Origins groups, state filter and PR detail (R10,
+    R14, R15, R18)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - triage-batches-columns-cutoff
+  - triage-origins-groups-prs
+  - triage-pages-folds
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/origins.py
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_origins_cmd.py
+  - tests/**/*.py
+  - docs/explainers/fr-triage.md
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Collapsible columns (spec §D, R10)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in test_triage_kanban_render.py every column's `h2` holds a `<button aria-expanded>`; an empty column renders with `aria-expanded="false"` and the collapsed class, a non-empty one `true`; the script names the storage key `fr-triage:<scope>:col:<key>` and wraps every storage access in try/catch (assert on the constant script text).
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement the toggle and the remembered state; turn the gh#1417 empty-column CSS into the collapsed-state style. Keep tests/unit/test_tripwire_triage_board_columns.py green.
+- number: 2
+  title: Wave cutoff (spec §G, R18)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: cards carry `data-wave`, `data-terminal` and `data-active` (latest event's ISO date, empty with no event); `body` carries `data-rendered`; the toolbar toggle starts pressed. A pure helper `cutoff_hidden_waves(cards, rendered_at, days=30)`, the Python statement of the rule the script applies: a wave whose batches are all terminal with no event in 30 days is hidden; a wave with a proposed, eventless batch is shown; cards with no wave are never hidden.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement the attributes and the toggle script (same rule; column counts show the shown cards; state remembered like the columns).
+- number: 3
+  title: Origins collect keeps merged PRs (spec §H, R15)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: in test_triage_origins.py, `OriginsFacts` parses a file with no `prs` key as no PRs; `origins collect` over a fake forge keeps PRs merged on or after `--since` (repo, number, title, url, merged_at) with one merged-PR list read per repo, and drops older ones.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: add `MergedPr` and `OriginsFacts.prs`, read through the forge seam `origins collect` already uses (the forge's PR list, state merged, the same limit as for issues); a truncated list adds a warning, as collect does.
+- number: 4
+  title: Origins groups, state filter and PR detail (spec §H, R14, R15, R11)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: "Every issue" is a plain section holding a state filter (open/closed/all, all pressed) and one closed fold per category in CATEGORIES order then unclassified, each with its count; rows carry `data-state`; no category buttons remain. Each leaderboard PR row shows link, title, `stamp_text(merged_at)` and a plain `<details>` of the group's issues naming it, each linked; a PR not in `prs` shows "not collected". `_pr_link`/`_related_pr` go through the Linker built from origins-facts (a non-GitHub repo's PR not in `prs` stays text).
+  - id: P3.T4.S2
+    text: |-
+      GREEN: implement; replace `FILTER_SCRIPT` with the state filter (hide rows by state, rewrite each fold's `.count`). REFACTOR: drop dead category-filter code.
+- number: 5
+  title: Browser check, docs and suite
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      Render Batches and Origins from a fixture state into a git-ignored scratch dir; capture per the visual names (light/dark, 1280px/390px): empty column collapsed, collapse/expand a column, state surviving a reload, cutoff on/off; origin groups folded, each state filter, PR detail and a "not collected" PR. Open every shot; fill the record's visual section.
+  - id: P3.T5.S2
+    text: |-
+      Update docs/explainers/fr-triage.md (and the fr-triage skill plus mirrors if it names the Origins filter or the board columns) and its `reviewed` stamp; `uv run fr docs check` exits 0. Full suite into `$TMPDIR/p3-suite.log` after the last code commit; green; ruff and mypy clean.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: '2026-11-19T00:31:53+00:00'
+      note: null
+  completion:
+    at: '2026-11-19T00:31:53+00:00'
+    note: null
+    observed_prs: []

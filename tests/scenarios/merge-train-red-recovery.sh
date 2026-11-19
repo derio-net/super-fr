@@ -108,8 +108,8 @@ drive() { run_fr out triage batch drive --once --yes --keep-sessions --repo "$re
   --checkout "$repo=$PWD"
   [ "$RC" -eq 0 ] || [ "$RC" -eq 3 ] || fail "drive exited $RC (3 is a pass waiting on checks): $out"; }
 board() {  # the board over the facts the last pass collected
-  run_fr page triage render --repo "$repo" --dir "$state"; require_exit 0 "$page"
-  cat "$state/triage.html"
+  run_fr page triage backlog --repo "$repo" --dir "$state"; require_exit 0 "$page"
+  cat "$state/backlog.html"
 }
 log() { cat "$FAKE_GH_LOG"; }
 prompts() { grep -c -- '^--END--$' "$HERDR_PROMPTS" || true; }

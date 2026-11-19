@@ -464,10 +464,12 @@ def drive_pass_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """One pass of the cloud driver (R12): restore the state from its ref when it is
-    missing or older, renew the drive lease (pushed), collect, plan and act with the host
-    driver's own policy (R13), run every forge action itself, and write the session
-    requests to --outbox for the agent to execute. A wake within half of --interval of the
+    """One pass of the cloud driver (R12).
+
+    It restores the state from its ref when it is missing or older, renews the drive
+    lease (pushed), then collects, plans and acts with the host driver's own policy
+    (R13). It runs every forge action itself and writes the session requests to
+    --outbox for the agent to execute. A wake within half of --interval of the
     last pass only renews the lease (p4-r2: `send_later` truncates to the minute).
 
     A session whose --generation is older than the lease's (another session replaced it
@@ -658,11 +660,12 @@ def drive_record_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Apply every result the agent recorded for the outbox's requests to the scope's
-    state (through the cloud runner's mailbox), empty the outbox, and push the state ref.
-    Only the current, unexpired holder of the scope's lease records, under the same-host
-    `drive.lock` (p4-r5). A session whose --generation is older than the lease's records
-    nothing and exits 0 (p6-r4), except the one whose own self-re-home moved it, which
+    """Apply the agent's recorded results to the scope's state, then push the state ref.
+
+    The results answer the outbox's requests and go through the cloud runner's mailbox.
+    The outbox is emptied. Only the current, unexpired holder of the scope's lease records,
+    under the same-host `drive.lock` (p4-r5). A session whose --generation is older than the lease's
+    records nothing and exits 0 (p6-r4), except the one whose own self-re-home moved it, which
     records that pass's results. Exit 2 on a refusal: no live lease of this driver's, a
     driver holding the lock, a result no pending request names, or a runner that keeps no
     mailbox."""

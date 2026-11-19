@@ -166,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "fr"
-version = "8.3.0rc1"
+version = "8.3.0rc6"
 source = { editable = "packages/fr" }
 dependencies = [
     { name = "packaging" },
@@ -187,7 +187,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-claude-cloud"
-version = "8.3.0rc1"
+version = "8.3.0rc6"
 source = { editable = "packages/fr-claude-cloud" }
 dependencies = [
     { name = "fr" },
@@ -204,7 +204,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-cncd"
-version = "8.3.0rc1"
+version = "8.3.0rc6"
 source = { editable = "packages/fr-cncd" }
 dependencies = [
     { name = "fr" },
@@ -219,7 +219,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-dispatch"
-version = "8.3.0rc1"
+version = "8.3.0rc6"
 source = { editable = "packages/fr-dispatch" }
 dependencies = [
     { name = "fr" },
@@ -230,7 +230,7 @@ requires-dist = [{ name = "fr", editable = "packages/fr" }]
 
 [[package]]
 name = "fr-herdr"
-version = "8.3.0rc1"
+version = "8.3.0rc6"
 source = { editable = "packages/fr-herdr" }
 dependencies = [
     { name = "fr" },
@@ -323,6 +323,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/cd/de45b239ea3bdf626f982a00c14bfcf2e12d261c510ba7db62c5969a27cd/librt-0.9.0-cp314-cp314t-win32.whl", hash = "sha256:a9c63e04d003bc0fb6a03b348018b9a3002f98268200e22cc80f146beac5dc40", size = 52453, upload-time = "2026-04-09T16:06:05.229Z" },
     { url = "https://files.pythonhosted.org/packages/7f/f9/bfb32ae428aa75c0c533915622176f0a17d6da7b72b5a3c6363685914f70/librt-0.9.0-cp314-cp314t-win_amd64.whl", hash = "sha256:f162af66a2ed3f7d1d161a82ca584efd15acd9c1cff190a373458c32f7d42118", size = 60044, upload-time = "2026-04-09T16:06:06.398Z" },
     { url = "https://files.pythonhosted.org/packages/aa/47/7d70414bcdbb3bc1f458a8d10558f00bbfdb24e5a11740fc8197e12c3255/librt-0.9.0-cp314-cp314t-win_arm64.whl", hash = "sha256:a4b25c6c25cac5d0d9d6d6da855195b254e0021e513e0249f0e3b444dc6e0e61", size = 50009, upload-time = "2026-04-09T16:06:07.995Z" },
+]
+
+[[package]]
+name = "markdown"
+version = "3.11.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/eb/dc0fd6eff604bfb870b7fb68b90985a32caaf3c76f67736bbf7f438acd59/markdown-3.11.3.tar.gz", hash = "sha256:81eb91631dc97ad1efbc76019ef0f80fe90ca49ddf81546752d79989c3bfff3e", size = 498810, upload-time = "2026-11-05T20:30:52.926Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/6f/1fa8970e960e5c832874399e6efa564870ade8206d57fef5d5e296b834f5/markdown-3.11.3-py3-none-any.whl", hash = "sha256:e1a31a112232504d753e5c01bb8c2de90d3f0ba986b063e10770cf7695b09e73", size = 116758, upload-time = "2026-11-05T20:30:51.775Z" },
 ]
 
 [[package]]
@@ -717,7 +726,7 @@ wheels = [
 
 [[package]]
 name = "super-fr-workspace"
-version = "8.3.0rc1"
+version = "8.3.0rc6"
 source = { editable = "." }
 dependencies = [
     { name = "fr" },
@@ -729,6 +738,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "markdown" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -749,6 +759,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "markdown", specifier = ">=3.5" },
     { name = "mypy", specifier = ">=1.11" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },

@@ -195,19 +195,51 @@ def _issue_body(end: OpenEnd, repo_root: Path, context: list[str]) -> str:
 _MARKER_LINE = re.compile(r"^<!-- fr:journal (\S+) -->$")
 
 
-def _existing_markers(gh: GhClient, repo: str) -> dict[str, str]:
+OPEN_ENDS_LIST_LIMIT = 1000
+"""The cap on the open-issue listing `_existing_markers` reads; reaching it fails closed."""
+
+
+@dataclass(frozen=True)
+class MarkerLookup:
+    """What `_existing_markers` learned: the found markers, or why it cannot be trusted."""
+
+    found: dict[str, str]
+    reason: str | None = None
+
+
+def _existing_markers(gh: GhClient, repo: str) -> MarkerLookup:
     """`marker -> url` of the open issues THIS account filed that end in a
     marker line, exactly as `_issue_body` writes it. An issue anyone else wrote,
     or one that merely quotes a marker mid-body, is never reused — reuse hands
-    its URL to `tracked_by`, so a third party could otherwise redirect it. Any
-    error (no listing, no viewer) means no dedup, never a failure."""
+    its URL to `tracked_by`, so a third party could otherwise redirect it.
+
+    Fails closed (super-fr#1485, as `_existing_owed` does): a listing that failed,
+    one that reached `OPEN_ENDS_LIST_LIMIT`, or no viewer to match authors against
+    cannot say "no issue carries this marker", so the caller files nothing. A forge
+    that cannot list issues at all (`UnsupportedForgeOperation`: glab, tea) keeps
+    R11's fallback, no dedup: there the answer is a known gap, not an unknown one."""
+    from fr.ghclient import UnsupportedForgeOperation
+
+    try:
+        issues = gh.list_issues(repo, "open", OPEN_ENDS_LIST_LIMIT, fields="number,url,body,author")
+    except UnsupportedForgeOperation:
+        return MarkerLookup({})
+    except Exception as e:  # noqa: BLE001 — unknown state is not "no duplicate"
+        return MarkerLookup({}, f"could not list the open issues ({type(e).__name__}: {e})")
+    if len(issues) >= OPEN_ENDS_LIST_LIMIT:
+        return MarkerLookup(
+            {},
+            f"the open-issue listing reached its limit of {OPEN_ENDS_LIST_LIMIT}, "
+            "so an existing issue could be missed",
+        )
     try:
         me = gh.viewer_login()
-        issues = gh.list_issues(repo, "open", 200, fields="number,url,body,author")
-    except Exception:  # noqa: BLE001 — dedup is best-effort by design (R11)
-        return {}
+    except Exception as e:  # noqa: BLE001
+        me, why = "", f"{type(e).__name__}: {e}"
+    else:
+        why = "the forge named no login"
     if not me:
-        return {}
+        return MarkerLookup({}, f"could not tell which account files the issues ({why})")
     found: dict[str, str] = {}
     for issue in issues:
         author = issue.get("author")
@@ -218,7 +250,7 @@ def _existing_markers(gh: GhClient, repo: str) -> dict[str, str]:
         m = _MARKER_LINE.match(body.splitlines()[-1].strip())
         if m:
             found.setdefault(m.group(1), str(url))
-    return found
+    return MarkerLookup(found)
 
 
 def context_for(repo_root: Path, end: OpenEnd) -> list[str]:
@@ -251,7 +283,10 @@ def file_open_ends(
     one end is recorded on it and the rest proceed."""
     if not ends:
         return []
-    known = _existing_markers(gh, repo)
+    lookup = _existing_markers(gh, repo)
+    if lookup.reason is not None:
+        return [Filed(e, error=lookup.reason) for e in ends]
+    known = lookup.found
     labels = frozenset({FOLLOW_UP_LABEL})
     try:
         gh.ensure_labels(repo, [FOLLOW_UP_LABEL])

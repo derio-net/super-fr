@@ -54,9 +54,38 @@ def _state_dir(tmp_path: Path) -> Path:
 # ------------------------------------------------------------------ the registry
 
 
+def test_the_registry_names_every_page_once_in_nav_order() -> None:
+    """R1, spec §A: one name per page, its file, title and fragment directory."""
+    from fr.triage.components import Legacy, page
+
+    assert [(p.key, p.file, p.title) for p in PAGES] == [
+        ("backlog", "backlog.html", "Backlog"),
+        ("issues", "issues.html", "Issues"),
+        ("batches", "batches.html", "Batches"),
+        ("origins", "origins.html", "Origins"),
+        ("architecture", "architecture.html", "Architecture"),
+        ("history", "history.html", "History"),
+    ]
+    assert [p.dir for p in PAGES] == [
+        "backlog",
+        "issues",
+        None,
+        "origins",
+        "architecture",
+        "history",
+    ]
+    assert page("backlog").legacy == Legacy("triage.html", "board")
+    assert page("issues").legacy == Legacy(None, "board")
+    assert page("batches").legacy == Legacy("board.html", None)
+    assert all(page(k).legacy is None for k in ("origins", "architecture", "history"))
+    assert page("issues").goal == "What is open, and how is it ranked?"
+    with pytest.raises(KeyError):
+        page("board")
+
+
 def test_pages_present_is_the_files_that_exist_plus_the_current_page(tmp_path: Path) -> None:
     assert pages_present(tmp_path, "history") == ("history",)
-    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "backlog.html").write_text("x", encoding="utf-8")
     (tmp_path / "origins.html").write_text("x", encoding="utf-8")
     (tmp_path / "board").mkdir()  # the fragments directory is not the page
     assert pages_present(tmp_path, "batches") == ("backlog", "batches", "origins")
@@ -65,9 +94,9 @@ def test_pages_present_is_the_files_that_exist_plus_the_current_page(tmp_path: P
 
 def test_page_header_links_only_present_pages_marks_current_then_states_the_goal() -> None:
     h = page_header("batches", ("backlog", "batches", "history"))
-    assert _links(h) == ["triage.html", "board.html", "history.html"]
+    assert _links(h) == ["backlog.html", "batches.html", "history.html"]
     assert h.count('aria-current="page"') == 1
-    assert re.search(r'<a href="board.html" aria-current="page">Batches</a>', h)
+    assert re.search(r'<a href="batches.html" aria-current="page">Batches</a>', h)
     assert h.endswith('<p class="goal">What is running, and what needs me?</p>')
     assert "origins.html" not in h and "architecture.html" not in h
 
@@ -80,12 +109,12 @@ def test_the_board_carries_its_nav_its_goal_and_the_batches_title(
 ) -> None:
     _state_dir(tmp_path)
     _use(monkeypatch, _Inspector())
-    code, said = _cli(tmp_path, "board")
+    code, said = _cli(tmp_path, "batches")
     assert code == 0, said
-    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    page = (tmp_path / "batches.html").read_text(encoding="utf-8")
     assert "<h1>Batches</h1>" in page and "<title>Batches · " in page
     assert "Batch board" not in page
-    assert _links(page) == ["board.html"]  # nothing else rendered yet
+    assert _links(page) == ["batches.html"]  # nothing else rendered yet
     assert 'class="goal">What is running, and what needs me?<' in page
     assert page.index("</header>") < page.index('class="pages"')
 
@@ -98,8 +127,8 @@ def test_the_skew_banner_sits_under_the_nav(
     monkeypatch.setattr(triage_kanban_cmd, "skew_banner", lambda facts: '<div class="skew">S</div>')
     _state_dir(tmp_path)
     _use(monkeypatch, _Inspector())
-    assert _cli(tmp_path, "board")[0] == 0
-    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    assert _cli(tmp_path, "batches")[0] == 0
+    page = (tmp_path / "batches.html").read_text(encoding="utf-8")
     assert page.index('class="goal"') < page.index('class="skew"')
     assert c.NAV_BLOCK.search(page)
 
@@ -112,29 +141,30 @@ def test_rendering_the_board_updates_the_other_pages_navs(
 ) -> None:
     _state_dir(tmp_path)
     _use(monkeypatch, _Inspector())
-    assert _cli(tmp_path, "render")[0] == 0
+    assert _cli(tmp_path, "backlog")[0] == 0
     assert _cli(tmp_path, "history", "render")[0] == 0
     history = (tmp_path / "history.html").read_text(encoding="utf-8")
-    assert _links(history) == ["triage.html", "history.html"]
+    assert _links(history) == ["backlog.html", "issues.html", "history.html"]
 
-    assert _cli(tmp_path, "board")[0] == 0
+    assert _cli(tmp_path, "batches")[0] == 0
     history = (tmp_path / "history.html").read_text(encoding="utf-8")
-    backlog = (tmp_path / "triage.html").read_text(encoding="utf-8")
-    board = (tmp_path / "board.html").read_text(encoding="utf-8")
-    for page in (history, backlog, board):
-        assert _links(page) == ["triage.html", "board.html", "history.html"]
+    backlog = (tmp_path / "backlog.html").read_text(encoding="utf-8")
+    issues = (tmp_path / "issues.html").read_text(encoding="utf-8")
+    board = (tmp_path / "batches.html").read_text(encoding="utf-8")
+    for page in (history, backlog, issues, board):
+        assert _links(page) == ["backlog.html", "issues.html", "batches.html", "history.html"]
     assert re.search(r'<a href="history.html" aria-current="page">', history)
-    assert re.search(r'<a href="triage.html" aria-current="page">', backlog)
-    for page in (history, backlog, board):
+    assert re.search(r'<a href="backlog.html" aria-current="page">', backlog)
+    for page in (history, backlog, issues, board):
         assert "origins.html" not in page and "architecture.html" not in page
 
 
 def test_rendering_a_page_adds_it_to_the_pages_already_there(tmp_path: Path) -> None:
     _state_dir(tmp_path)
     assert _cli(tmp_path, "history", "render")[0] == 0
-    assert _cli(tmp_path, "render")[0] == 0
+    assert _cli(tmp_path, "backlog")[0] == 0
     history = (tmp_path / "history.html").read_text(encoding="utf-8")
-    assert _links(history) == ["triage.html", "history.html"]
+    assert _links(history) == ["backlog.html", "issues.html", "history.html"]
 
 
 def _seed(tmp_path: Path, **pages: str) -> None:
@@ -148,7 +178,7 @@ def _seed(tmp_path: Path, **pages: str) -> None:
 def test_a_page_whose_nav_is_already_current_is_not_rewritten(tmp_path: Path) -> None:
     present = ("backlog", "history")
     _seed(tmp_path, history=nav_html("history", present))
-    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "backlog.html").write_text("x", encoding="utf-8")
     path = tmp_path / "history.html"
     os.utime(path, ns=(1_000_000_000, 1_000_000_000))
     before = path.read_bytes()
@@ -160,7 +190,7 @@ def test_a_stale_nav_is_replaced_atomically_and_nothing_else_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _seed(tmp_path, history=nav_html("history", ("history",)))
-    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "backlog.html").write_text("x", encoding="utf-8")
     written: list[Path] = []
     real = atomic.write_text_atomic
 
@@ -179,7 +209,7 @@ def test_a_stale_nav_is_replaced_atomically_and_nothing_else_changes(
 
 def test_a_page_without_a_nav_block_is_left_byte_identical_and_named(tmp_path: Path) -> None:
     (tmp_path / "history.html").write_text("<html>hand-written</html>\n", encoding="utf-8")
-    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "backlog.html").write_text("x", encoding="utf-8")
     seen: list[str] = []
     refresh_navs(tmp_path, "backlog", warn=seen.append)
     assert (tmp_path / "history.html").read_bytes() == b"<html>hand-written</html>\n"
@@ -189,7 +219,7 @@ def test_a_page_without_a_nav_block_is_left_byte_identical_and_named(tmp_path: P
 def test_the_command_warns_for_a_page_without_a_nav_block(tmp_path: Path) -> None:
     _state_dir(tmp_path)
     (tmp_path / "history.html").write_text("<html>old</html>\n", encoding="utf-8")
-    code, said = _cli(tmp_path, "render")
+    code, said = _cli(tmp_path, "backlog")
     assert code == 0 and "history.html" in said and "nav" in said
     assert (tmp_path / "history.html").read_bytes() == b"<html>old</html>\n"
 
@@ -202,7 +232,7 @@ def test_the_publish_command_gets_a_copy_without_the_nav_and_the_local_board_kee
 ) -> None:
     _state_dir(tmp_path)
     _use(monkeypatch, _Inspector())
-    assert _cli(tmp_path, "render")[0] == 0
+    assert _cli(tmp_path, "backlog")[0] == 0
     sent = tmp_path / "sent.html"
     cwd = tmp_path / "cwd.txt"
     code = (
@@ -211,12 +241,12 @@ def test_the_publish_command_gets_a_copy_without_the_nav_and_the_local_board_kee
     )
     cfg = {"publish": [sys.executable, "-c", code, str(sent), str(cwd), "{board}"]}
     (tmp_path / "scope.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    code_, said = _cli(tmp_path, "board", "--publish")
+    code_, said = _cli(tmp_path, "batches", "--publish")
     assert code_ == 0, said
     copy = sent.read_text(encoding="utf-8")
     assert '<nav class="pages"' not in copy and "<h1>Batches</h1>" in copy
-    local = (tmp_path / "board.html").read_text(encoding="utf-8")
-    assert _links(local) == ["triage.html", "board.html"]
+    local = (tmp_path / "batches.html").read_text(encoding="utf-8")
+    assert _links(local) == ["backlog.html", "issues.html", "batches.html"]
     assert Path(cwd.read_text(encoding="utf-8")).resolve() == tmp_path.resolve()
 
 
@@ -224,7 +254,7 @@ def test_a_page_with_two_nav_blocks_is_treated_alike_by_refresh_and_strip(
     tmp_path: Path,
 ) -> None:
     old = nav_html("history", ("history",))
-    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "backlog.html").write_text("x", encoding="utf-8")
     (tmp_path / "history.html").write_text(f"<a>{old}<b>{old}<c>\n", encoding="utf-8")
     refresh_navs(tmp_path, "backlog")
     new = nav_html("history", ("backlog", "history"))
@@ -258,7 +288,7 @@ def _spy(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
 
 @pytest.mark.parametrize(
     ("words", "page"),
-    [(("render",), "triage.html"), (("history", "render"), "history.html")],
+    [(("backlog",), "backlog.html"), (("history", "render"), "history.html")],
 )
 def test_a_render_writes_its_own_page_atomically(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, words: tuple[str, ...], page: str
@@ -274,7 +304,7 @@ def test_a_page_changed_between_read_and_write_is_not_overwritten(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _seed(tmp_path, history=nav_html("history", ("history",)))
-    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "backlog.html").write_text("x", encoding="utf-8")
     path = tmp_path / "history.html"
     other = "<html>another render got here first</html>\n"
     real = Path.read_text
@@ -297,7 +327,7 @@ def test_a_failed_nav_write_warns_naming_the_page_and_never_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _seed(tmp_path, history=nav_html("history", ("history",)))
-    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "backlog.html").write_text("x", encoding="utf-8")
 
     def boom(path: Path, text: str) -> None:
         raise PermissionError("read-only")
@@ -314,7 +344,7 @@ def test_a_render_still_stores_its_snapshot_when_a_nav_cannot_be_written(
     _state_dir(tmp_path)
     assert _cli(tmp_path, "history", "render")[0] == 0
     monkeypatch.setattr(atomic, "write_text_atomic", _fail_for("history.html"))
-    code, said = _cli(tmp_path, "render")
+    code, said = _cli(tmp_path, "backlog")
     assert code == 0 and "history.html" in said
     assert list((tmp_path / "snapshots").glob("*"))
 
@@ -339,8 +369,8 @@ def test_the_no_nav_warning_is_said_once_across_passes(
     _state_dir(tmp_path)
     _use(monkeypatch, _Inspector())
     (tmp_path / "history.html").write_text("<html>old</html>\n", encoding="utf-8")
-    first = _cli(tmp_path, "board")[1]
-    second = _cli(tmp_path, "board")[1]
+    first = _cli(tmp_path, "batches")[1]
+    second = _cli(tmp_path, "batches")[1]
     assert first.count("no nav block") == 1 and second.count("no nav block") == 0
 
 
@@ -356,16 +386,16 @@ def test_the_publish_copy_is_gone_once_the_command_returns(
     code = "import sys; open(sys.argv[1], 'w').write(sys.argv[2])"
     cfg = {"publish": [sys.executable, "-c", code, str(seen), "{board}"]}
     (tmp_path / "scope.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    assert _cli(tmp_path, "board", "--publish")[0] == 0
+    assert _cli(tmp_path, "batches", "--publish")[0] == 0
     copy = Path(seen.read_text(encoding="utf-8"))
-    assert copy.name == "board.html" and copy != tmp_path / "board.html"
+    assert copy.name == "batches.html" and copy != tmp_path / "batches.html"
     assert not copy.exists() and not copy.parent.exists()
 
 
 def test_the_backlog_names_the_batches_page_not_the_board() -> None:
-    from fr.triage.render import render
+    from fr.triage.render import render_backlog
 
     from tests.unit.triage_board_fixtures import busy
 
-    page = render(*busy(), board=True)
+    page = render_backlog(*busy(), board=True)
     assert "Open the Batches page</a>" in page and "live board" not in page
