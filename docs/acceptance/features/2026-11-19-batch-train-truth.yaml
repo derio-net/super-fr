@@ -32,9 +32,9 @@ rows:
       `drive failures --file --yes` files or updates one issue per cause, so recurring
       causes become tracked work
     origin:
-    - spec:2026-11-19-batch-train-truth#R7
     - spec:2026-11-19-batch-train-truth#R8
     - spec:2026-11-19-batch-train-truth#R9
+    - spec:2026-11-19-batch-train-truth#R10
     levels: {}
     status: not-implemented
     notes: ''
