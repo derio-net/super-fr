@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-19-feat-event-driven-a-la-carte
+workflow: fr-goal@1
+branch: feat/event-driven-a-la-carte
+started: '2026-11-19T22:20:35+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+driver: standalone
+fr_version: 8.3.0rc6
