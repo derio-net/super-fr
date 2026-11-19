@@ -363,3 +363,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p3 created=2026-11-19T22:27:45+00:00 decided_by=agent -->
 ### phase-split-2026-11-19-wave-merge-queue-p3 · decision · ask: git and forge execution of builds and landings (R4-R7, R10, R11, R20, R33-R35)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p4 created=2026-11-19T22:27:48+00:00 decided_by=agent -->
+### phase-split-2026-11-19-wave-merge-queue-p4 · decision · ask: the hold handshake with the release (R17-R19, R27)
