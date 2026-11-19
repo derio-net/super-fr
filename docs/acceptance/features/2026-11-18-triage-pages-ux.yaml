@@ -73,9 +73,15 @@ rows:
     origin:
     - spec:2026-11-18-triage-pages-ux#R8
     - spec:2026-11-18-triage-pages-ux#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_components.py#test_a_fold_renders_its_summary_with_heading_and_count
+      - super-fr:tests/unit/test_triage_components.py#test_every_renderer_includes_the_page_css_and_script
+      - super-fr:tests/unit/test_triage_components.py#test_the_fold_targets_a_hash_can_reach_sit_inside_their_details
+      - super-fr:tests/unit/test_triage_history.py#test_the_timeline_is_a_closed_fold_with_its_count
+    status: ci
+    notes: One fold component on every page; a hash target sits inside its fold; browser
+      walk recorded in the phase reviews.
     verify: none
     visual:
       states:
