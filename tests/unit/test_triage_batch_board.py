@@ -269,3 +269,34 @@ def test_the_merge_plan_hides_whole_when_no_step_is_shown() -> None:
             and 'class="merge-order"' in plan.group(1)
             and "Planned merge order" in plan.group(1)
         )
+
+
+def _attribute_matches(selector: str, value: str) -> bool:
+    """Whether a CSS `[attr op "text"]` selector's operator accepts *value* (the operators
+    the scripts use)."""
+    m = re.search(r'\[[\w-]+([*^$|~]?=)"([^"]*)"\]', selector)
+    assert m, selector
+    op, text = m.groups()
+    return {
+        "=": value == text,
+        "*=": text in value,
+        "^=": value.startswith(text),
+        "$=": value.endswith(text),
+    }[op]
+
+
+def test_the_stage_scripts_link_selector_matches_the_batch_links_the_page_carries() -> None:
+    from fr.triage.render import STAGE_FILTER_SCRIPT
+
+    page = render_backlog(FACTS, JUDGEMENTS)
+    hrefs = re.findall(r'<a [^>]*href="([^"]*#batch-[^"]*)"', page)
+    assert hrefs and any(h.startswith("backlog.html#batch-") for h in hrefs)
+    selector = re.search(r"closest\('([^']+)'\)", STAGE_FILTER_SCRIPT)
+    assert selector
+    for href in hrefs:
+        assert _attribute_matches(selector.group(1), href), (selector.group(1), href)
+
+
+def test_the_checker_refuses_a_prefix_selector_against_a_page_qualified_href() -> None:
+    assert _attribute_matches('a[href*="#batch-"]', "backlog.html#batch-b1")
+    assert not _attribute_matches('a[href^="#batch-"]', "backlog.html#batch-b1")

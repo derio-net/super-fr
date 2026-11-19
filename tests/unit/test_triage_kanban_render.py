@@ -745,3 +745,18 @@ def test_an_absent_closeout_has_a_batch_front_and_no_closeout_jump_or_code() -> 
     assert [c.endswith("--closeout") for c in _cmds(body)] == [False]
     section = body.split("<h4>Close-out session</h4>", 1)[1]
     assert 'class="jump"' not in section and 'class="cmd"' not in section
+
+
+def test_the_cutoff_choice_reads_an_id_and_a_scope_the_markup_carries() -> None:
+    """The script reaches the cutoff toggle by id and keys its choice by the body's
+    `data-scope`: both must be in the page it ships with, not only in the script text."""
+    page = _page()
+    ids = re.findall(r'getElementById\("([^"]+)"\)', SCRIPT)
+    assert "cutoff" in ids
+    assert 'id="cutoff"' in page
+    assert re.search(r"var scope = document\.body\.dataset\.scope", SCRIPT)
+    scope = re.search(r'<body[^>]*\bdata-scope="([^"]*)"', page)
+    assert scope and scope.group(1)
+    assert re.search(r'"fr-triage:" \+ scope \+ ":cutoff"', SCRIPT)
+    key = f"fr-triage:{scope.group(1)}:cutoff"
+    assert key.startswith("fr-triage:") and key.endswith(":cutoff") and "::" not in key
