@@ -95,6 +95,17 @@ rows:
     levels: {}
     status: not-implemented
     notes: born at brainstorm
+  - id: wave-queue-broken-hold
+    capability: wave merge queue
+    acceptance: A deleted or expired hold, a stray merge or a mid-queue release never
+      lands untested code or moves a PR branch. The hold is re-armed, and the operator
+      is told which release may have cut from a partly landed wave.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R27
+    - spec:2026-11-19-wave-merge-queue#R14
+    levels: {}
+    status: not-implemented
+    notes: born at brainstorm
   - id: wave-queue-approval-content
     capability: approval gate
     acceptance: An approved-fr approval survives any push that leaves the PR's own diff
