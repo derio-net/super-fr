@@ -149,9 +149,14 @@ rows:
     origin:
     - spec:2026-11-18-triage-pages-ux#R10
     - spec:2026-11-18-triage-pages-ux#R18
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_every_column_header_holds_a_toggle_that_says_whether_it_is_expanded
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_server_marks_the_cards_of_the_waves_the_cutoff_hides
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_marker_follows_the_thirty_day_boundary_to_the_second
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_each_terminal_kind_is_terminal
+    status: ci
+    notes: Column toggles and the server-decided wave cutoff pinned at a fixed clock.
     verify: none
     visual:
       states:
