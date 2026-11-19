@@ -43,12 +43,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # check judges merged rows against the default branch's history
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
       - name: Check matrix (gate — failing rows fail here)
         run: fr acceptance check
       - name: Write Actions summary (branch / PR / main)
@@ -59,26 +59,60 @@ jobs:
           REF: ${{ gitea.sha }}
         run: fr acceptance report --link-mode github --ref "$REF"
       - name: Upload report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: acceptance-report
           path: docs/acceptance/report.html
           retention-days: 90
 
+  # The debt job files issues through `tea`, pinned and checksummed (the same table the
+  # devcontainer scaffold reads). Its login token is FR_DEBT_TOKEN when the repo has that
+  # secret, else the job's own `gitea.token`. Checkout keeps no credential: archive-pr
+  # authenticates its pushes itself, from FR_DEBT_TOKEN or GITEA_TOKEN in its environment.
+  # tea 0.14.2 keeps its login in $XDG_CONFIG_HOME/tea, so the tea steps point it at the
+  # job's temp dir, never a runner's $HOME, and the last step logs out whatever happened.
   debt:
     if: gitea.event_name == 'schedule' || inputs.debt
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
       - name: Install fr
-        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+        run: uv tool install "git+https://github.com/derio-net/super-fr@0123456789abcdef0123456789abcdef01234567#subdirectory=packages/fr"  # v8.1.5
+      - name: Install tea
+        run: |
+          case "$(uname -m)" in
+            x86_64|amd64) url='https://gitea.com/gitea/tea/releases/download/v0.14.2/tea-0.14.2-linux-amd64'; sha='be4ab135752825ab223cfa87d30e7f328312a24120b70176b67c1bd4aba19cc3';;
+            aarch64|arm64) url='https://gitea.com/gitea/tea/releases/download/v0.14.2/tea-0.14.2-linux-arm64'; sha='f201f6ba4136f1129e99e6318af07900c0c16a92030648bd186ff27067b34568';;
+            *) echo "tea 0.14.2: unsupported architecture $(uname -m)" >&2; exit 1;;
+          esac
+          curl -fsSL "$url" -o /tmp/tea.dl
+          echo "$sha  /tmp/tea.dl" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          install -m 755 /tmp/tea.dl "$HOME/.local/bin/tea"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Log in to tea
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_SERVER_TOKEN: ${{ secrets.FR_DEBT_TOKEN || gitea.token }}
+        run: tea login add --name fr-ci
       - name: Technical debt issue (weekly)
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
         env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+          GITEA_TOKEN: ${{ gitea.token }}
         run: fr debt archive-pr --yes
+      - name: Log out of tea
+        if: always()
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/fr-tea
+        run: tea logout fr-ci || true

@@ -52,16 +52,20 @@
 //   - ./nag — the acceptance nag, one system part at a top-level session's
 //     first model request (fr-acceptance-nag.sh);
 //   - ./bind — attach/detach on `fr isolation up|exec|down` / `fr run start`
-//     and on `session.deleted` (fr-session-bind.sh, fr-session-unbind.sh).
+//     and on `session.deleted` (fr-session-bind.sh, fr-session-unbind.sh);
+//   - ./rules — the shipped rules delivered into `<plugin dir>/rules/`, appended
+//     as system parts on the `context` hook unless already present (no marker:
+//     parity does not model rule delivery).
 // Each of those modules carries its own `super-fr-parity:` marker, on the
 // handler it credits; parity.yaml declares their OpenCode cells.
 //
 // EXPORT DISCIPLINE: this module's only export is the default definition.
 // Helpers live in ./marker, ./idle, ./claim, ./pin, ./sentinel, ./guard,
-// ./push, ./nag, ./bind and ./spawn.
+// ./push, ./nag, ./bind, ./rules and ./spawn.
 import type { Plugin } from "@opencode/plugin";
 import { lstatSync, readlinkSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createBindHandler, createUnbindHandler, shellCwd } from "./bind";
 import { createClaimHandler, sharedClaimed } from "./claim";
 import { resolveGit } from "./git";
@@ -71,6 +75,7 @@ import { matchesAllowlist, resolveMarker, warnIfFrUnresolved } from "./marker";
 import { createNagHandler, sharedServed } from "./nag";
 import { createPinHandler, type ShellCreateEvent } from "./pin";
 import { decidePush } from "./push";
+import { createRulesHandler } from "./rules";
 import { writePipelineSentinel } from "./sentinel";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
@@ -267,6 +272,7 @@ const plugin: Plugin.Plugin = {
     const idle = createIdleHandler({ session: ctx.session, directory, actedOn: sharedActedOn() });
     const bind = createBindHandler({ session: ctx.session, directory });
     const unbind = createUnbindHandler({ directory });
+    const rules = createRulesHandler({ rulesDir: join(dirname(fileURLToPath(import.meta.url)), "rules") });
     const nag = createNagHandler({ session: ctx.session, directory, served: sharedServed() });
 
     await ctx.tool.hook("execute.before", async (event) => {
@@ -292,6 +298,7 @@ const plugin: Plugin.Plugin = {
       await bind(event);
     });
     await ctx.session.hook("context", async (event) => {
+      await rules(event as never);
       await nag(event);
     });
     await ctx.shell.hook("create.before", async (event) => {

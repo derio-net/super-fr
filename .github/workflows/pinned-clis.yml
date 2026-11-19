@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - packages/fr/src/fr/isolation/scaffold.py
+      - packages/fr/src/fr/acceptance/scaffold.py
       - scripts/check-pinned-clis.py
       - .github/workflows/pinned-clis.yml
 

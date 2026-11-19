@@ -15,6 +15,7 @@ import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { stripCommandPrefix } from "./guard";
 import { runFr } from "./fr";
+import { sessionDirectory, type SessionInfo } from "./session";
 import type { RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -44,6 +45,17 @@ function realDir(path: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Whether a shell command's first line could bind at all: pure command text
+ * (an optional leading `cd`, then `fr isolation up|exec|down` / `fr run start`),
+ * no filesystem and no session. The cheap check before any session lookup. */
+export function canBind(command: string): boolean {
+  let first = command.split("\n")[0] ?? "";
+  const cd = CD.exec(first);
+  if (cd) first = cd[6] ?? "";
+  first = stripCommandPrefix(first);
+  return ISOLATION_VERB.test(first) || RUN_START.test(first);
 }
 
 /** The argv `fr` gets for one completed shell command, or undefined. Pure. */
@@ -79,17 +91,25 @@ export function bindArgs(command: string, cwd: string, sessionID: string, home =
   ];
 }
 
-async function isChild(session: unknown, id: string): Promise<boolean> {
+/** The session's info, unless it is a child (undefined for a child). A failed
+ * lookup, or an answer whose `id` is not this session's, is not a child: the bash
+ * hook skips only on agent_id, so the caller falls back to the plugin directory. */
+async function parentInfo(session: unknown, id: string): Promise<{ child: boolean; info?: SessionInfo }> {
   try {
     const get = (session as { get?: unknown } | null | undefined)?.get;
-    if (typeof get !== "function") return false;
+    if (typeof get !== "function") return { child: false };
     const info = (await (get as (r: { sessionID: string }) => Promise<unknown>).call(session, { sessionID: id })) as
-      | { parentID?: unknown }
+      | SessionInfo
       | null
       | undefined;
-    return typeof info?.parentID === "string" && info.parentID !== "";
+    if (!info || typeof info !== "object") return { child: false };
+    // An answer about another session (nag's check): not this one's directory, and no
+    // evidence it is a child. Bind from the plugin directory.
+    if (info.id !== id) return { child: false };
+    if (typeof info.parentID === "string" && info.parentID !== "") return { child: true };
+    return { child: false, info };
   } catch {
-    return false; // unknown is not a child: the bash hook skips only on agent_id
+    return { child: false };
   }
 }
 
@@ -107,10 +127,14 @@ export function createBindHandler(options: BindOptions) {
       if (typeof sessionID !== "string" || sessionID === "") return;
       const input = (event.input ?? {}) as { command?: unknown; workdir?: unknown };
       if (typeof input.command !== "string" || input.command === "") return;
-      const cwd = shellCwd(options.directory, input.workdir);
+      if (!canBind(input.command)) return; // before any lookup
+      // One lookup: the child check and the session's own directory.
+      const { child, info } = await parentInfo(options.session, sessionID);
+      if (child) return;
+      const sessionDir = info ? sessionDirectory(info, options.directory) : options.directory;
+      const cwd = shellCwd(sessionDir, input.workdir);
       const args = bindArgs(input.command, cwd, sessionID);
       if (!args) return;
-      if (await isChild(options.session, sessionID)) return;
       await runFr(args, cwd);
     } catch {
       // Best-effort. See the header.
@@ -126,6 +150,9 @@ export function createUnbindHandler(options: { directory: string; runFr?: FrRunn
       if (!event || event.type !== "session.deleted") return;
       const sessionID = (event.data as { sessionID?: unknown } | undefined)?.sessionID;
       if (typeof sessionID !== "string" || sessionID === "") return;
+      // Runs in the plugin's directory on purpose: `fr isolation detach --session`
+      // acts on the session's bindings wherever they are (isolation_cmd.py detach),
+      // so its cwd chooses nothing.
       // Not awaited: the subscription loop must not wait ~2s of Python start
       // per deleted session. `run` is bounded and never rejects.
       void runFr(["isolation", "detach", "--session", sessionID], options.directory).catch(() => undefined);

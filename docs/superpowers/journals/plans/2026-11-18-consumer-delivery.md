@@ -1,0 +1,488 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-18-consumer-delivery
+
+<!-- fr:journal kind=discovery scope=plan id=p1-bun-flaky-under-load created=2026-11-18T16:03:17+00:00 phase=1 -->
+### p1-bun-flaky-under-load · discovery · bun timing tests time out on a loaded host (phase 1)
+
+marker relative-PATH, pin registration and quiet-placement tests failed only while pytest ran in parallel; green alone (host load average above 30).
+
+<!-- fr:journal kind=decision scope=plan id=p1-rule-list-env-var created=2026-11-18T16:03:17+00:00 phase=1 -->
+### p1-rule-list-env-var · decision · install.sh hands the rule list to the delivery as FR_OPENCODE_RULES (phase 1)
+
+One space-separated env var keeps the positional contract (install <dir>) that every caller and test uses; the list stays defined once, in CLAUDE_RULES.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t1 created=2026-11-18T16:03:17+00:00 phase=1 -->
+### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
+
+smoke and change fragment only, no code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t5 created=2026-11-18T16:03:17+00:00 phase=1 -->
+### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
+
+docs and acceptance bookkeeping, no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-18T16:16:49+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · install.sh's refusal line still says fix cli.json, wrong for the new missing-rule refusal (phase 1)
+
+scripts/install.sh:1024-1025. Fixed: the second line now says fix what the message above names (cli.json, or a missing rule file).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-18T16:16:49+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · FR_OPENCODE_RULES expanded unquoted (globbing) and rule names not validated (phase 1)
+
+scripts/deliver-opencode-plugin.sh:127,138. Fixed: one `read -r -a` into an array, every name must match ^[A-Za-z0-9._-]+\.md$ and not start with a dot, checked before any write; parametrised refusal test.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-18T16:16:49+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · De-dup by exact text gives two copies of a rule under version skew with opencode.json instructions (phase 1)
+
+packages/fr-opencode-plugin/src/rules.ts:60. Fixed: a part whose `Instructions from: <path>/<file>` header names the same rule file also counts as present; tests for skew and for a same-suffix different file.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-18T16:16:49+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · Unreadable-file test passes as root and does not prove the skip (phase 1)
+
+packages/fr-opencode-plugin/test/rules.test.ts:61-74. Fixed: a readFile seam throws for bad.md; the test asserts exactly ["OK"].
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-11-18T16:16:49+00:00 phase=1 -->
+### review-phase-1 · review · phase 1 review: approve with 4 minor in-scope findings, all fixed (phase 1)
+
+Independent reviewer (separate context) checked R1-R7, the three de-dup cases, lookup counts and fallbacks; bun test 320/0 and tsc clean at review. Findings p1-r1..p1-r4 (all in scope, minor) fixed with tests; after the fixes bun test 322/0, tsc clean, 32 pytest pass. Declined-to-judge items were outside the phase (live OpenCode semantics owed to Test Plan 1).
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-18T16:16:49+00:00 phase=1 lens=security step=review-phase -->
+### lens-security-1 · lens · the installer copies files named by an env var; check every installer input together (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-18T16:16:49+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: install.sh's refusal line still says fix cli.json, wrong for the new missing-rule refusal (phase 1)
+
+Neutral remedy line in install.sh.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-18T16:16:49+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: FR_OPENCODE_RULES expanded unquoted (globbing) and rule names not validated (phase 1)
+
+Array read plus name validation before any write; refusal tests.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-18T16:16:49+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: De-dup by exact text gives two copies of a rule under version skew with opencode.json instructions (phase 1)
+
+Header-name de-dup in rules.ts with tests.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-18T16:16:49+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: Unreadable-file test passes as root and does not prove the skip (phase 1)
+
+readFile seam; exact assertion.
+
+<!-- fr:journal kind=decision scope=plan id=p2-render-resolves-pin-by-default created=2026-11-18T17:01:33+00:00 phase=2 -->
+### p2-render-resolves-pin-by-default · decision · render_workflow/init/refresh_ci resolve the running fr's release pin when none is passed (phase 2)
+
+Callers (the command layer, tests) may pass fr_pin; otherwise the module resolves through fr.acceptance.pin.default_ls_remote. An autouse conftest fixture replaces that reader so no test reaches the network. Golden tests pass an explicit pin so releases do not move them.
+
+<!-- fr:journal kind=decision scope=plan id=p2-ci-cli-install-no-sudo created=2026-11-18T17:01:33+00:00 phase=2 -->
+### p2-ci-cli-install-no-sudo · decision · CI installs of tea and glab go to $HOME/.local/bin, not /usr/local/bin via sudo (phase 2)
+
+A CI job has no sudo. The snippet reads version, URLs and sha256 from isolation/scaffold.py's HOST_CLI_PINS; Gitea adds the directory to GITHUB_PATH because its steps do not share a shell.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-gitea-pins-lightweight-tags created=2026-11-18T17:01:33+00:00 phase=2 -->
+### p2-gitea-pins-lightweight-tags · discovery · Gitea pins: checkout v4.4.0, setup-uv v5.4.2, upload-artifact v4.6.2 are lightweight tags (phase 2)
+
+git ls-remote shows no peeled line for them, so the tag line is the commit SHA.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-18T17:01:33+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+pin module is new and small; render and read share one INSTALL_LINE/PIN_RE already (done in T3), nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-18T17:01:33+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+token pick and env header live in one helper (_remote_auth); nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t6 created=2026-11-18T17:01:33+00:00 phase=2 -->
+### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
+
+docs and acceptance bookkeeping, no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · acceptance-reports scenario now does a live ls-remote for the installed fr's tag; the release suite runs it at an untagged version (phase 2)
+
+scaffold.py init via tests/scenarios/acceptance-reports-derived-published.sh. Fixed: the scenario sets a scratch HOME whose .gitconfig redirects super-fr's URL (insteadOf) to a local bare repo with an annotated v<version> tag, and asserts the pinned sha; no product override added.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · the autouse conftest stub means the real default_ls_remote is never tested (phase 2)
+
+tests/conftest.py, pin.py. Fixed: unit tests drive the real default_ls_remote with subprocess.run patched (argv, no GIT_CONFIG_*, GIT_TERMINAL_PROMPT=0, timeout, FrPinError on non-zero exit and OSError).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Gitea tea login put the token on tea's command line (phase 2)
+
+DEBT_STEP_GITEA. Fixed: GITEA_SERVER_URL and GITEA_SERVER_TOKEN via env (tea 0.14.2 reads both, verified with tea login add --help), `tea login add --name fr-ci`; test asserts no token on the run line.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · CLI refusal test asserted only that the output contains 'v' (phase 2)
+
+test_acceptance_pin.py. Fixed: asserts the running version's tag and the nothing-was-written wording.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · refresh_ci and init resolved the pin before the foreign/paste/already-exists outcomes (phase 2)
+
+scaffold.py refresh_ci, init. Fixed: foreign check first; init resolves only when the workflow is missing; paste and rewrite/current still resolve (they render the install line), commented; tests for each outcome with a failing resolver.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · GitLab FR_DEBT_TOKEN check ran after three downloads (phase 2)
+
+DEBT_STEP_GITLAB. Fixed: first before_script line; test asserts the order.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · acceptance-matrix reference omitted --refresh-ci's refusal and the GH_TOKEN fallback (phase 2)
+
+docs/reference/acceptance-matrix.md. Fixed; fr docs check clean.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-11-18T17:42:21+00:00 phase=2 state=open review_scope=out -->
+### p2-r8 · finding [open] (reviewer: out of scope) · Gitea matrix job checkout persists gitea.token for PR code (phase 2)
+
+Pre-existing in the Gitea matrix job; R12 names only the debt job.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-18T17:42:21+00:00 phase=2 -->
+### review-phase-2 · review · phase 2 review: 8 findings (7 in scope, all fixed; 1 out of scope) (phase 2)
+
+Independent reviewer verified every ACTION_PINS sha against its tag with git ls-remote, the pin's peeled-tag preference live, the byte-identical refusal, user-info stripping and token redaction. It raised p2-r1 (critical: release suite would fail at an untagged version) through p2-r7, all fixed with tests and pushed; p2-r8 is out of scope (pre-existing).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: acceptance-reports scenario now does a live ls-remote for the installed fr's tag; the release suite runs it at an untagged version (phase 2)
+
+Hermetic scenario via scoped HOME .gitconfig insteadOf to a local tagged bare repo.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: the autouse conftest stub means the real default_ls_remote is never tested (phase 2)
+
+Real default_ls_remote unit-tested with subprocess patched.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Gitea tea login put the token on tea's command line (phase 2)
+
+tea login reads URL and token from env.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: CLI refusal test asserted only that the output contains 'v' (phase 2)
+
+Exact tag and wording asserted.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: refresh_ci and init resolved the pin before the foreign/paste/already-exists outcomes (phase 2)
+
+Pin resolved only when used, still before any write.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: GitLab FR_DEBT_TOKEN check ran after three downloads (phase 2)
+
+Token check first in before_script.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: acceptance-matrix reference omitted --refresh-ci's refusal and the GH_TOKEN fallback (phase 2)
+
+Reference page updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-11-18T17:42:21+00:00 phase=2 state=open resolves=p2-r8 out_of_scope=true -->
+### p2-r8-resolved · finding [out-of-scope] · resolves p2-r8: Gitea matrix job checkout persists gitea.token for PR code (phase 2)
+
+Predates this change: the Gitea matrix job's checkout was not touched by R8-R13, and R12 scopes credentials to the debt job. Filed at deliver as a follow-up.
+
+<!-- fr:journal kind=decision scope=plan id=p3-loads-helper-per-module created=2026-11-18T18:03:22+00:00 phase=3 -->
+### p3-loads-helper-per-module · decision · tea.loads and glab.loads fold every JSON read of CLI output (phase 3)
+
+Each module has one loads(out, what) raising its own error with not_json_reason(out) or the old message. issues_enabled and pages_visibility keep their documented fallback (None, UNKNOWN); pr_for_branch keeps None for non-HTML garbage but raises GlabError for a login page.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-18T18:03:22+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+fixtures and one small helper module, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · tea.api_result's non-2xx branch swallowed an HTML body and raised a bare HTTP 401 (phase 3)
+
+packages/fr/src/fr/tea.py:110-116. Fixed: raises `HTTP <status> with <reason>` for a login-page body; RAISING case tea:api_result_401.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · issues_enabled turned a login page into None, hiding the cause from fr init scaffold (phase 3)
+
+packages/fr/src/fr/real_glabclient.py:420-429. Fixed: re-raises a login-page GlabError (forge_body.names_login_page), None otherwise; test that the cause reaches the ServicesError.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · pages_visibility listed in SITES but its UNKNOWN fallback untested (phase 3)
+
+tests/unit/test_forge_sso_html.py:77. Fixed: FALLBACK entry pins UNKNOWN, with the reason (repo_visibility raises first on the same endpoint).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · guard test per function missed a raw json.loads in an already-listed function (phase 3)
+
+tests/unit/test_forge_sso_html.py:94-117. Fixed: flags every raw json.loads (FunctionDef, AsyncFunctionDef, module level) against a reasoned (module, function) allowlist; walker unit test proves a new raw call is caught.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · sso_login_redirect.txt fixture was unused (phase 3)
+
+tests/fixtures/forge/sso_login_redirect.txt. Fixed: drives test_a_302_fixture_header_block_names_the_proxy.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-18T18:10:12+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · tea.loads/glab._loads dropped `what` from the HTML message (phase 3)
+
+tea.py:130-135, glab.py:265-270. Fixed: `<what>: <reason>`; test_the_read_error_says_which_read_failed.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-18T18:10:12+00:00 phase=3 -->
+### review-phase-3 · review · phase 3 review: 6 findings, all in scope, all fixed (phase 3)
+
+Independent reviewer checked every json.loads site, HTML detection (no false positives), kept messages, real code paths and fixture privacy (RFC 2606 only). Raised p3-r1 (important, 4xx+HTML gap) and p3-r2..p3-r6 (minor); all fixed in 953a335bf with red-then-green tests (291 targeted tests pass, ruff and mypy clean).
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-1 created=2026-11-18T18:10:12+00:00 phase=3 lens=errors step=review-phase -->
+### lens-errors-1 · lens · adapter errors now carry the forward-auth cause; the deliberate swallow-to-fallback sites deserve a whole-feature look (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: tea.api_result's non-2xx branch swallowed an HTML body and raised a bare HTTP 401 (phase 3)
+
+Named cause on 4xx + HTML.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: issues_enabled turned a login page into None, hiding the cause from fr init scaffold (phase 3)
+
+Login-page error re-raised from issues_enabled.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: pages_visibility listed in SITES but its UNKNOWN fallback untested (phase 3)
+
+UNKNOWN fallback pinned.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: guard test per function missed a raw json.loads in an already-listed function (phase 3)
+
+Allowlist-based guard over every raw json.loads.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: sso_login_redirect.txt fixture was unused (phase 3)
+
+Fixture drives a test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-18T18:10:12+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: tea.loads/glab._loads dropped `what` from the HTML message (phase 3)
+
+`what` kept in the message.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · GitLab FR_DEBT_TOKEN guard leaked into acceptance-report and pages jobs
+
+Removed from both templates; goldens regenerated; test_the_gitlab_token_guard_is_on_the_debt_job_alone.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · 'pins everything the pipeline runs' was false on GitLab
+
+Pages list exactly what is pinned (actions, fr, uv on GitLab, tea, glab) and that python:3.12 is a movable tag.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · pages omitted that GitLab --refresh-ci only prints jobs to paste
+
+Sentence added to both pages, checked against refresh_ci.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: in scope) · 'each forge installs its own pinned CLI' was false for GitHub
+
+Reworded to Gitea and GitLab only.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r5 · finding [open] (reviewer: in scope) · install.md and plugin README omitted the Instructions-from header de-dup
+
+Both now say it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · GitLab MR and Pages jobs forced an api-scope token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · archive-pr sent the token to whatever host origin names
+
+_forge_host: declared host, SaaS domain, or the CI server's own host; any other origin is plain origin with one warning; tests for mirror, matching, declared and CI-server hosts.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · GitLab jobs piped an unpinned uv installer to sh while holding an api token
+
+UV_PIN (uv 0.13.7, per-arch SHA-256) installed from release tarballs; check-pinned-clis covers it; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-security-r4 · finding [open] (reviewer: in scope) · tea login left the token in a persistent HOME
+
+XDG_CONFIG_HOME under runner.temp for the tea steps plus an always() tea logout; test.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · GitLab gate failed on every MR without the token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · duplicate Authorization header with a persisted checkout extraheader (GitHub refuses)
+
+Empty-value reset entry first, existing GIT_CONFIG_COUNT kept; real-HTTP test sees exactly one header.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · pages_visibility swallowed the named login-page error
+
+Re-raised; pages_allowed refusal names the cause; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · rules.ts silently yielded no rules on an unreadable dir or file, cached
+
+Warns once naming the dir/file, no caching of a failed load; a missing dir stays silent by design (in-tree plugin), commented; bun tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-18T18:42:22+00:00 state=open review_scope=out -->
+### l-errors-r5 · finding [open] (reviewer: out of scope) · tea fail-soft sites swallow the named login-page TeaError
+
+Predates this change: the tea fail-soft sites were not modified by R14's sites; filed as a follow-up.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · no test confined the GitLab guard to technical-debt
+
+Same test as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · R11 test restated the env formula; no real HTTP exchange
+
+test_git_really_sends_exactly_one_authorization_header over a local http.server.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · token precedence and empty-secret fall-through untested
+
+test_token_precedence.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · R10 warning wiring in check() untested
+
+test_acceptance_check_reports_an_older_pin_as_a_warning_and_exits_zero.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · bind accepted another session's info; failed lookup untested
+
+id check added; bun tests for throwing and mismatched lookups.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · _git secret redaction untested
+
+test_a_failing_git_never_prints_the_token.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-18T18:42:22+00:00 state=open review_scope=in -->
+### l-tests-r7 · finding [open] (reviewer: in scope) · de-dup relied on a hand-written OpenCode header
+
+Real format found in the installed opencode v2.3.0 binary (Instructions from: <path>, several files per part); cited in rules.ts and tested with that exact shape.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-18T18:42:22+00:00 -->
+### lens-review-1 · review · lens review: security, tests, errors, docs-accuracy — 21 findings (20 in scope, all fixed; 1 out)
+
+One reviewer per lens over the diff from cb6021281. Three lenses independently found the GitLab token guard leaked into every job (a p2-r6 fix regression locked in by goldens). All in-scope findings fixed with tests in 1bc484487..f019ebf7b; l-errors-r5 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: GitLab FR_DEBT_TOKEN guard leaked into acceptance-report and pages jobs
+
+Removed from both templates; goldens regenerated; test_the_gitlab_token_guard_is_on_the_debt_job_alone.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: 'pins everything the pipeline runs' was false on GitLab
+
+Pages list exactly what is pinned (actions, fr, uv on GitLab, tea, glab) and that python:3.12 is a movable tag.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: pages omitted that GitLab --refresh-ci only prints jobs to paste
+
+Sentence added to both pages, checked against refresh_ci.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r4 -->
+### l-docs-accuracy-r4-resolved · finding [fixed] · resolves l-docs-accuracy-r4: 'each forge installs its own pinned CLI' was false for GitHub
+
+Reworded to Gitea and GitLab only.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-docs-accuracy-r5 -->
+### l-docs-accuracy-r5-resolved · finding [fixed] · resolves l-docs-accuracy-r5: install.md and plugin README omitted the Instructions-from header de-dup
+
+Both now say it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: GitLab MR and Pages jobs forced an api-scope token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: archive-pr sent the token to whatever host origin names
+
+_forge_host: declared host, SaaS domain, or the CI server's own host; any other origin is plain origin with one warning; tests for mirror, matching, declared and CI-server hosts.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: GitLab jobs piped an unpinned uv installer to sh while holding an api token
+
+UV_PIN (uv 0.13.7, per-arch SHA-256) installed from release tarballs; check-pinned-clis covers it; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-security-r4 -->
+### l-security-r4-resolved · finding [fixed] · resolves l-security-r4: tea login left the token in a persistent HOME
+
+XDG_CONFIG_HOME under runner.temp for the tea steps plus an always() tea logout; test.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: GitLab gate failed on every MR without the token
+
+Same fix as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: duplicate Authorization header with a persisted checkout extraheader (GitHub refuses)
+
+Empty-value reset entry first, existing GIT_CONFIG_COUNT kept; real-HTTP test sees exactly one header.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: pages_visibility swallowed the named login-page error
+
+Re-raised; pages_allowed refusal names the cause; tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: rules.ts silently yielded no rules on an unreadable dir or file, cached
+
+Warns once naming the dir/file, no caching of a failed load; a missing dir stays silent by design (in-tree plugin), commented; bun tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-18T18:42:22+00:00 state=open resolves=l-errors-r5 out_of_scope=true -->
+### l-errors-r5-resolved · finding [out-of-scope] · resolves l-errors-r5: tea fail-soft sites swallow the named login-page TeaError
+
+Predates this change; R14 scopes the JSON reads, and these TeaError catch sites around api_json were already fail-soft. Filed as a follow-up at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: no test confined the GitLab guard to technical-debt
+
+Same test as l-docs-accuracy-r1.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: R11 test restated the env formula; no real HTTP exchange
+
+test_git_really_sends_exactly_one_authorization_header over a local http.server.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: token precedence and empty-secret fall-through untested
+
+test_token_precedence.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: R10 warning wiring in check() untested
+
+test_acceptance_check_reports_an_older_pin_as_a_warning_and_exits_zero.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: bind accepted another session's info; failed lookup untested
+
+id check added; bun tests for throwing and mismatched lookups.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: _git secret redaction untested
+
+test_a_failing_git_never_prints_the_token.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-18T18:42:22+00:00 state=fixed resolves=l-tests-r7 -->
+### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: de-dup relied on a hand-written OpenCode header
+
+Real format found in the installed opencode v2.3.0 binary (Instructions from: <path>, several files per part); cited in rules.ts and tested with that exact shape.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved-2 created=2026-11-18T18:43:29+00:00 phase=2 state=open resolves=p2-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1553 -->
+### p2-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1553] · resolves p2-r8: Gitea matrix job checkout persists gitea.token for PR code (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1553.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved-2 created=2026-11-18T18:43:42+00:00 state=open resolves=l-errors-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1554 -->
+### l-errors-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1554] · resolves l-errors-r5: tea fail-soft sites swallow the named login-page TeaError
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1554.

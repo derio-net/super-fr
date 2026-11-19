@@ -1,0 +1,122 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-18-consumer-delivery
+repo: derio-net/super-fr
+rows:
+  - id: opencode-rules-delivered
+    capability: OpenCode consumers load the shipped rules
+    acceptance: After install.sh, an OpenCode session in any repo has every shipped
+      rule (the set installed for Claude Code) in its system prompt; a drift test fails
+      when the delivered set and the Claude Code set differ
+    origin:
+    - spec:2026-11-18-consumer-delivery#R1
+    - spec:2026-11-18-consumer-delivery#R2
+    - spec:2026-11-18-consumer-delivery#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_rules.py#test_install_delivers_exactly_the_claude_rules
+      - super-fr:packages/fr-opencode-plugin/test/rules.test.ts
+    status: walk-owed
+    notes: delivery and injection unit-pinned; live OpenCode load owed post-merge (Test
+      Plan 1)
+    verify: live
+  - id: opencode-handlers-session-directory
+    capability: OpenCode plugin handlers act in the session's repo
+    acceptance: The acceptance nag, session bind and child claim run fr in the session's
+      own directory, falling back to the plugin's only when the session has none; detach
+      stays session-global
+    origin:
+    - spec:2026-11-18-consumer-delivery#R4
+    - spec:2026-11-18-consumer-delivery#R5
+    - spec:2026-11-18-consumer-delivery#R6
+    - spec:2026-11-18-consumer-delivery#R7
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/bind.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/nag.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
+    status: ci
+    notes: nag, bind and claim run fr in the session's directory; unit-pinned, run by
+      CI's opencode-plugin-test job (bun test)
+    verify: none
+  - id: scaffold-pins-actions
+    capability: Consumer CI runs only pinned third-party actions
+    acceptance: Every action in the scaffolded acceptance workflow is pinned to a commit
+      SHA with a readable version comment, matching super-fr's own CI pins
+    origin:
+    - spec:2026-11-18-consumer-delivery#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_pins.py#test_every_uses_line_is_a_sha_pin_with_a_version
+      - super-fr:tests/unit/test_acceptance_scaffold_pins.py#test_github_pins_equal_the_pins_of_super_frs_own_ci
+    status: ci
+    notes: 'rendered workflows unit-pinned: every uses line is a SHA with a version
+      comment; GitHub pins equal super-fr''s own CI'
+    verify: none
+  - id: scaffold-pins-fr
+    capability: Consumer CI runs a released fr
+    acceptance: The scaffolded workflow installs the released fr that wrote it, pinned
+      by commit SHA with its version tag; an unresolvable tag refuses and writes nothing;
+      fr acceptance check warns when the pin is older than the running fr
+    origin:
+    - spec:2026-11-18-consumer-delivery#R9
+    - spec:2026-11-18-consumer-delivery#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_pin.py#test_every_job_installs_the_pinned_commit_never_main
+      - super-fr:tests/unit/test_acceptance_pin.py#test_init_with_ci_and_a_failing_resolver_writes_nothing
+      - super-fr:tests/unit/test_acceptance_pin.py#test_an_older_pin_warns_once_naming_the_remedy
+    status: ci
+    notes: fr pinned to its release commit; failing resolver exits 2 with the tree untouched;
+      stale pin warns
+    verify: none
+  - id: debt-token-scope-github
+    capability: The debt job's push token is confined
+    acceptance: In the GitHub debt job no token persists in .git/config, FR_DEBT_TOKEN
+      reaches only the archive-PR step, and fr pushes with it without writing it to
+      disk or argv
+    origin:
+    - spec:2026-11-18-consumer-delivery#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_debt_jobs.py#test_github_debt_checkout_keeps_no_credential_and_the_token_is_on_archive_pr_alone
+      - super-fr:tests/unit/test_debt_archive_pr.py#test_remote_calls_carry_the_token_in_the_environment_only
+    status: ci
+    notes: token confined to the archive step; archive-pr authenticates by env header,
+      never argv or .git/config
+    verify: none
+  - id: debt-credentials-gitea-gitlab
+    capability: The weekly debt job works on Gitea and GitLab
+    acceptance: The Gitea and GitLab debt jobs install their forge CLI and carry the
+      credentials both debt commands need; on GitLab a missing FR_DEBT_TOKEN fails the
+      job with a one-line remedy
+    origin:
+    - spec:2026-11-18-consumer-delivery#R12
+    - spec:2026-11-18-consumer-delivery#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_debt_jobs.py#test_gitea_debt_job_installs_the_pinned_tea_and_logs_in_through_env
+      - super-fr:tests/unit/test_acceptance_scaffold_debt_jobs.py#test_gitlab_debt_job_installs_glab_then_requires_the_masked_variable
+    status: walk-owed
+    notes: rendered jobs unit-pinned; real Gitea/GitLab runner owed post-merge (Test
+      Plan 2)
+    verify: live
+  - id: forge-sso-html-refusal
+    capability: A forge behind SSO gets a named refusal
+    acceptance: When a Gitea or GitLab API answers with an HTML login page, every fr
+      read names the SSO/forward-auth cause and the remedy instead of a JSON decode
+      error
+    origin:
+    - spec:2026-11-18-consumer-delivery#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_sso_html.py#test_a_login_page_is_named
+      - super-fr:tests/unit/test_forge_sso_html.py#test_no_raw_json_loads_outside_the_allowlist
+    status: ci
+    notes: every tea/glab JSON read names an SSO login page, fixture-pinned; the guard
+      flags any raw json.loads outside a reasoned allowlist
+    verify: none
