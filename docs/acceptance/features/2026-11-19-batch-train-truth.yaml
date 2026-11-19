@@ -46,10 +46,10 @@ rows:
       when the supervisor's parent dies the supervisor and its driver exit; `drive status`
       reports whether a driver holds the scope
     origin:
-    - spec:2026-11-19-batch-train-truth#R10
     - spec:2026-11-19-batch-train-truth#R11
     - spec:2026-11-19-batch-train-truth#R12
     - spec:2026-11-19-batch-train-truth#R13
+    - spec:2026-11-19-batch-train-truth#R14
     levels: {}
     status: not-implemented
     notes: ''
