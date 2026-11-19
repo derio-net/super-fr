@@ -1485,3 +1485,106 @@ def test_figures_css_keeps_the_wide_form_legible_in_an_article_column() -> None:
         r"@media\s*\(min-width:\s*1080px\)\s*\{article\.explainer \.site-figure\{width:960px",
         css,
     )
+
+
+# -- R13: the pages marker fills only on a line of its own -------------------------------
+
+
+def test_the_pages_marker_fills_only_when_it_stands_on_a_line_of_its_own() -> None:
+    entries = [bs.Entry("docs/ops.md", "Ops", "Manual operations.")]
+    text = (
+        "1. Write `<!-- site:pages -->` in the page.\n\n"
+        "<!-- site:pages -->\n\n"
+        "   <!-- site:pages -->  \n"
+    )
+    out = bs.fill_pages(text, "docs/explainers/index.md", entries)
+    assert "1. Write `<!-- site:pages -->` in the page." in out
+    assert out.count("<!-- site:pages -->") == 1
+    assert out.count("- [Ops](../ops.md): Manual operations.") == 2
+
+
+def test_a_marker_only_inside_inline_code_leaves_the_text_unchanged() -> None:
+    text = "1. Put `<!-- site:pages -->` here.\n"
+    assert bs.fill_pages(text, "docs/explainers/index.md", []) == text
+
+
+# -- R12: a fenced block that does not render as a code block is refused -----------------
+
+
+def _fence_renderer(renderer, fonts, source, out):
+    """Stand-in for python-markdown's rule: a fence renders as <pre> only at the start of a
+    line; indented under a list item it leaves inline code (checked against markdown 3.11)."""
+    lines = source.read_text(encoding="utf-8").split("\n")
+    parts, i = [], 0
+    while i < len(lines):
+        m = re.match(r"^( *)```(\w*)\s*$", lines[i])
+        if not m:
+            i += 1
+            continue
+        j = i + 1
+        while j < len(lines) and not re.match(r"^ *```\s*$", lines[j]):
+            j += 1
+        body = "\n".join(x.strip() for x in lines[i + 1 : j])
+        if len(m.group(1)) == 0:
+            parts.append(f"<pre><code>{body}</code></pre>")
+        else:
+            parts.append(f"<p><code>{m.group(2)} {body}</code></p>")
+        i = j + 1
+    html = (
+        "<html><head><style>@font-face{src:url(data:font/woff2;base64,AA)}</style></head>"
+        f"<body><article>{''.join(parts)}</article></body></html>"
+    )
+    out.write_text(html, encoding="utf-8")
+    return html
+
+
+def _fence_repo(tmp_path: Path, body: str) -> tuple[Path, Path]:
+    root, craft = _mini_repo(tmp_path)
+    (root / "docs" / "a.md").write_text(f"---\ntitle: a\n---\n\n{body}")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    return root, craft
+
+
+@pytest.mark.parametrize(
+    ("body", "line"),
+    [
+        ("1. Step\n\n  ```bash\n  echo hi\n  ```\n", 7),
+        ("1. Step\n\n   ```\n   echo hi\n   ```\n", 7),
+        ("1. Step\n\n    ```bash\n    echo hi\n    ```\n", 7),
+        ("<!-- site:pages -->\n\n1. Step\n\n  ```bash\n  echo hi\n  ```\n", 9),
+    ],
+)
+def test_a_fence_that_renders_without_pre_is_refused_and_no_page_is_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str, line: int
+) -> None:
+    root, craft = _fence_repo(tmp_path, body)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fence_renderer)
+    with pytest.raises(bs.BuildError, match=rf"docs/a\.md:{line}\b"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not list(out.rglob("*.html"))
+
+
+def test_a_top_level_fence_builds_and_an_indented_block_in_a_list_is_no_fence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body = "1. Step\n\n        echo hi\n\n```yaml\na: 1\n```\n"
+    root, craft = _fence_repo(tmp_path, body)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fence_renderer)
+    assert "guides/a.html" in bs.build(root, out, craft, REF, "https://github.com/o/r")
+
+
+def test_a_pre_elsewhere_on_the_page_does_not_satisfy_a_fence() -> None:
+    raw = "x\n\n  ```bash\n  echo hi\n  ```\n"
+    with pytest.raises(bs.BuildError, match=r"a\.md:3"):
+        bs.check_fences_render(raw, "<pre>other</pre><p><code>echo hi</code></p>", "a.md")
+    bs.check_fences_render(
+        raw, "<pre><code>echo&nbsp;hi</code></pre>".replace("&nbsp;", " "), "a.md"
+    )
+
+
+def test_a_mermaid_fence_is_the_renderers_to_place_and_is_not_checked() -> None:
+    raw = "x\n\n```mermaid\nflowchart LR\n  a --> b\n```\n"
+    assert bs.source_fences(raw) == []
+    bs.check_fences_render(raw, '<pre class="mermaid">flowchart</pre>', "a.md")

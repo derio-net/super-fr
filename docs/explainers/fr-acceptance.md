@@ -150,24 +150,23 @@ branch's own sequence on one row applies as written.
 ## How do you backfill a repo that has no matrix?
 
 1. `fr acceptance init` creates the fragments directory, `docs/acceptance/features/`, the
-   rule and the gitignore entry. It adds a CI workflow and a README badge only beside
-   existing CI, or with `--with-ci`. It is idempotent.
+    rule and the gitignore entry. It adds a CI workflow and a README badge only beside
+    existing CI, or with `--with-ci`. It is idempotent.
 2. `fr acceptance backfill` prints an inventory and the protocol to follow. The inventory
-   lists specs with a Test Plan no row cites yet, plans with no linked rows, and hints
-   from the test tree. A row retired by amendment still cites its spec: the retirement is
-   that Test Plan's recorded outcome.
+    lists specs with a Test Plan no row cites yet, plans with no linked rows, and hints
+    from the test tree. A row retired by amendment still cites its spec: the retirement is
+    that Test Plan's recorded outcome.
 3. Draft **one row per business acceptance, not per test**:
 
-   ```bash
-   fr acceptance add --id resume-stopped-workspace --capability isolation \
-       --acceptance "An operator can resume a stopped workspace" \
-       --origin spec:some-spec#R3 \
-       --level unit=example-repo:tests/test_up.py#test_resume \
-       --status unwired --notes "test exists, not yet in CI"
-   ```
+        fr acceptance add --id resume-stopped-workspace --capability isolation \
+            --acceptance "An operator can resume a stopped workspace" \
+            --origin spec:some-spec#R3 \
+            --level unit=example-repo:tests/test_up.py#test_resume \
+            --status unwired --notes "test exists, not yet in CI"
 
-   `add` validates the shape and inserts the row after its capability's last row. Never
-   hand-edit the YAML.
+    `add` validates the shape and inserts the row after its capability's last row. Never
+    hand-edit the YAML.
+
 4. Run `fr acceptance check` until only honest warnings remain.
 5. Open a review PR. The operator audits every status.
 

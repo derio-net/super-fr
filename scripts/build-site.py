@@ -53,6 +53,8 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_REPO_URL = "https://github.com/derio-net/super-fr"
 MARKER = "<!-- site:pages -->"
+# Only a marker alone on its line fills (R13): the same text inside inline code stays prose.
+_MARKER_LINE = re.compile(r"(?m)^[ \t]*" + re.escape(MARKER) + r"[ \t]*$")
 INDEX_SOURCE = "docs/explainers/index.md"
 FONTS_SUBDIR = Path("templates/content-type-explainers/shared/fonts/broadsheet")
 SECTIONS = (("explainers", "Explainers"), ("guides", "Guides"), ("reference", "Reference"))
@@ -266,7 +268,7 @@ def page_groups(page: str, entries: list[Entry]) -> list[tuple[str, str, list[En
 
 def fill_pages(text: str, page: str, entries: list[Entry]) -> str:
     """Replace the `<!-- site:pages -->` marker with the grouped list of pages."""
-    if MARKER not in text:
+    if not _MARKER_LINE.search(text):
         return text
     blocks = [
         f"### {heading}\n\n"
@@ -277,7 +279,8 @@ def fill_pages(text: str, page: str, entries: list[Entry]) -> str:
         )
         for _key, heading, rows in page_groups(page, entries)
     ]
-    return text.replace(MARKER, "\n\n".join(blocks))
+    listing = "\n\n".join(blocks)
+    return _MARKER_LINE.sub(lambda _m: listing, text)
 
 
 def parse_front_matter(text: str) -> dict:
@@ -1241,6 +1244,50 @@ def _markdown_converter() -> Callable[[str], str]:
     )
 
 
+def source_fences(raw: str) -> list[tuple[int, str]]:
+    """Each fenced block of `raw` but a mermaid one, as (1-based opening line, body)."""
+    found: list[tuple[int, str]] = []
+    fence, start, body, info = "", 0, [], ""
+    for n, line in enumerate(raw.split("\n"), 1):
+        f = _FENCE.match(line)
+        if f and not fence:
+            fence, start, body, info = f.group(1), n, [], line.strip()[3:].strip()
+        elif f and f.group(1) == fence:
+            # a mermaid fence is stashed and re-inserted by the renderer as <pre class="mermaid">
+            if not info.startswith("mermaid"):
+                found.append((start, "\n".join(body)))
+            fence = ""
+        elif fence:
+            body.append(line)
+    return found
+
+
+def check_fences_render(raw: str, rendered_html: str, page: str) -> None:
+    """Refuse a page whose fenced block does not render as a code block (spec R12).
+
+    Python-Markdown reads a fence only at the start of a line: inside a list item it
+    renders the fence as inline code. Each fence's body must therefore sit inside a `<pre>`
+    of the rendered page; matching by body means figure and chrome `<pre>` blocks
+    cannot satisfy it.
+    """
+
+    def norm(text: str) -> str:
+        return " ".join(html.unescape(text).split())
+
+    pres = [
+        norm(re.sub(r"<[^>]+>", "", m))
+        for m in re.findall(r"<pre\b.*?</pre>", rendered_html, re.DOTALL)
+    ]
+    for line, body in source_fences(raw):
+        want = norm(body)
+        if want and not any(want in pre for pre in pres):
+            raise BuildError(
+                f"{page}:{line}: this fenced block does not render as a code block; "
+                "a fence inside a list item is not read: write it there as a code block "
+                "indented 8 spaces, or move it out of the list"
+            )
+
+
 def _render_article(
     path: str,
     raw: str,
@@ -1264,7 +1311,9 @@ def _render_article(
     source.write_text(text, encoding="utf-8")
     target = Path(tmp) / "out" / route(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    return render_page(renderer, fonts, source, target), inserted
+    page_html = render_page(renderer, fonts, source, target)
+    check_fences_render(raw, page_html, path)
+    return page_html, inserted
 
 
 def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) -> list[str]:

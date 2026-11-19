@@ -131,21 +131,19 @@ is the one way to defeat this gate, and no tool can stop it.
 - **A shipped rule**, `docs-currency`, states the obligation for every harness.
 - **CI is the gate no flow can skip.** In a GitHub Actions job:
 
-  ```yaml
-  docs-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0          # the diff needs the merge base
-      # install fr however your repo does, then:
-      - name: Pages covering a changed path changed too
-        if: github.event_name == 'pull_request'
-        run: fr docs check --base "origin/${{ github.base_ref }}"
-      - name: Pages are well formed and cover what they claim
-        if: github.event_name != 'pull_request'
-        run: fr docs check
-  ```
+        docs-check:
+         runs-on: ubuntu-latest
+         steps:
+           - uses: actions/checkout@v4
+             with:
+               fetch-depth: 0          # the diff needs the merge base
+           # install fr however your repo does, then:
+           - name: Pages covering a changed path changed too
+             if: github.event_name == 'pull_request'
+             run: fr docs check --base "origin/${{ github.base_ref }}"
+           - name: Pages are well formed and cover what they claim
+             if: github.event_name != 'pull_request'
+             run: fr docs check
 
   Fetch the checkout's full history (`fetch-depth: 0`). A shallow clone cannot compute the merge
   base, and the check then says so; it does not pass. Add the job to any aggregate check that your
@@ -209,15 +207,16 @@ up to 860 px wide, or up to 1079 px inside an article page. Only a page with a f
 
 - Use inline Markdown links. A relative image, a reference-style link definition and a raw HTML
   `href` fail the build. Absolute URLs are fine.
-- Fence all code, and name the language. Link to sibling pages with relative `.md` paths.
+- Fence all code at the top level, and name the language. Inside a list item the renderer does
+  not read a fence: it shows the code as plain text. Write it there as a code block indented 8
+  spaces, with a blank line before and after. The build refuses a fence that does not render as
+  a code block, and names the page and line. Link to sibling pages with relative `.md` paths.
 - The build drops a `# H1` that opens the body of an article page, because the renderer prints the title
   itself. Keep it in the source, so that the file reads well on GitHub.
 - To preview, build into a directory outside the repo:
 
-  ```bash
-  uv run --isolated --no-project --with markdown --with pyyaml python \
-    scripts/build-site.py /tmp/site --blog-craft /path/to/blog-craft-checkout
-  ```
+        uv run --isolated --no-project --with markdown --with pyyaml python \
+         scripts/build-site.py /tmp/site --blog-craft /path/to/blog-craft-checkout
 
   `--isolated` matters: without it a pygments install elsewhere on the machine changes how code
   blocks render.
