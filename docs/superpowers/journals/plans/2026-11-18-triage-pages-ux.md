@@ -352,3 +352,37 @@ cbbf53400: Card.terminal reads the engine's stage and close-out state: merged, c
 ### p3-r5-resolved · finding [fixed] · resolves p3-r5: State filter leaves a header-only table when it hides every row of a group (phase 3)
 
 6070901a6: each group carries a hidden No issue. row the state filter shows when no row is visible.
+
+<!-- fr:journal kind=decision scope=plan id=p4-wave-finish-is-owed-until-the-pages-are-written created=2026-11-19T04:01:56+00:00 phase=4 -->
+### p4-wave-finish-is-owed-until-the-pages-are-written · decision · a wave finish is remembered until a page-writing pass sees it (phase 4) (phase 4)
+
+run_pass compares the previous pass's unfinished set with the new one before reassigning
+self._unfinished and sets _wave_owed; the pass that writes the pages takes and clears it.
+A wave that finishes on an essential-only pass (no pages written) is therefore not lost:
+the next page-writing pass stores the snapshot and re-measures Architecture. A pass that
+writes pages with no wave owed stores none after the first.
+
+<!-- fr:journal kind=decision scope=plan id=p4-writers-read-state-without-sync created=2026-11-19T04:01:56+00:00 phase=4 -->
+### p4-writers-read-state-without-sync · decision · the page writers read the state directory without a ref sync (phase 4) (phase 4)
+
+write_backlog/history/origins/architecture load facts through _load_state(read_only=True):
+the command resolves and syncs the state directory once, so the driver's five writers do
+not each fetch the state ref in a pass. A broken manifest or state file raises TriageError
+from the writer; each command turns it into its exit 2, the driver into one warning.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-first-snapshot-needs-distinct-clock-reads created=2026-11-19T04:01:56+00:00 phase=4 -->
+### p4-first-snapshot-needs-distinct-clock-reads · discovery · store_snapshot names a file by the second, so a test clock must move between stores (phase 4) (phase 4)
+
+Snapshots are named by the stored moment, so a frozen fake clock overwrites one file.
+tests/unit/test_triage_drive_pages.py moves its clock one hour per read.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-a-drive-ends-when-its-last-wave-finishes created=2026-11-19T04:01:56+00:00 phase=4 -->
+### p4-a-drive-ends-when-its-last-wave-finishes · discovery · a loop whose every batch is cancelled ends on the pass that finds the wave finished (phase 4) (phase 4)
+
+The wave-finish snapshot test therefore asserts the count after the drive returns, not from
+a hook after that pass.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-19T04:01:56+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+_write_pages is new code beside _write_board; the four command bodies were already lifted into writers in T1, so there was nothing left to tidy
