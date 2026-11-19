@@ -1,4 +1,10 @@
 {
   "schema": 1,
-  "stops": {}
+  "stops": {
+    "triage-pages": {
+      "head": "17b05c4d252ac328aebaec943edd827db782bbf0",
+      "reason": "PR #1550 (batch triage-pages) conflicts with origin/main in a change merge will not resolve: docs/reference/cli.md (only a version file whose PR change is the version alone is resolved). The scratch worktree is kept for inspection at /Users/idermitzakis/Docs/projects/super-fr/.fr/triage-state/derio-net--super-fr/merge/feat/batch-triage-pages",
+      "at": "2026-11-19T09:07:46+00:00"
+    }
+  }
 }

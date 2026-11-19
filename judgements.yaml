@@ -8288,6 +8288,10 @@ batches:
     runner: herdr
     handle: w3N:p1
     branch: feat/batch-consumer-delivery
+  - kind: approval
+    at: '2026-11-19T09:06:58.914042Z'
+    pr: 1548
+    head: 082bef2ffe36a902ef3e20f9a1519d9f3b76a2a1
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -8309,6 +8313,12 @@ batches:
   wave: 21
   after:
   - consumer-delivery
+  events:
+  - kind: dispatch
+    at: '2026-11-19T09:08:05.639953Z'
+    runner: herdr
+    handle: w3Q:p1
+    branch: feat/batch-docs-wording
 - id: retire-vk
   title: Retire VibeKanban support
   ids:
@@ -8417,6 +8427,17 @@ batches:
     runner: herdr
     handle: w3P:p1
     branch: feat/batch-triage-pages
+  - kind: approval
+    at: '2026-11-19T09:06:58.914042Z'
+    pr: 1550
+    head: 17b05c4d252ac328aebaec943edd827db782bbf0
+  - kind: conflict
+    at: '2026-11-19T09:07:46.731916Z'
+    head: 17b05c4d252ac328aebaec943edd827db782bbf0
+    paths:
+    - docs/reference/cli.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-triage-pages
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -8457,6 +8478,16 @@ batches:
     runner: herdr
     handle: w3P:p2
     branch: fix/batch-dispatch-safety
+  - kind: approval
+    at: '2026-11-19T09:06:58.914042Z'
+    pr: 1549
+    head: 94922c9172eee9a15236acd519d55e88b3797de3
+  - kind: update
+    at: '2026-11-19T09:07:59.675867Z'
+    pr: 1549
+    head_before: 94922c9172eee9a15236acd519d55e88b3797de3
+    head_after: 659d0bbeb0c560cbcee722abd788acbdf7c202ca
+    base: 66e02916d5e18fc422fce1450416581d07c0c95e
 - id: owed-followups
   title: 'Archive and owed follow-ups: symlinked live root, fail-closed marker read, unreadable default
     ref, host-pinned issue refs'
@@ -8475,6 +8506,10 @@ batches:
     runner: herdr
     handle: w3P:p3
     branch: fix/batch-owed-followups
+  - kind: approval
+    at: '2026-11-19T09:06:58.914042Z'
+    pr: 1551
+    head: 96fe52fa01b3d838e6ddf158489ad377de195d07
 - id: stealth-gitlab
   title: Stealth privacy check reads a self-hosted GitLab tracking repo's visibility
   ids:
