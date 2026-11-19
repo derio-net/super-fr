@@ -320,3 +320,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-local-suite-cost-p3 created=2026-11-19T09:19:45+00:00 -->
 ### phase-split-2026-11-19-local-suite-cost-p3 · decision · ask: the tiers and the tests gate (R5-R8, R10) are their own ask
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-local-suite-cost-p4 created=2026-11-19T09:19:48+00:00 -->
+### phase-split-2026-11-19-local-suite-cost-p4 · decision · ask: R9 is an operator-only ruleset change (manual)
