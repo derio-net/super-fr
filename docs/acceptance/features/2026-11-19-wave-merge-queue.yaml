@@ -135,3 +135,13 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+amendments:
+  - row: wave-queue-release-hold
+    op: reword
+    base: 0
+    acceptance: A repo cuts no release while a wave's queue drains, and once it drains
+      exactly one release run follows. That run clears the hold whether it cut an RC,
+      a final or nothing installable, and only then does the next queue open. A stale
+      open hold older than a day is ignored with a warning, and an uncleared drained
+      hold becomes a Need.
+    why: 'hold became a handshake: the release clears it (operator, round 3)'
