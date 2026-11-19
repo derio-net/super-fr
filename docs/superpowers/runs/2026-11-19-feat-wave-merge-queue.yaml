@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-19-feat-wave-merge-queue
+workflow: fr-goal@1
+branch: feat/wave-merge-queue
+started: '2026-11-19T20:59:27+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+driver: standalone
+fr_version: 8.3.0rc6
