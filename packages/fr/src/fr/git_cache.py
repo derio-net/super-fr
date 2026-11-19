@@ -30,7 +30,12 @@ What is NEVER cached (`locate` gives None, or `fr.git` declines to store):
   stat'd list whether or not its condition matches (over-invalidating is safe,
   a stale hit is not), and the per-worktree `HEAD` is stat'd so an `onbranch:`
   condition that flips is seen;
-- a system config file whose path git would not name.
+- a system config file whose path git would not name (remembered for the process,
+  like a path git did name, so a decline costs its git processes once).
+
+A decline is silent by default. `FR_GIT_CACHE_DEBUG=1` writes one stderr line per
+decline, `fr git cache: not caching <root>: <why>`, so a cache that never hits can
+be explained without a debugger.
 """
 
 from __future__ import annotations
@@ -38,6 +43,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -51,6 +57,9 @@ ABSENT = ("absent",)
 _CACHE: ContextVar[dict[Any, Any] | None] = ContextVar("fr_git_cache", default=None)
 
 _UNKNOWN = "unknown"
+
+DEBUG_ENV = "FR_GIT_CACHE_DEBUG"
+"""Truthy: each decline writes one stderr line naming why (`decline`)."""
 
 _SYSTEM_MEMO: dict[tuple[str | None, ...], str] = {}
 """The system config path git names, per git binary and environment, for the process.
@@ -96,36 +105,52 @@ class Located:
 def locate(root: Path) -> Located | None:
     """The repository *root* sits in, or None when the cache must not apply."""
     if os.environ.get("GIT_DIR") or os.environ.get("GIT_COMMON_DIR"):
+        decline(root, "GIT_DIR or GIT_COMMON_DIR is set in the environment")
         return None
     if os.environ.get("GIT_CONFIG"):
+        decline(root, "the legacy GIT_CONFIG file is set in the environment")
         return None
     try:
         here = Path(root).resolve()
-    except OSError:
+    except OSError as e:
+        decline(root, f"the root does not resolve ({e})")
         return None
     git_dir = _find_git_dir(here)
     if git_dir is None:
+        decline(root, "no plain .git directory or gitdir: file above it")
         return None
     common = git_dir
     commondir = git_dir / "commondir"
     if commondir.is_file():
         try:
             common = (git_dir / commondir.read_text().strip()).resolve()
-        except OSError:
+        except OSError as e:
+            decline(root, f"its commondir is unreadable ({e})")
             return None
     if (common / "reftable").exists():
+        decline(root, "a reftable repository")
         return None
     system = _system_config(here)
     if system == _UNKNOWN:
+        decline(root, "git would not name its system config path")
         return None
     if _env_includes():
+        decline(root, "an include key is passed through the environment")
         return None
     roots = (*((Path(system),) if system else ()), *_global_configs(), common / "config")
     files: list[Path] = []
     for path in roots:
-        if not _visit_config(path, 0, files):
+        why = _visit_config(path, 0, files)
+        if why is not None:
+            decline(root, why)
             return None
     return Located(git_dir=git_dir, common_dir=common, config_files=tuple(files))
+
+
+def decline(root: Path, why: str) -> None:
+    """Name *why* the cache declines *root* on stderr, when `DEBUG_ENV` is truthy."""
+    if _truthy(os.environ.get(DEBUG_ENV, "")):
+        print(f"fr git cache: not caching {root}: {why}", file=sys.stderr)
 
 
 def head_target(located: Located, remote: str) -> str | None:
@@ -139,27 +164,31 @@ def head_target(located: Located, remote: str) -> str | None:
     return (line.removeprefix(prefix) or None) if line.startswith(prefix) else None
 
 
-def _visit_config(path: Path, depth: int, files: list[Path]) -> bool:
-    """Add *path* and every file it includes to *files*; False when the cache must decline."""
+def _visit_config(path: Path, depth: int, files: list[Path]) -> str | None:
+    """Add *path* and every file it includes to *files*; the reason the cache must
+    decline, or None when it may apply."""
     files.append(path)
     try:
         text = path.read_text(errors="replace")
     except FileNotFoundError:
-        return True
-    except OSError:
-        return False
+        return None
+    except OSError as e:
+        return f"config file {path} is unreadable ({e})"
     if _WORKTREE_CONFIG.search(text):
-        return False
+        return f"extensions.worktreeConfig may be set in {path}"
     included = _include_paths(text)
     if included is None:
-        return False
+        return f"an include in {path} is spelled in a form this reader does not parse"
     for raw in included:
         target = _resolve_include(raw, path)
-        if target is None or depth + 1 > MAX_INCLUDE_DEPTH:
-            return False
-        if not _visit_config(target, depth + 1, files):
-            return False
-    return True
+        if target is None:
+            return f"include path {raw!r} in {path} is not a concrete file"
+        if depth + 1 > MAX_INCLUDE_DEPTH:
+            return f"the include chain through {path} is deeper than {MAX_INCLUDE_DEPTH}"
+        why = _visit_config(target, depth + 1, files)
+        if why is not None:
+            return why
+    return None
 
 
 def _include_paths(text: str) -> list[str] | None:
@@ -326,7 +355,7 @@ def _truthy(value: str) -> bool:
 
 def _system_config(here: Path) -> str:
     """The system config path, "" for none, or `_UNKNOWN`. Asked of git once per process
-    for each git binary (`_SYSTEM_MEMO`)."""
+    for each git binary (`_SYSTEM_MEMO`), whatever the answer."""
     if _truthy(os.environ.get("GIT_CONFIG_NOSYSTEM", "")):
         return ""
     configured = os.environ.get("GIT_CONFIG_SYSTEM")
@@ -341,8 +370,9 @@ def _system_config(here: Path) -> str:
     if key in _SYSTEM_MEMO:
         return _SYSTEM_MEMO[key]
     found = _ask_system_config(here)
-    if found != _UNKNOWN:
-        _SYSTEM_MEMO[key] = found
+    # `_UNKNOWN` is remembered too: asking again would repeat the same git processes
+    # (and, for a git that hangs, the same timeout) on every question (l-errors-r2).
+    _SYSTEM_MEMO[key] = found
     return found
 
 

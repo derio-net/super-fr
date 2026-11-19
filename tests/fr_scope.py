@@ -68,9 +68,14 @@ def resolve_base(root: Path, value: str) -> str:
     option was given with no value."""
     if value != DEFAULT_BASE:
         return value
-    from fr.git import remote_default_ref
+    from fr.git import GitRefusal, remote_default_ref
 
     ref = remote_default_ref(root)
+    if isinstance(ref, GitRefusal):
+        raise ScopeError(
+            f"--fr-scope: no default ref to diff against ({ref.reason}); "
+            "name one: --fr-scope <base-ref>"
+        )
     if not isinstance(ref, str) or not ref:
         raise ScopeError(
             "--fr-scope: no default ref to diff against (no remote HEAD or default "
@@ -111,12 +116,10 @@ def is_test_file(path: str) -> bool:
 
 def imported_names(source: str, module: str, *, is_package: bool = False) -> set[str]:
     """Every dotted name a module's imports name. `from a.b import c` names
-    `a.b.c` (c may be a module or an attribute: either way `a.b` runs)."""
+    `a.b.c` (c may be a module or an attribute: either way `a.b` runs). Raises
+    `SyntaxError` for a source `ast` cannot parse (`ImportIndex.build` records it)."""
     names: set[str] = set()
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return names
+    tree = ast.parse(source)
     package = module.split(".") if is_package else module.split(".")[:-1]
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -137,26 +140,33 @@ def imported_names(source: str, module: str, *, is_package: bool = False) -> set
 @dataclass(frozen=True)
 class ImportIndex:
     """`tests/` module path -> the names its imports name, and -> its source
-    (for the file-name mentions a non-Python change selects by)."""
+    (for the file-name mentions a non-Python change selects by). `unparseable`
+    holds the modules `ast` could not parse: their imports select nothing, and
+    `unparseable_line` names them so the gap is visible."""
 
     imports: Mapping[str, frozenset[str]]
     sources: Mapping[str, str] = field(default_factory=dict)
+    unparseable: frozenset[str] = frozenset()
 
     @classmethod
     def build(cls, root: Path) -> ImportIndex:
         out: dict[str, frozenset[str]] = {}
         sources: dict[str, str] = {}
+        broken: set[str] = set()
         for file in sorted((root / "tests").rglob("*.py")):
             rel = file.relative_to(root).as_posix()
             module = tests_module(rel)
             if module is None:
                 continue
             text = file.read_text(encoding="utf-8", errors="replace")
-            out[rel] = frozenset(
-                imported_names(text, module, is_package=file.name == "__init__.py")
-            )
+            try:
+                names = imported_names(text, module, is_package=file.name == "__init__.py")
+            except SyntaxError:
+                broken.add(rel)
+                names = set()
+            out[rel] = frozenset(names)
             sources[rel] = text
-        return cls(out, sources)
+        return cls(out, sources, frozenset(broken))
 
 
 def _names_changed_source(name: str, changed_modules: set[str]) -> bool:
@@ -233,6 +243,27 @@ def unreached_line(paths: Sequence[str], limit: int = 10) -> str:
     return f"fr-scope: no test reaches {n} changed path{'' if n == 1 else 's'}: {shown}{more}"
 
 
+def unparseable_line(index: ImportIndex, limit: int = 10) -> str:
+    """The one line naming the `tests/` files the index could not parse (empty when
+    there are none): no import selects through them, whatever changed."""
+    paths = sorted(index.unparseable)
+    if not paths:
+        return ""
+    shown = ", ".join(paths[:limit])
+    more = f", +{len(paths) - limit} more" if len(paths) > limit else ""
+    n = len(paths)
+    return (
+        f"fr-scope: {n} test file{'' if n == 1 else 's'} did not parse, so no import "
+        f"selects through {'it' if n == 1 else 'them'}: {shown}{more}"
+    )
+
+
+def reasons_line(reasons: Sequence[str]) -> str:
+    """The line printed just before `ADVISORY_LINE`: why this session is advisory.
+    The advisory line itself stays fixed, for fr's whole-line match."""
+    return f"fr-scope: advisory because {', '.join(reasons)}"
+
+
 def keep_item(rel_path: str, markers: Iterable[str], selected: set[str]) -> bool:
     """Whether the fast tier runs one collected item."""
     marks = set(markers)
@@ -254,6 +285,7 @@ def advisory_reasons(
     deselect: Sequence[str] | None,
     maxfail: int,
     testpaths_overridden: bool,
+    collect_only: bool = False,
 ) -> list[str]:
     """Why a session is not the whole configured suite (R7); empty when it is.
     `args_source` is the name of pytest's `Config.ArgsSource`: only `TESTPATHS`
@@ -285,6 +317,8 @@ def advisory_reasons(
         reasons.append(f"--maxfail={maxfail}")
     if testpaths_overridden:
         reasons.append("-o testpaths=")
+    if collect_only:
+        reasons.append("--collect-only")  # nothing ran
     return reasons
 
 
@@ -307,4 +341,5 @@ def session_reasons(config: Any) -> list[str]:
         testpaths_overridden=any(
             str(item).split("=", 1)[0].strip() == "testpaths" for item in overrides
         ),
+        collect_only=bool(getattr(o, "collectonly", False)),
     )

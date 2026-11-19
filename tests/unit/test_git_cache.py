@@ -519,3 +519,135 @@ def test_the_cli_entry_opens_a_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     CliRunner().invoke(cli.app, ["skills"])
     assert seen and seen[0] is not None
     assert git_cache.active() is None
+
+
+# --- lens-review fixes (l-errors-r2, r3, r9) ----------------------------------------
+
+
+def test_an_unknown_system_config_is_remembered_for_the_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-errors-r2: a decline over an unknown system config path costs its git
+    processes (and their timeout) once, not on every question."""
+    monkeypatch.delenv("GIT_CONFIG_NOSYSTEM", raising=False)
+    monkeypatch.delenv("GIT_CONFIG_SYSTEM", raising=False)
+    monkeypatch.setattr(git_cache, "_SYSTEM_MEMO", {})
+    asked: list[Path] = []
+
+    def unknown(here: Path) -> str:
+        asked.append(here)
+        return git_cache._UNKNOWN
+
+    monkeypatch.setattr(git_cache, "_ask_system_config", unknown)
+    root = _repo(tmp_path / "r")
+    assert git_cache.locate(root) is None
+    assert git_cache.locate(root) is None
+    assert len(asked) == 1
+
+
+@pytest.mark.parametrize(
+    ("setup", "reason"),
+    [
+        (lambda root, mp: mp.setenv("GIT_DIR", str(root / ".git")), "GIT_DIR"),
+        (lambda root, mp: (root / ".git" / "reftable").mkdir(), "reftable"),
+        (
+            lambda root, mp: _git(root, "config", "extensions.worktreeConfig", "true"),
+            "worktreeConfig",
+        ),
+        (
+            lambda root, mp: mp.setattr(
+                git_cache, "_system_config", lambda here: git_cache._UNKNOWN
+            ),
+            "system config",
+        ),
+    ],
+    ids=["git-dir", "reftable", "worktree-config", "system-config"],
+)
+def test_a_decline_is_named_on_stderr_under_the_debug_variable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    setup,  # type: ignore[no-untyped-def]
+    reason: str,
+) -> None:
+    """l-errors-r2: `FR_GIT_CACHE_DEBUG=1` makes a decline visible, one line naming why."""
+    root = _repo(tmp_path / "r")
+    setup(root, monkeypatch)
+    monkeypatch.setenv(git_cache.DEBUG_ENV, "1")
+    assert git_cache.locate(root) is None
+    lines = [line for line in capsys.readouterr().err.splitlines() if line]
+    assert len(lines) == 1, lines
+    assert lines[0].startswith("fr git cache: not caching")
+    assert reason in lines[0]
+
+
+def test_a_decline_is_silent_without_the_debug_variable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _repo(tmp_path / "r")
+    (root / ".git" / "reftable").mkdir()
+    monkeypatch.delenv(git_cache.DEBUG_ENV, raising=False)
+    assert git_cache.locate(root) is None
+    assert capsys.readouterr().err == ""
+
+
+def _git_fails_with_128(monkeypatch: pytest.MonkeyPatch, needle: str) -> dict[str, bool]:
+    """Make the git call whose argv holds *needle* exit 128 (a fatal git error)."""
+    real = subprocess.run
+    state = {"on": True}
+
+    def fatal(args, *a, **kw):  # type: ignore[no-untyped-def]
+        argv = [str(x) for x in args] if isinstance(args, (list, tuple)) else [str(args)]
+        if state["on"] and needle in argv:
+            return subprocess.CompletedProcess(argv, 128, "", "fatal: bad object\n")
+        return real(args, *a, **kw)
+
+    monkeypatch.setattr(subprocess, "run", fatal)
+    return state
+
+
+@pytest.mark.parametrize("needle", ["symbolic-ref", "rev-parse"])
+def test_a_fatal_git_error_is_a_refusal_never_an_absent_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, needle: str
+) -> None:
+    """l-errors-r3: `symbolic-ref -q` and `rev-parse --verify -q` say "not found"
+    with 1; 128 is git failing, which is neither "absent" nor cacheable."""
+    work, _ = _with_origin(tmp_path)
+    _git(work, "fetch", "-q", "origin")
+    _git(work, "remote", "set-head", "origin", "main")
+    state = _git_fails_with_128(monkeypatch, needle)
+    with git_cache.scope():
+        answer = remote_default_ref(work)
+        assert isinstance(answer, GitRefusal), answer
+        assert "fatal: bad object" in answer.reason
+        state["on"] = False
+        assert remote_default_ref(work) == "origin/main"
+
+
+def test_an_include_added_while_locating_is_not_stored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-errors-r9: an include added after `locate` read the config list but before
+    the before-stamp is in git's answer and missing from the watched list, so the
+    answer must not be stored (the list is read again after git answers)."""
+    work, origin = _with_origin(tmp_path)
+    _git(work, "remote", "add", "upstream", str(origin))
+    inc = work / ".git" / "inc.gitconfig"
+    inc.write_text("[checkout]\n\tdefaultRemote = upstream\n")
+    real = git_cache.locate
+    fired = {"done": False}
+
+    def locate_then_include(root: Path):  # type: ignore[no-untyped-def]
+        found = real(root)
+        if not fired["done"]:
+            fired["done"] = True
+            with (work / ".git" / "config").open("a") as f:
+                f.write("[include]\n\tpath = inc.gitconfig\n")
+        return found
+
+    monkeypatch.setattr(git_cache, "locate", locate_then_include)
+    with git_cache.scope():
+        assert remote_name(work) == "upstream"
+        cache = git_cache.active()
+        assert cache is not None
+        assert not [k for k in cache if "remote_name" in k], cache

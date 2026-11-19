@@ -31,6 +31,10 @@ def _assert_refused_as_advisory(output: str) -> None:
     assert ADVISORY_LINE in out
     assert '-m ""' in out
     assert "tests: ci" in out
+    # l-errors-r7: the refusal says what makes a log advisory.
+    for cause in ("--fr-scope", "-m", "-k", "explicit paths", "--collect-only", "not scenario"):
+        assert cause in out, cause
+    assert "fr-scope: advisory because" in out
 
 
 def test_deliver_refuses_an_advisory_log(tmp_path: Path) -> None:

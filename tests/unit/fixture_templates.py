@@ -18,6 +18,7 @@ import contextlib
 import inspect
 import json
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable, Iterator, Mapping
@@ -198,24 +199,43 @@ def build_paths(home: Path) -> dict[str, str]:
     return {k: str(v) for k, v in env.items()}
 
 
-def _git(root: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+def _git_out(key: str, root: Path, *args: str) -> str:
+    """git's stdout; a failure is a `TemplateBuildError` naming template *key*, the
+    command and git's stderr."""
+    done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    if done.returncode != 0:
+        raise TemplateBuildError(
+            f"template {key!r}: `git {' '.join(args)}` in {root} failed "
+            f"(exit {done.returncode}): {done.stderr.strip() or '(no stderr)'}"
+        )
+    return done.stdout
 
 
-def _git_out(root: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
-    ).stdout
+def _git(key: str, root: Path, *args: str) -> None:
+    _git_out(key, root, *args)
 
 
-def _worktrees(base: Path) -> list[Path]:
+def _worktrees(key: str, base: Path) -> list[Path]:
     """The linked worktrees of `base` (the main one left out)."""
     paths = [
         Path(line.removeprefix("worktree "))
-        for line in _git_out(base, "worktree", "list", "--porcelain").splitlines()
+        for line in _git_out(key, base, "worktree", "list", "--porcelain").splitlines()
         if line.startswith("worktree ")
     ]
     return paths[1:]
+
+
+def _marker_data(key: str, marker: Path) -> dict[str, Any]:
+    """A `.fr-isolation` marker's JSON object; anything else is a `TemplateBuildError`."""
+    try:
+        data = json.loads(marker.read_text())
+    except ValueError as exc:
+        raise TemplateBuildError(f"template {key!r}: {marker} is unreadable ({exc})") from exc
+    if not isinstance(data, dict):
+        raise TemplateBuildError(
+            f"template {key!r}: {marker} is not a JSON object (a {type(data).__name__})"
+        )
+    return data
 
 
 def _check_shape(key: str, template: Path, payload: Any) -> list[str]:
@@ -228,7 +248,7 @@ def _check_shape(key: str, template: Path, payload: Any) -> list[str]:
     problems: list[str] = []
     base = template / "base"
     if base.is_dir():
-        linked = _worktrees(base)
+        linked = _worktrees(key, base)
         for worktree in linked:
             if not worktree.is_dir():
                 problems.append(f"the worktree {worktree} is registered but missing")
@@ -236,15 +256,19 @@ def _check_shape(key: str, template: Path, payload: Any) -> list[str]:
             marker = worktree / ".fr-isolation"
             if marker.is_file():
                 try:
-                    toplevel = json.loads(marker.read_text())["toplevel"]
-                except (ValueError, KeyError) as exc:
-                    problems.append(f"{marker} is unreadable ({exc})")
+                    toplevel = _marker_data(key, marker)["toplevel"]
+                except TemplateBuildError as exc:
+                    problems.append(str(exc).removeprefix(f"template {key!r}: "))
+                except KeyError as exc:
+                    problems.append(f"{marker} is unreadable (no {exc})")
                 else:
-                    if Path(toplevel).resolve() != worktree.resolve():
+                    if not isinstance(toplevel, str):
+                        problems.append(f"{marker}'s toplevel is not a path: {toplevel!r}")
+                    elif Path(toplevel).resolve() != worktree.resolve():
                         problems.append(f"{marker} names {toplevel}, not {worktree}")
         if len(linked) > 1:
             unrepaired.append(f"it has {len(linked)} linked worktrees but a copy repairs one")
-        remotes = _git_out(base, "remote").split()
+        remotes = _git_out(key, base, "remote").split()
         if set(remotes) - {"origin"}:
             unrepaired.append(f"it has remotes {sorted(remotes)} but a copy repairs only `origin`")
     try:
@@ -257,10 +281,12 @@ def _check_shape(key: str, template: Path, payload: Any) -> list[str]:
 
 
 def _remap(value: Any, old: tuple[str, ...], new: str) -> Any:
-    """`value` with every template path inside a string replaced by the copy's."""
+    """`value` with every template path inside a string replaced by the copy's, on a
+    path boundary only: `.../t1` is rewritten in `.../t1/x` and `.../t1`, never in
+    `.../t10` (the next character may not continue a path component)."""
     if isinstance(value, str):
         for prefix in old:
-            value = value.replace(prefix, new)
+            value = re.sub(re.escape(prefix) + r"(?![\w.-])", lambda _: new, value)
         return value
     if isinstance(value, Path):
         return Path(_remap(str(value), old, new))
@@ -338,12 +364,12 @@ class FixtureTemplates:
         shutil.copytree(template, dest, symlinks=True, dirs_exist_ok=True)
         base, work = dest / "base", dest / workspace
         if base.is_dir() and (dest / "origin.git").is_dir():
-            _git(base, "remote", "set-url", "origin", str(dest / "origin.git"))
+            _git(key, base, "remote", "set-url", "origin", str(dest / "origin.git"))
         if base.is_dir() and work.is_dir():
-            _git(base, "worktree", "repair", str(work))
+            _git(key, base, "worktree", "repair", str(work))
             marker = work / ".fr-isolation"
             if marker.is_file():
-                data = json.loads(marker.read_text())
+                data = _marker_data(key, marker)
                 data["toplevel"] = str(work.resolve())
                 marker.write_text(json.dumps(data))
         if relink is not None:

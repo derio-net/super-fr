@@ -467,17 +467,19 @@ non-Python file's name (an agent, a skill, YAML, a script), and the `smoke` set
 `scenario` tier. It is not sound: a test that starts `fr` as a subprocess is invisible
 to the import graph. Any session that is not the whole configured suite (`--fr-scope`,
 a non-empty `-m` or `-k`, explicit paths or a run from a subdirectory, `--lf`, `--sw`,
-`--ignore`, `--ignore-glob`, `--deselect`, `-x`/`--maxfail`, `-o testpaths=`, so also
-the plain default run)
-prints `fr-scope: advisory — not deliver evidence` on a line of its own, and fr refuses
-a `tests` log holding that line at `deliver` and at a phase unit. **This repo declares
+`--ignore`, `--ignore-glob`, `--deselect`, `-x`/`--maxfail`, `-o testpaths=`,
+`--collect-only`, so also the plain default run) prints `fr-scope: advisory because
+<reasons>` and then `fr-scope: advisory — not deliver evidence`, each on a line of its
+own, and fr refuses a `tests` log holding the second line at `deliver` and at a phase
+unit. A brief whose `fast_tier` needs a `{base}` git cannot name is refused, never blank. **This repo declares
 `tests: ci`** in `.fr/ci.yaml`, and names its fast tier there as `fast_tier` (`{base}`
 is the only placeholder; fr ships no fast tier, so a repo without the key gets
 `tests: {mode: ci}` alone). The `deliver` and phase executor briefs carry
 `tests: {mode: ci, fast_tier: ...}`; an executor runs the fast tier last instead of
 the full suite, and `deliver` uses `tests: ci` (a local `-m ""` log stays accepted).
 `tests: ci` needs valid `gate_checks` in the same file. `--fr-scope` also names, on
-one line, the changed paths no test reaches beyond the smoke set.
+one line, the changed paths no test reaches beyond the smoke set, and on another the
+test files `ast` could not parse.
 
 **The CI time-budget watcher** (`.github/workflows/ci-budget.yml` +
 `scripts/ci_budget.py`, spec `2026-09-26-ci-time-budget-design.md`) files (and
@@ -491,7 +493,7 @@ watch-list tripwire) until it is either named in `ci-budget.yml`'s
 
 Measured 2026-11-19 from CI run 44544149927 (this repo's PR #1559 after the suite-cost
 work, the py3.14 leg's seven shards, every test): 16,989 tests, 4,157 worker-seconds
-(the py3.11 leg: 4,180), of which the `scenario` tier is 145 tests and 870
+(the py3.11 leg: 4,180), of which the `scenario` tier is 144 tests and 870
 worker-seconds; each shard job took 2 min 50 s to 4 min 37 s, and the whole CI run
 5 min 18 s of wall clock. The previous file (2026-11-15, 15,182 tests, 18,855
 worker-seconds) was measured on another machine, so the two totals do not compare. A

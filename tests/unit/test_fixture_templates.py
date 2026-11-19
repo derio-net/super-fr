@@ -336,3 +336,64 @@ def test_every_autouse_path_variable_that_names_a_tests_dir_is_in_the_build_sand
     assert in_a_tests_dir <= set(fixture_templates.env), sorted(
         in_a_tests_dir - set(fixture_templates.env)
     )
+
+
+# --- lens-review fixes (l-errors-r6) -------------------------------------------------
+
+
+def test_a_git_failure_in_a_copy_names_the_template_and_carries_gits_stderr(
+    tmp_path, fixture_templates
+):
+    """`copy` points `origin` at the copy's `origin.git`: a base with no `origin`
+    remote makes git fail, and that is a TemplateBuildError, not a bare
+    CalledProcessError with the stderr dropped."""
+
+    def build(directory: Path) -> None:
+        _repo_with_worktree(directory)
+        subprocess.run(["git", "init", "-q", "--bare", str(directory / "origin.git")], check=True)
+
+    with pytest.raises(TemplateBuildError, match=r"template 'no-origin'.*(?i:no such remote)"):
+        fixture_templates.copy("no-origin", build, tmp_path / "c")
+
+
+def test_a_git_failure_while_checking_the_shape_names_the_template(tmp_path, fixture_templates):
+    def build(directory: Path) -> None:
+        (directory / "base").mkdir()  # a directory, but no repository
+
+    with pytest.raises(TemplateBuildError, match=r"template 'not-a-repo'.*git worktree list"):
+        fixture_templates.copy("not-a-repo", build, tmp_path / "c")
+
+
+def _marker_of(directory: Path) -> Path:
+    return directory / "workspace" / ".fr-isolation"
+
+
+def test_a_marker_that_is_not_a_json_object_fails_at_build(tmp_path, fixture_templates):
+    def build(directory: Path) -> None:
+        _repo_with_worktree(directory)
+        _marker_of(directory).write_text("[]")
+
+    with pytest.raises(TemplateBuildError, match=r"template 'list-marker' .*not a JSON object"):
+        fixture_templates.copy("list-marker", build, tmp_path / "c")
+
+
+def test_a_marker_that_is_not_a_json_object_fails_at_copy(tmp_path, fixture_templates):
+    def build(directory: Path) -> None:
+        _repo_with_worktree(directory)
+        work = directory / "workspace"
+        _marker_of(directory).write_text(json.dumps({"toplevel": str(work.resolve())}))
+
+    template = fixture_templates.template_path("late-list-marker", build)
+    _marker_of(template).write_text('"a string"')
+    with pytest.raises(TemplateBuildError, match=r"template 'late-list-marker'.*not a JSON object"):
+        fixture_templates.copy("late-list-marker", build, tmp_path / "c")
+
+
+def test_remap_replaces_a_template_path_only_on_a_path_boundary():
+    payload = {"a": "/x/t1/f", "b": "/x/t10/f", "c": "/x/t1", "d": "cd /x/t1 && ls /x/t12"}
+    assert ft._remap(payload, ("/x/t1",), "/d") == {
+        "a": "/d/f",
+        "b": "/x/t10/f",
+        "c": "/d",
+        "d": "cd /d && ls /x/t12",
+    }

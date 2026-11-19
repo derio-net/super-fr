@@ -111,20 +111,42 @@ def load_gate_checks(repo_root: Path, rev: str = "HEAD") -> list[str] | None:
     return [n.strip() for n in names]
 
 
+_ABSENT_AT_HEAD = (
+    f"path '{CI_CONFIG}' does not exist in 'HEAD'",
+    f"path '{CI_CONFIG}' exists on disk, but not in 'HEAD'",
+)
+"""git's own words (C locale, `git_answer`) for "HEAD has no such path": the only
+failure of `git show HEAD:<path>` that means the file is absent."""
+
+
 def _ci_yaml_at_head(repo_root: Path) -> dict[str, Any] | None:
-    """`.fr/ci.yaml` at HEAD as a mapping; None when HEAD has no such file or
-    it is not a mapping. A file that is not YAML is refused."""
+    """`.fr/ci.yaml` at HEAD as a mapping; None when HEAD has no such path or the
+    file is empty. Every other failure (an unborn HEAD, an unreadable object) is
+    refused, never read as "absent", and so is a file that is not a YAML mapping
+    (l-errors-r4)."""
     try:
         res = git_answer(repo_root, "show", f"HEAD:{CI_CONFIG}")
     except GitUnavailableError as e:
         raise CiEvidenceRefused(f"git could not read {CI_CONFIG}: {e}") from e
     if res.returncode != 0:
-        return None
+        if any(words in res.stderr for words in _ABSENT_AT_HEAD):
+            return None
+        raise CiEvidenceRefused(
+            f"git could not read {CI_CONFIG} at HEAD: "
+            f"{res.stderr.strip() or f'exit {res.returncode}'}"
+        )
     try:
         data = yaml.safe_load(res.stdout)
     except yaml.YAMLError as e:
         raise CiEvidenceRefused(f"{CI_CONFIG} at HEAD is not YAML: {e}") from e
-    return data if isinstance(data, dict) else None
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise CiEvidenceRefused(
+            f"{CI_CONFIG} at HEAD must be a mapping (`gate_checks:`, `tests:`, ...); "
+            f"it is a {type(data).__name__}"
+        )
+    return data
 
 
 def declared_tests_mode(repo_root: Path) -> Literal["ci"] | None:

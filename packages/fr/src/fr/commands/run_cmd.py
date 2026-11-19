@@ -3329,8 +3329,13 @@ def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
         # here is never a witness `tests: reuse` could carry into `deliver`.
         err_console.print(
             f"[red]{key}: --evidence tests={log} holds the line `{ADVISORY_LINE}`: it is "
-            'not the whole suite. Run the full suite with `pytest -m ""` into a log and '
-            "name that file, or offer `tests: ci`.[/red]",
+            "not the whole suite. A session prints it when it ran with --fr-scope, a "
+            "non-empty -m or -k (the default local run's -m 'not scenario' included), "
+            "explicit paths or from a subdirectory, --lf, --sw, --ignore/--ignore-glob/"
+            "--deselect, -x/--maxfail, -o testpaths= or --collect-only; the line before "
+            "it in the log, `fr-scope: advisory because ...`, names which. Run the full "
+            'suite with `pytest -m ""` into a log and name that file, or offer '
+            "`tests: ci`.[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)
@@ -4850,8 +4855,9 @@ def _tests_brief(repo_root: Path, step: Step) -> dict[str, Any]:
     R8, §3.F) — else nothing, so every other brief is unchanged. `fast_tier` is
     the repo's own command (`.fr/ci.yaml`'s `fast_tier`, `{base}` made the run's
     default ref), present only when the repo names one: fr ships none. A value
-    fr refuses refuses the brief (exit 2), never read as "not declared"."""
-    from fr.git import remote_default_ref
+    fr refuses refuses the brief (exit 2), never read as "not declared", and so
+    does a `fast_tier` whose default ref git cannot name: never a blank base."""
+    from fr.git import GitRefusal, remote_default_ref
     from fr.run.ci_evidence import CiEvidenceRefused, declared_fast_tier, declared_tests_mode
 
     if "tests" not in step.evidence and step.agent != PHASE_EXECUTOR_AGENT:
@@ -4867,7 +4873,19 @@ def _tests_brief(repo_root: Path, step: Step) -> dict[str, Any]:
     tests: dict[str, Any] = {"mode": mode}
     if template is not None:
         base = remote_default_ref(repo_root)
-        command = template.format(base=base if isinstance(base, str) and base else "")
+        if not isinstance(base, str) or not base:
+            # Never a blank `{base}` (l-errors-r1): the executor would run the
+            # tier against nothing and read its silence as green.
+            why = base.reason if isinstance(base, GitRefusal) else "no remote default ref"
+            err_console.print(
+                f"[red]{step.id}: refused — .fr/ci.yaml's fast_tier needs {{base}}, the "
+                f"run's default ref, and git cannot name it: {escape(why)}. Fix: "
+                "`git remote set-head <remote> --auto` (a remote with no HEAD), or "
+                "`git config checkout.defaultRemote <remote>` (several remotes).[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        command = template.format(base=base)
         tests["fast_tier"] = " ".join(command.split())
     return {"tests": tests}
 

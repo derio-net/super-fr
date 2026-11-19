@@ -683,6 +683,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         changed_paths,
         keep_item,
         resolve_base,
+        unparseable_line,
         unreached,
         unreached_line,
     )
@@ -696,7 +697,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     index = ImportIndex.build(root)
     selected = scope_select(index, changed)
     # Printed in the terminal summary: what this tier covers with the smoke set alone.
-    config._fr_scope_unreached = unreached_line(unreached(index, changed))  # type: ignore[attr-defined]
+    lines = (unreached_line(unreached(index, changed)), unparseable_line(index))
+    config._fr_scope_unreached = [line for line in lines if line]  # type: ignore[attr-defined]
     kept, dropped = [], []
     for item in items:
         rel = item.path.relative_to(root).as_posix()
@@ -708,10 +710,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 def pytest_terminal_summary(terminalreporter: object, config: pytest.Config) -> None:
-    from tests.fr_scope import ADVISORY_LINE, session_reasons
+    from tests.fr_scope import ADVISORY_LINE, reasons_line, session_reasons
 
-    unreached = getattr(config, "_fr_scope_unreached", "")
-    if unreached:
-        terminalreporter.write_line(unreached)  # type: ignore[attr-defined]
-    if session_reasons(config):
+    for line in getattr(config, "_fr_scope_unreached", []):
+        terminalreporter.write_line(line)  # type: ignore[attr-defined]
+    reasons = session_reasons(config)
+    if reasons:
+        # The reasons on a line of their own, then the fixed line fr matches whole.
+        terminalreporter.write_line(reasons_line(reasons))  # type: ignore[attr-defined]
         terminalreporter.write_line(ADVISORY_LINE)  # type: ignore[attr-defined]

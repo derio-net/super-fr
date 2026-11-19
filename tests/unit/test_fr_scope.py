@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +24,7 @@ from tests.fr_scope import (
     resolve_base,
     select,
     session_reasons,
+    unparseable_line,
     unreached,
 )
 
@@ -224,6 +228,7 @@ def _reasons(**over: object) -> list[str]:
         deselect=None,
         maxfail=0,
         testpaths_overridden=False,
+        collect_only=False,
     )
     kw.update(over)
     return advisory_reasons(**kw)  # type: ignore[arg-type]
@@ -247,6 +252,7 @@ def _reasons(**over: object) -> list[str]:
         {"maxfail": 1},  # `-x` is `--maxfail=1`
         {"maxfail": 3},
         {"testpaths_overridden": True},
+        {"collect_only": True},  # l-errors-r7: nothing ran
     ],
 )
 def test_any_narrowed_session_is_advisory(over: dict[str, object]) -> None:
@@ -271,6 +277,7 @@ def _config(**option: object) -> SimpleNamespace:
         deselect=None,
         maxfail=0,
         override_ini=None,
+        collectonly=False,
     )
     args_source = option.pop("args_source", "TESTPATHS")
     fr_scope = option.pop("fr_scope", None)
@@ -297,6 +304,7 @@ def test_a_whole_session_reads_as_whole_from_the_config() -> None:
         ({"maxfail": 1}, "--maxfail"),
         ({"override_ini": ["testpaths=tests/unit"]}, "testpaths"),
         ({"fr_scope": ""}, "--fr-scope"),
+        ({"collectonly": True}, "--collect-only"),
     ],
 )
 def test_each_narrowing_option_is_read_from_the_config(option: dict, reason: str) -> None:
@@ -343,3 +351,150 @@ def test_the_fast_tier_runs_from_the_command_line() -> None:
     done = _pytest("--collect-only", "-q", "--fr-scope", "HEAD", "tests/unit/test_fr_scope.py")
     assert done.returncode in (0, 5), done.stdout + done.stderr
     assert ADVISORY_LINE in [line.strip() for line in done.stdout.splitlines()]
+
+
+# --- lens-review fixes (l-tests-r1, r2; l-errors-r5, r7, r8) -------------------------
+
+
+def test_a_default_ref_refusal_keeps_its_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-errors-r5: the GitRefusal says why there is no default ref; keep it."""
+    import fr.git
+
+    monkeypatch.setattr(
+        fr.git, "remote_default_ref", lambda root: fr.git.GitRefusal("two remotes, none named")
+    )
+    with pytest.raises(ScopeError, match="two remotes, none named"):
+        resolve_base(tmp_path, DEFAULT_BASE)
+
+
+def test_an_unparseable_test_file_is_named(tmp_path: Path) -> None:
+    """l-errors-r8: a test file `ast` cannot parse has no imports the index can see,
+    so its selection gap is named rather than silent."""
+    _write(tmp_path, {**FILES, "tests/unit/test_broken.py": "def (:\n"})
+    index = ImportIndex.build(tmp_path)
+    assert index.unparseable == frozenset({"tests/unit/test_broken.py"})
+    line = unparseable_line(index)
+    assert line.startswith("fr-scope: ")
+    assert "tests/unit/test_broken.py" in line
+    assert unparseable_line(ImportIndex.build(_fresh(tmp_path / "ok"))) == ""
+
+
+def _fresh(root: Path) -> Path:
+    _write(root, FILES)
+    return root
+
+
+# A throwaway repository wired with this repo's OWN `tests/conftest.py` and
+# `tests/fr_scope.py` (copied, so a change to either is what runs) and its own pytest
+# configuration, read from `pyproject.toml`: the hooks run in a real pytest session.
+SESSION_TESTS = {
+    ".gitignore": "__pycache__/\n",
+    "packages/demo/src/demo_mod.py": "VALUE = 1\n",
+    "packages/demo/src/other_mod.py": "VALUE = 2\n",
+    "tests/unit/helper.py": "def value():\n    import demo_mod\n    return demo_mod\n",
+    "tests/unit/test_uses_demo.py": "def test_uses():\n    if False:\n"
+    "        import demo_mod  # noqa: F401\n",
+    "tests/unit/test_via_helper.py": "from tests.unit.helper import value\n\n"
+    "def test_helper():\n    assert value\n",
+    "tests/unit/test_other.py": "def test_other():\n    if False:\n"
+    "        import other_mod  # noqa: F401\n",
+    "tests/unit/test_smoke_set.py": "import pytest\n\n@pytest.mark.smoke\n"
+    "def test_smoke():\n    pass\n\ndef test_not_smoke():\n    pass\n",
+    "tests/unit/test_scen.py": "import pytest\n\n@pytest.mark.scenario\n"
+    "def test_scen():\n    if False:\n        import demo_mod  # noqa: F401\n\n"
+    "def test_plain():\n    if False:\n        import demo_mod  # noqa: F401\n",
+}
+
+COPIED = ("tests/__init__.py", "tests/unit/__init__.py", "tests/conftest.py", "tests/fr_scope.py")
+
+
+def _pytest_ini_section() -> str:
+    """This repo's `[tool.pytest.ini_options]`, re-emitted (addopts, markers, testpaths)."""
+    ini = tomllib.loads((REPO / "pyproject.toml").read_text())["tool"]["pytest"]["ini_options"]
+    lines = ["[tool.pytest.ini_options]"]
+    lines += [f"{key} = {json.dumps(value, ensure_ascii=False)}" for key, value in ini.items()]
+    return "\n".join(lines) + "\n"
+
+
+@pytest.fixture(scope="module")
+def session_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("scope-session")
+    for rel in (*COPIED, "tests/unit/fixture_templates.py"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(REPO / rel, root / rel)
+    _write(root, SESSION_TESTS)
+    (root / "pyproject.toml").write_text(_pytest_ini_section(), encoding="utf-8")
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    return root
+
+
+def _session(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """A real pytest session in *root*, no path argument (pytest collects `testpaths`)."""
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "--no-cov", "-q", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+
+
+def _collected(stdout: str) -> set[str]:
+    return {line.strip() for line in stdout.splitlines() if "::" in line}
+
+
+def test_the_fast_tier_collects_exactly_the_dependents_and_the_smoke_set(
+    session_repo: Path,
+) -> None:
+    """l-tests-r1: the `pytest_collection_modifyitems` wiring end to end. One source
+    module changed: its importers (directly and through a `tests/` helper) and the
+    smoke tests are collected, nothing else, and no scenario test."""
+    module = session_repo / "packages/demo/src/demo_mod.py"
+    module.write_text("VALUE = 3\n")
+    try:
+        done = _session(session_repo, "-m", "", "--collect-only", "--fr-scope", "HEAD")
+    finally:
+        module.write_text(SESSION_TESTS["packages/demo/src/demo_mod.py"])
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert _collected(done.stdout) == {
+        "tests/unit/test_uses_demo.py::test_uses",
+        "tests/unit/test_via_helper.py::test_helper",
+        "tests/unit/test_scen.py::test_plain",
+        "tests/unit/test_smoke_set.py::test_smoke",
+    }, done.stdout
+    assert "4/7 tests collected (3 deselected)" in done.stdout, done.stdout
+
+
+def _summary_lines(stdout: str) -> list[str]:
+    return [line.strip() for line in stdout.splitlines()]
+
+
+def test_the_default_local_run_says_why_it_is_advisory(session_repo: Path) -> None:
+    """l-tests-r2, l-errors-r7: the plain run from the root (the shipped addopts'
+    `-m 'not scenario'`) prints its reasons on the line before the advisory line."""
+    done = _session(session_repo)
+    assert done.returncode == 0, done.stdout + done.stderr
+    lines = _summary_lines(done.stdout)
+    at = lines.index(ADVISORY_LINE)
+    assert lines[at - 1].startswith("fr-scope: advisory because "), lines
+    assert "-m 'not scenario'" in lines[at - 1]
+    assert "--collect-only" not in lines[at - 1]
+
+
+def test_a_keyword_run_says_why_it_is_advisory(session_repo: Path) -> None:
+    done = _session(session_repo, "-m", "", "-k", "smoke")
+    assert done.returncode == 0, done.stdout + done.stderr
+    lines = _summary_lines(done.stdout)
+    at = lines.index(ADVISORY_LINE)
+    assert lines[at - 1] == "fr-scope: advisory because -k 'smoke'", lines
+
+
+def test_the_whole_suite_prints_no_advisory_line(session_repo: Path) -> None:
+    done = _session(session_repo, "-m", "")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert ADVISORY_LINE not in _summary_lines(done.stdout)
+    assert not [line for line in _summary_lines(done.stdout) if "advisory because" in line]
