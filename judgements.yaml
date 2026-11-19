@@ -8457,6 +8457,12 @@ batches:
     at: '2026-11-19T09:25:44.781776Z'
     pr: 1550
     head: 7c8d4b796bc6089b431c926a5b231738011c19be
+  - kind: update
+    at: '2026-11-19T09:29:36.022537Z'
+    pr: 1550
+    head_before: 7c8d4b796bc6089b431c926a5b231738011c19be
+    head_after: aa1e9d2b43e88aa04ec475cf31099067b2ed1e30
+    base: 5925ac1d48b93d96ab6b567020a42205f0abb524
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
