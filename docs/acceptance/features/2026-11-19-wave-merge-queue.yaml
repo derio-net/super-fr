@@ -85,6 +85,16 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: wave-queue-devops-barrier
+    capability: wave merge queue
+    acceptance: A gate:devops PR enters the queue only when the DevOps stage releases
+      it after its pre-merge ops. It lands alone, and nothing lands behind it until
+      the stage records the post-merge ops done.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R26
+    levels: {}
+    status: not-implemented
+    notes: born at brainstorm
   - id: wave-queue-approval-content
     capability: approval gate
     acceptance: An approved-fr approval survives any push that leaves the PR's own diff
