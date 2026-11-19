@@ -1,0 +1,85 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Lighter heavy tests — template fixtures and per-file remedies (R2, R3, R4)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - template-fixture-copies-independent
+  tier: standard
+  files:
+  - tests/conftest.py
+  - tests/unit/record_support.py
+  - tests/unit/fixture_templates.py
+  - tests/unit/test_fixture_templates.py
+  - tests/integration/test_fr_goal_shape.py
+  - tests/**/*.py
+  - docs/acceptance/features/*.yaml
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: Baseline profile of the twelve files (spec §3.C)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      For each file in #1555's table (test_run_cli, test_scenarios, test_run_question_rounds, test_record_review_fixes, test_release_script, test_install_sh, test_record_apply, test_exit_label_sync_points, test_deliver_pr_body, test_forge_quiet_pr_body, test_gate_cmd, test_gatebackfill_closes), run `uv run pytest -p no:xdist --no-cov -q --durations=0 <file>` with a subprocess counter (setup against call seconds, subprocess count by command), noting the `uptime` load. Record one plan-journal discovery per file: before seconds, load, setup/call split, subprocess counts, and the chosen remedy or the reason for none.
+- number: 2
+  title: Sandboxed, copyable templates (spec §3.B)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_fixture_templates.py — a copied started run passes `fr.isolation.marker.valid_workspace` and `fr run status`; a push in copy A leaves copy B's origin.git refs unchanged; a write in a copy leaves the template unchanged; the template's HOME and GIT_CONFIG_GLOBAL are the sandbox's, not the operator's; `record_support.LAST_BRIEF` equals the template's brief in each copy; a test_run_cli template is keyed per branch.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: extract the per-test sandbox env from tests/conftest.py (:238-266) into one helper used by both the autouse fixture and a session-scoped `fixture_templates` factory (tests/unit/fixture_templates.py). The factory builds once per worker under tmp_path_factory and copies with shutil.copytree(symlinks=True) the base, origin.git and worktree; then runs `git remote set-url origin <copy>/origin.git` and `git worktree repair`, rewrites the `.fr-isolation` toplevel, and restores LAST_BRIEF. Point `record_support.started_run` and test_run_cli's `_repo` at it.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: remove the now-dead per-test build paths; keep `started_run`'s signature so callers are unchanged.
+- number: 3
+  title: Per-file remedies with measured savings (R3, R4)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Apply each file's recorded remedy (template fixture, in-process CliRunner in place of a `fr` subprocess, module-scoped repository, merged parametrized cases). Merge or remove a case only where another test asserts the same claim on the same path, and journal each as a plan-journal decision naming the covering test. Run `uv run fr acceptance check` and confirm no level ref lost its test.
+  - id: P2.T3.S2
+    text: |-
+      Re-measure each file with the same command, and record the after seconds and load beside the baseline in its plan-journal entry. A file with no saving records why.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR + quality gate: ruff format/check; run every touched file; commit; `uv run fr push`; wait for CI and record `tests: ci`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

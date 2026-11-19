@@ -291,3 +291,9 @@ the refreshed `.test_durations` and AGENTS.md diff (R10), all quoted in the PR b
 - Caching the other git lookups (`--git-dir`, `--show-toplevel`, `for-each-ref`).
 - CI's own wall clock (#1340).
 - A new CI job for scenarios: they stay in the balanced shards.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-19-local-suite-cost | `derio-net/super-fr` | `2026-11-19-local-suite-cost` | — |
