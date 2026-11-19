@@ -52,6 +52,29 @@ def test_every_render_is_valid_yaml_with_no_token_left(
     assert isinstance(yaml.safe_load(text), dict)
 
 
+@pytest.mark.parametrize("debt", [False, True])
+@pytest.mark.parametrize("pages", [False, True])
+@pytest.mark.parametrize("comment", [False, True])
+def test_no_gitea_job_keeps_a_credential_in_git_config(
+    debt: bool, pages: bool, comment: bool
+) -> None:
+    """Every checkout of the Gitea workflow drops its token: the matrix job runs the
+    PR's own code (spec 2026-11-19-consumer-followups R5, gh#1553)."""
+    text = render_workflow(
+        "gitea-actions", debt=debt, pages=pages, comment=comment, fr_pin=GOLDEN_PIN
+    )
+    jobs = yaml.safe_load(text)["jobs"]
+    checkouts = [
+        (name, step)
+        for name, job in jobs.items()
+        for step in job.get("steps", [])
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    ]
+    assert checkouts, "the Gitea workflow checks the repo out"
+    for name, step in checkouts:
+        assert (step.get("with") or {}).get("persist-credentials") is False, name
+
+
 @pytest.mark.parametrize("ci_type", CI_TYPES)
 def test_every_template_folds_over_full_history_and_checks(ci_type: str) -> None:
     text = render_workflow(ci_type, debt=False)

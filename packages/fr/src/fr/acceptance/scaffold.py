@@ -239,6 +239,7 @@ jobs:
       - uses: @@USES:actions/checkout@@
         with:
           fetch-depth: 0 # check judges merged rows against the default branch's history
+          persist-credentials: false
       - uses: @@USES:astral-sh/setup-uv@@
       - name: Install fr
         run: @@FR_INSTALL@@
