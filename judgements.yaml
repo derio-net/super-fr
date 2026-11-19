@@ -8536,6 +8536,11 @@ batches:
     - super-fr#1544
   - kind: post_merge
     at: '2026-11-19T11:22:39.810134Z'
+  - kind: closeout_hold
+    at: '2026-11-19T11:24:04.261096Z'
+    item: derio-net/super-fr/run/closeout-2026-11-19-2
+    reason: '`fr archive --branch feat/batch-triage-pages --no-issues` exited 2: bypass (recovery only):  FR_SKIP_MIGRATION=1
+      fr <command>'
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
@@ -9364,3 +9369,4 @@ closeouts:
   handle: w3P:p7
   planned:
   - triage-pages
+  closed: true
