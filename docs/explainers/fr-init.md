@@ -12,7 +12,7 @@ covers:
   - plugins/super-fr/skills/fr-init/SKILL.md
   - packages/fr/src/fr/commands/init_cmd.py
   - packages/fr/src/fr/commands/services_cmd.py
-reviewed: 2026-11-13 init's writers refuse in a stealth workspace (placement-resolver p4-r3)
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-13 init's writers refuse in a stealth workspace (placement-resolver p4-r3)
 ---
 
 ## Why is the profile the contract?

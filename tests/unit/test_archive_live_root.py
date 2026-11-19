@@ -113,3 +113,29 @@ def test_a_plan_path_reached_through_a_symlinked_root_still_keeps_the_root(
     keep = repo / "docs" / "superpowers" / "plans" / ".gitkeep"
     assert keep.is_file()
     assert "docs/superpowers/plans/.gitkeep" in _git(repo, "diff", "--cached", "--name-only")
+
+
+def test_a_symlinked_live_root_is_not_written_through(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # super-fr#1483: `O_NOFOLLOW` guards only `.gitkeep` itself. With the live root a
+    # symlink to another in-repo directory, mkdir/iterdir/open used to follow it and
+    # leave `docs/elsewhere/.gitkeep` behind. Every component from the repo root down is
+    # checked; a link anywhere means nothing is written and the warning says why.
+    repo = tmp_path.resolve() / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    real = repo / "docs" / "elsewhere"
+    (real / "a").mkdir(parents=True)
+    (real / "a" / "_meta.yaml").write_text("plan: x\n")
+    (repo / "docs" / "superpowers").mkdir(parents=True)
+    os.symlink("../elsewhere", repo / "docs" / "superpowers" / "plans")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "init")
+
+    archive_plan_dir(repo, repo / "docs" / "superpowers" / "plans" / "a")
+
+    assert sorted(os.listdir(real)) == []
+    err = capsys.readouterr().err
+    assert "docs/superpowers/plans/.gitkeep not staged" in err
+    assert "symbolic link" in err

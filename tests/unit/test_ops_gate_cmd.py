@@ -113,6 +113,28 @@ def test_no_ops_profile_is_refused_naming_scaffold(gate_repo: Path) -> None:
     (gate_repo / ".devcontainer/fr-profiles.yaml").write_text("profiles:\n  dev: {}\n")
     result = _gate("--run", "run-1")
     assert result.exit_code == 2 and "fr init scaffold --ops" in result.output
+    flat = " ".join(result.output.split())
+    assert "fr init scaffold --ops --profile" in flat and "--purpose" in flat
+    assert "new branch" in flat and "default branch" in flat
+
+
+def test_seal_help_says_target_is_the_quoted_path() -> None:
+    flat = " ".join(
+        runner.invoke(app, ["ops", "seal", "--help"], env={"COLUMNS": "1000"}).output.split()
+    )
+    assert "target's name" not in flat
+    assert "{target} the target's path, shell-quoted." in flat
+
+
+def test_plan_rework_help_names_live_or_archived_parents() -> None:
+    flat = " ".join(
+        runner.invoke(app, ["plan", "rework", "--help"], env={"COLUMNS": "1000"}).output.split()
+    )
+    assert "Complete + archived" not in flat
+    assert (
+        "Path to the parent plan folder: live under plans/, or archived under "
+        "implemented/plans/ or archived-plans/. It may be complete or not." in flat
+    )
 
 
 # ------------------------------------------------------------- fr ops status --ready

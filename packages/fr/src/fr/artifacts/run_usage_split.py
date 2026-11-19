@@ -111,6 +111,15 @@ def _already_v10(text: str, data: object) -> bool:
     return _already_v7(text, data)
 
 
+def _already_v11(text: str, data: object) -> bool:
+    """The additive 11 -> 12 hop adds only the optional merge target.
+
+    Like the earlier additive hops, the live reader is still a superset;
+    an already-wholly-v12 body may finish its stamp after interruption.
+    """
+    return _already_v7(text, data)
+
+
 def split_usage(data: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
     """`(v7 body, usage session entries)` — pure: no I/O, no clock.
 

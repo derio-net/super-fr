@@ -60,8 +60,10 @@ op as closed.
 
 The command runs on your machine, at a terminal, from a checkout that holds the run. It
 refuses non-interactive contexts, so a delivering agent cannot run it. You type it, or you
-watch an agent type it in your terminal. It needs a profile declared `ops: true`, which
-`fr init scaffold --ops` writes (see [fr-init](fr-init.md)).
+watch an agent type it in your terminal. It needs a profile declared `ops: true`. Write one on a new branch cut from the
+default branch, with `fr init scaffold --ops --profile <name> --purpose "<one line>"`.
+Land it by its own pull request, so it does not ride the feature pull request
+(see [fr-init](fr-init.md)).
 
 ## What are the eight stages?
 

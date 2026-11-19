@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/types.py
   - packages/fr/src/fr/plan/**
   - packages/fr/src/fr/commands/plan_cmd.py
-reviewed: 2026-11-12 placement-resolver phase 3, plan create writes and commits on the fr branch under quiet
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-12 placement-resolver phase 3, plan create writes and commits on the fr branch under quiet
 ---
 
 # The plan model

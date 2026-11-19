@@ -868,7 +868,8 @@ def _next_rework_number(parent_dir: Path, froot: Path) -> int:
 def rework_create(parent_plan_dir: Path) -> Plan:
     """Scaffold a sibling rework plan folder + append spec row.
 
-    Parent stays Complete and untouched. Rework folder is empty of phases
+    The parent may be live (plans/) or archived (implemented/plans/, archived-plans/),
+    complete or not; it stays untouched. Rework folder is empty of phases
     (operator authors them later, informed by origin_items).
     """
     parent_dir = parent_plan_dir.resolve()

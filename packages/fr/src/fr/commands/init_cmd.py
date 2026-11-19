@@ -30,7 +30,7 @@ def scaffold(
     purpose: str = typer.Option(..., help="One-line purpose, recorded in fr-profiles.yaml."),
     tool: list[str] = typer.Option(
         [],
-        help="Tool to include (repeatable; <tool>[@<version>]; known tools: "
+        help="Tool to include (repeatable; <tool>\\[@<version>]; known tools: "
         f"{', '.join(sorted(KNOWN_TOOLS))}; unknown tools are refused — see --feature).",
     ),
     feature: list[str] = typer.Option(
@@ -169,9 +169,10 @@ def agents_cmd(
         False, "--no-commit", help="Write the files only; do not commit them."
     ),
 ) -> None:
-    """Render fr's two dispatched agents into .claude/agents/ (the `agents` artifact,
-    stamped) and commit them, so a Claude Code cloud session can dispatch
-    fr-spec-reviewer and fr-phase-executor from its first turn. Idempotent."""
+    """Render fr's two dispatched agents into .claude/agents/ and commit them.
+
+    The files are the stamped `agents` artifact. A Claude Code cloud session can then
+    dispatch fr-spec-reviewer and fr-phase-executor from its first turn. Idempotent."""
     from fr.agents import AGENT_NAMES, agent_path, write_agents
     from fr.isolation.scaffold import commit_paths
 

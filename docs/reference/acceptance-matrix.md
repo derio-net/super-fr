@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
+reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
 ---
 
 # The acceptance matrix

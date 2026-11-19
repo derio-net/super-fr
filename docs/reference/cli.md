@@ -7,8 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-19 still true; batch run-durability changes no command or help line (fr run refuses a lost cursor update with exit 2, a cli step gains FR_CLI_STEP_TIMEOUT). 2026-11-18 fr triage backlog and fr triage batches replace render and board, which stay as hidden aliases (triage-pages-ux phase 1); the consumer-delivery phase 2 changes no command or help text. 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
-writing_standard: none
+reviewed: 2026-11-19 still true; batch run-durability changes no command or help line (fr run refuses a lost cursor update with exit 2, a cli step gains FR_CLI_STEP_TIMEOUT). 2026-11-19 batch docs-wording rewrites help first lines to pass STE (shorter, same meaning), escapes bracketed help so it renders, and checks this page under ste (no writing_standard exemption). 2026-11-18 the owed-followups batch changes no command or help text; fr triage backlog and fr triage batches replace render and board, which stay as hidden aliases (triage-pages-ux phase 1); the consumer-delivery phase 2 changes no command or help text. 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
 ---
 
 # The fr command line
@@ -85,7 +84,7 @@ one artifact kind.
   - `fr acceptance summary`: GitHub Actions-friendly Markdown summary: compact counts + collapsible debt.
   - `fr acceptance set-status`: Move an existing row's status, with a reason.
   - `fr acceptance amend`: Append an amendment of a row to this feature's fragment.
-  - `fr acceptance add`: Insert a schema-validated row into the fragment of the feature that owns it (its one origin spec, or --feature), after its capability's last row (agents never hand-edit YAML shapes); a new capability goes at the end of `rows:`.
+  - `fr acceptance add`: Insert a schema-validated row into the fragment of the feature that owns it.
   - `fr acceptance init`: Scaffold matrix + CI workflow + backfill rule + gitignore (idempotent).
   - `fr acceptance backfill`: Emit the agent backfill protocol + deterministic inventory (markdown).
   - `fr acceptance digest`: Markdown for the upserted "Acceptance debt" issue (idempotence marker included; zero debt prints a closable body).
@@ -117,10 +116,10 @@ one artifact kind.
   - `fr isolation gc`: Reconcile isolation workspaces host-wide.
 - `fr init`: Repo initialization: devcontainer profile scaffolding (driven by fr-init).
   - `fr init scaffold`: Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus host secrets placeholders.
-  - `fr init agents`: Render fr's two dispatched agents into .claude/agents/ (the `agents` artifact, stamped) and commit them, so a Claude Code cloud session can dispatch fr-spec-reviewer and fr-phase-executor from its first turn.
+  - `fr init agents`: Render fr's two dispatched agents into .claude/agents/ and commit them.
   - `fr init validator-wrapper`: Write scripts/validate-plans.sh (0755) and stage it — the harness-neutral remedy every isolation guard names when a plan repo is missing the wrapper.
 - `fr cloud`: Claude Code cloud sessions: check the environment, print its setup script.
-  - `fr cloud doctor`: Every cloud prerequisite (forge.api, the plugin, the repo's agents artifact, a current fr, rsync, a merge method the driver may use) and its state; exits 1 when any fails.
+  - `fr cloud doctor`: Print every cloud prerequisite and its state; exits 1 when any fails.
   - `fr cloud setup-script`: Print the cloud environment setup script (paste it into the environment's Setup script; new sessions run it).
 - `fr repos`: Instrument locally-checked-out repos (driven by the operator's collection).
   - `fr repos sync`: Write docs/superpowers/plan-config.yaml into each checked-out repo.
@@ -150,16 +149,17 @@ one artifact kind.
   - `fr verification exit`: Print a run's (or spec's) exit: its kinds, its gates and the gated rows.
   - `fr verification set`: Insert or rewrite one `strategy:`, row bullet or `gate:` line of the spec's `## Verification`, journal why, commit and re-sync the PR labels.
   - `fr verification walk`: Install the candidate into a throwaway prefix, smoke it, run each row's scenario, and write the log `deliver` verifies.
-  - `fr verification prerelease`: Cut an on-demand pre-release of BRANCH: dispatch the `prerelease.yml` workflow, then print the rc tag and the install source (`git+<remote>@<tag>`) the `prerelease` strategy installs from.
+  - `fr verification prerelease`: Cut an on-demand pre-release of BRANCH.
 - `fr run`: Durable workflow-run cursor: start / status / advance / resolve / check.
   - `fr run start`: Start a run: resolve the shape, ensure isolation, write run state in it.
   - `fr run reshape`: Move a drifted cursor onto the shape's current step list.
   - `fr run adopt`: Give in-flight work a run cursor, inferred from artifacts that exist.
+  - `fr run target`: Record the merge target before lens review, preserving the existing run.
   - `fr run status`: Print the cursor, every step's state, who is holding each dispatched unit, since when, and whether it has returned.
   - `fr run cost`: Print what a run cost, per step and per model, from its usage file (`docs/superpowers/usage/<run>.yaml`, then `implemented/usage/`).
   - `fr run advance`: Advance the cursor by one step.
   - `fr run resolve`: Record the outcome of an `agent` step, or answer a step's operator gate.
-  - `fr run claim`: Put the orchestrator's reported identity onto the dispatch `fr run advance` already opened for a unit — the `agent`/ `harness` half of `Attempt` that only the orchestrator can report, fr itself can only derive `agent_type`/`model` and time its own act.
+  - `fr run claim`: Put the orchestrator's reported identity onto the dispatch for a unit.
   - `fr run check`: Freshness gate: non-zero when the cursor sits on a failed step.
   - `fr run gates`: Every `gate: operator` step this run's manifest declares, and who cleared it — the source `fr-goal`'s `deliver` step reads for the PR body's "Operator gates" section.
 - `fr validate`: Structural validation of generated artifacts.
@@ -198,8 +198,8 @@ one artifact kind.
     - `fr triage lease show`: Who holds the scope's drive lease, since when and until when; or `free`.
     - `fr triage lease take`: Take the scope's drive lease for this machine's driver, from whoever holds it: the operator's take-over of a lease another driver left.
   - `fr triage drive`: The cloud driver's one pass per wake, and the record of its session results.
-    - `fr triage drive pass`: One pass of the cloud driver: restore the state from its ref when it is missing or older, renew the drive lease (pushed), collect, plan and act with the host driver's own policy, run every forge action itself, and write the session requests to --outbox for the agent to execute.
-    - `fr triage drive record`: Apply every result the agent recorded for the outbox's requests to the scope's state (through the cloud runner's mailbox), empty the outbox, and push the state ref.
+    - `fr triage drive pass`: One pass of the cloud driver.
+    - `fr triage drive record`: Apply the agent's recorded results to the scope's state, then push the state ref.
   - `fr triage history`: The history page: the snapshot timeline and the finished waves.
     - `fr triage history render`: Write the History page: the snapshot timeline, the finished waves as tabs, then the authored fragments `history/manifest.yaml` places among them.
   - `fr triage origins`: Defect origins: collect issues filed since a date, classify them, render the page.
@@ -208,13 +208,13 @@ one artifact kind.
     - `fr triage origins render`: Write the Origins page from origins-facts.json, origins.yaml and (for links) judgements.yaml, with the fragments `origins/manifest.yaml` places among the sections.
   - `fr triage state`: Copy a scope's durable state (judgements, origins, manifests, fragments, snapshots) to a repo directory and back, or push and fetch its state ref.
     - `fr triage state export`: Copy the scope's durable state to <dir>/<scope>/.
-    - `fr triage state push`: Push the scope's state to its ref, the branch refs/heads/fr-triage/<scope-id>, as a compare-and-swap on the ref this state was last fetched from or pushed to; the privacy guard runs first.
-    - `fr triage state fetch`: Restore the scope's state from its ref, refs/heads/fr-triage/<scope-id>: the state directory's ref files become exactly the ref's, and a file the ref no longer carries is removed.
+    - `fr triage state push`: Push the scope's state to its ref, refs/heads/fr-triage/<scope-id>.
+    - `fr triage state fetch`: Restore the scope's state from its ref, refs/heads/fr-triage/<scope-id>.
     - `fr triage state import`: Copy <dir>/<scope>/ back into the state directory.
 - `fr usage`: What harness sessions and runs cost, split by activity and step (read-only).
   - `fr usage collect`: Normalize sessions into the usage cache (`$HOME/.cache/fr/usage/`).
   - `fr usage report`: Render collected usage (reading live for any session not yet collected).
-  - `fr usage backfill`: Write `implemented/usage/<run>.yaml` for every archived run that has none, and price an archived file's sessions that were still open when it was captured: reads archived cursors and this host's transcripts, never writes a run cursor.
+  - `fr usage backfill`: Write `implemented/usage/<run>.yaml` for every archived run that has none.
   - `fr usage compare`: Compare two sets of runs: phases, turns, main/subagent tokens, cost, review findings per phase and re-opened findings (read-only, deterministic).
 - `fr debt`: What this repo owes: acceptance, plans and owed actions (read-only).
   - `fr debt issue`: Keep the one open `<repo>: Technical debt` issue current.
@@ -234,7 +234,7 @@ one artifact kind.
   - `fr lenses list`: Print the effective lenses and where each comes from.
   - `fr lenses show`: Print one lens's instruction text.
   - `fr lenses check`: Fail (exit 1) when .fr/lenses.yaml has a problem.
-  - `fr lenses status`: Print the feature's lens set: each lens with every reason and the step that added it, or the path rule that requires it and one matching file.
+  - `fr lenses status`: Print the feature's lens set.
 - `fr gate`: Post-merge gates: record that a gate passed on its PR (the gate ledger).
   - `fr gate pass`: Comment why PR <n>'s gate <g> passed, then swap gate:<g> for gate:<g>-passed.
   - `fr gate backfill`: Bring pre-v6 owed work into the gate lanes.
@@ -242,13 +242,13 @@ one artifact kind.
   - `fr ops status`: Report each selected op's state, running its probes.
   - `fr ops apply`: Apply one op, or a whole phase, in `needs` order; stop at the first failure.
   - `fr ops attest`: Close an UNVERIFIABLE op as DONE (attested), at a terminal, in an ops profile.
-  - `fr ops trust`: Show every probe and command of the selected ops and, confirmed at a terminal, record that you trust this exact set — in your own store outside the repo (a plan-journal line records it for audit).
+  - `fr ops trust`: Show every probe and command of the selected ops, then record your trust.
   - `fr ops seal`: Encrypt stdin into --target without ever leaving plaintext behind.
   - `fr ops secret`: Read a value live and pass it to COMMAND on stdin; never to stdout.
   - `fr ops clip`: Put a value on the clipboard.
   - `fr ops scratch`: Run COMMAND, then --cleanup on success, failure, Ctrl-C or SIGTERM.
   - `fr ops stub`: Propose an op stub per devops command step of the plan's spec.
-  - `fr ops gate`: The DevOps stage: pre-merge ops, the merge, post-merge ops, the devops Test Plan steps, the gate pass, the tester hand-off and the archive, in 8 recorded stages.
+  - `fr ops gate`: The DevOps stage, in 8 recorded stages.
 - `fr release`: Release gating: what still waits on a post-merge gate since the last final.
   - `fr release status`: List every PR merged since the last final tag that still waits on a post-merge gate.
 - `fr closeout`: Close-out records: one outcome per spec Test Plan step.

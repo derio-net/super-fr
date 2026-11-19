@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-19 cursor writes are atomic, a save refuses another command's newer cursor, and a cli step has a timeout and a bounded stored output (batch run-durability). 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
+reviewed: 2026-11-19 cursor writes are atomic, a save refuses another command's newer cursor, and a cli step has a timeout and a bounded stored output (batch run-durability). 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 explicit merge targets preserve existing run steps and evidence; target alignment applies to review, delivery and PR creation. 2026-11-18 still true; deliver's owed closing check now counts an issue URL only on the repo's forge host (owed-followups), no shape change. 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
 ---
 
 # Workflow shapes and the run cursor
@@ -29,6 +29,7 @@ is the file that records which step the run is on.
 
 ```bash
 fr run start <shape> --branch <b>     # resolve the shape, ensure the workspace, start the cursor
+fr run target <run-id> --base <b>     # record a fetched non-default merge target before lens review
 fr run advance <run-id>               # run the next cli step, or print the next agent brief
 fr run resolve <run-id> --step <id> --state done   # record an agent step's outcome
 fr run status <run-id>                # the cursor and every step's state
@@ -51,6 +52,12 @@ A `cli` step can run for 600 seconds. After that time, fr stops the step and all
 processes that it started. The step is then failed with exit code 124. To change the limit,
 set `FR_CLI_STEP_TIMEOUT` to a number of seconds, or to `0` for no limit. The cursor
 keeps only the last 16 KiB of the step's output. A first line tells how much fr removed.
+
+A run without an explicit merge target keeps the remote-default behavior. Use
+`fr run target` before lens review starts when the change will merge elsewhere.
+It records `base_branch` without replacing the run or clearing its steps. The
+same target supplies lens rules, the review diff, delivery docs/proportionality
+checks and draft PR creation. A later `--base` cannot contradict that target.
 
 `fr workflow check` validates the schema, duplicate step ids, `needs` that point nowhere,
 cycles and unknown capabilities. CI runs it on every shipped shape.
