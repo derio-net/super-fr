@@ -372,3 +372,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p6 created=2026-11-19T22:27:55+00:00 decided_by=agent -->
 ### phase-split-2026-11-19-wave-merge-queue-p6 · decision · ask: gates and the wave close-out (R15, R16, R21, R26)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-wave-merge-queue-p7 created=2026-11-19T22:27:58+00:00 decided_by=agent -->
+### phase-split-2026-11-19-wave-merge-queue-p7 · decision · ask: the operator's view and leaving a wave (R25, R28, R29)
