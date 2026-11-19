@@ -290,3 +290,8 @@ run_kind: none
 ### tier-2026-11-19-batch-train-truth-p1 · decision · hard: phase 1 rewrites the error path every driver caller (host loop, cloud pass, --once) relies on
 
 Reclassifies ~30 _fail sites and the loop boundary; a misclassification either kills the loop or retries a refusal.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-19-batch-train-truth-p2 created=2026-11-19T11:08:26+00:00 -->
+### phase-split-2026-11-19-batch-train-truth-p2 · decision · ask: the session-bound supervisor, drive status and the activity log (R11-R14, R22-R23)
+
+Process lifetime and visibility, reviewable apart from the boundary.
