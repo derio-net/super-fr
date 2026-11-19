@@ -15,3 +15,8 @@
 
 A (#1509, #1484, #1481): helper binaries and interpreters are reached by bare name / command -v and run without isolation flags, instead of through the absolute-PATH-entry resolvers already used for git and fr (fr_git_resolve, fr_fr_resolve, plugin resolveGit/resolveFr). Fix: one resolver for jq/python3/bash/gh, used everywhere, python with -I.
 B (#1508, #1510): delivered dependencies are resolved at install time instead of from a tested lock: uv tool install without the workspace uv.lock as constraints, unversioned npm -g, and bun.lock carrying advisory versions pinned by an upstream package (needs overrides). Different mechanism, different files, different tests. Per batch rule, stop and ask before fixing.
+
+<!-- fr:journal kind=root-cause scope=debug id=46e27da33460 created=2026-11-19T20:17:11+00:00 -->
+### 46e27da33460 · root-cause · A: hooks and plugin reach jq/python3/bash/gh by bare name, python without -I
+
+The resolvers for git (fr_git_resolve, plugin resolveGit) and fr (fr_fr_resolve, resolveFr) walk absolute PATH entries only; the JSON parser resolver used command -v (relative entries count) and ran python3 -c (cwd on sys.path); the Claude edit gate and ten other hooks run bare jq; the plugin execFiles bare bash and gh. Operator chose to fix A and B in one PR.
