@@ -3,7 +3,7 @@ run: 2026-11-18-perf-test-suite-cost
 workflow: fr-goal@1
 branch: perf/test-suite-cost
 started: '2026-11-18T18:52:45+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -154,7 +154,12 @@ steps:
           visual: none
           findings: p3-f-fr-scope-optional-value,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-19T20:38:38+00:00'
+    exit: 0
+    stdout: |
+      1 deferred finding(s): p3-f-fr-scope-optional-value → derio-net/super-fr#1575
+      1 out-of-scope finding(s): p3-r3
   lens-review:
     state: pending
   deliver:
