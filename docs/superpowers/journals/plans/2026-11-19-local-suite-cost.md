@@ -570,3 +570,8 @@ Fixed in 9bf334e0d: _through_cache re-locates after compute and stores nothing w
 ### l-tests-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1579] · resolves l-tests-r5: The _Advance stand-in exposes only exit_code, output and stdout
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1579.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved-2 created=2026-11-19T21:25:07+00:00 state=open resolves=p3-r3 tracked_by=derio-net/super-fr#1574 -->
+### p3-r3-resolved-2 · finding [deferred → derio-net/super-fr#1574] · resolves p3-r3: _read_suite_log never checks that a tests log shows a passing, complete run
+
+Filed as derio-net/super-fr#1574 at the phase-3 review; predates this change.
