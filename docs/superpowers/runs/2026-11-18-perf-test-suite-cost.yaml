@@ -3,7 +3,7 @@ run: 2026-11-18-perf-test-suite-cost
 workflow: fr-goal@1
 branch: perf/test-suite-cost
 started: '2026-11-18T18:52:45+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-19T09:20:15+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-19T09:20:22+00:00'
+    exit: 0
+    stdout: "[warn] orphan phase-split decision phase-split-2026-11-19-local-suite-cost-p4\
+      \ \nnames no agentic phase; it waives nothing.\n"
   implement:
     state: pending
     members:
