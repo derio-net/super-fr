@@ -7548,6 +7548,10 @@ batches:
   after:
   - adopt-fixes
   bump: minor
+  events:
+  - kind: cancel
+    at: '2026-11-19T09:41:27.493030Z'
+    reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
 - id: issue-from-transcript
   title: 'triage: open an issue from an ad-hoc session''s transcript'
   ids:
