@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-17 still true after batch triage-intake (the new ready-fr label is an operator label of triage, not a dispatch label); 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch
+reviewed: 2026-11-19 a failed dedup lookup hands nothing over (#1499); the cncd symlink refusal (#1501) changes no label; 2026-11-17 still true after batch triage-intake (the new ready-fr label is an operator label of triage, not a dispatch label); 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch
 ---
 
 # Dispatch labels and the per-repo plan profile
@@ -41,6 +41,10 @@ Two more labels are markers, not states. `fr:synced` is the record stamp that sa
 phase was handed to the runner, so the phase is never handed over twice. `manual` marks a
 human-only phase, which is never routed to an agent. An issue made without `--to` is
 tracking-only and carries no lifecycle label.
+
+The runner's dedup snapshot is the second check: before a handover, `tick` asks the runner which phases it
+already holds. If the runner cannot answer, `tick` hands over no phase in that tick,
+writes no label, and reports each phase as a failure. The next tick asks again.
 
 All of this is what the defaults give you. A repo's forge settings (`.fr/settings.yaml`
 on its default branch, `fr settings show`) can switch writes off by kind:
