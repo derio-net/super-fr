@@ -132,6 +132,16 @@ rows:
     levels: {}
     status: not-implemented
     notes: born at brainstorm
+  - id: wave-queue-post-merge
+    capability: wave merge queue
+    acceptance: post_merge runs once per landing at the landed main and gates the next
+      landing, and a landed PR the forge still shows open pauses the queue with a Need.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R33
+    - spec:2026-11-19-wave-merge-queue#R35
+    levels: {}
+    status: not-implemented
+    notes: born at spec review
   - id: wave-queue-approval-content
     capability: approval gate
     acceptance: An approved-fr approval survives any push that leaves the PR's own diff
