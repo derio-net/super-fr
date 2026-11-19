@@ -8518,6 +8518,12 @@ batches:
     checks:
     - 2 failing check(s)
     delivered: session
+  - kind: update
+    at: '2026-11-19T10:06:32.439720Z'
+    pr: 1550
+    head_before: aa1e9d2b43e88aa04ec475cf31099067b2ed1e30
+    head_after: 42c85a2e21e641abafb99345b2fd89e05b5a006c
+    base: 5f1285223374d0676c434c0501d66b2fe566aab0
 - id: train-truth
   title: 'Merge-train truth: the loop survives a refused push, sees red and conflicting drafts, and fetches
     once'
