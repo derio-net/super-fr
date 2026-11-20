@@ -5169,6 +5169,26 @@ def test_a_clean_or_resolvable_pr_is_never_trial_merged_and_a_probe_adds_no_forg
     assert "base_rules" not in world.calls
 
 
+def test_a_hand_back_to_a_session_needs_no_model_to_launch_with(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    """A batch with no `launch.model` (the cloud scenario's) gets its red and conflict
+    hand-backs: only a fresh session needs a model, and these never start one."""
+    world.issues[1] = "open"
+    world.pr(101, "feat/batch-b1", [1], draft=True, labels=[], mergeable="CONFLICTING")
+    checkout.conflicts = ["src/a.py"]
+    bare = _batch("b1", 1, events=_dispatch_event("b1")).replace(f"    launch: {LAUNCH}\n", "")
+    _state(tmp_path, world, bare)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    world.all_checks[101] = {"pass": 0, "fail": 1, "pending": 0}
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "no model to launch with" not in out, out
+    assert len(messenger.messages) == 2  # the red hand-back and the conflict brief
+    assert [e.delivered for e in _red_events(tmp_path)] == ["session"]
+    assert [e.delivered for e in _conflicts(tmp_path)] == ["session"]
+
+
 def test_the_base_rules_are_read_once_per_repo_per_pass_and_reach_the_merge_context(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,

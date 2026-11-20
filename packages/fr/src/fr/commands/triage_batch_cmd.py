@@ -6265,7 +6265,7 @@ class _Driver:
         if decision.kind == "held":
             self._append(judgements, facts, batch, event)
             return f"{said}; held: its hand-backs since its dispatch are spent, it needs you", True
-        name, target, _ = self._hand_back_target(facts, batch, repo)
+        name, target = self._session_target(facts, batch, repo)
         if not self.adapter.carries(name):  # another driver's session
             return f"{said}; its session runs on {name}, which this driver lacks: left to that "\
                 "runner's driver", False  # fmt: skip
@@ -6326,7 +6326,7 @@ class _Driver:
         runner: Any = None
         status = "idle"
         if decision == "handback":
-            name, target, _ = self._hand_back_target(facts, batch, repo)
+            name, target = self._session_target(facts, batch, repo)
             if not self.adapter.carries(name):  # another driver's session
                 return self._said_once(
                     batch, action, "carries",
@@ -6459,11 +6459,17 @@ class _Driver:
         """Where a hand-back goes (conflict or red): the runner's name, the work item of
         the latest fresh conflict session since the dispatch, else the batch's own session,
         and the launch the batch would start a fresh one with."""
+        name, target = self._session_target(facts, batch, repo)
+        return name, target, self._launch(facts, batch, repo)
+
+    def _session_target(self, facts: Facts, batch: Batch, repo: str) -> tuple[str, Any]:
+        """`_hand_back_target` without the launch: a message to a session (a red or probed
+        hand-back) never starts one, so a batch with no model to launch with still gets
+        its hand-back."""
         from fr_dispatch.work_item import WorkItem
 
         last = last_dispatch(batch)
-        launch = self._launch(facts, batch, repo)
-        name = str(last.runner if last else launch.runner)
+        name = str(last.runner if last else self._launch(facts, batch, repo).runner)
         since = fresh_conflicts(batch, since_dispatch=True)
         target = WorkItem(
             id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False))
@@ -6472,7 +6478,7 @@ class _Driver:
             unit="run", workflow=batch_workflow(batch), repo=repo, parent=None, inputs=(),
             payload={"group": self.group_of(batch)}, tracking=None,
         )  # fmt: skip
-        return name, target, launch
+        return name, target
 
     def _hand_back(
         self,
