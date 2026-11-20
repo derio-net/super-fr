@@ -471,3 +471,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_or_first_draft_is_a_member_and_is_ready_when_green
     why: an approved draft is a queue member (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_commands.py#test_a_default_merge_holds_an_unlabelled_batch_and_merges_the_rest
+    why: renamed for the queue (R23)
