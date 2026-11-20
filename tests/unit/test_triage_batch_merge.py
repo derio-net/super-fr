@@ -281,7 +281,7 @@ def test_pr_checks_verdict_matches_live_checks(
         client=Forge(),  # type: ignore[arg-type]
         checkout=None,  # type: ignore[arg-type]
         repo="derio-net/super-fr", version=None, method="squash",
-        say=lambda line: None, ci_none=ci_none,
+        ci_none=ci_none,
     )  # fmt: skip
     direct = pr_checks_verdict(Forge(), "derio-net/super-fr", 7, ci_none=ci_none)  # type: ignore[arg-type]
     assert direct == live_checks(ctx, 7)

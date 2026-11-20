@@ -64,7 +64,7 @@ from fr.triage.model import (
     RedHandbackEvent,
 )
 from fr.triage.stage import Stage
-from fr.triage.views import drive_snapshot
+from fr.triage.views import drive_snapshot, queue_unconfigured
 
 BoardStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
 """One session's live state as the board shows it; `absent` when the runner holds none."""
@@ -168,6 +168,8 @@ HINT_AWAITING_APPROVAL = "awaiting approval"
 # A member the wave merge queue holds as an entry or a ready entry (wave-merge-queue R25).
 HINT_IN_MERGE_QUEUE = "in merge queue"
 HINT_MERGE_READY = "merge ready"
+# A ready PR of a repo whose `.fr/triage.yaml` has no `queue.ci`: the queue holds it.
+HINT_QUEUE_UNCONFIGURED = "queue held: add `queue: {ci: push}` to .fr/triage.yaml"
 
 
 def _idle_hint(idle: IdleSession, collected_at: str) -> str:
@@ -619,6 +621,7 @@ def _card(
     awaiting: frozenset[str] = frozenset(),
     queued: frozenset[str] = frozenset(),
     ready: frozenset[str] = frozenset(),
+    queue_held: Mapping[str, str] | None = None,
     ci_none: Collection[str] = (),
 ) -> Card:
     stop = stops.get(batch.id)
@@ -678,6 +681,8 @@ def _card(
         hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
     elif (batch.id in queued or batch.id in ready) and _conflicting(batch, facts):
         hint = CONFLICT_HINT  # R19: the queue still plans it; the card never says ready
+    elif (repo or "") in (queue_held or {}) and (batch.id in queued or batch.id in ready):
+        hint = HINT_QUEUE_UNCONFIGURED  # the queue holds this repo: never "merge ready"
     elif batch.id in queued:
         hint = HINT_IN_MERGE_QUEUE
     elif batch.id in ready:
@@ -794,6 +799,7 @@ def build_board(
     snapshot, plan = _default_plan(facts, judgements, ci_none)  # one plan per board (p1-r8)
     actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
     queued = _in_merge_queue(plan)
+    queue_held = queue_unconfigured(snapshot, facts)
     selected = default_selection(batches)
     live = _board_stops(batches, facts, stops or {}, ci_none)
     cards = [
@@ -811,6 +817,7 @@ def build_board(
             awaiting=awaiting,
             queued=queued,
             ready=plan.ready,
+            queue_held=queue_held,
             ci_none=ci_none,
         )
         for b in batches

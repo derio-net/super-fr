@@ -474,6 +474,7 @@ class RecordingQueue:
 
     world: World
     script: dict[int, Any] = {}
+    ports: Any = None  # the driver's ports, as the last pass built them: `entry_of` is a build's
 
     def __init__(self, ports: Any) -> None:
         self.ports = ports
@@ -492,6 +493,7 @@ class RecordingQueue:
         from fr.triage.wave_queue import QueueAction
 
         type(self).world.queue_plans.extend(plan.actions)
+        type(self).ports = self.ports
         # a planned write is an act, as the real executor's lines are (a pass that opened or
         # built a queue is not "nothing to do")
         lines: list[str] = [
@@ -524,7 +526,7 @@ class RecordingQueue:
 
 def _recording_queue(monkeypatch: pytest.MonkeyPatch, world: World) -> None:
     """Every pass of these tests plans the queue and a `RecordingQueue` records it."""
-    RecordingQueue.world, RecordingQueue.script = world, {}
+    RecordingQueue.world, RecordingQueue.script, RecordingQueue.ports = world, {}, None
     monkeypatch.setattr(triage_batch_cmd, "QueueExecutor", RecordingQueue)
     # a repo's queue config is the queue's own tests' subject: here every repo declares
     # `queue.ci: push`, so the queue is not refused and the pass plans it

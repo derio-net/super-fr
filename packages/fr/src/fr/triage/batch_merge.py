@@ -13,12 +13,11 @@ runs no process itself and tests drive it with fakes.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from fr.ghclient import MERGE_METHODS, BaseRules, GhClient
-from fr.triage.approval import PatchIdOf
+from fr.ghclient import MERGE_METHODS, GhClient
 from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
 from fr.triage.batch_drive import ChecksVerdict, checks_verdict
 from fr.triage.batch_version import (
@@ -59,22 +58,15 @@ class CheckoutSeam(Protocol):
 @dataclass
 class MergeContext:
     """What a forge write of the merge path runs in: the repo's client and clone, its
-    `version:` block, its merge method, and what the pass read of it (`ci none`, the base
-    branch's rules, the patch-id reader)."""
+    `version:` block, its merge method, and what the pass read of it (`ci none`)."""
 
     client: GhClient
     checkout: CheckoutSeam
     repo: str
     version: VersionBlock | None
     method: str
-    say: Callable[[str], None]
     # The repo declares `ci none` on its default branch (R4): green on non-draft alone.
     ci_none: bool = False
-    # The base branch's rules, read once per repo per pass (merge-train-safety §D, R12).
-    rules: BaseRules = field(default_factory=BaseRules)
-    # Reads a PR's patch-id at a head (spec 2026-11-19-wave-merge-queue R12): the approval
-    # gate compares it; None judges approvals by `reaches` alone.
-    patch_id_of: PatchIdOf | None = None
 
     @property
     def main(self) -> str:

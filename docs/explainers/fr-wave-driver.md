@@ -69,8 +69,10 @@ is true now, not from what it remembers. In order, a pass:
    through the wave merge queue. Per repo, the queue opens for the lowest wave that still
    has an unfinished batch, once the first pull request of that wave is ready. A pull
    request enters the queue only when it is open, its checks are green, and it carries
-   **your** `approved-fr` label. The driver marks nothing ready for you: it holds an
-   unapproved pull request as awaiting approval, and the queue goes on without it. Your
+   **your** `approved-fr` label. The driver marks nothing ready for you before you approve it: it holds an
+   unapproved pull request as awaiting approval, and the queue goes on without it. A pull
+   request you approved that is still a draft is marked ready by the driver when the queue
+   builds it. Your
    approval belongs to the pull request's own changes, not to one commit: a merge of the
    base branch or an empty commit keeps it. Other changes to its diff (even to spaces or to
    a binary file) void it and remove the label. One change does not: git compares the
@@ -90,6 +92,12 @@ is true now, not from what it remembers. In order, a pass:
     base branch requires a forge merge queue, or that has not said how its checks run on the
     combinations (`queue.ci` in `.fr/triage.yaml`), is held, and the driver says what to add.
     The driver never approves, and it never waits for CI inside a pass.
+
+    **When you upgrade:** the old driver merged a ready pull request in any repo. The queue
+    does not. A repo with no `queue:` block merges nothing, and the driver says so under
+    **Needs you now**. To restore merging, add `queue: {ci: push}` to `.fr/triage.yaml` and run
+    every workflow that reports a required check on pushes to `fr-queue/**`. A repo with no
+    CI at all takes `queue: {ci: none}`.
 
 3. **Closes out what merged.** Once the release commit that followed the merge has landed
    (or ten minutes have passed with none, for a pull request that releases nothing), the

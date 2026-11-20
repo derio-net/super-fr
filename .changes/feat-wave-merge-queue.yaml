@@ -1,2 +1,2 @@
-bump: minor
-summary: The wave driver merges through its own forge-independent merge queue
+bump: major
+summary: The wave driver now merges only through its own queue, so a repo must add a `queue:` block (`ci: push|none`) to .fr/triage.yaml or its driver holds every merge

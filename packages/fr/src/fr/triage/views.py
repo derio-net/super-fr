@@ -99,6 +99,28 @@ def collected(facts: Facts) -> datetime:
 # ------------------------------------------------------------- the driver's view
 
 
+QUEUE_CONFIG_NEED = (
+    "{repo} has open batch PRs and no `queue:` block in .fr/triage.yaml, so the driver merges "
+    "none of them: add `queue: {{ci: push}}` (and run the CI workflows that report required "
+    "checks on pushes to `fr-queue/**`), or `queue: {{ci: none}}` in a repo with no CI"
+)
+
+
+def queue_unconfigured(snap: Snapshot, facts: Facts) -> dict[str, str]:
+    """Each repo with a `pr-open` batch whose `.fr/triage.yaml` names no `queue.ci`: the
+    driver's queue refuses it and merges nothing (wave-merge-queue R7, R22), so the board
+    says so from the facts alone. Repo -> the one line to act on."""
+    out: dict[str, str] = {}
+    for b in snap.batches:
+        repo = snap.repos.get(b.id)
+        if repo is None or repo in out or snap.stages.get(b.id) != "pr-open":
+            continue
+        block = facts.config_for(repo).queue
+        if block is None or block.ci is None:
+            out[repo] = QUEUE_CONFIG_NEED.format(repo=repo)
+    return out
+
+
 def drive_snapshot(
     facts: Facts,
     judgements: Judgements,
@@ -184,6 +206,7 @@ class Need:
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr
     # | archive-conflict
+    # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -192,6 +215,7 @@ class Need:
 
 NEED_LABELS = {
     "approve-pr": "Label a green PR approved-fr",
+    "queue-unconfigured": "Repo has no merge queue config",
     "red-pr": "Red PR its session cannot fix",
     "failing-ci": "Failing CI",
     "foreign-pr": "Foreign PR on a batch branch",
@@ -283,6 +307,9 @@ def needs_you(
             else f"PR #{pr.number} is green: label it {APPROVED_FR.name} to merge"
         )
         out.append(Need("approve-pr", entry.batch.id, text, pr.url))
+
+    for held_repo, why in sorted(queue_unconfigured(snap, facts).items()):
+        out.append(Need("queue-unconfigured", held_repo, why, None))
 
     for action in plan.actions:
         if action.kind == "warn":

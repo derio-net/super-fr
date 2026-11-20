@@ -415,6 +415,8 @@ class Snapshot:
     queue_holds: Mapping[str, Hold | None] = field(default_factory=dict)
     queue_releases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     queue_slots: Mapping[str, SlotCheck] = field(default_factory=dict)
+    # Each queue repo's default branch name: an entry based on any other is refused.
+    queue_defaults: Mapping[str, str] = field(default_factory=dict)
     queue_conflicts: Mapping[str, BuildConflict] = field(default_factory=dict)
     queue_closeouts: Mapping[str, bool] = field(default_factory=dict)
     # repo -> its open housekeeping PRs (a DevOps stage's ops branch) whose `approved-fr` is
@@ -1647,7 +1649,7 @@ def queue_snapshot(
         approvals=snap.approvals, records=records,
         hold=snap.queue_holds.get(repo), hold_read=repo in snap.queue_holds,
         releases=snap.queue_releases.get(repo, ()), base=snap.bases.get(repo, ""),
-        slots=snap.queue_slots,
+        slots=snap.queue_slots, default=snap.queue_defaults.get(repo, ""),
         conflicts=snap.queue_conflicts, eligible=eligible, sessions=snap.session_status,
         head_changed=snap.head_changed, closeout_landed=closeout,
         others=tuple(OtherEntry(a.key, a.kind, a.pr.number, a.wave, a.at, a.batch) for a in mine),

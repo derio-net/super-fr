@@ -229,6 +229,7 @@ class QueueSnapshot:
     others: tuple[OtherEntry, ...] = ()  # the non-batch entries admitted this pass (R32)
     warned: frozenset[str] = frozenset()  # report keys said already
     scope_args: tuple[str, ...] = ()  # the drive's own scope arguments, for pasted commands
+    default: str = ""  # the repo's default branch; "": unread, no entry is base-checked
 
 
 @dataclass(frozen=True)
@@ -318,6 +319,16 @@ def _ready_at(batch: Batch, pr: LivePr) -> datetime | None:
     return None
 
 
+def base_refusal(pr: LivePr, qs: QueueSnapshot) -> str:
+    """Why *pr* is no entry of this queue for its base branch, "" when it is one. The queue
+    lands only onto the default branch; an unread default admits anything, and a PR whose
+    base was not read (an archive or close-out PR: the executor reads it) is not judged
+    here."""
+    if not qs.default or not pr.base or pr.base == qs.default:
+        return ""
+    return f"is based on {pr.base}, not {qs.default}"
+
+
 def _ready(batch: Batch, qs: QueueSnapshot) -> bool:
     """R3: open, a valid approval, its own head's checks green, and no pre-merge gate."""
     if qs.stages.get(batch.id) != "pr-open" or is_deferred(batch):
@@ -327,6 +338,8 @@ def _ready(batch: Batch, qs: QueueSnapshot) -> bool:
     pr = qs.live.get(batch.id)
     verdict = qs.approvals.get(batch.id)
     if pr is None or pr.state != "OPEN" or verdict is None or not is_approved(verdict):
+        return False
+    if base_refusal(pr, qs):
         return False
     return pr.checks == "green" and not pre_merge_held(pr.labels)
 
@@ -346,7 +359,10 @@ def _other_ready(o: OtherEntry, qs: QueueSnapshot) -> bool:
     """R3, R32: its trust rule admitted it (it is listed), its PR is open and its own
     head's checks are green."""
     pr = qs.live.get(o.key)
-    return pr is not None and pr.state == "OPEN" and pr.checks == "green"
+    return (
+        pr is not None and pr.state == "OPEN" and pr.checks == "green"
+        and not base_refusal(pr, qs)
+    )  # fmt: skip
 
 
 def _unfinished_waves(qs: QueueSnapshot) -> frozenset[int]:
@@ -1011,8 +1027,27 @@ def waits_on_queue(batch: Batch, stage: str | None, *, open_wave: int | None) ->
     return stage == "pr-open" and effective_wave(batch) != open_wave
 
 
+def _base_needs(qs: QueueSnapshot) -> tuple[QueueAction, ...]:
+    """A Need for each open entry PR the queue refuses for its base: it is never merged
+    and nothing else would say so."""
+    out = []
+    for key, pr in sorted(qs.live.items()):
+        why = base_refusal(pr, qs) if pr.state == "OPEN" else ""
+        if why:
+            out.append(QueueAction("queue-need", qs.repo,
+                                   f"PR #{pr.number} ({key}) {why}; the queue never merges it",
+                                   batch=key))  # fmt: skip
+    return tuple(out)
+
+
 def plan_queue(qs: QueueSnapshot) -> QueuePlan:
     """One pass of one repo's queue (§A)."""
+    plan = _plan_queue(qs)
+    needs = () if any(a.kind == "queue-held" for a in plan.actions) else _base_needs(qs)
+    return replace(plan, actions=(*plan.actions, *needs)) if needs else plan
+
+
+def _plan_queue(qs: QueueSnapshot) -> QueuePlan:
     held = _held(qs)
     if held is not None:
         return held

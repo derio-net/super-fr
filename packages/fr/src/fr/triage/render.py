@@ -864,8 +864,9 @@ def _batches(
     steps = planned_merge_order(judgements.batches, facts, judgements.issues)
     order = (
         '<div class="merge-plan"><p class="tier-desc">Planned merge order of the open batch '
-        "PRs, with the files each shares with a later step (a conflict forecast; <code>fr "
-        "triage batch merge</code> computes the final order).</p>"
+        "PRs, with the files each shares with a later step (a conflict forecast). The "
+        "merge queue lands entries in the order they became ready; this order only breaks "
+        "ties between entries ready together.</p>"
         f'<ol class="merge-order">{"".join(_merge_step(s) for s in steps)}</ol></div>'
         if steps
         else ""

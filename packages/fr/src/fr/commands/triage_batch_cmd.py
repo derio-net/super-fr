@@ -186,6 +186,7 @@ from fr.triage.batch_drive import (
     closeout_brief,
     closeout_due,
     closeout_event,
+    closeout_handback_decision,
     closeout_item_id,
     closeout_of,
     collected_candidate,
@@ -688,7 +689,11 @@ IssueOpt = Annotated[
 TitleOpt = Annotated[str | None, typer.Option("--title", help="One-line batch title.")]
 RationaleOpt = Annotated[str | None, typer.Option("--rationale", help="Why these belong together.")]
 OrderOpt = Annotated[
-    int | None, typer.Option("--order", help="Hard constraint on merge order (lower first).")
+    int | None,
+    typer.Option(
+        "--order",
+        help="Merge order among entries that are ready together (lower first); readiness comes first.",
+    ),
 ]
 WaveOpt = Annotated[
     int | None, typer.Option("--wave", help="Wave number; the driver dispatches lower waves first.")
@@ -4190,13 +4195,10 @@ class _Driver:
                 repo=repo,
                 version=facts.config_for(repo).version,
                 method=method,
-                say=lambda line: None,  # the driver prints one line per action itself
             )
         ctx = self._merge[repo]
         # Read each pass, as the pass's own verdict is: the context outlives a pass.
-        ctx.patch_id_of = self._patch_id_of(facts, repo)
         ctx.ci_none = self._ci_none(repo)
-        ctx.rules = self._base_rules(facts, repo)
         config = facts.config_for(repo)
         ctx.version = config.version
         try:  # the allowed methods were read at the build: no forge read here
@@ -4305,6 +4307,7 @@ class _Driver:
                     head_ref=e.pr.head_ref,
                     trusted=True,  # the queue holds `batch_pr`s only (gh#936)
                     labels=tuple(str(n) for n in view.get("labels") or ()),
+                    base=str(view.get("base_ref") or ""),
                 )
             # Every landed batch, selected or not: adopting a finished close-out is
             # bookkeeping (gh#990). Only the selection is read further.
@@ -6366,9 +6369,19 @@ class _Driver:
                 return None
             try:
                 client = self.client(facts, repo)
+                view = client.pr_view(repo, live.number)
+                base = str(view.get("base_ref") or "")
+                default = self.checkout(repo).default_branch()
+                if base != default:  # the queue lands onto the default branch only
+                    self._report_once(
+                        f"queue-base\0{repo}\0{key}\0{base}",
+                        f"{repo}: PR #{live.number} ({key}) is based on "
+                        f"{base or 'an unknown branch'}, not {default}; the queue never merges it",
+                    )  # fmt: skip
+                    return None
                 if live.draft:  # a close-out's draft is readied once admitted (R15)
                     client.pr_ready(repo, live.number)
-                title = str(client.pr_view(repo, live.number).get("title") or f"{kind} {key}")
+                title = str(view.get("title") or f"{kind} {key}")
             except _GATE_WRITE_FAILURES:
                 return None
             return EntryInput(key=key, ref=QueueEntryRef(pr=live.number, kind=kind),  # type: ignore[arg-type]
@@ -6377,6 +6390,11 @@ class _Driver:
         pr = batch_pr(batch, facts)
         if pr is None:
             return None
+        if live.draft:  # an approved, green draft is readied when the queue builds it (R1)
+            try:
+                self.client(facts, repo).pr_ready(repo, live.number)
+            except _GATE_WRITE_FAILURES:
+                return None
         return EntryInput(key=key, ref=QueueEntryRef(batch=key), pr=pr.number, title=pr.title,
                           head=live.head, head_ref=live.head_ref or pr.head_ref,
                           bump=batch.bump)  # fmt: skip
@@ -6437,6 +6455,8 @@ class _Driver:
         judgements = load_judgements(self.target / "judgements.yaml")
         batch = next((b for b in judgements.batches if b.id == action.batch), None)
         live = self._queue_live.get(action.batch)
+        if batch is None and live is not None:
+            return self._queue_hand_back_other(action, facts, judgements, repo, live)
         if batch is None or live is None:
             return "no batch session to hand it back to"
         if action.reason == "conflict":
@@ -6450,6 +6470,42 @@ class _Driver:
                      red=True, checks=action.checks)  # fmt: skip
         line, _ = self._recover(red, facts)
         return line or "handed to the red recovery"
+
+    def _queue_hand_back_other(
+        self, action: QueueAction, facts: Facts, judgements: Judgements, repo: str, live: LivePr
+    ) -> str:
+        """R6, R13: an ejected `closeout#N` goes to the collected close-out's session (R27's
+        one `closeout_handback`, budget included) and an `archive#N` to the close-out session
+        of the archive's batch (merge-truth R12). Any other entry, or one with no session to
+        take it, is the operator's: said so."""
+        kind, _, _ = action.batch.partition("#")
+        conflict = action.reason == "conflict"
+        checks = ("merge conflict",) if conflict else action.checks
+        if kind == "closeout":
+            marker = next((c for c in judgements.closeouts if c.pr == live.number), None)
+            known = {b.id for b in judgements.batches}
+            members = tuple(m for m in (marker.members if marker else ()) if m in known)
+            if marker is None or not members:
+                return f"no close-out session to hand {action.batch} back to"
+            events = [e for b in judgements.batches if b.id in members for e in b.events]
+            decision = closeout_handback_decision(events, marker.item, action.head, marker.handed)
+            if decision != "handback":
+                return (f"{action.batch}'s one hand-back is spent or taken at "
+                        f"{action.head[:12]}: the operator's")  # fmt: skip
+            back = Action("closeout-handback", members[0], action.detail, pr=live.number,
+                          head=action.head, items=members, key=marker.item,
+                          checks=checks)  # fmt: skip
+            line, _ = self._closeout_hand_back(back, facts, judgements, repo)
+            return line
+        admitted = self._queue_admitted.get(action.batch)
+        if kind == "archive" and conflict and admitted is not None and admitted.batch:
+            owner = next((b for b in judgements.batches if b.id == admitted.batch), None)
+            if owner is not None:
+                back = Action("archive-conflict", owner.id, action.detail, pr=live.number,
+                              head=action.head, branch=live.head_ref)  # fmt: skip
+                line, _ = self._archive_conflict(back, facts, judgements, owner, repo)
+                return line
+        return f"no session to hand {action.batch} back to: the operator's"
 
     def _queue_records(self, judgements: Judgements, repo: str) -> list[QueueRecord]:
         """This scope's queue records of *repo*, oldest first: the slot leases' history."""
@@ -6522,6 +6578,7 @@ class _Driver:
         skipped = set(skip)
         queues: dict[str, Any] = {}
         bases: dict[str, str] = {}
+        defaults: dict[str, str] = {}
         slots: dict[str, Any] = {}
         holds: dict[str, Hold | None] = {}
         releases: dict[str, tuple[str, ...]] = {}
@@ -6534,6 +6591,7 @@ class _Driver:
                 checkout = self._fetched_reader(repo)
                 default = checkout.default_branch()
                 bases[repo] = checkout.rev_parse(f"origin/{default}")
+                defaults[repo] = default
             except (GitError, TriageError):
                 continue
             record = self._queue_record(judgements, repo)
@@ -6566,6 +6624,7 @@ class _Driver:
             "queue_holds": holds,
             "queue_releases": releases,
             "bases": bases,
+            "queue_defaults": defaults,
         }
 
     def _housekeeping_reads(
