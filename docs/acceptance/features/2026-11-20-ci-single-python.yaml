@@ -63,10 +63,11 @@ rows:
     - spec:2026-11-20-ci-single-python#R8
     levels:
       unit:
-      - super-fr:tests/unit/test_acceptance_scaffold_publish.py
-      - super-fr:tests/unit/test_acceptance_services.py
+      - super-fr:tests/unit/test_acceptance_scaffold_publish.py#test_published_render_matches_the_golden
+      - super-fr:tests/unit/test_acceptance_services.py#TestGoldenRenders::test_debt_on_matches_the_golden
     status: ci
-    notes: Scaffold goldens pin python:3.14
+    notes: Golden comparisons pin the python:3.14 image byte for byte (test_published_render_matches_the_golden,
+      TestGoldenRenders::test_debt_on_matches_the_golden).
     verify: none
 amendments:
   - row: ci-coverage-newest-leg
