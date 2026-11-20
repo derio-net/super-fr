@@ -483,3 +483,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_commands.py#test_a_default_merge_holds_an_unlabelled_batch_and_queues_the_rest
     why: batch merge drives the queue (R23)
+  - row: batch-merge-skip-held
+    op: reword
+    base: 0
+    acceptance: fr triage batch merge with no ids skips batches another scope holds,
+      naming each, and queues the rest; naming a held batch still refuses.
+    why: batch merge drives the wave merge queue (R23)
