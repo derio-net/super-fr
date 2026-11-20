@@ -97,9 +97,11 @@ rows:
       its later reads fail as a transient failure
     origin:
     - spec:2026-11-19-batch-train-truth#R19
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_fetched_reader.py#test_a_failed_fetch_is_made_once_and_every_read_raises_the_same_error
+    status: ci
+    notes: 'CI: fetch counted on a fake checkout that fails'
   - id: swap-labels-retry-converges
     capability: The label swap retry is correct whatever gh's resolution order
     acceptance: A refused label swap that applied part of its change, followed by the
