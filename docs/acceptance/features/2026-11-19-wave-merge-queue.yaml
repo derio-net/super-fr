@@ -453,3 +453,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_queue
     why: the queue's version of the unapproved member test (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_green_draft_is_readied_then_merged
+    why: a draft is readied when the queue builds it, not merged by a pass (R22)
