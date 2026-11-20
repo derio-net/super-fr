@@ -68,6 +68,8 @@ GATED: dict[str, str] = {
         "_Driver.forge_off(labels) on the marker's repo",
     "fr/src/fr/triage/approval.py::settle_approvals":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
+    "fr/src/fr/triage/approval.py::settle_entry_approval":
+        "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::ensure_approval_label": "_labels_off: client_policy(labels)",
     "fr/src/fr/triage/claim_writes.py::_add_label":
         "reached only from claim/refresh, after _gate (quiet_block: labels, comments)",

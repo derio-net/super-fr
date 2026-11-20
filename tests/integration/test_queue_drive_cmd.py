@@ -317,6 +317,22 @@ def test_with_no_post_merge_the_queue_lands_on_without_a_pause(
     assert not log.exists()
 
 
+def _closed_out_by_hand(tmp_path: Path) -> None:
+    """Both batches carry a finished close-out (`archived`), so their wave owes none (R15)."""
+    path = tmp_path / "judgements.yaml"
+    text = path.read_text("utf-8")
+    for bid in ("b1", "b2"):
+        marker = f"branch: feat/batch-{bid}}}\n"
+        assert marker in text
+        text = text.replace(
+            marker,
+            marker + "      - {kind: closeout, at: 2026-10-01T12:00:00Z, runner: hand, handle: h, "
+            "archived: 900}\n",
+            1,
+        )
+    path.write_text(text, "utf-8")
+
+
 def test_the_drive_holds_the_repos_releases_open_then_drained(
     tmp_path: Path, queue: tuple[Origin, QueueWorld, Path]
 ) -> None:
@@ -324,6 +340,7 @@ def test_the_drive_holds_the_repos_releases_open_then_drained(
     it: `open` on the base the queue opened on, `drained` with the drained main as parent
     once the last entry landed, with no re-arm in between."""
     origin, _, _ = queue
+    _closed_out_by_hand(tmp_path)  # R15: a wave drains once its close-out landed
     base = origin.sha("refs/heads/main")
     first = _passes(tmp_path, 1)
     hold = origin.sha("refs/heads/fr-hold/queue")

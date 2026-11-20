@@ -64,7 +64,7 @@ def test_a_conflicting_pr_never_reads_merge_ready() -> None:
     f, jd = _open(_cursor("none"), labels=["approved-fr"], mergeable="CONFLICTING")
     card = build_board(f, jd, {}).card("a")
     assert card.hint == CONFLICT_HINT
-    assert CONFLICT_HINT == "conflicting — the driver updates it or hands it back"
+    assert CONFLICT_HINT == "conflicting — the queue ejects it and hands it back to its session"
 
 
 def test_a_blocked_pr_still_reads_merge_ready() -> None:
@@ -73,11 +73,12 @@ def test_a_blocked_pr_still_reads_merge_ready() -> None:
     assert build_board(f, jd, {}).card("a").hint == "merge ready"
 
 
-def test_the_merge_train_still_plans_the_merge_for_a_conflicting_pr() -> None:
-    from fr.triage.kanban import first_actions
+def test_the_pass_still_counts_a_conflicting_pr_ready_for_the_queue() -> None:
+    from fr.triage.kanban import _default_plan
 
     f, jd = _open(_cursor("none"), labels=["approved-fr"], mergeable="CONFLICTING")
-    assert first_actions(f, jd)["a"].kind == "merge"
+    _, plan = _default_plan(f, jd)
+    assert "a" in plan.ready  # the queue meets the conflict at build and hands it back (R6)
 
 
 # ----------------------------------------------------------------- R17 columns
@@ -237,19 +238,8 @@ def test_p5_r6_the_reason_names_every_held_gate_and_what_is_owed() -> None:
     assert "walk" in reason
 
 
-@pytest.mark.parametrize("kind", ["merge", "enqueue"])
-def test_p5_r7_the_conflicting_hint_replaces_merge_and_enqueue(
-    kind: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from fr.triage import kanban
-    from fr.triage.batch_drive import Action
-
-    f, jd = _open(_cursor("none"), mergeable="CONFLICTING")
-    monkeypatch.setattr(
-        kanban,
-        "_first_actions",
-        lambda plan: {"a": Action(kind, "a", "", pr=11)},  # type: ignore[arg-type]
-    )
+def test_p5_r7_the_conflicting_hint_replaces_merge_ready() -> None:
+    f, jd = _open(_cursor("none"), labels=["approved-fr"], mergeable="CONFLICTING")
     assert build_board(f, jd, {}).card("a").hint == CONFLICT_HINT
 
 
@@ -267,10 +257,11 @@ def test_p3_r9_a_pr_held_by_gate_devops_is_awaiting_devops_on_the_board() -> Non
 
 
 def test_p3_r9_a_passed_devops_gate_merges_as_before() -> None:
-    from fr.triage.kanban import first_actions
 
     f, jd = _open(_cursor("none"), labels=["approved-fr", "gate:devops", "gate:devops-passed"])
-    assert _col(f, jd) == "pr-open" and first_actions(f, jd)["a"].kind == "merge"
+    from fr.triage.kanban import _default_plan
+
+    assert _col(f, jd) == "pr-open" and "a" in _default_plan(f, jd)[1].ready
 
 
 # ------------------------------- gate-labelled merged PRs outside batches (gate-backfill R13)

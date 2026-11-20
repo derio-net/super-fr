@@ -403,7 +403,8 @@ class Snapshot:
     collected_pushed: frozenset[str] = frozenset()
     collected_reopened: Mapping[str, LivePr] = field(default_factory=dict)
     # The wave merge queue (spec 2026-11-19-wave-merge-queue §A): repo -> its `queue:`
-    # config for every repo the queue drives (its train is not walked), the queue records,
+    # config for every repo the queue drives (all of them: the one merge path, R22), the
+    # queue records,
     # each repo's hold, each combination's checks by sha, the conflicts the executor met
     # building an entry, each open wave's close-out (repo -> landed; absent: none), each
     # batch's last head change and its session's status. `bases` gives `main` now. The
@@ -529,6 +530,9 @@ class Pass:
     # The pr-open batches with no valid `approved-fr` approval: held, never a queue entry
     # (merge-train-safety §A); the board reads them for its "label it approved" lane.
     awaiting: frozenset[str] = frozenset()
+    # The pr-open batches ready for the queue: open, green, approved and held by no gate. The
+    # board says "merge ready" for them, with no queue plan of its own to read.
+    ready: frozenset[str] = frozenset()
     # The non-batch PRs this pass admitted to a repo's queue (R32), by `entry_key`, with the
     # PR as read: the command's executor builds them like any entry.
     admitted: Mapping[str, Admitted] = field(default_factory=dict)
@@ -1489,7 +1493,7 @@ def _dispatch_key(batch: Batch) -> tuple[int, int, int, int, str]:
 
 def _member_reports(
     entries: Sequence[QueueEntry], snap: Snapshot
-) -> tuple[list[Action], list[str]]:
+) -> tuple[list[Action], list[str], list[str]]:
     """What the pass says about a repo's pr-open batches before the queue takes them (the
     reports the retired merge train made, R22): a failing PR is a red `warn` for the red
     recovery, wherever it sits; one with no valid approval is *awaiting* it, said by the
@@ -1498,6 +1502,7 @@ def _member_reports(
     takes the rest: it plans no merge here."""
     actions: list[Action] = []
     awaiting: list[str] = []
+    ready: list[str] = []
     for entry in entries:
         bid = entry.batch.id
         pr = snap.live.get(bid)
@@ -1520,7 +1525,10 @@ def _member_reports(
         if pre_merge_held(pr.labels):  # fr-ops R14: the DevOps stage merges it
             awaiting.append(bid)
             actions.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
-    return actions, awaiting
+            continue
+        if pr.checks == "green":
+            ready.append(bid)
+    return actions, awaiting, ready
 
 
 def _claim_actions(snap: Snapshot) -> list[Action]:
@@ -1718,10 +1726,12 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue
         by_repo.setdefault(snap.repos.get(bid, ""), []).append(entry)
     awaiting: list[str] = []
+    ready_members: list[str] = []
     for repo in sorted(by_repo):
-        reports, waits = _member_reports(by_repo[repo], snap)
+        reports, waits, ok = _member_reports(by_repo[repo], snap)
         actions.extend(reports)
         awaiting.extend(waits)
+        ready_members.extend(ok)
     admitted: list[Admitted] = []
 
     # 2. Close out. Recording a close-out that has already finished starts nothing and
@@ -2023,6 +2033,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             gated=gated,
         ),
         awaiting=frozenset(awaiting),
+        ready=frozenset(ready_members),
         admitted={a.key: a for a in admitted},
         held_by=tuple(held_by),
         queues=tuple(queues),

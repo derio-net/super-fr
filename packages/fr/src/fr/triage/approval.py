@@ -151,7 +151,7 @@ def reaches(events: Sequence[BatchEvent], pr: int, start: str, head: str) -> boo
 
 
 def is_approved(verdict: ApprovalVerdict) -> bool:
-    """`Approved` or `First`: a train member fr may merge once it is green (§A "The walk")."""
+    """`Approved` or `First`: a queue member once it is green (§A "The walk"; R3)."""
     return isinstance(verdict, Approved | First)
 
 

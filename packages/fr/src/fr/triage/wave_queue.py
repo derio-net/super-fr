@@ -870,9 +870,35 @@ def _tail(
         actions.append(drained)
     elif (need := _stall_need(record, qs, entries)) is not None:
         actions.append(need)
+    elif (need := _closeout_need(record, qs, entries)) is not None:
+        actions.append(need)
     actions.extend(_ejected_other_needs(record, rep, qs))
     return QueuePlan(qs.repo, "open", record.wave, tuple(actions), tuple(entries),
                      tuple(waiting))  # fmt: skip
+
+
+def _closeout_need(
+    record: QueueRecord, qs: QueueSnapshot, entries: Sequence[str]
+) -> QueueAction | None:
+    """R15, R30: every batch of the open wave is terminal and nothing is left to land, but the
+    wave's close-out has not landed, and the queue has done nothing for `stall_hours`: its
+    drain waits on a session or a PR only the operator can move, so the driver says so. Never a
+    write."""
+    wave = record.wave
+    if wave is None or entries or qs.closeout_landed is not False or not record.events:
+        return None
+    mine = [b for b in qs.batches if effective_wave(b) == wave]
+    if not all(is_terminal(b, qs.stages.get(b.id)) for b in mine):
+        return None
+    last = max(e.at for e in record.events)
+    if qs.now - last < timedelta(hours=qs.config.stall_hours):
+        return None
+    return QueueAction(
+        "queue-need", qs.repo, f"{qs.repo}'s queue for wave {wave} has landed every batch and "
+        f"waits on the wave's close-out, which has not landed for {qs.config.stall_hours} h: "
+        "see its collected close-out PR and session under Needs you now, or "
+        "`fr triage batch closeout --yes` for a batch it held; the hold stays open until it "
+        "lands", wave=wave)  # fmt: skip
 
 
 def _ejected_other_needs(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> list[QueueAction]:

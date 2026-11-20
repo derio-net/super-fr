@@ -3911,7 +3911,7 @@ class _Driver:
         self._rules: dict[str, BaseRules] = {}  # per pass: repo -> its base branch's rules
         self._unknown_said: set[str] = set()  # per pass: repos whose hold was said (R13)
         self._held = 0  # per pass: planned dispatches that did not start
-        # per pass: repo -> the conflicts its train met, (batch, refused paths) in order
+        # per pass: repo -> the conflicts its queue handed back, (batch, refused paths) in order
         self._conflicts: dict[str, list[tuple[str, tuple[str, ...]]]] = {}
         self._clients: dict[str, GhClient] = {}
         self._policies: dict[str, RepoPolicy] = {}  # per pass: repo -> its forge policy (R9)

@@ -200,10 +200,8 @@ def test_every_action_kind_has_a_phrase() -> None:
     ("kind", "phrase"),
     [
         ("dispatch", "dispatch next"),
-        ("merge", "merge ready"),
         ("warn", "CI failing"),
         ("closeout", "close-out due"),
-        ("archive", "archive PR ready to merge"),
         ("held", "held by the in-flight cap"),
         ("adopt", "close-out found; the drive records it"),
         ("foreign", "foreign PR on its branch"),

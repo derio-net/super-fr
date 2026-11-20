@@ -163,10 +163,11 @@ HINT_REVIEW = "awaiting review"
 HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
-# A green train member without a valid `approved-fr` label (merge-train-safety R5).
+# A green member without a valid `approved-fr` label, so no queue entry (merge-train-safety R5).
 HINT_AWAITING_APPROVAL = "awaiting approval"
-# A member the base's merge queue already holds (merge-train-safety R13).
+# A member the wave merge queue holds as an entry or a ready entry (wave-merge-queue R25).
 HINT_IN_MERGE_QUEUE = "in merge queue"
+HINT_MERGE_READY = "merge ready"
 
 
 def _idle_hint(idle: IdleSession, collected_at: str) -> str:
@@ -479,7 +480,7 @@ def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
 def awaiting_approval(
     facts: Facts, judgements: Judgements, ci_none: Collection[str] = ()
 ) -> frozenset[str]:
-    """The green train members the driver holds for the operator's `approved-fr` label
+    """The green members the driver holds for the operator's `approved-fr` label
     (`Pass.awaiting`, merge-train-safety R5); a pending one still reads `CI pending`."""
     return _awaiting(*_default_plan(facts, judgements, ci_none))
 
@@ -617,6 +618,7 @@ def _card(
     notes: Mapping[str, str] | None = None,
     awaiting: frozenset[str] = frozenset(),
     queued: frozenset[str] = frozenset(),
+    ready: frozenset[str] = frozenset(),
     ci_none: Collection[str] = (),
 ) -> Card:
     stop = stops.get(batch.id)
@@ -674,10 +676,12 @@ def _card(
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
         hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
-    elif batch.id in queued and _conflicting(batch, facts):
+    elif (batch.id in queued or batch.id in ready) and _conflicting(batch, facts):
         hint = CONFLICT_HINT  # R19: the queue still plans it; the card never says ready
     elif batch.id in queued:
         hint = HINT_IN_MERGE_QUEUE
+    elif batch.id in ready:
+        hint = HINT_MERGE_READY
     elif batch.id in awaiting:
         hint = HINT_AWAITING_APPROVAL
     else:
@@ -806,6 +810,7 @@ def build_board(
             notes=notes,
             awaiting=awaiting,
             queued=queued,
+            ready=plan.ready,
             ci_none=ci_none,
         )
         for b in batches

@@ -7,7 +7,7 @@ unapproved PR.
 
 from __future__ import annotations
 
-CONFLICT_HINT = "conflicting — the driver updates it or hands it back"
+CONFLICT_HINT = "conflicting — the queue ejects it and hands it back to its session"
 
 
 def conflicting(mergeable: str | None, merge_state: str | None) -> bool:

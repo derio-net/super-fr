@@ -939,8 +939,9 @@ def test_a_refused_cleared_write_under_release_none_is_a_need() -> None:
 def _other(kind: str, n: int, *, wave: int | None = None, at: str = AT, batch: str = "") -> Any:
     from fr.triage.wave_queue import OtherEntry
 
-    return OtherEntry(key=f"{kind}#{n}", kind=kind, pr=n, wave=wave,  # type: ignore[arg-type]
-                      at=datetime.fromisoformat(at.replace("Z", "+00:00")), batch=batch)  # fmt: skip
+    when = datetime.fromisoformat(at.replace("Z", "+00:00"))
+    return OtherEntry(key=f"{kind}#{n}", kind=kind, pr=n, wave=wave, at=when,  # type: ignore[arg-type]
+                      batch=batch)  # fmt: skip
 
 
 def _o(kind: str, n: int, **kw: Any) -> tuple[Any, dict[str, LivePr]]:
@@ -1033,3 +1034,18 @@ def test_an_other_entry_ejected_at_its_head_is_a_need_and_stays_out_until_its_he
 
     moved = replace(snap, live={entry.key: _live(9, "head-new")})
     assert _one(plan_queue(moved), "queue-build").entries == ("closeout#9",)
+
+
+def test_a_wave_waiting_only_on_its_closeout_past_stall_hours_is_a_need() -> None:
+    rec = _record(_open("2026-11-20T03:00:00Z"), _built(1, "s1", "a", at="2026-11-20T03:30:00Z"),
+                  _land("s1", "a", at="2026-11-20T04:00:00Z"))  # fmt: skip
+    hold = Hold(state="open", scope=ME, wave=1, parent=MAIN)
+    snap = _qs([_batch("a", 1)], {"a": "merged"}, records=(rec,), hold=hold, base="s1",
+               live={}, closeout_landed=False)  # fmt: skip
+    plan = plan_queue(snap)  # last landing 8 h ago, stall_hours is 4
+    need = _one(plan, "queue-need")
+    assert "waits on the wave's close-out" in need.detail and "queue-drain" not in _kinds(plan)
+    from dataclasses import replace
+
+    fresh = replace(snap, now=datetime(2026, 11, 20, 5, 0, tzinfo=UTC))
+    assert "queue-need" not in _kinds(plan_queue(fresh))  # an hour in: still its time
