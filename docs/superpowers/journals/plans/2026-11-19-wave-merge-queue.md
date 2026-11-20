@@ -373,3 +373,103 @@ build was written once against the refactored batch_merge.unresolvable (split ou
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 land_push, land_merge and read_back share Landing/LandResult from the start; the refusal wording lives in one refusal_reason; nothing duplicated
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-11-20T13:25:52+00:00 phase=3 -->
+### p3-review-1 · review · Phase 3 review — nine in-scope findings fixed, one out-of-scope refuted (phase 3)
+
+An independent reviewer read the executor diff (df23637..feede7110) against R1–R36. It confirmed the
+lease design (main leased on the tested base, each PR head on its recorded head, main moved to the
+tested sha), --atomic with no fallback, the squash chain, post_merge once per landing, the two land:push
+crash windows, and glab/tea held. It raised p3-r1..p3-r9 (in) and p3-r10 (out). Fixes are
+fc8ec0c82..45344b0c7, adding schema-13 events queue_halt and queue_slot_lost (spec R11, R24).
+The full suite after the fixes: 17043 passed, 1 failed, 122 skipped; the one failure,
+tests/integration/test_scenarios.py::test_placement_move_and_drift (fr placement move refused over an
+uncommitted fixture file under its own tmp HOME), passes alone (rerun by the orchestrator: 1 passed)
+and this round touched no placement code: a flake under load. deliver's full suite re-checks it.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-halt-needs-operator-retry created=2026-11-20T13:25:52+00:00 phase=3 -->
+### p3-halt-needs-operator-retry · discovery · no command clears a queue_halt; phase 7's operator verbs should add an explicit retry (phase 3)
+
+A halt lifts only when queue.land changes or the default branch moves, so an operator who fixes a
+ruleset or an "up to date" rule has nothing to act with. Phase 7 (defer/requeue and the operator view)
+adds an explicit retry verb that records the halt as lifted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · land:merge stops and land:push holds were never persisted, so the next pass landed again and R34 never reached Needs you (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · land:merge with a version block always failed the tree check after merging every PR (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · resume recorded an unrecorded landing only when main equalled a combination sha, wedging the queue (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · a landed PR still reading OPEN had its approval voided and approved-fr removed (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · the command-level executor wiring had no test through fr triage batch drive (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · the push tripwire allowlisted the generic Checkout.push_leased with no caller pin (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · the landing did not enforce that the tip fast-forwards main (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · slot leases read ls-remote at build time and resume re-pushed over a detected writer (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · rebase replay with --no-merges silently dropped content living only in a PR's merge commits (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-11-20T13:25:52+00:00 phase=3 state=open review_scope=out -->
+### p3-r10 · finding [open] (reviewer: out of scope) · origins facts compared against FACTS_SCHEMA by equality, possibly stranded by the facts bump (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: land:merge stops and land:push holds were never persisted, so the next pass landed again and R34 never reached Needs you (phase 3)
+
+_land records queue_halt on held/stopped; the planner's live_halt/_halted turn the plan into one queue-need (Needs you) and nothing builds or lands until queue.land changes or main moves; tests in test_queue_resume.py and test_wave_queue_planner.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: land:merge with a version block always failed the tree check after merging every PR (phase 3)
+
+queue_refusal refuses land:merge with a version block, naming both and suggesting queue.land push; spec R11 says so; test_queue_exec.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: resume recorded an unrecorded landing only when main equalled a combination sha, wedging the queue (phase 3)
+
+_resume_landing records the deepest recorded combination that is an ancestor of main (push) or reads the PRs back from the forge (merge), halting on an untested tree; tests for a foreign move after an unrecorded push and kills mid and after forge merges.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: a landed PR still reading OPEN had its approval voided and approved-fr removed (phase 3)
+
+queue_landed gives the landed batches; settle_approvals and pr_open_queue skip them; tests in test_triage_approval.py and test_queue_drive_cmd.py (fails without the wiring).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: the command-level executor wiring had no test through fr triage batch drive (phase 3)
+
+new tests/integration/test_queue_drive_cmd.py drives the real command over a real bare origin; build, one-push landing, post_merge once, resume after a killed driver, the failure mapping and no-post_merge landing.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: the push tripwire allowlisted the generic Checkout.push_leased with no caller pin (phase 3)
+
+test_tripwire_product_push.py pins every push_leased caller by module and function and atomic=True only in land_push, with a scanner self-test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: the landing did not enforce that the tip fast-forwards main (phase 3)
+
+land_push holds unless the bottom parent is the base and base is an ancestor of the tip, persisted as a halt; tests in test_queue_land.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: slot leases read ls-remote at build time and resume re-pushed over a detected writer (phase 3)
+
+slot_leases gives the last recorded sha per slot; builds lease on it; a lost lease is recorded as queue_slot_lost and resume never re-pushes over it; tests in test_queue_resume.py, test_queue_build.py and the planner.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: rebase replay with --no-merges silently dropped content living only in a PR's merge commits (phase 3)
+
+_keeps_merge_content compares the replayed tree with a plain merge and ejects with "rebase would drop content from its merge commits"; real evil-merge test in test_queue_build.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-11-20T13:25:52+00:00 phase=3 state=refuted resolves=p3-r10 -->
+### p3-r10-resolved · finding [refuted] · resolves p3-r10: origins facts compared against FACTS_SCHEMA by equality, possibly stranded by the facts bump (phase 3)
+
+origins.py:311 compares against origins.py's own FACTS_SCHEMA = 1 (line 74, the origins-facts.json stamp), not fr.triage.model.FACTS_SCHEMA, which origins never imports; the bump to 16 leaves cached origins facts readable.
