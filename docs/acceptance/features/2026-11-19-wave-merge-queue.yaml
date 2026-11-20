@@ -238,3 +238,9 @@ amendments:
       within a file keeps the approval.'
     why: 'p1-r1 review: git patch-id is position-blind within a file, so the row no
       longer claims every diff change voids; p1-r2/r7 widen what keeps it.'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_moved_identical_hunk_keeps_the_patch_id
+    why: 'p1 review fix: evidence for the reworded row'
