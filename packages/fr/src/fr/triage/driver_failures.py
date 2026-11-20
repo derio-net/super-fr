@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
 
 from fr.ghclient import GhClient, ListingCapped
 from fr.labels import LabelDef
@@ -159,7 +158,7 @@ def file_failures(
     def one(cause: str, entry: Cause) -> None:
         number = _number(entry.issue) if entry.issue else None
         if entry.issue and entry.issue.startswith(f"{repo}#") and number is not None:
-            state = str(_view_state(client, repo, number))
+            state = _view_state(client, repo, number)
             if state == "CLOSED":
                 closed = entry.issue
                 if entry.count <= entry.filed_count:  # nothing since its filing (p1a-r3)
@@ -199,5 +198,5 @@ def file_failures(
     return out
 
 
-def _view_state(client: GhClient, repo: str, number: int) -> Any:
+def _view_state(client: GhClient, repo: str, number: int) -> str:
     return str(client.view_issue(repo, number).get("state", "")).upper()

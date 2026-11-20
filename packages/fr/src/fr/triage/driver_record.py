@@ -201,13 +201,17 @@ def save_record(state_dir: Path, record: DriverRecord) -> None:
     )
 
 
-def _current(state_dir: Path) -> DriverRecord:
-    """This process's record: the one on disk when this pid wrote it, else a fresh one
-    that keeps the supervisor's counts (a restarted child keeps its supervisor's record)."""
+def _old(state_dir: Path) -> DriverRecord | None:
+    """The record on disk, None when there is none or it cannot be read: it is rewritten."""
     try:
-        old = load_record(state_dir)
+        return load_record(state_dir)
     except TriageError:
-        old = None
+        return None
+
+
+def _current(old: DriverRecord | None) -> DriverRecord:
+    """This process's record: *old* (the one on disk) when this pid wrote it, else a fresh one
+    that keeps the supervisor's counts (a restarted child keeps its supervisor's record)."""
     pid = os.getpid()
     if old is None:
         return DriverRecord(pid=pid)
@@ -227,10 +231,7 @@ def record_supervisor(
     """The supervisor's view of its driver on `driver.yaml` (R13): who supervises, the restart
     count and the last crash. *child* is the driver's pid, None between a crash and the next
     start (the record keeps the dead one's)."""
-    try:
-        old = load_record(state_dir)
-    except TriageError:
-        old = None
+    old = _old(state_dir)
     pid = child if child is not None else (old.pid if old else 0)
     base = old if old is not None else DriverRecord(pid=pid)
     update: dict[str, object] = {
@@ -261,7 +262,7 @@ def record_start(state_dir: Path, now: datetime, supervisor: int | None) -> Driv
         update.update(restarts=0, last_crash=None, supervised_start=None)
     else:
         update["supervised_start"] = process_start(supervisor)
-    record = _current(state_dir).model_copy(update=update)
+    record = _current(_old(state_dir)).model_copy(update=update)
     save_record(state_dir, record)
     return record
 
@@ -280,13 +281,11 @@ def record_refusal(
     records its own, a crash loop, and leaves the driver's pid as the supervisor last wrote it."""
     refusal = LastRefusal(cause=cause, message=message, at=now, fr_version=fr_version,
                           resume=resume)  # fmt: skip
-    base = _current(state_dir)
+    old = _old(state_dir)
     if as_supervisor:
-        try:
-            old = load_record(state_dir)
-        except TriageError:
-            old = None
         base = old if old is not None else DriverRecord(pid=0)
+    else:
+        base = _current(old)
     record = base.model_copy(update={"last_refusal": refusal})
     save_record(state_dir, record)
     return record
@@ -295,7 +294,7 @@ def record_refusal(
 def record_pass(state_dir: Path, now: datetime) -> DriverRecord:
     """A pass that ended cleanly: its time, which a stopped driver's need is weighed
     against (a scope with no lease has no other record of it)."""
-    record = _current(state_dir)
+    record = _current(_old(state_dir))
     if record.started is None:
         record = record.model_copy(update={"started": now})
     record = record.model_copy(update={"last_pass": now})
