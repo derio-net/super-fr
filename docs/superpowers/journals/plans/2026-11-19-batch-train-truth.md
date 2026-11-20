@@ -254,3 +254,78 @@ status and log are small read-only commands sharing _status_tail; nothing to cle
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 _say became a thin wrapper of _emit, the one print-and-append seam; nothing left to fold
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2-a created=2026-11-20T03:01:25+00:00 phase=2 -->
+### review-phase-2-a · review · Phase 2 review: supervisor, drive_log, drive status/log, Activity panel (phase 2)
+
+Independent read-only review of `git diff 2829d71e7 7fc3bc303` against spec R11-R14, R22-R23. Seven findings, all in scope; checked fine: exit 2/3 not restarted, 129/130/143 and signal codes deliberate, supervisor never detaches, SupervisorGone not swallowed by the pass boundary, no click import, subprocess only in safe_spawn, no new forge write.
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r1 created=2026-11-20T03:01:25+00:00 phase=2 state=open review_scope=in -->
+### p2a-r1 · finding [open] (reviewer: in scope) · crash-loop stop is only ledgered and logged: no driver.yaml last_refusal, no board render, nothing printed, no failures-command pointer (R11/R8/R22) (phase 2)
+
+crash-loop stop is only ledgered and logged: no driver.yaml last_refusal, no board render, nothing printed, no failures-command pointer (R11/R8/R22)
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r2 created=2026-11-20T03:01:25+00:00 phase=2 state=open review_scope=in -->
+### p2a-r2 · finding [open] (reviewer: in scope) · drive status exits 0 on pid liveness alone when no lease exists; a reused pid reports a dead driver as running (R14) (phase 2)
+
+drive status exits 0 on pid liveness alone when no lease exists; a reused pid reports a dead driver as running (R14)
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r3 created=2026-11-20T03:01:25+00:00 phase=2 state=open review_scope=in -->
+### p2a-r3 · finding [open] (reviewer: in scope) · drive status says no driver holds the scope (exit 3) during restart backoff while the supervisor is alive (R14) (phase 2)
+
+drive status says no driver holds the scope (exit 3) during restart backoff while the supervisor is alive (R14)
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r4 created=2026-11-20T03:01:25+00:00 phase=2 state=open review_scope=in -->
+### p2a-r4 · finding [open] (reviewer: in scope) · DriveLog.append rotation is unlocked: driver and supervisor racing at the limit can replace drive.log.1 with a near-empty file (R22) (phase 2)
+
+DriveLog.append rotation is unlocked: driver and supervisor racing at the limit can replace drive.log.1 with a near-empty file (R22)
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r5 created=2026-11-20T03:01:25+00:00 phase=2 state=open review_scope=in -->
+### p2a-r5 · finding [open] (reviewer: in scope) · drive log -f loses lines appended between tail() and follow()'s end-seek; BrokenPipe not handled (R22) (phase 2)
+
+drive log -f loses lines appended between tail() and follow()'s end-seek; BrokenPipe not handled (R22)
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r6 created=2026-11-20T03:01:25+00:00 phase=2 state=open review_scope=in -->
+### p2a-r6 · finding [open] (reviewer: in scope) · the sixth crash is never ledgered as crash:<x> because the crash-loop branch returns first (R13) (phase 2)
+
+the sixth crash is never ledgered as crash:<x> because the crash-loop branch returns first (R13)
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r7 created=2026-11-20T03:01:25+00:00 phase=2 state=open review_scope=in -->
+### p2a-r7 · finding [open] (reviewer: in scope) · tests lack real-driver 130/SIGHUP cases, concurrent append and rotation races, crash-loop last_refusal, and status with no lease plus a live unrelated pid (phase 2)
+
+tests lack real-driver 130/SIGHUP cases, concurrent append and rotation races, crash-loop last_refusal, and status with no lease plus a live unrelated pid
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r1-resolved created=2026-11-20T03:01:25+00:00 phase=2 state=fixed resolves=p2a-r1 -->
+### p2a-r1-resolved · finding [fixed] · resolves p2a-r1: crash-loop stop is only ledgered and logged: no driver.yaml last_refusal, no board render, nothing printed, no failures-command pointer (R11/R8/R22) (phase 2)
+
+Supervisor records last_refusal via record_refusal(..., as_supervisor=True), renders the board once from disk (on_refusal callback, no forge reads), and prints every line (incl. the resume command and the `fr triage drive failures --file --yes` pointer) to stderr as well as drive.log; the crash-loop integration test asserts all three. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r2-resolved created=2026-11-20T03:01:25+00:00 phase=2 state=fixed resolves=p2a-r2 -->
+### p2a-r2-resolved · finding [fixed] · resolves p2a-r2: drive status exits 0 on pid liveness alone when no lease exists; a reused pid reports a dead driver as running (R14) (phase 2)
+
+driver.yaml records pid_start/supervised_start (fr.safe_spawn.process_start); drive status requires the live start time to match, and trusts a record without one only under a live lease of this host. Tests: unrelated live pid with no lease exits 3, matching start exits 0. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r3-resolved created=2026-11-20T03:01:25+00:00 phase=2 state=fixed resolves=p2a-r3 -->
+### p2a-r3-resolved · finding [fixed] · resolves p2a-r3: drive status says no driver holds the scope (exit 3) during restart backoff while the supervisor is alive (R14) (phase 2)
+
+A dead child with a live, start-matched supervisor reports 'supervisor alive, driver restarting', exit 0; match and mismatch tested. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r4-resolved created=2026-11-20T03:01:25+00:00 phase=2 state=fixed resolves=p2a-r4 -->
+### p2a-r4-resolved · finding [fixed] · resolves p2a-r4: DriveLog.append rotation is unlocked: driver and supervisor racing at the limit can replace drive.log.1 with a near-empty file (R22) (phase 2)
+
+Size check, rotation and write run under fcntl.flock on drive.log.lock with a re-stat under the lock; tail takes a shared lock; concurrent-appender test asserts drive.log.1 is never a near-empty replacement and no line is torn. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r5-resolved created=2026-11-20T03:01:25+00:00 phase=2 state=fixed resolves=p2a-r5 -->
+### p2a-r5-resolved · finding [fixed] · resolves p2a-r5: drive log -f loses lines appended between tail() and follow()'s end-seek; BrokenPipe not handled (R22) (phase 2)
+
+DriveLog.follow(tail=N) takes tail and follow offset from one read, drains the old file across a rotation, and ends quietly on BrokenPipeError; tests cover each. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r6-resolved created=2026-11-20T03:01:25+00:00 phase=2 state=fixed resolves=p2a-r6 -->
+### p2a-r6-resolved · finding [fixed] · resolves p2a-r6: the sixth crash is never ledgered as crash:<x> because the crash-loop branch returns first (R13) (phase 2)
+
+The final crash is ledgered as crash:<x> before the crash-loop refusal; pinned count is now 6. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p2a-r7-resolved created=2026-11-20T03:01:25+00:00 phase=2 state=fixed resolves=p2a-r7 -->
+### p2a-r7-resolved · finding [fixed] · resolves p2a-r7: tests lack real-driver 130/SIGHUP cases, concurrent append and rotation races, crash-loop last_refusal, and status with no lease plus a live unrelated pid (phase 2)
+
+Added tests: real `batch drive --supervised-by` exiting 130 read as Stop(130) with the lease released, SupervisorGone releasing the lease, SIGHUP stop without restart, real process-start read, plus the r1-r5 tests. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
