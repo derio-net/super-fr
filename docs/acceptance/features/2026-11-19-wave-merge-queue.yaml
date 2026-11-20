@@ -567,3 +567,10 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_approval.py#test_a_housekeeping_approval_is_voided_when_the_diff_changes_and_the_label_is_removed
     why: a non-batch entry's approval is judged by the same rule (R12, R32)
+  - row: merge-train-label-gate
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_wave_queue_phase5_fixes.py#test_p5_r1_an_approved_green_draft_batch_pr_is_readied_when_the_queue_builds_it
+    why: an approved green draft batch PR is readied when the queue builds it, for both
+      land methods (phase 5 fix p5-r1)
