@@ -72,8 +72,8 @@ is true now, not from what it remembers. In order, a pass:
    **your** `approved-fr` label. The driver marks an approved draft ready first; it holds an
    unapproved one as awaiting approval, and the train goes on past it. Your approval
    belongs to the pull request's own changes, not to one commit: a merge of the base branch
-   or an empty commit keeps it, and any change to its diff (even to spaces or to a binary
-   file) voids it and removes the label.
+   or an empty commit keeps it, as does an update the driver pushes itself. Any other
+   change to its diff (even to spaces or to a binary file) voids it and removes the label.
 
     The driver pins the merge to the head whose checks it judged, so it leaves a head that
     moved since for the next pass. It updates a pull request that has fallen behind its base,

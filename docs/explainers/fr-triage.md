@@ -151,7 +151,7 @@ may run at the same time; a batch names the wave it belongs to, or the batch it 
 `after`. The driver merges ready pull requests one after another in a fixed order (a merge
 train), closes out what has landed, and dispatches what may start. Merging a batch
 pull request needs the operator's `approved-fr` label, which holds while the pull
-request's own diff stays the same. The driver never approves its own work.
+request's own diff stays the same (or changes only by the driver's own update). The driver never approves its own work.
 
 `fr triage batches` draws `batches.html`, a Kanban of every batch by lifecycle column. It has
 four "Needs you" lanes (developer, reviewer, tester, devops), which the board decides from
