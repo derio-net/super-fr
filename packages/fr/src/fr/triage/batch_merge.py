@@ -637,13 +637,14 @@ def merge_main(
     return conflicted, (_unresolvable(version, main, wt, conflicted) if conflicted else [])
 
 
-def _clear_scratch(checkout: CheckoutSeam, where: Path) -> str | None:
+def _clear_scratch(checkout: CheckoutSeam, where: Path, *, added: bool = False) -> str | None:
     """Remove the probe's scratch worktree at *where* and its registration. A removal git
     refuses falls back to deleting the directory (a probe's worktree never holds operator
     work), then `git worktree prune` forgets it, so a registration whose directory is gone
-    never blocks the next `worktree add` there. Why it is still there, else None."""
+    never blocks the next `worktree add` there. *added*: this probe added it, so it is
+    removed even when its directory is not there to see. Why it is still there, else None."""
     failed: str | None = None
-    if where.exists():
+    if added or where.exists():
         try:
             checkout.remove_worktree(where)  # which prunes too
             return None
@@ -686,7 +687,8 @@ def trial_conflicts(
         return refused
     finally:
         try:  # cleanup never masks what is in flight, and never skips the temp root
-            left = _clear_scratch(checkout, where) if wt is not None or where.exists() else None
+            added = wt is not None
+            left = _clear_scratch(checkout, where, added=added) if added or where.exists() else None
             if left is not None and warn is not None:
                 warn(f"the conflict probe's scratch worktree {where} was not removed: {left}")
         finally:
