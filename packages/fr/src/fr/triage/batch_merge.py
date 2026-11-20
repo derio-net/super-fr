@@ -565,21 +565,32 @@ def _update_message(
 
 
 def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) -> list[str]:
-    """The conflicted paths merge may NOT resolve by taking main's side, and
-    whether a relock must regenerate a lockfile it did take (spec §3.F step 3).
+    """`unresolvable` for an update: the worktree's HEAD is the PR side, merging main."""
+    return unresolvable(ctx.version, wt.show, wt.merge_base(ctx.main), "HEAD", conflicted)
 
-    `git checkout --theirs` replaces the WHOLE file, so a declared version file
-    is taken only when the PR's own change to it, from the merge base, is the
+
+def unresolvable(
+    version: VersionBlock | None,
+    show: Callable[[str, str], str | None],
+    base: str,
+    side: str,
+    conflicted: list[str],
+) -> list[str]:
+    """The conflicted paths a merge may NOT resolve by taking the other side's file, and
+    whether a relock must regenerate a lockfile it did take (spec §3.F step 3). *side* is
+    the PR's ref and *base* the merge base; *show* reads a file at a ref.
+
+    `git checkout --theirs` (or `--ours`) replaces the WHOLE file, so a declared version
+    file is taken only when the PR's own change to it, from the merge base, is the
     version and nothing else (review r3-f2): then `set` re-applies the slot and
     nothing the PR wrote is lost. A lockfile the PR changed further is taken
     only when a `relock` is declared to regenerate it from the manifests.
-    Everything else is a real conflict.
+    Everything else is a real conflict. The wave merge queue builds by the same rule
+    (spec 2026-11-19-wave-merge-queue R6).
     """
-    version = ctx.version
     if version is None:
         return list(conflicted)
-    base = wt.merge_base(ctx.main)
-    old_text, new_text = wt.show(base, version.source.file), wt.show("HEAD", version.source.file)
+    old_text, new_text = show(base, version.source.file), show(side, version.source.file)
     if old_text is None or new_text is None:
         return list(conflicted)
     old, new = read_source(old_text, version.source), read_source(new_text, version.source)
@@ -588,7 +599,7 @@ def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) ->
         if not all_version_files([path], version.files):
             out.append(path)
             continue
-        before, after = wt.show(base, path), wt.show("HEAD", path)
+        before, after = show(base, path), show(side, path)
         if (
             before is not None
             and after is not None

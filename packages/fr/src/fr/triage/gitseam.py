@@ -24,6 +24,7 @@ import re
 import shlex
 import stat
 import subprocess
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
@@ -360,6 +361,20 @@ def push_ref_cas(cwd: Path, remote: str, sha: str, ref: str, *, expected_old: st
             return False
         raise PushRefusedError(str(exc)) from exc
     return True
+
+
+class LeaseLostError(GitError):  # noqa: N818 - a lost race, beside PushRefusedError
+    """A leased push found a ref the remote holds at another sha than the lease named
+    (git's `(stale info)`): another writer moved it. With `--atomic` no ref moved."""
+
+
+class AtomicUnsupportedError(GitError):  # noqa: N818 - a refusal of the server's
+    """The remote does not support `git push --atomic` (spec 2026-11-19-wave-merge-queue
+    R10, R22): nothing was pushed, and there is no non-atomic fallback."""
+
+
+_NO_ATOMIC = "does not support --atomic"
+"""git's own words when the receiving end advertises no `atomic` capability."""
 
 
 def tree_files(cwd: Path, sha: str) -> list[tuple[str, str, str]]:
@@ -812,6 +827,66 @@ class Checkout:
         git(["update-ref", "refs/remotes/origin/main", "HEAD"], dest)
         git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], dest)
 
+    # ------------------------------------------------ the wave merge queue
+
+    def push_leased(
+        self,
+        refspecs: Sequence[tuple[str, str]],
+        leases: Mapping[str, str | None],
+        *,
+        atomic: bool,
+    ) -> None:
+        """Push each `(sha, ref)` of *refspecs* to origin, every ref leased on the sha
+        *leases* names for it (None: the ref must not exist yet), as ONE push; *atomic*
+        makes it all or nothing (spec 2026-11-19-wave-merge-queue R4, R10).
+
+        A lease the remote's ref no longer matches raises `LeaseLostError`; a remote that
+        cannot push atomically `AtomicUnsupportedError`; any other refusal (a protection
+        rule, a hook, a permission) `PushRefusedError` with git's own words, which carry
+        the remote's (a GitHub `GH006` or `GH013`, say)."""
+        if not refspecs:
+            return
+        argv = ["push", "--quiet", "--no-verify", *(["--atomic"] if atomic else [])]
+        for _sha, ref in refspecs:
+            argv.append(f"--force-with-lease={ref}:{leases.get(ref) or ''}")
+        argv += ["origin", *(f"{sha}:{ref}" for sha, ref in refspecs)]
+        try:
+            git(argv, self.path)
+        except GitError as exc:
+            words = str(exc)
+            if _NO_ATOMIC in words:
+                raise AtomicUnsupportedError(words) from exc
+            if _STALE_LEASE in words:
+                raise LeaseLostError(words) from exc
+            raise PushRefusedError(words) from exc
+
+    def remote_sha(self, ref: str) -> str | None:
+        """The sha origin holds at the fully qualified *ref* now, None when none."""
+        return remote_ref(self.path, "origin", ref)
+
+    def tree_of(self, rev: str) -> str:
+        """The tree *rev* holds (`<rev>^{tree}`)."""
+        return git(["rev-parse", f"{rev}^{{tree}}"], self.path).strip()
+
+    def has_commit(self, sha: str) -> bool:
+        return has_commit(self.path, sha)
+
+    def merge_base(self, one: str, two: str) -> str:
+        return git(["merge-base", one, two], self.path).strip()
+
+    def parents(self, sha: str) -> tuple[str, ...]:
+        """*sha*'s parents, first parent first."""
+        return tuple(git(["rev-list", "--parents", "-1", sha], self.path).split()[1:])
+
+    def message(self, sha: str) -> str:
+        """*sha*'s full commit message."""
+        return git(["log", "-1", "--format=%B", sha], self.path).rstrip("\n")
+
+    def replayed(self, base: str, head: str) -> tuple[str, ...]:
+        """The non-merge commits of *base*..*head*, oldest first: what a rebase replays."""
+        return tuple(git(["rev-list", "--reverse", "--no-merges", f"{base}..{head}"],
+                         self.path).split())  # fmt: skip
+
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).
 
@@ -919,6 +994,16 @@ class Worktree:
         Never `git add --all`: `set` / `relock` may leave build output behind,
         and anything untracked would ride into another run's PR (review r3-f7).
         """
+        self.stage(version_files)
+        merging = git_ok(["rev-parse", "-q", "--verify", "MERGE_HEAD"], self.path)
+        if not merging and git_ok(["diff", "--cached", "--quiet"], self.path):
+            return None
+        git(["commit", "--no-verify", "-m", message], self.path)
+        return git(["rev-parse", "HEAD"], self.path).strip()
+
+    def stage(self, version_files: Sequence[str]) -> None:
+        """Stage tracked changes plus untracked files matching the declared
+        *version_files* globs, never anything else (review r3-f7)."""
         git(["add", "--update"], self.path)
         untracked = git(["ls-files", "-z", "--others", "--exclude-standard"], self.path)
         declared = [
@@ -928,11 +1013,60 @@ class Worktree:
         ]
         if declared:
             git(["add", "--", *declared], self.path)
-        merging = git_ok(["rev-parse", "-q", "--verify", "MERGE_HEAD"], self.path)
-        if not merging and git_ok(["diff", "--cached", "--quiet"], self.path):
-            return None
-        git(["commit", "--no-verify", "-m", message], self.path)
-        return git(["rev-parse", "HEAD"], self.path).strip()
+
+    # ------------------------------------ the wave merge queue's combinations
+
+    def take_ours(self, paths: list[str]) -> None:
+        """Resolve *paths* to the side being built on (HEAD), so no file keeps conflict
+        markers: the combination's, when a queue entry is merged into it."""
+        git(["checkout", "--ours", "--", *paths], self.path)
+        git(["add", "--", *paths], self.path)
+
+    def write_tree(self) -> str:
+        """The tree the index holds now."""
+        return git(["write-tree"], self.path).strip()
+
+    def commit_tree(
+        self, tree: str, parents: Sequence[str], message: str, *, date: str | None = None
+    ) -> str:
+        """A commit of *tree* on *parents* with *message* (the clone's identity), written
+        without touching HEAD; *date* (`@<epoch> +0000`) pins both its dates."""
+        argv = ["commit-tree", tree, "-m", message]
+        for parent in parents:
+            argv += ["-p", parent]
+        env = {"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date} if date else None
+        out: str = _run(["git", *argv], self.path, env=env, timeout=GIT_TIMEOUT_SECONDS)
+        return out.strip()
+
+    def commit_date(self, sha: str) -> int:
+        """*sha*'s committer time, in seconds since the epoch."""
+        return int(git(["log", "-1", "--format=%ct", sha], self.path).strip())
+
+    def cherry_pick(self, sha: str) -> list[str]:
+        """Replay *sha* onto HEAD, committing it; the conflicted paths ([] if none), with
+        the pick left in progress for `continue_pick` or `abort_pick`. rerere is off, as
+        for `merge`."""
+        argv = ["-c", "rerere.enabled=false", "-c", "merge.directoryRenames=false",
+                "cherry-pick", "--allow-empty", "--keep-redundant-commits", sha]  # fmt: skip
+        clean = git_ok(argv, self.path)
+        conflicted = git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
+        if not clean and not conflicted:
+            raise GitError(f"`git cherry-pick {sha}` failed in {self.path} without a conflict")
+        return conflicted
+
+    def continue_pick(self) -> None:
+        git(["-c", "core.editor=true", "cherry-pick", "--continue"], self.path)
+
+    def abort_pick(self) -> None:
+        git_ok(["cherry-pick", "--abort"], self.path)
+
+    def amend(self, version_files: Sequence[str]) -> str:
+        """Fold the staged and tracked changes (and *version_files*) into HEAD, keeping its
+        message; the new HEAD."""
+        self.stage(version_files)
+        git(["commit", "--no-verify", "--quiet", "--amend", "--no-edit", "--allow-empty"],
+            self.path)  # fmt: skip
+        return self.head()
 
     def commit_paths(self, paths: list[str], message: str) -> str | None:
         """Stage exactly *paths* (directories included, untracked files under them too)
