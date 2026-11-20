@@ -473,3 +473,66 @@ _keeps_merge_content compares the replayed tree with a plain merge and ejects wi
 ### p3-r10-resolved · finding [refuted] · resolves p3-r10: origins facts compared against FACTS_SCHEMA by equality, possibly stranded by the facts bump (phase 3)
 
 origins.py:311 compares against origins.py's own FACTS_SCHEMA = 1 (line 74, the origins-facts.json stamp), not fr.triage.model.FACTS_SCHEMA, which origins never imports; the bump to 16 leaves cached origins facts readable.
+
+<!-- fr:journal kind=decision scope=plan id=p4-hold-record-first created=2026-11-20T14:32:32+00:00 phase=4 -->
+### p4-hold-record-first · decision · The queue records queue_open and queue_drain before pushing the hold, and the planner repairs either crash window (phase 4) (phase 4)
+
+queue_open and queue_drain are recorded first, then the leased hold push follows. An open queue
+whose hold push failed or never ran has no hold, which R27's re-arm repairs on the next pass.
+A drain recorded whose `drained` push never ran leaves our `open` hold with a drained record:
+`_after_drain` plans a `queue-drain` again, which re-pushes the hold and records nothing twice.
+Before recording an open the executor reads the hold and opens nothing under another scope's.
+
+<!-- fr:journal kind=decision scope=plan id=p4-hold-refresh-hourly created=2026-11-20T14:32:32+00:00 phase=4 -->
+### p4-hold-refresh-hourly · decision · An open hold is refreshed once it is an hour old, not on every pass (phase 4) (phase 4)
+
+R17 says the driver refreshes the hold each pass. Every push to fr-hold/** starts a release.yml
+run (R19), so a refresh per drive pass would start a run a minute. The planner emits
+`queue-hold` (refresh) once `refreshed` is HOLD_REFRESH_AFTER (1 hour) old, well inside R18's
+24 hours. A departure from the letter of R17, not its purpose.
+
+<!-- fr:journal kind=decision scope=plan id=p4-hold-read-gates-the-rules created=2026-11-20T14:32:32+00:00 phase=4 -->
+### p4-hold-read-gates-the-rules · decision · Hold rules apply only to a snapshot that read the hold (QueueSnapshot.hold_read) (phase 4) (phase 4)
+
+None cannot mean both "absent" and "not read". `hold_read` (the Snapshot's `queue_holds` carries
+a key per repo it read) switches on the re-arm, refresh and drained-clear rules, so a pass that
+could not read the hold (said once) writes none of them and the existing planner tests, which
+pass no hold, are unchanged. A ref that is no hold message reads as an open hold of scope
+`unreadable`: it holds the queue and every release until someone clears it.
+
+<!-- fr:journal kind=decision scope=plan id=p4-version-run-held-exits-nonzero created=2026-11-20T14:32:32+00:00 phase=4 -->
+### p4-version-run-held-exits-nonzero · decision · A held --version run exits non-zero, printing the clear command and the re-dispatch (phase 4) (phase 4)
+
+R18 says a `--version` run is held too and prints how to clear the hold by hand. No later run
+carries the override, so, like a superseded one, it exits non-zero (EXIT_REFUSED) and names
+`git push origin --delete fr-hold/queue` and `gh workflow run release.yml -f version=X`.
+A run without the override that is held exits 0 and, in the job graph, reports cut=false.
+
+<!-- fr:journal kind=decision scope=plan id=p4-clear-after-every-finished-run created=2026-11-20T14:32:32+00:00 phase=4 -->
+### p4-clear-after-every-finished-run · decision · release.py clears a drained hold after publish, and after any run that cuts nothing (phase 4) (phase 4)
+
+`_finish_and_clear` is the last step of publish (the push landed or was already there) and of
+the prepare/no-cut path, including "no pending fragments" and "nothing installable": a drain
+with only docs would otherwise stay drained until the operator cleared it. The clear is
+`--force-with-lease=<ref>:<drained sha>` of a `cleared` commit on the drained main's tree, and
+only when the run's HEAD contains the hold's parent. A superseded or failed run never reaches it.
+Fetching the hold is credential-free; a failed fetch other than "no such ref" refuses the run.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-fr-release-status-reads-the-hold-too created=2026-11-20T14:32:32+00:00 phase=4 -->
+### p4-fr-release-status-reads-the-hold-too · discovery · fr release status (the forge path) also reads the hold from origin (phase 4) (phase 4)
+
+`--from-json` takes the hold from release.py's facts; the plain command reads it with
+`read_hold` over this checkout, so an operator sees the same verdict. The JSON stays schema 1
+with two additive keys, `held` and `warnings`, which release.py's reader ignores.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-stale-wave-exclusive-ref created=2026-11-20T14:32:32+00:00 phase=4 -->
+### p4-stale-wave-exclusive-ref · discovery · The wave-queue-wave-exclusive row cited a test phase 2's review renamed (phase 4) (phase 4)
+
+`fr acceptance check` named the old test name as unresolved; repointed to
+test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry. The check still
+reports the git-answers-cached, scenario-tier and fast-tier rows of main (behind main).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-20T14:32:32+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+the hold read and write went into queue_exec once (read_hold, push_hold, _hold_write); open, refresh, re-arm, drain and clear all share them, so nothing was duplicated to clean
