@@ -387,3 +387,10 @@ amendments:
     notes: 'retired by spec 2026-11-19-wave-merge-queue R22: every pass prints a queue
       line per repo instead (R25); the summary still counts queued entries (test_summary_line_adds_queued_between_closing_and_blocked)'
     why: R22 removes the merge train and its line
+  - row: merge-train-queue
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: fr never enqueues; a base
+      requiring a forge merge queue is queue-held with the reason (tests/unit/test_triage_batch_drive_cmd.py#test_a_repo_whose_base_requires_a_forge_merge_queue_is_held_with_the_reason,
+      scenario merge-train-queue.sh)'
+    why: R22 removes the forge merge-queue mode
