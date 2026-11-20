@@ -82,8 +82,9 @@ from fr.commands.triage_cmd import (
     rate_limit_reason,
     resolve_state_dir,
 )
-from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
+from fr.commands.triage_cmd import fail as _fail
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
+from fr.commands.triage_kanban_cmd import probe_item, try_load
 from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, QueueState, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.isolation.adopt import (
@@ -243,10 +244,10 @@ from fr.triage.claims import stale as claim_stale
 from fr.triage.components import page
 from fr.triage.cursor import read_cursor
 from fr.triage.dedupe import candidates
-from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
+from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify, unexpected
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
-from fr.triage.drive_log import DriveLog
+from fr.triage.drive_log import TRACEBACK_FILE, DriveLog, append_traceback
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.driver_record import (
     FAILURES_COMMAND,
@@ -6182,14 +6183,24 @@ class _Driver:
         at, so the board shows it as needing you (#1008)."""
         if failed:
             self.failed_write = True
-        key = f"{batch.id}\0{action.head}\0{exc}"
         if not isinstance(exc, HeadMovedError):
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
             record_stop(self.target, batch.id, MergeStop(action.head, str(exc), stamp))
+        # a stop's cause is its reason: another reason at the same head is another stop
+        return self._once(
+            f"stop\0{batch.id}\0{action.head}\0{exc}",
+            f"stopped: {exc}",
+            again=f"stopped again at {action.head[:12]} (reported above)",
+        )
+
+    def _once(self, key: str, line: str, *, again: str = "") -> str:
+        """*line* the first time *key* (a kind, the batch, the head and a stable cause, never
+        a message that varies) is seen by this driver, else *again*: a pass that decides
+        nothing new says nothing new (§C)."""
         if key in self.reported:
-            return f"stopped again at {action.head[:12]} (reported above)"
+            return again
         self.reported.add(key)
-        return f"stopped: {exc}"
+        return line
 
     # ------------------------------------------------- conflict hand-back (§G)
 
@@ -6252,7 +6263,7 @@ class _Driver:
             if paths is None:
                 paths = trial_conflicts(
                     checkout, main, facts.config_for(repo).version, action.head,
-                    scratch_root=self.target / "probe",
+                    scratch_root=self.target / "probe", warn=self._probe_cleanup_failed,
                 )  # fmt: skip
                 self._probed[key] = paths
         except (GitError, TriageError) as exc:
@@ -6394,22 +6405,20 @@ class _Driver:
         assert name is not None  # a hand-back needs a session, and a session needs a runner
         return self._red_hand_back(action, facts, judgements, batch, repo, name, target, runner)
 
+    def _probe_cleanup_failed(self, why: str) -> None:
+        """A probe's scratch worktree the cleanup could not clear: said once per driver."""
+        if self._once("probe-cleanup", why):
+            err_console.print(f"[yellow]warning:[/yellow] {escape(why)}", soft_wrap=True)
+            _log("transient", why)
+
     def _probe_said(self, batch: Batch, action: Action, cause: str, line: str) -> str:
-        """A probe's whole *line* the first time this (batch, head, cause) is seen, else ""."""
-        key = f"probe\0{batch.id}\0{action.head}\0{cause}"
-        if key in self.reported:
-            return ""
-        self.reported.add(key)
-        return line
+        """A probe's whole *line*, once per (batch, head, *cause*)."""
+        return self._once(f"probe\0{batch.id}\0{action.head}\0{cause}", line)
 
     def _said_once(self, batch: Batch, action: Action, cause: str, why: str) -> str:
-        """The red warn line with *why*, the first time this (batch, head, cause) is seen,
-        else "": a pass that decides nothing new says nothing (§C)."""
-        key = f"red\0{batch.id}\0{action.head}\0{cause}\0{why}"
-        if key in self.reported:
-            return ""
-        self.reported.add(key)
-        return f"{action.detail}; {why}"
+        """The red warn line with *why*, once per (batch, head, *cause*): *why* may carry an
+        error's text, which is no part of the key."""
+        return self._once(f"red\0{batch.id}\0{action.head}\0{cause}", f"{action.detail}; {why}")
 
     @staticmethod
     def _red_event(action: Action, batch: Batch, delivered: str) -> RedHandbackEvent:
@@ -7738,10 +7747,12 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
         except Exception as exc:  # noqa: BLE001 - THE boundary: every failure is classified
             failure = classify(exc)
             if once or not driver.yes:  # R6: today's exit code, from the carried code
-                if failure.message and not failure.said:
-                    _error(failure.message)
                 if driver.yes:
                     _ledger_failure(driver, failure)
+                if unexpected(failure) is not None:
+                    raise  # an fr bug: its traceback and exit 1, as before the boundary
+                if failure.message and not failure.said:
+                    _error(failure.message)
                 return LoopEnd(failure.code)
             failed += 1
             if isinstance(failure, TransientPassFailure) and failed >= MAX_FAILED_PASSES:
@@ -7757,17 +7768,19 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
                 return LoopEnd(failure.code)
             _ledger_failure(driver, failure)
             wait = backoff(interval, failed)
+            kept = keep_traceback(driver.target, failure)
             if failure.cause not in driver.read_failures:
                 driver.read_failures.add(failure.cause)
                 shown = failure.message and not failure.said
                 said = f"{escape(failure.message)} " if shown else ""
+                where = f"; its traceback: {escape(str(kept))}" if kept is not None else ""
                 err_console.print(
                     f"[yellow]warning:[/yellow] {said}({failure.cause}); the pass ended, "
-                    f"its state kept; the next pass in {wait}s",
+                    f"its state kept; the next pass in {wait}s{where}",
                     soft_wrap=True,
                 )
                 _log("transient", f"{failure.message} ({failure.cause}); the pass ended, "
-                     f"the next pass in {wait}s")  # fmt: skip
+                     f"the next pass in {wait}s{where}")  # fmt: skip
             if driver.restart_to is not None:
                 return LoopEnd(0, driver.restart_to)
             _wait(wait)
@@ -7776,6 +7789,27 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
 def _error(message: str) -> None:
     err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
     _log("refusal", message)
+
+
+_TRACEBACKS_KEPT: set[tuple[Path, str]] = set()
+"""The (state directory, cause) pairs whose traceback this process already kept."""
+
+
+def keep_traceback(target: Path, failure: DriverRefusal | TransientPassFailure) -> Path | None:
+    """An unexpected failure's traceback, appended to `drive-tracebacks.log` in *target* once
+    per cause per process (a looping driver, and the cloud pass, have no other trace of an fr
+    bug); the file's path, else None. Like the log, it is never a reason to fail."""
+    original = unexpected(failure)
+    if original is None:
+        return None
+    path = target / TRACEBACK_FILE
+    if (target, failure.cause) not in _TRACEBACKS_KEPT:
+        try:
+            path = append_traceback(target, failure.cause, original, _now())
+        except OSError:
+            return None
+        _TRACEBACKS_KEPT.add((target, failure.cause))
+    return path
 
 
 def _ledger(driver: _Driver, kind: FailureKind, cause: str, message: str, exc: str) -> None:
@@ -7859,6 +7893,8 @@ def _stop(
         _report_read_failure(driver, f"the driver record: {err}", "not recorded")
     if refusal.message and not refusal.said:
         _error(refusal.message)
+    elif refusal.message:  # printed where it was raised, so only the log is owed it
+        _log("refusal", refusal.message)
     driver._write_board()
     err_console.print(
         f"[red]driver stopped[/red] ({refusal.cause}); resume: {escape(refusal.resume)}; "

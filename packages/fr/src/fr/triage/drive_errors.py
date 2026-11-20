@@ -104,7 +104,7 @@ TRANSIENTS: tuple[tuple[type[BaseException], str], ...] = (
     (VisibilityUnreadable, "visibility-unreadable"),
 )
 
-FAIL_HELPERS = frozenset({"_fail"})
+FAIL_HELPERS = frozenset({"_fail", "fail"})
 """The functions that only raise the `Exit` a caller asked for: never the one named."""
 
 _GIT_VALUE_OPTIONS = frozenset({"-C", "-c", "--git-dir", "--work-tree"})
@@ -114,7 +114,7 @@ def classify(exc: BaseException) -> DriverRefusal | TransientPassFailure:
     """*exc* as a refusal or a transient failure (R2-R4); an already classified one as is."""
     if isinstance(exc, DriverRefusal | TransientPassFailure):
         return exc
-    message = str(exc)
+    message = str(exc) or type(exc).__name__  # never an empty message (l-errors-r1)
     for transient, cause in TRANSIENTS:
         if isinstance(exc, transient):
             return TransientPassFailure(cause, message, original=exc)
@@ -124,9 +124,12 @@ def classify(exc: BaseException) -> DriverRefusal | TransientPassFailure:
     if isinstance(exc, PrivacyError):  # after VisibilityUnreadable, its transient subclass
         return DriverRefusal("privacy", message)
     if isinstance(exc, typer.Exit):  # its str() is the code: the text is `_fail`'s (p1a-r1)
-        cause = f"exit:{_raiser(exc.__traceback__)}"
-        text = str(getattr(exc, FAIL_MESSAGE, "") or "")
-        said = bool(text)  # `_fail` printed it as it raised
+        raiser = _raiser(exc.__traceback__)
+        cause = f"exit:{raiser}"
+        # `_fail` printed its text as it raised; a bare `Exit` is raised after its site
+        # printed its own reason, so the fallback (never an empty message) is not printed
+        text = str(getattr(exc, FAIL_MESSAGE, "") or "") or f"{raiser} exited {exc.exit_code}"
+        said = True
         if exc.exit_code == 2:
             return DriverRefusal(cause, text, said=said)
         return TransientPassFailure(cause, text, code=exc.exit_code, original=exc, said=said)
@@ -135,6 +138,14 @@ def classify(exc: BaseException) -> DriverRefusal | TransientPassFailure:
     if isinstance(exc, TriageError):
         return TransientPassFailure(f"triage:{type(exc).__name__}", message, original=exc)
     return TransientPassFailure(f"unexpected:{type(exc).__name__}", message, original=exc)
+
+
+def unexpected(failure: DriverRefusal | TransientPassFailure) -> BaseException | None:
+    """The original exception of an unexpected failure (an fr bug, `unexpected:<Class>`),
+    else None: a single pass re-raises it, so it keeps its traceback and exit 1 (R6)."""
+    if isinstance(failure, TransientPassFailure) and failure.cause.startswith("unexpected:"):
+        return failure.original
+    return None
 
 
 def _raiser(tb: TracebackType | None) -> str:

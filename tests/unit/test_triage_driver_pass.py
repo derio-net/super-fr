@@ -739,7 +739,7 @@ def test_sigterm_releases_the_host_drivers_lease_and_restores_the_handler(
     [
         (lambda: StateRefConflict("another writer moved the ref"), 2, "state-ref-conflict"),
         (lambda: StateRefPushRefused("the remote refused the push"), 2, "push-refused"),
-        (lambda: ValueError("an fr bug"), 2, "unexpected:ValueError"),
+        (lambda: ValueError("an fr bug"), 1, "unexpected:ValueError"),
         (
             lambda: triage_batch_cmd.ForgeReadError("the forge timed out", code=2),
             2,
@@ -773,7 +773,13 @@ def test_a_failed_pass_writes_its_outbox_and_exits_with_the_carried_code(
     result = _pass(state, outbox)
 
     assert result.exit_code == code, result.output
-    assert str(failure()) in " ".join(result.output.split())
+    if cause.startswith("unexpected:"):  # R6: an fr bug keeps its traceback and exit 1
+        from fr.triage.drive_log import TRACEBACK_FILE
+
+        assert isinstance(result.exception, ValueError)
+        assert "an fr bug" in (state / TRACEBACK_FILE).read_text()
+    else:
+        assert str(failure()) in " ".join(result.output.split())
     requests = json.loads(outbox.read_text())["requests"]
     assert [r["item"] for r in requests] == [
         "derio-net/super-fr/run/batch-b1",

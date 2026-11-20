@@ -12,6 +12,7 @@ from __future__ import annotations
 import fcntl
 import os
 import time
+import traceback
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -20,6 +21,9 @@ from typing import BinaryIO
 
 LOG_FILE = "drive.log"
 LOCK_FILE = "drive.log.lock"
+TRACEBACK_FILE = "drive-tracebacks.log"
+"""The tracebacks of a looping driver's unexpected failures, one per cause per process
+(host-local like `drive.log`, which keeps one line per entry and so cannot hold them)."""
 KINDS = ("pass", "action", "transient", "refusal", "restart", "stop")
 LIMIT_BYTES = 5 * 1024 * 1024
 FOLLOW_POLL_S = 1.0
@@ -147,3 +151,21 @@ class DriveLog:
         data = pending + chunk
         *whole, rest = data.split(b"\n")
         return [raw.decode("utf-8", errors="replace") for raw in whole], rest
+
+
+def append_traceback(state_dir: Path, cause: str, exc: BaseException, now: datetime) -> Path:
+    """Append *exc*'s formatted traceback under a `<ISO UTC> <cause>` heading to
+    `TRACEBACK_FILE` in *state_dir*; past the size limit the file is moved to `.1` first, as
+    `drive.log` is. The path written."""
+    path = state_dir / TRACEBACK_FILE
+    stamp = now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    text = f"{stamp} {cause}\n{''.join(traceback.format_exception(exc))}\n"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if path.stat().st_size > LIMIT_BYTES:
+            os.replace(path, state_dir / f"{TRACEBACK_FILE}.1")
+    except FileNotFoundError:
+        pass
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(text)
+    return path

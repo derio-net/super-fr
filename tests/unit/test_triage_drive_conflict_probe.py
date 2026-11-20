@@ -165,3 +165,86 @@ def test_a_leftover_dirty_probe_directory_is_discarded_and_the_probe_runs(
     (where / "stray.txt").write_text("a crashed probe left this\n")
     assert trial_conflicts(Checkout(repo), "main", None, head, scratch_root=root) == []
     assert _scratch_gone(repo, root)
+
+
+def test_a_registered_worktree_whose_directory_is_gone_does_not_block_the_next_probe(
+    tmp_path: Path,
+) -> None:
+    """l-errors-r6: a probe directory deleted without its registration (a removal that fell
+    back to deleting the directory, or a crash) is pruned, so the next probe still runs."""
+    import shutil
+
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    root = tmp_path / "probe"
+    where = root / f"probe-{head[:12]}"
+    Checkout(repo).add_worktree(where, head)
+    shutil.rmtree(where)  # the directory is gone, git still lists it
+    assert str(where) in _git(repo, "worktree", "list", "--porcelain")
+    assert trial_conflicts(Checkout(repo), "main", None, head, scratch_root=root) == []
+    assert _scratch_gone(repo, root)
+
+
+def test_a_failed_removal_falls_back_to_deleting_and_pruning_the_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    root = tmp_path / "probe"
+    clone = Checkout(repo)
+
+    def _fail(where: Path) -> None:
+        raise GitError("worktree remove failed")
+
+    monkeypatch.setattr(clone, "remove_worktree", _fail)
+    warned: list[str] = []
+    assert trial_conflicts(clone, "main", None, head, scratch_root=root, warn=warned.append) == []
+    assert _scratch_gone(repo, root), "the registration is pruned, not left behind"
+    assert warned == []  # the fallback cleared it: nothing is left to report
+
+
+def test_a_cleanup_that_cannot_clear_the_worktree_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    root = tmp_path / "probe"
+    clone = Checkout(repo)
+
+    def _fail(*args: object) -> None:
+        raise GitError("the clone is locked")
+
+    trial_conflicts(clone, "main", None, head, scratch_root=root)  # a first, clean probe
+    monkeypatch.setattr(clone, "remove_worktree", _fail)
+    monkeypatch.setattr(clone, "prune_worktrees", _fail)
+    warned: list[str] = []
+    trial_conflicts(clone, "main", None, head, scratch_root=root, warn=warned.append)
+    assert len(warned) == 1 and "the clone is locked" in warned[0]
+
+
+@pytest.mark.parametrize(("relock", "expected"), [("uv lock", []), (None, ["uv.lock"])])
+def test_a_lockfile_conflict_is_resolved_only_when_the_repo_relocks(
+    tmp_path: Path, relock: str | None, expected: list[str]
+) -> None:
+    """R17, under merge's own rules (`_unresolvable`): a lockfile the PR changed beyond the
+    version is regenerated from the manifests when a `relock` is declared, else conflicts."""
+    repo = _repo(tmp_path)
+    (repo / "uv.lock").write_text('[[package]]\nname = "dep"\nversion = "1.0"\n')
+    _git(repo, "add", "uv.lock")
+    _git(repo, "commit", "-qm", "lock")
+    _git(repo, "switch", "-qc", "pr")
+    (repo / "uv.lock").write_text('[[package]]\nname = "dep"\nversion = "1.1"\n')
+    _git(repo, "commit", "-qam", "pr relocks")
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "-q", "main")
+    (repo / "uv.lock").write_text('[[package]]\nname = "dep"\nversion = "2.0"\n')
+    _git(repo, "commit", "-qam", "main relocks")
+    block = VersionBlock(
+        source=VersionSource(file="pyproject.toml", key="project.version"),
+        files=["pyproject.toml", "uv.lock"],
+        set="true",
+        relock=relock,
+    )
+    root = tmp_path / "probe"
+    assert trial_conflicts(Checkout(repo), "main", block, head, scratch_root=root) == expected
+    assert _scratch_gone(repo, root)

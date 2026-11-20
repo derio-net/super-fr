@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fr.forgeapi import ForgeApi
 from fr.isolation.types import _home
-from fr.triage.errors import TriageError
+from fr.triage.errors import ConfigError, TriageError
 from fr.triage.gitseam import run_publish
 from fr.triage.model import Scope
 
@@ -120,10 +120,14 @@ def load_durable(state_dir: Path) -> ScopeDurable:
     if not path.exists():
         return ScopeDurable()
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:  # a read that may heal: no verdict on the config
+        raise TriageError(f"{path}: cannot read {SCOPE_DURABLE_FILE}: {exc}") from exc
+    try:
+        data = yaml.safe_load(text)
         return ScopeDurable.model_validate({} if data is None else data)
-    except (OSError, yaml.YAMLError, ValidationError) as exc:
-        raise TriageError(f"{path}: invalid {SCOPE_DURABLE_FILE}: {exc}") from exc
+    except (yaml.YAMLError, ValidationError) as exc:  # only its owner fixes it (R2)
+        raise ConfigError(f"{path}: invalid {SCOPE_DURABLE_FILE}: {exc}") from exc
 
 
 def write_durable(state_dir: Path, durable: ScopeDurable) -> None:
@@ -161,10 +165,14 @@ def load_scope_config(state_dir: Path) -> ScopeConfig:
     if not path.exists():
         return ScopeConfig()
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:  # a read that may heal: no verdict on the config
+        raise TriageError(f"{path}: cannot read the scope config: {exc}") from exc
+    try:
+        data = yaml.safe_load(text)
         return ScopeConfig.model_validate({} if data is None else data)
-    except (OSError, yaml.YAMLError, ValidationError) as exc:
-        raise TriageError(f"{path}: invalid scope config: {exc}") from exc
+    except (yaml.YAMLError, ValidationError) as exc:  # only its owner fixes it (R2)
+        raise ConfigError(f"{path}: invalid scope config: {exc}") from exc
 
 
 def default_board_name(scope: Scope) -> str:

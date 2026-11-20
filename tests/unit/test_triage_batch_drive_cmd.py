@@ -378,6 +378,9 @@ class DriveCheckout:
     def remove_worktree(self, where: Path) -> None:
         self.removed.append(where)
 
+    def prune_worktrees(self) -> None:
+        pass
+
     def rev_parse(self, ref: str) -> str:
         return f"{ref}@fetched"
 

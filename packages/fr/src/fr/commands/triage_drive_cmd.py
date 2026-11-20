@@ -42,7 +42,13 @@ from fr.commands.triage_cmd import (
     resolve_state_dir,
     triage_app,
 )
-from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify, fail_exit
+from fr.commands.triage_cmd import fail as _fail
+from fr.triage.drive_errors import (
+    DriverRefusal,
+    TransientPassFailure,
+    classify,
+    unexpected,
+)
 from fr.triage.errors import TriageError
 from fr.triage.lease import (
     DEFAULT_INTERVAL_MIN,
@@ -76,11 +82,6 @@ triage_app.add_typer(drive_app)
 def _now() -> datetime:
     """The clock; tests replace it."""
     return datetime.now(UTC)
-
-
-def _fail(message: str, code: int = 2) -> NoReturn:
-    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise fail_exit(message, code)
 
 
 IntervalOpt = Annotated[
@@ -609,6 +610,8 @@ def drive_pass_command(
     except Exception as exc:  # noqa: BLE001 - the pass's one boundary (batch-train-truth R6)
         failure = classify(exc)
         _pass_failed(outbox, driver, target, failure)
+        if unexpected(failure) is not None:
+            raise  # an fr bug: its traceback and exit 1, as before the boundary (R6)
         raise typer.Exit(code=failure.code) from exc
     pacer.clean()
     if newer is not None:
@@ -636,11 +639,16 @@ def _pass_failed(
 ) -> None:
     """A cloud pass that failed (R6): the outbox it has is written (what it asked so far is
     still owed), the failure counted in the ledger (R9) and said; a refusal's line names
-    how to resume and how to track it (R10)."""
+    how to resume and how to track it (R10). An unexpected failure is only kept, with its
+    traceback: the caller re-raises it."""
+    from fr.commands.triage_batch_cmd import keep_traceback
     from fr.triage.driver_record import FAILURES_COMMAND
 
     _write_outbox(outbox, driver.outbox())
     _record_failure(target, failure)
+    keep_traceback(target, failure)
+    if unexpected(failure) is not None:
+        return  # re-raised by the caller, with its traceback
     if failure.message and not failure.said:
         err_console.print(f"[red]error:[/red] {escape(failure.message)}", soft_wrap=True)
     if isinstance(failure, DriverRefusal):

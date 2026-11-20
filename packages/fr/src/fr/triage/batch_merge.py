@@ -98,6 +98,7 @@ class CheckoutSeam(Protocol):
     def changed_paths(self, ref: str, head: str) -> frozenset[str]: ...
     def add_worktree(self, where: Path, ref: str) -> Any: ...
     def remove_worktree(self, where: Path) -> None: ...
+    def prune_worktrees(self) -> None: ...
     def rev_parse(self, ref: str) -> str: ...
 
 
@@ -636,6 +637,26 @@ def merge_main(
     return conflicted, (_unresolvable(version, main, wt, conflicted) if conflicted else [])
 
 
+def _clear_scratch(checkout: CheckoutSeam, where: Path) -> str | None:
+    """Remove the probe's scratch worktree at *where* and its registration. A removal git
+    refuses falls back to deleting the directory (a probe's worktree never holds operator
+    work), then `git worktree prune` forgets it, so a registration whose directory is gone
+    never blocks the next `worktree add` there. Why it is still there, else None."""
+    failed: str | None = None
+    if where.exists():
+        try:
+            checkout.remove_worktree(where)  # which prunes too
+            return None
+        except GitError as exc:
+            failed = str(exc)
+            shutil.rmtree(where, ignore_errors=True)
+    try:
+        checkout.prune_worktrees()
+    except GitError as exc:
+        return f"{failed}; {exc}" if failed else str(exc)
+    return failed if where.exists() else None
+
+
 def trial_conflicts(
     checkout: CheckoutSeam,
     main: str,
@@ -643,11 +664,13 @@ def trial_conflicts(
     head: str,
     *,
     scratch_root: Path | None = None,
+    warn: Callable[[str], None] | None = None,
 ) -> list[str]:
     """R17: the paths on which PR head *head* really conflicts with *main* (what `_update`
     would refuse), by a trial merge in a scratch worktree that is always aborted and
     removed. A version file whose PR change is the version alone, and a lockfile when the
-    repo relocks, are resolved, not conflicts. Writes nothing the repo keeps."""
+    repo relocks, are resolved, not conflicts. Writes nothing the repo keeps. A scratch
+    worktree the cleanup could not clear is said to *warn*; it never masks the verdict."""
     own = scratch_root is None
     root = Path(tempfile.mkdtemp(prefix="fr-conflict-probe-")) if scratch_root is None else (
         scratch_root
@@ -655,11 +678,7 @@ def trial_conflicts(
     where = root / f"probe-{head[:12]}"
     wt: WorktreeSeam | None = None
     try:
-        if where.exists():  # a probe's leftover (it never holds operator work): discard it
-            try:
-                checkout.remove_worktree(where)
-            except GitError:
-                shutil.rmtree(where, ignore_errors=True)
+        _clear_scratch(checkout, where)  # a probe's leftover: `worktree add` says if it stays
         wt = checkout.add_worktree(where, head)
         conflicted, refused = merge_main(wt, main, version)
         if conflicted:
@@ -667,10 +686,9 @@ def trial_conflicts(
         return refused
     finally:
         try:  # cleanup never masks what is in flight, and never skips the temp root
-            if wt is not None or where.exists():
-                checkout.remove_worktree(where)
-        except GitError:
-            pass
+            left = _clear_scratch(checkout, where) if wt is not None or where.exists() else None
+            if left is not None and warn is not None:
+                warn(f"the conflict probe's scratch worktree {where} was not removed: {left}")
         finally:
             if own:
                 shutil.rmtree(root, ignore_errors=True)

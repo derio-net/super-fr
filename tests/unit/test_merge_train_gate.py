@@ -301,6 +301,8 @@ class UpToDate:
 
     def remove_worktree(self, where: Path) -> None: ...
 
+    def prune_worktrees(self) -> None: ...
+
     def rev_parse(self, ref: str) -> str:
         return "m1"
 

@@ -22,6 +22,7 @@ from pathlib import Path
 from types import FrameType
 
 from fr.safe_spawn import Child
+from fr.triage import driver_record
 from fr.triage.drive_log import DriveLog
 from fr.triage.driver_record import FAILURES_COMMAND, FailureKind
 from fr.triage.errors import TriageError
@@ -125,6 +126,7 @@ class Supervisor:
         self.last_crash: str | None = None
         self._signal: int | None = None
         self._child: Child | None = None
+        self._unwritten: set[str] = set()  # the records already said to be failing
 
     # -- the one-line records ------------------------------------------------------------
 
@@ -140,30 +142,29 @@ class Supervisor:
         except OSError:
             pass  # the log is a view: never a reason to stop supervising
 
-    def _record(self, child_pid: int | None) -> None:
-        from fr.triage import driver_record
-
+    def _best_effort(self, what: str, write: Callable[[], object]) -> None:
+        """*write*, a record the supervisor keeps but never stops for: a failure is said once
+        per *what*, then dropped."""
         try:
-            driver_record.record_supervisor(
-                self.state_dir,
-                supervisor=os.getpid(),
-                child=child_pid,
-                restarts=self.restarts,
-                last_crash=self.last_crash,
-            )
-        except (OSError, TriageError):
-            pass
+            write()
+        except (OSError, TriageError) as err:
+            if what not in self._unwritten:
+                self._unwritten.add(what)
+                self._say("transient", f"{what} not recorded: {err or type(err).__name__}")
+
+    def _record(self, child_pid: int | None) -> None:
+        self._best_effort("the driver record", lambda: driver_record.record_supervisor(
+            self.state_dir, supervisor=os.getpid(), child=child_pid, restarts=self.restarts,
+            last_crash=self.last_crash,
+        ))  # fmt: skip
 
     def _refuse(self, cause: str, message: str) -> None:
         """The refusal on `driver.yaml` (the board's driver-stopped need reads it), then the
         board rendered once if a renderer was given. Neither can stop the supervisor."""
-        from fr.triage import driver_record
-
-        try:
-            driver_record.record_refusal(self.state_dir, cause, message, self.resume, self.now(),
-                                         self.fr_version, as_supervisor=True)  # fmt: skip
-        except (OSError, TriageError):
-            pass
+        self._best_effort("the driver record", lambda: driver_record.record_refusal(
+            self.state_dir, cause, message, self.resume, self.now(), self.fr_version,
+            as_supervisor=True,
+        ))  # fmt: skip
         if self.on_refusal is not None:
             try:
                 self.on_refusal()
@@ -171,14 +172,9 @@ class Supervisor:
                 pass
 
     def _ledger(self, kind: FailureKind, cause: str, message: str) -> None:
-        from fr.triage import driver_record
-
-        try:
-            driver_record.record_failure(
-                self.state_dir, kind, cause, message, self.now(), self.fr_version
-            )
-        except (OSError, TriageError):
-            pass
+        self._best_effort("the driver failure ledger", lambda: driver_record.record_failure(
+            self.state_dir, kind, cause, message, self.now(), self.fr_version
+        ))  # fmt: skip
 
     # -- signals -------------------------------------------------------------------------
 
@@ -250,7 +246,15 @@ class Supervisor:
     def _run(self, parent: int) -> int:
         me = os.getpid()
         while True:
-            child = Child(self.make_argv(me))
+            try:
+                child = Child(self.make_argv(me))
+            except OSError as exc:  # the interpreter is gone (a reinstall): nothing to restart
+                message = f"could not start the driver: {exc or type(exc).__name__}"
+                self._ledger("refusal", "spawn-failed", message)
+                self._refuse("spawn-failed", message)
+                self._say("refusal", f"driver stopped (spawn-failed): {message}; "
+                          f"resume: {self.resume}; track it: {FAILURES_COMMAND}")  # fmt: skip
+                return 2
             self._child = child
             self._record(child.pid)
             end, why = self._watch(child, parent)

@@ -21,7 +21,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, NoReturn, get_args
+from typing import TYPE_CHECKING, Annotated, Any, get_args
 
 import typer
 from rich.markup import escape
@@ -49,6 +49,7 @@ from fr.commands.triage_cmd import (
     triage_app,
     warn_nav,
 )
+from fr.commands.triage_cmd import fail as _fail
 from fr.triage import gitseam, pacing_state
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
@@ -67,7 +68,6 @@ from fr.triage.components import (
     skew_banner,
     strip_nav,
 )
-from fr.triage.drive_errors import fail_exit
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.driver_record import stopped, stopped_line, view_inputs
@@ -96,14 +96,6 @@ DISPATCH_INSTALL_HINT = (
     "this requires fr-dispatch — install it "
     "(e.g. `uv tool install --with fr-dispatch fr`) and re-run."
 )
-
-
-def _fail(message: str, code: int = 2) -> NoReturn:
-    """Print *message* and exit *code*. The `Exit` carries the message as `fr_message`
-    (`fr.triage.drive_errors.FAIL_MESSAGE`), because `str()` of an `Exit` is its code: the
-    wave driver's boundary records the text, and does not print it a second time."""
-    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise fail_exit(message, code)
 
 
 def one_line(exc: BaseException) -> str:

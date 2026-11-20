@@ -136,7 +136,14 @@ def test_classify_an_exit_through_fail_carries_the_fail_message_not_the_code() -
     refusal = classify(_raise_in("dispatch_batch", "_fail('the batch is gone')"))
     transient = classify(_raise_in("dispatch_batch", "_fail('the runner', code=1)"))
     assert (refusal.message, transient.message) == ("the batch is gone", "the runner")
-    assert classify(_raise_in("dispatch_batch", "raise typer.Exit(code=2)")).message == ""
+    bare = classify(_raise_in("dispatch_batch", "raise typer.Exit(code=2)"))
+    assert bare.message == "dispatch_batch exited 2", "never an empty message (l-errors-r3)"
+    assert bare.said, "a bare Exit's site said its own reason: the fallback is not printed"
+
+
+def test_classify_an_exception_with_no_message_records_its_class_name() -> None:
+    assert classify(ValueError()).message == "ValueError"
+    assert classify(TriageError()).message == "TriageError"
 
 
 def test_classify_returns_an_already_classified_failure_unchanged() -> None:
@@ -337,7 +344,6 @@ def test_a_renewal_that_fails_inside_wait_out_is_classified_not_a_traceback(
         (StateRefConflict("moved"), 2),
         (StateRefPushRefused("refused"), 2),
         (TransientPassFailure("dispatch-failed:fake", "failed to dispatch", code=1), 1),
-        (ValueError("bad"), 2),
     ],
 )
 def test_once_exits_with_the_failures_carried_code(
@@ -348,6 +354,48 @@ def test_once_exits_with_the_failures_carried_code(
     assert _loop(StubDriver(tmp_path), once=True) == triage_batch_cmd.LoopEnd(code)
     assert sleeps == []
     assert str(exc) in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("plan", [False, True])
+def test_once_and_plan_mode_re_raise_an_unexpected_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float], plan: bool
+) -> None:
+    """R6: today's exit code for an fr bug is its traceback and exit 1, never a quiet 2."""
+    _script(monkeypatch, ValueError())
+    driver = StubDriver(tmp_path)
+    driver.yes = not plan
+    with pytest.raises(ValueError):
+        _loop(driver, once=not plan)
+    assert sleeps == []
+
+
+def test_a_looping_driver_keeps_an_unexpected_failures_traceback_once_per_cause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float],
+    capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    from fr.triage.drive_log import TRACEBACK_FILE
+
+    _script(monkeypatch, ValueError(), False, ValueError(), KeyError("k"), True)
+    assert _loop(StubDriver(tmp_path), interval=10) == triage_batch_cmd.LoopEnd(0)
+    kept = (tmp_path / TRACEBACK_FILE).read_text()
+    assert kept.count("Traceback (most recent call last)") == 2  # ValueError once, KeyError
+    assert "unexpected:ValueError" in kept and "unexpected:KeyError" in kept
+    err = " ".join(capsys.readouterr().err.split())
+    assert "ValueError (unexpected:ValueError)" in err  # the class name, never an empty text
+    assert TRACEBACK_FILE in err  # the warning points at the kept traceback
+    assert load_ledger(tmp_path).causes["unexpected:ValueError"].message == "ValueError"
+
+
+def test_a_said_refusal_still_writes_its_reason_to_the_drive_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sleeps: list[float]
+) -> None:
+    from fr.triage.drive_log import DriveLog
+
+    _script(monkeypatch, _raise_in("dispatch_batch", "_fail('the batch is gone')"))
+    with triage_batch_cmd.drive_log_attached(DriveLog(tmp_path)):
+        assert _loop(StubDriver(tmp_path)) == triage_batch_cmd.LoopEnd(2)
+    refusals = [x for x in DriveLog(tmp_path).tail() if " refusal " in x]
+    assert any(x.endswith("the batch is gone") for x in refusals), refusals
 
 
 def test_a_pass_whose_helper_fails_with_exit_2_stops_as_that_helper(
@@ -516,3 +564,38 @@ def test_a_refused_push_mid_loop_is_pushed_by_the_next_pass_with_no_event_twice(
         "dispatch" in [e["kind"] for e in b.get("events") or []]
         for b in pushed["batches"] if b["id"] == "b1"
     ), "the first pass's dispatch reached the remote with the second pass's push"  # fmt: skip
+
+
+def test_a_state_load_that_fails_in_a_pass_carries_its_reason(tmp_path: Path) -> None:
+    """l-errors-r3: `_load_state`'s refusals carry the text they print, so a pass that hits
+    one records why, not an empty message."""
+    from fr.commands import triage_cmd
+    from fr.triage.model import Scope
+
+    try:
+        triage_cmd._load_state(Scope("repo", "derio-net/x"), tmp_path, None)
+    except typer.Exit as exc:
+        out = classify(exc)
+    else:
+        raise AssertionError("no facts must refuse")
+    assert isinstance(out, DriverRefusal)
+    assert "no facts at" in out.message
+    assert out.cause == "exit:_load_state"
+
+
+@pytest.mark.parametrize(
+    ("name", "loader"),
+    [("scope-durable.yaml", "load_durable"), ("scope.yaml", "load_scope_config")],
+)
+def test_an_invalid_durable_or_scope_config_is_a_refusal_not_a_transient(
+    tmp_path: Path, name: str, loader: str
+) -> None:
+    """l-errors-r7: only the operator fixes a scope config fr refuses (R2)."""
+    from fr.triage import scope_config
+
+    (tmp_path / name).write_text("no_such_key: 1\n")
+    with pytest.raises(TriageError) as raised:
+        getattr(scope_config, loader)(tmp_path)
+    out = classify(raised.value)
+    assert isinstance(out, DriverRefusal)
+    assert out.cause == "config:ConfigError"

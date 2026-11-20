@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import signal
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fr.triage.supervise import CrashLoop, Restart, Stop, restart_decision
@@ -59,3 +60,37 @@ def test_restarts_older_than_thirty_minutes_fall_out_of_the_window() -> None:
 def test_a_deliberate_end_is_never_a_crash_even_in_a_loop() -> None:
     history = [NOW - timedelta(minutes=m) for m in (4, 3, 2, 1, 0)]
     assert restart_decision(history, NOW, 3) == Stop(3)
+
+
+def test_a_driver_that_cannot_be_started_is_a_spawn_failed_refusal(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.triage.driver_record import load_ledger, load_record
+    from fr.triage.supervise import Supervisor
+
+    state = tmp_path / "state"
+    state.mkdir()
+    sup = Supervisor(lambda pid: [str(tmp_path / "no-such-interpreter")], state, now=lambda: NOW)
+    assert sup.run() == 2
+    assert load_ledger(state).causes["spawn-failed"].kind == "refusal"
+    record = load_record(state)
+    assert record is not None and record.last_refusal is not None
+    assert record.last_refusal.cause == "spawn-failed"
+    assert "spawn-failed" in capsys.readouterr().err
+
+
+def test_a_record_the_supervisor_cannot_write_is_said_once(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import driver_record
+    from fr.triage.supervise import Supervisor
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(driver_record, "record_failure", refuse)
+    sup = Supervisor(lambda pid: [], tmp_path, now=lambda: NOW)
+    sup._ledger("crash", "crash:1", "the driver ended with 1")
+    sup._ledger("crash", "crash:1", "the driver ended with 1")
+    err = capsys.readouterr().err
+    assert err.count("disk full") == 1
