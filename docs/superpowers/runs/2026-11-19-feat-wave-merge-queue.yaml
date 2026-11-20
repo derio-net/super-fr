@@ -89,7 +89,7 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-20T06:45:40+00:00'
           agent: pending
@@ -104,9 +104,14 @@ steps:
           agent: aaeb47b708555dc16
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: claude-opus-5-5
           session: a675f8da-621c-489c-90c0-07d7c601e9f7
+          returned: '2026-11-20T08:33:04+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   lens-review:

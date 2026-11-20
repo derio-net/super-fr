@@ -151,3 +151,85 @@ UpdateEvent.patch_id recorded by _update; the verdict approves any id fr recorde
 ### p1-r8-resolved · finding [fixed] · resolves p1-r8: an approval first recorded without a patch-id stayed on reaches() for good (phase 1)
 
 settle records a refreshing ApprovalEvent with the id once readable while the approval still holds; dry run says "would pin"; tests in test_triage_approval.py.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-suite-evidence-unbound created=2026-11-20T08:33:03+00:00 phase=2 -->
+### p2-suite-evidence-unbound · discovery · Phase 2's full-suite log is not bound as step evidence (phase 2)
+
+The executor's full suite passed (16959 passed, 122 skipped, exit 0, log wave-p2-suite.log).
+The orchestrator had claimed the unit under a placeholder agent id, so the claim was abandoned
+and re-opened after the run; fr binds a tests log only to a command of the current holder made
+since the unit opened, so the log is left out. deliver's own full suite covers this phase.
+
+<!-- fr:journal kind=decision scope=plan id=p2-queue-built-parent created=2026-11-20T08:33:03+00:00 phase=2 -->
+### p2-queue-built-parent · decision · QueueBuiltEvent gains an optional `parent` (the commit the combination was built on) (phase 2)
+
+The planner rebuilds each slot's chain (which entries a combination holds) from the
+records alone (R24). `base` names the queue's main, not the combination ahead, so a
+chain could not be recovered after a landing or a fresh rebuild. `parent` (None reads as
+`base`) makes it exact and keys R13's "one rebuild per tree" as (parent, entry, head).
+Schema 13 is unreleased on this branch, so no migration (as p1-fr-updates-record-patch-id).
+Phase 3's executor must write it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-queue-only-for-configured-repos created=2026-11-20T08:33:03+00:00 phase=2 -->
+### p2-queue-only-for-configured-repos · decision · plan_queue replaces _walk_train only for repos in Snapshot.wave_queues; others keep the train until phase 5 (phase 2)
+
+`Snapshot.wave_queues` (repo -> QueueConfig) is empty until phase 3 builds it from the
+`queue:` config block, so no repo changes behaviour yet and the board/`drive --plan`
+are untouched. For a queue repo, drive_pass runs no train; the queue's report actions
+become pass actions (queue-held -> held, queue-need -> blocked and counted, queue-warn
+-> warn keyed in warned); the command prints the rest as `<kind> <repo>: ... : planned,
+not executed` under --yes. Pass gains `queues`; wave_queue defines a minimal
+`queue_line` that phase 7 replaces. QueueConfig is a dataclass in wave_queue for now.
+
+<!-- fr:journal kind=decision scope=plan id=p2-reupdate-removed-with-executor created=2026-11-20T08:33:03+00:00 phase=2 -->
+### p2-reupdate-removed-with-executor · decision · With red_decision's reupdate rule went the driver's _reupdate, batch_merge.update_failing and the red path's base fetch (phase 2)
+
+red_decision is now (events, pr, head, failing, status). Its only executor and
+update_failing/_open_head_unready became dead, so they were removed now rather than in
+phase 5 (whose list names them). Tests: rule-2 tests in test_merge_train_red_decision
+replaced by one hand-back test (rules renumbered), the cmd re-update tests replaced by
+a moved-base hand-back test, and tests/scenarios/merge-train-red-recovery.sh phase A now
+asserts an fr-made red head is handed back and never updated (scenario green).
+Row merge-train-red-recovery amended (reword, drop/add the renamed level, set-status ci).
+
+<!-- fr:journal kind=decision scope=plan id=p2-planner-shape created=2026-11-20T08:33:03+00:00 phase=2 -->
+### p2-planner-shape · decision · How the planner reads the spec's open points (phase 2)
+
+- queue-open is planned alone; builds start the pass after `queue_open` is recorded.
+- A between-waves queue holds one entry: the one built, else the oldest ready; it
+  drains once it landed something.
+- Readiness order: the latest approval event, or a later eject in this record (a
+  re-entered entry joins at the back).
+- Build conflicts reach the planner as QueueSnapshot.conflicts (entry -> head, paths),
+  which phase 3's executor fills; the eject carries conflict_decision's kind (skip
+  included: the hand-back was already made).
+- The red retry and the queue-build after a landing are planned in the same pass as the
+  landing; the retried entry keeps its slot.
+- R30's proposal never names a batch that is an active queue entry (it moves by
+  building and landing); "no progress" needs both its last event (batch events and queue
+  events naming it) and its last head change (unknown counts as old) past stall_hours.
+- R36's cap exemption applies only while the repo's queue is open.
+- The wave close-out is an input (QueueSnapshot.closeout_landed) until phase 6.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-acceptance-check-behind-main created=2026-11-20T08:33:03+00:00 phase=2 -->
+### p2-acceptance-check-behind-main · discovery · fr acceptance check reports refs of rows merged on main whose tests are not on this branch (phase 2)
+
+The branch is behind origin/main; the fold reads main's rows (git-answers-cached-per-invocation,
+scenario-tier-deselected-locally, fast-tier-advisory-and-refused) whose tests and spec are
+not here, so check prints ref errors unrelated to this run. A merge of main clears them.
+The three phase-2 rows stay not-implemented with level refs: only the planner exists.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-20T08:33:03+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a new module of small pure readers (effective_wave, is_terminal, queue_phase, _ready); nothing duplicated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-20T08:33:03+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+replay/_valid/_plan_open were written once against the final combination model (parent-chained combos); no second copy of the slot logic exists to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-20T08:33:03+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+ejection reuses batch_drive.red_decision and conflict_decision unchanged in shape; the cleanup was the removal of the reupdate rule, its executor and update_failing in the same commit
