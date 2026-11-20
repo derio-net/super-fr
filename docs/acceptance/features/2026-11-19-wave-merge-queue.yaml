@@ -55,9 +55,13 @@ rows:
     origin:
     - spec:2026-11-19-wave-merge-queue#R6
     - spec:2026-11-19-wave-merge-queue#R13
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_second_red_at_the_same_tree_ejects_it_and_rebuilds_what_was_behind
     status: not-implemented
-    notes: ''
+    notes: 'phase 2: the pure planner ejects (one fresh rebuild, then red_decision /
+      conflict_decision) and rebuilds only what was behind; the executor that pushes
+      and hands back is phase 3'
   - id: wave-queue-one-path
     capability: wave merge queue
     acceptance: 'The queue is the driver''s and batch merge''s only merge path: a repo
