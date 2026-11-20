@@ -132,6 +132,9 @@ rows:
     origin:
     - spec:2026-11-19-batch-train-truth#R22
     - spec:2026-11-19-batch-train-truth#R23
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_log.py#test_follow_yields_both_lines_of_one_poll_whose_second_rotates
+      - super-fr:tests/unit/test_triage_batch_board.py#test_the_activity_panel_lists_entries_newest_first_and_escapes_them
+    status: ci
+    notes: 'CI: DriveLog append, rotate, follow across a rotation, and the board panel'
