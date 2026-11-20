@@ -38,6 +38,7 @@ from fr.triage.model import (
     Judgements,
     Launch,
     PullRequest,
+    QueueRecord,
     ReplacementEvent,
     TriageConfig,
     _check_schema,
@@ -610,6 +611,16 @@ def save_closeouts(
     return _rewrite(
         path, "closeouts", block, unchanged=lambda now: list(now.closeouts) == list(read)
     )
+
+
+def save_queues(
+    path: Path, queues: Sequence[QueueRecord], *, read: Sequence[QueueRecord]
+) -> Judgements:
+    """Write *queues* as `path`'s `queues:` section (spec 2026-11-19-wave-merge-queue R24):
+    the sibling of `save_closeouts`, under the same refuse-or-write discipline."""
+    docs = [q.model_dump(mode="json", exclude_defaults=True) for q in queues]
+    block = yaml.safe_dump({"queues": docs}, sort_keys=False, allow_unicode=True, width=100)
+    return _rewrite(path, "queues", block, unchanged=lambda now: list(now.queues) == list(read))
 
 
 # ------------------------------------------------------------------ launch

@@ -39,11 +39,11 @@ from fr.triage.model import (
     Batch,
     Bump,
     PostMergeEvent,
-    QueueBuiltEvent,
-    QueueEntryRef,
     QueueBlock,
+    QueueBuiltEvent,
     QueueDrainEvent,
     QueueEjectEvent,
+    QueueEntryRef,
     QueueEvent,
     QueueLandEvent,
     QueueOpenEvent,
@@ -123,9 +123,7 @@ def _slot_version(wt: Worktree, version: VersionBlock | None, entry: EntryInput)
     return bump_version(read_source(text, version.source), entry.bump)
 
 
-def _apply_slot(
-    wt: Worktree, version: VersionBlock | None, slot: str | None, relock: bool
-) -> None:
+def _apply_slot(wt: Worktree, version: VersionBlock | None, slot: str | None, relock: bool) -> None:
     if version is None:
         return
     if slot is not None:
@@ -599,8 +597,9 @@ def slot_check(
         by_name: dict[str, list[Mapping[str, Any]]] = {}
         for c in checks:
             by_name.setdefault(str(c.get("name")), []).append(c)
-        failing = tuple(sorted(n for n in required
-                               if any(_state(c) == "fail" for c in by_name.get(n, []))))  # fmt: skip
+        failing = tuple(
+            sorted(n for n in required if any(_state(c) == "fail" for c in by_name.get(n, [])))
+        )
         missing = tuple(sorted(n for n in required if n not in by_name))
         pending = [n for n in required
                    if n in by_name and any(_state(c) == "pending" for c in by_name[n])]  # fmt: skip
@@ -749,8 +748,10 @@ class QueueExecutor:
             refs = _refs(record)
             entries = [refs.get(k) or QueueEntryRef(batch=k) for k in combo.chain]
             p.record(QueueLandEvent(kind="queue_land", at=p.now(), main=main, entries=entries))
-            lines.append(f"queue-land {p.repo}: {', '.join(combo.chain)} had landed at "
-                         f"{main[:12]} before the driver stopped: recorded, not pushed again")  # fmt: skip
+            lines.append(
+                f"queue-land {p.repo}: {', '.join(combo.chain)} had landed at "
+                f"{main[:12]} before the driver stopped: recorded, not pushed again"
+            )
             return lines
         for c in rep.combos.values():
             ref = slot_ref(p.scope, c.slot)
@@ -768,7 +769,9 @@ class QueueExecutor:
 
     # ---------------------------------------------------------- gating (R33, R35)
 
-    def gate(self, plan: QueuePlan, record: QueueRecord | None, batches: Iterable[Batch]) -> QueuePlan:
+    def gate(
+        self, plan: QueuePlan, record: QueueRecord | None, batches: Iterable[Batch]
+    ) -> QueuePlan:
         """Before any landing: the last landing's `post_merge`, run once if it is owed
         (R33), and its PRs read back from the forge (R35). Either one unfinished pauses
         the landings with a Need."""
@@ -779,8 +782,11 @@ class QueueExecutor:
         if owed and p.post_merge is not None:
             failed = p.post_merge(owed)
             if failed is not None:
-                return pause_landings(plan, f"post_merge failed after the landing of "
-                                      f"{', '.join(owed)}: {failed}; it runs again next pass")  # fmt: skip
+                return pause_landings(
+                    plan,
+                    f"post_merge failed after the landing of "
+                    f"{', '.join(owed)}: {failed}; it runs again next pass",
+                )
         if not any(a.kind == "queue-land" for a in plan.actions):
             return plan
         land = last_landing(record)
@@ -863,11 +869,27 @@ class QueueExecutor:
         if not landings:
             return LandResult("stopped"), "not landed: an entry's PR is not readable now"
         if p.config.land == "merge":
-            result = land_merge(p.client, p.checkout, p.repo, default=p.default, tip=action.sha,
-                                landings=landings, method=p.method, record=p.record, now=p.now)  # fmt: skip
+            result = land_merge(
+                p.client,
+                p.checkout,
+                p.repo,
+                default=p.default,
+                tip=action.sha,
+                landings=landings,
+                method=p.method,
+                record=p.record,
+                now=p.now,
+            )
         else:
-            result = land_push(p.checkout, default=p.default, base=replay(record).base,
-                               landings=landings, method=p.method, record=p.record, now=p.now)  # fmt: skip
+            result = land_push(
+                p.checkout,
+                default=p.default,
+                base=replay(record).base,
+                landings=landings,
+                method=p.method,
+                record=p.record,
+                now=p.now,
+            )
         if result.outcome == "lease":
             return result, "a lease failed: nothing landed, the queue is rebuilt next pass"
         if result.outcome != "landed":

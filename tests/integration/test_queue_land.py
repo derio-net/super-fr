@@ -103,8 +103,16 @@ def test_land_merge_merges_each_pr_at_its_pinned_head_in_order(tmp_path: Path) -
     w, built = _two(tmp_path, "squash")
     f = forge(w, tmp_path)
     recorded: list[QueueLandEvent] = []
-    result = land_merge(f, w.checkout, "r", default="main", tip=built[-1].sha,  # type: ignore[arg-type]
-                        landings=landings_of(built), method="squash", record=recorded.append)  # fmt: skip
+    result = land_merge(
+        f,
+        w.checkout,
+        "r",
+        default="main",
+        tip=built[-1].sha,
+        landings=landings_of(built),
+        method="squash",
+        record=recorded.append,
+    )
     assert [(n, h) for n, h, _ in f.merges] == [(1, built[0].entry.head), (2, built[1].entry.head)]
     assert result.outcome == "landed" and result.main == w.main()
     assert git(w.origin, "rev-parse", "main^{tree}") == built[-1].tree
@@ -115,8 +123,15 @@ def test_land_merge_stops_on_a_tree_mismatch(tmp_path: Path) -> None:
     w, built = _two(tmp_path, "squash")
     f = forge(w, tmp_path)
     f.main_after_merge = "drift.txt"
-    result = land_merge(f, w.checkout, "r", default="main", tip=built[-1].sha,  # type: ignore[arg-type]
-                        landings=landings_of(built), method="squash")  # fmt: skip
+    result = land_merge(
+        f,
+        w.checkout,
+        "r",
+        default="main",
+        tip=built[-1].sha,
+        landings=landings_of(built),
+        method="squash",
+    )
     assert result.outcome == "stopped" and "tree" in result.detail
     assert len(f.merges) == 2  # the merges done are not undone, and none is retried
 
@@ -125,8 +140,15 @@ def test_land_merge_stops_on_a_refusal_and_lands_nothing_after_it(tmp_path: Path
     w, built = _two(tmp_path, "squash")
     f = forge(w, tmp_path)
     f.refuse[1] = "Pull request is not up to date with its base"
-    result = land_merge(f, w.checkout, "r", default="main", tip=built[-1].sha,  # type: ignore[arg-type]
-                        landings=landings_of(built), method="squash")  # fmt: skip
+    result = land_merge(
+        f,
+        w.checkout,
+        "r",
+        default="main",
+        tip=built[-1].sha,
+        landings=landings_of(built),
+        method="squash",
+    )
     assert result.outcome == "stopped" and "not up to date" in result.detail
     assert f.merges == []
 

@@ -744,12 +744,27 @@ def test_a_ready_green_pr_is_merged_without_waiting(
     assert _lines(out, "merge") == ["merge b1: merged PR #101 at sha-101"]
 
 
-def test_a_wave_queue_repo_is_planned_by_the_queue_and_only_reported(
+def test_a_queue_block_without_queue_ci_holds_the_repo_and_walks_no_train(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """Spec 2026-11-19-wave-merge-queue R7: a repo whose `.fr/triage.yaml` has a `queue:`
+    block is the queue's, not the train's; without `queue.ci` its queue is refused, naming
+    the line to add, and nothing merges or is recorded."""
+    world.config = {"queue": {"depth": 2}}
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert world.merged == [] and _lines(out, "merge") == []
+    assert f"queue {REPO}:" in out
+    assert "queue.ci" in out and "ci: push" in out
+    assert load_judgements(tmp_path / "judgements.yaml").queues == []
+
+
+def test_a_queue_repo_in_plan_mode_says_its_writes_and_runs_none(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
-    """Spec 2026-11-19-wave-merge-queue §A, phase 2: the planner replaces the repo's train;
-    until the executor lands, the driver says its writes and runs none of them."""
+    """Without --yes the queue's writes are planned and said, never run (§A)."""
     from fr.triage import batch_drive
     from fr.triage.wave_queue import QueueConfig
 
@@ -759,14 +774,12 @@ def test_a_wave_queue_repo_is_planned_by_the_queue_and_only_reported(
         lambda snap: real(replace(snap, wave_queues={REPO: QueueConfig()})),
     )  # fmt: skip
     _pr_open(world, tmp_path)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once")
     assert code in (0, 3), out
-    assert world.merged == [] and _lines(out, "merge") == []
-    assert f"queue {REPO}: idle" in out
+    assert world.merged == []
     (line,) = _lines(out, "queue-open")
-    assert line.endswith(": planned, not executed") and "wave 1" in line
-    queues = load_judgements(tmp_path / "judgements.yaml").queues
-    assert queues == []  # nothing recorded: the executor is phase 3's
+    assert "wave 1" in line
+    assert load_judgements(tmp_path / "judgements.yaml").queues == []
 
 
 @pytest.mark.parametrize(
@@ -5790,3 +5803,30 @@ def test_an_archive_pr_pushed_between_its_view_and_its_checks_is_never_merged(
     assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")], out
     assert _lines(out, "archive") == [], out
     assert len(views) >= 2  # the head was read on both sides of the checks
+
+
+def test_the_queue_writer_appends_through_the_one_judgements_writer(
+    tmp_path: Path, world: World
+) -> None:
+    """Spec 2026-11-19-wave-merge-queue R24: a `queue_open` starts this scope's record,
+    later events append to it, re-reading the file each time; the batches stay as they
+    were, byte for byte in content."""
+    from fr.triage.model import QueueBuiltEvent, QueueEntryRef, QueueOpenEvent
+
+    _pr_open(world, tmp_path)
+    before = load_judgements(tmp_path / "judgements.yaml").batches
+    write = triage_batch_cmd.queue_writer(tmp_path, REPO, "s-1")
+    write(QueueOpenEvent(kind="queue_open", at=NOW), wave=1, base="m" * 40)
+    write(QueueBuiltEvent(kind="queue_built", at=NOW, slot=1, sha="c" * 40,
+                          entry=QueueEntryRef(batch="b1"), head="sha-101", patch_id="p",
+                          base="m" * 40, parent="m" * 40))  # fmt: skip
+    judgements = load_judgements(tmp_path / "judgements.yaml")
+    (record,) = judgements.queues
+    assert (record.repo, record.wave, record.scope, record.base) == (REPO, 1, "s-1", "m" * 40)
+    assert [e.kind for e in record.events] == ["queue_open", "queue_built"]
+    assert judgements.batches == before
+    other = triage_batch_cmd.queue_writer(tmp_path, REPO, "s-2")  # no record of its own
+    with pytest.raises(Exception, match="no queue record"):
+        other(QueueBuiltEvent(kind="queue_built", at=NOW, slot=1, sha="c" * 40,
+                              entry=QueueEntryRef(batch="b1"), head="h", patch_id="",
+                              base="m" * 40))  # fmt: skip

@@ -566,6 +566,8 @@ def _update_message(
 
 def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) -> list[str]:
     """`unresolvable` for an update: the worktree's HEAD is the PR side, merging main."""
+    if ctx.version is None:
+        return list(conflicted)
     return unresolvable(ctx.version, wt.show, wt.merge_base(ctx.main), "HEAD", conflicted)
 
 

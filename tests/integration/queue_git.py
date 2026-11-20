@@ -186,9 +186,13 @@ class FakeForge:
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         head = self.w.head(number)
-        merged = number not in self.sticky and subprocess.run(
-            ["git", "merge-base", "--is-ancestor", head, "refs/heads/main"], cwd=self.w.origin
-        ).returncode == 0
+        merged = (
+            number not in self.sticky
+            and subprocess.run(
+                ["git", "merge-base", "--is-ancestor", head, "refs/heads/main"], cwd=self.w.origin
+            ).returncode
+            == 0
+        )
         return {"state": "MERGED" if merged else "OPEN", "head_oid": head,
                 "head_ref": self.w.prs[number], "title": self.w.titles[number]}  # fmt: skip
 

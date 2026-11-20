@@ -31,7 +31,7 @@ from fr.triage.wave_queue import QueueConfig, QueueSnapshot, plan_queue
 from tests.integration.queue_git import REPO, SCOPE, FakeForge, World, forge, world
 
 
-class Killed(Exception):
+class KilledError(Exception):
     """The driver died here."""
 
 
@@ -64,7 +64,7 @@ class Driver:
         last = self.records[-1]
         self.records[-1] = last.model_copy(update={"events": [*last.events, event]})
         if self.kill_on(event):
-            raise Killed(event.kind)
+            raise KilledError(event.kind)
 
     def entry_of(self, key: str) -> EntryInput | None:
         return self.w.entry(int(key[1:]))
@@ -145,7 +145,7 @@ def test_a_driver_killed_after_queue_built_resumes_and_lands_once(tmp_path: Path
     d = _driver(tmp_path)
     d.one_pass()  # open
     d.kill_on = lambda e: isinstance(e, QueueBuiltEvent)
-    with pytest.raises(Killed):
+    with pytest.raises(KilledError):
         d.one_pass()  # slot-1 recorded, never pushed
     d.kill_on = lambda e: False
     recorded = d.events(QueueBuiltEvent)[0].sha
@@ -166,7 +166,7 @@ def test_a_driver_killed_after_the_land_push_records_it_and_never_lands_again(
     d.one_pass()  # open
     d.one_pass()  # build both
     d.kill_on = lambda e: isinstance(e, QueueLandEvent)
-    with pytest.raises(Killed):
+    with pytest.raises(KilledError):
         d.one_pass()  # pushed, then died before anything else
     d.records[-1] = d.records[-1].model_copy(
         update={"events": [e for e in d.records[-1].events if not isinstance(e, QueueLandEvent)]}
