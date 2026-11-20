@@ -59,6 +59,14 @@
 // Each of those modules carries its own `super-fr-parity:` marker, on the
 // handler it credits; parity.yaml declares their OpenCode cells.
 //
+// The shell gate, the push guard, the edit gate and the sentinel judge in the
+// SESSION's directory — the `location.directory` of the session the event names,
+// looked up once per session (./session) — never the plugin's, because one
+// OpenCode server can hold sessions in another checkout (gh#1371, #1552). Claude
+// Code's hooks read the session's `cwd` from the hook input, so the two now agree.
+// A failed lookup falls back to the plugin's directory. Unbind alone stays in the
+// plugin's directory (consumer-delivery R7): a deleted session has nothing to ask.
+//
 // EXPORT DISCIPLINE: this module's only export is the default definition.
 // Helpers live in ./marker, ./idle, ./claim, ./pin, ./sentinel, ./guard,
 // ./push, ./nag, ./bind, ./rules and ./spawn.
@@ -77,6 +85,7 @@ import { createPinHandler, type ShellCreateEvent } from "./pin";
 import { decidePush } from "./push";
 import { createRulesHandler } from "./rules";
 import { writePipelineSentinel } from "./sentinel";
+import { createSessionDirectoryResolver, sharedSessionDirectories } from "./session";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. The shell tool (`shell` in OpenCode 2,
@@ -184,13 +193,18 @@ type GateEvent = { tool: string; input?: unknown };
 
 /** The edit gate: throws to reject the call, which OpenCode 2 allows from
  * `execute.before` alone. */
-async function gate(directory: string, event: GateEvent): Promise<void> {
+/** True when the edit gate passes the call without judging it, so it needs no
+ * directory (and the hook need not look the session up for it). */
+function gateSkips(event: GateEvent): boolean {
   // OpenCode cannot intercept filesystem effects of Bash. Other known
   // read-only tools are excluded; every remaining tool is inspected.
-  if (typeof event.tool === "string" && NON_WRITING_TOOLS.has(event.tool)) return;
-
+  if (typeof event.tool === "string" && NON_WRITING_TOOLS.has(event.tool)) return true;
   // Deliberate base-clone edit — the documented escape hatch.
-  if (process.env.FR_BASE_OK === "1") return;
+  return process.env.FR_BASE_OK === "1";
+}
+
+async function gate(directory: string, event: GateEvent): Promise<void> {
+  if (gateSkips(event)) return;
 
   const targets = extractTargets(event.input);
   if (targets.unresolvablePatch) {
@@ -271,30 +285,45 @@ const plugin: Plugin.Plugin = {
     const exportPin = createPinHandler();
     const idle = createIdleHandler({ session: ctx.session, directory, actedOn: sharedActedOn() });
     const bind = createBindHandler({ session: ctx.session, directory });
+    // Unbind stays in the plugin's directory (consumer-delivery R7).
     const unbind = createUnbindHandler({ directory });
     const rules = createRulesHandler({ rulesDir: join(dirname(fileURLToPath(import.meta.url)), "rules") });
     const nag = createNagHandler({ session: ctx.session, directory, served: sharedServed() });
+    // Where the gates judge: the event's session's own directory, else the plugin's.
+    const sessionDir = createSessionDirectoryResolver({
+      session: ctx.session,
+      fallback: directory,
+      cache: sharedSessionDirectories(),
+    });
 
     await ctx.tool.hook("execute.before", async (event) => {
       // Before the gate, and whatever the tool: a child's first call of ANY
       // kind is the earliest moment it can be named. Neither throws.
       await claimChild(event);
+      // Look the session up only when a gate will judge this call: an uncached
+      // failed lookup is paid per call, so a read-only tool pays nothing (p1-r1).
+      const judged = event.tool === "shell" || !gateSkips(event);
+      const here = judged ? await sessionDir(event.sessionID) : directory;
       if (event.tool === "shell") {
         // The shell gate decides on the WHOLE command line, before any path
         // inspection (R3); a refusal rejects this call alone.
         const input = (event.input ?? {}) as { command?: unknown; workdir?: unknown };
         const command = typeof input.command === "string" ? input.command : "";
-        const cwd = shellCwd(directory, input.workdir);
+        const cwd = shellCwd(here, input.workdir);
         const refusal = decideShell(command, cwd, event.sessionID);
         if (refusal) throw new Error(refusal);
         const pushRefusal = await decidePush(command, cwd, event.sessionID);
         if (pushRefusal) throw new Error(pushRefusal);
       }
-      await gate(directory, event);
+      await gate(here, event);
     });
     await ctx.tool.hook("execute.after", async (event) => {
       // Neither throws: they follow a call that already ran.
-      writePipelineSentinel(event, directory);
+      // Only a completed skill call can arm the sentinel; any other call skips
+      // the session lookup (p1-r1).
+      if (event.tool === "skill" && event.status === "completed") {
+        writePipelineSentinel(event, await sessionDir(event.sessionID));
+      }
       await bind(event);
     });
     await ctx.session.hook("context", async (event) => {

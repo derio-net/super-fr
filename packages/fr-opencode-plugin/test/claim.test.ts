@@ -8,6 +8,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { createClaimHandler, SHARED_CLAIMED, type ClaimAnswer } from "../src/claim";
+import { sharedSessionDirectories } from "../src/session";
 import { load } from "./fake";
 
 const CHILD = {
@@ -192,11 +193,15 @@ describe("child claim (OpenCode): wired into the plugin", () => {
     delete slot[SHARED_CLAIMED];
     const { client, looked } = fakeClient({ data: { ...CHILD, parentID: undefined } });
     const { executeBefore } = await load({ session: client, directory: "/nonexistent" });
+    // The gates' own session-directory lookup (#1552) is a second `get`; with the
+    // directory already known, every lookup left is the claim's.
+    sharedSessionDirectories().set("ses_wired", "/nonexistent");
 
     await executeBefore({ tool: "read", sessionID: "ses_wired", input: {} });
 
     expect(looked).toEqual(["ses_wired"]);
     delete slot[SHARED_CLAIMED];
+    sharedSessionDirectories().delete("ses_wired");
   });
 
   test("claim.ts never names a step, item or unit state — the verdict is fr's", async () => {

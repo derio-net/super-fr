@@ -43,6 +43,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+from fr import forge_body as _forge_body
 from fr.forge_body import not_json_reason
 from fr.ghclient import CommandRunner, run_cli
 from fr.labels import LabelDef
@@ -79,6 +80,12 @@ def _run_tea(args: list[str], *, cwd: Path | None = None) -> str:
 
 
 _STATUS_LINE = re.compile(r"^HTTP/\S+\s+(\d{3})\b")
+# The fixed text of api_result's 3xx refusal: the redirect is how a login page
+# arrives when tea does not follow it. `names_login_page` reads it back.
+REDIRECT_REFUSAL = (
+    "an SSO or forward-auth proxy is likely in front of it; "
+    "exempt its /api/ paths or use an internal URL"
+)
 _LOCATION = re.compile(r"^location:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
 
@@ -102,8 +109,7 @@ def api_result(result: subprocess.CompletedProcess[str]) -> Any:
         loc = _LOCATION.search(stderr)
         where = f" to {loc.group(1)}" if loc else ""
         raise TeaError(
-            f"HTTP {status}: the Gitea API redirected{where} — an SSO or forward-auth "
-            "proxy is likely in front of it; exempt its /api/ paths or use an internal URL",
+            f"HTTP {status}: the Gitea API redirected{where} — {REDIRECT_REFUSAL}",
             stderr=stderr,
         )
     if not 200 <= status < 300:
@@ -136,6 +142,14 @@ def loads(out: str, what: str) -> Any:
     except json.JSONDecodeError as exc:
         reason = not_json_reason(out)
         raise TeaError(f"{what}: {reason}" if reason else f"unreadable {what}: {exc}") from exc
+
+
+def names_login_page(err: TeaError) -> bool:
+    """True when *err* names an SSO or forward-auth login page, in either form
+    `api_result` raises: an HTML body (`forge_body`'s named cause) or a 3xx
+    redirect. The fail-soft reads re-raise exactly these (gh#1554)."""
+    message = str(err)
+    return _forge_body.names_login_page(message) or REDIRECT_REFUSAL in message
 
 
 def api_json(path: str, *, cwd: Path | None = None, run: CommandRunner | None = None) -> Any:

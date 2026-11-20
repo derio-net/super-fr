@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-19 still true after a failed forge read of the default branch became a named refusal (batch consumer-followups, gh#1554); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?

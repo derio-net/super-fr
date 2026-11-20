@@ -1074,3 +1074,28 @@ def test_gh1275_stage_7_passes_nothing_when_the_pr_has_no_gate_tester(ops_root: 
 
     assert _gate_passes(tree) == []
     assert 7 in _host(ops_root).stages()
+
+
+class LoginPageForge(FakeForge):
+    """A forge whose default-branch read meets an SSO login page (gh#1554)."""
+
+    def default_branch(self, *, cwd: Path, run: Any = None) -> str | None:
+        from fr.tea import TeaError
+
+        raise TeaError(
+            "HTTP 200 with an HTML body, not the forge's JSON: an SSO or forward-auth "
+            "login page, most likely; exempt the instance's /api/ paths or use an internal URL"
+        )
+
+
+def test_a_forge_error_on_the_default_branch_read_is_a_refusal_naming_it(
+    ops_root: Path,
+) -> None:
+    """R7 (spec 2026-11-19-consumer-followups): a raised forge error is the gate's
+    exit-2 refusal, naming the cause, never a traceback."""
+    gate, *_ = _gate(ops_root, forge=LoginPageForge())
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        _ = gate.default
+    assert exc.value.code == 2
+    assert "cannot read the default branch from the forge" in exc.value.why
+    assert "SSO or forward-auth login page" in exc.value.why

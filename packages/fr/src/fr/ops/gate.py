@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import UnsupportedForgeOperation
+from fr.hostclient import FORGE_ERRORS
 from fr.journal.model import (
     JournalEntry,
     append_journal_entry,
@@ -333,7 +334,14 @@ class Gate:
         forge's repo metadata, cross-checked with the base checkout's `origin/HEAD`;
         never the PR's own base ref, which its author chooses."""
         if self._default is None:
-            forge = self.forge.default_branch(cwd=self.target.primary)
+            # A forge error (a login page the adapter re-raises, gh#1554; a refused
+            # host) is the gate's refusal, naming it — never a traceback (R7).
+            try:
+                forge = self.forge.default_branch(cwd=self.target.primary)
+            except FORGE_ERRORS as exc:
+                raise StageFailed(
+                    f"cannot read the default branch from the forge: {exc}", code=2
+                ) from exc
             origin = self.host.origin_head()
             if not forge or not origin:
                 raise StageFailed(
