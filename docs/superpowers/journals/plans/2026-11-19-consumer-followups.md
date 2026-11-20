@@ -106,3 +106,57 @@ looks the session up only for shell, or for a call the gate judges. execute.afte
 up only for a completed skill call. The new test in session-gates.test.ts ("a call no gate
 judges makes no session lookup") fails without the fix and passes with it. Full bun test
 349/0; tsc clean.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-20T02:29:25+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · migrate.py swallowed the newly raised login-page TeaError from file_exists
+
+`_spec_fully_implemented` (migrate.py:925-936) wrapped its `gh.file_exists` probes in
+`except Exception: pass`. After R6 a tea login page raises there. The operator still got
+only "unresolved locally (cross-repo?) — confirm and re-run", with no cause, and on an
+SSO-fronted Gitea would re-run forever.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-20T02:29:25+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · pr_for_branch docstring claimed an unreachable forge is not "no PR"
+
+real_teaclient.py's `pr_for_branch` docstring said "an unreachable forge is not 'no PR'".
+Only a login page is re-raised: a timeout, a 5xx or a non-zero tea exit still returns None.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-20T02:29:25+00:00 state=open review_scope=out -->
+### l-errors-r3 · finding [open] (reviewer: out of scope) · adopt.py and push_cmd.py swallow forge errors silently, so a login page is never named there
+
+run/adopt.py:787-789 (`except Exception: return None`) and commands/push_cmd.py:156-158
+(`except FORGE_ERRORS: continue`) fail open by design, as their docstrings state. The
+login-page signal R6 adds is dropped there without a log. Those swallows predate this change.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-20T02:29:25+00:00 -->
+### lens-review-1 · review · Lens review — docs-accuracy none, security none, errors three findings (two in scope, fixed)
+
+Three independent reviewers read the whole diff from the merge base, one per lens.
+- docs-accuracy: checked ops.md, acceptance-matrix.md, install.md and the two stamped
+  explainers against gate.py, scaffold.py, index.ts and session.ts. No finding.
+- security: checked that the session directory comes only from the host's session record,
+  id-checked and falling back as before, and that no Gitea checkout persists a credential.
+  No finding.
+- errors: traced every caller of the six tea reads and raised l-errors-r1 and r2 (in, fixed)
+  and l-errors-r3 (out).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-20T02:29:25+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: migrate.py swallowed the newly raised login-page TeaError from file_exists
+
+migrate.py now catches FORGE_ERRORS before the broad clause and appends
+"(the forge refused: <error>)" to the note, keeping the degrade. The new test
+test_spec_fully_implemented_names_a_tea_login_page covers it. The existing GlabError test
+now pins the suffixed note. Spec Design §C is updated to match.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-20T02:29:25+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: pr_for_branch docstring claimed an unreachable forge is not "no PR"
+
+The docstring now says a login page is not "no PR" and that any other TeaError (a timeout,
+a 5xx, a non-zero tea exit) still reads as None.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-20T02:29:25+00:00 state=open resolves=l-errors-r3 out_of_scope=true -->
+### l-errors-r3-resolved · finding [out-of-scope] · resolves l-errors-r3: adopt.py and push_cmd.py swallow forge errors silently, so a login page is never named there
+
+The two fail-open swallows predate this change and are documented as deliberate. This
+change did not cause them. Naming a login page there is a separate decision about whether
+the push guard and adopt should warn.

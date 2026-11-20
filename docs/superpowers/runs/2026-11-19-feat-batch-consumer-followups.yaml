@@ -3,7 +3,7 @@ run: 2026-11-19-feat-batch-consumer-followups
 workflow: fr-goal@1
 branch: feat/batch-consumer-followups
 started: '2026-11-19T22:17:21+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -93,8 +93,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-20T02:25:31+00:00'
+    state: done
+    at: '2026-11-20T02:29:26+00:00'
     units:
       step/lens-review:
         attempts:
@@ -102,6 +102,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-20T02:29:26+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=ae8771d17b5d3e91d,errors=af22336b67719c3ad,security=ae003c3ddca4343b7
+          findings: l-errors-r1,l-errors-r2,l-errors-r3
+          lenses: docs-accuracy=9:none;errors=5:l-errors-r1,l-errors-r2,l-errors-r3;security=8:none
   deliver:
     state: pending
 fr_version: 8.3.0rc6
