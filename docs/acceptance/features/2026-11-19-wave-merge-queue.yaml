@@ -459,3 +459,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_green_draft_is_readied_then_merged
     why: a draft is readied when the queue builds it, not merged by a pass (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval
+    why: fr no longer updates PR branches (R22)
