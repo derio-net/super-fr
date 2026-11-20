@@ -36,10 +36,14 @@ SUPERVISOR = textwrap.dedent(
     import sys
     from pathlib import Path
     from fr.triage.supervise import Supervisor
+    import os
     d = Path(sys.argv[1])
+    (d / f"supervisor-{os.getpid()}").write_text("")
+    parent = os.environ.get("RIG_PARENT")
     sup = Supervisor(
         lambda pid: [sys.executable, str(d / "driver.py"), str(d)],
         d / "state", base_delay=0.3, grace=1.0, poll=0.2,
+        parent=int(parent) if parent else None,
     )
     raise SystemExit(sup.run())
     """
@@ -47,7 +51,10 @@ SUPERVISOR = textwrap.dedent(
 PARENT = textwrap.dedent(
     """
     import os, subprocess, sys, time
-    subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]])
+    # name ourselves as the parent: on a loaded host this process may be gone before the
+    # supervisor has even imported fr, and the supervisor must still end (R12)
+    env = {**os.environ, "RIG_PARENT": str(os.getpid())}
+    subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]], env=env)
     deadline = time.monotonic() + 15  # exit only once the supervisor has started its driver
     while not os.path.exists(sys.argv[2] + "/pids") and time.monotonic() < deadline:
         time.sleep(0.05)
@@ -144,11 +151,25 @@ def test_the_supervisor_and_its_driver_end_with_the_supervisors_parent(rig: Rig)
                     str(rig.root)], check=True)  # fmt: skip
     assert wait_for(lambda: len(rig.pids()) == 1)
     child = rig.pids()[0]
-    # the supervisor is the child's parent; find it before it goes
-    ppid = int(subprocess.run(["ps", "-o", "ppid=", "-p", str(child)], capture_output=True,
-                              text=True, check=True).stdout)  # fmt: skip
-    assert alive(ppid)
-    assert wait_for(lambda: not alive(ppid) and not alive(child), timeout=15)
+    # the supervisor names itself on start: reading the child's ppid instead races the
+    # supervisor ending it, which it may already have done
+    (sup,) = (int(p.name.split("-")[1]) for p in rig.root.glob("supervisor-*"))
+    assert wait_for(lambda: not alive(sup) and not alive(child), timeout=15)
+
+
+def test_a_supervisor_whose_parent_ended_before_it_ran_starts_no_driver(rig: Rig) -> None:
+    # the parent is named, and gone, before the supervisor runs: the adopter must not be
+    # mistaken for it, or the supervisor outlives its session (R12)
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    env = {**os.environ, "RIG_PARENT": str(gone.pid)}
+    proc = subprocess.run([sys.executable, str(rig.root / "supervisor.py"), str(rig.root)],
+                          env=env, timeout=15)  # fmt: skip
+    assert proc.returncode == 0
+    assert rig.pids() == []
+    assert (
+        "parent ended before the driver started" in (rig.root / "state" / "drive.log").read_text()
+    )
 
 
 def test_sigterm_to_the_supervisor_stops_the_driver_and_exits(rig: Rig) -> None:

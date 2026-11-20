@@ -106,8 +106,13 @@ class Supervisor:
         fr_version: str = "",
         resume: str = "fr triage batch drive --supervise --yes",
         on_refusal: Callable[[], None] | None = None,
+        parent: int | None = None,
     ) -> None:
         self.make_argv = make_argv
+        # the process whose end ends this supervisor (R12); None reads it at `run`. A caller
+        # that knows it (a launcher passing its own pid) closes the window in which the
+        # parent ends before `run` reads it and the adopter is mistaken for the parent
+        self.parent = parent
         self.state_dir = state_dir
         self.base_delay, self.grace, self.poll = base_delay, grace, poll
         self.now = now or (lambda: datetime.now(UTC))
@@ -233,8 +238,11 @@ class Supervisor:
         """Supervise until a deliberate end, a crash loop, a signal or the loss of the
         parent; the exit code."""
         previous = self._install()
-        parent = os.getppid()
+        parent = os.getppid() if self.parent is None else self.parent
         try:
+            if os.getppid() != parent:
+                self._say("stop", "the supervisor's parent ended before the driver started")
+                return 0
             return self._run(parent)
         finally:
             self._restore(previous)
