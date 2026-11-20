@@ -52,11 +52,16 @@ def test_release_suite_runs_on_the_requires_python_floor() -> None:
 
 
 def test_ci_tests_one_python_the_floor() -> None:
+    # R3: no ci.yml job picks another interpreter, so every job inherits the
+    # workflow's floor (#1589).
     jobs = _workflow("ci.yml")["jobs"]
-    for name in ("test", "collect"):
-        job = jobs[name]
+    assert {"test", "collect"} <= set(jobs)
+    for name, job in jobs.items():
         assert "python" not in (job.get("strategy") or {}).get("matrix", {}), name
         assert "UV_PYTHON" not in (job.get("env") or {}), name
+        for step in job.get("steps", []):
+            assert "setup-python" not in str(step.get("uses", "")), name
+            assert "UV_PYTHON" not in (step.get("env") or {}), name
 
 
 def test_every_shard_feeds_coverage() -> None:

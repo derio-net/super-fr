@@ -112,8 +112,10 @@ jobs:
         run: cp durations-plan.json shard-durations.json
       # Sharded with pytest-split (spec 2026-09-26 §3.A, 2026-11-01 §3.B).
       # addopts is CLEARED, not patched, and --strict-markers is re-added
-      # explicitly, with the coverage options on every shard (--cov-report=
-      # cancels addopts' term-missing). The `coverage` job
+      # explicitly: pytest-cov accumulates --cov-report values, so a CLI
+      # --cov-report= could not cancel addopts' term-missing, and clearing
+      # addopts is what drops it. Every shard measures coverage; --cov-report=
+      # asks for no report, since the `coverage` job
       # below holds the --cov-fail-under=75 gate that addopts holds locally.
       # --clean-durations makes shard-durations.json hold exactly the tests
       # this shard ran; `split-check` compares those files to `collect`.
