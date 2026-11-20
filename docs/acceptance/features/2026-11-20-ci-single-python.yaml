@@ -54,8 +54,11 @@ rows:
     - spec:2026-11-20-ci-single-python#R6
     levels: {}
     status: walk-owed
-    notes: ''
+    notes: 'Post-merge walk tracked in derio-net/super-fr#1600: the first main push''s
+      durations save and the release suite on 3.14.'
     verify: live
+    issues:
+    - derio-net/super-fr#1600
   - id: ci-scaffold-python-3-14
     capability: acceptance
     acceptance: The consumer CI fr scaffolds runs in a python:3.14 image
