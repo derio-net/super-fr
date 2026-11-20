@@ -72,3 +72,8 @@ passed alone. The closing suite is the log named in evidence.
 ### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
 
 a smoke test and a change fragment; there is no code to clean
+
+<!-- fr:journal kind=decision scope=plan id=p1-fr-updates-record-patch-id created=2026-11-20T03:11:58+00:00 phase=1 decided_by=agent -->
+### p1-fr-updates-record-patch-id · decision · fr's own updates record their new head's patch-id; an approval holds at any id fr recorded since it (supersedes p1-fr-updates-keep-approval's reaches-only carry-over) (phase 1)
+
+Review finding p1-r7: under p1-fr-updates-keep-approval an fr update was carried only by reaches(), so a clean merge of main AFTER an fr update voided the approval (the recorded patch-id is the pre-update one, and reaches does not lead to the merge head). Now UpdateEvent gains an optional patch_id (schema 13, unreleased on this branch, so no migration; older events have none), _update records the patch-id of head_after before the push, and the verdict is Approved when the live patch-id equals any id recorded since the live approval (its own, or an fr update's after it), else reaches(), else Void. Every id in that set is approved content or fr's own update of approved content, so the set is no wider than what the operator approved. reaches() stays as the fallback for an unreadable id and for approvals with none; p1-r8 makes such an approval gain an id once it holds and the id reads.
