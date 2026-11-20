@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-20 wave-merge-queue phase 1, judgements schema 13 and an approval pinned to the pull request's diff; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-20 wave-merge-queue phase 1 fixes, a moved identical change counts as the same diff; wave-merge-queue phase 1, judgements schema 13 and an approval pinned to the pull request's diff; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -151,7 +151,9 @@ may run at the same time; a batch names the wave it belongs to, or the batch it 
 `after`. The driver merges ready pull requests one after another in a fixed order (a merge
 train), closes out what has landed, and dispatches what may start. Merging a batch
 pull request needs the operator's `approved-fr` label, which holds while the pull
-request's own diff stays the same (or changes only by the driver's own update). The driver never approves its own work.
+request's own diff stays the same (or changes only by the driver's own update). A block of
+changes moved unchanged to another place in the same file counts as the same diff. The
+driver never approves its own work.
 
 `fr triage batches` draws `batches.html`, a Kanban of every batch by lifecycle column. It has
 four "Needs you" lanes (developer, reviewer, tester, devops), which the board decides from

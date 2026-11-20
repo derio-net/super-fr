@@ -212,7 +212,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); 11 added
      `archive_conflict` (merge-truth R12); 12 recovery ownership/session audit metadata;
      current writers stamp 13 (read 1–13), adding the wave merge queue's `queues:` list,
-     the batch `deferred`/`requeued` events and an approval's `patch_id`
+     the batch `deferred`/`requeued` events and the `patch_id` of an approval and an update
      (wave-merge-queue R12, R24).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
