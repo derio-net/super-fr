@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-20 batch train-truth R24 the driver's failure boundary, supervisor, drive status/log/failures, the Activity panel and the early red and conflict hand-backs; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -151,11 +151,19 @@ may run at the same time; a batch names the wave it belongs to, or the batch it 
 `after`. The driver merges ready pull requests one after another in a fixed order (a merge
 train), closes out what has landed, and dispatches what may start. Merging a batch
 pull request needs the operator's `approved-fr` label. The driver never approves its own
-work.
+work. A pass that fails because of a passing fault, such as a forge call that timed out,
+ends and the next pass starts after a longer wait. A fault that only you can fix, such as a
+second writer on the state ref, stops the driver and shows on the board under **Needs you
+now**. Ten failed passes in a row also stop it. `fr triage batch drive --supervise --yes`
+restarts a driver that crashes, and ends with the session that started it. `fr triage
+drive status`, `fr triage drive log` and `fr triage drive failures` show what it holds, did
+and failed at. The driver also hands failing checks and real merge conflicts back to a
+batch's session while the pull request is still a draft.
 
 `fr triage batches` draws `batches.html`, a Kanban of every batch by lifecycle column. It has
 four "Needs you" lanes (developer, reviewer, tester, devops), which the board decides from
-the run's cursor and the merged PR's gate labels, never from a session's status. Every column
+the run's cursor and the merged PR's gate labels, never from a session's status. Below the
+columns, an **Activity** panel shows the newest lines of the driver's log. Every column
 has a button in its header that folds it and opens it again. A column with no cards starts
 folded, and on a wide screen a folded column is a narrow strip with its title turned on its
 side, so the columns that hold cards get the room. The page remembers each column in your
