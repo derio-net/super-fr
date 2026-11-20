@@ -122,10 +122,11 @@ def test_a_killed_driver_is_restarted_and_the_crash_is_recorded(rig: Rig) -> Non
     assert load_ledger(state).causes["crash:SIGKILL"].kind == "crash"
     assert wait_for(lambda: (load_record(state) or object()) is not None and
                     getattr(load_record(state), "restarts", 0) == 1)  # fmt: skip
+    # the restarted child is recorded a moment after the crash is: wait for it
+    assert wait_for(lambda: getattr(load_record(state), "pid", 0) == rig.pids()[1])
     record = load_record(state)
     assert record is not None
     assert (record.supervised, record.last_crash) == (sup.pid, "SIGKILL")
-    assert record.pid == rig.pids()[1]
     log = (state / "drive.log").read_text()
     assert " restart " in log and "SIGKILL" in log
 
