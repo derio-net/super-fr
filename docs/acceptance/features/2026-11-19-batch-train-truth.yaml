@@ -108,9 +108,11 @@ rows:
       retry, ends with exactly the wanted labels
     origin:
     - spec:2026-11-19-batch-train-truth#R20
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gh.py#TestSwapIssueLabelsPartialApply::test_a_refused_call_that_applied_part_of_its_change_ends_with_the_wanted_labels
+    status: ci
+    notes: 'CI: a refused partial-apply call then the retry ends with the wanted labels'
   - id: cancel-undispatched-no-checkout
     capability: Cancelling a never-dispatched batch needs no clone
     acceptance: '`batch cancel --yes` of a batch with no dispatch event needs no --checkout,
