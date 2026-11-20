@@ -325,6 +325,7 @@ class DriveCheckout:
         self.conflicts: list[str] = []  # what a scratch merge with main reports conflicted
         self.trials = 0  # scratch merges made
         self.removed: list[Path] = []  # scratch worktrees removed
+        self.fetches = 0  # `git fetch` calls
 
     def origin_repo(self) -> str | None:
         return REPO
@@ -336,7 +337,7 @@ class DriveCheckout:
         return "main"
 
     def fetch(self) -> None:
-        pass
+        self.fetches += 1
 
     def show(self, ref: str, file: str) -> str | None:
         if file == ".fr/triage.yaml":
@@ -5894,3 +5895,203 @@ def test_an_archive_pr_pushed_between_its_view_and_its_checks_is_never_merged(
     assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")], out
     assert _lines(out, "archive") == [], out
     assert len(views) >= 2  # the head was read on both sides of the checks
+
+
+# ------------- hand-back review findings (p3a-r1..r6): one fetch, no launch, said once
+
+
+class _FailingClone:
+    def __init__(self) -> None:
+        self.fetches = 0
+
+    def fetch(self) -> None:
+        from fr.triage.gitseam import GitError
+
+        self.fetches += 1
+        raise GitError("could not read from remote repository")
+
+
+def test_a_failed_merge_ctx_fetch_is_not_repeated_by_a_later_probe_read(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.gitseam import GitError
+
+    clone = _FailingClone()
+    driver = _clone_driver(tmp_path, monkeypatch, clone)
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown):
+        driver.merge_ctx(world.facts(), REPO)
+    with pytest.raises(GitError):
+        driver._fetched_reader(REPO)  # the probe's read: the recorded failure, no new fetch
+    assert clone.fetches == 1
+
+
+def test_a_failed_probe_fetch_is_not_repeated_by_merge_ctx(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.gitseam import GitError
+
+    clone = _FailingClone()
+    driver = _clone_driver(tmp_path, monkeypatch, clone)
+    with pytest.raises(GitError):
+        driver._fetched_reader(REPO)
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown):
+        driver.merge_ctx(world.facts(), REPO)
+    assert clone.fetches == 1
+
+
+def test_a_red_pass_fetches_the_repo_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert len(_red_events(tmp_path)) == 1
+    assert checkout.fetches == 1
+
+
+def test_a_session_target_with_no_dispatch_and_no_launch_names_no_runner_and_does_not_raise(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing names a runner (no dispatch event, no `launch.runner`) and no model resolves
+    a launch: the hand-back finds no session, it does not fail the pass."""
+    world.issues[1] = "open"
+    bare = _batch("b1", 1).replace(f"    launch: {LAUNCH}\n", "")
+    _state(tmp_path, world, bare)
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    driver = _clone_driver(tmp_path, monkeypatch, object())
+    name, target = driver._session_target(world.facts(), batch, REPO)
+    assert name is None and target.id == BATCH_ITEM_B1
+    named = _batch("b1", 1, events=_dispatch_event("b1"))
+    _state(tmp_path, world, named)
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    assert driver._session_target(world.facts(), batch, REPO)[0] == "fake"
+
+
+def test_a_probe_waiting_on_a_working_session_says_so_once_across_passes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "working"
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    lines = [x for x in result.output.splitlines() if "nothing sent" in x]
+    assert len(lines) == 1, result.output
+
+
+def test_a_failing_probe_hand_back_says_so_once_across_passes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+
+    def _boom(item: Any, text: str) -> None:
+        raise RuntimeError("pane gone")
+
+    monkeypatch.setattr(messenger, "message", _boom)
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    lines = [x for x in result.output.splitlines() if "hand-back to" in x]
+    assert len(lines) == 1 and _conflicts(tmp_path) == [], result.output
+
+
+def test_a_queue_mode_red_unapproved_draft_is_handed_back_end_to_end(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    world.config = QUEUE_CONFIG
+    _red_draft(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1 and "sha-101" in text and "lint" in text, out
+    (event,) = _red_events(tmp_path)
+    assert (event.head, event.delivered) == ("sha-101", "session")
+    assert world.merged == [] and "pr_ready 101" not in world.calls
+
+
+def test_a_probe_whose_runner_cannot_be_inspected_or_messaged_holds_the_conflict(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _dirty_draft(world, tmp_path, checkout)
+    _drive(tmp_path, "--once", "--yes")  # `runner` is no SessionMessenger / SessionInspector
+    (event,) = _conflicts(tmp_path)
+    assert event.delivered == "held" and runner.dispatched == []
+
+
+def test_a_probe_whose_fetch_fails_says_so_once_and_records_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.gitseam import GitError
+
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+
+    def _fail() -> None:
+        checkout.fetches += 1
+        raise GitError("could not read from remote repository")
+
+    monkeypatch.setattr(checkout, "fetch", _fail)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert checkout.fetches == 1, out
+    assert any("the conflict probe could not run" in x for x in out.splitlines()), out
+    assert _conflicts(tmp_path) == [] and messenger.messages == [] and checkout.trials == 0
+
+
+def test_a_probe_on_a_runner_this_driver_lacks_leaves_the_session_to_its_driver(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.driver import HOST
+
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    monkeypatch.setattr(type(HOST), "carries", lambda self, runner: False)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "left to that runner's driver" in out, out
+    assert messenger.messages == [] and _conflicts(tmp_path) == []
+
+
+def test_a_probe_git_error_is_said_once_and_retried_uncached(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.gitseam import GitError
+
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    attempts: list[int] = []
+
+    def _trial(*args: Any, **kwargs: Any) -> list[str]:
+        attempts.append(1)
+        raise GitError("worktree add failed")
+
+    monkeypatch.setattr(triage_batch_cmd, "trial_conflicts", _trial)
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    lines = [x for x in result.output.splitlines() if "the conflict probe could not run" in x]
+    assert len(lines) == 1 and len(attempts) >= 2, result.output  # said once, tried each pass
+    assert _conflicts(tmp_path) == [] and messenger.messages == []

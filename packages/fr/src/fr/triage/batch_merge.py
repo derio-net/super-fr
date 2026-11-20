@@ -39,6 +39,7 @@ from fr.triage.batch_version import (
     slot_versions,
 )
 from fr.triage.errors import ConfigError, TriageError
+from fr.triage.gitseam import GitError
 from fr.triage.model import BatchEvent, UpdateEvent, VersionBlock
 
 FAILING_BUCKETS = frozenset({"fail", "cancel"})
@@ -654,16 +655,25 @@ def trial_conflicts(
     where = root / f"probe-{head[:12]}"
     wt: WorktreeSeam | None = None
     try:
+        if where.exists():  # a probe's leftover (it never holds operator work): discard it
+            try:
+                checkout.remove_worktree(where)
+            except GitError:
+                shutil.rmtree(where, ignore_errors=True)
         wt = checkout.add_worktree(where, head)
         conflicted, refused = merge_main(wt, main, version)
         if conflicted:
             wt.abort_merge()
         return refused
     finally:
-        if wt is not None or where.exists():
-            checkout.remove_worktree(where)
-        if own:
-            shutil.rmtree(root, ignore_errors=True)
+        try:  # cleanup never masks what is in flight, and never skips the temp root
+            if wt is not None or where.exists():
+                checkout.remove_worktree(where)
+        except GitError:
+            pass
+        finally:
+            if own:
+                shutil.rmtree(root, ignore_errors=True)
 
 
 def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: str | None) -> str:

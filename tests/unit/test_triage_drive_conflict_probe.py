@@ -6,8 +6,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 from fr.triage.batch_merge import trial_conflicts
-from fr.triage.gitseam import Checkout
+from fr.triage.gitseam import Checkout, GitError
 from fr.triage.model import VersionBlock, VersionSource
 
 
@@ -78,4 +79,89 @@ def test_a_version_only_conflict_is_resolved_not_reported(tmp_path: Path) -> Non
     assert trial_conflicts(Checkout(repo), "main", None, head, scratch_root=root) == [
         "pyproject.toml"
     ]
+    assert _scratch_gone(repo, root)
+
+
+def _pr_head(repo: Path) -> str:
+    _git(repo, "switch", "-qc", "pr")
+    (repo / "a.txt").write_text("one\nPR\nthree\n")
+    _git(repo, "commit", "-qam", "pr")
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "-q", "main")
+    return head
+
+
+def test_an_exception_during_the_merge_still_removes_the_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import batch_merge
+
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    root = tmp_path / "probe"
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(batch_merge, "merge_main", _boom)
+    with pytest.raises(KeyboardInterrupt):
+        trial_conflicts(Checkout(repo), "main", None, head, scratch_root=root)
+    assert _scratch_gone(repo, root)
+
+
+def test_a_merge_git_error_with_no_conflict_propagates_and_cleans_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import batch_merge
+
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    root = tmp_path / "probe"
+
+    def _fail(*args: object, **kwargs: object) -> None:
+        raise GitError("merge: not something we can merge")
+
+    monkeypatch.setattr(batch_merge, "merge_main", _fail)
+    with pytest.raises(GitError, match="not something"):
+        trial_conflicts(Checkout(repo), "main", None, head, scratch_root=root)
+    assert _scratch_gone(repo, root)
+
+
+def test_a_failing_cleanup_masks_nothing_and_still_removes_the_temp_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import batch_merge
+
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    (repo / "a.txt").write_text("one\nMAIN\nthree\n")
+    _git(repo, "commit", "-qam", "main")
+    clone = Checkout(repo)
+    made: list[Path] = []
+    real_mkdtemp = batch_merge.tempfile.mkdtemp
+
+    def _mkdtemp(*args: object, **kwargs: object) -> str:
+        path = real_mkdtemp(*args, **kwargs)  # type: ignore[call-overload]
+        made.append(Path(path))
+        return path
+
+    def _fail(where: Path) -> None:
+        raise GitError("worktree remove failed")
+
+    monkeypatch.setattr(batch_merge.tempfile, "mkdtemp", _mkdtemp)
+    monkeypatch.setattr(clone, "remove_worktree", _fail)
+    assert trial_conflicts(clone, "main", None, head) == ["a.txt"]  # the verdict, not the cleanup
+    assert made and not made[0].exists()
+
+
+def test_a_leftover_dirty_probe_directory_is_discarded_and_the_probe_runs(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    root = tmp_path / "probe"
+    where = root / f"probe-{head[:12]}"
+    Checkout(repo).add_worktree(where, head)
+    (where / "stray.txt").write_text("a crashed probe left this\n")
+    assert trial_conflicts(Checkout(repo), "main", None, head, scratch_root=root) == []
     assert _scratch_gone(repo, root)

@@ -4148,9 +4148,7 @@ class _Driver:
         client, checkout = self.client(facts, repo), self.checkout(repo)
         if repo not in self._ctx_checked:
             try:
-                if repo not in self._fetched:
-                    checkout.fetch()
-                    self._fetched.add(repo)
+                self._fetch_once(repo, checkout)
                 _config_fresh(checkout, facts, repo, hold_unknown=True)
             except GitError as exc:
                 self._ctx_held[repo] = DefaultBranchUnknown(repo, exc)
@@ -4890,9 +4888,16 @@ class _Driver:
     def _fetched_reader(self, repo: str) -> Checkout:
         """`_reader`, fetched once per pass (p4-r7): every read of `origin/<default>` a
         pass makes shares one fetch, however many batches ask."""
+        checkout = self._reader(repo)
+        self._fetch_once(repo, checkout)
+        return checkout
+
+    def _fetch_once(self, repo: str, checkout: Checkout) -> None:
+        """Fetch *checkout* unless this pass already did, recording a failure so every
+        later fetch of the repo in the pass raises the same `GitError` (R19): the one
+        place a pass's fetch is made, whoever asks."""
         if repo in self._fetch_failed:
             raise self._fetch_failed[repo]  # R19: one fetch per repo per pass, failed or not
-        checkout = self._reader(repo)
         if repo not in self._fetched:
             try:
                 checkout.fetch()
@@ -4900,7 +4905,6 @@ class _Driver:
                 self._fetch_failed[repo] = exc
                 raise
             self._fetched.add(repo)
-        return checkout
 
     def _forget_fetches(self) -> None:
         """A new pass fetches each repo again."""
@@ -6257,7 +6261,12 @@ class _Driver:
         if decision.kind == "skip":
             return "", False
         if decision.kind == "wait-behind":
-            return f"{said}; waits behind {decision.behind}, whose conflict shares a path", False
+            return self._probe_said(
+                batch,
+                action,
+                "behind\0" + str(decision.behind),
+                f"{said}; waits behind {decision.behind}, whose conflict shares a path",
+            ), False
         event = ConflictEvent(
             kind="conflict", at=_now_after(batch), head=action.head, paths=list(paths),
             delivered="held",
@@ -6266,6 +6275,9 @@ class _Driver:
             self._append(judgements, facts, batch, event)
             return f"{said}; held: its hand-backs since its dispatch are spent, it needs you", True
         name, target = self._session_target(facts, batch, repo)
+        if name is None:  # nothing names a runner: no session can take it
+            self._append(judgements, facts, batch, event)
+            return f"{said}; no session can take it: it needs you", True
         if not self.adapter.carries(name):  # another driver's session
             return f"{said}; its session runs on {name}, which this driver lacks: left to that "\
                 "runner's driver", False  # fmt: skip
@@ -6277,14 +6289,24 @@ class _Driver:
         )  # fmt: skip
         status, failure = self._offer(name, target, brief)
         if status == "failed":
-            return f"{said}; hand-back to {target.id} failed, retried next pass: {failure}", False
+            return self._probe_said(
+                batch,
+                action,
+                "failed",
+                f"{said}; hand-back to {target.id} failed, retried next pass: {failure}",
+            ), False
         if status == "idle":
             event = event.model_copy(update={"delivered": "session", "handle": target.id})
             self._append(judgements, facts, batch, event)
             pending = " (pending)" if isinstance(self.runner(name), Mailbox) else ""
             return f"{said}; handed back{pending} to its session {target.id}", True
         if status not in (None, "absent", "done"):
-            return f"{said}; its session is {status}: nothing sent, retried next pass", False
+            return self._probe_said(
+                batch,
+                action,
+                f"wait\0{status}",
+                f"{said}; its session is {status}: nothing sent, retried next pass",
+            ), False
         self._append(judgements, facts, batch, event)  # no session can take it: it needs you
         return f"{said}; no session can take it: it needs you", True
 
@@ -6312,8 +6334,7 @@ class _Driver:
             return "", False
         events = [*batch.events, *ctx.recorded.get(batch.id, [])]
         try:
-            ctx.checkout.fetch()
-            base_now = ctx.checkout.rev_parse(ctx.main)
+            base_now = self._fetched_reader(repo).rev_parse(ctx.main)
         except (GitError, TriageError) as exc:
             return self._said_once(
                 batch, action, "base", f"the base could not be read ({exc}): retried next pass"
@@ -6327,22 +6348,25 @@ class _Driver:
         status = "idle"
         if decision == "handback":
             name, target = self._session_target(facts, batch, repo)
-            if not self.adapter.carries(name):  # another driver's session
+            if name is None:  # nothing names a runner: no session can take it
+                status = "absent"
+            elif not self.adapter.carries(name):  # another driver's session
                 return self._said_once(
                     batch, action, "carries",
                     f"its session runs on {name}, which this driver lacks: left to that "
                     "runner's driver",
                 ), False  # fmt: skip
-            runner = self.runner(name)
-            if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
-                try:
-                    status = runner.session_statuses([target]).get(target.id, "unknown")
-                except Exception as exc_:  # noqa: BLE001 - retried next pass
-                    return self._said_once(
-                        batch, action, "status", f"its session could not be read: {exc_}"
-                    ), False
             else:
-                status = "absent"  # this runner cannot be messaged: no session can take it
+                runner = self.runner(name)
+                if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
+                    try:
+                        status = runner.session_statuses([target]).get(target.id, "unknown")
+                    except Exception as exc_:  # noqa: BLE001 - retried next pass
+                        return self._said_once(
+                            batch, action, "status", f"its session could not be read: {exc_}"
+                        ), False
+                else:
+                    status = "absent"  # this runner cannot be messaged: no session can take it
             decision = red_decision(
                 events, action.pr, action.head, checks, base_now, status,
                 queue=ctx.rules.merge_queue,
@@ -6361,7 +6385,16 @@ class _Driver:
                 f"its session is {status}: nothing sent, retried next pass",
             )  # fmt: skip
             return line, False
+        assert name is not None  # a hand-back needs a session, and a session needs a runner
         return self._red_hand_back(action, facts, judgements, batch, repo, name, target, runner)
+
+    def _probe_said(self, batch: Batch, action: Action, cause: str, line: str) -> str:
+        """A probe's whole *line* the first time this (batch, head, cause) is seen, else ""."""
+        key = f"probe\0{batch.id}\0{action.head}\0{cause}"
+        if key in self.reported:
+            return ""
+        self.reported.add(key)
+        return line
 
     def _said_once(self, batch: Batch, action: Action, cause: str, why: str) -> str:
         """The red warn line with *why*, the first time this (batch, head, cause) is seen,
@@ -6460,16 +6493,31 @@ class _Driver:
         the latest fresh conflict session since the dispatch, else the batch's own session,
         and the launch the batch would start a fresh one with."""
         name, target = self._session_target(facts, batch, repo)
-        return name, target, self._launch(facts, batch, repo)
+        launch = self._launch(facts, batch, repo)
+        return str(name or launch.runner), target, launch
 
-    def _session_target(self, facts: Facts, batch: Batch, repo: str) -> tuple[str, Any]:
+    def _session_runner(self, batch: Batch, last: Any) -> str | None:
+        """The runner whose session a hand-back would message: the dispatch's, else what
+        the adapter and the batch already say. None when nothing names one (no dispatch and
+        no `launch.runner`): there is then no session, and resolving a launch (which needs
+        a model) would only fail."""
+        if last is not None:
+            return str(last.runner)
+        try:
+            named = self.adapter.runner_for(batch)
+        except TriageError:
+            named = None
+        named = named or batch.launch.runner
+        return str(named) if named else None
+
+    def _session_target(self, facts: Facts, batch: Batch, repo: str) -> tuple[str | None, Any]:
         """`_hand_back_target` without the launch: a message to a session (a red or probed
         hand-back) never starts one, so a batch with no model to launch with still gets
-        its hand-back."""
+        its hand-back, or finds no session (a None name)."""
         from fr_dispatch.work_item import WorkItem
 
         last = last_dispatch(batch)
-        name = str(last.runner if last else self._launch(facts, batch, repo).runner)
+        name = self._session_runner(batch, last)
         since = fresh_conflicts(batch, since_dispatch=True)
         target = WorkItem(
             id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False))
