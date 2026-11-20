@@ -128,3 +128,13 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-consumer-followups-p1 created=2026-11-19T22:32:03+00:00 -->
 ### tier-2026-11-19-consumer-followups-p1 · decision · hard: R1-R4 change what the OpenCode isolation gates judge on every tool call of every session
+
+<!-- fr:journal kind=finding scope=spec id=s-r5-resolved-2 created=2026-11-20T07:21:23+00:00 state=open resolves=s-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1590 -->
+### s-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1590] · resolves s-r5: In CI, a Gitea checkout with a default branch outside main/master/trunk/develop has no default ref, so the check refuses
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1590.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6-resolved-2 created=2026-11-20T07:21:23+00:00 state=open resolves=s-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1591 -->
+### s-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1591] · resolves s-r6: Child sessions have no sentinel of their own, so the shell and push guards never fire for them in any directory
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1591.
