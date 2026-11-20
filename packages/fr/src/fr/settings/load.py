@@ -282,7 +282,7 @@ def _quiet(root: Path) -> EffectiveSettings | None:
     try:
         _, sha, _, _ = _resolve_source(root)
         ignored = sha is not None and _show(root, sha) is not None
-    except (SettingsError, GitUnavailableError):
+    except SettingsError, GitUnavailableError:
         ignored = False
     if ignored:
         note += f"; {SETTINGS_PATH} on the default branch is ignored under quiet"
@@ -345,7 +345,7 @@ def _stealth(root: Path) -> EffectiveSettings | None:
     try:
         _, own, _, _ = _resolve_source(root)
         ignored = own is not None and _show(root, own) is not None
-    except (SettingsError, GitUnavailableError):
+    except SettingsError, GitUnavailableError:
         ignored = False
     if ignored:
         note += f"; the target's {SETTINGS_PATH} is ignored under stealth"

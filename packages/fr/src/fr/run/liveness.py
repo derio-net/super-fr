@@ -307,7 +307,7 @@ class StalledAttempt(NamedTuple):
 def _parse_instant(text: str) -> _dt.datetime | None:
     try:
         parsed = _dt.datetime.fromisoformat(text)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=_dt.UTC)
 

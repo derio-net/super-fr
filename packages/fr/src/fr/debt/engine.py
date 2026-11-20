@@ -167,7 +167,7 @@ def spec_heading_problems(repo_root: Path) -> list[str]:
     for spec in sorted(specs.glob("*.md")) if specs.is_dir() else []:
         try:
             heading = find_test_plan_heading(spec.read_text())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             continue
         if heading is not None and not heading.exact:
             out.append(near_miss_message(heading, f"{SPECS_REL}/{spec.name}"))
@@ -205,7 +205,7 @@ def read_journals(repo_root: Path) -> JournalsRead:
         for path in sorted(root.glob("**/*.md")):
             try:
                 entries[path] = parse_journal(path.read_text())
-            except (JournalParseError, OSError, UnicodeDecodeError):
+            except JournalParseError, OSError, UnicodeDecodeError:
                 unreadable.append(path.relative_to(repo_root).as_posix())
     return JournalsRead(entries, tuple(unreadable))
 
@@ -286,7 +286,7 @@ def _last_commit(
             text=True,
             timeout=30,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         return None
     return _parse(done.stdout.strip()) if done.returncode == 0 else None
 
@@ -328,7 +328,7 @@ def _safe_branch(repo_root: Path, branch: str) -> bool:
             text=True,
             timeout=30,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         return False
     return done.returncode == 0
 
@@ -340,7 +340,7 @@ def _run_branches(repo_root: Path) -> dict[str, str]:
     for path in sorted(runs.glob("*.yaml")) if runs.is_dir() else []:
         try:
             data = yaml.safe_load(path.read_text())
-        except (OSError, yaml.YAMLError):
+        except OSError, yaml.YAMLError:
             continue
         if not isinstance(data, dict) or not isinstance(data.get("branch"), str):
             continue

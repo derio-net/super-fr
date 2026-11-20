@@ -1,0 +1,31 @@
+schema_version: 12
+run: 2026-11-20-feat-ci-single-python
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3]
+refactor:
+  P1.T1: "the T1.S3 fix (PEP 695 generics, dropped TypeVars) is the cleanup; nothing further to tidy"
+  P1.T3: "a one-string image tag change in three places; nothing to clean"
+  P1.T4: "rows, notes and fragment only; nothing to clean"
+journal:
+  - kind: discovery
+    id: ruff-unsafe-fix-partial-rename
+    title: ruff --unsafe-fixes for UP047 renames type params inconsistently on its first pass
+    body: |
+      The first `--fix --unsafe-fixes` pass wrote `def _poll[T](check: ... _T ...)` (signature
+      and body names disagreeing) and left the module TypeVar. I reverted it, wrote the PEP 695
+      headers by hand, deleted the now-unused module TypeVar/ParamSpec definitions, and let ruff
+      clean imports; a second ruff pass then normalised the underscore-prefixed names. mypy is green.
+  - kind: discovery
+    id: py314-format-churn
+    title: ruff format at target py314 rewrites 98 files (PEP 758 unparenthesised except lists)
+    body: |
+      `except (A, B):` becomes `except A, B:` at py314, so `ruff format --check` at the new
+      target needs that mechanical churn (formatting only; legacy/pin tests rerun green).
+  - kind: discovery
+    id: ci-evidence-main-push-row
+    title: ci-single-leg-main-push stays walk-owed
+    body: Post-merge walk by design (spec Verification); not touched.
+resolves: []
+evidence: {tests: ci}

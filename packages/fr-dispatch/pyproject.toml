@@ -2,7 +2,7 @@
 name = "fr-dispatch"
 version = "8.3.0rc6"
 description = "super-fr dispatch: queue protocol + runner framework (discover/tick, Runner protocol, prompt/lifecycle/metrics)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = ["fr"]
 
 [build-system]

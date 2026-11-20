@@ -258,7 +258,7 @@ The scaffolded workflow runs code with your repo's tokens, so it pins what it ru
 action is a commit SHA with a version comment. The `fr` it installs is the commit of the
 release tag of the `fr` that wrote the file, not `main`. On GitLab, each job also installs
 one uv release and checks its SHA-256. The debt job pins its `tea` and `glab` the same
-way. The pins leave one thing open: the GitLab job image `python:3.12` is a tag, and a tag
+way. The pins leave one thing open: the GitLab job image `python:3.14` is a tag, and a tag
 can move.
 
 A moving branch could change what your CI runs between two runs. A commit cannot. To move

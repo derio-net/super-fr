@@ -71,9 +71,9 @@ permissions:
   pull-requests: read
 
 # The pre-push suite the test shards run is the only test a release gets; it runs
-# on the requires-python floor, like CI (#940).
+# on the requires-python floor, like CI (#940, #1589).
 env:
-  UV_PYTHON: "3.11"
+  UV_PYTHON: "3.14"
 
 # GitHub keeps ONE pending run per group: a push run queued behind a pending
 # `workflow_dispatch` run replaced it, silently (gh#1291). A dispatch run gets a

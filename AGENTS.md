@@ -446,8 +446,8 @@ test file grows or shrinks a lot — a stale file only makes the shards less
 balanced, never wrong; the CI time-budget watcher is what notices when the
 imbalance starts to cost real wall clock. On a host too loaded to run the whole
 suite, merge the stored durations of a green CI run's shards instead (each uploads
-`durations-py<v>-shard-<n>`; `scripts/split_check.py merge -o .test_durations
-<the 3.14 leg's shard-durations.json files>`, as `split-check` does on `main`).
+`durations-shard-<n>`; `scripts/split_check.py merge -o .test_durations
+<the shards' shard-durations.json files>`, as `split-check` does on `main`).
 
 **Tiers** (spec `2026-11-19-local-suite-cost` R5–R8). `pyproject.toml`'s `addopts`
 carries `-m "not scenario"`: the `scenario` marker (every test of
@@ -492,8 +492,8 @@ watch-list tripwire) until it is either named in `ci-budget.yml`'s
 `exclude: true` in `.github/ci-budget.yaml`.
 
 Measured 2026-11-19 from CI run 44544149927 (this repo's PR #1559 after the suite-cost
-work, the py3.14 leg's seven shards, every test): 16,989 tests, 4,157 worker-seconds
-(the py3.11 leg: 4,180), of which the `scenario` tier is 144 tests and 870
+work, the py3.14 leg's seven shards, every test, when CI ran two legs, 3.11 and 3.14): 16,989
+tests, 4,157 worker-seconds (the py3.11 leg: 4,180). CI now runs one leg, on 3.14 (#1589). Of the 16,989, the `scenario` tier is 144 tests and 870
 worker-seconds; each shard job took 2 min 50 s to 4 min 37 s, and the whole CI run
 5 min 18 s of wall clock. The previous file (2026-11-15, 15,182 tests, 18,855
 worker-seconds) was measured on another machine, so the two totals do not compare. A

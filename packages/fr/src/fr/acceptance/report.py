@@ -124,7 +124,7 @@ class LinkBuilder:
             return frag
         try:
             line = node_line((self._base(repo) / path).read_text(), frag)
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             return frag
         return f"L{line}" if line is not None else frag
 

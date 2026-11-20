@@ -801,7 +801,7 @@ def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
 
     try:
         plan = parse(emitted_path(repo_root, plan_rel))
-    except (PlanSchemaError, OSError):
+    except PlanSchemaError, OSError:
         return None
     return next((p.phase.tier for p in plan.phases if p.phase.number == phase_n), None)
 
@@ -2505,7 +2505,7 @@ def _proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:
         head = git_answer(repo_root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         try:
             recorded = load_state(repo_root, head)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             recorded = None
         if recorded is not None and recorded.base_sha:
             ok = git_answer(repo_root, "cat-file", "-e", f"{recorded.base_sha}^{{commit}}")
@@ -3921,7 +3921,7 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
         # evidence" unanswerable, and the caller (`status`/`check`) warns about
         # the drift itself (spec 2026-10-05-run-upgrade-midflight §B).
         manifest = _resolve_manifest_checked_schema(repo_root, state)
-    except (RunStateError, WorkflowError, AdoptError, OSError):
+    except RunStateError, WorkflowError, AdoptError, OSError:
         return {}
     out: dict[tuple[str, str], tuple[str, ...]] = {}
     for step_id, declaring in _evidence_owed(manifest).items():
@@ -5357,7 +5357,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
             state = parse_run_state(candidate.read_text())
-        except (RunStateError, OSError):
+        except RunStateError, OSError:
             continue  # a broken run file is a different problem
         if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
             return state.run
@@ -5804,7 +5804,7 @@ def _is_tracked(repo_root: Path, path: Path) -> bool:
     try:
         rel = path.resolve().relative_to(repo_root.resolve()).as_posix()
         return git_answer(repo_root, "ls-files", "--error-unmatch", "--", rel).returncode == 0
-    except (ValueError, GitUnavailableError):
+    except ValueError, GitUnavailableError:
         return False
 
 
@@ -6174,7 +6174,7 @@ def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
     archived = archived_run_path(repo_root, run_id)
     try:
         return parse_run_state(archived.read_text()) if archived.is_file() else None
-    except (OSError, RunStateError):
+    except OSError, RunStateError:
         return None
 
 
@@ -6991,7 +6991,7 @@ def _repo_relative(value: str) -> str:
     try:
         root = resolve_repo_root().resolve()
         return str(Path(value).resolve().relative_to(root)) if Path(value).is_absolute() else value
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return value
 
 
@@ -7065,7 +7065,7 @@ def _warn_ops_gap(repo_root: Path, state: RunState) -> None:
     except TestPlanHeadingError as e:  # never silent: it hides every step (#1315)
         err_console.print(f"warning: {e}", markup=False, soft_wrap=True)
         return
-    except (ValueError, OSError, AcceptanceError, OpsLoadError):
+    except ValueError, OSError, AcceptanceError, OpsLoadError:
         return
     if gap:
         message = gap_message(gap, has_plan=plan_dir is not None)
@@ -7471,10 +7471,7 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     raise typer.Exit(2)
 
 
-_T_JOURNALS = TypeVar("_T_JOURNALS")
-
-
-def _gate_journals(read: Callable[[], _T_JOURNALS]) -> _T_JOURNALS:
+def _gate_journals[T_JOURNALS](read: Callable[[], T_JOURNALS]) -> T_JOURNALS:
     """Run a `deliver` gate's journal read; a journal that does not parse
     refuses, naming it (review p3-r4) — never a gate judging a run with one
     of its journals silently dropped."""
@@ -8125,14 +8122,14 @@ def _next_unit(
         state = load_run_state(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
         _step, parent = _find_step(manifest, step_id)
-    except (RunStateError, WorkflowError, AdoptError):
+    except RunStateError, WorkflowError, AdoptError:
         return None
     if parent is not None:
         grec = state.steps.get(parent.id)
         if grec is not None and grec.state != "done":
             try:
                 agentic, _manual = _group_phases(repo_root, state)
-            except (RunStateError, AdoptError):
+            except RunStateError, AdoptError:
                 return parent.id
             items = units.unit_states(grec)
             for key in _expected_group_items(parent, agentic):
@@ -8787,7 +8784,7 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
             state = parse_run_state(candidate.read_text())
-        except (RunStateError, OSError):
+        except RunStateError, OSError:
             continue
         if state.branch == branch:
             found.append(state)
@@ -8940,7 +8937,7 @@ def check_cmd(
     state = _load_or_exit(repo_root, run_id)
     try:
         _resolve_manifest_for_read(repo_root, state)  # warns once on a drifted cursor
-    except (RunStateError, WorkflowError):
+    except RunStateError, WorkflowError:
         pass  # check's verdict never depended on the manifest resolving
 
     record = state.steps.get(state.cursor)

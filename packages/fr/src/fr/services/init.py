@@ -121,7 +121,7 @@ def resolve_init_services(
             ci = CiService(**block) if name == "ci" else CiService(type="none")
             tr = TrackingService(**block) if name == "tracking" else TrackingService(type="none")
             validate_services(ForgeService(**(forge or {"type": forge_type})), ci, tr)
-        except (ServicesError, ValidationError):
+        except ServicesError, ValidationError:
             return None
         return block
 

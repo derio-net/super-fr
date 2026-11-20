@@ -59,7 +59,7 @@ def holds_open(row: Row, repo_root: Path) -> bool:
     spec = _spec_of(row, repo_root)
     try:
         return spec_verification(repo_root, spec).is_post_merge(row)
-    except (StrategyError, SectionError, OSError):
+    except StrategyError, SectionError, OSError:
         return True
 
 

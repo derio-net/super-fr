@@ -54,7 +54,7 @@ def load_stops(target: Path) -> dict[str, MergeStop]:
         if data.get("schema") != _SCHEMA:
             return {}
         return {str(bid): MergeStop(**stop) for bid, stop in data["stops"].items()}
-    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+    except OSError, ValueError, TypeError, KeyError, AttributeError:
         return {}
 
 

@@ -2,7 +2,7 @@
 name = "fr"
 version = "8.3.0rc6"
 description = "super-fr base: superpowers wrapper + plan-as-folder + GH tracking (render → observe → diff → apply)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "typer>=0.12",
     "pyyaml>=6",

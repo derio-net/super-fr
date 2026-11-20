@@ -8,13 +8,13 @@ on:
   # A merge queue builds each group on its own branch (merge-train-safety R15).
   merge_group:
 
-# Test the floor we declare (`requires-python = ">=3.11"`), not whatever
-# Python the runner ships (#940). An env var rather than a committed
-# `.python-version`, so it does not also pin an operator's local runs. The
-# test job overrides it per leg; tests/unit/test_ci_python_floor.py keeps it
+# The floor we declare (`requires-python = ">=3.14"`) is the one interpreter we
+# test (#940, #1589), not whatever Python the runner ships. An env var rather
+# than a committed `.python-version`, so it does not also pin an operator's
+# local runs. Every job inherits it; tests/unit/test_ci_python_floor.py keeps it
 # equal to the requires-python floor.
 env:
-  UV_PYTHON: "3.11"
+  UV_PYTHON: "3.14"
 
 jobs:
   lint:
@@ -65,18 +65,11 @@ jobs:
           path: plan/durations-plan.json
           retention-days: 1
 
-  # What each leg collects, with the shards' own addopts and no split or
+  # What the suite collects, with the shards' own addopts and no split or
   # coverage; `split-check` proves the shards ran exactly this set (R5).
   collect:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.11", "3.14"]
-    name: collect (py${{ matrix.python }})
-    env:
-      UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,7 +81,7 @@ jobs:
           > collected.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: collected-py${{ matrix.python }}
+          name: collected
           path: collected.txt
           retention-days: 1
 
@@ -99,23 +92,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The floor, and the newest stable Python, so a version-specific
-        # break shows up from either end (#940).
-        python: ["3.11", "3.14"]
         # 7, not 6 (gh#1428): runner speed varies x0.72-x1.40 between runs, and
         # at 6 a slow runner's shard alone filled the 360 s budget.
         shard: [1, 2, 3, 4, 5, 6, 7]
-        include:
-          # Coverage is measured on the newest leg only (R7): both legs would
-          # upload the same artifact name, and the gate needs one run of the
-          # suite, not two.
-          - python: "3.11"
-            cov_args: "--no-cov"
-          - python: "3.14"
-            cov_args: "--cov --cov-report="
-    name: test (py${{ matrix.python }}, ${{ matrix.shard }})
-    env:
-      UV_PYTHON: ${{ matrix.python }}
+    name: test (${{ matrix.shard }})
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,21 +112,19 @@ jobs:
         run: cp durations-plan.json shard-durations.json
       # Sharded with pytest-split (spec 2026-09-26 §3.A, 2026-11-01 §3.B).
       # addopts is CLEARED, not patched, and --strict-markers is re-added
-      # explicitly; the coverage options come per leg (matrix.cov_args), since
-      # pytest-cov accumulates --cov-report values into a dict, so a CLI
-      # --cov-report= cannot cancel addopts' term-missing. The `coverage` job
+      # explicitly, with the coverage options on every shard (--cov-report=
+      # cancels addopts' term-missing). The `coverage` job
       # below holds the --cov-fail-under=75 gate that addopts holds locally.
       # --clean-durations makes shard-durations.json hold exactly the tests
       # this shard ran; `split-check` compares those files to `collect`.
       - run: >-
-          uv run pytest -o addopts="--strict-markers" $COV_ARGS
+          uv run pytest -o addopts="--strict-markers" --cov --cov-report=
           -n auto --splits 7 --group $SHARD
           --splitting-algorithm least_duration
           --durations-path shard-durations.json --store-durations --clean-durations
           --durations=25
           --junitxml=junit-shard.xml
         env:
-          COV_ARGS: ${{ matrix.cov_args }}
           SHARD: ${{ matrix.shard }}
           COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
       # A failed test as a check-run annotation, readable through the REST API
@@ -160,20 +138,19 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: durations-py${{ matrix.python }}-shard-${{ matrix.shard }}
+          name: durations-shard-${{ matrix.shard }}
           path: shard-durations.json
           retention-days: 7
-      - if: matrix.python == '3.14'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-shard-${{ matrix.shard }}
           path: .coverage.shard${{ matrix.shard }}
           include-hidden-files: true
           retention-days: 1
 
-  # R5: per leg, the tests the shards ran are exactly the tests collected, none
-  # twice. On a push to main it also saves the 3.14 leg's measured durations
-  # as the next run's plan.
+  # R5: the tests the shards ran are exactly the tests collected, none twice.
+  # On a push to main it also saves the shards' measured durations as the next
+  # run's plan.
   split-check:
     needs: [test, collect]
     runs-on: ubuntu-latest
@@ -183,30 +160,23 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: durations-py*-shard-*
+          pattern: durations-shard-*
           path: shards
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: collected-py*
+          name: collected
           path: collected
-      - name: Shards ran exactly what each leg collects
-        # The legs come from `collect`'s artifacts (its matrix is pinned equal to
-        # `test`'s), so an added leg is checked too; a leg with no shard files
-        # leaves the glob unmatched and the load fails loudly.
-        run: |
-          set -euo pipefail
-          for dir in collected/collected-py*; do
-            py="${dir#collected/collected-py}"
-            uv run --no-project python scripts/split_check.py check \
-              --collected "$dir/collected.txt" \
-              shards/durations-py"$py"-shard-*/shard-durations.json
-          done
-      - name: Merge the 3.14 leg's measured durations
+      - name: Shards ran exactly what was collected
+        run: >-
+          uv run --no-project python scripts/split_check.py check
+          --collected collected/collected.txt
+          shards/durations-shard-*/shard-durations.json
+      - name: Merge the shards' measured durations
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: >-
           uv run --no-project python scripts/split_check.py merge
           -o cache/test-durations.json
-          shards/durations-py3.14-shard-*/shard-durations.json
+          shards/durations-shard-*/shard-durations.json
       - name: Save them as the next run's plan
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

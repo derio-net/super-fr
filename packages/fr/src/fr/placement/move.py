@@ -367,7 +367,7 @@ def _owner(rel: str, plan_spec: Mapping[str, str], run_branch: Mapping[str, str]
 def _yaml_key(data: bytes, key: str) -> str | None:
     try:
         doc = yaml.safe_load(data.decode())
-    except (yaml.YAMLError, UnicodeDecodeError):
+    except yaml.YAMLError, UnicodeDecodeError:
         return None
     value = doc.get(key) if isinstance(doc, dict) else None
     return value if isinstance(value, str) and value else None

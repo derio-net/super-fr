@@ -163,7 +163,7 @@ class Operation(replacement.Operation):
             )
             where = target or "uncertain allocation: discover labelled pane roster"
             return f"checkpoint {checkpoint}; source {self.request.pane}; target {where}"
-        except (managed.ManagedError, OSError):
+        except managed.ManagedError, OSError:
             return "unreadable recovery intent; inspect both stores; never allocate/replay"
 
     @contextmanager

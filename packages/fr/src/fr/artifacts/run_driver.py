@@ -39,7 +39,7 @@ def refuse_unreadable_v7_cursor(path: Path) -> None:
     try:
         text = path.read_text()
         readable = _already_v7(text, yaml.safe_load(text))
-    except (OSError, yaml.YAMLError):
+    except OSError, yaml.YAMLError:
         readable = False
     if not readable:
         raise UnreadableRunCursorError(

@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from fr.ghclient import HostRefusedError
@@ -25,8 +25,6 @@ from fr.labels import LabelDef
 
 if TYPE_CHECKING:
     from fr.real_ghrestclient import RealGhRestClient
-
-T = TypeVar("T")
 
 
 def _rest() -> RealGhRestClient | None:
@@ -43,7 +41,7 @@ def _rest() -> RealGhRestClient | None:
     return RealGhRestClient(host=_HOST.get())
 
 
-def _stealth_refuses(fn: Callable[..., T]) -> Callable[..., T]:
+def _stealth_refuses[T](fn: Callable[..., T]) -> Callable[..., T]:
     """A forge write helper refused under stealth, before any call (review p4-r5)."""
     import functools
 
@@ -120,7 +118,7 @@ def known_hosts() -> frozenset[str]:
 
     try:
         data = yaml.safe_load(_hosts_yml().read_text())
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+    except OSError, UnicodeDecodeError, yaml.YAMLError:
         return frozenset()
     if not isinstance(data, dict):
         return frozenset()
@@ -826,7 +824,7 @@ def is_transient(err: GhError) -> bool:
     return any(p in text for p in _TRANSIENT_PATTERNS)
 
 
-def with_retry(
+def with_retry[T](
     op: Callable[[], T],
     *,
     max_attempts: int = 3,

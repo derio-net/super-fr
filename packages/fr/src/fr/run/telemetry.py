@@ -130,7 +130,7 @@ def _read_records(path: Path) -> list[dict[str, Any]] | None:
         # LC_ALL=C. This file is written by another program in a spec'd
         # encoding; fr's own files keep the repo's bare-read_text convention.
         text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return None
     records: list[dict[str, Any]] = []
     for line in text.splitlines():
@@ -318,7 +318,7 @@ def attribute_dispatches(
             # non-ASCII character in a dispatch `description` would silently
             # unattribute that agent rather than failing loudly.
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        except OSError, UnicodeDecodeError, json.JSONDecodeError:
             continue
         if not isinstance(meta, dict):
             continue
@@ -559,7 +559,7 @@ def orchestrator_model(env: Mapping[str, str]) -> str | None:
             size = fh.tell()
             fh.seek(max(0, size - _ORCHESTRATOR_TAIL_BYTES))
             tail = fh.read().decode("utf-8", errors="replace")
-    except (OSError, HarnessError):
+    except OSError, HarnessError:
         return None
     for line in reversed(tail.splitlines()):
         try:
@@ -594,7 +594,7 @@ def subagent_model(env: Mapping[str, str], session: str | None, agent_id: str) -
         transcript = claude_code_session(env, session)
         found = witness_transcript(transcript, agent_id) if transcript is not None else None
         records = _read_records(found) if isinstance(found, Path) else None
-    except (OSError, HarnessError):
+    except OSError, HarnessError:
         return None
     models = [
         first["message"].get("model")
@@ -861,7 +861,7 @@ def _this_session(env: Mapping[str, str]) -> Path | None:
         return None
     try:
         return claude_code_session(env)
-    except (OSError, HarnessError):
+    except OSError, HarnessError:
         return None
 
 

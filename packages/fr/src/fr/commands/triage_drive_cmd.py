@@ -369,7 +369,7 @@ def _state_tree(target: Path) -> object:
     when it cannot be read (no clone yet), which a restore then differs from."""
     try:
         return local_tree(target)
-    except (TriageError, OSError):
+    except TriageError, OSError:
         return None
 
 

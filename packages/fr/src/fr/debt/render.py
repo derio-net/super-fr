@@ -126,7 +126,7 @@ def parse_figures(body: str) -> dict[str, Any] | None:
         return None
     try:
         data = json.loads(base64.b64decode(m_group, validate=True))
-    except (binascii.Error, ValueError):
+    except binascii.Error, ValueError:
         return None
     return data if isinstance(data, dict) and _flat(data) else None
 

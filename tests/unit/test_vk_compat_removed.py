@@ -151,7 +151,7 @@ def test_no_vk_env_names_remain() -> None:
                 continue
             try:
                 text = path.read_text()
-            except (UnicodeDecodeError, OSError):
+            except UnicodeDecodeError, OSError:
                 continue
             if "VK_REPO_ROOT" in text or "VK_INSTALL_SKIP_PREFLIGHT" in text:
                 hits.append(str(path.relative_to(REPO)))
@@ -321,7 +321,7 @@ def _flagged(root: Path, rel: str) -> list[tuple[int, str]]:
         return []
     try:
         lines = (root / rel).read_text(encoding="utf-8").splitlines()
-    except (UnicodeDecodeError, OSError):
+    except UnicodeDecodeError, OSError:
         return []
     return [
         (n, line)

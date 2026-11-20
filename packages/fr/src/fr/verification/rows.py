@@ -152,7 +152,7 @@ def raw_shape_default(repo_root: Path, state: RunState) -> str | None:
 
     try:
         return resolve_workflow(state.workflow.partition("@")[0], repo_root).verification
-    except (WorkflowError, OSError):
+    except WorkflowError, OSError:
         return None
 
 

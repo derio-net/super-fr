@@ -242,7 +242,7 @@ def run_issue(repo_root: Path) -> int | None:
             if "issue:" not in text:  # most cursors record none: skip the full parse
                 continue
             state = parse_run_state(text)
-        except (RunStateError, OSError, UnicodeDecodeError):
+        except RunStateError, OSError, UnicodeDecodeError:
             continue
         if state.branch == branch and state.issue is not None:
             issues.add(state.issue)

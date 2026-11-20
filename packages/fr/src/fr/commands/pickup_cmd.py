@@ -222,7 +222,7 @@ def _missing_run_exit(repo_root: Path, run_id: str, path: Path) -> NoReturn:
     if isinstance(remote, str):
         try:
             _fetch(repo_root, remote)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        except subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError:
             pass
     err_console.print(f"[red]{explain_missing(repo_root, run_id, path)}[/red]", soft_wrap=True)
     raise typer.Exit(2)

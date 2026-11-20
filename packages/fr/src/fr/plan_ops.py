@@ -1754,7 +1754,7 @@ def _test_plan_heading_issues(plan: Plan) -> list[ReviewIssue]:
         return []
     try:
         heading = find_test_plan_heading(_plan_spec_file(plan, root).read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return []  # an unreadable spec is reported by the checks that need it
     if heading is None or heading.exact:
         return []
@@ -1936,11 +1936,11 @@ def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
     try:  # `SectionError` is a ValueError, as an undecodable spec's error is
         spec_file = _plan_spec_file(plan, root)
         spec_text = spec_file.read_text() if spec_file.is_file() else ""
-    except (ValueError, OSError):
+    except ValueError, OSError:
         return []
     try:
         gap = ops_gap(root, spec_rel, plan.dir, exit_for_spec(root, spec_rel).gates)
-    except (ValueError, OSError, AcceptanceError, OpsLoadError, TestPlanHeadingError):
+    except ValueError, OSError, AcceptanceError, OpsLoadError, TestPlanHeadingError:
         gap = []  # a near-miss heading is `_test_plan_heading_issues`' error
     if gap:
         issues.append(ReviewIssue(severity="warn", message=gap_message(gap, has_plan=True)))

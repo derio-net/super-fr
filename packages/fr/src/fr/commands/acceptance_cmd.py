@@ -1087,7 +1087,7 @@ def _own_statement(root: Path, row_id: str) -> str | None:
     for path in sorted(folder.glob("*.yaml")) if folder.is_dir() else ():
         try:
             frag = parse_fragment(path.read_text(encoding="utf-8"), source=path.name)
-        except (AcceptanceError, OSError, UnicodeDecodeError):
+        except AcceptanceError, OSError, UnicodeDecodeError:
             continue  # the engine names a fragment that does not parse
         row = next((r for r in frag.rows if r.id == row_id), None)
         if row is not None:

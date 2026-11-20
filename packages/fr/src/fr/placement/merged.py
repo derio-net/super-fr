@@ -202,7 +202,7 @@ def is_full_sha(text: str) -> bool:
 def _sha_lines(path: Path) -> list[str]:
     try:
         text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return []
     return [line.strip() for line in text.splitlines() if is_full_sha(line.strip())]
 
@@ -236,7 +236,7 @@ def _stealth_heads(feature_root: Path) -> list[str]:
     for p in sorted(runs.glob(f"*{PLACEMENT_SUFFIX}")):
         try:
             head = json.loads(p.read_text()).get("product_head")
-        except (OSError, ValueError, AttributeError):
+        except OSError, ValueError, AttributeError:
             continue
         if isinstance(head, str) and is_full_sha(head):
             out.append(head)

@@ -14,7 +14,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 from fr_herdr import managed
 from fr_herdr._herdr import HerdrError, _run_herdr, poll, start_agent
@@ -309,10 +309,7 @@ def eligible(
     return proc
 
 
-_T = TypeVar("_T")
-
-
-def _poll(check: Callable[[], _T | None]) -> _T | None:
+def _poll[T](check: Callable[[], T | None]) -> T | None:
     return poll(check, timeout=TIMEOUT, clock=_clock, sleep=_sleep)
 
 

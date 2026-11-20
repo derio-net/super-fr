@@ -7,7 +7,7 @@ covers:
   - scripts/configure-main-protection.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-17 added the Issue intake section (batch triage-intake); dispatched runs have their own concurrency group; a missing GitHub Release is created on the next run (batch release-truth)
+reviewed: 2026-11-20 still true; release.yml now runs its suite on Python 3.14, which the page does not name (ci-single-python). 2026-11-17 added the Issue intake section (batch triage-intake); dispatched runs have their own concurrency group; a missing GitHub Release is created on the next run (batch release-truth)
 ---
 
 # Merge protection for `main`

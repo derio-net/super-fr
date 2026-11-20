@@ -209,7 +209,7 @@ def _readable(state_dir: Path) -> Iterator[Snapshot]:
     for path in sorted(target.glob("*.json"), reverse=True):
         try:
             yield Snapshot.model_validate_json(path.read_text(encoding="utf-8"))
-        except (ValidationError, OSError, UnicodeDecodeError):
+        except ValidationError, OSError, UnicodeDecodeError:
             continue
 
 
@@ -224,7 +224,7 @@ def stored_snapshots(state_dir: Path) -> list[tuple[datetime, Snapshot]]:
         try:
             when = datetime.strptime(path.stem, _STAMP).replace(tzinfo=UTC)
             out.append((when, Snapshot.model_validate_json(path.read_text(encoding="utf-8"))))
-        except (ValueError, ValidationError, OSError, UnicodeDecodeError):
+        except ValueError, ValidationError, OSError, UnicodeDecodeError:
             continue
     return out
 

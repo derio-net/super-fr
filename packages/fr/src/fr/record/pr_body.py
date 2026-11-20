@@ -712,7 +712,7 @@ def _owed_discharged(repo_root: Path, state: RunState) -> str:
         return "None."
     try:
         held = run_held_issues(repo_root, state)
-    except (AcceptanceError, UnreadableJournalError):  # deliver's own gate refuses these
+    except AcceptanceError, UnreadableJournalError:  # deliver's own gate refuses these
         held = {}
     return render_owed_discharged(items, held)
 
@@ -1082,7 +1082,7 @@ def holds_open_for_run(
         try:
             verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
             ours = {r.id for r in rows_citing(matrix, spec_ref)}
-        except (SectionError, OSError):
+        except SectionError, OSError:
             verification = None
 
     def holds(row: Row) -> bool:
