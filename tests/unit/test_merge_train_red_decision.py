@@ -1,4 +1,8 @@
-"""`red_decision` and `red_brief` (spec 2026-10-11-merge-train-safety §C, R9-R11)."""
+"""`red_decision` and `red_brief` (spec 2026-10-11-merge-train-safety §C, R10, R11).
+
+R9's `reupdate` rule is gone: the wave merge queue never updates a PR branch (spec
+2026-11-19-wave-merge-queue R13, R22).
+"""
 
 from __future__ import annotations
 
@@ -32,8 +36,8 @@ def _dispatch() -> DispatchEvent:
     return DispatchEvent(kind="dispatch", at=AT, runner="r", handle="h", branch="b")
 
 
-def _decide(events: list, *, base_now: str = BASE, status: str = "idle", head: str = HEAD) -> str:
-    return red_decision(events, PR, head, ("test",), base_now, status)
+def _decide(events: list, *, status: str = "idle", head: str = HEAD) -> str:
+    return red_decision(events, PR, head, ("test",), status)
 
 
 def test_the_cap_is_two_per_dispatch() -> None:
@@ -42,47 +46,28 @@ def test_the_cap_is_two_per_dispatch() -> None:
 
 def test_rule_1_a_hand_back_at_this_head_is_skipped_whatever_else_holds() -> None:
     events = [_update(), _red(HEAD)]
-    assert _decide(events, base_now="moved") == "skip"
+    assert _decide(events) == "skip"
     assert _decide([_red(HEAD, "none")]) == "skip"
 
 
-def test_rule_2_an_fr_made_head_with_a_moved_base_is_updated_again() -> None:
-    assert _decide([_update()], base_now="b2") == "reupdate"
+def test_a_red_head_fr_made_is_handed_back_like_any_other_never_updated_again() -> None:
+    assert _decide([_update()]) == "handback"
+    assert _decide([_dispatch(), _update(), _red("a"), _red("b")]) == "needs_you"
 
 
-def test_rule_2_needs_the_base_to_have_moved() -> None:
-    assert _decide([_update()], base_now=BASE) == "handback"
-
-
-def test_rule_2_stops_once_a_later_update_starts_from_this_head() -> None:
-    later = _update(before=HEAD, after="h3", base="b2")
-    assert _decide([_update(), later], base_now="b2") == "handback"
-
-
-def test_rule_2_compares_the_base_of_the_update_that_made_the_head() -> None:
-    events = [_update(before="h0", after="hx", base="b0"), _update(base="b1")]
-    assert _decide(events, base_now="b1") == "handback"
-    assert _decide(events, base_now="b2") == "reupdate"
-
-
-def test_rule_2_beats_the_cap() -> None:
-    events = [_dispatch(), _update(), _red("a"), _red("b")]
-    assert _decide(events, base_now="b2") == "reupdate"
-
-
-def test_rule_3_two_delivered_since_the_dispatch_is_needs_you() -> None:
+def test_rule_2_two_delivered_since_the_dispatch_is_needs_you() -> None:
     assert _decide([_dispatch(), _red("a"), _red("b")]) == "needs_you"
 
 
-def test_rule_3_counts_since_the_last_dispatch_only() -> None:
+def test_rule_2_counts_since_the_last_dispatch_only() -> None:
     assert _decide([_red("a"), _red("b"), _dispatch(), _red("c")]) == "handback"
 
 
-def test_rule_3_does_not_count_undelivered_ones() -> None:
+def test_rule_2_does_not_count_undelivered_ones() -> None:
     assert _decide([_dispatch(), _red("a", "none"), _red("b", "none")]) == "handback"
 
 
-def test_rule_3_does_not_count_conflict_hand_backs() -> None:
+def test_rule_2_does_not_count_conflict_hand_backs() -> None:
     from fr.triage.model import ConflictEvent
 
     conflicts = [
@@ -103,7 +88,7 @@ def test_rule_3_does_not_count_conflict_hand_backs() -> None:
         ("unknown", "wait"),
     ],
 )
-def test_rule_4_the_session_status_decides(status: str, want: str) -> None:
+def test_rule_3_the_session_status_decides(status: str, want: str) -> None:
     assert _decide([], status=status) == want
 
 
@@ -118,9 +103,3 @@ def test_the_brief_names_the_pr_sha_checks_and_the_rules() -> None:
     assert "force" in text  # no force-push
     assert "draft" in text and "label" in text  # leave both alone
     assert text.rstrip().endswith(NO_APPROVAL_LINE)
-
-
-def test_rule_2_does_not_apply_in_a_merge_queue_repo() -> None:
-    events = [_update("h1", HEAD, "m0")]
-    assert _decide(events, base_now="m1") == "reupdate"
-    assert red_decision(events, PR, HEAD, ("test",), "m1", "idle", queue=True) == "handback"

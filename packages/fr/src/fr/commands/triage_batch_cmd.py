@@ -226,7 +226,6 @@ from fr.triage.batch_merge import (
     plan_queue,
     pr_checks_verdict,
     run_queue,
-    update_failing,
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
@@ -6234,9 +6233,9 @@ class _Driver:
 
     def _recover(self, action: Action, facts: Facts) -> tuple[str, bool]:
         """A failing batch PR the walk stepped over: what `red_decision` says, from the
-        persisted events, the base as fetched now and the session's live status (R9-R11).
-        Returns the line to print ("" when this pass has nothing new to say) and whether
-        it acted (wrote an event, updated the PR, or messaged the session)."""
+        persisted events and the session's live status (R10, R11). Returns the line to
+        print ("" when this pass has nothing new to say) and whether it acted (wrote an
+        event or messaged the session)."""
         from fr_dispatch.protocols import SessionInspector, SessionMessenger
 
         judgements = load_judgements(self.target / "judgements.yaml")
@@ -6253,18 +6252,9 @@ class _Driver:
         if ctx is None:  # R13
             return "", False
         events = [*batch.events, *ctx.recorded.get(batch.id, [])]
-        try:
-            ctx.checkout.fetch()
-            base_now = ctx.checkout.rev_parse(ctx.main)
-        except (GitError, TriageError) as exc:
-            return self._said_once(
-                batch, action, "base", f"the base could not be read ({exc}): retried next pass"
-            ), False
         checks = action.checks
-        # Rules 1-3 never read the session: ask it only when they leave the decision to it.
-        decision = red_decision(
-            events, action.pr, action.head, checks, base_now, "idle", queue=ctx.rules.merge_queue
-        )
+        # Rules 1-2 never read the session: ask it only when they leave the decision to it.
+        decision = red_decision(events, action.pr, action.head, checks, "idle")
         runner: Any = None
         status = "idle"
         if decision == "handback":
@@ -6285,14 +6275,9 @@ class _Driver:
                     ), False
             else:
                 status = "absent"  # this runner cannot be messaged: no session can take it
-            decision = red_decision(
-                events, action.pr, action.head, checks, base_now, status,
-                queue=ctx.rules.merge_queue,
-            )  # fmt: skip
+            decision = red_decision(events, action.pr, action.head, checks, status)
         if decision == "skip":
             return "", False
-        if decision == "reupdate":
-            return self._reupdate(action, facts, judgements, batch, repo, ctx)
         if decision == "needs_you":
             event = self._red_event(action, batch, "none")
             self._append(judgements, facts, batch, event)
@@ -6347,48 +6332,6 @@ class _Driver:
         if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
             return f"{action.detail}; handed-back (pending) to its session {target.id}", True
         return f"{action.detail}; handed back to its session {target.id}", True
-
-    def _reupdate(
-        self,
-        action: Action,
-        facts: Facts,
-        judgements: Judgements,
-        batch: Batch,
-        repo: str,
-        ctx: MergeContext,
-    ) -> tuple[str, bool]:
-        """R9: the driver's own update went red and the base moved since: update it again
-        through the merge machinery with the green-checks precondition waived. The new
-        `update` event is what stops a second update from the same head."""
-        entries = [
-            e
-            for e in pr_open_queue(judgements.batches, facts, judgements.issues)
-            if e.batch.id == batch.id
-        ]
-        try:
-            slots, _ = plan_queue(ctx, entries)
-            if not slots or slots[0].head != action.head:
-                return "", False  # merged, or the head moved: judged again next pass
-            writer = event_writer(self.target, facts, read_errors=True)
-            ctx.on_update = update_recorder(
-                writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
-            )
-            attempt = update_failing(ctx, slots[0])
-        except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
-        except MergeConflictError as exc:
-            return self._conflict(exc, action, facts, judgements, batch, repo)
-        except (MergeStopError, GitError) as exc:
-            return self._stopped_line(batch, action, exc), False
-        except TriageError as exc:
-            _fail(str(exc))
-        except FORGE_ERRORS as exc:
-            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
-        return (
-            f"{action.detail}; the base moved: updated PR #{action.pr} to "
-            f"{attempt.head[:12]}, its checks run again",
-            True,
-        )
 
     @staticmethod
     def _conflict_event(

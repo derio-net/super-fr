@@ -15,16 +15,25 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from fr.labels import pre_merge_held
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import BatchStage
-from fr.triage.batch_drive import LivePr
+from fr.triage.batch_drive import (
+    HANDBACKS_PER_DISPATCH,
+    RED_HANDBACKS_PER_DISPATCH,
+    LivePr,
+    conflict_decision,
+    handbacks_since,
+    held_conflict,
+    red_decision,
+)
 from fr.triage.model import (
     ApprovalEvent,
     Batch,
+    ConflictEvent,
     DeferredEvent,
     QueueBuiltEvent,
     QueueDrainEvent,
@@ -33,6 +42,7 @@ from fr.triage.model import (
     QueueLandEvent,
     QueueOpenEvent,
     QueueRecord,
+    RedHandbackEvent,
     RequeuedEvent,
 )
 
@@ -229,11 +239,17 @@ def _ready(batch: Batch, qs: QueueSnapshot) -> bool:
     return pr.checks == "green" and not pre_merge_held(pr.labels)
 
 
-def _by_readiness(batches: Sequence[Batch], qs: QueueSnapshot) -> list[Batch]:
-    """*batches* in the order they became ready (R3); unknown last, then by wave order."""
+def _by_readiness(
+    batches: Sequence[Batch], qs: QueueSnapshot, since: Mapping[str, datetime] | None = None
+) -> list[Batch]:
+    """*batches* in the order they became ready (R3): the latest approval, or a later
+    ejection (*since*) it re-entered after; unknown last, then by wave order."""
 
     def key(b: Batch) -> tuple[bool, datetime | str, int, int, str]:
         at = _ready_at(b, qs.live[b.id])
+        floor = (since or {}).get(b.id)
+        if floor is not None and (at is None or floor > at):
+            at = floor
         return (at is None, at or "", b.order is None, b.order or 0, b.id)
 
     return sorted(batches, key=key)
@@ -315,6 +331,7 @@ class Replay:
     order: tuple[str, ...]
     landed: frozenset[str]
     ejected: Mapping[str, str]
+    ejected_at: Mapping[str, datetime]
     builds: Mapping[tuple[str, str, str], int]
 
 
@@ -325,6 +342,7 @@ def replay(record: QueueRecord) -> Replay:
     order: list[str] = []
     landed: set[str] = set()
     ejected: dict[str, str] = {}
+    ejected_at: dict[str, datetime] = {}
     heads: dict[str, str] = {}
     builds: dict[tuple[str, str, str], int] = {}
     for event in record.events:
@@ -359,8 +377,9 @@ def replay(record: QueueRecord) -> Replay:
         elif isinstance(event, QueueEjectEvent):
             key = entry_key(event.entry)
             ejected[key] = heads.get(key, "")
+            ejected_at[key] = event.at
             order = [k for k in order if k != key]
-    return Replay(base, combos, tuple(order), frozenset(landed), ejected, builds)
+    return Replay(base, combos, tuple(order), frozenset(landed), ejected, ejected_at, builds)
 
 
 def _verdict(combo: Combo, qs: QueueSnapshot) -> SlotCheck:
@@ -410,7 +429,7 @@ def _entries(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> tuple[list[
     keep = [b.id for b in mine]
     queued = [k for k in rep.order if k in keep]
     fresh = [
-        b.id for b in _by_readiness([b for b in mine if b.id not in queued], qs)
+        b.id for b in _by_readiness([b for b in mine if b.id not in queued], qs, rep.ejected_at)
         if b.id not in rep.landed and rep.ejected.get(b.id) != _head(b.id, qs)
     ]  # fmt: skip
     entries = [*queued, *fresh]
@@ -445,6 +464,21 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                 wave=wave, entries=window, slots=tuple(range(1, len(window) + 1)),
                 base=qs.base))  # fmt: skip
         return QueuePlan(qs.repo, "open", wave, tuple(actions), tuple(entries), tuple(waiting))
+    by_id = {b.id: b for b in qs.batches}
+    earlier: list[tuple[str, Sequence[str]]] = []
+    for key in list(entries):  # R6: a conflict met at build, at the head it still has
+        met = qs.conflicts.get(key)
+        if met is None or met.head != _head(key, qs):
+            continue
+        batch = by_id.get(key)
+        decided = (conflict_decision(batch.events, met.head, met.paths, earlier).kind
+                   if batch is not None else "")  # fmt: skip
+        earlier.append((key, met.paths))
+        entries.remove(key)
+        actions.append(QueueAction(
+            "queue-eject", qs.repo, f"eject {key}: it conflicts in {', '.join(met.paths)}",
+            wave=wave, entries=(key,), reason="conflict", paths=met.paths, decision=decided,
+            batch=key if batch is not None else ""))  # fmt: skip
     valid = _valid(entries, rep.base, rep.combos, qs)
     green = 0
     while green < len(valid) and _verdict(valid[green], qs).verdict == "green":
@@ -457,13 +491,112 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                                    f"{tip.sha[:12]}", wave=wave, entries=done,
                                    sha=tip.sha))  # fmt: skip
         entries, base, standing = entries[green:], tip.sha, valid[green:]
+    fresh, first = False, None
+    if standing and _verdict(standing[0], qs).verdict == "failing":  # R13: every one ahead green
+        red = standing[0]
+        key, check = red.chain[-1], _verdict(red, qs)
+        if rep.builds.get((red.parent, key, red.heads[-1]), 0) < 2:
+            fresh, first = True, red.slot  # once more, as a fresh commit with the same tree
+        else:
+            batch, pr = by_id.get(key), qs.live.get(key)
+            told: str = (
+                red_decision(batch.events, pr.number, pr.head, check.failing,
+                             qs.sessions.get(key, "unknown"))
+                if batch is not None and pr is not None else ""
+            )  # fmt: skip
+            entries.remove(key)
+            actions.append(QueueAction(
+                "queue-eject", qs.repo, f"eject {key}: combination {red.sha[:12]} failed "
+                f"twice ({', '.join(check.failing) or 'checks failing'})", wave=wave,
+                entries=(key,), reason="red", sha=red.sha, checks=check.failing,
+                decision=told, batch=key if batch is not None else ""))  # fmt: skip
+        standing = []
     todo = tuple(entries[len(standing) : depth])
     if todo:
         on = standing[-1].sha if standing else base
+        slots = _free(standing, depth, depth)
+        if first is not None:
+            slots = (first, *(s for s in slots if s != first))
         actions.append(QueueAction(
-            "queue-build", qs.repo, f"build {', '.join(todo)} on {on[:12]}", wave=wave,
-            entries=todo, slots=_free(standing, depth, len(todo)), base=on))  # fmt: skip
+            "queue-build", qs.repo, f"{'rebuild' if fresh else 'build'} {', '.join(todo)} on "
+            f"{on[:12]}", wave=wave, entries=todo, slots=slots[: len(todo)], base=on,
+            fresh=fresh))  # fmt: skip
+    landing = any(a.kind == "queue-land" for a in actions)
+    drained = None if entries or landing else _drained(record, rep, qs)
+    if drained is not None:
+        actions.append(drained)
+    elif (need := _stall_need(record, qs)) is not None:
+        actions.append(need)
     return QueuePlan(qs.repo, "open", wave, tuple(actions), tuple(entries), tuple(waiting))
+
+
+def _drained(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> QueueAction | None:
+    """§B: a wave drains once every batch of it is terminal (deferral included) and its
+    close-out, if it has one, has landed; a between-waves queue once its one entry landed."""
+    wave = record.wave
+    if wave is None:
+        done = bool(rep.landed)
+    else:
+        done = qs.closeout_landed is not False and all(
+            is_terminal(b, qs.stages.get(b.id)) for b in qs.batches if effective_wave(b) == wave
+        )
+    if not done:
+        return None
+    which = "between waves" if wave is None else f"wave {wave}"
+    return QueueAction("queue-drain", qs.repo, f"{qs.repo}'s queue for {which} is done: "
+                       f"drain it at {rep.base[:12]}", wave=wave, sha=rep.base)  # fmt: skip
+
+
+def _budget_spent(batch: Batch) -> bool:
+    """Its conflict or red hand-backs since its dispatch are spent (R22, R10)."""
+    red = handbacks_since(
+        batch.events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
+    )
+    conflicts = handbacks_since(
+        batch.events, lambda e: isinstance(e, ConflictEvent) and e.delivered != "held"
+    )
+    return (red >= RED_HANDBACKS_PER_DISPATCH or conflicts >= HANDBACKS_PER_DISPATCH
+            or held_conflict(batch) is not None)  # fmt: skip
+
+
+def _stall_need(record: QueueRecord, qs: QueueSnapshot) -> QueueAction | None:
+    """R30: every other batch of the open wave is terminal, and the one left has spent its
+    hand-back budget or made no progress (no new head, no event) for `stall_hours`. The
+    driver proposes; the operator defers or requeues. Never a write."""
+    wave = record.wave
+    if wave is None:
+        return None
+    left = [b for b in qs.batches
+            if effective_wave(b) == wave and not is_terminal(b, qs.stages.get(b.id))]  # fmt: skip
+    if len(left) != 1:
+        return None
+    batch = left[0]
+    stall = timedelta(hours=qs.config.stall_hours)
+    mine = [e.at for e in record.events
+            if (ref := getattr(e, "entry", None)) is not None and entry_key(ref) == batch.id
+            or isinstance(e, QueueLandEvent) and batch.id in map(entry_key, e.entries)]  # fmt: skip
+    last = max([e.at for e in batch.events] + mine, default=None)
+    head = qs.head_changed.get(batch.id)
+    if _budget_spent(batch):
+        why = "its hand-back budget is spent"
+    elif last is not None and qs.now - last >= stall and (head is None or qs.now - head >= stall):
+        why = f"it has made no progress for {qs.config.stall_hours} h"
+    else:
+        return None
+    args = "".join(f" {a}" for a in qs.scope_args)
+    detail = (
+        f"{batch.id} is the last batch holding wave {wave}'s drain and {why}: take it out of "
+        f"the wave with `fr triage batch defer {batch.id}{args}`, or move it to a later "
+        f"queue with `fr triage batch requeue {batch.id}{args}`"
+    )
+    return QueueAction("queue-need", qs.repo, detail, wave=wave, batch=batch.id)
+
+
+def waits_on_queue(batch: Batch, stage: str | None, *, open_wave: int | None) -> bool:
+    """R36: *batch*'s PR is delivered (`pr-open`) and waits on a later queue than the open
+    one (wave *open_wave*): it takes no in-flight slot, so the open wave's undispatched
+    batches are never starved by later waves' finished work."""
+    return stage == "pr-open" and effective_wave(batch) != open_wave
 
 
 def plan_queue(qs: QueueSnapshot) -> QueuePlan:

@@ -6,9 +6,9 @@
 # (the `batch-archive-followups` tab is idle) and which records every `agent prompt`, and
 # a real bare remote where the driver's update pushes land. Phases:
 #   A. the PR is red at a head fr made (an `update` event, base M0) and main has moved
-#      since: the pass updates it again (a new `update` event with the fetched base), and
-#      the next pass, its head red again with the base unmoved, hands it back instead of
-#      updating a third time;
+#      since: the pass hands it back to the idle session like any red head, and never
+#      updates the PR again (the `reupdate` rule is gone: spec 2026-11-19-wave-merge-queue
+#      R13, R22, the queue never updates a PR branch);
 #   B. a session pushes and that head is red: the pass hands it back to the idle session
 #      once (one prompt naming the sha), a second pass over the same head sends nothing,
 #      and the board's `failing-ci` need is gone while the hand-back covers the head;
@@ -116,21 +116,12 @@ prompts() { grep -c -- '^--END--$' "$HERDR_PROMPTS" || true; }
 events() { grep -c -- "kind: $1" "$state/judgements.yaml" || true; }
 R="repos/$repo"
 
-# A. Red at fr's own update head, main moved since: updated again, once.
+# A. Red at fr's own update head, main moved since: handed back, never updated again.
 drive
 expect_grep "CI failing at ${h1:0:12}" "$out" "the red head is reported"
-expect_grep "the base moved: updated PR #1080 to" "$out" "a red fr-made head with a moved base is updated"
-h2="$(git -C "$bare" rev-parse feat/batch-archive-followups)"
-[ "$h2" != "$h1" ] || fail "the re-update pushed nothing"
-y="$(cat "$state/judgements.yaml")"
-expect_grep "head_before: $h1" "$y" "the second update starts from the red head"
-expect_grep "head_after: $h2" "$y" "the second update names its new head"
-expect_grep "base: $m1" "$y" "it records the base fetched at the time"
-[ "$(prompts)" = 0 ] || fail "a re-update also messaged the session"
-forge "w['red'] = ['$h2']"  # fr's second update is red too, and the base has not moved
-drive
-refuse_grep "updated PR" "$out" "no third update: a later update already starts from the red head"
-[ "$(events update)" = 2 ] || fail "expected exactly two update events, got $(events update)"
+refuse_grep "updated PR" "$out" "a red fr-made head is never updated again"
+[ "$(git -C "$bare" rev-parse feat/batch-archive-followups)" = "$h1" ] || fail "the PR branch moved"
+[ "$(events update)" = 1 ] || fail "expected the one seeded update event, got $(events update)"
 expect_grep "handed back to its session $tab" "$out" "it is handed back instead"
 [ "$(prompts)" = 1 ] || fail "expected one prompt after phase A, got $(prompts)"
 

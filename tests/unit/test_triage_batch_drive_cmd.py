@@ -5034,27 +5034,22 @@ def test_a_delivered_hand_back_suppresses_failing_ci_on_the_board(
     assert _red_needs(tmp_path) == ["failing-ci"]
 
 
-def test_a_red_pr_at_an_fr_made_head_with_a_moved_base_is_updated_again(
+def test_a_red_pr_at_an_fr_made_head_with_a_moved_base_is_handed_back_never_updated(
     tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
 ) -> None:
+    """Spec 2026-11-19-wave-merge-queue R13, R22: the `reupdate` rule is gone."""
     _red(world, tmp_path)
     _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")  # base m1; the clone now says otherwise
     checkout.behind.add("sha-101")
     messenger.status[BATCH_ITEM_B1] = "idle"
     code, out = _drive(tmp_path, "--once", "--yes")
-    assert messenger.messages == [], out  # an update, not a hand-back
-    assert world.prs[101]["head_oid"] == "sha-updated"
+    assert len(messenger.messages) == 1, out
+    assert world.prs[101]["head_oid"] == "sha-101"
     updates = [
         e for b in load_judgements(tmp_path / "judgements.yaml").batches
         for e in b.events if e.kind == "update"
     ]  # fmt: skip
-    assert [(e.head_before, e.head_after) for e in updates] == [
-        ("sha-old", "sha-101"),
-        ("sha-101", "sha-updated"),
-    ]
-    assert updates[-1].base == "origin/main@fetched"
-    (line,) = _lines(out, "warn")
-    assert "updated PR #101 to sha-updated" in line
+    assert [(e.head_before, e.head_after) for e in updates] == [("sha-old", "sha-101")]
 
 
 def test_a_red_pr_at_an_fr_made_head_with_an_unmoved_base_is_handed_back(
@@ -5181,23 +5176,6 @@ def test_a_failing_status_read_and_a_failing_send_are_each_said_once(
     out = _two_passes()
     assert out.count("failed, retried next pass: pane gone") == 1
     assert _red_events(tmp_path) == []
-
-
-def test_a_reupdate_keeps_the_approval_and_leaves_draft_and_labels_alone(
-    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
-) -> None:
-    _red(world, tmp_path)
-    world.prs[101]["draft"] = True
-    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")
-    checkout.behind.add("sha-101")
-    labels = list(world.prs[101]["labels"])
-    _drive(tmp_path, "--once", "--yes")
-    assert world.prs[101]["head_oid"] == "sha-updated"
-    assert world.prs[101]["draft"] is True and world.prs[101]["labels"] == labels
-    assert not any(c.startswith(("pr_ready", "label 101")) for c in world.calls)
-    kinds = [e.kind for b in load_judgements(tmp_path / "judgements.yaml").batches
-             for e in b.events]  # fmt: skip
-    assert kinds.count("approval") == 1 and kinds.count("update") == 2  # none voided or re-recorded
 
 
 # --------------------------- merge queues (merge-train-safety §D, R13)

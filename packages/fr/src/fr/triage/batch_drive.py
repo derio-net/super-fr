@@ -53,7 +53,6 @@ from fr.triage.model import (
     Export,
     Facts,
     RedHandbackEvent,
-    UpdateEvent,
 )
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
@@ -893,7 +892,7 @@ def conflict_decision(
 RED_HANDBACKS_PER_DISPATCH = 2
 """R10: red hand-backs a batch gets per dispatch, counted apart from conflict ones."""
 
-RedDecisionKind = Literal["reupdate", "handback", "wait", "needs_you", "skip"]
+RedDecisionKind = Literal["handback", "wait", "needs_you", "skip"]
 
 
 def red_decision(
@@ -901,35 +900,23 @@ def red_decision(
     pr: int,
     head: str,
     failing: Sequence[str],
-    base_now: str,
     status: str,
-    *,
-    queue: bool = False,
 ) -> RedDecisionKind:
     """What the driver does with PR *pr* red at *head* (*failing* names the checks), by the
-    first rule that applies (R9-R11):
+    first rule that applies (R10, R11):
 
     1. a `red_handback` event exists for (pr, head): `skip`;
-    2. *head* is an `update` event's `head_after`, the base moved past that event's base,
-       and no later `update` starts from *head*: `reupdate`;
-    3. `RED_HANDBACKS_PER_DISPATCH` delivered hand-backs have gone out since the latest
+    2. `RED_HANDBACKS_PER_DISPATCH` delivered hand-backs have gone out since the latest
        dispatch: `needs_you`;
-    4. the session's *status*: `idle` is a `handback`, `absent` or `done` a `needs_you`,
+    3. the session's *status*: `idle` is a `handback`, `absent` or `done` a `needs_you`,
        anything else `wait`.
+
+    The rule that updated a red head fr itself made (R9's `reupdate`) is gone: the wave
+    merge queue never updates a PR branch (spec 2026-11-19-wave-merge-queue R13, R22).
     """
     red = [e for e in events if isinstance(e, RedHandbackEvent)]
     if any(e.pr == pr and e.head == head for e in red):
         return "skip"
-    updates = [e for e in events if isinstance(e, UpdateEvent) and e.pr == pr]
-    made = [e for e in updates if e.head_after == head]
-    # In a merge-queue repo fr never pushes an update (R13): rule 2 does not apply.
-    if (
-        not queue
-        and made
-        and made[-1].base != base_now
-        and not any(e.head_before == head for e in updates)
-    ):
-        return "reupdate"
     handed = handbacks_since(
         events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
     )
