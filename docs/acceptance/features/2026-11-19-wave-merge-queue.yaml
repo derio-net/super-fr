@@ -256,3 +256,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_textconv_attribute_does_not_hide_a_binary_edit
     why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_pr_that_merged_a_newer_main_is_read_against_a_refetched_default
+    why: 'p1 review fix: evidence for the reworded row'
