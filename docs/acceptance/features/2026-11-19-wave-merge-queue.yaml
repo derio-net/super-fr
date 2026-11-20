@@ -71,8 +71,10 @@ rows:
       - super-fr:tests/unit/test_wave_queue_planner.py#test_between_waves_entries_open_a_one_entry_queue_once_every_wave_is_done
       - super-fr:tests/unit/test_wave_queue_planner.py#test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry
     status: not-implemented
-    notes: '''phase 2: the pure planner opens the lowest unfinished wave, keeps later      waves
-      and no-wave batches waiting, opens one-entry queues between waves, holds'
+    notes: 'phase 2: the pure planner opens the lowest unfinished wave, keeps later
+      waves and no-wave batches waiting, opens one-entry queues between waves, holds
+      a repo another scope''s hold holds, and drains a finished wave; phase 4 adds the
+      hold handshake the release clears; the wave close-out is phase 6'
   - id: wave-queue-eject
     capability: wave merge queue
     acceptance: A combination that fails twice or conflicts takes only its own PR out
