@@ -65,3 +65,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
     why: test renamed
+  - row: ci-coverage-newest-leg
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_ci_python_floor.py#test_every_shard_feeds_coverage
+    why: test renamed
