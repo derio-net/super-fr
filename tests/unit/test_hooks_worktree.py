@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -459,7 +460,7 @@ class TestWorktreeRemove:
 TRACE_PS4 = "+ ${BASHPID} ${EPOCHREALTIME:-} "
 STUB_TRACE = (
     r"""printf '%s ppid=%s t=%s lock-holder=%s\n' "$1" "$PPID" "${EPOCHREALTIME:-}" """
-    r""""$(cat "$HOME"/.cache/fr/locks/*/pid 2>/dev/null | tr '\n' ,)" >> "$FR_STUB_LOG.trace"
+    r""""$(cat "$HOME"/.cache/fr/locks/* 2>/dev/null | tr '\n' ,)" >> "$FR_STUB_LOG.trace"
 """
 )
 
@@ -491,7 +492,34 @@ def run_twice(script: Path, payload: Path, env: dict[str, str]) -> list[RaceRun]
                     env={**env, "PS4": TRACE_PS4},
                 )
             )
-    return [RaceRun(p.pid, *p.communicate(timeout=60), p.returncode) for p in procs]
+    # Both at once: reading one to the end first leaves the other blocked on a full
+    # pipe (the `bash -x` trace alone outgrows one), and a lock holder that cannot
+    # write cannot release the lock the first is waiting on.
+    with ThreadPoolExecutor(max_workers=len(procs)) as pool:
+        outputs = list(pool.map(lambda p: p.communicate(timeout=60), procs))
+    return [RaceRun(p.pid, out, err, p.returncode) for p, (out, err) in zip(procs, outputs)]
+
+
+def test_run_twice_drains_both_pipes_while_they_run(tmp_path: Path) -> None:
+    """The harness must read both hooks' pipes at once. Each copy here writes 1 MB of
+    stderr (far past any pipe buffer), then waits for the other to have written its own.
+    Reading one hook's pipes to the end before the other's leaves the second blocked in
+    write(2): the first waits for it forever. With the real hook that is the lock holder
+    filling its pipe with `bash -x` trace while the other waits on the lock, which timed
+    out the Release shards at 60 s once #1573 tripled the trace."""
+    script = tmp_path / "both-write-then-meet.sh"
+    script.write_text(
+        "head -c 1048576 /dev/zero | tr '\\0' x >&2\n"
+        'touch "$MEET/$$"\n'
+        'for _ in $(seq 100); do [ "$(ls "$MEET" | wc -l)" -ge 2 ] && exit 0; sleep 0.1; done\n'
+        "exit 1\n"
+    )
+    meet = tmp_path / "meet"
+    meet.mkdir()
+    payload = tmp_path / "empty.json"
+    payload.write_text("{}")
+    runs = run_twice(script, payload, {**os.environ, "MEET": str(meet)})
+    assert [r.code for r in runs] == [0, 0]
 
 
 # The traced steps worth reading, matched on the command an xtrace line
@@ -549,6 +577,33 @@ def test_two_concurrent_invocations_do_not_overlap(repo: Path, stub_fr: dict[str
     assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped\n" + evidence
     paths = {r.out.strip().splitlines()[-1] for r in runs}
     assert len(paths) == 1, f"the two invocations disagree on the worktree: {paths}\n{evidence}"
+
+
+# The hooks' lock must not rest on an external `mkdir` being atomic: on Linux CI both
+# copies have been seen to succeed at `mkdir <lock>` on one path, microseconds apart,
+# and then both ran inside the critical section (gh#1463, gh#1586). This `mkdir` says
+# yes to every lock path without making it, which is the worst a `mkdir` could do.
+LYING_MKDIR = r"""#!/bin/bash
+case "$*" in *worktree-*) exit 0 ;; esac
+exec "$REAL_MKDIR" "$@"
+"""
+
+
+def test_the_lock_does_not_depend_on_an_external_mkdir_being_atomic(
+    repo: Path, stub_fr: dict[str, str]
+) -> None:
+    bin_dir = Path(stub_fr["PATH"].split(":")[0])
+    (bin_dir / "fr").write_text(SLOW_STUB)
+    mkdir = bin_dir / "mkdir"
+    mkdir.write_text(LYING_MKDIR)
+    mkdir.chmod(0o755)
+    env = {**stub_fr, "REAL_MKDIR": shutil.which("mkdir") or "/bin/mkdir"}
+    payload = Path(stub_fr["HOME"]) / "payload.json"
+    payload.write_text(json.dumps(create_payload("twice", repo)))
+    runs = run_twice(CREATE, payload, env)
+    evidence = race_evidence(runs, stub_fr)
+    assert all(r.code == 0 for r in runs), evidence
+    assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped\n" + evidence
 
 
 SLOW_DOWN_STUB = (

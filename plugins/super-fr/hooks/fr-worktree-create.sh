@@ -113,20 +113,23 @@ has_profile() { ls -d "$root"/.devcontainer/*/ >/dev/null 2>&1; }
 # must print the same path: the second waits, then finds the worktree made
 # (mimic_default's `-d` check, or the idempotent `up`). This lock once covered
 # only the `fr isolation up` path, and the two copies of every `agent-*`
-# dispatch raced on one `git worktree add` (gh#1124). mkdir is the atomic step;
+# dispatch raced on one `git worktree add` (gh#1124). The `noclobber` create is the atomic step;
 # a lock whose holder is dead is reclaimed; the wait is bounded, since a cold
 # `devcontainer up` is slow.
 locks="$HOME/.cache/fr/locks"; mkdir -p "$locks"
-lock="$locks/worktree-create.$(printf '%s' "$root|$name" | cksum | cut -d' ' -f1)"
+lock="$locks/worktree-create.$(printf '%s' "$root|$name" | cksum | cut -d' ' -f1).lock"
 waited=0
-until mkdir "$lock" 2>/dev/null; do
-  holder=$(cat "$lock/pid" 2>/dev/null || true)
-  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then rm -rf "$lock"; continue; fi
+# The lock is a FILE made by the shell itself: `noclobber` opens it O_EXCL, so the
+# exclusion is the kernel's and rests on no external binary (an external `mkdir` was
+# seen succeeding twice on one path on Linux CI, gh#1463/gh#1586). It is created and
+# holds the holder's pid in one step; a reader that sees it empty just waits.
+until ( set -o noclobber; echo $$ > "$lock" ) 2>/dev/null; do
+  holder=$(cat "$lock" 2>/dev/null || true)
+  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then rm -f "$lock"; continue; fi
   [ "$waited" -ge 900 ] && { echo "fr-worktree-create: gave up waiting for $lock" >&2; exit 1; }
   sleep 1; waited=$((waited + 1))
 done
-trap 'rm -rf "$lock"' EXIT
-echo $$ > "$lock/pid"
+trap 'rm -f "$lock"' EXIT
 
 case "$name" in agent-*) agent_worktree ;; esac
 _fr_is_enabled "$root" || mimic_default
