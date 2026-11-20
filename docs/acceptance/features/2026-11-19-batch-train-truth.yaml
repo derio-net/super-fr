@@ -84,9 +84,13 @@ rows:
     origin:
     - spec:2026-11-19-batch-train-truth#R17
     - spec:2026-11-19-batch-train-truth#R18
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_draft_red.py#test_a_conflicting_unapproved_draft_is_probed_whatever_its_checks
+      - super-fr:tests/unit/test_triage_drive_conflict_probe.py#test_a_real_content_conflict_returns_its_path_and_leaves_no_worktree
+    status: ci
+    notes: 'CI: a conflicting draft is probed in both walks; trial merge in a scratch
+      repo'
   - id: drive-fetch-once
     capability: A pass fetches each repo at most once
     acceptance: Within one pass a repo whose fetch failed is not fetched again, and
