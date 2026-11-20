@@ -148,3 +148,8 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=finding scope=spec id=s-r7-resolved-2 created=2026-11-20T08:43:56+00:00 state=open resolves=s-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1594 -->
+### s-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1594] · resolves s-r7: fr-spec-status.yml pins setup-python 3.12 and pip-installs fr v3.0.0
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1594.
