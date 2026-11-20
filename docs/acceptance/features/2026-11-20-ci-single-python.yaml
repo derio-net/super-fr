@@ -110,3 +110,11 @@ amendments:
     notes: 'Coverage measured and uploaded on every shard of the one 3.14 leg (#1589);
       coverage job (fail-under 75) unchanged and green on PR #1593.'
     why: 'one leg (#1589): the two-leg note is no longer true'
+  - row: ci-shards-complete
+    op: set-status
+    base: 4
+    status: ci
+    notes: 'split-check runs on every CI run over the one 3.14 leg''s 7 shards (#1589,
+      green on PR #1593); shape and pure check/merge pinned by unit tests; xdist writer
+      pinned by integration test.'
+    why: 'one leg (#1589): the both-legs, 6-shard note is no longer true'
