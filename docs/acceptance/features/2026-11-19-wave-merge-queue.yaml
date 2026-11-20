@@ -215,9 +215,20 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R17
     - spec:2026-11-19-wave-merge-queue#R18
     - spec:2026-11-19-wave-merge-queue#R19
-    levels: {}
-    status: not-implemented
-    notes: born at brainstorm; scenario written by its phase
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_an_open_hold_cuts_nothing_and_release_py_passes_it_in_the_facts
+      - super-fr:tests/unit/test_release_script.py#test_a_finished_release_clears_a_drained_hold_its_base_contains
+      - super-fr:tests/unit/test_release_status.py#test_an_open_hold_refreshed_over_a_day_ago_warns_and_does_not_hold
+      - super-fr:tests/unit/test_release_workflow.py#test_a_deleted_hold_starts_no_release
+      int:
+      - super-fr:tests/integration/test_queue_hold.py#test_the_drain_pushes_drained_on_the_drained_main_and_dispatches_the_release
+      - super-fr:tests/integration/test_scenarios.py#test_wave_queue_release_hold
+    status: ci
+    notes: 'phase 4: the hold is pushed by the driver (open, refresh, drained, cleared
+      under release none), judged by fr release status, honoured and cleared by release.py;
+      real git over a bare origin, the release workflow pinned, and a scenario over
+      the facts'
     scenario: tests/scenarios/wave-queue-release-hold.sh
   - id: wave-queue-closeout-migrates
     capability: collected close-out
