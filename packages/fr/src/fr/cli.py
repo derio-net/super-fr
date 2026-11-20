@@ -67,13 +67,17 @@ from fr.commands.workflow_cmd import workflow_app
 
 
 class _FrGroup(TyperGroup):
-    """The root group: maps a settings refusal from any subcommand to a clean exit 2."""
+    """The root group: opens the git answer cache's scope around each command and maps a
+    settings refusal from any subcommand to a clean exit 2."""
 
     def invoke(self, ctx: Any) -> Any:  # a click Context; fr never imports click
+        from fr import git_cache
         from fr.settings import SettingsError
 
         try:
-            return super().invoke(ctx)
+            # One git answer cache per command (spec 2026-11-19-local-suite-cost R1).
+            with git_cache.scope():
+                return super().invoke(ctx)
         except SettingsError as e:
             typer.echo(f"fr: settings: {e}", err=True)
             raise typer.Exit(2) from e

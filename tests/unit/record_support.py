@@ -20,6 +20,7 @@ from tests.integration.test_fr_goal_shape import (
     _fr,
     _workspace,
 )
+from tests.unit import fixture_templates
 
 __all__ = [
     "LAST_BRIEF",
@@ -139,9 +140,10 @@ def _plan(root: Path) -> None:
     )
 
 
-def started_run(tmp_path: Path) -> Path:
-    """A workspace whose run `r1` has just briefed `implement-phase phase/1`."""
-    root = _workspace(tmp_path, "feat/rec")
+def _build_started_run(directory: Path) -> dict[str, object]:
+    """Build the template: a workspace whose run `r1` has just briefed
+    `implement-phase phase/1`; returns that brief."""
+    root = _workspace(directory, "feat/rec")
     (root / "docs").mkdir(parents=True, exist_ok=True)
     (root / "docs" / "spec.md").write_text(
         "# spec\n\n## Implementation Plans\n\n"
@@ -153,10 +155,25 @@ def started_run(tmp_path: Path) -> Path:
     # plan-review's advance goes on to brief implement-phase phase/1 (R5).
     brief = _drive_to_implement(root, RUN, "feat/rec", "docs/spec.md", PLAN_REL)
     assert (brief["step"], brief["item"]) == ("implement-phase", "phase/1"), brief
+    commit_all(root, "cursor")
+    # the self-check: a template built wrong fails here, naming itself (review p2-r1)
+    from fr.run import units
+    from fr.run.model import load_run_state
+
+    state = load_run_state(root, RUN)
+    assert units.last_attempt(state, "phase/1/implement-phase") is not None, "not briefed"
+    assert git(root, "status", "--porcelain").strip() == "", "the template tree is dirty"
+    return brief
+
+
+def started_run(tmp_path: Path) -> Path:
+    """A workspace whose run `r1` has just briefed `implement-phase phase/1`: an
+    independent copy of the worker's template (`fixture_templates`, spec
+    2026-11-19-local-suite-cost §3.B), with `LAST_BRIEF` set to its brief."""
+    brief = fixture_templates.current().copy("started_run", _build_started_run, tmp_path)
     LAST_BRIEF.clear()
     LAST_BRIEF.update(brief)
-    commit_all(root, "cursor")
-    return root
+    return tmp_path / "workspace"
 
 
 def implement_record(**overrides: object) -> dict[str, object]:
