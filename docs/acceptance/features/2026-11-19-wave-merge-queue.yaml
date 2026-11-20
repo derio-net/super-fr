@@ -374,3 +374,10 @@ amendments:
       gone; the wave merge queue''s entry order and landing are the planner tests (tests/unit/test_wave_queue_planner.py)'
     why: 'R22 removes the merge train: the queue plans every merge, and a head-only
       walk no longer exists'
+  - row: drive-merge-train-step-over
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: a failing PR is reported
+      red and never an entry (tests/unit/test_merge_train_gate.py#test_a_failing_member_is_reported_red_and_is_no_entry);
+      a refused merge no longer exists'
+    why: R22 removes the merge train
