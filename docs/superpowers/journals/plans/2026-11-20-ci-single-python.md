@@ -34,3 +34,68 @@ a one-string image tag change in three places; nothing to clean
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 rows, notes and fragment only; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-20T08:38:03+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · Amended rows ci-coverage-newest-leg and ci-shards-complete keep stale two-leg notes (phase 1)
+
+docs/acceptance/features/2026-11-01-ci-speed.yaml:40,54.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-20T08:38:03+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · ci.yml comment claims --cov-report= cancels addopts' term-missing (phase 1)
+
+.github/workflows/ci.yml:115-116; addopts is cleared by -o, and pytest-cov accumulates --cov-report values.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-20T08:38:03+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · test_ci_tests_one_python_the_floor checks only test/collect, not every ci.yml job (R3) (phase 1)
+
+tests/unit/test_ci_python_floor.py:54.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-20T08:38:03+00:00 phase=1 state=open review_scope=out -->
+### p1-r4 · finding [open] (reviewer: out of scope) · test_ci_shards.py:4 docstring still says 6-way matrix (phase 1)
+
+Stale since gh#1428 (7 shards), before this change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-20T08:38:03+00:00 phase=1 state=open review_scope=out -->
+### p1-r5 · finding [open] (reviewer: out of scope) · scripts/floors.py keeps dead 3.11 tokenizer compatibility (phase 1)
+
+scripts/floors.py:32-38; harmless, a follow-up cleanup.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-11-20T08:38:03+00:00 phase=1 state=open review_scope=out -->
+### p1-r6 · finding [open] (reviewer: out of scope) · Other workflows set no UV_PYTHON, so uv downloads 3.14 every run (phase 1)
+
+acceptance-report.yml, pages.yml, ci-budget.yml, pinned-clis.yml; correct, only slower.
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-20T08:38:03+00:00 phase=1 -->
+### review-p1-1 · review · independent code review of phase 1: 6 findings (3 in, 3 out) (phase 1)
+
+Reviewer verified the except reformat is purely syntactic (150 pairs, no `as` clauses), PEP 695 conversions keep bounds/variance, uv.lock moves no versions, acceptance anchors resolve, rewritten tests assert real shape. p1-r1..r3 fixed (r3 proven red against a mutated ci.yml with a typecheck-job UV_PYTHON); p1-r4..r6 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-20T08:38:03+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: Amended rows ci-coverage-newest-leg and ci-shards-complete keep stale two-leg notes (phase 1)
+
+set-status amendments on both rows replace the two-leg notes (feature 2026-11-20-ci-single-python); fr acceptance check passes.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-20T08:38:03+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: ci.yml comment claims --cov-report= cancels addopts' term-missing (phase 1)
+
+Comment now says addopts is cleared because pytest-cov accumulates --cov-report values; --cov-report= asks for no report.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-20T08:38:03+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: test_ci_tests_one_python_the_floor checks only test/collect, not every ci.yml job (R3) (phase 1)
+
+The test loops over every ci.yml job: no python matrix, no job- or step-level UV_PYTHON, no setup-python. Red on a mutated ci.yml, green on the real one.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-20T08:38:03+00:00 phase=1 state=open resolves=p1-r4 out_of_scope=true -->
+### p1-r4-resolved · finding [out-of-scope] · resolves p1-r4: test_ci_shards.py:4 docstring still says 6-way matrix (phase 1)
+
+Pre-existing since gh#1428; this change did not cause it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-20T08:38:03+00:00 phase=1 state=open resolves=p1-r5 out_of_scope=true -->
+### p1-r5-resolved · finding [out-of-scope] · resolves p1-r5: scripts/floors.py keeps dead 3.11 tokenizer compatibility (phase 1)
+
+Pre-existing compatibility code that stays correct; removal is an unrelated cleanup.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-11-20T08:38:03+00:00 phase=1 state=open resolves=p1-r6 out_of_scope=true -->
+### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: Other workflows set no UV_PYTHON, so uv downloads 3.14 every run (phase 1)
+
+Pre-existing: those workflows never pinned an interpreter; behaviour stays correct under the new floor.
