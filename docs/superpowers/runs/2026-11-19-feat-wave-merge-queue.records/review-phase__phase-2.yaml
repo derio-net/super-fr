@@ -1,0 +1,71 @@
+schema_version: 12
+run: 2026-11-19-feat-wave-merge-queue
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: review
+    id: p2-review-1
+    phase: 2
+    title: Phase 2 review — four reviewer findings plus two raised in fixing, all in scope, all fixed
+    body: |
+      An independent reviewer read the planner diff (4d27bd0f1..7a39c6c67) against R1–R36. It confirmed
+      prefix and depth, R13's one rebuild per tree, wave exclusivity and the hold, the R36 cap exemption,
+      purity, the report-only wiring, and that removing reupdate kept approval voiding, the conflict and
+      red budgets and version slots. It raised p2-r1..p2-r4 and a spec reading (filed by the orchestrator
+      as p2-r5); the fix round found p2-r6. Fixes are b03614fc5..da7300a6e. The full suite after p2-r1..r5
+      passed (16966 passed, 122 skipped); p2-r6 is a pure planner change covered by the 54 wave-queue tests,
+      and deliver's full suite covers it.
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: a conflict-ejected entry re-entered at the same head on the next pass
+  - kind: finding
+    id: p2-r2
+    phase: 2
+    review_scope: in
+    title: a foreign move of main with an empty window left the queue open forever
+  - kind: finding
+    id: p2-r3
+    phase: 2
+    review_scope: in
+    title: queue-build's fresh flag marked every entry, not only the R13 same-tree retry
+  - kind: finding
+    id: p2-r4
+    phase: 2
+    review_scope: in
+    title: QueuePlan.waiting listed open-wave entries ejected at an unchanged head
+  - kind: finding
+    id: p2-r5
+    phase: 2
+    review_scope: in
+    title: an idle repo opened the lowest wave's queue before any entry was ready, holding releases for the wave's whole development
+  - kind: finding
+    id: p2-r6
+    phase: 2
+    review_scope: in
+    title: a between-waves queue whose only entry was ejected, with nothing landed, never drained
+resolves:
+  - id: p2-r1
+    state: fixed
+    body: QueueEjectEvent and the eject action carry the head left at, with a fallback to the batch's conflict event; tests in test_wave_queue_planner.py (no re-entry at an unchanged head, no duplicate eject, re-entry once the head moves).
+  - id: p2-r2
+    state: fixed
+    body: with nothing to rebuild, a foreign move adopts the moved main; every open pass ends in a shared _tail deciding drain or R30 stall; tests drain at the moved main and still propose the stalled batch.
+  - id: p2-r3
+    state: fixed
+    body: QueueAction.fresh became fresh_entry naming the one retried entry; test at depth 3 shows only b fresh.
+  - id: p2-r4
+    state: fixed
+    body: ejected-at-head entries of the open wave are excluded from waiting and entries; tests for conflict and red ejection.
+  - id: p2-r5
+    state: fixed
+    body: _plan_idle opens nothing while no entry of the lowest unfinished wave is ready; spec §B reworded; decision p2-queue-opens-on-first-ready; tests for both cases.
+  - id: p2-r6
+    state: fixed
+    body: a between-waves queue drains at its base once nothing is left to land (R29/R17 support drain, not clear); an entry ejected from an earlier between-waves queue at its live head opens no new queue until its head moves; spec §B reworded; four planner tests.
+evidence:
+  review: p2-review-1
+  reviewer: a4bcb4595bd73affc
+  model: claude-opus-5-5
