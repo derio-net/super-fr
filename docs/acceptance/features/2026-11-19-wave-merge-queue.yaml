@@ -260,9 +260,19 @@ rows:
       migration can move: it migrates what it archives on its own branch.'
     origin:
     - spec:2026-11-19-wave-merge-queue#R16
-    levels: {}
-    status: not-implemented
-    notes: born at brainstorm; scenario written by its phase
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_runner.py#test_only_migrates_the_named_files_and_leaves_a_second_stale_one_as_it_was
+      - super-fr:tests/unit/test_migration_runner.py#test_only_refuses_a_retiring_hop_before_writing_anything
+      - super-fr:tests/unit/test_triage_batch_closeout.py#test_the_stale_artifacts_the_archive_moves_are_migrated_as_their_own_commit_first
+      - super-fr:tests/unit/test_triage_collected_closeout_drive.py#test_r16_a_migration_commit_of_files_the_archive_moves_is_admitted
+      - super-fr:tests/unit/test_wave_closeout.py#test_one_close_out_takes_the_whole_wave_and_another_wave_gets_its_own
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_wave_queue_closeout_migrates
+    status: ci
+    notes: 'phase 6: fr migrate artifacts --path migrates only the named files and refuses
+      a retiring hop; the close-out verb migrates the stale artifacts its archive moves
+      as its own commit; review_reasons admits that commit; unit tests and a scenario'
     scenario: tests/scenarios/wave-queue-closeout-migrates.sh
   - id: wave-queue-migratable-validation
     capability: artifact validation
