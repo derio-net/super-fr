@@ -55,13 +55,15 @@ R7. The tests that pin the CI layout (`tests/unit/test_ci_split_workflow.py`, `t
 R8. The consumer CI that `fr` scaffolds uses `image: python:3.14` in each place it names an image, and the scaffold golden fixtures match.
 R9. `.github/ci-budget.yaml` keeps `ci.yml` at 360 s with its comment stating that the budget is for one leg; `AGENTS.md`'s CI notes describe one leg on 3.14 (the durations-merge recipe and the measurement paragraph).
 R10. The change ships a `major` change fragment whose summary says the floor is now Python 3.14 and that a `uv` install fetches 3.14 when the host has none.
+R11. The pages `fr docs check` reports for this change are current: `docs/reference/acceptance-matrix.md` and `docs/explainers/fr-acceptance.md` name the GitLab job image `python:3.14`; `docs/reference/components.md` states the Python 3.14 requirement and that uv downloads it when the host has none; `docs/merge-protection.md` (covers `release.yml`) is edited or re-stamped.
 
 ## Design
 
 ### A. The floor (R1, R2)
 
 Edit the six `requires-python` lines, `target-version` and `python_version`. Regenerate the lock
-with `uv lock`; only the `requires-python` header and any marker that names the floor may move. Run
+with `uv lock` (no `--upgrade`): the `requires-python` header moves, entries and wheels needed only
+below 3.14 drop (the `tomli` edge and package, cp311-cp313 wheels), and no package version changes. Run
 `ruff check --target-version py314` and fix the 13 findings by hand: the 12 `UP047` become PEP 695
 generic functions (`def f[T](x: T) -> T`), which drops the module-level `TypeVar` they used when
 nothing else uses it; the `UP043` drops the default type arguments. Then `mypy` with the five
@@ -117,8 +119,9 @@ golden fixtures under `tests/fixtures/acceptance_scaffold/` and run the tests th
 
 ### F. Budget, notes, fragment (R9, R10)
 
-`.github/ci-budget.yaml`: comment only. `AGENTS.md`: the `split_check.py merge` recipe names "the
-shards' `shard-durations.json` files"; the measurement paragraph says the figures were measured
+`.github/ci-budget.yaml`: comment only. `AGENTS.md`: the `split_check.py merge` recipe says each
+shard uploads `durations-shard-<n>` (was `durations-py<v>-shard-<n>`) and names "the shards'
+`shard-durations.json` files"; the measurement paragraph says the figures were measured
 when CI ran two legs, and that CI now runs one leg on 3.14. `.changes/feat-ci-single-python.yaml`:
 `bump: major`.
 
@@ -127,8 +130,19 @@ on the 3.14 leg while the 3.11 leg runs without it. It is amended, never edited 
 to "measured on every shard of the one leg", and its level ref is re-pointed (`drop-level` /
 `add-level`) to the renamed `test_every_shard_feeds_coverage`.
 
-No page in `.fr/docs.yaml` covers `ci.yml`, `release.yml` or the `pyproject.toml` files, so
-`fr docs check` owes nothing; the implementer runs it to confirm.
+The merged row `ci-shards-complete` (spec `2026-11-01-ci-speed` R4) says "CI splits every leg's
+tests across 6 shards" and cites `test_ci_split_workflow.py#test_split_check_covers_every_test_leg`.
+That test is renamed `test_split_check_checks_the_one_leg`, so the row is amended: `reword` (one
+leg, 7 shards) and `drop-level`/`add-level` to the new name.
+
+### G. Pages (R11)
+
+Four pages cover paths this change edits (`.fr/docs.yaml` globs; each page's `covers:`):
+`docs/reference/acceptance-matrix.md:190` and `docs/explainers/fr-acceptance.md:261` name the image
+`python:3.12` and are edited; `docs/reference/components.md` (covers `packages/*/pyproject.toml`)
+gains the Python 3.14 requirement in its Requirements list; `docs/merge-protection.md` (covers
+`release.yml`) gets a `reviewed` stamp unless its text names the interpreter. `fr docs check` must
+pass.
 
 ## Verification
 
@@ -138,8 +152,21 @@ strategy: none
 - ci-scaffold-python-3-14: none — the scaffold golden tests pin the image
 - ci-single-leg-main-push: live — the main-push merge of durations and the release suite on 3.14 run only after merge
 gate: developer
+gate: ci-single-leg-main-push=developer
 
 ## Test Plan
+
+- pre-merge — CI: `tests/unit/test_ci_python_floor.py` (`test_ci_pins_the_requires_python_floor`,
+  `test_release_suite_runs_on_the_requires_python_floor`) and
+  `tests/unit/test_ops_isolated_python.py::test_the_python_floor_has_safe_path` pin R1/R6, and CI's
+  `lint`/`typecheck` jobs run at the new targets (R2) (row `ci-floor-python-3-14`).
+- pre-merge — CI: `test_ci_python_floor.py` (`test_ci_tests_one_python_the_floor`,
+  `test_every_shard_feeds_coverage`), `tests/unit/test_ci_split_workflow.py` and
+  `tests/unit/test_ci_shards.py` pin R3-R5/R7, and this PR's own CI run is the one-leg layout
+  running (row `ci-single-leg`; amended rows `ci-coverage-newest-leg`, `ci-shards-complete`).
+- pre-merge — CI: `tests/unit/test_acceptance_scaffold_publish.py` and
+  `tests/unit/test_acceptance_services.py` read the scaffold golden fixtures, which name
+  `python:3.14` (R8) (row `ci-scaffold-python-3-14`).
 
 - post-merge — operator-driven: on the first push to `main` after merge, `ci.yml`'s `split-check`
   merges and saves `test-durations-<run_id>` from the `durations-shard-*` files, and the Release
