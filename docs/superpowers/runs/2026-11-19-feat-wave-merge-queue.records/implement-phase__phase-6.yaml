@@ -86,3 +86,4 @@ journal:
       marks it MERGED) when `fr-queue:release` is added, as the queue would; they expect the
       release prompt, not the merge one.
 resolves: []
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/wave-p6-suite.log}
