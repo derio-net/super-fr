@@ -76,8 +76,9 @@ def _land(main: str, *bids: str, at: str = AT) -> dict[str, Any]:
             "entries": [{"batch": b} for b in bids]}  # fmt: skip
 
 
-def _eject(bid: str, reason: str = "red", at: str = AT) -> dict[str, Any]:
-    return {"kind": "queue_eject", "at": at, "entry": {"batch": bid}, "reason": reason}
+def _eject(bid: str, reason: str = "red", at: str = AT, head: str | None = None) -> dict[str, Any]:
+    doc = {"kind": "queue_eject", "at": at, "entry": {"batch": bid}, "reason": reason}
+    return doc if head is None else {**doc, "head": head}
 
 
 def _qs(
@@ -128,18 +129,29 @@ def _green(*shas: str) -> dict[str, SlotCheck]:
 # ------------------------------------------------ phases and wave choice (R2, R3, R31)
 
 
-def test_an_idle_repo_opens_the_lowest_unfinished_wave_even_with_nothing_of_it_ready() -> None:
+def test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry() -> None:
     batches = [
         _batch("w3", 1, wave=3),  # dispatched, no PR yet: not ready, not terminal
+        _batch("w3b", 4, wave=3),
         _batch("w4", 2, wave=4),
         _batch("w2", 3, wave=2),  # landed: terminal
     ]
-    stages = {"w3": "dispatched", "w4": "pr-open", "w2": "merged"}
+    stages = {"w3": "dispatched", "w3b": "pr-open", "w4": "pr-open", "w2": "merged"}
     plan = plan_queue(_qs(batches, stages))
     assert plan.phase == "idle"
     assert _kinds(plan) == ["queue-open"]
     assert _one(plan, "queue-open").wave == 3 and plan.wave == 3
     assert plan.waiting == ("w4",)
+
+
+def test_an_idle_repo_opens_nothing_while_no_entry_of_the_lowest_unfinished_wave_is_ready() -> None:
+    # p2-queue-opens-on-first-ready: no queue, so no hold blocks a release, while the
+    # wave is still being developed; a later wave's ready PR waits all the same (R2).
+    batches = [_batch("w3", 1, wave=3), _batch("w4", 2, wave=4), _batch("loose", 3, wave=None)]
+    stages = {"w3": "dispatched", "w4": "pr-open", "loose": "pr-open"}
+    plan = plan_queue(_qs(batches, stages))
+    assert plan.phase == "idle" and plan.actions == () and plan.wave is None
+    assert set(plan.waiting) == {"w4", "loose"}
 
 
 def test_terminal_means_landed_cancelled_abandoned_or_deferred() -> None:
@@ -151,7 +163,7 @@ def test_terminal_means_landed_cancelled_abandoned_or_deferred() -> None:
         _batch("d", 4, wave=3),
         _batch("e", 5, wave=5),
     ]
-    stages = {"a": "pr-open", "b": "cancelled", "c": "abandoned", "d": "partial", "e": "proposed"}
+    stages = {"a": "pr-open", "b": "cancelled", "c": "abandoned", "d": "partial", "e": "pr-open"}
     plan = plan_queue(_qs(batches, stages))
     assert _one(plan, "queue-open").wave == 5
 
@@ -160,7 +172,7 @@ def test_a_requeued_batch_belongs_to_the_wave_it_names() -> None:
     moved = [{"kind": "deferred", "at": AT, "wave": 3},
              {"kind": "requeued", "at": "2026-11-20T10:05:00Z", "wave": 6}]  # fmt: skip
     batches = [_batch("a", 1, wave=3, events=moved), _batch("b", 2, wave=7)]
-    plan = plan_queue(_qs(batches, {"a": "pr-open", "b": "proposed"}))
+    plan = plan_queue(_qs(batches, {"a": "pr-open", "b": "pr-open"}))
     assert _one(plan, "queue-open").wave == 6
 
 
@@ -211,7 +223,7 @@ def test_the_phase_reads_records_and_the_hold() -> None:
 def test_between_waves_entries_wait_while_a_waved_batch_is_unfinished() -> None:
     batches = [_batch("loose", 1, wave=None), _batch("w2", 2, wave=2)]
     plan = plan_queue(_qs(batches, {"loose": "pr-open", "w2": "dispatched"}))
-    assert _one(plan, "queue-open").wave == 2 and plan.waiting == ("loose",)
+    assert plan.actions == () and plan.waiting == ("loose",)
 
 
 def test_between_waves_entries_open_a_one_entry_queue_once_every_wave_is_done() -> None:
@@ -279,8 +291,8 @@ def test_an_open_queue_builds_its_first_depth_entries_into_slots_on_the_base() -
     plan = plan_queue(_abc())
     assert plan.phase == "open" and plan.entries == ("a", "b", "c")
     build = _one(plan, "queue-build")
-    assert (build.entries, build.slots, build.base, build.fresh) == (("a", "b"), (1, 2), MAIN,
-                                                                     False)  # fmt: skip
+    assert (build.entries, build.slots, build.base, build.fresh_entry) == (
+        ("a", "b"), (1, 2), MAIN, "")  # fmt: skip
     assert "queue-land" not in _kinds(plan)
 
 
@@ -367,6 +379,25 @@ def test_a_foreign_base_move_rebuilds_every_slot_on_the_new_base_and_says_so_onc
         assert "feat/batch-" not in action.detail  # no action names a PR head ref
 
 
+def test_a_foreign_move_with_no_entry_left_adopts_the_new_main_and_drains_there() -> None:
+    # p2-r2: every batch terminal, nothing queued, main moved under the queue: it drains at
+    # the moved main instead of waiting on a rebuild that has nothing to build.
+    snap = _abc(_built(1, "s1", "a"), _land("s1", "a"),
+                stages={"a": "merged", "b": "cancelled", "c": "abandoned"}, base="f1")  # fmt: skip
+    plan = plan_queue(snap)
+    assert _kinds(plan) == ["queue-warn", "queue-drain"]
+    assert _one(plan, "queue-drain").sha == "f1" and plan.entries == ()
+
+
+def test_a_foreign_move_with_no_entry_left_still_proposes_the_stalled_batch() -> None:
+    batches = [_batch("a", 1), _batch("c", 3, events=_spent(102))]
+    hold = Hold(state="open", scope=ME, wave=1, parent=MAIN)
+    live = {"c": _live(102, checks="failing")}
+    plan = plan_queue(_qs(batches, {"a": "merged", "c": "pr-open"}, live=live, hold=hold,
+                          records=(_record(_open()),), base="f1"))  # fmt: skip
+    assert _kinds(plan) == ["queue-warn", "queue-need"]
+
+
 def test_once_rebuilt_on_the_new_base_the_queue_lands_again() -> None:
     events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"),
               _built(1, "r1", "a", parent="f1", base="f1"),
@@ -396,7 +427,7 @@ def test_a_first_red_behind_a_green_slot_is_rebuilt_once_fresh_in_its_own_slot()
     plan = _red_slot2()
     assert _one(plan, "queue-land").entries == ("a",)
     build = _one(plan, "queue-build")
-    assert build.fresh and build.entries[0] == "b" and build.slots[0] == 2
+    assert build.fresh_entry == "b" and build.entries[0] == "b" and build.slots[0] == 2
     assert build.base == "s1"
     assert "queue-eject" not in _kinds(plan)
 
@@ -409,8 +440,24 @@ def test_a_second_red_at_the_same_tree_ejects_it_and_rebuilds_what_was_behind() 
                                                                       ("test",))  # fmt: skip
     assert eject.decision == "handback" and eject.batch == "b"
     build = _one(plan, "queue-build")  # c, on main+a
-    assert (build.entries, build.base, build.fresh) == (("c",), "s1", False)
+    assert (build.entries, build.base, build.fresh_entry) == (("c",), "s1", "")
     assert plan.entries == ("c",)
+
+
+def test_only_the_retried_entry_is_named_fresh_not_the_ones_built_behind_it() -> None:
+    # p2-r3: a, b at depth 3: b's combination is red once, so b is retried fresh and c is
+    # built behind it for the first time; only b is the R13 same-tree retry.
+    events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"))
+    plan = plan_queue(_abc(*events, slots={"s1": GREEN, "s2": FAIL},
+                           config=QueueConfig(depth=3)))  # fmt: skip
+    build = _one(plan, "queue-build")
+    assert build.entries == ("b", "c") and build.fresh_entry == "b"
+
+
+def test_a_red_ejection_names_the_head_it_left_at() -> None:
+    plan = _red_slot2(_built(2, "s2b", "b", parent="s1", at="2026-11-20T10:30:00Z"),
+                      sessions={"b": "idle"})  # fmt: skip
+    assert _one(plan, "queue-eject").head == "head-b"
 
 
 def test_the_red_decision_reads_the_session_and_the_budget() -> None:
@@ -466,9 +513,42 @@ def test_conflicts_sharing_a_path_wait_behind_the_first_and_a_stale_one_is_ignor
     assert "queue-eject" not in _kinds(stale)
 
 
+def test_a_conflict_ejection_names_its_head_and_keeps_the_entry_out_at_that_head() -> None:
+    # p2-r1: a conflict at build has no `queue_built` for that head; the eject event's own
+    # head keeps it out, and it re-enters once the head moves.
+    from fr.triage.wave_queue import BuildConflict
+
+    met = {"b": BuildConflict("head-b", ("x.py",))}
+    plan = plan_queue(_abc(_built(1, "s1", "a"), conflicts=met))
+    assert _one(plan, "queue-eject").head == "head-b"
+    events = (_built(1, "s1", "a"), _eject("b", "conflict", head="head-b"))
+    after = plan_queue(_abc(*events, conflicts=met))  # the executor may still report it
+    assert "b" not in after.entries and "queue-eject" not in _kinds(after)
+    assert "b" not in after.waiting  # p2-r4: ejected, not waiting (R25)
+    live = {"a": _live(100, "head-a"), "b": _live(101, "head-b2"), "c": _live(102, "head-c")}
+    moved = plan_queue(_abc(*events, live=live, conflicts=met))
+    assert moved.entries == ("a", "c", "b") and "queue-eject" not in _kinds(moved)
+
+
+def test_a_conflict_ejection_without_a_head_reads_the_batchs_conflict_event() -> None:
+    from dataclasses import replace
+
+    conflict = {"kind": "conflict", "at": AT, "head": "head-b", "paths": ["x.py"],
+                "delivered": "session", "handle": "h"}  # fmt: skip
+    snap = _abc(_built(1, "s1", "a"), _eject("b", "conflict"))
+    batches = tuple(
+        b.model_copy(update={"events": [*b.events, Batch.model_validate(
+            {"id": "z", "title": "z", "ids": ["super-fr#9"], "events": [conflict]}).events[0]]})
+        if b.id == "b" else b for b in snap.batches
+    )  # fmt: skip
+    assert "b" not in plan_queue(replace(snap, batches=batches)).entries
+    assert "b" in plan_queue(snap).entries  # no head anywhere: it is let back in
+
+
 def test_an_ejected_entry_re_enters_only_when_its_head_moves() -> None:
     events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"), _eject("b"))
-    assert plan_queue(_abc(*events)).entries == ("a", "c")
+    kept_out = plan_queue(_abc(*events))
+    assert kept_out.entries == ("a", "c") and kept_out.waiting == ()  # p2-r4
     live = {"a": _live(100, "head-a"), "b": _live(101, "head-b2"), "c": _live(102, "head-c")}
     assert plan_queue(_abc(*events, live=live)).entries == ("a", "c", "b")
 

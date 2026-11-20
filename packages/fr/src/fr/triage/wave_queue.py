@@ -14,7 +14,7 @@ is `QueueSnapshot.now`. `tests/unit/test_wave_queue_planner.py` pins that.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -155,7 +155,10 @@ class QueueAction:
     # build: the commit the first entry is built on; rebuild: the new `main`
     base: str = ""
     sha: str = ""  # land: the tested tip `main` moves to; eject (red): the combination
-    fresh: bool = False  # build: a rebuild of a red combination with the same tree (R13)
+    # build: the one entry rebuilt as a fresh commit with the same tree as its red
+    # combination (R13); the entries behind it are ordinary builds. "": none
+    fresh_entry: str = ""
+    head: str = ""  # eject: the head the entry leaves at, recorded on `queue_eject` (R6, R13)
     reason: str = ""  # eject: conflict | red
     checks: tuple[str, ...] = ()  # eject (red): the failing check names
     paths: tuple[str, ...] = ()  # eject (conflict): the paths
@@ -273,7 +276,9 @@ def _held(qs: QueueSnapshot) -> QueuePlan | None:
 
 
 def _plan_idle(qs: QueueSnapshot) -> QueuePlan:
-    """§B: open the lowest wave with a non-terminal batch, ready entry or not; with no waved
+    """§B: the lowest wave with a non-terminal batch opens once its first entry is ready;
+    until then nothing opens and no hold is written, so a wave still being developed never
+    holds the repo's releases (plan decision p2-queue-opens-on-first-ready). With no waved
     batch unfinished, a one-entry queue for the oldest ready between-waves entry."""
     unfinished = sorted(
         {w for b in qs.batches if not is_terminal(b, qs.stages.get(b.id))
@@ -282,6 +287,8 @@ def _plan_idle(qs: QueueSnapshot) -> QueuePlan:
     ready = _by_readiness([b for b in qs.batches if _ready(b, qs)], qs)
     if unfinished:
         wave: int | None = unfinished[0]
+        if not any(effective_wave(b) == wave for b in ready):
+            return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(b.id for b in ready))
         entries: tuple[str, ...] = ()
         why = f"open {qs.repo}'s merge queue for wave {wave}"
     else:
@@ -323,7 +330,8 @@ class Combo:
 @dataclass(frozen=True)
 class Replay:
     """A queue record read in order: its base now, each slot's combination, the entries in
-    the order they joined, what landed, what was ejected (at which head) and how often each
+    the order they joined, what landed, what was ejected (at which head: "" for a conflict
+    whose event names none, which `_ejected_head` reads from the batch) and how often each
     (parent, entry, head) was built (R13's one rebuild)."""
 
     base: str
@@ -376,7 +384,10 @@ def replay(record: QueueRecord) -> Replay:
             order = [k for k in order if k not in done]
         elif isinstance(event, QueueEjectEvent):
             key = entry_key(event.entry)
-            ejected[key] = heads.get(key, "")
+            # A conflict met at build has no `queue_built` at its head: the last build's head
+            # is an older one, so only the event's own head is trusted for it.
+            last = "" if event.reason == "conflict" else heads.get(key, "")
+            ejected[key] = event.head or last
             ejected_at[key] = event.at
             order = [k for k in order if k != key]
     return Replay(base, combos, tuple(order), frozenset(landed), ejected, ejected_at, builds)
@@ -414,9 +425,21 @@ def _head(key: str, qs: QueueSnapshot) -> str:
     return pr.head if pr is not None else ""
 
 
+def _ejected_head(key: str, rep: Replay, by_id: Mapping[str, Batch]) -> str | None:
+    """The head *key* was ejected at (None: not ejected): the replay's, else its batch's
+    latest `conflict` event for a conflict ejection that named none ("" when unknown)."""
+    if key not in rep.ejected:
+        return None
+    if rep.ejected[key] or (batch := by_id.get(key)) is None:
+        return rep.ejected[key]
+    met = next((e for e in reversed(batch.events) if isinstance(e, ConflictEvent)), None)
+    return met.head if met is not None else ""
+
+
 def _entries(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> tuple[list[str], list[str]]:
     """The queue's entries in order (R3: the order they became ready), and the ready
-    entries that wait on a later queue. An ejected entry re-enters once its head moves."""
+    entries that wait on a later queue. An ejected entry re-enters once its head moves;
+    until then it is ejected, neither an entry nor waiting (R25)."""
     by_id = {b.id: b for b in qs.batches}
     ready = [b for b in qs.batches if _ready(b, qs)]
     mine = [b for b in ready if effective_wave(b) == record.wave]
@@ -428,13 +451,15 @@ def _entries(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> tuple[list[
             mine = [b for b in built if b in mine][:1] or _by_readiness(mine, qs)[:1]
     keep = [b.id for b in mine]
     queued = [k for k in rep.order if k in keep]
+    out = {b.id for b in ready if effective_wave(b) == record.wave
+           and _ejected_head(b.id, rep, by_id) == _head(b.id, qs)}  # fmt: skip
     fresh = [
         b.id for b in _by_readiness([b for b in mine if b.id not in queued], qs, rep.ejected_at)
-        if b.id not in rep.landed and rep.ejected.get(b.id) != _head(b.id, qs)
+        if b.id not in rep.landed and b.id not in out
     ]  # fmt: skip
     entries = [*queued, *fresh]
     waiting = [b.id for b in _by_readiness(ready, qs) if b.id not in entries
-               and b.id not in rep.landed]  # fmt: skip
+               and b.id not in rep.landed and b.id not in out]  # fmt: skip
     return entries, waiting
 
 
@@ -463,7 +488,10 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                 "queue-rebuild", qs.repo, f"rebuild {', '.join(window)} on {qs.base[:12]}",
                 wave=wave, entries=window, slots=tuple(range(1, len(window) + 1)),
                 base=qs.base))  # fmt: skip
-        return QueuePlan(qs.repo, "open", wave, tuple(actions), tuple(entries), tuple(waiting))
+            return _tail(record, rep, qs, actions, entries, waiting)
+        # Nothing to rebuild: the queue's base is the moved `main`, and it drains or stalls
+        # there like any other pass (an empty window must not hold the hold open forever).
+        rep = replace(rep, base=qs.base)
     by_id = {b.id: b for b in qs.batches}
     earlier: list[tuple[str, Sequence[str]]] = []
     for key in list(entries):  # R6: a conflict met at build, at the head it still has
@@ -478,7 +506,7 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
         actions.append(QueueAction(
             "queue-eject", qs.repo, f"eject {key}: it conflicts in {', '.join(met.paths)}",
             wave=wave, entries=(key,), reason="conflict", paths=met.paths, decision=decided,
-            batch=key if batch is not None else ""))  # fmt: skip
+            batch=key if batch is not None else "", head=met.head))  # fmt: skip
     valid = _valid(entries, rep.base, rep.combos, qs)
     green = 0
     while green < len(valid) and _verdict(valid[green], qs).verdict == "green":
@@ -491,12 +519,12 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                                    f"{tip.sha[:12]}", wave=wave, entries=done,
                                    sha=tip.sha))  # fmt: skip
         entries, base, standing = entries[green:], tip.sha, valid[green:]
-    fresh, first = False, None
+    fresh, first = "", None
     if standing and _verdict(standing[0], qs).verdict == "failing":  # R13: every one ahead green
         red = standing[0]
         key, check = red.chain[-1], _verdict(red, qs)
         if rep.builds.get((red.parent, key, red.heads[-1]), 0) < 2:
-            fresh, first = True, red.slot  # once more, as a fresh commit with the same tree
+            fresh, first = key, red.slot  # once more, as a fresh commit with the same tree
         else:
             batch, pr = by_id.get(key), qs.live.get(key)
             told: str = (
@@ -509,7 +537,8 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                 "queue-eject", qs.repo, f"eject {key}: combination {red.sha[:12]} failed "
                 f"twice ({', '.join(check.failing) or 'checks failing'})", wave=wave,
                 entries=(key,), reason="red", sha=red.sha, checks=check.failing,
-                decision=told, batch=key if batch is not None else ""))  # fmt: skip
+                decision=told, batch=key if batch is not None else "",
+                head=red.heads[-1]))  # fmt: skip
         standing = []
     todo = tuple(entries[len(standing) : depth])
     if todo:
@@ -518,16 +547,30 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
         if first is not None:
             slots = (first, *(s for s in slots if s != first))
         actions.append(QueueAction(
-            "queue-build", qs.repo, f"{'rebuild' if fresh else 'build'} {', '.join(todo)} on "
-            f"{on[:12]}", wave=wave, entries=todo, slots=slots[: len(todo)], base=on,
-            fresh=fresh))  # fmt: skip
+            "queue-build", qs.repo, f"build {', '.join(todo)} on {on[:12]}"
+            + (f" ({fresh} rebuilt fresh, same tree)" if fresh else ""), wave=wave,
+            entries=todo, slots=slots[: len(todo)], base=on, fresh_entry=fresh))  # fmt: skip
+    return _tail(record, rep, qs, actions, entries, waiting)
+
+
+def _tail(
+    record: QueueRecord,
+    rep: Replay,
+    qs: QueueSnapshot,
+    actions: list[QueueAction],
+    entries: Sequence[str],
+    waiting: Sequence[str],
+) -> QueuePlan:
+    """Every open pass ends here, a foreign move's included: drain the finished wave, else
+    propose the batch that stalls it (§B, R30)."""
     landing = any(a.kind == "queue-land" for a in actions)
     drained = None if entries or landing else _drained(record, rep, qs)
     if drained is not None:
         actions.append(drained)
     elif (need := _stall_need(record, qs, entries)) is not None:
         actions.append(need)
-    return QueuePlan(qs.repo, "open", wave, tuple(actions), tuple(entries), tuple(waiting))
+    return QueuePlan(qs.repo, "open", record.wave, tuple(actions), tuple(entries),
+                     tuple(waiting))  # fmt: skip
 
 
 def _drained(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> QueueAction | None:

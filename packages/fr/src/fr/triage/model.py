@@ -1143,6 +1143,12 @@ class QueueEjectEvent(_Strict):
     entry: QueueEntryRef
     reason: Literal["conflict", "red", "operator"]
     detail: str = ""
+    # The head *entry* left at: it re-enters once its head moves (R6, R13). A conflict met
+    # at build has no `queue_built` for that head, so the planner cannot rebuild it from the
+    # events ahead. Schema 13 like the event itself (`queues:` needs 13); None on an event
+    # written without it, which the planner reads from the last build or the batch's
+    # `conflict` event (`fr.triage.wave_queue.replay`).
+    head: str | None = None
 
 
 class QueueLandEvent(_Strict):
