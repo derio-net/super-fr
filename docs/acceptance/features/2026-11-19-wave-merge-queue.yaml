@@ -441,3 +441,9 @@ amendments:
       the diff after labelling voids the approval and removes the label, and a merge
       of the base or an empty commit keeps it.'
     why: a labelled PR is a queue entry now, and fr no longer updates PR branches (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_walk
+    why: renamed for the queue (R22)
