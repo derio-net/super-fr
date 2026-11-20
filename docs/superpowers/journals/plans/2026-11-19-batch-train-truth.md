@@ -399,3 +399,78 @@ _update's merge step and _unresolvable were factored into merge_main/trial_confl
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 a four-line change beside _fetched; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3-a created=2026-11-20T10:15:25+00:00 phase=3 -->
+### review-phase-3-a · review · Phase 3 review: red and conflicting draft hand-backs, train-wide probe, one fetch per pass (phase 3)
+
+Independent read-only review of b2725d115, 4c802828a and 1d03aafa7 against spec R15-R19. R15-R18 built as written; held-on-uninspectable-runner decision matches the spec. Six findings, all in scope.
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r1 created=2026-11-20T10:15:25+00:00 phase=3 state=open review_scope=in -->
+### p3a-r1 · finding [open] (reviewer: in scope) · merge_ctx fetched directly, ignoring _fetched/_fetch_failed, so a failed fetch repeated within one pass (R19) (phase 3)
+
+merge_ctx fetched directly, ignoring _fetched/_fetch_failed, so a failed fetch repeated within one pass (R19)
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r2 created=2026-11-20T10:15:25+00:00 phase=3 state=open review_scope=in -->
+### p3a-r2 · finding [open] (reviewer: in scope) · _recover fetched per red PR, bypassing the one-fetch-per-repo-per-pass cache and its failure record (R19) (phase 3)
+
+_recover fetched per red PR, bypassing the one-fetch-per-repo-per-pass cache and its failure record (R19)
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r3 created=2026-11-20T10:15:25+00:00 phase=3 state=open review_scope=in -->
+### p3a-r3 · finding [open] (reviewer: in scope) · _session_target resolved a launch (needs a model) when the batch had no dispatch event, failing the pass (phase 3)
+
+_session_target resolved a launch (needs a model) when the batch had no dispatch event, failing the pass
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r4 created=2026-11-20T10:15:25+00:00 phase=3 state=open review_scope=in -->
+### p3a-r4 · finding [open] (reviewer: in scope) · _probe_conflict's wait-behind, nothing-sent and hand-back-failed lines printed every pass (phase 3)
+
+_probe_conflict's wait-behind, nothing-sent and hand-back-failed lines printed every pass
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r5 created=2026-11-20T10:15:25+00:00 phase=3 state=open review_scope=in -->
+### p3a-r5 · finding [open] (reviewer: in scope) · trial_conflicts' cleanup could mask the in-flight exception and skip temp-root cleanup; a leftover dirty probe dir blocked probing forever (phase 3)
+
+trial_conflicts' cleanup could mask the in-flight exception and skip temp-root cleanup; a leftover dirty probe dir blocked probing forever
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r6 created=2026-11-20T10:15:25+00:00 phase=3 state=open review_scope=in -->
+### p3a-r6 · finding [open] (reviewer: in scope) · tests missed queue-mode red hand-back, uninspectable runner -> held, probe fetch failure, carries=False (phase 3)
+
+tests missed queue-mode red hand-back, uninspectable runner -> held, probe fetch failure, carries=False
+
+<!-- fr:journal kind=finding scope=plan id=p3-orch-r12-parent-race created=2026-11-20T10:15:25+00:00 phase=3 state=open review_scope=in -->
+### p3-orch-r12-parent-race · finding [open] (reviewer: in scope) · The supervisor read getppid() late: a launcher that ended first left it adopted and running forever (R12) (phase 3)
+
+Found by the orchestrator: a parent-death test's supervisor and driver ran orphaned for ~6 h on a loaded host; the existing test also raced reading the child's ppid (2 of 15 local runs failed).
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r1-resolved created=2026-11-20T10:15:25+00:00 phase=3 state=fixed resolves=p3a-r1 -->
+### p3a-r1-resolved · finding [fixed] · resolves p3a-r1: merge_ctx fetched directly, ignoring _fetched/_fetch_failed, so a failed fetch repeated within one pass (R19) (phase 3)
+
+New _fetch_once records success and failure; merge_ctx and _fetched_reader both go through it, so a recorded failure re-raises the same GitError without fetching. Tests cover both orders. Commit 26a9a9231; scoped run 7785 passed (p3-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r2-resolved created=2026-11-20T10:15:25+00:00 phase=3 state=fixed resolves=p3a-r2 -->
+### p3a-r2-resolved · finding [fixed] · resolves p3a-r2: _recover fetched per red PR, bypassing the one-fetch-per-repo-per-pass cache and its failure record (R19) (phase 3)
+
+_recover reads through self._fetched_reader(repo).rev_parse(ctx.main); test: a red pass fetches the repo once. _base_now's fetch predates this branch (unchanged against origin/main) and is left as is. Commit 26a9a9231; scoped run 7785 passed (p3-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r3-resolved created=2026-11-20T10:15:25+00:00 phase=3 state=fixed resolves=p3a-r3 -->
+### p3a-r3-resolved · finding [fixed] · resolves p3a-r3: _session_target resolved a launch (needs a model) when the batch had no dispatch event, failing the pass (phase 3)
+
+_session_target takes the runner from the dispatch event, else adapter.runner_for(batch), else batch.launch.runner, and never resolves a launch; no runner reads as absent (red) or held (probe). Unit-tested directly. Commit 26a9a9231; scoped run 7785 passed (p3-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r4-resolved created=2026-11-20T10:15:25+00:00 phase=3 state=fixed resolves=p3a-r4 -->
+### p3a-r4-resolved · finding [fixed] · resolves p3a-r4: _probe_conflict's wait-behind, nothing-sent and hand-back-failed lines printed every pass (phase 3)
+
+New _probe_said dedupes by batch, head and cause; two-pass loop tests show each line once. Commit 26a9a9231; scoped run 7785 passed (p3-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r5-resolved created=2026-11-20T10:15:25+00:00 phase=3 state=fixed resolves=p3a-r5 -->
+### p3a-r5-resolved · finding [fixed] · resolves p3a-r5: trial_conflicts' cleanup could mask the in-flight exception and skip temp-root cleanup; a leftover dirty probe dir blocked probing forever (phase 3)
+
+Cleanup GitError suppressed, temp root always removed, a leftover probe-<head12> force-removed (rmtree fallback) before the probe; tests for KeyboardInterrupt mid-merge, merge GitError, failing cleanup, leftover dir, and a said-once uncached retry. Commit 26a9a9231; scoped run 7785 passed (p3-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p3a-r6-resolved created=2026-11-20T10:15:25+00:00 phase=3 state=fixed resolves=p3a-r6 -->
+### p3a-r6-resolved · finding [fixed] · resolves p3a-r6: tests missed queue-mode red hand-back, uninspectable runner -> held, probe fetch failure, carries=False (phase 3)
+
+Added each as a test. Commit 26a9a9231; scoped run 7785 passed (p3-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=p3-orch-r12-parent-race-resolved created=2026-11-20T10:15:25+00:00 phase=3 state=fixed resolves=p3-orch-r12-parent-race -->
+### p3-orch-r12-parent-race-resolved · finding [fixed] · resolves p3-orch-r12-parent-race: The supervisor read getppid() late: a launcher that ended first left it adopted and running forever (R12) (phase 3)
+
+Supervisor takes the parent explicitly and stops before starting a driver when it already ended; the rig names its parent and the supervisor names itself; a new test (parent ended before run) and the repaired race both failed before the fix and pass after. Commit c28d94e42.
