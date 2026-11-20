@@ -71,4 +71,4 @@ journal:
       The same run's other failure, test_run_evidence_visual
       test_an_ignored_shot_inside_the_repo_passes_through_git, passed alone and is load-flaky
       (host load ~45); the log of that first run is p3-suite-run1.log beside the final one.
-evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/755bf926-d4e8-4f88-99cb-388408cbe75e/scratchpad/train-truth/p3-fast.log}
+evidence: {tests: ci}
