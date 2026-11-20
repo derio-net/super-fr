@@ -28,12 +28,12 @@ STAMP_KEY = "fr_artifact_version"
 AGENTS_DIR = Path(".claude") / "agents"
 """Repo-relative home of the rendered files."""
 
-PINNED_AT_VERSION = 5
+PINNED_AT_VERSION = 6
 """The `agents` kind's `current_version` when `CANONICAL_SHA256` was taken."""
 
 CANONICAL_SHA256: dict[str, str] = {
     "fr-spec-reviewer": "69fdf80f9ad6de326027215c65d3251f31a7c61bbca9b3793f74a17d2085671e",
-    "fr-phase-executor": "b38cbaece911d0927ae02f2bbefee8c408becbdb6d507c24f4d647821a849ac0",
+    "fr-phase-executor": "87c85757d9d402ca89f4674fba394b26799cf1200f162e5ecc492aa38b54e525",
 }
 
 

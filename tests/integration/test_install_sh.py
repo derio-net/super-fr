@@ -19,6 +19,10 @@ from pathlib import Path
 
 import pytest
 
+# Every test here runs install.sh into a sandboxed home: the scenario tier, which a
+# plain local run deselects (spec 2026-11-19-local-suite-cost R5).
+pytestmark = pytest.mark.scenario
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 
@@ -36,6 +40,36 @@ def fake_home(tmp_path: Path) -> Path:
     # $HOME/bin is on _run_install's PATH; callers drop stubs (uv, fr) there.
     (home / "bin").mkdir()
     seed_claude_files(home)
+    return home
+
+
+def _fresh_home(root: Path) -> Path:
+    home = root / "home"
+    home.mkdir()
+    (home / "bin").mkdir()
+    seed_claude_files(home)
+    return home
+
+
+@pytest.fixture(scope="module")
+def installed_home(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """ONE plain install into a fresh fake HOME, shared by the tests that only READ what it
+    left (spec 2026-11-19-local-suite-cost R3: each used to run install.sh itself). A test that
+    changes the home, or installs twice, takes `fake_home` instead."""
+    home = _fresh_home(tmp_path_factory.mktemp("installed"))
+    _run_install(home)
+    return home
+
+
+@pytest.fixture(scope="module")
+def installed_home_with_plugins(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """`installed_home`, from a home whose `installed_plugins.json` is the version-1 file
+    that gates step 4 (what `TestPluginCacheDirectory` reads)."""
+    home = _fresh_home(tmp_path_factory.mktemp("installed-plugins"))
+    (home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+        json.dumps({"plugins": {}, "version": 1})
+    )
+    _run_install(home)
     return home
 
 
@@ -128,11 +162,9 @@ class TestInstallRefusesWithoutRegistrationFiles:
         assert missing.rsplit("/", 1)[-1] in result.stderr
         assert "fr cloud setup-script" in result.stderr
 
-    def test_with_both_files_it_registers_the_plugin(self, fake_home: Path) -> None:
-        _run_install(fake_home)
-
+    def test_with_both_files_it_registers_the_plugin(self, installed_home: Path) -> None:
         installed = json.loads(
-            (fake_home / ".claude" / "plugins" / "installed_plugins.json").read_text()
+            (installed_home / ".claude" / "plugins" / "installed_plugins.json").read_text()
         )
         assert "super-fr@derio-net--super-fr" in installed["plugins"]
 
@@ -189,10 +221,8 @@ def test_the_cloud_setup_script_requires_the_plugin() -> None:
 
 
 class TestInstallRules:
-    def test_installs_rule_file(self, fake_home: Path) -> None:
-        _run_install(fake_home)
-
-        rule = fake_home / ".claude" / "rules" / "fr-plan-override.md"
+    def test_installs_rule_file(self, installed_home: Path) -> None:
+        rule = installed_home / ".claude" / "rules" / "fr-plan-override.md"
         assert rule.exists()
         assert "fr-plan" in rule.read_text().lower()
 
@@ -722,8 +752,8 @@ class TestPluginCacheDirectory:
     def _installed(self, home: Path) -> dict:
         return json.loads((home / ".claude" / "plugins" / "installed_plugins.json").read_text())
 
-    def test_installpath_is_the_current_directory(self, home_with_plugins: Path) -> None:
-        _run_install(home_with_plugins)
+    def test_installpath_is_the_current_directory(self, installed_home_with_plugins: Path) -> None:
+        home_with_plugins = installed_home_with_plugins
         entry = self._installed(home_with_plugins)["plugins"]["super-fr@derio-net--super-fr"][0]
         assert entry["installPath"].endswith("/cache/derio-net--super-fr/super-fr/current")
         current = Path(entry["installPath"])
@@ -733,8 +763,8 @@ class TestPluginCacheDirectory:
         pj = json.loads((current / ".claude-plugin" / "plugin.json").read_text())
         assert pj["version"] == _plugin_version("super-fr")
 
-    def test_first_install_leaves_only_current(self, home_with_plugins: Path) -> None:
-        _run_install(home_with_plugins)
+    def test_first_install_leaves_only_current(self, installed_home_with_plugins: Path) -> None:
+        home_with_plugins = installed_home_with_plugins
         cache = self._cache_dir(home_with_plugins)
         assert sorted(p.name for p in cache.iterdir()) == ["current"]
 
@@ -758,8 +788,8 @@ class TestPluginCacheDirectory:
         for name in ("1.0.0", "1.0.1", "1.0.2"):
             assert (cache / name).is_dir(), f"{name} is recent: a session may still hold it"
 
-    def test_dispatch_plugin_gets_the_same_layout(self, home_with_plugins: Path) -> None:
-        _run_install(home_with_plugins)
+    def test_dispatch_plugin_gets_the_same_layout(self, installed_home_with_plugins: Path) -> None:
+        home_with_plugins = installed_home_with_plugins
         current = self._cache_dir(home_with_plugins, "super-fr-dispatch") / "current"
         assert current.is_dir() and not current.is_symlink()
         entry = self._installed(home_with_plugins)["plugins"][
@@ -830,11 +860,11 @@ class TestInstallWorkflows:
     is the one this module's own runtime lookup actually reads.
     """
 
-    def test_shipped_manifest_lands_in_the_marketplace_directory(self, fake_home: Path) -> None:
-        _run_install(fake_home)
-
+    def test_shipped_manifest_lands_in_the_marketplace_directory(
+        self, installed_home: Path
+    ) -> None:
         manifest = (
-            fake_home
+            installed_home
             / ".claude"
             / "plugins"
             / "marketplaces"
@@ -850,11 +880,11 @@ class TestInstallWorkflows:
         )
         assert "workflow: fr-goal" in manifest.read_text()
 
-    def test_shipped_manifest_matches_the_repo_source_byte_for_byte(self, fake_home: Path) -> None:
-        _run_install(fake_home)
-
+    def test_shipped_manifest_matches_the_repo_source_byte_for_byte(
+        self, installed_home: Path
+    ) -> None:
         installed = (
-            fake_home
+            installed_home
             / ".claude"
             / "plugins"
             / "marketplaces"
@@ -867,12 +897,10 @@ class TestInstallWorkflows:
         source = REPO_ROOT / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
         assert installed.read_text() == source.read_text()
 
-    def test_every_shipped_workflow_manifest_is_delivered(self, fake_home: Path) -> None:
-        _run_install(fake_home)
-
+    def test_every_shipped_workflow_manifest_is_delivered(self, installed_home: Path) -> None:
         source_dir = REPO_ROOT / "plugins" / "super-fr" / "workflows"
         installed_dir = (
-            fake_home
+            installed_home
             / ".claude"
             / "plugins"
             / "marketplaces"

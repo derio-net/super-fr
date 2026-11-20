@@ -208,9 +208,10 @@ def test_every_version_bump_registers_its_re_render_hop() -> None:
     """The kind left 1 when fr-spec-reviewer learned the `## Test Plan` heading rule
     (super-fr#1315), and 2 when it learned to review against the repo's settings
     (repo-feature-settings R15), and 3 when fr-phase-executor learned to push with
-    `fr push` (R12), and 4 when both learned about review lenses (review-lenses R14):
-    every hop from 1 to the current version is registered."""
-    assert KIND.current_version == 5
+    `fr push` (R12), and 4 when both learned about review lenses (review-lenses R14),
+    and 5 when fr-phase-executor learned the declared `tests: ci` default
+    (local-suite-cost R8): every hop from 1 to the current version is registered."""
+    assert KIND.current_version == 6
     chain = MIGRATIONS.chain("agents", 1)
     assert [m.to_version for m in chain] == list(range(2, KIND.current_version + 1))
 

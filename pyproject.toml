@@ -52,7 +52,14 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers --cov --cov-report=term-missing --cov-fail-under=75"
+# `-m "not scenario"`: the install and shell-scenario tests are deselected from a
+# plain local run (spec 2026-11-19-local-suite-cost R5). `-m ""` runs the whole
+# suite; CI and the release replace addopts (or pass `-m ""`), so they run it all.
+addopts = "--strict-markers --cov --cov-report=term-missing --cov-fail-under=75 -m 'not scenario'"
+markers = [
+    "scenario: drives an installed fr or install.sh end to end; deselected locally, run by CI and the release",
+    "smoke: one CLI round trip per top-level fr command group; always run by --fr-scope",
+]
 
 [tool.coverage.run]
 source = ["fr", "fr_dispatch", "fr_cncd", "fr_herdr", "fr_claude_cloud"]

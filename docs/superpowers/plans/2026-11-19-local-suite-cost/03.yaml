@@ -1,0 +1,136 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Scenario tier, fast advisory tier, the declared tests ci default (R5-R8,
+    R10)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - scenario-tier-deselected-locally
+  - fast-tier-advisory-and-refused
+  - repo-declares-ci-tests-evidence
+  tier: hard
+  files:
+  - pyproject.toml
+  - tests/conftest.py
+  - tests/fr_scope.py
+  - tests/integration/test_scenarios.py
+  - tests/integration/test_install_sh.py
+  - tests/unit/test_fr_scope.py
+  - tests/unit/test_scenario_tier_commands.py
+  - tests/unit/test_tests_mode.py
+  - tests/**/*.py
+  - scripts/release.py
+  - packages/fr/src/fr/run/ci_evidence.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/agents/**
+  - packages/fr/src/fr/artifacts/**
+  - plugins/super-fr/agents/fr-phase-executor.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .claude/agents/**
+  - .opencode/**
+  - .hermes/**
+  - .fr/ci.yaml
+  - .test_durations
+  - AGENTS.md
+  - README.md
+  - docs/**/*.md
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: The scenario tier and its command-line pin (spec §3.D)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_scenario_tier_commands.py parses ci.yml's collect and test `run:` lines and release.py's `_collect_pytest_args`, `_shard_pytest_args` and `_run_staged_tests` argv, asserting each replaces addopts with no `-m` or passes `-m ""`. It also asserts that `pytest --collect-only -q -o addopts=--strict-markers` lists nodes of test_scenarios.py and test_install_sh.py, and that a default `pytest --collect-only -q tests/integration/test_scenarios.py` lists only `test_every_scenario_script_has_a_test_here`.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: register `scenario` and `smoke` markers in pyproject.toml and add `-m "not scenario"` to addopts; set `pytestmark = pytest.mark.scenario` in test_install_sh.py; in test_scenarios.py mark every test but the tripwire; make `_run_staged_tests` pass `-m ""`.
+- number: 2
+  title: The fast tier and the advisory line (spec §3.E)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_fr_scope.py over a fixture repo. Selection comes from the merge-base diff plus untracked files. A changed source module selects test files that import it or a parent package, directly or through a tests/ helper. A changed helper selects its importers. A changed conftest.py selects its directory. `smoke` tests always run; scenario tests never do. The base defaults to remote_default_ref. The advisory line is printed (as a whole line) for --fr-scope, a non-empty -m or -k, explicit paths, --lf, --sw and the default run; it is not printed for `-m ""` with no other narrowing.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: tests/fr_scope.py (pure selection over an ast import index), wired from tests/conftest.py through `pytest_addoption` (`--fr-scope`, nargs='?'), `pytest_collection_modifyitems`, and `pytest_terminal_summary` printing `fr-scope: advisory — not deliver evidence`. Mark the smoke set: one CLI round trip per top-level `fr` command group.
+  - id: P3.T2.S3
+    text: |-
+      RED then GREEN: run_cmd `_read_suite_log` refuses (exit 2) a log with a stripped line equal to the advisory line, naming `-m ""` and `tests: ci`. Tests cover deliver and a phase unit, a log that merely quotes the string mid-line (accepted), and a phase resolve that refuses it and so leaves nothing for `tests: reuse`.
+- number: 3
+  title: The declared tests ci default and the briefs (spec §3.F)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_tests_mode.py — `declared_tests_mode` returns 'ci' for `tests: ci`, None when the key is absent, and refuses any other value; `load_gate_checks` still ignores unknown keys. With the key declared, the deliver and implement-phase briefs carry `tests: {mode: ci, fast_tier: 'uv run pytest --fr-scope <base> -n 2 -q --no-cov'}` with <base> from remote_default_ref; without it they carry no `tests` key.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: `declared_tests_mode` in fr/run/ci_evidence.py (reads .fr/ci.yaml at HEAD); the brief builders in run_cmd add the key; `.fr/ci.yaml` gains `tests: ci`.
+  - id: P3.T3.S3
+    text: |-
+      Edit plugins/super-fr/agents/fr-phase-executor.md: :139's full-suite-last rule becomes conditional on the brief's `tests.mode: ci` (the fast tier is the last act); :147's `none` rule gains that case; :150's tests: ci mode stays for repos that do not declare it. Edit fr-goal SKILL.md §5 (tests_log under the declared default), §6 (the draft-PR-at-implement-start rule applies only to phases using tests: ci) and §8 (tests: ci is the declared default; `-m ""` is the full local run). Then run scripts/sync-agents-data.py, move the `agents` kind's current_version in fr/artifacts/registry.py, update CANONICAL_SHA256 and PINNED_AT_VERSION, register the rerender_migration hop in MIGRATIONS, and run `uv run fr migrate artifacts --yes`, scripts/sync-opencode.py, scripts/sync-hermes.py and scripts/sync-readme.py. Run test_tripwire_agents_data.py, test_opencode_agent_mirror.py, the opencode and hermes sync tripwires, and test_skill_validation.py.
+- number: 4
+  title: Durations, AGENTS.md, docs currency (R10) and quality gate
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Refresh .test_durations with `uv run pytest -m "" -n auto --no-cov --store-durations` (every test, scenarios included), or merge the stored durations from this PR's CI shards when the host is too loaded. Replace AGENTS.md:436's command and :455's figures with the measured worker-seconds and wall clock, and describe the fast tier, the scenario marker, `-m ""` and the declared tests: ci default.
+  - id: P3.T4.S2
+    text: |-
+      Run `uv run fr docs check --base origin/main`; edit each page it names, or bump its reviewed stamp with a note when it is still true.
+  - id: P3.T4.S3
+    text: |-
+      REFACTOR + quality gate: ruff format/check, mypy, `uv run fr validate artifacts`, the touched tests; commit; `uv run fr push`; wait for CI and record `tests: ci`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+    P3.T4.S3:
+      state: x
+      ticked_at: '2026-11-19T20:17:31+00:00'
+      note: null
+  completion:
+    at: '2026-11-19T20:17:31+00:00'
+    note: null
+    observed_prs: []

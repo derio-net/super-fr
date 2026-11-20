@@ -1,0 +1,2 @@
+bump: minor
+summary: faster fr git lookups (a per-invocation cache of the default remote and ref), a declared `tests: ci` default in `.fr/ci.yaml`, and a fast advisory test tier whose logs deliver refuses

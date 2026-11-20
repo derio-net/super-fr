@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+
+from fr import git_cache
 
 
 def _run_git(args: list[str], cwd: Path | None = None) -> str:
@@ -181,6 +183,53 @@ WELL_KNOWN_DEFAULTS = ("main", "master", "trunk", "develop")
 """Candidate trunk names, remote-tracking first, then local. Last resort."""
 
 
+def _through_cache(
+    root: Path,
+    question: tuple[str, ...],
+    remote: str | None,
+    compute: Callable[[], tuple[str | None | GitRefusal, tuple[str, ...]]],
+) -> str | None | GitRefusal:
+    """Answer *question* about *root* from `fr.git_cache`'s open scope, else ask git.
+
+    *compute* returns the answer and the remote-tracking ref names (under
+    *remote*) it consulted. An answer is stored with the fingerprint of what it
+    read, and only when the fingerprint taken before git ran (over the
+    well-known names and the branch the remote's loose `HEAD` names) still
+    holds after it: a write racing the question is never cached. A
+    `GitRefusal` is never stored; a `GitUnavailableError` propagates and
+    stores nothing. The repository is located again after *compute*, and an
+    answer whose config list moved meanwhile is not stored. Outside a scope,
+    or for a repository `git_cache.locate` will not fingerprint, *compute*
+    runs every time.
+    """
+    cache = git_cache.active()
+    located = git_cache.locate(root) if cache is not None else None
+    if cache is None or located is None:
+        return compute()[0]
+    key = (located.git_dir, Path(root).resolve(), *question)
+    hit = cache.get(key)
+    if hit is not None:
+        answer, names, stamp = hit
+        if git_cache.fingerprint(located, remote, names) == stamp:
+            return answer  # type: ignore[no-any-return]
+        del cache[key]
+    named = git_cache.head_target(located, remote) if remote is not None else None
+    watched = (*WELL_KNOWN_DEFAULTS, *((named,) if named else ()))
+    before = git_cache.fingerprint(located, remote, watched)
+    answer, consulted = compute()
+    if isinstance(answer, GitRefusal):
+        return answer
+    # The config list is read again: an include added after `locate` read the list
+    # but before `before` was taken is in git's answer and missing from the list
+    # the stamp watches, so the answer is not stored (l-errors-r9).
+    if git_cache.locate(root) != located:
+        git_cache.decline(root, "its config include list changed while git answered")
+    elif git_cache.fingerprint(located, remote, watched) == before:
+        names = tuple(dict.fromkeys((*watched, *consulted)))
+        cache[key] = (answer, names, git_cache.fingerprint(located, remote, names))
+    return answer
+
+
 def remote_name(root: Path) -> str | None | GitRefusal:
     """Which remote speaks for "the default branch" (review r5-c3 / r5-e6).
 
@@ -189,7 +238,15 @@ def remote_name(root: Path) -> str | None | GitRefusal:
     two unnamed-by-config remotes are a genuine ambiguity and this refuses
     rather than picking one — callers decide whether an automatic commit is
     allowed, or whether a plan counts as merged, on the answer.
+
+    Inside a `fr.git_cache.scope()` (every CLI command) a repeated question is
+    answered from the cache while nothing it read has changed (spec
+    `2026-11-19-local-suite-cost` R1).
     """
+    return _through_cache(root, ("remote_name",), None, lambda: (_remote_name(root), ()))
+
+
+def _remote_name(root: Path) -> str | None | GitRefusal:
     configured = git_answer(root, "config", "--get", "checkout.defaultRemote")
     if configured.returncode == 0 and configured.stdout.strip():
         return configured.stdout.strip()
@@ -227,19 +284,60 @@ def remote_default_ref(root: Path) -> str | None | GitRefusal:
     `None` when there is no remote, or neither source resolves; the remote's
     `GitRefusal` (e.g. two remotes, no `checkout.defaultRemote`) passes
     through. A branch with a `/` in it (`origin/release/main`) survives.
+
+    Cached inside a `fr.git_cache.scope()`, like `remote_name`.
     """
     remote = remote_name(root)
     if remote is None or isinstance(remote, GitRefusal):
         return remote
+    return _through_cache(
+        root, ("remote_default_ref", remote), remote, lambda: _default_ref_of(root, remote)
+    )
+
+
+def _default_ref_of(root: Path, remote: str) -> tuple[str | None | GitRefusal, tuple[str, ...]]:
+    """`remote_default_ref`'s git work for *remote*, and the ref names it consulted.
+
+    `symbolic-ref --quiet` and `rev-parse --verify --quiet` say "not there" with
+    exit 1. Any other non-zero exit (128: git itself failed) is a `GitRefusal`,
+    never read as an absent ref, and so never cached (l-errors-r3)."""
     head = git_answer(root, "symbolic-ref", "--quiet", "--short", f"refs/remotes/{remote}/HEAD")
+    if head.returncode not in (0, _GIT_NOT_FOUND):
+        return _git_failed(head, f"symbolic-ref refs/remotes/{remote}/HEAD"), ()
+    consulted: tuple[str, ...] = ()
     if head.returncode == 0 and head.stdout.strip():
         named = head.stdout.strip().removeprefix(f"{remote}/")
-        if named and ref_exists(root, f"refs/remotes/{remote}/{named}"):
-            return f"{remote}/{named}"
+        if named:
+            consulted = (named,)
+            found = _verified(root, f"refs/remotes/{remote}/{named}")
+            if isinstance(found, GitRefusal):
+                return found, ()
+            if found:
+                return f"{remote}/{named}", consulted
     for name in WELL_KNOWN_DEFAULTS:
-        if ref_exists(root, f"refs/remotes/{remote}/{name}"):
-            return f"{remote}/{name}"
-    return None
+        found = _verified(root, f"refs/remotes/{remote}/{name}")
+        if isinstance(found, GitRefusal):
+            return found, ()
+        if found:
+            return f"{remote}/{name}", consulted
+    return None, consulted
+
+
+_GIT_NOT_FOUND = 1
+"""The exit `symbolic-ref --quiet` / `rev-parse --verify --quiet` give for "no such ref"."""
+
+
+def _verified(root: Path, ref: str) -> bool | GitRefusal:
+    """`ref_exists`, but a git failure (exit other than 0 or 1) is a `GitRefusal`."""
+    done = git_answer(root, "rev-parse", "--verify", "--quiet", ref)
+    if done.returncode in (0, _GIT_NOT_FOUND):
+        return done.returncode == 0
+    return _git_failed(done, f"rev-parse --verify {ref}")
+
+
+def _git_failed(done: subprocess.CompletedProcess[str], what: str) -> GitRefusal:
+    detail = done.stderr.strip() or f"exit {done.returncode}"
+    return GitRefusal(f"`git {what}` failed (exit {done.returncode}): {detail}")
 
 
 def on_default_branch(root: Path, default_ref: str) -> bool:
