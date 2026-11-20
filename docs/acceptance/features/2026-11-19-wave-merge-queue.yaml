@@ -244,3 +244,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_moved_identical_hunk_keeps_the_patch_id
     why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_hostile_diff_configuration_does_not_change_the_patch_id
+    why: 'p1 review fix: evidence for the reworded row'
