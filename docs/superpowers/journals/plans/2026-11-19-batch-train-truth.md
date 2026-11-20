@@ -549,3 +549,238 @@ That line prints only for a dispatched batch. Commit f2f927670.
 ### p4a-r4-resolved · finding [fixed] · resolves p4a-r4: the R21 test seeded no fr:in-progress label, so 'removes no label' was weakly proven (phase 4)
 
 The test now seeds fr:in-progress and asserts it stays. That exposed a real gap: the claim release removed fr:in-progress (claim_sync always unlabels). ClaimOp gains unlabel (default True); cancel passes unlabel=dispatched, so a never-dispatched cancel removes only fr:claimed. Claim/cancel tests: 347 passed. Commit f2f927670.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-a created=2026-11-20T13:25:14+00:00 -->
+### lens-review-a · review · Lens review: errors, tests, simplicity, docs-accuracy over the whole feature
+
+One read-only reviewer per lens over merge-base 396e444d3..HEAD. 22 in-scope findings (21 fixed, 1 refuted with the spec's reason) and 1 out of scope, filed as derio-net/super-fr#1601.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · --once/plan mode: an unexpected exception exited 2 (was traceback, exit 1) and printed nothing on an empty message
+
+--once/plan mode: an unexpected exception exited 2 (was traceback, exit 1) and printed nothing on an empty message
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · looping and cloud drivers kept no traceback for unexpected:* causes
+
+looping and cloud drivers kept no traceback for unexpected:* causes
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · a bare typer.Exit(2) from _load_state/resolve_state_dir inside a pass became a refusal with an empty message
+
+a bare typer.Exit(2) from _load_state/resolve_state_dir inside a pass became a refusal with an empty message
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · refusals raised through _fail never wrote their reason to drive.log
+
+refusals raised through _fail never wrote their reason to drive.log
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · the supervisor's Child() OSError killed it with a traceback and recorded nothing; its record/ledger writes failed silently
+
+the supervisor's Child() OSError killed it with a traceback and recorded nothing; its record/ledger writes failed silently
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · trial_conflicts cleanup swallowed failures and its rmtree fallback skipped prune, so a stale registration blocked the probe
+
+trial_conflicts cleanup swallowed failures and its rmtree fallback skipped prune, so a stale registration blocked the probe
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · an invalid scope config read in take_lease was transient triage:TriageError instead of an R2 refusal
+
+an invalid scope config read in take_lease was transient triage:TriageError instead of an R2 refusal
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · supervisor process test cleanup could leak a launcher-started supervisor and an unwritten-pid driver forever
+
+supervisor process test cleanup could leak a launcher-started supervisor and an unwritten-pid driver forever
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · a fixed sleep raced the fake driver's SIG_IGN
+
+a fixed sleep raced the fake driver's SIG_IGN
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · the R20 swap_issue_labels test passed without the retry
+
+the R20 swap_issue_labels test passed without the retry
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · no test moved the PR head or default-branch sha between passes, so a PR-only probe cache would pass
+
+no test moved the PR head or default-branch sha between passes, so a PR-only probe cache would pass
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · no test exercised the old-file drain at a DriveLog rotation
+
+no test exercised the old-file drain at a DriveLog rotation
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · R17's lockfile case had no trial_conflicts test
+
+R17's lockfile case had no trial_conflicts test
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r1 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-simplicity-r1 · finding [open] (reviewer: in scope) · three near-identical dedupe-once helpers with inconsistent keys
+
+three near-identical dedupe-once helpers with inconsistent keys
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r2 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-simplicity-r2 · finding [open] (reviewer: in scope) · drive_errors derives a cause from traceback frame names; have _fail raise with an explicit cause
+
+drive_errors derives a cause from traceback frame names; have _fail raise with an explicit cause
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r3 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-simplicity-r3 · finding [open] (reviewer: in scope) · _fail duplicated in triage_drive_cmd and triage_kanban_cmd
+
+_fail duplicated in triage_drive_cmd and triage_kanban_cmd
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r4 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-simplicity-r4 · finding [open] (reviewer: in scope) · driver_record repeated the load-or-None block and loaded twice in record_refusal
+
+driver_record repeated the load-or-None block and loaded twice in record_refusal
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r5 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-simplicity-r5 · finding [open] (reviewer: in scope) · supervise.py had three identical swallow-and-pass wrappers with redundant local imports
+
+supervise.py had three identical swallow-and-pass wrappers with redundant local imports
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r6 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-simplicity-r6 · finding [open] (reviewer: in scope) · driver_failures double str() and a closure-heavy file_failures
+
+driver_failures double str() and a closure-heavy file_failures
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-wave-driver.md listed a lost push race as transient; it is a StateRefConflict refusal
+
+fr-wave-driver.md listed a lost push race as transient; it is a StateRefConflict refusal
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · 'each pass fetches a repo once' was false on merge-queue paths (_base_now fetched directly)
+
+'each pass fetches a repo once' was false on merge-queue paths (_base_now fetched directly)
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-20T13:25:14+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · the signal-stop exit code sentence was imprecise
+
+the signal-stop exit code sentence was imprecise
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-20T13:25:14+00:00 state=open review_scope=out -->
+### l-errors-r8 · finding [open] (reviewer: out of scope) · a failing close-out take-back after a failed dispatch hides the dispatch error and leaves the close-out stuck as started
+
+a failing close-out take-back after a failed dispatch hides the dispatch error and leaves the close-out stuck as started (triage_batch_cmd.py close-out take-back; same code on main).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: --once/plan mode: an unexpected exception exited 2 (was traceback, exit 1) and printed nothing on an empty message
+
+--once, plan and the cloud pass ledger then re-raise unexpected:* (traceback, exit 1); classify never leaves a message empty (class name fallback). Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: looping and cloud drivers kept no traceback for unexpected:* causes
+
+drive_log.append_traceback writes once per (state dir, cause) per process to host-local drive-tracebacks.log (5 MB rotation); the warning and drive.log line name it. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: a bare typer.Exit(2) from _load_state/resolve_state_dir inside a pass became a refusal with an empty message
+
+Shared triage_cmd.fail raises fail_exit at the four sites; a bare Exit gets '<function> exited <code>'. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: refusals raised through _fail never wrote their reason to drive.log
+
+_stop logs the refusal message even when already printed. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: the supervisor's Child() OSError killed it with a traceback and recorded nothing; its record/ledger writes failed silently
+
+OSError on spawn records a spawn-failed refusal, refuses, says it and returns 2; _best_effort says each failing write once. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: trial_conflicts cleanup swallowed failures and its rmtree fallback skipped prune, so a stale registration blocked the probe
+
+New Checkout.prune_worktrees; _clear_scratch rmtree-then-prune before each probe and in cleanup, an unclearable one reported once; the probe removes a worktree it added even with no directory visible. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [fixed] · resolves l-errors-r7: an invalid scope config read in take_lease was transient triage:TriageError instead of an R2 refusal
+
+load_durable and load_scope_config raise ConfigError (a TriageError subclass) on YAML/validation errors; OSError stays transient. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: supervisor process test cleanup could leak a launcher-started supervisor and an unwritten-pid driver forever
+
+Cleanup kills supervisor-* pids first then re-reads drivers until stable; the fake driver has a hard deadline; the err handle is closed. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: a fixed sleep raced the fake driver's SIG_IGN
+
+The driver signals readiness after installing its handler and the test waits on it. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: the R20 swap_issue_labels test passed without the retry
+
+The fake refuses before any removal lands; exactly 2 calls asserted, the second without the undefined label. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: no test moved the PR head or default-branch sha between passes, so a PR-only probe cache would pass
+
+The looping probe test moves rev_parse and head_oid separately and asserts a second trial; unchanged stays one. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: no test exercised the old-file drain at a DriveLog rotation
+
+One poll appends two lines, the second rotating; both yielded in order. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: R17's lockfile case had no trial_conflicts test
+
+test_a_lockfile_conflict_is_resolved_only_when_the_repo_relocks: relock declared -> [], none -> ['uv.lock']. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r1-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-simplicity-r1 -->
+### l-simplicity-r1-resolved · finding [fixed] · resolves l-simplicity-r1: three near-identical dedupe-once helpers with inconsistent keys
+
+One _Driver._once backs _stopped_line, _probe_said and _said_once; red and probe keys no longer hold error text. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r2-resolved created=2026-11-20T13:25:14+00:00 state=refuted resolves=l-simplicity-r2 -->
+### l-simplicity-r2-resolved · finding [refuted] · resolves l-simplicity-r2: drive_errors derives a cause from traceback frame names; have _fail raise with an explicit cause
+
+Spec R4 (2026-11-19-batch-train-truth-design.md:57) defines the cause as exit:<function>, the function that raised, and the Design (line 100) leaves the pass's helpers, bare typer.Exit included, as they are, covered by R4; ~156 _fail call sites and bare Exits cannot carry a cause argument, and a constant default would merge every ledger cause. The frame walk is the spec's mechanism; 'fail' was added to FAIL_HELPERS for the shared helper.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r3-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-simplicity-r3 -->
+### l-simplicity-r3-resolved · finding [fixed] · resolves l-simplicity-r3: _fail duplicated in triage_drive_cmd and triage_kanban_cmd
+
+One triage_cmd.fail, imported by kanban, drive, claim and batch. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r4-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-simplicity-r4 -->
+### l-simplicity-r4-resolved · finding [fixed] · resolves l-simplicity-r4: driver_record repeated the load-or-None block and loaded twice in record_refusal
+
+_old(state_dir) and _current(old); record_refusal loads once. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r5-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-simplicity-r5 -->
+### l-simplicity-r5-resolved · finding [fixed] · resolves l-simplicity-r5: supervise.py had three identical swallow-and-pass wrappers with redundant local imports
+
+One _best_effort helper; the local imports are gone. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r6-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-simplicity-r6 -->
+### l-simplicity-r6-resolved · finding [fixed] · resolves l-simplicity-r6: driver_failures double str() and a closure-heavy file_failures
+
+_view_state returns str (the double conversion is gone). The planner/applier split was declined: dry-run and write already share one path via the write guards, and the action depends on a mid-way forge read (view_issue), so the split would not be simpler. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-wave-driver.md listed a lost push race as transient; it is a StateRefConflict refusal
+
+The transient example is a push the remote refused (a permission or a hook); the lost race stays a refusal. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: 'each pass fetches a repo once' was false on merge-queue paths (_base_now fetched directly)
+
+Code fixed per R19: _base_now goes through _fetched_reader/_fetch_once, tested for one fetch and a remembered failure; the claim now holds. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-20T13:25:14+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: the signal-stop exit code sentence was imprecise
+
+A signalled or orphaned supervisor exits 0; otherwise it exits with the driver's code (130 after an interrupt or SIGTERM stop). The duplicated reviewed note was removed too. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-20T13:25:14+00:00 state=open resolves=l-errors-r8 out_of_scope=true -->
+### l-errors-r8-resolved · finding [out-of-scope] · resolves l-errors-r8: a failing close-out take-back after a failed dispatch hides the dispatch error and leaves the close-out stuck as started
+
+Predates this change: the same take-back code is on main (triage_batch_cmd.py ~6575, ~6650). Filed as derio-net/super-fr#1601.
