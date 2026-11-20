@@ -199,3 +199,58 @@ Filing re-loads the ledger at save and merges only issue/filed_count of the caus
 ### p1a-r10-resolved · finding [fixed] · resolves p1a-r10: the 10th-transient stop rewrites the cause's ledger kind to refusal, mislabelling a transient cause and its filed issue (phase 1)
 
 The 10th-transient stop keeps the ledger kind transient; only driver.yaml records the refusal (09dc9ce94).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-process-spawn-seam created=2026-11-20T02:48:00+00:00 phase=2 -->
+### p2-process-spawn-seam · discovery · fr.triage may start no process outside its git seam: the child spawn lives in fr.safe_spawn.Child (phase 2)
+
+The first full suite failed test_fr_triage_touches_gh_only_in_collect (supervise.py imported subprocess) and test_the_loop_ends_with_exit_3 (a new stop line printed to stdout). The spawn moved to fr.safe_spawn.Child (safe env, no new session); the final stop lines are log-only.
+
+<!-- fr:journal kind=decision scope=plan id=p2-end-is-a-popen-returncode created=2026-11-20T02:48:00+00:00 phase=2 -->
+### p2-end-is-a-popen-returncode · decision · restart_decision takes a Popen return code; the driver's clean stop is exit 130 (phase 2)
+
+A signal death is a negative return code. SIGINT/SIGTERM/SIGHUP deaths (-n) and exit 128+n are deliberate stops (code 128+n). Typer turns the driver's KeyboardInterrupt (Ctrl-C and SIGTERM) into exit 1, which would read as a crash, so a driver started with --supervised-by exits 130 on KeyboardInterrupt (after releasing its lease). A stop the supervisor itself causes (its own signal, or its parent ending) never restarts and exits 0.
+
+<!-- fr:journal kind=decision scope=plan id=p2-status-without-lease created=2026-11-20T02:48:00+00:00 phase=2 -->
+### p2-status-without-lease · decision · drive status with no lease still reports a live recorded driver on this host (phase 2)
+
+A scope with no state repo holds no lease at all (_host_lease returns None), so a lease-only status could never exit 0 there. driver.yaml is host-local, so with no lease a record whose pid is alive reads as running (exit 0); no lease and no record, or a dead pid, is exit 3. A live lease of another host is reported as held elsewhere (exit 0, never probed); an expired one is exit 3.
+
+<!-- fr:journal kind=decision scope=plan id=p2-supervised-wait-is-chunked created=2026-11-20T02:48:00+00:00 phase=2 -->
+### p2-supervised-wait-is-chunked · decision · A supervised driver's every wait is cut into one-second sleeps through _wait (phase 2)
+
+R12 asks for a ppid check inside the module-level _sleep and wait_out. Both reach the clock through _wait, so _wait splits a supervised wait into one-second _sleep calls and checks os.getppid() between them (SupervisorGone, a BaseException, passes the pass boundary; _host_loop returns LoopEnd(0) and the command releases the lease). Unsupervised, _wait is one _sleep as before.
+
+<!-- fr:journal kind=decision scope=plan id=p2-log-routing created=2026-11-20T02:48:00+00:00 phase=2 -->
+### p2-log-routing · decision · _say routes through _emit; the drive log is attached only in loop mode with --yes (phase 2)
+
+_emit(kind, line) prints and appends while drive_log_attached is active; _say is _emit('action', ...). The log is attached around the host loop only when --yes and not --once, so plan mode and --once are byte-identical. Pass summaries are kind pass, a stall or the final stop is stop, warnings are transient, refusals refusal; the supervisor writes restart and stop. A log write that fails is swallowed: the log is a view.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-tdd-order-supervisor created=2026-11-20T02:48:00+00:00 phase=2 -->
+### p2-tdd-order-supervisor · discovery · The supervisor and drive log were written before their tests; the tests were green on first run (phase 2)
+
+Honest record of a TDD-order slip on P2.T2/P2.T4: supervise.py and drive_log.py were drafted with the pure policy tests only (T1 went red first: module missing); the process, log and command tests followed the code and passed, except the parent-death test, which exposed a real race (a parent that exits before the supervisor reads its ppid is never seen to change); the test now holds its parent until the driver started.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-docs-pages-deferred created=2026-11-20T02:48:00+00:00 phase=2 -->
+### p2-docs-pages-deferred · discovery · fr docs check lists fr-triage, fr-wave-driver and herdr-control-sessions as stale until phase 4 (phase 2)
+
+The plan puts the explainer and skill pages last (phase 4), so the stale-page report on this branch is expected after phase 2.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-20T02:48:00+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+restart_decision is a pure function written once; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-20T02:48:00+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+Supervisor was written in one pass; the supervised-driver checks reuse the loop's one _wait seam, nothing duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-20T02:48:00+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+status and log are small read-only commands sharing _status_tail; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-20T02:48:00+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+_say became a thin wrapper of _emit, the one print-and-append seam; nothing left to fold
