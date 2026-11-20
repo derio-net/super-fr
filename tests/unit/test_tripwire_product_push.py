@@ -41,7 +41,18 @@ FR_OWNED_BOT_BRANCH_PUSHERS = {
     ("fr.triage.gitseam", "Checkout.publish_branch"),
     ("fr.triage.gitseam", "Worktree.push"),
 }
-ALLOWED = PRODUCT_PUSHER | FR_BRANCH_PUSHERS | TRACKING_REPO_PUSHERS | FR_OWNED_BOT_BRANCH_PUSHERS
+QUEUE_PUSHERS = {
+    # the wave merge queue (spec 2026-11-19-wave-merge-queue R4, R10): its fr-owned slot
+    # branches, and its landing, ONE atomic push leased on the base and every built-from
+    # head that moves the default branch to a tested combination of approved PRs. That
+    # is the forge merge's job done by push, not a write of fr's own files, so it is not
+    # the placement's product pusher (which scans what fr adds to a product branch).
+    ("fr.triage.gitseam", "Checkout.push_leased"),
+}
+ALLOWED = (
+    PRODUCT_PUSHER | FR_BRANCH_PUSHERS | TRACKING_REPO_PUSHERS | FR_OWNED_BOT_BRANCH_PUSHERS
+    | QUEUE_PUSHERS
+)  # fmt: skip
 
 
 def _module(path: Path) -> str:
