@@ -711,6 +711,19 @@ pushes. The bump, `uv lock --check`, the migration, `fr`'s decision and every
 other git command run credential-free; the suite jobs get a read-only
 `GITHUB_TOKEN`, used only by checkout and never persisted, and no forge token in
 the suite's env.
+**The merge queue's hold** (spec `2026-11-19-wave-merge-queue` R17-R19, R27). A repo whose
+wave queue is landing keeps one ref, `refs/heads/fr-hold/queue`, a commit whose message is
+`fr-hold: <open|drained|cleared> scope <id> wave <N|-> opened <ISO> refreshed <ISO>`
+(`fr.triage.wave_queue.parse_hold`). The driver pushes it (`queue_exec`'s `push_hold`, the one
+leased hold writer): `open` at queue open and refreshed once an hour, `drained` after the last
+landing, `cleared` itself under `queue.release: none`. While it is `open` and was refreshed
+within 24 hours, `release.py` cuts nothing (RC or final; `--version` too) and `fr release
+status` reports the repo held (`fr.release_status.hold_verdict`, from the `hold` key of its
+facts). The run that finishes, `prepare` when it cuts nothing or `publish` after its push,
+clears a `drained` hold its base contains with a leased push of a `cleared` commit; a
+superseded or failed run clears nothing. `release.yml` also runs on pushes to `fr-hold/**`
+(`prepare` skips a deletion), so every drain starts a release.
+
 An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
 `X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one
 parser every script reads both spellings through. `fr_version` floors admit an RC of the

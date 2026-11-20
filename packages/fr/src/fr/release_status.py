@@ -8,6 +8,10 @@ facts to `fr release status --from-json` (no credential), whose JSON says whethe
 a release candidate (anything waits, and something installable changed: `release.py`
 checks that) or the final (nothing does).
 
+A merge queue's hold (spec 2026-11-19-wave-merge-queue R17, R18) rides the same facts: a
+repo is held while its hold is `open` and was refreshed within 24 hours (`hold_verdict`); an
+older `open` hold is ignored with a warning, and `drained` and `cleared` holds never hold.
+
 Pure given its inputs: the forge is a two-method protocol, the owed rows a callable,
 and the tag and its date are passed in. `fr.commands.release_cmd` wires the real ones.
 """
@@ -15,9 +19,9 @@ and the tag and its date are passed in. `fr.commands.release_cmd` wires the real
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from fr.labels import held_gates
@@ -74,12 +78,39 @@ class Waiting:
         }
 
 
+HOLD_FRESH = timedelta(hours=24)
+"""R18: an `open` hold refreshed longer ago than this holds no release."""
+
+
+@dataclass(frozen=True)
+class Held:
+    """A release held by a merge queue's `open` hold (R18): the scope and wave that hold it
+    and when it was last refreshed (None: the hold names no time, which holds)."""
+
+    scope: str
+    wave: int | None
+    refreshed: str | None
+
+    def to_json(self) -> dict[str, Any]:
+        return {"scope": self.scope, "wave": self.wave, "refreshed": self.refreshed}
+
+    def line(self) -> str:
+        wave = "between waves" if self.wave is None else f"wave {self.wave}"
+        return (
+            f"held: the merge queue of scope {self.scope} ({wave}) has the release held "
+            f"(hold open, refreshed {self.refreshed or 'at an unknown time'}); it is released "
+            "when the queue drains"
+        )
+
+
 @dataclass(frozen=True)
 class ReleaseStatus:
     repo: str
     last_final: str | None
     since: str | None
     waiting: tuple[Waiting, ...]
+    held: Held | None = None
+    warnings: tuple[str, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -88,7 +119,38 @@ class ReleaseStatus:
             "last_final": self.last_final,
             "since": self.since,
             "waiting": [w.to_json() for w in self.waiting],
+            "held": None if self.held is None else self.held.to_json(),
+            "warnings": list(self.warnings),
         }
+
+
+def hold_verdict(
+    hold: Mapping[str, Any] | None, now: datetime | None = None
+) -> tuple[Held | None, tuple[str, ...]]:
+    """R18: whether *hold* (`state`, `scope`, `wave`, `refreshed`, as `release.py` reads the
+    ref) holds a release, and the warnings. Only `open` holds, and an `open` one refreshed
+    more than 24 hours ago is ignored, warned and named. A missing or unreadable refresh
+    time holds (fail closed); `drained`, `cleared` and no hold never do."""
+    if not hold or hold.get("state") != "open":
+        return None, ()
+    now = now or datetime.now(UTC)
+    scope = str(hold.get("scope") or "?")
+    wave = hold.get("wave")
+    refreshed = hold.get("refreshed")
+    when: datetime | None = None
+    if refreshed:
+        try:
+            when = _when(str(refreshed))
+        except ValueError:
+            when = None
+    if when is not None and now - when > HOLD_FRESH:
+        return None, (
+            f"the merge queue hold of scope {scope} was last refreshed {refreshed}, more than "
+            "24 hours ago: ignored, so it holds no release; clear it with "
+            "`git push origin --delete fr-hold/queue`",
+        )
+    return Held(scope, wave if isinstance(wave, int) else None,
+                str(refreshed) if refreshed else None), ()  # fmt: skip
 
 
 def _when(stamp: str) -> datetime:
@@ -102,10 +164,12 @@ def release_status(
     since: str | None,
     forge: ReleaseForge,
     owed_rows: Callable[[str], OwedRows | None],
+    hold: Mapping[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> ReleaseStatus:
     """Every PR merged after *since* (the last final tag's commit time; None: every
     merged PR) whose labels hold a post-merge gate, oldest merge first. Only PRs merged
-    after *since* have their labels read."""
+    after *since* have their labels read. *hold* is the repo's merge queue hold, if any."""
     after = _when(since) if since else None
     recent = [
         p
@@ -129,4 +193,5 @@ def release_status(
                 owed_rows=None if rows is None else {g: tuple(rows.get(g, ())) for g in gates},
             )
         )
-    return ReleaseStatus(repo, last_final, since, tuple(waiting))
+    held, warnings = hold_verdict(hold, now)
+    return ReleaseStatus(repo, last_final, since, tuple(waiting), held, warnings)

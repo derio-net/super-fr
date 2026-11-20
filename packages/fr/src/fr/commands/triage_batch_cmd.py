@@ -310,6 +310,7 @@ from fr.triage.queue_exec import (
     held_plan,
     queue_config,
     queue_refusal,
+    read_hold,
     read_slots,
     required_names,
 )
@@ -319,6 +320,7 @@ from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 from fr.triage.wave_queue import REPORT_KINDS as QUEUE_REPORT_KINDS
 from fr.triage.wave_queue import (
+    Hold,
     QueueAction,
     QueuePlan,
     queue_action_line,
@@ -6768,6 +6770,8 @@ class _Driver:
         queues: dict[str, Any] = {}
         bases: dict[str, str] = {}
         slots: dict[str, Any] = {}
+        holds: dict[str, Hold | None] = {}
+        releases: dict[str, tuple[str, ...]] = {}
         for repo in sorted(set(repos.values()) - skipped):
             block = facts.config_for(repo).queue
             if block is None:
@@ -6782,6 +6786,17 @@ class _Driver:
             except (GitError, TriageError):
                 continue
             record = self._queue_record(judgements, repo)
+            try:  # §G: the repo's hold, and the releases cut since the open queue's base
+                holds[repo] = read_hold(checkout)
+                if record is not None:
+                    cut = checkout.release_commits(record.base, f"origin/{default}")
+                    releases[repo] = tuple(
+                        f"{subject.removeprefix('release: ')} at {sha[:12]}" for sha, subject in cut
+                    )
+            except (GitError, TriageError) as exc:
+                holds.pop(repo, None)
+                self._report_once(f"hold-unread\0{repo}\0{exc}",
+                                  f"{repo}: the queue's hold could not be read: {exc}")  # fmt: skip
             if record is None or queue_config(block).ci == "none":
                 continue
             client = self.client(facts, repo)
@@ -6797,6 +6812,8 @@ class _Driver:
             "queue_records": tuple(judgements.queues),
             "queue_slots": slots,
             "queue_conflicts": conflicts,
+            "queue_holds": holds,
+            "queue_releases": releases,
             "bases": bases,
         }
 

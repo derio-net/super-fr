@@ -13,9 +13,10 @@ is `QueueSnapshot.now`. `tests/unit/test_wave_queue_planner.py` pins that.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fr.labels import pre_merge_held
@@ -36,6 +37,7 @@ from fr.triage.model import (
     ConflictEvent,
     DeferredEvent,
     QueueBuiltEvent,
+    QueueClearedEvent,
     QueueDrainEvent,
     QueueEjectEvent,
     QueueEntryRef,
@@ -86,10 +88,23 @@ class QueueConfig:
     stall_hours: int = 4
 
 
+HOLD_REF = "refs/heads/fr-hold/queue"
+"""The one hold per repo, across every scope that contains it (R17, R31)."""
+HOLD_REFRESH_AFTER = timedelta(hours=1)
+"""An `open` hold is refreshed once its last refresh is this old, not on every pass: each push
+to `fr-hold/**` starts a release run, so a refresh per pass would run one a minute. A tenth
+of R18's 24 hours, so a driver that skips a few passes never lets it expire."""
+HOLD_EXPIRES_AFTER = timedelta(hours=24)
+"""R18: an `open` hold older than this holds no release, and R27 re-arms it."""
+CLEAR_COMMAND = "git push origin --delete fr-hold/queue"
+"""What clears a hold by hand (R19): the ref is deleted, and a deletion starts no release run."""
+
+
 @dataclass(frozen=True)
 class Hold:
     """The repo's `refs/heads/fr-hold/queue` commit, as read (R17): its state, the scope and
-    wave it names, its parent, and when it was opened and last refreshed."""
+    wave it names, its parent, and when it was opened and last refreshed. *sha* is the hold
+    commit itself, the sha every write of the hold is leased on."""
 
     state: HoldState
     scope: str
@@ -97,6 +112,47 @@ class Hold:
     parent: str
     opened: datetime | None = None
     refreshed: datetime | None = None
+    sha: str = ""
+
+
+_HOLD_RE = re.compile(
+    r"^fr-hold: (open|drained|cleared) scope (\S+) wave (\d+|-) opened (\S+) refreshed (\S+)\s*$"
+)
+
+
+def _stamp(at: datetime) -> str:
+    return at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def hold_message(
+    state: HoldState, scope: str, wave: int | None, opened: datetime, refreshed: datetime
+) -> str:
+    """The commit message of a hold (R17)."""
+    w = "-" if wave is None else str(wave)
+    return (
+        f"fr-hold: {state} scope {scope} wave {w} opened {_stamp(opened)} "
+        f"refreshed {_stamp(refreshed)}"
+    )
+
+
+def parse_hold(message: str) -> Hold | None:
+    """The hold *message* (a commit's, first line read) names, with no parent or sha;
+    None when it is not a hold message (R17)."""
+    first = message.strip().splitlines()[0] if message.strip() else ""
+    m = _HOLD_RE.match(first)
+    if m is None:
+        return None
+    state, scope, wave, opened, refreshed = m.groups()
+    try:
+        at = datetime.fromisoformat(opened.replace("Z", "+00:00"))
+        seen = datetime.fromisoformat(refreshed.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if at.tzinfo is None or seen.tzinfo is None:
+        return None
+    return Hold(state=state, scope=scope,  # type: ignore[arg-type]
+                wave=None if wave == "-" else int(wave), parent="", opened=at,
+                refreshed=seen)  # fmt: skip
 
 
 @dataclass(frozen=True)
@@ -133,6 +189,9 @@ class QueueSnapshot:
     approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
     records: tuple[QueueRecord, ...] = ()  # this repo's queue records, oldest first
     hold: Hold | None = None
+    hold_read: bool = False  # the hold ref was read: None then means absent, not unread
+    releases: tuple[str, ...] = ()  # `v1.2.3 at abc123` cut on the default branch since the
+    # open queue's base: what R27 names when it re-arms a hold
     base: str = ""  # the default branch's sha now; "" when unread
     slots: Mapping[str, SlotCheck] = field(default_factory=dict)  # combination sha -> checks
     conflicts: Mapping[str, BuildConflict] = field(default_factory=dict)  # entry key ->
@@ -280,7 +339,43 @@ def _held(qs: QueueSnapshot) -> QueuePlan | None:
     return QueuePlan(qs.repo, "idle", None, (action,))
 
 
+def _drain_event(record: QueueRecord) -> QueueDrainEvent | None:
+    return next((e for e in record.events if isinstance(e, QueueDrainEvent)), None)
+
+
+def _after_drain(qs: QueueSnapshot, mine: Sequence[QueueRecord]) -> tuple[QueueAction, ...]:
+    """What a queue this scope drained still owes its hold (R17, R19, R24): the `drained`
+    push a driver killed after recording the drain never made (our `open` hold is still
+    there), or the `queue_cleared` event once the release cleared the hold. Said with the
+    hold read; nothing while it was not."""
+    last = mine[-1] if mine else None
+    drain = _drain_event(last) if last is not None else None
+    if last is None or drain is None or not (qs.hold_read or qs.hold is not None):
+        return ()
+    hold = qs.hold
+    if hold is not None and hold.state == "open" and hold.scope == qs.scope:
+        which = "between waves" if last.wave is None else f"wave {last.wave}"
+        return (QueueAction("queue-drain", qs.repo, f"push {qs.repo}'s drained hold for {which}: "
+                            "the drain was recorded and the hold never written", wave=last.wave,
+                            sha=drain.main or last.base),)  # fmt: skip
+    if (hold is None or hold.state == "cleared") and not any(
+        isinstance(e, QueueClearedEvent) for e in last.events
+    ):
+        return (QueueAction("queue-cleared", qs.repo, f"{qs.repo}'s hold was cleared: record it",
+                            wave=last.wave),)  # fmt: skip
+    return ()
+
+
 def _plan_idle(qs: QueueSnapshot) -> QueuePlan:
+    mine = tuple(r for r in qs.records if r.scope == qs.scope)
+    owed = _after_drain(qs, mine)
+    plan = _plan_idle_open(qs)
+    if not owed:
+        return plan
+    return replace(plan, actions=(*owed, *plan.actions))
+
+
+def _plan_idle_open(qs: QueueSnapshot) -> QueuePlan:
     """§B: the lowest wave with a non-terminal batch opens once its first entry is ready;
     until then nothing opens and no hold is written, so a wave still being developed never
     holds the repo's releases (plan decision p2-queue-opens-on-first-ready). With no waved
@@ -747,13 +842,71 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
     mine = tuple(r for r in qs.records if r.scope == qs.scope)
     phase = queue_phase(mine, qs.hold)
     if phase == "releasing":
-        return QueuePlan(qs.repo, phase, mine[-1].wave if mine else None, ())
+        return _plan_releasing(mine, qs)
     if phase == "idle":
         return _plan_idle(qs)
     halt = live_halt(mine[-1], qs)
-    if halt is not None:
-        return _halted(mine[-1], qs, halt)
-    return _plan_open(mine[-1], qs)
+    plan = _halted(mine[-1], qs, halt) if halt is not None else _plan_open(mine[-1], qs)
+    hold = _hold_actions(mine[-1], qs)
+    return replace(plan, actions=(*hold, *plan.actions)) if hold else plan
+
+
+def _plan_releasing(mine: Sequence[QueueRecord], qs: QueueSnapshot) -> QueuePlan:
+    """§G: the hold reads `drained`. Under `release: none` the driver clears it itself
+    (R17); otherwise the release does, and one that has not within `release_wait_hours` is
+    a Need naming the command that clears it by hand (R19)."""
+    hold = qs.hold
+    wave = mine[-1].wave if mine else None
+    actions: list[QueueAction] = []
+    if hold is not None and qs.config.release == "none":
+        actions.append(QueueAction("queue-cleared", qs.repo, f"{qs.repo}'s release is none: "
+                                   "clear the drained hold", wave=wave))  # fmt: skip
+    elif hold is not None and hold.refreshed is not None:
+        waited = qs.now - hold.refreshed
+        if waited >= timedelta(hours=qs.config.release_wait_hours):
+            actions.append(QueueAction("queue-need", qs.repo, (
+                f"{qs.repo}'s hold has read drained since {_stamp(hold.refreshed)} and no "
+                f"release has cleared it (release_wait_hours {qs.config.release_wait_hours}): "
+                f"run the release, or clear it by hand with `{CLEAR_COMMAND}` in the clone"
+            ), wave=wave))  # fmt: skip
+    return QueuePlan(qs.repo, "releasing", wave, tuple(actions))
+
+
+def _hold_actions(record: QueueRecord, qs: QueueSnapshot) -> tuple[QueueAction, ...]:
+    """§G, R27: an open queue keeps its hold `open`. A hold that vanished, was cleared by
+    the release, or expired is re-armed, and said once as a Need naming any release cut
+    from the partly landed wave. A fresh one is refreshed once it is `HOLD_REFRESH_AFTER`
+    old. Nothing while the hold was not read."""
+    if not (qs.hold_read or qs.hold is not None):
+        return ()
+    hold = qs.hold
+    wave = record.wave
+    if hold is not None and hold.state == "open" and hold.refreshed is not None:
+        age = qs.now - hold.refreshed
+        if age < HOLD_EXPIRES_AFTER:
+            if age < HOLD_REFRESH_AFTER:
+                return ()
+            return (QueueAction("queue-hold", qs.repo, f"refresh {qs.repo}'s hold "
+                                f"(refreshed {_stamp(hold.refreshed)})", wave=wave,
+                                reason="refresh"),)  # fmt: skip
+        why = f"expired (last refreshed {_stamp(hold.refreshed)})"
+    elif hold is None:
+        why = "gone"
+    elif hold.state == "cleared":
+        why = "cleared by the release while the queue was open"
+    elif hold.state == "open":
+        return ()  # no refresh time to judge: left alone
+    else:
+        return ()  # drained: queue_phase reads that as releasing, never open
+    cut = (f"; a release was cut from the partly landed wave: {', '.join(qs.releases)}"
+           if qs.releases else "; no release was cut from it")  # fmt: skip
+    which = "between waves" if wave is None else f"wave {wave}"
+    detail = f"{qs.repo}'s hold for {which} was {why}: re-armed{cut}"
+    return (
+        QueueAction("queue-hold", qs.repo, f"re-arm {qs.repo}'s hold ({why})", wave=wave,
+                    reason="rearm"),
+        QueueAction("queue-need", qs.repo, detail, wave=wave),
+    )  # fmt: skip
 
 
 # ------------------------------------------------------------------ lines

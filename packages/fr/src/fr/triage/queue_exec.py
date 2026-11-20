@@ -26,7 +26,7 @@ from typing import Any, Literal, Protocol
 
 import yaml
 
-from fr.ghclient import UnsupportedBatchOps
+from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.triage.batch_merge import MergeConflictError, MergeStopError, unresolvable
 from fr.triage.batch_version import bump_version, is_lockfile, read_source
@@ -44,6 +44,7 @@ from fr.triage.model import (
     PostMergeEvent,
     QueueBlock,
     QueueBuiltEvent,
+    QueueClearedEvent,
     QueueDrainEvent,
     QueueEjectEvent,
     QueueEntryRef,
@@ -56,12 +57,16 @@ from fr.triage.model import (
     VersionBlock,
 )
 from fr.triage.wave_queue import (
+    HOLD_REF,
     BuildConflict,
+    Hold,
     QueueAction,
     QueueConfig,
     QueuePlan,
     SlotCheck,
     entry_key,
+    hold_message,
+    parse_hold,
     replay,
     slot_leases,
 )
@@ -775,6 +780,33 @@ def post_merge_owed(record: QueueRecord, batches: Iterable[Batch]) -> tuple[str,
     return tuple(owed)
 
 
+# ------------------------------------------------------------------ the hold (§G)
+
+
+_DISPATCH_ERRORS: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation, OSError)
+"""What a failed `queue.release_workflow` dispatch raises: a forge failure, a forge that
+cannot dispatch (glab, tea), a missing CLI. Each is a warning (R19), nothing else is."""
+
+
+def read_hold(checkout: Checkout) -> Hold | None:
+    """The repo's hold as origin has it now (R17): fetched, its message parsed, its parent
+    and sha filled in; None when there is none. A ref that is no hold message (someone's
+    own branch under the name) reads as an `open` hold of scope `unreadable`, so it holds
+    the queue and every release until the operator clears it."""
+    sha = checkout.fetch_remote_ref(HOLD_REF)
+    if sha is None:
+        return None
+    parents = checkout.parents(sha)
+    hold = parse_hold(checkout.message(sha)) or Hold("open", "unreadable", None, "")
+    return replace(hold, parent=parents[0] if parents else "", sha=sha)
+
+
+def push_hold(checkout: Checkout, sha: str, lease: str | None) -> None:
+    """Push hold commit *sha* to the hold ref, leased on *lease* (None: the ref must be
+    absent): every state change of the hold is such a push and never a force (R17)."""
+    checkout.push_leased([(sha, HOLD_REF)], {HOLD_REF: lease}, atomic=False)
+
+
 # ------------------------------------------------------------------ the executor (§A)
 
 
@@ -946,6 +978,108 @@ class QueueExecutor:
             "is built again"
         )
 
+    # ---------------------------------------------------------- the hold (R17, R19, R27)
+
+    def _hold_free(self) -> str | None:
+        """Why the hold is another scope's, or unreadable: None when this scope may take it
+        (absent, cleared, or its own)."""
+        p = self.ports
+        try:
+            current = read_hold(p.checkout)
+        except GitError as exc:
+            return f"the hold could not be read: {exc}"
+        if current is None or current.state == "cleared" or current.scope == p.scope:
+            return None
+        return f"the hold is {current.state} for scope {current.scope}"
+
+    def _hold_write(
+        self,
+        state: Literal["open", "drained", "cleared"],
+        *,
+        wave: int | None,
+        parent: str,
+        opened: datetime | None = None,
+        may_replace: tuple[str, ...] = ("open",),
+    ) -> tuple[bool, str]:
+        """Write the hold as *state* on *parent*, leased on the sha it holds now (absent, or
+        a cleared one, or this scope's own in *may_replace*): whether it wrote, and the
+        words. Another writer's hold, or a lease that lost its race, is reported and never
+        forced (R17, R27, R31)."""
+        p = self.ports
+        try:
+            current = read_hold(p.checkout)
+            if (
+                current is not None
+                and current.state != "cleared"
+                and not (current.scope == p.scope and current.state in may_replace)
+            ):
+                return False, f"the hold is {current.state} for scope {current.scope}: not written"
+            if not p.checkout.has_commit(parent):
+                p.checkout.refresh_remote_branch(p.default)
+            now = p.now()
+            mine = current is not None and current.scope == p.scope
+            kept = current.opened if mine and current is not None else None
+            sha = p.checkout.ref_commit(
+                parent, hold_message(state, p.scope, wave, opened or kept or now, now)
+            )
+            push_hold(p.checkout, sha, current.sha if current is not None else None)
+        except LeaseLostError:
+            return False, "another writer moved the hold: not written, never forced"
+        except GitError as exc:
+            return False, f"the hold was not written: {exc}"
+        return True, f"hold {state}"
+
+    def _release_signal(self, parent: str, wave: int | None) -> str:
+        """After the `drained` push: clear the hold under `release: none` (R17), else
+        dispatch `queue.release_workflow` when one is named; a failed dispatch only warns
+        (R19). The words that follow the drain's own."""
+        p = self.ports
+        if p.config.release == "none":
+            ok, said = self._hold_write("cleared", wave=wave, parent=parent,
+                                        may_replace=("drained",))  # fmt: skip
+            if ok:
+                p.record(
+                    QueueClearedEvent(
+                        kind="queue_cleared",
+                        at=p.now(),
+                        detail="release: none, the driver cleared it",
+                    )
+                )
+            return f"; {said}"
+        name = p.config.release_workflow
+        if not name:
+            return ""
+        try:
+            p.client.dispatch_workflow(p.repo, name, inputs={})
+        except _DISPATCH_ERRORS as exc:
+            return f"; warning: dispatching {name} failed ({exc}); the hold's push starts a run"
+        return f"; dispatched {name}"
+
+    def _hold_action(self, action: QueueAction, record: QueueRecord | None) -> str:
+        """Execute one of the hold's actions (`queue-hold`, `queue-cleared`, and the
+        hold half of `queue-drain`); the words."""
+        p = self.ports
+        if action.kind == "queue-hold" and record is not None:
+            opened = next((e.at for e in record.events if isinstance(e, QueueOpenEvent)), None)
+            rearm = action.reason == "rearm"
+            ok, said = self._hold_write("open", wave=action.wave, parent=record.base,
+                                        opened=opened if rearm else None)  # fmt: skip
+            return said if ok else f"not {action.reason}ed: {said}"
+        if action.kind == "queue-cleared":
+            try:
+                current = read_hold(p.checkout)
+            except GitError as exc:
+                return f"the hold could not be read: {exc}"
+            if current is not None and current.state != "cleared":
+                if (current.scope == p.scope and current.state == "drained"
+                        and p.config.release == "none"):  # fmt: skip
+                    return self._release_signal(current.parent, action.wave).lstrip("; ")
+                return f"left alone: the hold is {current.state} for scope {current.scope}"
+            p.record(QueueClearedEvent(kind="queue_cleared", at=p.now(),
+                                       detail="the release cleared the hold"))  # fmt: skip
+            return "recorded"
+        return "nothing to write"
+
     # ---------------------------------------------------------- gating (R33, R35)
 
     def gate(
@@ -997,10 +1131,18 @@ class QueueExecutor:
             if action.kind in ("queue-held", "queue-need", "queue-warn"):
                 continue
             if action.kind == "queue-open":
+                taken = self._hold_free()
+                if taken is not None:  # R31: nothing opens while another scope holds the repo
+                    lines.append(f"{line}: not opened: {taken}")
+                    continue
                 base = self.main_now()
-                self.ports.record(QueueOpenEvent(kind="queue_open", at=self.ports.now()),
+                opened = self.ports.now()
+                self.ports.record(QueueOpenEvent(kind="queue_open", at=opened),
                                   wave=action.wave, base=base)  # fmt: skip
-                lines.append(f"{line}: opened at {base[:12]}")
+                # recorded first: a hold that is not written (a lost lease, a refused push)
+                # leaves an open queue with no hold, which the next pass re-arms (R27)
+                _, said = self._hold_write("open", wave=action.wave, parent=base, opened=opened)
+                lines.append(f"{line}: opened at {base[:12]}; {said}")
             elif action.kind in ("queue-build", "queue-rebuild") and record is not None:
                 if failed_tip is not None and action.base == failed_tip:
                     lines.append(f"{line}: not built, the landing it builds on did not land")
@@ -1018,11 +1160,17 @@ class QueueExecutor:
             elif action.kind == "queue-eject" and record is not None:
                 lines.append(f"{line}: {self._eject(action, record)}")
             elif action.kind == "queue-drain":
-                self.ports.record(QueueDrainEvent(kind="queue_drain", at=self.ports.now(),
-                                                  main=action.sha or None))  # fmt: skip
-                lines.append(f"{line}: drained")
+                again = record is not None and any(
+                    isinstance(e, QueueDrainEvent) for e in record.events)  # fmt: skip
+                if not again:  # recorded first, as the open is: a killed driver re-pushes
+                    self.ports.record(QueueDrainEvent(kind="queue_drain", at=self.ports.now(),
+                                                      main=action.sha or None))  # fmt: skip
+                parent = action.sha or self.main_now()
+                ok, said = self._hold_write("drained", wave=action.wave, parent=parent)
+                signal = self._release_signal(parent, action.wave) if ok else ""
+                lines.append(f"{line}: {'drain pushed' if again else 'drained'}; {said}{signal}")
             else:  # queue-hold, queue-cleared: the hold handshake
-                lines.append(f"{line}: planned, not executed (the hold is not written yet)")
+                lines.append(f"{line}: {self._hold_action(action, record)}")
         return lines
 
     def _build(self, action: QueueAction, queue_base: str) -> str:

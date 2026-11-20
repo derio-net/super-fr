@@ -315,3 +315,24 @@ def test_with_no_post_merge_the_queue_lands_on_without_a_pause(
     lands = [e for e in _queue(tmp_path).events if isinstance(e, QueueLandEvent)]
     assert [[e.batch for e in x.entries] for x in lands] == [["b1"], ["b2"]]
     assert not log.exists()
+
+
+def test_the_drive_holds_the_repos_releases_open_then_drained(
+    tmp_path: Path, queue: tuple[Origin, QueueWorld, Path]
+) -> None:
+    """R17: the command reads the hold into each pass's snapshot and the executor writes
+    it: `open` on the base the queue opened on, `drained` with the drained main as parent
+    once the last entry landed, with no re-arm in between."""
+    origin, _, _ = queue
+    base = origin.sha("refs/heads/main")
+    first = _passes(tmp_path, 1)
+    hold = origin.sha("refs/heads/fr-hold/queue")
+    assert _git(origin.bare, "rev-parse", f"{hold}^") == base
+    assert _git(origin.bare, "log", "-1", "--format=%B", hold).startswith("fr-hold: open scope ")
+    rest = _passes(tmp_path, 4)
+    drained = origin.sha("refs/heads/fr-hold/queue")
+    assert _git(origin.bare, "log", "-1", "--format=%B", drained).startswith(
+        "fr-hold: drained scope "
+    )
+    assert _git(origin.bare, "rev-parse", f"{drained}^") == origin.sha("refs/heads/main")
+    assert not any("re-arm" in out for out in (*first, *rest))

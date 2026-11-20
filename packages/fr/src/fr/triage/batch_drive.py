@@ -428,7 +428,9 @@ class Snapshot:
     # board and `drive --plan` read none of these, so they leave them empty.
     wave_queues: Mapping[str, QueueConfig] = field(default_factory=dict)
     queue_records: tuple[QueueRecord, ...] = ()
-    queue_holds: Mapping[str, Hold] = field(default_factory=dict)
+    # a repo with a key had its hold read: None is then absent, not unread (R27)
+    queue_holds: Mapping[str, Hold | None] = field(default_factory=dict)
+    queue_releases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     queue_slots: Mapping[str, SlotCheck] = field(default_factory=dict)
     queue_conflicts: Mapping[str, BuildConflict] = field(default_factory=dict)
     queue_closeouts: Mapping[str, bool] = field(default_factory=dict)
@@ -1766,7 +1768,9 @@ def queue_snapshot(snap: Snapshot, repo: str, held: Iterable[str] = ()) -> Queue
         repo=repo, scope=snap.scope_id or snap.me, config=snap.wave_queues[repo], now=snap.now,
         batches=batches, stages=snap.stages, live=snap.live, approvals=snap.approvals,
         records=tuple(r for r in snap.queue_records if r.repo == repo),
-        hold=snap.queue_holds.get(repo), base=snap.bases.get(repo, ""), slots=snap.queue_slots,
+        hold=snap.queue_holds.get(repo), hold_read=repo in snap.queue_holds,
+        releases=snap.queue_releases.get(repo, ()), base=snap.bases.get(repo, ""),
+        slots=snap.queue_slots,
         conflicts=snap.queue_conflicts, eligible=eligible, sessions=snap.session_status,
         head_changed=snap.head_changed, closeout_landed=snap.queue_closeouts.get(repo),
         warned=snap.warned, scope_args=snap.scope_args,

@@ -8,7 +8,7 @@ forge, no clock. Every test builds a snapshot by hand and reads the plan it retu
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +23,8 @@ from fr.triage.wave_queue import (
     QueuePlan,
     QueueSnapshot,
     SlotCheck,
+    hold_message,
+    parse_hold,
     plan_queue,
     queue_phase,
 )
@@ -206,7 +208,8 @@ def test_a_drained_hold_opens_nothing_and_a_cleared_or_absent_one_opens() -> Non
     assert plan.phase == "releasing" and plan.actions == ()
     for hold in (None, Hold(state="cleared", scope=OTHER, wave=2, parent=MAIN)):
         plan = plan_queue(_qs(batches, stages, hold=hold, records=(drain_rec,)))
-        assert plan.phase == "idle" and _kinds(plan) == ["queue-open"], hold
+        # the cleared hold of a recorded drain is recorded (queue_cleared), then it opens
+        assert plan.phase == "idle" and "queue-open" in _kinds(plan), hold
 
 
 def test_the_phase_reads_records_and_the_hold() -> None:
@@ -790,3 +793,107 @@ def test_a_conflict_with_a_reason_names_it_in_the_ejection() -> None:
     plan = plan_queue(_abc(conflicts={"a": BuildConflict("head-a", ("x.py",), why)}))
     eject = _one(plan, "queue-eject")
     assert why in eject.detail and eject.reason == "conflict"
+
+
+# ------------------------------------------------ the hold handshake (R17-R19, R27)
+
+
+def _hold(state: str = "open", *, scope: str = ME, ago: timedelta = timedelta(minutes=5),
+          wave: int | None = 1, sha: str = "h1" * 20) -> Hold:  # fmt: skip
+    return Hold(state=state, scope=scope, wave=wave, parent=MAIN,  # type: ignore[arg-type]
+                opened=NOW - timedelta(hours=3), refreshed=NOW - ago, sha=sha)  # fmt: skip
+
+
+def _open_queue(**kw: Any) -> QueueSnapshot:
+    return _qs([_batch("a", 1)], {"a": "pr-open"}, records=(_record(_open()),), **kw)
+
+
+def test_a_hold_message_round_trips_and_garbage_is_not_a_hold() -> None:
+    at = datetime(2026, 11, 20, 9, 30, 5, tzinfo=UTC)
+    text = hold_message("open", ME, 3, at, NOW)
+    assert text == (
+        f"fr-hold: open scope {ME} wave 3 opened 2026-11-20T09:30:05Z refreshed "
+        "2026-11-20T12:00:00Z"
+    )
+    hold = parse_hold(text + "\n\nbody ignored")
+    assert hold is not None
+    assert (hold.state, hold.scope, hold.wave, hold.opened, hold.refreshed) == (
+        "open",
+        ME,
+        3,
+        at,
+        NOW,
+    )
+    assert parse_hold(hold_message("drained", ME, None, at, NOW)) is not None
+    assert parse_hold(hold_message("drained", ME, None, at, NOW)).wave is None  # type: ignore[union-attr]
+    for bad in ("", "wip", "fr-hold: held scope s wave 1 opened x refreshed y",
+                "fr-hold: open scope s wave 1 opened 2026-01-01 refreshed 2026-01-01"):  # fmt: skip
+        assert parse_hold(bad) is None, bad
+
+
+def test_a_fresh_open_hold_needs_no_write_and_an_old_one_is_refreshed() -> None:
+    plan = plan_queue(_open_queue(hold=_hold()))
+    assert "queue-hold" not in _kinds(plan)
+    plan = plan_queue(_open_queue(hold=_hold(ago=timedelta(hours=2))))
+    action = _one(plan, "queue-hold")
+    assert action.reason == "refresh" and "queue-need" not in _kinds(plan)
+
+
+def test_a_vanished_cleared_or_expired_hold_is_re_armed_with_one_need() -> None:
+    cases = {
+        "gone": dict(hold=None, hold_read=True),
+        "cleared": dict(hold=_hold("cleared", scope=OTHER)),
+        "expired": dict(hold=_hold(ago=timedelta(hours=25))),
+    }
+    for name, kw in cases.items():
+        plan = plan_queue(_open_queue(**kw))
+        assert _one(plan, "queue-hold").reason == "rearm", name
+        need = _one(plan, "queue-need")
+        assert name in need.detail or "cleared by the release" in need.detail, name
+        assert "no release was cut" in need.detail, name
+
+
+def test_the_rearm_need_names_a_release_cut_from_a_partly_landed_wave() -> None:
+    plan = plan_queue(_open_queue(hold=None, hold_read=True, releases=("v8.3.0-rc.7 at abc123",)))
+    assert "v8.3.0-rc.7 at abc123" in _one(plan, "queue-need").detail
+
+
+def test_an_unread_hold_plans_no_hold_write() -> None:
+    plan = plan_queue(_open_queue())
+    assert not {"queue-hold", "queue-need"} & set(_kinds(plan))
+
+
+def test_a_drained_hold_unreleased_past_release_wait_hours_is_a_need_with_the_command() -> None:
+    drained = _record(_open(), {"kind": "queue_drain", "at": AT, "main": MAIN})
+    cfg = QueueConfig(release_wait_hours=6)
+    young = plan_queue(_qs([], {}, records=(drained,), config=cfg,
+                           hold=_hold("drained", ago=timedelta(hours=5))))  # fmt: skip
+    assert young.phase == "releasing" and young.actions == ()
+    old = plan_queue(_qs([], {}, records=(drained,), config=cfg,
+                         hold=_hold("drained", ago=timedelta(hours=7))))  # fmt: skip
+    need = _one(old, "queue-need")
+    assert "git push origin --delete fr-hold/queue" in need.detail and "drained" in need.detail
+
+
+def test_under_release_none_a_drained_hold_is_cleared_by_the_driver() -> None:
+    drained = _record(_open(), {"kind": "queue_drain", "at": AT, "main": MAIN})
+    plan = plan_queue(_qs([], {}, records=(drained,), config=QueueConfig(release="none"),
+                          hold=_hold("drained")))  # fmt: skip
+    assert _kinds(plan) == ["queue-cleared"]
+
+
+def test_a_drain_recorded_but_never_pushed_is_pushed_again() -> None:
+    drained = _record(_open(), {"kind": "queue_drain", "at": AT, "main": "m1" * 20})
+    plan = plan_queue(_qs([], {}, records=(drained,), hold=_hold("open")))
+    action = _one(plan, "queue-drain")
+    assert action.sha == "m1" * 20 and "queue-open" not in _kinds(plan)
+
+
+def test_a_cleared_hold_after_our_drain_is_recorded_once() -> None:
+    drained = _record(_open(), {"kind": "queue_drain", "at": AT, "main": MAIN})
+    assert _kinds(plan_queue(_qs([], {}, records=(drained,), hold=None, hold_read=True))) == [
+        "queue-cleared"
+    ]
+    done = _record(_open(), {"kind": "queue_drain", "at": AT, "main": MAIN},
+                   {"kind": "queue_cleared", "at": AT})  # fmt: skip
+    assert plan_queue(_qs([], {}, records=(done,), hold=None, hold_read=True)).actions == ()

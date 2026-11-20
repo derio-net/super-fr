@@ -125,6 +125,7 @@ def _from_facts(root: Path, path: Path) -> ReleaseStatus:
             since=facts.get("since") or None,
             forge=FactsReleaseForge(prs),
             owed_rows=owed_rows_reader(root, "HEAD"),
+            hold=facts.get("hold") if isinstance(facts.get("hold"), dict) else None,
         )
     except (KeyError, TypeError, ValueError) as exc:
         _fail(f"{path} holds a malformed PR record: {exc}", 2)
@@ -157,6 +158,7 @@ def _from_forge(root: Path, repo: str | None, host: str | None, limit: int) -> R
             since=since,
             forge=forge,
             owed_rows=owed_rows_reader(root),
+            hold=_hold_facts(root),
         )
     except _FORGE_FAILURES as exc:
         _fail(f"cannot read {slug}'s merged PRs on {forge_host}: {exc}", 1)
@@ -167,6 +169,27 @@ def _from_forge(root: Path, repo: str | None, host: str | None, limit: int) -> R
             err=True,
         )
     return status
+
+
+def _hold_facts(root: Path) -> dict[str, Any] | None:
+    """The repo's merge queue hold as `fr release status --from-json` reads it (R18): the
+    ref fetched from origin; None when there is none, or it cannot be read (said)."""
+    from fr.triage.errors import TriageError
+    from fr.triage.gitseam import Checkout
+    from fr.triage.queue_exec import read_hold
+
+    try:
+        hold = read_hold(Checkout(root))
+    except TriageError as exc:
+        typer.echo(f"fr release status: could not read the queue hold ({exc}); "
+                   "assuming there is none", err=True)  # fmt: skip
+        return None
+    if hold is None:
+        return None
+    return {
+        "state": hold.state, "scope": hold.scope, "wave": hold.wave,
+        "refreshed": hold.refreshed.isoformat() if hold.refreshed else None,
+    }  # fmt: skip
 
 
 def _last_final(root: Path) -> tuple[str | None, str | None]:
@@ -197,8 +220,8 @@ def status_command(
         Path | None,
         typer.Option(
             "--from-json",
-            help="Decide from these facts (repo, last_final, since, prs with labels), "
-            "read by release.py; never reaches a forge.",
+            help="Decide from these facts (repo, last_final, since, prs with labels, "
+            "and the queue hold), read by release.py; never reaches a forge.",
         ),
     ] = None,
 ) -> None:
@@ -218,6 +241,11 @@ def status_command(
         typer.echo(json.dumps(status.to_json(), indent=2))
         return
     typer.echo(f"last final: {status.last_final or '(none)'}")
+    for warning in status.warnings:
+        typer.echo(f"warning: {warning}", err=True)
+    if status.held is not None:
+        typer.echo(status.held.line())
+        return
     if not status.waiting:
         typer.echo("nothing waits on a post-merge gate: a final may be cut")
         return

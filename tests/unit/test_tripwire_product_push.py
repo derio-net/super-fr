@@ -158,6 +158,9 @@ QUEUE_LEASED_PUSH_CALLERS = {
     ("fr.triage.queue_exec", "build"),
     ("fr.triage.queue_exec", "land_push"),
     ("fr.triage.queue_exec", "QueueExecutor.resume"),
+    # the hold's one push (R17): a bare ref `refs/heads/fr-hold/queue` over a commit of the
+    # base's own tree, every state change leased; carries no PR or product content
+    ("fr.triage.queue_exec", "push_hold"),
 }
 QUEUE_ATOMIC_PUSH_CALLERS = {("fr.triage.queue_exec", "land_push")}
 

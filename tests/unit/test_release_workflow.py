@@ -65,10 +65,32 @@ TOKEN_JOBS = ("prepare", "publish")
 CREDENTIAL_FREE_JOBS = ("collect", "test")
 
 
-def test_triggers_on_push_to_main_with_no_path_filter() -> None:
+def test_triggers_on_push_to_main_and_the_merge_queue_hold_with_no_path_filter() -> None:
     push = _on()["push"]
-    assert push["branches"] == ["main"]
+    # `fr-hold/**` is the merge queue's hold ref (spec 2026-11-19-wave-merge-queue R19): a
+    # drain, by landing, forge merge or deferral, starts a release through its push
+    assert push["branches"] == ["main", "fr-hold/**"]
     assert "paths" not in push  # every merge may carry a fragment
+
+
+def test_a_deleted_hold_starts_no_release() -> None:
+    """R19: deleting the hold is the operator clearing it by hand; `prepare` skips it and
+    every other job needs `prepare`'s `cut` output."""
+    assert _jobs()["prepare"]["if"] == "github.event.deleted != true"
+    for name, job in _jobs().items():
+        if name != "prepare":
+            assert "needs.prepare.outputs.cut" in str(job.get("if", "")), name
+
+
+def test_the_hold_is_cleared_by_the_job_that_ends_the_run_with_the_token_it_holds() -> None:
+    """R18: the clear is release.py's last step, in `prepare` (it cuts nothing) or `publish`
+    (after the push), the two jobs that hold the token; no credential-free job runs it."""
+    for name in TOKEN_JOBS:
+        (step,) = [s for s in _release_py_steps(name)]
+        assert "GH_TOKEN" in step["env"]
+    for name in CREDENTIAL_FREE_JOBS:
+        for step in _release_py_steps(name):
+            assert "publish" not in str(step["run"]) and "prepare" not in str(step["run"])
 
 
 def test_manual_dispatch_takes_an_optional_version() -> None:

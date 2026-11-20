@@ -47,6 +47,12 @@ name: Release
 # publishes nothing. The suite makes this workflow long; .github/ci-budget.yaml
 # gives it its own budget.
 #
+# The merge queue's hold (R17-R19): while `refs/heads/fr-hold/queue` reads `open` and was
+# refreshed within 24 hours, release.py cuts nothing, RC or final, and a `--version` run
+# is held too. The run that finishes, `prepare` when it cuts nothing or `publish` after
+# the push, clears a `drained` hold its base contains with a leased push of a `cleared`
+# commit, using the token that job already holds. A superseded or failed run clears nothing.
+#
 # Pushing to main works today because main's ruleset forbids only force-push
 # and deletion. If a required-PR or required-checks rule is ever added, the
 # release bot needs a bypass actor on that rule (the app, once
@@ -55,7 +61,10 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    # `fr-hold/**` is the merge queue's hold (spec 2026-11-19-wave-merge-queue R17-R19): the
+    # driver's push of the `drained` hold starts the release that follows its wave, and a
+    # deletion of the hold (an operator clearing it by hand) starts nothing (`prepare`'s guard).
+    branches: [main, "fr-hold/**"]
   schedule:
     - cron: "17 6 * * *" # daily: the final follows the last gate pass with no push
   workflow_dispatch:
@@ -99,6 +108,9 @@ concurrency:
 # release commit already landed skips the push and only tags.
 jobs:
   prepare:
+    # A deleted hold ref is a push event too: it is no reason to release. Every other job
+    # needs `prepare`'s `cut` output, so skipping it skips them all.
+    if: github.event.deleted != true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

@@ -139,6 +139,8 @@ def test_the_json_shape_is_pinned() -> None:
                 "owed_rows": {"tester": ["row-a"]},
             }
         ],
+        "held": None,  # the queue hold (R18): additive, schema 1 stays
+        "warnings": [],
     }
 
 
@@ -366,3 +368,59 @@ def test_p7_r7_a_read_at_its_limit_warns_and_an_unfetched_tag_is_said(
     assert "--limit" in result.output and "may be missing" in result.output
     # The fixture has no origin: the fetch fails and the command says what it assumes.
     assert "assuming this checkout's tags are current" in result.output
+
+
+# -- a merge queue's hold (spec 2026-11-19-wave-merge-queue R17, R18) -----------------------
+
+from datetime import UTC, datetime, timedelta  # noqa: E402
+
+from fr.release_status import hold_verdict  # noqa: E402
+
+_NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+
+
+def _hold(state: str, ago: timedelta = timedelta(hours=1), **kw: Any) -> dict[str, Any]:
+    return {"state": state, "scope": "s-1", "wave": 3,
+            "refreshed": (_NOW - ago).isoformat(), **kw}  # fmt: skip
+
+
+def test_a_fresh_open_hold_holds_naming_its_scope_and_wave() -> None:
+    held, warnings = hold_verdict(_hold("open"), _NOW)
+    assert held is not None and (held.scope, held.wave) == ("s-1", 3) and warnings == ()
+    assert "s-1" in held.line() and "wave 3" in held.line()
+
+
+def test_an_open_hold_refreshed_over_a_day_ago_warns_and_does_not_hold() -> None:
+    held, warnings = hold_verdict(_hold("open", timedelta(hours=25)), _NOW)
+    assert held is None
+    (warning,) = warnings
+    assert "s-1" in warning and "24 hours" in warning and "--delete fr-hold/queue" in warning
+
+
+def test_drained_cleared_and_no_hold_never_hold() -> None:
+    for hold in (_hold("drained"), _hold("cleared"), None, {}):
+        assert hold_verdict(hold, _NOW) == (None, ())
+
+
+def test_an_open_hold_with_no_readable_refresh_time_holds() -> None:
+    held, _ = hold_verdict({"state": "open", "scope": "s-1", "refreshed": "not a time"}, _NOW)
+    assert held is not None and held.refreshed == "not a time"
+    assert hold_verdict({"state": "open"}, _NOW)[0] is not None
+
+
+def test_from_json_reports_the_hold_and_exits_clean(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(release_cmd, "owed_rows_reader", lambda root, ref=None: lambda b: {})
+    facts = _facts(checkout)
+    doc = json.loads(facts.read_text())
+    doc["hold"] = {"state": "open", "scope": "s-9", "wave": 2,
+                   "refreshed": datetime.now(UTC).isoformat()}  # fmt: skip
+    facts.write_text(json.dumps(doc))
+    result = CliRunner().invoke(app, ["release", "status", "--from-json", str(facts), "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["held"]["scope"] == "s-9" and data["held"]["wave"] == 2
+    assert data["warnings"] == []
+    text = CliRunner().invoke(app, ["release", "status", "--from-json", str(facts)])
+    assert "held: the merge queue of scope s-9 (wave 2)" in text.output

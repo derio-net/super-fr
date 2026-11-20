@@ -864,6 +864,28 @@ class Checkout:
         """The sha origin holds at the fully qualified *ref* now, None when none."""
         return remote_ref(self.path, "origin", ref)
 
+    def fetch_remote_ref(self, ref: str) -> str | None:
+        """Fetch origin's fully qualified *ref* (forced: the remote is the truth) and return
+        the sha it holds, None when origin has none: the hold's read (R17)."""
+        return fetch_ref(self.path, "origin", ref)
+
+    def ref_commit(self, parent: str, message: str) -> str:
+        """A commit of *parent*'s tree on *parent* with *message* and fr's fixed identity,
+        written without touching HEAD or any ref: a hold (R17)."""
+        out: str = _run(
+            ["git", "commit-tree", f"{parent}^{{tree}}", "-p", parent, "-m", message],
+            self.path, env=_REF_IDENTITY, timeout=GIT_TIMEOUT_SECONDS,
+        )  # fmt: skip
+        return out.strip()
+
+    def release_commits(self, base: str, head: str) -> tuple[tuple[str, str], ...]:
+        """`(sha, subject)` of every `release: v...` commit in *base*..*head*, oldest first:
+        the releases cut while a queue was open (R27)."""
+        out = git(["log", "--reverse", "--format=%H\t%s", "--grep=^release: v", f"{base}..{head}"],
+                  self.path)  # fmt: skip
+        rows = (line.partition("\t") for line in out.splitlines() if line)
+        return tuple((sha, subject) for sha, _, subject in rows)
+
     def tree_of(self, rev: str) -> str:
         """The tree *rev* holds (`<rev>^{tree}`)."""
         return git(["rev-parse", f"{rev}^{{tree}}"], self.path).strip()
