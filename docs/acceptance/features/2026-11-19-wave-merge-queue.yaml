@@ -143,9 +143,16 @@ rows:
     origin:
     - spec:2026-11-19-wave-merge-queue#R27
     - spec:2026-11-19-wave-merge-queue#R14
-    levels: {}
-    status: not-implemented
-    notes: born at brainstorm
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_foreign_base_move_rebuilds_every_slot_on_the_new_base_and_says_so_once
+      int:
+      - super-fr:tests/integration/test_queue_hold.py#test_a_vanished_hold_is_re_armed_with_one_need_naming_a_release
+      - super-fr:tests/integration/test_queue_hold.py#test_a_rearm_lands_nothing_untested_and_moves_no_pr_branch
+    status: ci
+    notes: 'phase 4: a vanished, cleared or expired open hold is re-armed with one Need
+      naming any release cut from the partly landed wave, and nothing lands or moves
+      a PR branch; the foreign move (R14) is phases 2 and 3''s'
   - id: wave-queue-operator-loop
     capability: wave merge queue
     acceptance: The operator sees every queue problem as a Needs-you entry with a command
