@@ -134,3 +134,8 @@ The same test is parametrized over release.yml (its test job must exist); red on
 ### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: Row ci-scaffold-python-3-14 cites whole test files, not the golden comparisons
 
 Row levels re-pointed to test_published_render_matches_the_golden and TestGoldenRenders::test_debt_on_matches_the_golden; ci-single-leg re-pointed to the renamed test; fr acceptance check passes.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved-2 created=2026-11-20T08:44:13+00:00 phase=1 state=open resolves=p1-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1596 -->
+### p1-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1596] · resolves p1-r4: test_ci_shards.py:4 docstring still says 6-way matrix (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1596.
