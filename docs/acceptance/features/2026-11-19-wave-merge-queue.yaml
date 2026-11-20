@@ -501,3 +501,10 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_queues_the_rest
     why: batch merge drives the queue (R23)
+  - row: triage-archive-pr-draft-merged
+    op: reword
+    base: 0
+    acceptance: Under --yes the drive admits a draft attributed archive PR to the wave
+      merge queue once green, with no approved-fr label; the queue readies and lands
+      it.
+    why: an attributed archive PR is a queue entry (R32)
