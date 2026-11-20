@@ -64,8 +64,10 @@ __all__ = [
     "handback_brief",
     "issues_to_close",
     "member_steps",
+    "migrate_args",
     "members_from_body",
     "next_collected",
+    "owned_stale",
     "plan_lines",
     "recorded_closes",
     "step_ranges",
@@ -95,6 +97,10 @@ class CloseoutTree(Protocol):
 
     def squash_all(self, base: str, message: str) -> str | None: ...
 
+    def stale_artifacts(self) -> list[str]: ...
+
+    def commit_paths(self, paths: list[str], message: str) -> str | None: ...
+
     def push(self, branch: str, *, force: bool = False) -> None: ...
 
 
@@ -121,6 +127,7 @@ class Member:
     evidence: str | None = None
     missing: tuple[int, ...] = ()
     closes: tuple[str, ...] = ()
+    scope: tuple[str, ...] = ()  # the names its live artifacts carry (`CloseoutRead.scope`)
 
 
 @dataclass(frozen=True)
@@ -291,6 +298,57 @@ def closeout_title(branch: str, batches: Sequence[str]) -> str:
     return f"chore: collected close-out {branch.removeprefix('chore/')} ({', '.join(batches)})"
 
 
+MIGRATION_SUBJECT = "chore(fr): migrate the artifacts this close-out archives"
+
+
+def owned_stale(stale: Iterable[str], members: Sequence[Member]) -> list[str]:
+    """The stale artifacts (repo-relative paths) the *members*' archives move (R16): those
+    whose path carries one of a member's names (its run id, plan folder or spec slug) as a
+    whole path component or file stem. A stale artifact no member owns is left alone."""
+    names = {n for m in members for n in m.scope}
+    out: list[str] = []
+    for rel in stale:
+        parts = rel.split("/")
+        stems = {*parts, *(part.rsplit(".", 1)[0] for part in parts), *(
+            part.partition(".records")[0] for part in parts)}  # fmt: skip
+        if names & stems:
+            out.append(rel)
+    return out
+
+
+def migrate_args(paths: Sequence[str]) -> list[str]:
+    """`fr migrate artifacts --yes --path <p>…` over exactly *paths* (R16)."""
+    out = ["migrate", "artifacts", "--yes"]
+    for p in paths:
+        out += ["--path", p]
+    return out
+
+
+def _migrate_first(
+    members: Sequence[Member], tree: CloseoutTree, say: Callable[[str], None]
+) -> str:
+    """R16: migrate the stale artifacts the *members*' archives move, as the close-out
+    branch's first commit, so no stale artifact holds the close-out. Returns the commit the
+    archive then builds on (the tree's head when nothing was stale or the migration was
+    refused: a retiring hop is not per file, and the archive then holds as it always did)."""
+    base = tree.head()
+    paths = owned_stale(tree.stale_artifacts(), members)
+    if not paths:
+        return base
+    code, out = tree.run_fr(migrate_args(paths))
+    if code != 0:
+        tree.reset_hard(base)
+        last = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip()), "")
+        say(f"not migrated before the archive: `fr {shlex.join(migrate_args(paths))}` "
+            f"exited {code}" + (f": {last}" if last else ""))  # fmt: skip
+        return base
+    head = tree.commit_paths(paths, MIGRATION_SUBJECT)
+    if head is None:
+        return base
+    say(f"migrated {len(paths)} stale artifact(s) the archive moves, as {head[:12]}")
+    return head
+
+
 def _why(step: Step, code: int, out: str) -> str:
     last = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip()), "")
     return f"`{step.line}` exited {code}" + (f": {last}" if last else "")
@@ -314,7 +372,7 @@ def execute(
     commit, one push and one PR. *hold*(batch id, why) each batch held (the *unreadable*
     ones first); *record*(batch id, branch) each batch the PR carries, only once it is
     open."""
-    base = tree.head()
+    base = _migrate_first(members, tree, say)  # R16: its own commit; the archive builds on it
     done: list[Member] = []
     held: list[tuple[str, str]] = list(unreadable)
     skipped: list[tuple[str, str]] = list(transient)

@@ -1231,8 +1231,9 @@ class QueueClearedEvent(_Strict):
 
 class QueueReleaseEvent(_Strict):
     """The DevOps stage released `gate:devops`-held *entry* (its `fr-queue:release` label)
-    at *head* and *patch_id* (spec 2026-11-19-wave-merge-queue R24, R26). Needs judgements
-    schema 13. Written by the engine only."""
+    at *head* and *patch_id* (spec 2026-11-19-wave-merge-queue R24, R26). An empty *patch_id*
+    records that a release was voided (its diff moved after it; the label was removed).
+    Needs judgements schema 13. Written by the engine only."""
 
     kind: Literal["queue_release"]
     at: AwareDatetime

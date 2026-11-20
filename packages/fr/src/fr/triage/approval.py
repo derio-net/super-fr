@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from fr.labels import APPROVED_FR, READY_FR
+from fr.labels import APPROVED_FR, QUEUE_POSTMERGE_DONE, QUEUE_RELEASE, READY_FR
 from fr.triage.model import (
     ApprovalEvent,
     Batch,
@@ -44,6 +44,8 @@ from fr.triage.model import (
     PullRequest,
     QueueApprovalEvent,
     QueueEntryRef,
+    QueuePostmergeDoneEvent,
+    QueueReleaseEvent,
     UpdateEvent,
 )
 
@@ -327,6 +329,96 @@ def settle_entry_approval(
             verdict = Unlabelled()
     live = _live_approval(as_batch, number) if is_approved(verdict) else None
     return verdict, live.at if live is not None else None
+
+
+def settle_release(
+    client: Any,
+    record: Callable[[QueueReleaseEvent], None],
+    repo: str,
+    entry: QueueEntryRef,
+    number: int,
+    events: Sequence[QueueReleaseEvent],
+    view: dict[str, Any],
+    say: Callable[[str], None],
+    *,
+    now: datetime,
+    dry_run: bool = False,
+    patch_id_of: PatchIdOf | None = None,
+) -> bool:
+    """Settle the DevOps stage's `fr-queue:release` label on the open PR in *view* into a
+    `queue_release` at its head and patch-id (R26, as `approved-fr` is settled): whether the
+    entry (whose PR is *number*) is released now. *events* are this entry's `queue_release`
+    events, in order.
+
+    A label with no live event, or after a voided one, is a new release, recorded at the
+    live patch-id. A label whose last event pinned another patch-id is stale: the PR's diff
+    moved after the release, so the label is removed (R9: only while labels are on) and a
+    void is recorded (a `queue_release` with no patch-id), and the stage must run again.
+    An unreadable patch-id changes nothing. Nothing is written under *dry_run*."""
+    if QUEUE_RELEASE.name not in {str(n) for n in view.get("labels") or ()}:
+        return False
+    head = str(view.get("head_oid") or "")
+    patch_id = patch_id_of(number, head) if patch_id_of is not None else None
+    last = events[-1] if events else None
+    if last is not None and last.patch_id and patch_id is None:
+        return True  # cannot read the diff now: the recorded release stands
+    if patch_id is None:
+        return False  # nothing to pin a first release to: not released yet
+    if last is not None and last.patch_id and last.patch_id != patch_id:
+        # the diff moved since the release: re-read once against a fresh default branch
+        patch_id_fresh = patch_id_of(number, head, fresh=True) if patch_id_of else None
+        if patch_id_fresh == last.patch_id:
+            return True
+        if dry_run:
+            say(f"would void the release of {entry_key(entry)}: its diff changed after it")
+        elif (off := _labels_off(client, repo)) is not None:
+            say(f"release of {entry_key(entry)} not voided: {off}")
+            return False
+        else:
+            client.edit_issue_labels(
+                repo, number, add=frozenset(), remove=frozenset({QUEUE_RELEASE.name})
+            )
+            record(QueueReleaseEvent(kind="queue_release", at=now, entry=entry, head=head,
+                                     patch_id=""))  # fmt: skip
+            say(f"release of {entry_key(entry)} voided: its diff changed after the DevOps "
+                f"stage released it; run `fr ops gate` again")  # fmt: skip
+        return False
+    if last is not None and last.patch_id == patch_id:
+        return True
+    if dry_run:
+        say(f"would record the release of {entry_key(entry)} at {head[:12]}")
+        return True
+    record(QueueReleaseEvent(kind="queue_release", at=now, entry=entry, head=head,
+                             patch_id=patch_id))  # fmt: skip
+    say(f"release of {entry_key(entry)} recorded at {head[:12]}")
+    return True
+
+
+def settle_postmerge_done(
+    record: Callable[[QueuePostmergeDoneEvent], None],
+    entry: QueueEntryRef,
+    view: dict[str, Any],
+    say: Callable[[str], None],
+    *,
+    now: datetime,
+    dry_run: bool = False,
+) -> bool:
+    """Settle `fr-queue:postmerge-done` on a landed *entry*'s merged PR into a
+    `queue_postmerge_done` (R26): whether the label was there. Recorded once; the caller
+    asks only for entries with none."""
+    if QUEUE_POSTMERGE_DONE.name not in {str(n) for n in view.get("labels") or ()}:
+        return False
+    if dry_run:
+        say(f"would record the post-merge ops of {entry_key(entry)} as done")
+        return True
+    record(QueuePostmergeDoneEvent(kind="queue_postmerge_done", at=now, entry=entry))
+    say(f"post-merge ops of {entry_key(entry)} recorded as done: the barrier lifts")
+    return True
+
+
+def entry_key(ref: QueueEntryRef) -> str:
+    """A queue entry's name: its batch id, or `<kind>#<pr>`."""
+    return ref.batch if ref.batch is not None else f"{ref.kind}#{ref.pr}"
 
 
 def _live_approval(events: Sequence[BatchEvent], pr: int) -> ApprovalEvent | None:

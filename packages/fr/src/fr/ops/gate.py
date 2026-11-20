@@ -8,14 +8,16 @@ the next stage and runs nothing itself. Its ports run everything:
 - `OpsTree` is the ops workspace `chore/ops-<slug>` (`fr.triage.gitseam.Worktree`): git
   there, and this `fr` with the workspace as its checkout (`fr ops trust`, `fr closeout
   outcome`, `fr gate pass`, `fr archive`);
-- `GateForge` is the `GhClient` adapter (another forge's merge raises
-  `UnsupportedForgeOperation`, which names the manual merge);
+- `GateForge` is the `GhClient` adapter (another forge's label write raises
+  `UnsupportedForgeOperation`, which names the manual label);
 - `GatePrompt` is the operator's terminal; `GateState` the operator's host-side record of
   the stages done and the head stage 1 verified (`HostGateState`).
 
 The eight stages (`STAGES`) run in order. Each one's completion is recorded host-side,
 per operator, outside every checkout (`gate_state_path`), so a rerun resumes at the
-first stage that state does not record; a forge-MERGED PR counts as stage 2 done. The
+first stage that state does not record; stage 2 is done only when the forge reads the PR
+MERGED, which the wave merge queue brings about (stage 2 adds `fr-queue:release` and the run
+stops until then, R26; stage 4 adds `fr-queue:postmerge-done`). The
 `gate-stage-<n>` decisions in the plan journal are an audit trail and are NEVER read:
 the ops workspace is cut from the PR, so whatever it carries is PR-controlled. The
 first failure stops the run, naming the stage. Pre-merge evidence is committed on the ops
@@ -41,6 +43,7 @@ from fr.journal.model import (
     journal_now,
     resolve_journal_read_path,
 )
+from fr.labels import QUEUE_POSTMERGE_DONE, QUEUE_RELEASE, LabelDef
 
 if TYPE_CHECKING:
     from fr.ops.load import LoadedOp
@@ -140,9 +143,11 @@ class GateForge(Protocol):
 
     def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]: ...
 
-    def repo_merge_methods(self, repo: str) -> dict[str, Any]: ...
+    def ensure_labels(self, repo: str, labels: list[Any]) -> None: ...
 
-    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None: ...
+    def edit_pr_labels(
+        self, repo: str, pr: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None: ...
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None: ...
 
@@ -291,7 +296,6 @@ class GateTarget:
     plan_rel: str  # docs/superpowers/plans/<slug>
     profile: str
     primary: Path  # the base checkout `fr isolation …` is told about (`--repo`)
-    method: str | None = None
 
     @property
     def slug(self) -> str:
@@ -326,6 +330,11 @@ class Gate:
         if self._view is None or fresh:
             self._view = self.forge.pr_view(self.target.repo, self.target.pr)
         return self._view
+
+    def refreshed(self) -> Gate:
+        """This gate with the PR re-read from the forge on its next `view`."""
+        self.view(fresh=True)
+        return self
 
     @property
     def default(self) -> str:
@@ -734,23 +743,40 @@ def _checks_green(gate: Gate) -> None:
         raise StageFailed(f"PR #{t.pr}'s checks are {verdict}: {', '.join(names)}")
 
 
-def stage_2(gate: Gate) -> None:
-    """The merge: no open pre-merge op, green required checks, an explicit confirmation."""
-    from fr.triage.batch_merge import choose_method
+def add_queue_label(gate: Gate, label: LabelDef) -> None:
+    """Say a word to the wave merge queue (R26): create *label* on the repo when it is
+    missing, then add it to the PR. The DevOps stage reads no triage state and calls no
+    merge; the driver settles the label into a queue event on its next pass."""
+    t = gate.target
+    try:
+        gate.forge.ensure_labels(t.repo, [label])
+        gate.forge.edit_pr_labels(t.repo, t.pr, add=frozenset({label.name}), remove=frozenset())
+    except UnsupportedForgeOperation as exc:
+        raise StageFailed(
+            f"{exc}: add the label {label.name} to PR #{t.pr} by hand in the forge"
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 — the forge's refusal is the operator's to read
+        raise StageFailed(f"the forge refused the label {label.name} on PR #{t.pr}: {exc}") from exc
 
+
+def stage_2(gate: Gate) -> None:
+    """The release to the merge queue (R26): no open pre-merge op, green required checks, an
+    explicit confirmation, then the label `fr-queue:release`. It never merges and records
+    nothing: the stage is done when the forge reads the PR MERGED, which only the queue
+    brings about (`run` stops here until then)."""
     t = gate.target
     tree = gate.tree()
     view = gate.view(fresh=True)
     state = str(view.get("state") or "")
     if state != "OPEN":
-        raise StageFailed(f"PR #{t.pr} is {state or 'UNKNOWN'}, not open: nothing to merge")
+        raise StageFailed(f"PR #{t.pr} is {state or 'UNKNOWN'}, not open: nothing to release")
     gate.require_default_base()  # a base retargeted since stage 1
     head = gate.verified_head(tree)
     live = str(view.get("head_oid") or "")
     if live != head:
         raise StageFailed(
             f"PR #{t.pr}'s head moved from {head} (verified in stage 1) to {live or 'unknown'}; "
-            f"nothing merged: {gate.redo_stage_1()}",
+            f"nothing released: {gate.redo_stage_1()}",
             code=2,
         )
     pre = _ops(tree, t.plan_rel, "pre-merge")
@@ -760,23 +786,23 @@ def stage_2(gate: Gate) -> None:
     if left:
         raise StageFailed("pre-merge ops are still open: " + "; ".join(left))
     _checks_green(gate)
+    if QUEUE_RELEASE.name in {str(n) for n in view.get("labels") or ()}:
+        return  # already released: the queue has it, or has not read the label yet
     lines = [f"  {lo.op.id}: {rows[lo.op.id].get('label')}" for lo in pre] or [
         "  (no pre-merge op)"
     ]
-    text = f"MERGE PR #{t.pr} of {t.repo} at head {head}\npre-merge state:\n" + "\n".join(lines)
+    text = (
+        f"RELEASE PR #{t.pr} of {t.repo} at head {head} to the merge queue, which lands it "
+        "alone\npre-merge state:\n" + "\n".join(lines)
+    )
     if not gate.prompt.confirm(text):  # its own confirmation, --yes or not
-        raise StageFailed(f"the merge of PR #{t.pr} was not confirmed; nothing merged")
-    try:
-        method = choose_method(t.method, gate.forge.repo_merge_methods(t.repo))
-        gate.forge.pr_merge(t.repo, t.pr, head_sha=head, method=method)
-    except UnsupportedForgeOperation as exc:
-        raise StageFailed(
-            f"{exc}: merge PR #{t.pr} by hand in the forge at head {head}, then re-run "
-            "`fr ops gate` (a merged PR counts as this stage done)"
-        ) from exc
-    except Exception as exc:  # noqa: BLE001 — the forge's refusal is the operator's to read
-        raise StageFailed(f"the forge refused the merge of PR #{t.pr}: {exc}") from exc
-    gate.finish(tree, 2, f"merged PR #{t.pr} at {head}")
+        raise StageFailed(f"the release of PR #{t.pr} was not confirmed; nothing released")
+    add_queue_label(gate, QUEUE_RELEASE)
+    gate.say(
+        f"PR #{t.pr} released to the merge queue ({QUEUE_RELEASE.name} at {head[:12]}): the "
+        "driver lands it alone, then `fr ops gate --run "
+        f"{t.run.run}` resumes at stage 3"
+    )
 
 
 def stage_3(gate: Gate) -> None:
@@ -820,7 +846,10 @@ def stage_3(gate: Gate) -> None:
 
 
 def stage_4(gate: Gate) -> None:
+    """Post-merge ops. Their completion lifts the queue's barrier (R26): the label
+    `fr-queue:postmerge-done`, which the driver settles into `queue_postmerge_done`."""
     apply_phase(gate, "post-merge")
+    add_queue_label(gate, QUEUE_POSTMERGE_DONE)
     gate.finish(gate.tree(), 4, "post-merge ops closed")
 
 
@@ -1128,13 +1157,15 @@ def _cut(gate: Gate, recorded: set[int]) -> bool:
     again, as long as nothing was merged yet."""
     if 1 not in recorded:
         return False
-    if 2 in recorded or str(gate.view().get("state") or "") == "MERGED":
+    if _merged(gate, recorded):
         return True
     return gate.host.workspace(gate.target.ops_branch) is not None
 
 
 def _merged(gate: Gate, recorded: set[int]) -> bool:
-    return 2 in recorded or str(gate.view().get("state") or "") == "MERGED"
+    """Stage 2 is done only when the forge reads the PR MERGED (R26): the queue owns every
+    merge of the repo, so stage 3 never runs on an unmerged PR. Nothing records stage 2."""
+    return str(gate.view().get("state") or "") == "MERGED"
 
 
 def _passed(gate: Gate, recorded: set[int]) -> bool:
@@ -1146,9 +1177,10 @@ def _passed(gate: Gate, recorded: set[int]) -> bool:
 STAGES: tuple[Stage, ...] = (
     Stage(1, "pre-merge ops", "bring up or reuse the ops workspace from the PR head; "
           "trust; pre-merge status and apply", _cut, stage_1),
-    Stage(2, "merge", "merge the PR after a terminal confirmation naming it, its head "
-          "and the pre-merge state (no open pre-merge op, required checks green)",
-          _merged, stage_2),
+    Stage(2, "release to the merge queue", "add fr-queue:release to the PR after a terminal "
+          "confirmation naming it, its head and the pre-merge state (no open pre-merge op, "
+          "required checks green); the queue lands it alone and the stage is done when the "
+          "forge reads the PR merged", _merged, stage_2),
     Stage(3, "verify-merge, rebase, ready", "fr isolation verify-merge; rebase the ops "
           "workspace onto the default branch; every `ready:`", _recorded(3), stage_3),
     Stage(4, "post-merge ops", "post-merge status and apply", _recorded(4), stage_4),
@@ -1170,6 +1202,7 @@ class GateResult:
     failed: int | None = None
     why: str = ""
     code: int = 0  # the command's exit: 0, 1 (a stage stopped) or 2 (a refusal)
+    waiting: bool = False  # stage 2 released the PR to the merge queue, which has not landed it
 
 
 def preview(gate: Gate) -> list[str]:
@@ -1209,6 +1242,10 @@ def run(gate: Gate) -> GateResult:
             gate.say(why)
             return GateResult(False, tuple(ran), s.number, why, exc.code)
         ran.append(s.number)
+        # the queue merges it (R26): read the forge afresh, a quick queue may have landed it
+        if s.number == 2 and not s.done(gate.refreshed(), gate.recorded()):
+            gate.say("stage 2 waits for the merge queue to land the PR; re-run once it has")
+            return GateResult(False, tuple(ran), waiting=True)
     gate.say("the DevOps stage is complete" if ran else "every stage is already done; nothing ran")
     return GateResult(True, tuple(ran))
 

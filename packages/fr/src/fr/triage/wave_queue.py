@@ -45,7 +45,9 @@ from fr.triage.model import (
     QueueHaltEvent,
     QueueLandEvent,
     QueueOpenEvent,
+    QueuePostmergeDoneEvent,
     QueueRecord,
+    QueueReleaseEvent,
     QueueSlotLostEvent,
     RedHandbackEvent,
     RequeuedEvent,
@@ -228,6 +230,10 @@ class QueueSnapshot:
     closeout_landed: bool | None = None
     others: tuple[OtherEntry, ...] = ()  # the non-batch entries admitted this pass (R32)
     warned: frozenset[str] = frozenset()  # report keys said already
+    # R26: the entries whose `fr-queue:release` label is settled to a `queue_release` at the
+    # patch-id they have now. A `gate:devops` entry is ready only then.
+    released: frozenset[str] = frozenset()
+    runs: Mapping[str, str] = field(default_factory=dict)  # entry key -> its run id, for the Need
     scope_args: tuple[str, ...] = ()  # the drive's own scope arguments, for pasted commands
     default: str = ""  # the repo's default branch; "": unread, no entry is base-checked
 
@@ -341,7 +347,35 @@ def _ready(batch: Batch, qs: QueueSnapshot) -> bool:
         return False
     if base_refusal(pr, qs):
         return False
-    return pr.checks == "green" and not pre_merge_held(pr.labels)
+    if pre_merge_held(pr.labels) and batch.id not in qs.released:
+        return False  # R26: a gate:devops entry waits for the DevOps stage's release
+    return pr.checks == "green"
+
+
+def barrier_keys(records: Sequence[QueueRecord]) -> frozenset[str]:
+    """R26: every entry the DevOps stage released to the queue (a `queue_release` in any
+    record of the scope): a gate:devops entry, which lands as the last entry of its push."""
+    return frozenset(
+        entry_key(e.entry) for r in records for e in r.events if isinstance(e, QueueReleaseEvent)
+    )
+
+
+def postmerge_done_keys(records: Sequence[QueueRecord]) -> frozenset[str]:
+    """R26: the released entries whose post-merge ops the DevOps stage completed."""
+    return frozenset(
+        entry_key(e.entry)
+        for r in records
+        for e in r.events
+        if isinstance(e, QueuePostmergeDoneEvent)
+    )
+
+
+def barrier_open(records: Sequence[QueueRecord]) -> tuple[str, ...]:
+    """R26: the released entries the queue landed whose post-merge ops are not done: nothing
+    lands behind them, and the wave does not drain, until each is."""
+    done = postmerge_done_keys(records)
+    landed = landed_keys(records)
+    return tuple(sorted(k for k in barrier_keys(records) if k in landed and k not in done))
 
 
 @dataclass(frozen=True)
@@ -779,6 +813,11 @@ def _entries(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> tuple[list[
     return entries, waiting
 
 
+def _is_barrier(key: str, qs: QueueSnapshot) -> bool:
+    pr = qs.live.get(key)
+    return key in qs.released and pr is not None and bool(pre_merge_held(pr.labels))
+
+
 def _free(combos: Sequence[Combo], depth: int, n: int) -> tuple[int, ...]:
     """*n* slots no standing combination holds, lowest first (R4: reused, never more)."""
     taken = {c.slot for c in combos}
@@ -829,6 +868,13 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
     while green < len(valid) and _verdict(valid[green], qs).verdict == "green":
         green += 1
     base, standing = rep.base, valid
+    mine = [r for r in qs.records if r.scope == qs.scope]
+    waiting_on = barrier_open(mine)
+    if waiting_on:  # R26: nothing lands behind a landed barrier until its post-merge ops are done
+        green = 0
+    else:  # a released gate:devops entry is the last entry of its push
+        stop = next((i for i in range(green) if _is_barrier(entries[i], qs)), None)
+        green = green if stop is None else stop + 1
     if green:
         tip = valid[green - 1]
         done = tuple(entries[:green])
@@ -881,16 +927,35 @@ def _tail(
     """Every open pass ends here, a foreign move's included: drain the finished wave, else
     propose the batch that stalls it (§B, R30)."""
     landing = any(a.kind == "queue-land" for a in actions)
-    drained = None if entries or landing else _drained(record, rep, qs)
+    waiting_on = barrier_open([r for r in qs.records if r.scope == qs.scope])
+    drained = None if entries or landing or waiting_on else _drained(record, rep, qs)
     if drained is not None:
         actions.append(drained)
     elif (need := _stall_need(record, qs, entries)) is not None:
         actions.append(need)
     elif (need := _closeout_need(record, qs, entries)) is not None:
         actions.append(need)
+    actions.extend(_barrier_needs(record, qs, waiting_on))
     actions.extend(_ejected_other_needs(record, rep, qs))
     return QueuePlan(qs.repo, "open", record.wave, tuple(actions), tuple(entries),
                      tuple(waiting))  # fmt: skip
+
+
+def _barrier_needs(
+    record: QueueRecord, qs: QueueSnapshot, waiting_on: Sequence[str]
+) -> list[QueueAction]:
+    """R26: a landed barrier's post-merge ops are the operator's: the stage resumes at stage 3
+    once the PR reads merged, and its stage 4 lifts the barrier."""
+    out: list[QueueAction] = []
+    for key in waiting_on:
+        run = qs.runs.get(key)
+        command = f"fr ops gate --run {run}" if run else "fr ops gate --run <run-id>"
+        out.append(QueueAction(
+            "queue-need", qs.repo, f"{key} landed as a DevOps barrier in {qs.repo}'s merge "
+            f"queue: nothing lands behind it until its post-merge ops are done; run `{command}` "
+            "(it resumes at stage 3)", wave=record.wave, batch=key if key in {b.id for b in
+            qs.batches} else ""))  # fmt: skip
+    return out
 
 
 def _closeout_need(

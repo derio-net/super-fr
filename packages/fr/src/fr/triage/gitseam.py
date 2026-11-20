@@ -1113,6 +1113,18 @@ class Worktree:
         code, out = _run(fr_argv(*args), self.path, coded=True, env=safe_fr_env(), exact_env=True)
         return int(code), str(out)
 
+    def stale_artifacts(self) -> list[str]:
+        """The live artifacts of this worktree a registered migration would move, as
+        repo-relative paths (`fr.artifacts.runner.plan_migrations`, read-only): what the
+        collected close-out's `fr migrate artifacts --path` then migrates (R16)."""
+        from fr.artifacts.runner import plan_migrations
+
+        seen: dict[str, None] = {}
+        for action in plan_migrations(self.path):
+            if not action.is_repair:
+                seen[action.path.relative_to(self.path).as_posix()] = None
+        return list(seen)
+
     def reset_hard(self, sha: str) -> None:
         """Back to *sha*, every change and untracked file since gone: a held batch moves
         nothing (R15)."""
@@ -1123,7 +1135,8 @@ class Worktree:
         """Everything since *base* (commits, staged and unstaged changes, new files) as ONE
         commit on *base*; the new head, or None when nothing changed. `--all` is right
         here, unlike `commit_all`: the worktree is fresh and only fr's own verbs wrote in
-        it, and an archive's moves are new files."""
+        it, and an archive's moves are new files. With the close-out's migration commit
+        (R16) as *base*, only the archive is squashed and the migration commit stays."""
         git(["add", "--all"], self.path)
         git(["reset", "--soft", "--quiet", base], self.path)
         if git_ok(["diff", "--cached", "--quiet"], self.path):

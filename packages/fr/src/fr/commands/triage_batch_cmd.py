@@ -49,6 +49,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import urlparse
@@ -95,7 +96,14 @@ from fr.isolation.adopt import (
     workspace_path,
 )
 from fr.isolation.rename import IsolationError, rename_branch
-from fr.labels import APPROVED_FR, FR_AWAITING_LIVE, FR_IN_PROGRESS, held_gates, passed_gates
+from fr.labels import (
+    APPROVED_FR,
+    FR_AWAITING_LIVE,
+    FR_IN_PROGRESS,
+    QUEUE_RELEASE,
+    held_gates,
+    passed_gates,
+)
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError
 from fr.services.resolve import resolve_services
@@ -110,6 +118,8 @@ from fr.triage.approval import (
     judge_approval,
     settle_approvals,
     settle_entry_approval,
+    settle_postmerge_done,
+    settle_release,
 )
 from fr.triage.batch import (
     CLOSED_OUT,
@@ -285,6 +295,7 @@ from fr.triage.model import (
     QueueEntryRef,
     QueueOpenEvent,
     QueueRecord,
+    QueueReleaseEvent,
     RedHandbackEvent,
     ReplacementEvent,
     Scope,
@@ -319,6 +330,7 @@ from fr.triage.wave_queue import (
     Hold,
     QueueAction,
     QueuePlan,
+    barrier_open,
     queue_action_line,
     queue_landed,
     queue_line,
@@ -636,10 +648,10 @@ def queue_writer(target: Path, repo: str, scope: str) -> QueueWriter:
         judgements = load_judgements(target / "judgements.yaml")
         queues = list(judgements.queues)
         mine = [i for i, q in enumerate(queues) if q.repo == repo and q.scope == scope]
-        # a non-batch entry's approval (R32) may come before any queue ever opened: it then
-        # starts a record of its own, which no `queue_open` ever follows
+        # a non-batch entry's approval (R32), or a DevOps release (R26), may come before any
+        # queue ever opened: it then starts a record of its own, which no `queue_open` follows
         if isinstance(event, QueueOpenEvent) or (
-            not mine and isinstance(event, QueueApprovalEvent) and base
+            not mine and isinstance(event, QueueApprovalEvent | QueueReleaseEvent) and base
         ):
             queues.append(QueueRecord(repo=repo, wave=wave, scope=scope, base=base,
                                       events=[event]))  # fmt: skip
@@ -3116,7 +3128,7 @@ def _collected_member(
     return collected.Member(
         batch=batch.id, branch=branch, run=read.run, passed=tuple(sorted(passed)),
         evidence=evidence, missing=read.missing,
-        closes=collected.issues_to_close(cited, narrowed=read.narrowed),
+        closes=collected.issues_to_close(cited, narrowed=read.narrowed), scope=read.scope,
     )  # fmt: skip
 
 
@@ -4370,6 +4382,10 @@ class _Driver:
             queue_reads["queue_housekeeping"] = self._housekeeping_reads(
                 facts, judgements, repos, {*unread, *carried}
             )
+            gated_in, gated_runs = self._barrier_reads(
+                facts, judgements, repos, queue, live, {*unread, *carried}
+            )
+            queue_reads["queue_released"], queue_reads["queue_runs"] = gated_in, gated_runs
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
@@ -4456,6 +4472,7 @@ class _Driver:
             )
             if self.adapter.kind == "host"
             else frozenset(),
+            placements=self._placements(repos, {*unread, *carried}),
             **queue_reads,
             **claim_plan,
         )
@@ -4536,6 +4553,7 @@ class _Driver:
         prs: dict[str, LivePr] = {}
         diff: dict[str, frozenset[str] | None] = {}
         commits: dict[str, tuple[str, ...] | None] = {}
+        migration: dict[str, frozenset[str] | None] = {}
         body_closes: dict[str, frozenset[str]] = {}
         narrowed: dict[str, frozenset[str] | None] = {}
         pushed: set[str] = set()
@@ -4563,7 +4581,11 @@ class _Driver:
                     return
                 ref = f"origin/{checkout.default_branch()}"
                 diff[m.item] = checkout.changed_status(ref, m.head)
-                commits[m.item] = checkout.commits_since(ref, m.head)
+                since = checkout.commits_since(ref, m.head)
+                commits[m.item] = since
+                if len(since) == 2 and since[0] == m.head:
+                    # R16: the verb's migration commit, the older of the two (newest first)
+                    migration[m.item] = checkout.changed_status(ref, since[1])
                 tip = ref
                 names: set[str] = set()
                 for bid in m.members:
@@ -4574,6 +4596,7 @@ class _Driver:
             except TriageError:
                 diff.setdefault(m.item, None)
                 commits.setdefault(m.item, None)
+                migration.setdefault(m.item, None)  # no migration commit is read as none
                 narrowed[m.item] = None
 
         try:
@@ -4645,6 +4668,7 @@ class _Driver:
             asked.update(i.id for i in items)
         return {
             "collected_prs": prs, "collected_diff": diff, "collected_commits": commits,
+            "collected_migration": migration,
             "collected_body_closes": body_closes, "collected_narrowed": narrowed,
             "collected_pushed": frozenset(pushed), "collected_reopened": reopened,
             "live": frozenset(live), "asked": frozenset(asked),
@@ -6626,6 +6650,89 @@ class _Driver:
             "bases": bases,
             "queue_defaults": defaults,
         }
+
+    def _placements(self, repos: Mapping[str, str], skip: Iterable[str]) -> dict[str, str]:
+        """Where each repo keeps fr's artifacts (`repo`, `quiet` or `stealth`: the repo's own
+        settings, read from the clone). Under quiet or stealth the merge queue holds batch PRs
+        only (R15). A repo whose settings cannot be read is `repo`, as before."""
+        from fr.settings import SettingsError, load_settings
+
+        out: dict[str, str] = {}
+        for repo in sorted(set(repos.values()) - set(skip)):
+            try:
+                out[repo] = str(load_settings(self._fetched_reader(repo).path).settings.placement)
+            except (GitError, TriageError, SettingsError):
+                continue
+        return out
+
+    def _barrier_reads(
+        self,
+        facts: Facts,
+        judgements: Judgements,
+        repos: Mapping[str, str],
+        queue: Iterable[Any],
+        live: Mapping[str, LivePr],
+        skip: Iterable[str],
+    ) -> tuple[frozenset[str], dict[str, str]]:
+        """R26: the DevOps stage's two labels, settled on the queue's own events as
+        `approved-fr` is. A batch PR carrying `fr-queue:release` is recorded as a
+        `queue_release` at its head and patch-id (voided, label off, when its diff moved
+        after it); the entries that are released now are returned. A landed barrier's merged
+        PR carrying `fr-queue:postmerge-done` is recorded as a `queue_postmerge_done`, and
+        each still open is mapped to its run id for the Need that names `fr ops gate`.
+        Nothing is written without --yes."""
+        skipped = set(skip)
+        scope = scope_id(self.scope)
+        released: set[str] = set()
+        runs: dict[str, str] = {}
+        by_id = {b.id: b for b in judgements.batches}
+
+        def events_of(repo: str) -> list[Any]:
+            return [e for q in judgements.queues if q.repo == repo and q.scope == scope
+                    for e in q.events]  # fmt: skip
+
+        def writer(repo: str, event: Any) -> None:
+            checkout = self._fetched_reader(repo)
+            base = checkout.rev_parse(f"origin/{checkout.default_branch()}")
+            queue_writer(self.target, repo, scope)(event, base=base)
+
+        for e in queue:
+            where = repos.get(e.batch.id)
+            pr = live.get(e.batch.id)
+            if where is None or where in skipped or pr is None or pr.state != "OPEN":
+                continue
+            if QUEUE_RELEASE.name not in (pr.labels or ()):
+                continue
+            ref = QueueEntryRef(batch=e.batch.id)
+            mine = [x for x in events_of(where)
+                    if isinstance(x, QueueReleaseEvent) and x.entry == ref]  # fmt: skip
+            view = {"labels": list(pr.labels or ()), "head_oid": pr.head}
+            if settle_release(
+                self.client(facts, where), partial(writer, where), where, ref,
+                pr.number, mine, view, _say, now=_now(), dry_run=not self.yes,
+                patch_id_of=self._patch_id_of(facts, where),
+            ):  # fmt: skip
+                released.add(e.batch.id)
+        for repo in sorted(set(repos.values()) - skipped):
+            records = [q for q in judgements.queues if q.repo == repo and q.scope == scope]
+            for key in barrier_open(records):
+                batch = by_id.get(key)
+                pr_row = batch_pr(batch, facts) if batch is not None else None
+                if batch is None or pr_row is None:
+                    continue
+                view = self.client(facts, repo).pr_view(repo, pr_row.number)
+                if settle_postmerge_done(
+                    partial(writer, repo), QueueEntryRef(batch=key), view,
+                    _say, now=_now(), dry_run=not self.yes,
+                ):  # fmt: skip
+                    continue
+                clone = self.path_of(repo)
+                last = last_dispatch(batch)
+                branch = last.branch if last else batch_branch(batch)
+                found = find_run(_cursors(clone), branch) if clone is not None else None
+                if found:
+                    runs[key] = found[0]
+        return frozenset(released), runs
 
     def _housekeeping_reads(
         self, facts: Facts, judgements: Judgements, repos: Mapping[str, str], skip: Iterable[str]

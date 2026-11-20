@@ -36,6 +36,8 @@ manifests becoming migratable.
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -76,14 +78,77 @@ class ValidationReport:
     checked: int
     """How many artifact files were looked at — 0 issues over 0 files is not a
     pass anyone should celebrate, so the count is reported too."""
+    migratable: tuple[ValidationIssue, ...] = ()
+    """With `allow_migratable` (wave-merge-queue R21): the stale artifacts a registered
+    migration moves, which pass. Informational: `ok` does not read them."""
 
     @property
     def ok(self) -> bool:
         return not self.issues
 
 
-def validate_artifact(kind: ArtifactKind, path: Path) -> tuple[ValidationIssue, ...]:
-    """Stamp then structure for one artifact. Empty tuple means valid."""
+class Migratable:
+    """Whether a stale artifact is one a registered migration moves (R21): a chain reaches the
+    kind's current version from its stamp, and the migration does not refuse it. The refusal is
+    found by running every migration once on a scratch copy of the checkout (never the
+    checkout itself), lazily, and only when some artifact is stale."""
+
+    def __init__(self, repo_root: Path) -> None:
+        self.repo_root = repo_root
+        self._refused: dict[Path, str] | None = None
+        self._broken: str | None = None
+
+    def verdict(self, kind: ArtifactKind, path: Path, version: int) -> str | None:
+        """None when *path* is migratable, else why it is not."""
+        from fr.artifacts.runner import MIGRATIONS, MigrationChainError
+
+        try:
+            MIGRATIONS.chain(kind.name, version)
+        except MigrationChainError as e:
+            return (f"stale and no registered migration reaches version {kind.current_version} "
+                    f"from version {version}: {e}")  # fmt: skip
+        refused = self._run()
+        if self._broken is not None:
+            return f"stale and its migration cannot be tried: {self._broken}"
+        try:
+            rel = path.resolve().relative_to(self.repo_root.resolve())
+        except ValueError:
+            rel = path
+        why = refused.get(rel)
+        return None if why is None else f"stale and its migration refuses it: {why}"
+
+    def _run(self) -> dict[Path, str]:
+        if self._refused is not None:
+            return self._refused
+        from fr.artifacts.runner import MigrationChainError, run_migrations
+
+        refused: dict[Path, str] = {}
+        with tempfile.TemporaryDirectory(prefix="fr-validate-migratable-") as tmp:
+            copy = Path(tmp) / "tree"
+            shutil.copytree(
+                self.repo_root, copy, symlinks=True, ignore=shutil.ignore_patterns(*_NOT_COPIED)
+            )
+            try:
+                report = run_migrations(copy, dry_run=False)
+            except MigrationChainError as e:  # a registry gap: nothing can be told apart
+                self._broken = str(e)
+            else:
+                for failure in report.failed:
+                    refused[failure.path.relative_to(copy)] = failure.error
+        self._refused = refused
+        return refused
+
+
+_NOT_COPIED = (".git", ".venv", "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache",
+               ".ruff_cache", ".tox")  # fmt: skip
+
+
+def validate_artifact(
+    kind: ArtifactKind, path: Path, *, migratable: Migratable | None = None
+) -> tuple[ValidationIssue, ...]:
+    """Stamp then structure for one artifact. Empty tuple means valid. With *migratable*, a
+    stale artifact a registered migration moves is reported as a `ValidationIssue` whose
+    message starts `stale, migratable` (the caller files it apart from the failures)."""
     from fr import __version__
 
     def issue(message: str) -> tuple[ValidationIssue, ...]:
@@ -108,6 +173,15 @@ def validate_artifact(kind: ArtifactKind, path: Path) -> tuple[ValidationIssue, 
             f"only understands up to version {kind.current_version} — upgrade fr "
             f"(artifacts are never downgraded)"
         )
+    if version < kind.current_version and migratable is not None:
+        why = migratable.verdict(kind, path, version)
+        if why is None:
+            return issue(
+                f"stale, migratable: written for {kind.name} artifact version {version}, this "
+                f"fr writes version {kind.current_version}; `fr migrate artifacts --yes` "
+                "moves it"
+            )
+        return issue(why)
     if version < kind.current_version:
         return issue(
             f"stale: written for {kind.name} artifact version {version} (stamp: "
@@ -211,14 +285,25 @@ def _agents_set_issues(repo_root: Path) -> list[ValidationIssue]:
     ]
 
 
-def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> ValidationReport:
+STALE_MIGRATABLE = "stale, migratable"
+
+
+def validate_repo(
+    repo_root: Path, *, kind_name: str | None = None, allow_migratable: bool = False
+) -> ValidationReport:
     """Validate every live artifact under `repo_root` (or just one kind's).
+
+    With *allow_migratable* (wave-merge-queue R21) a stale artifact a registered migration
+    moves passes and is listed in `ValidationReport.migratable`; one whose migration refuses
+    it, that no migration reaches, or that is newer than this fr still fails.
 
     Raises `UnknownArtifactKindError` for an unregistered `kind_name` — a typo
     must not silently validate nothing and report success.
     """
     kinds = [artifact_kind(kind_name)] if kind_name is not None else list(ARTIFACT_KINDS.values())
     issues: list[ValidationIssue] = []
+    passed: list[ValidationIssue] = []
+    migratable = Migratable(repo_root) if allow_migratable else None
     checked = 0
     for kind in kinds:
         # A locator hit that is NOT a file is a real finding, and
@@ -249,14 +334,15 @@ def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> Validatio
                 continue
             seen.add(real)
             checked += 1
-            issues.extend(validate_artifact(kind, path))
+            for found in validate_artifact(kind, path, migratable=migratable):
+                (passed if found.message.startswith(STALE_MIGRATABLE) else issues).append(found)
     if kind_name in (None, RECORD_KIND):
         issues.extend(_records_dir_issues(repo_root))
     if kind_name in (None, AGENTS_KIND):
         issues.extend(_agents_set_issues(repo_root))
     if kind_name is None:
         issues.extend(_workflow_issues(repo_root))
-    return ValidationReport(issues=tuple(issues), checked=checked)
+    return ValidationReport(issues=tuple(issues), checked=checked, migratable=tuple(passed))
 
 
 __all__ = [

@@ -220,18 +220,15 @@ def gate(
     profile: Annotated[
         str | None, typer.Option("--profile", help="The ops profile (default: the only one).")
     ] = None,
-    method: Annotated[
-        str | None,
-        typer.Option("--method", help="Merge method (default: the repo's): merge|squash|rebase."),
-    ] = None,
 ) -> None:
     """The DevOps stage, in 8 recorded stages.
 
-    The stages are pre-merge ops, the merge, post-merge ops, the devops Test Plan steps,
-    the gate pass, the tester hand-off and the archive.
+    The stages are pre-merge ops, the release to the merge queue, post-merge ops, the devops
+    Test Plan steps, the gate pass, the tester hand-off and the archive.
 
-    Runs on the harness host at a terminal; previews without --yes. The merge asks its
-    own confirmation even with --yes. A rerun resumes at the first unrecorded stage."""
+    Runs on the harness host at a terminal; previews without --yes. The release asks its
+    own confirmation even with --yes, and the merge queue lands the PR: re-run once it has.
+    A rerun resumes at the first unrecorded stage."""
     from fr.commands.gate_cmd import RunLookupError, find_run, resolve_target
     from fr.git import repo_root as git_repo_root
     from fr.ops import gate as engine
@@ -273,7 +270,6 @@ def gate(
         plan_rel=plan_rel,
         profile=_profile(root, profile),
         primary=primary_checkout(root),
-        method=method,
     )
     g = engine.Gate(
         target,

@@ -269,6 +269,43 @@ def test_p6b_r4_any_head_commit_or_author_but_the_verbs_is_never_auto_merged(
     assert "admitted" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
 
 
+# wave-merge-queue R16: the verb's migration commit, then the recorded head
+
+
+MOVED = "M\tdocs/superpowers/runs/r.yaml"  # modified by the migration, then moved by the archive
+
+
+def _migrated(changed: Any, commits: tuple[str, ...] = ("h900", "m0")) -> Any:
+    return _under_way(_shared(), "a", collected_commits={ITEM: commits},
+                      collected_migration={ITEM: changed})  # fmt: skip
+
+
+def test_r16_a_migration_commit_of_files_the_archive_moves_is_admitted() -> None:
+    assert "admitted" in _kinds_of(_migrated(frozenset({MOVED})))
+
+
+@pytest.mark.parametrize("changed", [
+    frozenset({MOVED, "M\tpackages/fr/src/fr/backdoor.py"}),  # a file the archive does not move
+    frozenset({"A\tdocs/superpowers/runs/r.yaml"}),  # it adds rather than modifies
+    frozenset({"D\tdocs/superpowers/runs/r.yaml"}),  # it deletes
+    frozenset({"M\tdocs/superpowers/runs/other.yaml"}),  # a live artifact the archive leaves
+    None,  # unreadable
+])  # fmt: skip
+def test_r16_a_migration_commit_changing_anything_else_needs_review(changed: Any) -> None:
+    snap = _migrated(changed)
+    assert "admitted" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
+
+
+def test_r16_the_recorded_head_must_be_the_newest_of_the_two_commits() -> None:
+    snap = _migrated(frozenset({MOVED}), commits=("m0", "h900"))
+    assert "admitted" not in _kinds_of(snap)
+
+
+def test_r16_two_commits_with_no_migration_read_are_never_admitted() -> None:
+    snap = _under_way(_shared(), "a", collected_commits={ITEM: ("h900", "m0")})
+    assert "admitted" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
+
+
 # p6b-r5: Closes is the recorded set, against today's narrowing, in this repo only
 
 

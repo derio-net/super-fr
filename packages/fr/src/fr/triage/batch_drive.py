@@ -388,6 +388,10 @@ class Snapshot:
     # The repos whose `post_merge` this driver runs (p4-r2): a landed batch of one gets a
     # `post-merge` action at merge, gated or not, before any close-out of it.
     post_merge_repos: frozenset[str] = frozenset()
+    # Where each repo keeps fr's artifacts (`repo` | `quiet` | `stealth`), as the driver read it;
+    # a repo with no entry is `repo`. Under quiet or stealth the merge queue holds batch PRs
+    # only and owes no collected close-out (R15).
+    placements: Mapping[str, str] = field(default_factory=dict)
     # Collected close-outs (exit-gates R15, §D): the start markers from the judgements,
     # and, driver only, what the driver itself reads for each unfinished one, by item:
     # its PR on its branch; its own git diff (`<status>\t<path>`) and commits from the
@@ -398,6 +402,9 @@ class Snapshot:
     collected_prs: Mapping[str, LivePr] = field(default_factory=dict)
     collected_diff: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_commits: Mapping[str, tuple[str, ...] | None] = field(default_factory=dict)
+    # R16: what the close-out's migration commit (the one before the recorded head) changed,
+    # as `<status>\t<path>`; None when it could not be read. Present only when there is one.
+    collected_migration: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_body_closes: Mapping[str, frozenset[str]] = field(default_factory=dict)
     collected_narrowed: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_pushed: frozenset[str] = frozenset()
@@ -424,6 +431,10 @@ class Snapshot:
     queue_housekeeping: Mapping[str, tuple[tuple[LivePr, datetime | None], ...]] = field(
         default_factory=dict
     )
+    # R26: the batches whose DevOps `fr-queue:release` is settled at the patch-id they have
+    # now, and the run id of each landed barrier still open (for its Need)
+    queue_released: frozenset[str] = frozenset()
+    queue_runs: Mapping[str, str] = field(default_factory=dict)
     head_changed: Mapping[str, datetime] = field(default_factory=dict)
     session_status: Mapping[str, str] = field(default_factory=dict)
 
@@ -1088,7 +1099,11 @@ def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> lis
         if outside := sorted(e.partition("\t")[2] for e in diff if not archive_allowed(e)):
             why.append(f"it changes {', '.join(outside[:5])}, which no archive changes")
     commits = snap.collected_commits.get(marker.item)
-    if commits is None or tuple(commits) != (marker.head,):
+    if commits is not None and len(commits) == 2 and commits[0] == marker.head:
+        # R16: the verb's own migration commit, then the recorded head (newest first). It may
+        # change only files the archive then moves, and only by modifying them.
+        why.extend(_migration_reasons(marker, snap))
+    elif commits is None or tuple(commits) != (marker.head,):
         why.append("its commits past the base are not the one the verb pushed")
     narrowed = snap.collected_narrowed.get(marker.item)
     if narrowed is None:
@@ -1100,6 +1115,23 @@ def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> lis
         if snap.collected_body_closes.get(marker.item, frozenset()) != want:
             why.append("its body's Closes lines are not the recorded issues")
     return why
+
+
+def _migration_reasons(marker: CollectedCloseout, snap: Snapshot) -> list[str]:
+    """Why the close-out's commit before its recorded head is no migration of what the archive
+    moves (R16): it must be read, and modify only paths the recorded file set deletes."""
+    changed = snap.collected_migration.get(marker.item)
+    if changed is None:
+        return ["its migration commit's changes could not be read"]
+    moved = {e.partition("\t")[2] for e in marker.files if e.startswith("D\t")}
+    stray = sorted(
+        path for status, _, path in (e.partition("\t") for e in changed)
+        if status != "M" or path not in moved
+    )  # fmt: skip
+    if stray:
+        return [f"its migration commit changes {', '.join(stray[:5])}, which the archive does "
+                "not move"]  # fmt: skip
+    return []
 
 
 def _collected_step(
@@ -1620,6 +1652,36 @@ def wave_closeout_landed(
     return True if seen else None
 
 
+def _wave_of(batch: Batch) -> int | None:
+    from fr.triage.wave_queue import effective_wave
+
+    return effective_wave(batch)
+
+
+def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
+    """R15: whether *wave*'s collected close-out may start: every batch of it is terminal (the
+    wave's landings are over: landed, cancelled, abandoned or deferred) and, where the repo
+    runs a `post_merge`, every landed one has it recorded, so the close-out starts only after
+    the last landing's `post_merge`. A batch with no wave stands alone: always."""
+    from fr.triage.wave_queue import is_terminal
+
+    if wave is None:
+        return True
+    for batch in snap.batches:
+        if snap.repos.get(batch.id) != repo or _wave_of(batch) != wave:
+            continue
+        stage = snap.stages.get(batch.id)
+        if not is_terminal(batch, stage):
+            return False
+        if (
+            stage in LANDED
+            and repo in snap.post_merge_repos
+            and not any(e.kind == "post_merge" for e in batch.events)
+        ):
+            return False
+    return True
+
+
 def queue_snapshot(
     snap: Snapshot, repo: str, held: Iterable[str] = (), admitted: Iterable[Admitted] = ()
 ) -> QueueSnapshot:
@@ -1643,6 +1705,10 @@ def queue_snapshot(
     closeout = snap.queue_closeouts.get(repo)
     if closeout is None:
         closeout = wave_closeout_landed(snap, repo, open_wave, landed)
+    if snap.placements.get(repo, "repo") != "repo":
+        # R15: the repo keeps no fr artifacts on its default branch, so the queue holds batch
+        # PRs only: no close-out, archive, export or housekeeping entry, and no wave waits on one
+        closeout, mine = None, []
     return QueueSnapshot(
         repo=repo, scope=snap.scope_id or snap.me, config=snap.wave_queues[repo], now=snap.now,
         batches=batches, stages=snap.stages, live={**snap.live, **{a.key: a.pr for a in mine}},
@@ -1654,6 +1720,7 @@ def queue_snapshot(
         head_changed=snap.head_changed, closeout_landed=closeout,
         others=tuple(OtherEntry(a.key, a.kind, a.pr.number, a.wave, a.at, a.batch) for a in mine),
         warned=snap.warned, scope_args=snap.scope_args,
+        released=snap.queue_released, runs=snap.queue_runs,
     )  # fmt: skip
 
 
@@ -1740,7 +1807,8 @@ def drive_pass(snap: Snapshot) -> Pass:
     # writes nothing to the forge, so it reads every landed batch, selected or not
     # (gh#990); starting one, or recording one under way, follows the selection.
     closing = gated = closeouts_held = 0
-    collecting: dict[str, list[str]] = {}  # repo -> the batches its collected close-out takes
+    # (repo, wave) -> the batches its collected close-out takes (R15: one per wave)
+    collecting: dict[tuple[str, int | None], list[str]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in held_ids:
@@ -1809,13 +1877,18 @@ def drive_pass(snap: Snapshot) -> Pass:
                                   f"retry: fr triage batch closeout {batch.id} --yes",
                                   key=hold.item))  # fmt: skip
             continue
-        collecting.setdefault(snap.repos.get(batch.id, ""), []).append(batch.id)
-    # R15: at most one collected close-out per repo, and none while one is under way.
-    for repo in sorted(collecting):
+        group = _wave_of(batch)
+        if not wave_landings_done(snap, snap.repos.get(batch.id, ""), group):
+            continue  # R15: the wave's one close-out starts after its last landing's post_merge
+        collecting.setdefault((snap.repos.get(batch.id, ""), group), []).append(batch.id)
+    # R15: one collected close-out per wave, at most one per repo, none while one is under way.
+    started: set[str] = set()
+    for repo, group in sorted(collecting, key=lambda k: (k[0], k[1] is None, k[1] or 0)):
         name, item_id = next_collected_item(repo, snap)
-        if _collected_under_way(repo, snap) or item_id in snap.existing:
+        if repo in started or _collected_under_way(repo, snap) or item_id in snap.existing:
             continue  # one at a time; a live session of this item is not started twice
-        taking = tuple(collecting[repo])
+        started.add(repo)
+        taking = tuple(collecting[(repo, group)])
         actions.append(
             Action("closeout", taking[0], f"start {collected_item_id(repo, name)} for "
                    f"{', '.join(taking)}", items=taking, key=name)
