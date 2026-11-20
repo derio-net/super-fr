@@ -865,3 +865,8 @@ the DevOps stage, the settle helpers and the planner barrier were new code besid
 ### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
 
 the per-wave grouping replaced the per-repo one in the same loop and the migration commit is one new helper; nothing left over to clean
+
+<!-- fr:journal kind=decision scope=plan id=p6-release-void-explicit created=2026-11-20T23:17:34+00:00 phase=6 -->
+### p6-release-void-explicit · decision · A voided release is its own flag (voided: bool), superseding p6-release-void-is-an-empty-patch-id (phase 6)
+
+QueueReleaseEvent gains an optional voided flag (schema 13 is unreleased, so no migration); an empty patch_id is a real release at an empty diff, and barrier_keys counts only an entry's last release when it is not voided. Chosen over a distinct event kind because the void already pins the same entry and head fields and needs no new schema-13 event registration.
