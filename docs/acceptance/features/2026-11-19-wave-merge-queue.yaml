@@ -447,3 +447,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_walk
     why: renamed for the queue (R22)
+  - row: merge-train-label-gate
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_queue
+    why: the queue's version of the unapproved member test (R22)
