@@ -329,3 +329,73 @@ The final crash is ledgered as crash:<x> before the crash-loop refusal; pinned c
 ### p2a-r7-resolved · finding [fixed] · resolves p2a-r7: tests lack real-driver 130/SIGHUP cases, concurrent append and rotation races, crash-loop last_refusal, and status with no lease plus a live unrelated pid (phase 2)
 
 Added tests: real `batch drive --supervised-by` exiting 130 read as Stop(130) with the lease released, SupervisorGone releasing the lease, SIGHUP stop without restart, real process-start read, plus the r1-r5 tests. Commits ed163871d, 626857363; targeted run 3910 passed (p2-fix.log).
+
+<!-- fr:journal kind=decision scope=plan id=p3-probe-scope-and-memo created=2026-11-20T08:48:33+00:00 phase=3 -->
+### p3-probe-scope-and-memo · decision · conflict-probe covers every conflicting non-candidate; the memo holds the paths, per driver process (phase 3)
+
+The walks emit `conflict-probe` for each OPEN batch PR that reads conflicting except the
+merge train's candidates (merge-train mode) and PRs already in the merge queue (queue mode).
+A conflicting non-member (unapproved draft) is also stepped over and puts a Train in the
+pass, so the train line names it (R16). `_Driver._probed` maps (repo, PR, head, default
+branch sha) to the refused paths, so a session that was working or unreadable is retried
+on the next pass from the cached paths with no second trial merge. A `conflict` event at
+the head is the `skip` and is decided with no I/O. The probe's scratch root is
+`<state dir>/probe/`, and trial_conflicts removes the worktree in a `finally`.
+
+<!-- fr:journal kind=decision scope=plan id=p3-probe-no-session-held created=2026-11-20T08:48:33+00:00 phase=3 -->
+### p3-probe-no-session-held · decision · a runner that cannot be inspected or messaged counts as no session for the probe: held (phase 3)
+
+`_offer` returns None for a runner that is neither inspector nor messenger. The conflict
+hand-back would start a fresh session; the probe never does (R17), so None, absent and
+done are all `conflict` event `delivered: held`; idle messages; working, unknown and a
+failed read wait.
+
+<!-- fr:journal kind=decision scope=plan id=p3-card-hint-placement created=2026-11-20T08:48:33+00:00 phase=3 -->
+### p3-card-hint-placement · decision · the card hint `conflicting - handed back` sits after the lane/stop/idle hints and yields to a red phrase (phase 3)
+
+R18's hint (`CONFLICT_HANDED_BACK_HINT`, mergeability.py) is chosen only for a delivered
+`conflict` event at the PR's current head, after every needs-you hint and before the
+driver-action and awaiting-approval ones; a red PR keeps its red phrase.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-t1s3-green-first created=2026-11-20T08:48:33+00:00 phase=3 -->
+### p3-t1s3-green-first · discovery · P3.T1.S3 (red recovery for an unapproved draft) was green on its first run (phase 3)
+
+As the plan expected, _recover needs nothing beyond the walk's new `warn red=True`: the
+five command tests for idle / working / absent / done / the cross-draft-and-ready cap
+passed at once. P3.T1.S1 went red (4 of 6 failed) and P3.T2/T3/T4 each went red first.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-drive-is-one-process created=2026-11-20T08:48:33+00:00 phase=3 -->
+### p3-drive-is-one-process · discovery · the per-process memo needs a looping drive in a test; each `--once` is a new process (phase 3)
+
+`_drive(..., "--once")` builds a new _Driver per call, so the once-per-process trial
+merge is shown through a loop run with a `_sleep` hook. The existing pass also reads each
+batch PR twice (the snapshot and `settle_approvals`); the probe adds no read, which the
+test checks against the clean-PR count.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-scenario-caught-launch-requirement created=2026-11-20T08:48:33+00:00 phase=3 -->
+### p3-scenario-caught-launch-requirement · discovery · the cloud-triage-version-drift scenario failed on the first full suite: a red draft's hand-back asked for a launch model (phase 3)
+
+The scenario's batches are unapproved drafts with no `launch.model`. Now that they are
+walked as red non-members, `_recover` reached `_hand_back_target`, whose `_launch` raises
+for a batch with no model, ending the pass with code 2. A message to a session never
+starts one, so `_session_target` (name and work item, no launch) now serves `_recover`
+and `_probe_conflict`; `_hand_back_target` builds on it. Test:
+test_a_hand_back_to_a_session_needs_no_model_to_launch_with (red before, green after).
+The same run's other failure, test_run_evidence_visual
+test_an_ignored_shot_inside_the_repo_passes_through_git, passed alone and is load-flaky
+(host load ~45); the log of that first run is p3-suite-run1.log beside the final one.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-20T08:48:33+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the member split is one helper (_nonmember) shared by both walks; nothing duplicated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-20T08:48:33+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+_update's merge step and _unresolvable were factored into merge_main/trial_conflicts as the green step itself; nothing further to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-11-20T08:48:33+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+a four-line change beside _fetched; nothing to clean
