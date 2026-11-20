@@ -897,3 +897,37 @@ def test_a_cleared_hold_after_our_drain_is_recorded_once() -> None:
     done = _record(_open(), {"kind": "queue_drain", "at": AT, "main": MAIN},
                    {"kind": "queue_cleared", "at": AT})  # fmt: skip
     assert plan_queue(_qs([], {}, records=(done,), hold=None, hold_read=True)).actions == ()
+
+
+_REFUSED = {"kind": "queue_halt", "at": "2026-11-20T11:50:00Z", "state": "held", "land": "push",
+            "detail": "hold write refused: the open hold: GH013 non-fast-forward"}  # fmt: skip
+
+
+def test_a_refused_hold_write_stops_the_open_queue_with_a_need_until_a_write_succeeds() -> None:
+    record = _record(_open(), _REFUSED)
+    plan = plan_queue(_qs([_batch("a", 1)], {"a": "pr-open"}, records=(record,),
+                          hold=None, hold_read=True))  # fmt: skip
+    kinds = _kinds(plan)
+    assert "queue-land" not in kinds and "queue-build" not in kinds
+    assert _one(plan, "queue-hold").reason == "rearm"  # the driver tries again each pass
+    assert any("hold write refused" in a.detail for a in plan.actions if a.kind == "queue-need")
+    # a hold write succeeded after the halt: it lifts (stamps are whole seconds)
+    fresh = Hold(state="open", scope=ME, wave=1, parent=MAIN, opened=NOW - timedelta(hours=1),
+                 refreshed=datetime(2026, 11, 20, 11, 55, tzinfo=UTC), sha="h2" * 20)  # fmt: skip
+    plan = plan_queue(_qs([_batch("a", 1)], {"a": "pr-open"}, records=(record,), hold=fresh))
+    assert not any("hold write refused" in a.detail for a in plan.actions)
+
+
+def test_a_refused_drained_write_is_a_need_beside_the_retry() -> None:
+    record = _record(_open(), {"kind": "queue_drain", "at": AT, "main": MAIN}, _REFUSED)
+    old_open = _hold("open", ago=timedelta(hours=1))
+    plan = plan_queue(_qs([], {}, records=(record,), hold=old_open))
+    assert _one(plan, "queue-drain").sha == MAIN
+    assert any("hold write refused" in a.detail for a in plan.actions if a.kind == "queue-need")
+
+
+def test_a_refused_cleared_write_under_release_none_is_a_need() -> None:
+    record = _record(_open(), {"kind": "queue_drain", "at": AT, "main": MAIN}, _REFUSED)
+    plan = plan_queue(_qs([], {}, records=(record,), config=QueueConfig(release="none"),
+                          hold=_hold("drained", ago=timedelta(hours=1))))  # fmt: skip
+    assert _kinds(plan) == ["queue-need", "queue-cleared"]

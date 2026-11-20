@@ -98,6 +98,10 @@ HOLD_EXPIRES_AFTER = timedelta(hours=24)
 """R18: an `open` hold older than this holds no release, and R27 re-arms it."""
 CLEAR_COMMAND = "git push origin --delete fr-hold/queue"
 """What clears a hold by hand (R19): the ref is deleted, and a deletion starts no release run."""
+HOLD_HALT = "hold write refused"
+"""A `queue_halt` whose detail starts so is the hold's: a hold write the remote still refused
+(R17). It stops landing until a hold write succeeds, not until `queue.land` or the default
+branch changes."""
 
 
 @dataclass(frozen=True)
@@ -355,9 +359,14 @@ def _after_drain(qs: QueueSnapshot, mine: Sequence[QueueRecord]) -> tuple[QueueA
     hold = qs.hold
     if hold is not None and hold.state == "open" and hold.scope == qs.scope:
         which = "between waves" if last.wave is None else f"wave {last.wave}"
-        return (QueueAction("queue-drain", qs.repo, f"push {qs.repo}'s drained hold for {which}: "
-                            "the drain was recorded and the hold never written", wave=last.wave,
-                            sha=drain.main or last.base),)  # fmt: skip
+        push = QueueAction("queue-drain", qs.repo, f"push {qs.repo}'s drained hold for {which}: "
+                           "the drain was recorded and the hold never written", wave=last.wave,
+                           sha=drain.main or last.base)  # fmt: skip
+        halt = hold_halt(last, qs)
+        if halt is None:
+            return (push,)
+        return (push, QueueAction("queue-need", qs.repo, _hold_halt_need(qs, halt),
+                                  wave=last.wave))  # fmt: skip
     if (hold is None or hold.state == "cleared") and not any(
         isinstance(e, QueueClearedEvent) for e in last.events
     ):
@@ -542,29 +551,71 @@ def queue_landed(records: Sequence[QueueRecord]) -> frozenset[str]:
     )
 
 
+def is_hold_halt(event: QueueHaltEvent) -> bool:
+    return event.detail.startswith(HOLD_HALT)
+
+
+def hold_halt_live(record: QueueRecord, hold: Hold | None) -> QueueHaltEvent | None:
+    """The last hold-write halt of *record*, while no hold write has succeeded after it (the
+    hold reads a `refreshed` at or after the halt: the hold's stamps have whole seconds)."""
+    halt = next(
+        (e for e in reversed(record.events) if isinstance(e, QueueHaltEvent) and is_hold_halt(e)),
+        None,
+    )
+    if halt is None:
+        return None
+    if hold is not None and hold.refreshed is not None:
+        if hold.refreshed >= halt.at.replace(microsecond=0):
+            return None
+    return halt
+
+
+def hold_halt(record: QueueRecord, qs: QueueSnapshot) -> QueueHaltEvent | None:
+    """The hold-write halt that still stops *record*'s queue (R17); an unread hold keeps it."""
+    return hold_halt_live(record, qs.hold)
+
+
 def live_halt(record: QueueRecord, qs: QueueSnapshot) -> QueueHaltEvent | None:
     """The halt that still stops *record*'s queue (R11, R22, R34): its last `queue_halt`,
     while `queue.land` is the one it was written under and the default branch has not
     moved from where it stood (an unread base keeps it). None when there is none, or the
-    operator has acted on it."""
-    halt = next((e for e in reversed(record.events) if isinstance(e, QueueHaltEvent)), None)
-    if halt is None or halt.land != qs.config.land:
-        return None
-    if halt.main and qs.base and qs.base != halt.main:
-        return None
-    return halt
+    operator has acted on it. A hold-write halt (`hold_halt`) is lifted by a hold write
+    instead, and is the one that shows when no other halt does."""
+    halt = next(
+        (e for e in reversed(record.events)
+         if isinstance(e, QueueHaltEvent) and not is_hold_halt(e)),
+        None,
+    )  # fmt: skip
+    if (
+        halt is not None
+        and halt.land == qs.config.land
+        and not (halt.main and qs.base and qs.base != halt.main)
+    ):
+        return halt
+    return hold_halt(record, qs)
 
 
 def _halted(record: QueueRecord, qs: QueueSnapshot, halt: QueueHaltEvent) -> QueuePlan:
     """A halted queue builds and lands nothing; the operator owns it (R28)."""
-    detail = (
-        f"{qs.repo}'s merge queue is {halt.state} and lands nothing: {halt.detail}. It "
-        "goes on once you change `queue.land` in .fr/triage.yaml or move the default "
-        "branch (a fix by hand); every combination is then rebuilt"
-    )
+    if is_hold_halt(halt):
+        detail = _hold_halt_need(qs, halt)
+    else:
+        detail = (
+            f"{qs.repo}'s merge queue is {halt.state} and lands nothing: {halt.detail}. It "
+            "goes on once you change `queue.land` in .fr/triage.yaml or move the default "
+            "branch (a fix by hand); every combination is then rebuilt"
+        )
     rep = replay(record)
     need = QueueAction("queue-need", qs.repo, detail, wave=record.wave)
     return QueuePlan(qs.repo, "open", record.wave, (need,), rep.order)
+
+
+def _hold_halt_need(qs: QueueSnapshot, halt: QueueHaltEvent) -> str:
+    return (
+        f"{qs.repo}'s merge queue lands nothing: {halt.detail}. The driver tries the hold "
+        "write again each pass and the queue goes on once one succeeds; if the remote will "
+        "never accept it, fix the push permission or the branch rule for `fr-hold/**`"
+    )
 
 
 def _verdict(combo: Combo, qs: QueueSnapshot) -> SlotCheck:
@@ -858,6 +909,9 @@ def _plan_releasing(mine: Sequence[QueueRecord], qs: QueueSnapshot) -> QueuePlan
     hold = qs.hold
     wave = mine[-1].wave if mine else None
     actions: list[QueueAction] = []
+    halt = hold_halt(mine[-1], qs) if mine else None
+    if halt is not None:
+        actions.append(QueueAction("queue-need", qs.repo, _hold_halt_need(qs, halt), wave=wave))
     if hold is not None and qs.config.release == "none":
         actions.append(QueueAction("queue-cleared", qs.repo, f"{qs.repo}'s release is none: "
                                    "clear the drained hold", wave=wave))  # fmt: skip

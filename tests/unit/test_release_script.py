@@ -2901,3 +2901,64 @@ def test_the_prepare_job_with_a_held_hold_reports_no_cut_and_clears_nothing(
     assert gh_out.read_text().strip() == "cut=false"
     held = world.origin_hold()
     assert held is not None and held[0] == sha
+
+
+def test_the_clearing_commit_is_a_merge_whose_second_parent_is_the_drained_hold(
+    world: World,
+) -> None:
+    """p4-r1: the push that clears is a fast-forward, so a remote that forbids non-fast-forward
+    updates takes it; the first parent keeps its meaning, the drained main."""
+    world.fragment("fix-a", "patch", "fix the thing")
+    main = _tip(world)
+    drained = world.hold("drained")
+    assert world.run() == 0
+    sha, _ = world.origin_hold()  # type: ignore[misc]
+    parents = _git(world.origin, "rev-list", "--parents", "-1", sha).split()[1:]
+    assert parents == [main, drained]
+    _git(world.origin, "merge-base", "--is-ancestor", drained, sha)
+
+
+def test_a_hold_with_two_parents_reads_its_first_parent(world: World) -> None:
+    drained = world.hold("drained")
+    _git(world.other, "fetch", "-q", "origin")
+    main = _git(world.other, "rev-parse", "origin/main").strip()
+    message = _git(world.other, "log", "-1", "--format=%B", drained).strip()
+    merge = _git(world.other, "commit-tree", f"{main}^{{tree}}", "-p", main, "-p", drained,
+                 "-m", message).strip()  # fmt: skip
+    _git(world.other, "push", "-q", "--force", "origin", f"{merge}:refs/heads/fr-hold/queue")
+    hold = release.fetch_hold(world.clone)
+    assert hold is not None and hold.parent == main and hold.sha == merge
+
+
+def test_a_run_the_floor_check_fails_clears_nothing(world: World) -> None:
+    """p4-r4: EXIT_FLOOR is a failed run; only EXIT_OK clears."""
+    world.land(
+        "packages/demo/src/demo/new.py", 'SCOPE_FR_VERSION = ">=4.24.0,<5.0.0"\n', "floor PR"
+    )
+    world.fragment("feat-b", "minor", "the floor's feature")
+    world.fragment("big", "major", "a breaking change")
+    drained = world.hold("drained")
+    assert world.run() == release.EXIT_FLOOR
+    held = world.origin_hold()
+    assert held is not None and held[0] == drained
+
+
+def test_publish_rereads_the_hold_and_pushes_nothing_when_one_opened_during_the_suite(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """p4-r3: prepare read no hold, the suite ran, a queue opened its hold on the staged base:
+    publish does not release over it."""
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    sha = world.hold("open")  # opened on the staged base, after prepare read the ref
+    tip = _tip(world)
+    capsys.readouterr()
+
+    assert _publish(world, out, plan) == 0
+
+    assert _tip(world) == tip and world.origin_tags() == [f"v{BASE}"]
+    assert _gh_writes(world) == []
+    said = capsys.readouterr().out
+    assert "held: the merge queue of scope" in said and "nothing is pushed" in said
+    held = world.origin_hold()
+    assert held is not None and held[0] == sha  # and it clears nothing

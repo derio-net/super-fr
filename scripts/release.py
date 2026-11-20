@@ -30,9 +30,14 @@ waits, the final `X.Y.Z` consumes the fragments. Versions parse through
    warning; `drained`, `cleared` and no hold never hold. The LAST step of a run that
    finished, a release published or nothing to cut (`_finish_and_clear`), clears a
    `drained` hold whose parent, the drained `main`, this run's base contains: a leased push
-   of a `cleared` commit, with the token the job already holds (`clear_hold`). A superseded
-   run and a failed run clear nothing, and a clear that loses its lease leaves the newer
-   queue's hold alone.
+   of a `cleared` commit, with the token the job already holds (`clear_hold`): the THIRD
+   authenticated push beside the release commit's and the tag's (the hold's fetch stays
+   credential-free). Every hold commit after the first is a merge whose first parent keeps
+   its meaning and whose second is the hold it replaces, so each write is a fast-forward
+   (the first parent is the one read). Only a run that finished (`EXIT_OK`) clears; a
+   superseded run, a held one and a failed one (`EXIT_FLOOR`) clear nothing, and a clear
+   that loses its lease leaves the newer queue's hold alone. `publish` reads the hold again
+   before its push: one opened since `prepare` read it holds the release (nothing is pushed).
 
 1. Fetch and reset to the **tip** of `origin/main`, so a run sees every
    fragment merged before it started.
@@ -547,7 +552,10 @@ def fetch_hold(repo: Path) -> Hold | None:
             "release over a hold that may be open"
         )
     sha = _rev(repo, HOLD_LOCAL)
-    parents = _out(repo, "rev-list", "--parents", "-1", sha).split()[1:]
+    # the FIRST parent only: a write after the first is a merge whose second parent is the
+    # hold it replaced (R17), and only the first has the meaning the checks read
+    first = _git(repo, "rev-parse", "--verify", "--quiet", f"{sha}^1", check=False)
+    parents = [first.stdout.strip()] if first.returncode == 0 else []
     message = _out(repo, "log", "-1", "--format=%B", sha)
     return parse_hold(sha, parents[0] if parents else "", message)
 
@@ -608,7 +616,11 @@ def clear_hold(repo: Path) -> None:
         f"refreshed {now}"
     )
     tree = f"{hold.parent}^{{tree}}"
-    commit = _out(repo, *_bot("commit-tree", tree, "-p", hold.parent, "-m", message)).strip()
+    # a merge: the first parent is the drained main, the second the hold it replaces, so the
+    # push is a fast-forward and a remote that forbids non-fast-forward pushes takes it
+    commit = _out(
+        repo, *_bot("commit-tree", tree, "-p", hold.parent, "-p", hold.sha, "-m", message)
+    ).strip()
     pushed = _git(
         repo, "push", "--quiet", f"--force-with-lease={HOLD_REF}:{hold.sha}", REMOTE,
         f"{commit}:{HOLD_REF}", check=False, auth=True,
@@ -1220,6 +1232,12 @@ def publish(repo: Path, staged: Staged, cmds: Commands) -> int:
         return _finish_and_clear(repo, cmds)
     if tip != staged.base_sha:
         return _superseded(staged, tip)  # a superseded run clears nothing (R18)
+    held = check_hold(repo, cmds)  # a hold opened during the suite holds the release too
+    if held is not None:
+        print(held_message(held, None))
+        print(f"{RELEASE_PREFIX}{staged.version} was staged before the hold opened: "
+              "nothing is pushed")  # fmt: skip
+        return EXIT_OK
     if push(repo) == "race":
         return _superseded(staged, fetch_origin(repo))
     kind = "an RC, no fragment consumed" if staged.rc else f"{len(staged.fragments)} fragment(s)"
@@ -1228,11 +1246,13 @@ def publish(repo: Path, staged: Staged, cmds: Commands) -> int:
 
 
 def _finish_and_clear(repo: Path, cmds: Commands) -> int:
-    """`finish`, then, as the last step of a run that finished, clear a drained hold its
-    base covers (R17, R18). A failure in `finish` raises past the clear: a failed run
-    never clears the hold."""
+    """`finish`, then, as the last step of a run that FINISHED (`EXIT_OK`: a release published,
+    or nothing to cut), clear a drained hold its base covers (R17, R18). A run `finish`
+    reports as failed (`EXIT_FLOOR`: tagged and released, but a floor names another release)
+    clears nothing, and a failure in `finish` raises past the clear."""
     code = finish(repo, cmds)
-    clear_hold(repo)
+    if code == EXIT_OK:
+        clear_hold(repo)
     return code
 
 

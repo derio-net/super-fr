@@ -706,8 +706,9 @@ untagged RC at HEAD (a failed tag push) is tagged on the next run.
 `FR_RELEASE_STATUS_TOKEN` is the workflow's `github.token`, so it also carries
 the `prepare` job's contents and issues write; it reaches only the `gh` read,
 never `fr` or repo code, and `publish` holds only `GH_TOKEN`. Exactly these calls
-authenticate: the `gh` read, the `gh release` and `gh issue` writes, and the two
-pushes. The bump, `uv lock --check`, the migration, `fr`'s decision and every
+authenticate: the `gh` read, the `gh release` and `gh issue` writes, the two pushes
+(the release commit and the tag) and the leased push of a `cleared` merge-queue hold (see
+below; the hold's fetch stays credential-free). The bump, `uv lock --check`, the migration, `fr`'s decision and every
 other git command run credential-free; the suite jobs get a read-only
 `GITHUB_TOKEN`, used only by checkout and never persisted, and no forge token in
 the suite's env.
@@ -716,13 +717,19 @@ wave queue is landing keeps one ref, `refs/heads/fr-hold/queue`, a commit whose 
 `fr-hold: <open|drained|cleared> scope <id> wave <N|-> opened <ISO> refreshed <ISO>`
 (`fr.triage.wave_queue.parse_hold`). The driver pushes it (`queue_exec`'s `push_hold`, the one
 leased hold writer): `open` at queue open and refreshed once an hour, `drained` after the last
-landing, `cleared` itself under `queue.release: none`. While it is `open` and was refreshed
+landing, `cleared` itself under `queue.release: none`. Every write after the first is a merge
+commit (first parent: the base, or the drained `main`; second: the hold it replaces), so each push
+is a fast-forward; readers read the first parent only. A write the remote refuses is a
+`queue_halt` whose detail starts `hold write refused` (`wave_queue.hold_halt`): the queue lands
+nothing and shows a Need until a hold write succeeds. While it is `open` and was refreshed
 within 24 hours, `release.py` cuts nothing (RC or final; `--version` too) and `fr release
 status` reports the repo held (`fr.release_status.hold_verdict`, from the `hold` key of its
 facts). The run that finishes, `prepare` when it cuts nothing or `publish` after its push,
-clears a `drained` hold its base contains with a leased push of a `cleared` commit; a
-superseded or failed run clears nothing. `release.yml` also runs on pushes to `fr-hold/**`
-(`prepare` skips a deletion), so every drain starts a release.
+clears a `drained` hold its base contains with a leased push of a `cleared` commit (the third
+authenticated push); only a run that finished (`EXIT_OK`) clears, and a superseded, held or
+failed (`EXIT_FLOOR`) one does not. `publish` reads the hold again before its push. `release.yml`
+also runs on pushes to `fr-hold/**`, but `prepare` runs only for a `drained` hold's commit message
+and never for a deletion, so every drain starts a release and no other hold write does.
 
 An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
 `X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one

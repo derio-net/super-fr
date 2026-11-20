@@ -141,6 +141,7 @@ def test_the_json_shape_is_pinned() -> None:
         ],
         "held": None,  # the queue hold (R18): additive, schema 1 stays
         "warnings": [],
+        "hold_unknown": None,
     }
 
 
@@ -211,6 +212,7 @@ class FakeClient:
 def _install(monkeypatch: pytest.MonkeyPatch, client: Any) -> None:
     monkeypatch.setattr(release_cmd, "client_for_url", lambda url: client)
     monkeypatch.setattr(release_cmd, "owed_rows_reader", lambda root: lambda branch: {})
+    monkeypatch.setattr(release_cmd, "_hold_facts", lambda root: (None, None))  # no origin here
 
 
 def test_status_json_lists_the_waiting_prs_since_the_last_final_tag(
@@ -252,6 +254,7 @@ def test_status_text_names_each_waiting_pr_its_gate_and_owed_rows(
     monkeypatch.setattr(
         release_cmd, "owed_rows_reader", lambda root: lambda branch: {"devops": ("row-x",)}
     )
+    monkeypatch.setattr(release_cmd, "_hold_facts", lambda root: (None, None))
 
     result = CliRunner().invoke(app, ["release", "status", "--repo", REPO])
 
@@ -424,3 +427,71 @@ def test_from_json_reports_the_hold_and_exits_clean(
     assert data["warnings"] == []
     text = CliRunner().invoke(app, ["release", "status", "--from-json", str(facts)])
     assert "held: the merge queue of scope s-9 (wave 2)" in text.output
+
+
+def test_a_naive_refresh_stamp_is_an_unreadable_hold_that_holds_with_a_warning() -> None:
+    """p4-r7: a stamp with no zone cannot be compared with the clock; it must not raise (the
+    CLI would report a malformed PR record) but hold, fail closed, naming the hold."""
+    held, warnings = hold_verdict(
+        {"state": "open", "scope": "s-1", "wave": 3, "refreshed": "2026-11-20T11:00:00"}, _NOW
+    )
+    assert held is not None and held.scope == "s-1"
+    (warning,) = warnings
+    assert (
+        "s-1" in warning and "unreadable refresh time" in warning and "holds the release" in warning
+    )
+    held, warnings = hold_verdict({"state": "open", "scope": "s-2", "refreshed": "garbage"}, _NOW)
+    assert held is not None and "s-2" in warnings[0] and "unreadable" in warnings[0]
+
+
+def test_from_json_with_a_naive_stamp_holds_instead_of_a_malformed_pr_record(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(release_cmd, "owed_rows_reader", lambda root, ref=None: lambda b: {})
+    facts = _facts(checkout)
+    doc = json.loads(facts.read_text())
+    doc["hold"] = {"state": "open", "scope": "s-9", "wave": 2, "refreshed": "2026-11-20T11:00:00"}
+    facts.write_text(json.dumps(doc))
+    result = CliRunner().invoke(app, ["release", "status", "--from-json", str(facts), "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["held"]["scope"] == "s-9" and "unreadable refresh time" in data["warnings"][0]
+
+
+def test_the_forge_path_reports_an_unreadable_hold_as_unknown_never_as_none(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p4-r5: the fixture has no origin, so the hold cannot be read; the status says whether
+    a queue holds the release is unknown and that no final can be confirmed."""
+    monkeypatch.setattr(release_cmd, "client_for_url", lambda url: FakeClient([], {}))
+    monkeypatch.setattr(release_cmd, "owed_rows_reader", lambda root: lambda branch: {})
+    result = CliRunner().invoke(app, ["release", "status", "--json", "--repo", REPO])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout[result.stdout.index("{") :])
+    assert "no final can be confirmed" in data["warnings"][-1]
+    assert data["hold_unknown"] and data["held"] is None
+    text = CliRunner().invoke(app, ["release", "status", "--repo", REPO])
+    assert "unknown: the merge queue hold could not be read" in text.output
+    assert "no final can be confirmed" in text.output
+    assert "assuming there is none" not in text.output
+    assert "a final may be cut" not in text.output
+
+
+def test_the_forge_path_reads_a_real_hold_from_origin(
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    _git(checkout, "remote", "add", "origin", str(origin))
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _git(checkout, "commit", "-q", "--allow-empty", "-m",
+         f"fr-hold: open scope s-5 wave 2 opened {stamp} refreshed {stamp}")  # fmt: skip
+    _git(checkout, "push", "-q", "origin", "HEAD:refs/heads/fr-hold/queue")
+    _git(checkout, "reset", "-q", "--hard", "HEAD~1")
+    monkeypatch.setattr(release_cmd, "client_for_url", lambda url: FakeClient([], {}))
+    monkeypatch.setattr(release_cmd, "owed_rows_reader", lambda root: lambda branch: {})
+    result = CliRunner().invoke(app, ["release", "status", "--json", "--repo", REPO])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout[result.stdout.index("{") :])
+    assert data["held"]["scope"] == "s-5" and data["held"]["wave"] == 2
+    assert data["hold_unknown"] is None

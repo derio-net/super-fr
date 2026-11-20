@@ -111,6 +111,7 @@ class ReleaseStatus:
     waiting: tuple[Waiting, ...]
     held: Held | None = None
     warnings: tuple[str, ...] = ()
+    hold_unknown: str | None = None  # why the hold could not be read: no final can be confirmed
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -121,6 +122,7 @@ class ReleaseStatus:
             "waiting": [w.to_json() for w in self.waiting],
             "held": None if self.held is None else self.held.to_json(),
             "warnings": list(self.warnings),
+            "hold_unknown": self.hold_unknown,
         }
 
 
@@ -138,11 +140,21 @@ def hold_verdict(
     wave = hold.get("wave")
     refreshed = hold.get("refreshed")
     when: datetime | None = None
+    warnings: tuple[str, ...] = ()
     if refreshed:
         try:
             when = _when(str(refreshed))
         except ValueError:
             when = None
+        if when is not None and when.tzinfo is None:
+            when = None  # a stamp with no zone cannot be compared with the clock
+        if when is None:
+            warnings = (
+                f"the merge queue hold of scope {scope} has an unreadable refresh time "
+                f"({str(refreshed)!r}): it is treated as open, so it holds the release until "
+                "its queue writes it again or it is cleared with "
+                "`git push origin --delete fr-hold/queue`",
+            )
     if when is not None and now - when > HOLD_FRESH:
         return None, (
             f"the merge queue hold of scope {scope} was last refreshed {refreshed}, more than "
@@ -150,7 +162,7 @@ def hold_verdict(
             "`git push origin --delete fr-hold/queue`",
         )
     return Held(scope, wave if isinstance(wave, int) else None,
-                str(refreshed) if refreshed else None), ()  # fmt: skip
+                str(refreshed) if refreshed else None), warnings  # fmt: skip
 
 
 def _when(stamp: str) -> datetime:
@@ -165,11 +177,13 @@ def release_status(
     forge: ReleaseForge,
     owed_rows: Callable[[str], OwedRows | None],
     hold: Mapping[str, Any] | None = None,
+    hold_unread: str | None = None,
     now: datetime | None = None,
 ) -> ReleaseStatus:
     """Every PR merged after *since* (the last final tag's commit time; None: every
     merged PR) whose labels hold a post-merge gate, oldest merge first. Only PRs merged
-    after *since* have their labels read. *hold* is the repo's merge queue hold, if any."""
+    after *since* have their labels read. *hold* is the repo's merge queue hold, if any;
+    *hold_unread* says why it could not be read, which leaves the hold unknown."""
     after = _when(since) if since else None
     recent = [
         p
@@ -194,4 +208,10 @@ def release_status(
             )
         )
     held, warnings = hold_verdict(hold, now)
-    return ReleaseStatus(repo, last_final, since, tuple(waiting), held, warnings)
+    if hold_unread is not None:
+        warnings = (
+            *warnings,
+            f"the merge queue hold could not be read ({hold_unread}): whether a queue holds "
+            "the release is unknown, so no final can be confirmed",
+        )
+    return ReleaseStatus(repo, last_final, since, tuple(waiting), held, warnings, hold_unread)

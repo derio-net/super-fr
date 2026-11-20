@@ -47,7 +47,7 @@ name: Release
 # publishes nothing. The suite makes this workflow long; .github/ci-budget.yaml
 # gives it its own budget.
 #
-# The merge queue's hold (R17-R19): while `refs/heads/fr-hold/queue` reads `open` and was
+# The merge queue's hold (R17-R19; only a `drained` push to it starts a run): while `refs/heads/fr-hold/queue` reads `open` and was
 # refreshed within 24 hours, release.py cuts nothing, RC or final, and a `--version` run
 # is held too. The run that finishes, `prepare` when it cuts nothing or `publish` after
 # the push, clears a `drained` hold its base contains with a leased push of a `cleared`
@@ -108,9 +108,15 @@ concurrency:
 # release commit already landed skips the push and only tags.
 jobs:
   prepare:
-    # A deleted hold ref is a push event too: it is no reason to release. Every other job
-    # needs `prepare`'s `cut` output, so skipping it skips them all.
-    if: github.event.deleted != true
+    # A deleted hold ref is a push event too: it is no reason to release. Every push to the
+    # hold ref is one, but only the `drained` one (the driver's, after a wave's last landing)
+    # needs a run; an open, refresh or cleared push starts none. Pushes to main, the schedule
+    # and a dispatch are unchanged. Every other job needs `prepare`'s `cut` output, so
+    # skipping `prepare` skips them all.
+    if: >-
+      github.event.deleted != true &&
+      (!startsWith(github.ref, 'refs/heads/fr-hold/') ||
+      startsWith(github.event.head_commit.message, 'fr-hold: drained'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

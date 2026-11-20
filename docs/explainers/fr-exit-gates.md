@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake)
+reviewed: 2026-11-20 added the merge queue's hold on a release (wave merge queue)
 ---
 
 ## What work cannot finish in the pull request?
@@ -124,7 +124,11 @@ labels therefore means candidates only, until someone fixes it. An explicit `--v
 releases a final without asking the ledger: it is the operator's override, not a way around
 a hold.
 
-`fr release status` lists what is waiting.
+A merge queue can hold a release too. While a repository's queue lands a wave, it keeps a
+hold on the release. The script then cuts nothing, candidate or final, so a half-landed wave
+is never released. When the queue is done, the release clears the hold. A hold that nobody
+refreshed for a day is ignored. `fr release status` lists what is waiting, and says when a
+hold is the reason that nothing is cut.
 
 ## What about old work, and the DevOps stage?
 

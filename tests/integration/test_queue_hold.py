@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 from fr.triage import queue_exec
-from fr.triage.model import QueueClearedEvent, QueueDrainEvent
+from fr.triage.model import QueueClearedEvent, QueueDrainEvent, QueueHaltEvent, QueueLandEvent
 from fr.triage.queue_exec import read_hold
 from fr.triage.wave_queue import HOLD_REF, QueueConfig, QueueSnapshot, hold_message, plan_queue
 
@@ -272,3 +272,163 @@ def test_the_hold_commit_carries_the_base_tree_and_one_parent(tmp_path: Path) ->
     assert git(d.w.origin, "rev-parse", f"{sha}^{{tree}}") == git(
         d.w.origin, "rev-parse", f"{parent}^{{tree}}")  # fmt: skip
     assert git(d.w.origin, "rev-list", "--parents", "-1", sha).split()[1:] == [parent]
+
+
+# ------------------------------------------------------------ fast-forward writes, refusals
+
+
+def _deny_non_ff(d: HoldDriver) -> None:
+    """A remote whose ruleset forbids non-fast-forward updates of the hold: the PR branches
+    the queue lands are rewritten by design, so the rule is the hold's alone."""
+    hook = d.w.origin / "hooks" / "pre-receive"
+    hook.write_text(
+        "#!/bin/sh\nzero=0000000000000000000000000000000000000000\n"
+        "while read old new ref; do\n"
+        '  case "$ref" in refs/heads/fr-hold/*)\n'
+        '    [ "$old" = "$zero" ] || git merge-base --is-ancestor "$old" "$new" || {\n'
+        '      echo "GH013: non-fast-forward refused" >&2; exit 1; } ;; esac\n'
+        "done\nexit 0\n"
+    )
+    hook.chmod(0o755)
+
+
+def _parents(w: World, sha: str) -> list[str]:
+    return git(w.origin, "rev-list", "--parents", "-1", sha).split()[1:]
+
+
+def test_every_hold_write_is_a_fast_forward_a_no_force_push_remote_accepts(
+    tmp_path: Path,
+) -> None:
+    d = _driver(tmp_path, QueueConfig(ci="push"))  # stays open: the hold is refreshed
+    _deny_non_ff(d)
+    d.one_pass()
+    first = d.w.remote(HOLD_REF)
+    base = d.records[-1].base
+    d.clock += timedelta(hours=2)
+    d.one_pass()  # refresh
+    second = d.w.remote(HOLD_REF)
+    assert second != first
+    # a merge: the first parent is the base, the second the hold it replaces
+    assert _parents(d.w, second) == [base, first]
+    git(d.w.origin, "merge-base", "--is-ancestor", first, second)
+    git(d.w.origin, "update-ref", "-d", HOLD_REF)  # vanished: re-armed on the base, as new
+    d.one_pass()
+    assert d.w.remote(HOLD_REF) is not None
+
+
+def test_open_refresh_drained_cleared_all_push_under_deny_non_fast_forwards(
+    tmp_path: Path,
+) -> None:
+    d = _driver(tmp_path, QueueConfig(ci="none", release="none"))
+    _deny_non_ff(d)
+    seen: list[str] = []
+    for _ in range(8):
+        d.one_pass()
+        sha = d.w.remote(HOLD_REF)
+        if sha is not None and (not seen or seen[-1] != sha):
+            seen.append(sha)
+    assert _hold_of(d.w)[2].startswith(f"fr-hold: cleared scope {SCOPE} wave 1 opened ")
+    history = git(d.w.origin, "log", "--format=%s", seen[-1]).splitlines()
+    states = [line.split()[1] for line in history if line.startswith("fr-hold: ")]
+    assert states[:3] == [
+        "cleared",
+        "drained",
+        "open",
+    ]  # one line of history: open, drained, cleared
+    for earlier, later in zip(seen, seen[1:], strict=False):
+        git(d.w.origin, "merge-base", "--is-ancestor", earlier, later)
+    # the first parent keeps its meaning: the drained main
+    assert _parents(d.w, seen[-1])[0] == d.w.main()
+    assert read_hold(d.w.checkout).parent == d.w.main()  # type: ignore[union-attr]
+
+
+def _refuse_hold_pushes(origin: Path) -> Path:
+    hook = origin / "hooks" / "pre-receive"
+    hook.write_text(
+        "#!/bin/sh\nwhile read old new ref; do\n"
+        '  case "$ref" in refs/heads/fr-hold/*) echo "GH013: refused" >&2; exit 1;; esac\n'
+        "done\nexit 0\n"
+    )
+    hook.chmod(0o755)
+    return hook
+
+
+def _hold_needs(d: HoldDriver) -> list[str]:
+    return [a.detail for a in d.last_plan.actions if a.kind == "queue-need"]
+
+
+def test_a_hold_the_remote_refuses_halts_landing_with_a_need_until_one_succeeds(
+    tmp_path: Path,
+) -> None:
+    d = _driver(tmp_path, QueueConfig(ci="none"))
+    hook = _refuse_hold_pushes(d.w.origin)
+    main = d.w.main()
+    for _ in range(4):
+        d.one_pass()
+    assert d.w.checkout.remote_sha(HOLD_REF) is None and d.w.main() == main  # nothing landed
+    assert not d.events(QueueLandEvent)
+    assert any("hold write refused" in n for n in _hold_needs(d))
+    assert len([e for e in d.events(QueueHaltEvent)]) == 1  # recorded once, not every pass
+    hook.unlink()  # the rule is fixed
+    for _ in range(8):
+        d.one_pass()
+    assert d.events(QueueLandEvent) and d.events(QueueDrainEvent)
+    assert "fr-hold: drained" in _hold_of(d.w)[2]
+
+
+def test_a_refused_drained_write_is_a_need_not_a_wedge(tmp_path: Path) -> None:
+    d = _driver(tmp_path, QueueConfig(ci="none"))
+    for _ in range(3):
+        d.one_pass()  # open, build, land
+    hook = _refuse_hold_pushes(d.w.origin)
+    for _ in range(3):
+        d.one_pass()  # the drain is recorded, its hold push refused
+    assert d.events(QueueDrainEvent) and "fr-hold: open" in _hold_of(d.w)[2]
+    needs = _hold_needs(d)
+    assert any("hold write refused" in n and "drained hold" in n for n in needs)
+    hook.unlink()
+    d.one_pass()
+    d.one_pass()
+    assert "fr-hold: drained" in _hold_of(d.w)[2]
+    assert not any("hold write refused" in n for n in _hold_needs(d))
+
+
+def test_a_refused_cleared_write_under_release_none_is_a_need(tmp_path: Path) -> None:
+    d = _driver(tmp_path, QueueConfig(ci="none", release="none"))
+    for _ in range(3):
+        d.one_pass()
+    hook = _refuse_hold_pushes(d.w.origin)
+    for _ in range(3):
+        d.one_pass()
+    assert any("hold write refused" in n for n in _hold_needs(d))
+    hook.unlink()
+    for _ in range(3):
+        d.one_pass()
+    assert "fr-hold: cleared" in _hold_of(d.w)[2]
+
+
+def test_a_writer_taking_the_hold_between_the_check_and_the_lease_stops_the_queue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _driver(tmp_path, QueueConfig(ci="none"))
+    git(d.w.seed, "fetch", "--quiet", "origin")
+    parent = d.w.main()
+    foreign = git(d.w.seed, "commit-tree", f"{parent}^{{tree}}", "-p", parent, "-m",
+                  hold_message("open", "s-22222222", 2, d.clock, d.clock))  # fmt: skip
+    real = queue_exec.push_hold
+
+    def racing(checkout: object, sha: str, lease: str | None) -> None:
+        git(d.w.seed, "push", "--quiet", "origin", f"{foreign}:{HOLD_REF}")  # the other writer
+        real(checkout, sha, lease)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(queue_exec, "push_hold", racing)
+    lines = d.one_pass()
+    monkeypatch.undo()
+    assert any("another writer moved the hold: not written, never forced" in x for x in lines)
+    assert d.w.remote(HOLD_REF) == foreign  # never forced over
+    main = d.w.main()
+    for _ in range(4):
+        d.one_pass()
+    assert d.w.main() == main and not d.events(QueueLandEvent)  # R31: it lands nothing
+    held = d.last_plan.actions[0]  # `_held`: the repo's hold is another scope's, said each pass
+    assert held.kind == "queue-held" and "s-22222222" in held.detail

@@ -869,13 +869,17 @@ class Checkout:
         the sha it holds, None when origin has none: the hold's read (R17)."""
         return fetch_ref(self.path, "origin", ref)
 
-    def ref_commit(self, parent: str, message: str) -> str:
+    def ref_commit(self, parent: str, message: str, *, previous: str | None = None) -> str:
         """A commit of *parent*'s tree on *parent* with *message* and fr's fixed identity,
-        written without touching HEAD or any ref: a hold (R17)."""
-        out: str = _run(
-            ["git", "commit-tree", f"{parent}^{{tree}}", "-p", parent, "-m", message],
-            self.path, env=_REF_IDENTITY, timeout=GIT_TIMEOUT_SECONDS,
-        )  # fmt: skip
+        written without touching HEAD or any ref: a hold (R17). With *previous* (the hold
+        commit the ref holds now) it is a merge commit whose SECOND parent is *previous*, so
+        the push that replaces the hold is a fast-forward and a remote that refuses
+        non-fast-forward pushes accepts it; the first parent keeps its meaning."""
+        argv = ["git", "commit-tree", f"{parent}^{{tree}}", "-p", parent]
+        if previous is not None and previous != parent:
+            argv += ["-p", previous]
+        out: str = _run(argv + ["-m", message], self.path, env=_REF_IDENTITY,
+                        timeout=GIT_TIMEOUT_SECONDS)  # fmt: skip
         return out.strip()
 
     def release_commits(self, base: str, head: str) -> tuple[tuple[str, str], ...]:

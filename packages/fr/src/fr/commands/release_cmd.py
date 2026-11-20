@@ -148,6 +148,7 @@ def _from_forge(root: Path, repo: str | None, host: str | None, limit: int) -> R
     except TriageError as exc:
         _fail(str(exc), 2)
     slug, forge_host = resolve_target(repo, host, root)
+    hold, hold_unread = _hold_facts(root)
     forge = None
     try:
         client = client_for_url(f"https://{forge_host}/{slug}")
@@ -158,7 +159,8 @@ def _from_forge(root: Path, repo: str | None, host: str | None, limit: int) -> R
             since=since,
             forge=forge,
             owed_rows=owed_rows_reader(root),
-            hold=_hold_facts(root),
+            hold=hold,
+            hold_unread=hold_unread,
         )
     except _FORGE_FAILURES as exc:
         _fail(f"cannot read {slug}'s merged PRs on {forge_host}: {exc}", 1)
@@ -171,9 +173,11 @@ def _from_forge(root: Path, repo: str | None, host: str | None, limit: int) -> R
     return status
 
 
-def _hold_facts(root: Path) -> dict[str, Any] | None:
+def _hold_facts(root: Path) -> tuple[dict[str, Any] | None, str | None]:
     """The repo's merge queue hold as `fr release status --from-json` reads it (R18): the
-    ref fetched from origin; None when there is none, or it cannot be read (said)."""
+    ref fetched from origin; `(None, None)` when there is none. A hold that cannot be read
+    is `(None, why)`, never an absent one: whether a queue holds the release is then
+    unknown (the status says so, and that no final can be confirmed)."""
     from fr.triage.errors import TriageError
     from fr.triage.gitseam import Checkout
     from fr.triage.queue_exec import read_hold
@@ -181,15 +185,13 @@ def _hold_facts(root: Path) -> dict[str, Any] | None:
     try:
         hold = read_hold(Checkout(root))
     except TriageError as exc:
-        typer.echo(f"fr release status: could not read the queue hold ({exc}); "
-                   "assuming there is none", err=True)  # fmt: skip
-        return None
+        return None, str(exc)
     if hold is None:
-        return None
+        return None, None
     return {
         "state": hold.state, "scope": hold.scope, "wave": hold.wave,
         "refreshed": hold.refreshed.isoformat() if hold.refreshed else None,
-    }  # fmt: skip
+    }, None  # fmt: skip
 
 
 def _last_final(root: Path) -> tuple[str | None, str | None]:
@@ -243,6 +245,12 @@ def status_command(
     typer.echo(f"last final: {status.last_final or '(none)'}")
     for warning in status.warnings:
         typer.echo(f"warning: {warning}", err=True)
+    if status.hold_unknown is not None:
+        typer.echo(
+            f"unknown: the merge queue hold could not be read ({status.hold_unknown}), "
+            "so no final can be confirmed"
+        )
+        return
     if status.held is not None:
         typer.echo(status.held.line())
         return

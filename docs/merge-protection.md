@@ -7,7 +7,7 @@ covers:
   - scripts/configure-main-protection.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-17 added the Issue intake section (batch triage-intake); dispatched runs have their own concurrency group; a missing GitHub Release is created on the next run (batch release-truth)
+reviewed: 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
 ---
 
 # Merge protection for `main`
@@ -60,8 +60,10 @@ The release token is a ruleset bypass actor, so it can push to `main` past the
 rules. It is scoped to this repo with contents and issues write only. It is minted
 per job and revoked when the job ends, and never persisted in the checkout's git
 config. It is kept from the staged test run (`release.py` strips every forge
-token from that subprocess). The token authenticates the two `git push` calls and the
-`gh release` and `gh issue` writes. Every other git command runs credential-free.
+token from that subprocess). The token authenticates the two `git push` calls (the release
+commit and the tag), a third push that clears a drained merge queue hold, and the
+`gh release` and `gh issue` writes. Every other git command runs credential-free, and
+that includes the fetch of the hold.
 
 Anything else that can run in the release job could still read it, so the job
 runs only trusted code from `main`.
