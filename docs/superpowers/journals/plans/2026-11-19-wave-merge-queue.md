@@ -611,3 +611,97 @@ hold_verdict treats a naive or unparseable stamp as an unreadable hold that hold
 ### p4-r8-resolved · finding [fixed] · resolves p4-r8: no test for a remote-refused hold push or the race between the free check and the leased write (phase 4)
 
 test_queue_hold.py covers a remote refusing hold pushes and a writer taking the hold between the check and the lease (lease fails, nothing lands, reported as queue-held naming the other scope).
+
+<!-- fr:journal kind=decision scope=plan id=p5-fr-update-branch-read-only created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-fr-update-branch-read-only · decision · The fr-update branch of the approval verdict stays, read-only, for stored judgements (supersedes p1-fr-updates-keep-approval's carry-over for new work) (phase 5)
+
+With the train and the update path gone nothing writes an `update` event, so no new approval can ever
+be carried across an fr update. The branch of `approval_verdict` that follows `reaches()` over
+UpdateEvents is unreachable for anything written after this change, but a `judgements.yaml` written
+before it still holds approvals recorded without a patch-id and the updates that followed them, and
+a PR open on one of them must judge as it did. `reaches`, `UpdateEvent.patch_id` and
+`_pinned_ids` are therefore kept as readers only (docstring says so); the writers are removed:
+`update_recorder`, `MergeContext.on_update` and `recorded`, `_dequeue_unapproved` and its enqueue
+event. p1-fr-updates-record-patch-id described a behaviour that no longer exists; its reading stays.
+
+<!-- fr:journal kind=decision scope=plan id=p5-every-repo-is-a-queue-repo created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-every-repo-is-a-queue-repo · decision · A repo with no `queue:` block gets the default block, whose `ci` is unset, so the queue refuses it and says what to add (phase 5)
+
+There is no train to fall back to, so `_Driver._queue_block` returns `QueueBlock()` for a repo with
+none and `queue_refusal` (R7) holds it with "add ci: push under queue:". `Snapshot.wave_queues` lists
+every repo. The tests that drove the train with no config now run on a `RecordingQueue` executor
+stand-in (the real one runs over real git in tests/integration/test_queue_drive_cmd.py).
+A base whose `base_rules().merge_queue` is true is held first, before any `queue.ci` complaint,
+because no setting of fr's queue makes it work (R22).
+
+<!-- fr:journal kind=decision scope=plan id=p5-other-entries-are-admitted-not-merged created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-other-entries-are-admitted-not-merged · decision · The pure pass admits a non-batch PR under its trust rule (`Admitted`); the queue plans, builds and lands it (phase 5)
+
+`_collected_step` (review_reasons empty), the attributed archive PR (`archive_allowed`) and
+`_export_row` (the recorded head) return `Admitted`; a housekeeping PR (`chore/ops-<slug>`) is
+admitted by the command only with `approved-fr` recorded as a queue `approval`
+(`approval.settle_entry_approval`, the batch rule: pinned to the patch-id, void on a diff change).
+`wave_queue.OtherEntry` carries it into the planner, `<kind>#<pr>` is its key, a close-out is
+always the last entry of its wave (R15) and joins the open wave's queue, every other kind queues
+between waves (R2, R32). `_archive` and `_export_merge` are deleted; the forge merge stays only
+behind `land: merge`. Nothing a later pass needs is lost: `closeout-merged` and `export-reconcile`
+record a landed PR the forge reads MERGED, and an attributed archive PR, which could not be found
+again once it left the open list, is recorded by `QueuePorts.landed` at the landing (rg-6).
+
+<!-- fr:journal kind=decision scope=plan id=p5-wave-drain-waits-on-the-closeout created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-wave-drain-waits-on-the-closeout · decision · A wave drains once its ungated landed batches are closed out; a stalled close-out is a Need (phase 5)
+
+R15 says the queue does not drain until the wave's close-out landed. `batch_drive.wave_closeout_landed`
+derives it from the batches (landed, not gated, not archived, not held by the verb, closeout event
+with `archived` or its collected PR landed by the queue) and `Snapshot.queue_closeouts` still
+overrides it. `wave_queue._closeout_need` says, after `stall_hours` with nothing left to land,
+that the hold stays open on the close-out. The driver does not know a repo's placement (it starts
+close-outs for every repo today), so the wait is uniform: the spec's "under quiet or stealth the
+queue holds batch PRs only" is not applied (see p5-driver-has-no-placement).
+
+<!-- fr:journal kind=discovery scope=plan id=p5-driver-has-no-placement created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-driver-has-no-placement · discovery · The triage driver has no notion of placement, so R15's repo-placement condition on the close-out entry is not enforced (phase 5)
+
+grep finds no `placement` in `fr/triage/batch_drive.py` or `commands/triage_batch_cmd.py`: close-outs
+are collected for every repo whatever keeps its artifacts. A quiet or stealth repo therefore waits
+on its close-out before a wave drains, and its close-out PR, if any, is a queue entry. Whether a
+close-out exists there at all is the close-out verb's, not the queue's. Left to phase 6, which owns
+R15's gating; the Need above makes a stuck wave visible.
+
+<!-- fr:journal kind=decision scope=plan id=p5-batch-merge-is-the-driver-with-the-queue-only created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-batch-merge-is-the-driver-with-the-queue-only · decision · `batch merge` runs the driver's own pass in the foreground with every action but the queue's dropped (phase 5)
+
+R23. `batch_merge_command` builds a `_Driver` with `queue_only=True` (its plan keeps only the held,
+blocked and warn reports, the red hand-back included) and `method_override`, takes the drive lock
+under `--yes`, and loops `run_pass` until every named or pr-open batch landed, is not ready (no
+approval, red, held by a gate, waiting on a later wave's queue) or a pass reported a held queue
+or a Need (exit 1). It polls every 30 s and gives up after an hour of nothing changing. Without
+`--yes` it prints the one pass's plan. A named batch without a valid approval is still refused
+(exit 2) after the pass settled approvals. The queue is left open for the rest of its wave.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-train-scenarios-ported-or-trimmed created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-train-scenarios-ported-or-trimmed · discovery · The four train scenarios were trimmed to what the queue keeps, and the real-git `batch merge` test is gone (phase 5)
+
+merge-train-label-gate.sh keeps the label, the void and the board asks (four passes); merge-train-red-recovery.sh
+keeps the hand-back phases and reads an old `update` event; merge-train-queue.sh now proves the
+forge-queue hold and the `queue.ci` refusal; batch-merge-skip-held.sh keeps the skip and the refusal.
+tests/integration/test_triage_batch_merge_git.py and test_triage_merge_routine_git.py tested the
+update path and the strict-checks exemption, which are gone; the queue's own real-git tests cover
+version slots, relock and conflicts. Acceptance rows amended: five retired, six reworded or
+re-pointed (fr acceptance amend), wave-queue-one-path moved to ci.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-clients-lost-enqueue created=2026-11-20T19:35:29+00:00 phase=5 -->
+### p5-clients-lost-enqueue · discovery · GhClient lost pr_enqueue, pr_dequeue, pr_queue_state and QueueState (phase 5)
+
+Their only callers were the enqueue executor and `_dequeue_unapproved`; `grep -rn "pr_enqueue\|_walk_queue\|merge_ready" packages/`
+now returns nothing. The forge_guard and archive_preview method lists and the gitseam methods only
+the update path used (`commits_behind`, `take_theirs`, `commit_all`) went with them. `BaseRules.merge_queue`
+stays: it is the R22 hold's input.
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-3 created=2026-11-20T19:35:29+00:00 phase=5 lens=security step=implement-phase -->
+### lens-security-3 · lens · The driver now admits non-batch PRs to a queue that lands them by push, on trust rules the old merge step applied (phase 5)
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-20T19:35:29+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+the three admission paths (a collected close-out, an attributed archive PR, an export PR) each returned an Action already; they return one Admitted type instead and nothing was duplicated, so there was nothing to clean
