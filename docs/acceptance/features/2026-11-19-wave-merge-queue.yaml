@@ -325,3 +325,10 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_3_the_session_status_decides
     why: the rule numbers moved when the reupdate rule went
+  - row: merge-train-red-recovery
+    op: set-status
+    base: 3
+    status: ci
+    notes: red_decision, the driver recovery and the board changes; the scenario drives
+      an fr-made red head handed back (never re-updated), hand-back once, needs-you.
+    why: the scenario's phase A now proves the hand-back of an fr-made red head
