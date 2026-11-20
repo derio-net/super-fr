@@ -274,3 +274,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_driver_update_records_its_patch_id_and_a_clean_merge_after_it_keeps_the_approval
     why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_triage_approval.py#test_an_approval_with_no_patch_id_gains_one_while_it_still_holds
+    why: 'p1 review fix: evidence for the reworded row'
