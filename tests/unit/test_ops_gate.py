@@ -24,7 +24,6 @@ from fr.journal.model import (
 )
 from fr.ops import gate as gate_mod
 from fr.ops.evidence import record_op
-from fr.triage.approval import release_marker
 from fr.ops.gate import (
     Gate,
     GateResult,
@@ -35,6 +34,7 @@ from fr.ops.gate import (
     run,
 )
 from fr.run.model import RunState, StepRecord, save_run_state
+from fr.triage.approval import release_marker
 
 from tests.unit.requirements_support import row, write_matrix
 

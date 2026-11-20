@@ -146,8 +146,8 @@ class Migratable:
         return refused
 
 
-_NOT_COPIED = (".git", ".fr-isolation", ".venv", "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache",
-               ".ruff_cache", ".tox")  # fmt: skip
+_NOT_COPIED = (".git", ".fr-isolation", ".venv", "node_modules", "__pycache__", ".mypy_cache",
+               ".pytest_cache", ".ruff_cache", ".tox")  # fmt: skip
 
 
 def validate_artifact(

@@ -116,10 +116,10 @@ from fr.triage.approval import (
     facts_without_label,
     is_approved,
     judge_approval,
+    read_release_marker,
     settle_approvals,
     settle_entry_approval,
     settle_postmerge_done,
-    read_release_marker,
     settle_release,
 )
 from fr.triage.batch import (
@@ -6678,9 +6678,10 @@ class _Driver:
         """R26: the DevOps stage's two labels, settled on the queue's own events as
         `approved-fr` is. A batch PR carrying `fr-queue:release` is recorded as a
         `queue_release` at the patch-id its stage 2 verified (its marker comment; voided, label
-        off, when its diff moved after it); the entries that are released now are returned. A landed barrier's merged
-        PR carrying `fr-queue:postmerge-done` is recorded as a `queue_postmerge_done`, and
-        each still open is mapped to its run id for the Need that names `fr ops gate`.
+        off, when its diff moved after it); the entries that are released now are returned. A
+        landed barrier's merged PR carrying `fr-queue:postmerge-done` is recorded as a
+        `queue_postmerge_done`, and each still open is mapped to its run id for the Need
+        that names `fr ops gate`.
         Nothing is written without --yes."""
         skipped = set(skip)
         scope = scope_id(self.scope)

@@ -193,9 +193,9 @@ class HostCheckout:
             return None
 
     def queue_configured(self, default: str) -> bool:
-        from fr.triage.gitseam import GitError, git
-
         import yaml
+
+        from fr.triage.gitseam import GitError, git
 
         try:
             text = git(["show", f"origin/{default}:.fr/triage.yaml"], self.primary)
