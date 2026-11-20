@@ -26,6 +26,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.safe_spawn import process_start
 from fr.triage.errors import TriageError
 
 RECORD_FILE = "driver.yaml"
@@ -53,7 +54,9 @@ class DriverRecord(BaseModel):
 
     pid: int
     started: datetime | None = None
+    pid_start: str | None = None  # the OS's start time of `pid`: a recycled pid is not it
     supervised: int | None = None  # the supervisor's pid
+    supervised_start: str | None = None  # the OS's start time of the supervisor
     restarts: int = 0
     last_crash: str | None = None
     last_pass: datetime | None = None
@@ -210,7 +213,7 @@ def _current(state_dir: Path) -> DriverRecord:
         return DriverRecord(pid=pid)
     if old.pid == pid:
         return old
-    return old.model_copy(update={"pid": pid, "started": None})
+    return old.model_copy(update={"pid": pid, "started": None, "pid_start": None})
 
 
 def record_supervisor(
@@ -230,11 +233,16 @@ def record_supervisor(
         old = None
     pid = child if child is not None else (old.pid if old else 0)
     base = old if old is not None else DriverRecord(pid=pid)
-    update: dict[str, object] = {"pid": pid, "supervised": supervisor, "restarts": restarts}
+    update: dict[str, object] = {
+        "pid": pid, "supervised": supervisor, "restarts": restarts,
+        "supervised_start": process_start(supervisor),
+    }  # fmt: skip
     if last_crash is not None:
         update["last_crash"] = last_crash
-    if child is not None and (old is None or old.pid != child):
-        update["started"] = None
+    if child is not None:
+        update["pid_start"] = process_start(child)
+        if old is None or old.pid != child:
+            update["started"] = None
     record = base.model_copy(update=update)
     save_record(state_dir, record)
     return record
@@ -244,21 +252,42 @@ def record_start(state_dir: Path, now: datetime, supervisor: int | None) -> Driv
     """A looping driver started (R12, R14): its pid and time, and its supervisor's pid when it
     has one. An unsupervised driver forgets an earlier supervisor's counts; a supervised one
     keeps what that supervisor wrote."""
-    update: dict[str, object] = {"started": now, "supervised": supervisor}
+    update: dict[str, object] = {
+        "started": now,
+        "supervised": supervisor,
+        "pid_start": process_start(os.getpid()),
+    }
     if supervisor is None:
-        update.update(restarts=0, last_crash=None)
+        update.update(restarts=0, last_crash=None, supervised_start=None)
+    else:
+        update["supervised_start"] = process_start(supervisor)
     record = _current(state_dir).model_copy(update=update)
     save_record(state_dir, record)
     return record
 
 
 def record_refusal(
-    state_dir: Path, cause: str, message: str, resume: str, now: datetime, fr_version: str
+    state_dir: Path,
+    cause: str,
+    message: str,
+    resume: str,
+    now: datetime,
+    fr_version: str,
+    *,
+    as_supervisor: bool = False,
 ) -> DriverRecord:
-    """The refusal that stopped this driver, on `driver.yaml` (R8)."""
+    """The refusal that stopped this driver, on `driver.yaml` (R8). The supervisor (*as_supervisor*)
+    records its own, a crash loop, and leaves the driver's pid as the supervisor last wrote it."""
     refusal = LastRefusal(cause=cause, message=message, at=now, fr_version=fr_version,
                           resume=resume)  # fmt: skip
-    record = _current(state_dir).model_copy(update={"last_refusal": refusal})
+    base = _current(state_dir)
+    if as_supervisor:
+        try:
+            old = load_record(state_dir)
+        except TriageError:
+            old = None
+        base = old if old is not None else DriverRecord(pid=0)
+    record = base.model_copy(update={"last_refusal": refusal})
     save_record(state_dir, record)
     return record
 

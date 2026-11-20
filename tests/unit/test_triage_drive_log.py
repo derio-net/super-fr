@@ -109,3 +109,28 @@ def test_the_supervisors_restart_line_lands_in_the_same_file(tmp_path: Path) -> 
     log = DriveLog(tmp_path)
     log.append("pass", "from the driver", NOW)
     assert [x.split(" ", 2)[1] for x in log.tail()] == ["restart", "pass"]
+
+
+def _hammer(args: tuple[str, int, int]) -> None:
+    directory, worker, count = args
+    log = DriveLog(Path(directory), limit=4000)
+    now = datetime(2026, 11, 19, tzinfo=UTC)
+    for i in range(count):
+        log.append("action", f"w{worker}-{i:04d} " + "p" * 60, now)
+
+
+def test_concurrent_appenders_across_the_limit_never_leave_a_near_empty_previous(
+    tmp_path: Path,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    # separate DriveLog objects and open files, as separate processes have
+    with ThreadPoolExecutor(4) as pool:
+        list(pool.map(_hammer, [(str(tmp_path), w, 120) for w in range(4)]))
+    previous = (tmp_path / "drive.log.1").read_text()
+    current = (tmp_path / "drive.log").read_text()
+    # every rotation moved a (nearly) full file: a double rotation would leave one line
+    assert len(previous) > 4000 - 200
+    assert len(previous.splitlines()) > 20
+    for line in previous.splitlines() + current.splitlines():
+        assert line.endswith("p" * 60)  # no torn line

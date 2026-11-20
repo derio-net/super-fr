@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,7 +42,7 @@ def test_supervise_runs_the_same_arguments_less_supervise_and_takes_no_lock(
 ) -> None:
     seen: dict[str, Any] = {}
 
-    def supervise(args: list[str], target: Path) -> NoReturn:
+    def supervise(args: list[str], target: Path, *rest: object) -> NoReturn:
         seen.update(args=args, target=target)
         raise SystemExit(0)
 
@@ -180,3 +181,64 @@ def test_driver_started_records_the_supervisor_on_driver_yaml(
     triage_batch_cmd._driver_started(StubDriver(tmp_path), None)  # type: ignore[arg-type]
     record = load_record(tmp_path)
     assert record is not None and record.supervised is None and record.restarts == 0
+
+
+# --------------------------------------- the real drive command's interrupt, and its lease
+
+
+def _drive_with_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raiser: Any, *args: str
+) -> tuple[Any, StubDriver]:
+    driver = StubDriver(tmp_path)
+    driver.released = 0  # type: ignore[attr-defined]
+    driver.release_lease = lambda: setattr(driver, "released", driver.released + 1)  # type: ignore[attr-defined,method-assign]
+    monkeypatch.setattr(triage_batch_cmd, "build_driver", lambda *a, **k: driver)
+    monkeypatch.setattr(triage_batch_cmd, "_host_lease", lambda *a, **k: None)
+    monkeypatch.setattr(triage_batch_cmd, "_host_loop", raiser)
+    monkeypatch.setattr(triage_batch_cmd, "_driver_started", lambda *a, **k: None)
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    return _run(tmp_path, "--yes", *args), driver
+
+
+def test_an_interrupted_supervised_drive_exits_130_and_releases_its_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.supervise import Stop, restart_decision
+
+    def interrupted(*a: Any, **k: Any) -> NoReturn:
+        raise KeyboardInterrupt
+
+    result, driver = _drive_with_loop(tmp_path, monkeypatch, interrupted, "--supervised-by", "777")
+    assert result.exit_code == 130, result.output
+    assert driver.released == 1  # type: ignore[attr-defined]
+    # and the supervisor reads that exit as a deliberate end, never a crash
+    assert restart_decision([], NOW, result.exit_code) == Stop(130)
+
+
+def test_an_interrupted_unsupervised_drive_releases_its_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def interrupted(*a: Any, **k: Any) -> NoReturn:
+        raise KeyboardInterrupt
+
+    result, driver = _drive_with_loop(tmp_path, monkeypatch, interrupted)
+    assert driver.released == 1  # type: ignore[attr-defined]
+
+
+def test_a_vanished_supervisor_ends_the_loop_cleanly_and_the_lease_is_released(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _passes(monkeypatch, lambda n: None)
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", lambda s: None)
+    driver = StubDriver(tmp_path)
+    driver.released = 0  # type: ignore[attr-defined]
+    driver.release_lease = lambda: setattr(driver, "released", driver.released + 1)  # type: ignore[attr-defined,method-assign]
+    monkeypatch.setattr(triage_batch_cmd, "build_driver", lambda *a, **k: driver)
+    monkeypatch.setattr(triage_batch_cmd, "_host_lease", lambda *a, **k: None)
+    monkeypatch.setattr(triage_batch_cmd, "_driver_started", lambda *a, **k: None)
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    # --supervised-by names a pid that is not this process's parent: the supervisor is gone
+    result = _run(tmp_path, "--yes", "--supervised-by", str(os.getppid() + 100000))
+    assert result.exit_code == 0, result.output
+    assert calls == []  # it stopped before any pass
+    assert driver.released == 1  # type: ignore[attr-defined]

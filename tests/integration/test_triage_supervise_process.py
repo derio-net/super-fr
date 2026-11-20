@@ -86,7 +86,10 @@ class Rig:
         return [int(x) for x in path.read_text().split()] if path.exists() else []
 
     def start(self) -> subprocess.Popen[bytes]:
-        proc = subprocess.Popen([sys.executable, str(self.root / "supervisor.py"), str(self.root)])
+        proc = subprocess.Popen(
+            [sys.executable, str(self.root / "supervisor.py"), str(self.root)],
+            stderr=(self.root / "supervisor.err").open("ab"),
+        )
         self.procs.append(proc)
         return proc
 
@@ -187,6 +190,26 @@ def test_a_crash_loop_stops_the_supervisor_as_a_refusal(rig: Rig) -> None:
     assert len(rig.pids()) == 6
     ledger = load_ledger(rig.root / "state")
     assert ledger.causes["crash-loop"].kind == "refusal"
-    assert ledger.causes["crash:1"].count == 5
+    assert ledger.causes["crash:1"].count == 6  # the last crash is ledgered too (p2a-r6)
     data = yaml.safe_load((rig.root / "state" / "driver.yaml").read_text())
     assert data["restarts"] == 5
+    # the refusal is on driver.yaml, so the board's driver-stopped need shows it (R8)
+    assert data["last_refusal"]["cause"] == "crash-loop"
+    assert data["last_refusal"]["resume"]
+    # and said on stderr with the pointer to file it, as everything the supervisor logs is
+    err = (rig.root / "supervisor.err").read_text()
+    assert "fr triage drive failures --file --yes" in err
+    assert "restart 1 in" in err and "crash-loop" in err
+    log = (rig.root / "state" / "drive.log").read_text()
+    assert "crash-loop" in log
+
+
+def test_sighup_to_the_supervisor_stops_the_driver_and_exits_cleanly(rig: Rig) -> None:
+    sup = rig.start()
+    assert wait_for(lambda: len(rig.pids()) == 1)
+    child = rig.pids()[0]
+    sup.send_signal(signal.SIGHUP)
+    assert sup.wait(timeout=15) == 0
+    assert wait_for(lambda: not alive(child))
+    assert len(rig.pids()) == 1
+    assert "SIGHUP received" in (rig.root / "state" / "drive.log").read_text()

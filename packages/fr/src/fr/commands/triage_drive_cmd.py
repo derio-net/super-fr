@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -887,6 +888,19 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _is_process(pid: int, started: str | None, *, trusted: bool) -> bool:
+    """Whether *pid* is the process that was recorded: alive, and with the recorded OS
+    start time (a recycled pid has another). A record with no start time is trusted only
+    when *trusted* (a live lease of this host vouches for it)."""
+    from fr.safe_spawn import process_start
+
+    if not _alive(pid):
+        return False
+    if started is None:
+        return trusted
+    return process_start(pid) == started
+
+
 @drive_app.command("status")
 def drive_status_command(
     repo: RepoOpt = None,
@@ -924,7 +938,23 @@ def drive_status_command(
         if lease.last_pass is not None:
             console.print(f"  last pass: {lease.last_pass.isoformat()}", markup=False)
         return
-    running = record is not None and _alive(record.pid) and (lease is None or live_lease)
+    running = (
+        record is not None
+        and (lease is None or live_lease)
+        and _is_process(record.pid, record.pid_start, trusted=lease is not None)
+    )
+    if (
+        not running
+        and record is not None
+        and record.supervised is not None
+        and _is_process(record.supervised, record.supervised_start, trusted=False)
+    ):  # the driver is between a crash and its restart: its supervisor is what runs
+        console.print(
+            f"supervisor alive, driver restarting: supervisor pid {record.supervised}",
+            markup=False,
+        )
+        _status_tail(record, lease)
+        return
     if not running or record is None:
         console.print("no driver holds the scope: not running on this host", markup=False)
         if record is not None:
@@ -958,6 +988,14 @@ def _status_tail(record: Any, lease: Any) -> None:
         )  # fmt: skip
 
 
+def _quiet_stdout() -> None:
+    """After a broken pipe, point stdout at /dev/null so the exit flush says nothing."""
+    try:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (OSError, ValueError):
+        pass
+
+
 def _follow_sleep(seconds: float) -> None:
     """`drive log -f`'s poll wait; tests replace it."""
     time.sleep(seconds)
@@ -980,17 +1018,20 @@ def drive_log_command(
 
     scope = triage_cmd._scope(repo, org)
     log = DriveLog(resolve_state_dir(scope, dir_override, workspace))
+    if follow:
+        # one read fixes both the tail and where following starts: no line falls between
+        try:
+            for line in log.follow(tail=lines, sleep=_follow_sleep):
+                console.print(line, markup=False, soft_wrap=True, highlight=False)
+                console.file.flush()
+        except KeyboardInterrupt:  # how a follow ends
+            return
+        except BrokenPipeError:  # the reader (`| head`) went away: quietly done
+            _quiet_stdout()
+        return
     tail = log.tail(lines)
-    if not tail and not follow:
+    if not tail:
         console.print("no driver has run: there is no drive.log yet", markup=False)
         return
     for line in tail:
         console.print(line, markup=False, soft_wrap=True, highlight=False)
-    if not follow:
-        return
-    try:
-        for line in log.follow(sleep=_follow_sleep):
-            console.print(line, markup=False, soft_wrap=True, highlight=False)
-            console.file.flush()
-    except KeyboardInterrupt:  # how a follow ends
-        return

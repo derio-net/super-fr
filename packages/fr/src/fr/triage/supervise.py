@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -22,7 +23,7 @@ from types import FrameType
 
 from fr.safe_spawn import Child
 from fr.triage.drive_log import DriveLog
-from fr.triage.driver_record import FailureKind
+from fr.triage.driver_record import FAILURES_COMMAND, FailureKind
 from fr.triage.errors import TriageError
 
 DELIBERATE_CODES = frozenset({0, 2, 3})
@@ -103,12 +104,16 @@ class Supervisor:
         poll: float = POLL_S,
         now: Callable[[], datetime] | None = None,
         fr_version: str = "",
+        resume: str = "fr triage batch drive --supervise --yes",
+        on_refusal: Callable[[], None] | None = None,
     ) -> None:
         self.make_argv = make_argv
         self.state_dir = state_dir
         self.base_delay, self.grace, self.poll = base_delay, grace, poll
         self.now = now or (lambda: datetime.now(UTC))
         self.fr_version = fr_version
+        self.resume = resume
+        self.on_refusal = on_refusal  # renders the board once after a crash loop (R8)
         self.log = DriveLog(state_dir)
         self.history: list[datetime] = []
         self.restarts = 0
@@ -119,6 +124,12 @@ class Supervisor:
     # -- the one-line records ------------------------------------------------------------
 
     def _say(self, kind: str, line: str) -> None:
+        """One line to stderr and to `drive.log`: the supervisor appends every line it prints
+        (R22)."""
+        try:
+            print(f"{kind}: {line}", file=sys.stderr, flush=True)
+        except (OSError, ValueError):
+            pass
         try:
             self.log.append(kind, line, self.now())
         except OSError:
@@ -137,6 +148,22 @@ class Supervisor:
             )
         except (OSError, TriageError):
             pass
+
+    def _refuse(self, cause: str, message: str) -> None:
+        """The refusal on `driver.yaml` (the board's driver-stopped need reads it), then the
+        board rendered once if a renderer was given. Neither can stop the supervisor."""
+        from fr.triage import driver_record
+
+        try:
+            driver_record.record_refusal(self.state_dir, cause, message, self.resume, self.now(),
+                                         self.fr_version, as_supervisor=True)  # fmt: skip
+        except (OSError, TriageError):
+            pass
+        if self.on_refusal is not None:
+            try:
+                self.on_refusal()
+            except Exception:  # noqa: BLE001 - the board is a view
+                pass
 
     def _ledger(self, kind: FailureKind, cause: str, message: str) -> None:
         from fr.triage import driver_record
@@ -232,8 +259,12 @@ class Supervisor:
             if isinstance(decision, CrashLoop):
                 minutes = int(LOOP_WINDOW.total_seconds() // 60)
                 message = f"{LOOP_RESTARTS + 1} crashes within {minutes} minutes, the last: {crash}"
+                self._ledger("crash", cause, f"the driver ended with {crash}")  # p2a-r6
                 self._ledger("refusal", "crash-loop", message)
                 self._record(None)
+                self._refuse("crash-loop", message)
+                self._say("refusal", f"driver stopped (crash-loop): {message}; "
+                          f"resume: {self.resume}; track it: {FAILURES_COMMAND}")  # fmt: skip
                 self._say("stop", f"crash-loop: {message}")
                 return decision.code
             self.history.append(self.now())

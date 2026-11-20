@@ -163,3 +163,119 @@ def test_log_follow_prints_what_is_appended_until_interrupted(
     lines = result.output.splitlines()
     assert [x.rsplit(" ", 1)[1] for x in lines] == ["before", "one", "two"]
     assert result.exit_code == 0  # an interrupt is how follow ends
+
+
+# ------------------------------------------- a pid is the process only with its start time
+
+
+def test_with_no_lease_a_live_pid_that_is_another_process_is_not_the_driver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.safe_spawn.process_start", lambda pid: "Thu Nov 19 12:00:00 2026")
+    save_record(tmp_path, DriverRecord(pid=os.getpid(), pid_start="Mon Jan  1 00:00:00 2024"))
+    result = _status(tmp_path)  # alive, but it started at another time: a recycled pid
+    assert result.exit_code == 3, result.output
+    assert "not running" in result.output
+
+
+def test_no_lease_a_matching_start_time_is_the_driver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.safe_spawn.process_start", lambda pid: "Thu Nov 19 12:00:00 2026")
+    save_record(tmp_path, DriverRecord(pid=os.getpid(), pid_start="Thu Nov 19 12:00:00 2026"))
+    assert _status(tmp_path).exit_code == 0
+
+
+def test_no_lease_and_no_recorded_start_time_is_not_trusted(tmp_path: Path) -> None:
+    save_record(tmp_path, DriverRecord(pid=os.getpid()))
+    assert _status(tmp_path).exit_code == 3
+
+
+def test_during_a_restart_backoff_the_live_supervisor_is_reported_with_exit_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.safe_spawn.process_start", lambda pid: "Thu Nov 19 12:00:00 2026")
+    save_record(
+        tmp_path,
+        DriverRecord(
+            pid=2**22 + 12345, supervised=os.getpid(), restarts=1, last_crash="SIGKILL",
+            supervised_start="Thu Nov 19 12:00:00 2026",
+        ),
+    )  # fmt: skip
+    result = _status(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "supervisor alive, driver restarting" in result.output
+    assert "restarts: 1" in result.output
+
+
+def test_a_supervisor_pid_that_is_another_process_is_not_a_backoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.safe_spawn.process_start", lambda pid: "Thu Nov 19 12:00:00 2026")
+    save_record(
+        tmp_path,
+        DriverRecord(pid=2**22 + 12345, supervised=os.getpid(),
+                     supervised_start="Mon Jan  1 00:00:00 2024"),
+    )  # fmt: skip
+    assert _status(tmp_path).exit_code == 3
+
+
+def test_the_real_start_time_of_this_process_is_readable() -> None:
+    from fr.safe_spawn import process_start
+
+    first = process_start(os.getpid())
+    assert first and process_start(os.getpid()) == first
+    assert process_start(2**22 + 12345) is None
+
+
+# ------------------------------------------------------- follow: one offset, a pipe that closes
+
+
+def test_follow_with_a_tail_loses_no_line_between_the_tail_and_the_follow(
+    tmp_path: Path,
+) -> None:
+    log = DriveLog(tmp_path)
+    for i in range(5):
+        log.append("action", f"e{i}", NOW)
+    seen: list[str] = []
+    gen = log.follow(tail=2, sleep=lambda _: None)
+    seen.extend(next(gen) for _ in range(2))  # the tail
+    log.append("action", "after", NOW)  # lands between the tail and the first poll
+    seen.append(next(gen))
+    gen.close()
+    assert [x.rsplit(" ", 1)[1] for x in seen] == ["e3", "e4", "after"]
+
+
+def test_follow_with_a_tail_follows_a_rotation_and_never_yields_half_a_line(
+    tmp_path: Path,
+) -> None:
+    log = DriveLog(tmp_path, limit=120)
+    log.append("action", "x" * 10, NOW)
+    steps = iter(["a", "b", "c"])
+    seen: list[str] = []
+
+    def poll(_: float) -> None:
+        try:
+            log.append("action", next(steps) * 40, NOW)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+
+    with pytest.raises(KeyboardInterrupt):
+        for line in log.follow(tail=1, sleep=poll):
+            seen.append(line)
+    assert [x.rsplit(" ", 1)[1] for x in seen] == ["x" * 10] + [c * 40 for c in "abc"]
+    assert (tmp_path / "drive.log.1").exists()
+
+
+def test_a_closed_pipe_ends_log_follow_quietly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    DriveLog(tmp_path).append("action", "one", NOW)
+
+    def broken(*args: Any, **kwargs: Any) -> None:
+        raise BrokenPipeError
+
+    monkeypatch.setattr(triage_drive_cmd.console, "print", broken)
+    monkeypatch.setattr(triage_drive_cmd, "_quiet_stdout", lambda: None)
+    result = _log(tmp_path, "-f")
+    assert result.exit_code == 0, result.output

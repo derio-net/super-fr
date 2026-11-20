@@ -31,6 +31,22 @@ def safe_fr_env(base: Mapping[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+def process_start(pid: int) -> str | None:
+    """The OS's start time of process *pid* (`ps -o lstart=`, the C locale), or None when it
+    is not running or cannot be read. A pid alone proves nothing once the OS recycles it:
+    the pid with this time is the process."""
+    try:
+        out = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=5, check=False,
+            env={**os.environ, "LC_ALL": "C"},
+        )  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return None
+    text = " ".join(out.stdout.split())
+    return text if out.returncode == 0 and text else None
+
+
 class Child:
     """A started child process, as the driver supervisor (`fr.triage.supervise`) sees it. It
     lives here because `fr.triage` starts no process outside its git seam."""

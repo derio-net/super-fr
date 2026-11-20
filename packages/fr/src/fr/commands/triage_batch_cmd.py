@@ -7649,15 +7649,36 @@ def _driver_started(driver: _Driver, supervisor: int | None) -> None:
         _report_read_failure(driver, f"the driver record: {err}", "not recorded")
 
 
-def _supervise(args: list[str], target: Path) -> NoReturn:
+def _supervise(
+    args: list[str],
+    target: Path,
+    scope: Scope | None = None,
+    scope_args: Sequence[str] = (),
+    workspace_prefix: str = DEFAULT_WORKSPACE_PREFIX,
+) -> NoReturn:
     """`drive --supervise --yes` (R11-R13): run the driver as this process's child, with
     *args* (the same arguments less `--supervise`) and `--supervised-by <our pid>`. It takes
-    neither `drive.lock` nor the lease: the child does."""
+    neither `drive.lock` nor the lease: the child does. After a crash loop it renders the
+    board once from what is on disk (R8), so the driver-stopped need shows."""
+    import shlex
+
     from fr.safe_spawn import fr_argv
     from fr.triage.supervise import Supervisor
 
+    def render_board() -> None:
+        if scope is None:
+            return
+        out, _ = triage_kanban_cmd.write_board(
+            scope, target, scope_args=scope_args, prefix=workspace_prefix
+        )
+        triage_kanban_cmd.publish(scope, target, out, set())
+
     code = Supervisor(
-        lambda pid: fr_argv(*args, "--supervised-by", str(pid)), target, fr_version=__version__
+        lambda pid: fr_argv(*args, "--supervised-by", str(pid)),
+        target,
+        fr_version=__version__,
+        resume="fr " + shlex.join([*args, "--supervise"]),
+        on_refusal=render_board,
     ).run()
     raise typer.Exit(code=code)
 
@@ -7784,6 +7805,9 @@ def batch_drive_command(
             )[1:]
             + (["--quota-floor", str(quota_floor)] if quota_floor is not None else []),
             target,
+            scope,
+            triage_kanban_cmd.scope_args(repo, org, dir_override, workspace),
+            workspace_prefix,
         )
     pacer = make_pacer(target, quota_floor=quota_floor, interval_s=interval)  # refuses a bad floor
     guard: SinglePass | None = None
