@@ -1802,6 +1802,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     # writes nothing to the forge, so it reads every landed batch, selected or not
     # (gh#990); starting one, or recording one under way, follows the selection.
     closing = gated = closeouts_held = 0
+    post_owed: dict[tuple[str, int | None], list[str]] = {}
     # (repo, wave) -> the batches its collected close-out takes (R15: one per wave)
     collecting: dict[tuple[str, int | None], list[str]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
@@ -1855,6 +1856,11 @@ def drive_pass(snap: Snapshot) -> Pass:
             actions.extend(_gate_actions(batch, snap, labelled))
             continue
         closing += 1
+        if owed and snap.repos.get(batch.id) in snap.post_merge_repos and hand is None:
+            # R15: the wave's one close-out starts only after every landing's post_merge
+            post_owed.setdefault((snap.repos.get(batch.id, ""), _wave_of(batch)), []).append(
+                batch.id
+            )
         if hand is not None:
             actions.append(Action("adopt", batch.id,
                                   f"close-out PR #{hand.number} ({hand.head_ref}) is open",
@@ -1879,6 +1885,13 @@ def drive_pass(snap: Snapshot) -> Pass:
     # R15: one collected close-out per wave, at most one per repo, none while one is under way.
     started: set[str] = set()
     for repo, group in sorted(collecting, key=lambda k: (k[0], k[1] is None, k[1] or 0)):
+        if waiting := post_owed.get((repo, group)):
+            # R15: held until every landed member's post_merge succeeded, never started
+            # with the rest; the post-merge action retries it every pass
+            actions.append(Action("held", waiting[0], "the wave's close-out waits: post_merge "
+                                  f"has not succeeded for {', '.join(waiting)} (its `post-merge` "
+                                  "Need names it)"))  # fmt: skip
+            continue
         name, item_id = next_collected_item(repo, snap)
         if repo in started or _collected_under_way(repo, snap) or item_id in snap.existing:
             continue  # one at a time; a live session of this item is not started twice

@@ -6897,26 +6897,29 @@ class _Driver:
         self, action: Action, facts: Facts, judgements: Judgements, repo: str
     ) -> tuple[str, bool]:
         """R15: start ONE close-out session for *action*'s batches, briefed to run `fr
-        triage batch closeout`. Each member's close-out event (`archive` the shared branch)
-        is recorded before the tab starts (gh#883) and taken back if it cannot start."""
+        triage batch closeout`. It starts only once EVERY landed member's `post_merge` has
+        succeeded (any adapter): a member without one holds the whole close-out, never starts
+        with the rest. Each member's close-out event (`archive` the shared branch) is recorded
+        before the tab starts (gh#883) and taken back if it cannot start."""
         members: list[Batch] = []
-        skipped: list[str] = []  # post_merge not yet run: a close-out hold, retried next pass
+        skipped: list[
+            str
+        ] = []  # post_merge not yet run: the whole close-out is held, retried next pass
         foreign: list[str] = []  # another driver's runner: its close-out is not this driver's
         for bid in action.items:
             b = _find(judgements.batches, bid)
             if self.adapter.refusal(b) is not None:
                 foreign.append(f"left to the driver of runner {b.launch.runner} ({bid})")
-            elif (
-                self.adapter.kind == "host"
-                and facts.config_for(repo).post_merge
-                and not any(e.kind == "post_merge" for e in b.events)
+            elif facts.config_for(repo).post_merge and not any(
+                e.kind == "post_merge" for e in b.events
             ):
                 skipped.append(f"{bid} (its post_merge has not succeeded)")
             else:
                 members.append(b)
+        if skipped:  # R15: the wave's one close-out starts only after every landing's post_merge
+            return "; ".join([f"close-out held: {'; '.join(skipped)}", *foreign]), False
         if not members:  # cloud-triage §E, p4-r10: a foreign batch is not a hold
-            parts = ([f"close-out held: {'; '.join(skipped)}"] if skipped else []) + foreign
-            return "; ".join(parts), False
+            return "; ".join(foreign), False
         checkout = self.checkout(repo)
         try:
             checkout.fast_forward(switch=self.adapter.owns_checkout)

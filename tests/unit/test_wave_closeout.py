@@ -59,7 +59,9 @@ def test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out()
     snap = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=frozenset({REPO}),
                  a_events=[POST_MERGE])  # fmt: skip
     kinds = [(a.kind, a.batch) for a in drive_pass(snap).actions]
-    assert kinds == [("post-merge", "b"), ("closeout", "a")]  # b's landing has none yet
+    # R15: b's landing has none yet, so the wave's close-out waits for it (never starts
+    # with a alone)
+    assert kinds == [("post-merge", "b"), ("held", "b")]
     done = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=frozenset({REPO}),
                  a_events=[POST_MERGE], b_events=[POST_MERGE])  # fmt: skip
     assert [a.kind for a in drive_pass(done).actions] == ["closeout"]
@@ -105,3 +107,16 @@ def _config() -> Any:
     from fr.triage.wave_queue import QueueConfig
 
     return QueueConfig()
+
+
+def test_p6_r6_one_member_without_its_post_merge_holds_the_whole_close_out() -> None:
+    """Wave {a, b}: b's post_merge has not succeeded, so no close-out starts, not even for a;
+    once it has, exactly one close-out takes both."""
+    repos = frozenset({REPO})
+    held = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=repos,
+                 a_events=[POST_MERGE])  # fmt: skip
+    assert _closeouts(held) == []
+    assert [a.kind for a in drive_pass(held).actions if a.kind == "held"] == ["held"]
+    done = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=repos,
+                 a_events=[POST_MERGE], b_events=[POST_MERGE])  # fmt: skip
+    assert _closeouts(done) == [("a", "b")]
