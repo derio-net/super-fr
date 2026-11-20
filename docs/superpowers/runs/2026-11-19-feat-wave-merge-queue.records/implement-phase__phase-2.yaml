@@ -12,6 +12,15 @@ refactor:
   P2.T2: "replay/_valid/_plan_open were written once against the final combination model (parent-chained combos); no second copy of the slot logic exists to clean"
   P2.T3: "ejection reuses batch_drive.red_decision and conflict_decision unchanged in shape; the cleanup was the removal of the reupdate rule, its executor and update_failing in the same commit"
 journal:
+  - kind: discovery
+    id: p2-suite-evidence-unbound
+    phase: 2
+    title: Phase 2's full-suite log is not bound as step evidence
+    body: |
+      The executor's full suite passed (16959 passed, 122 skipped, exit 0, log wave-p2-suite.log).
+      The orchestrator had claimed the unit under a placeholder agent id, so the claim was abandoned
+      and re-opened after the run; fr binds a tests log only to a command of the current holder made
+      since the unit opened, so the log is left out. deliver's own full suite covers this phase.
   - kind: decision
     id: p2-queue-built-parent
     phase: 2
@@ -77,5 +86,4 @@ journal:
       not here, so check prints ref errors unrelated to this run. A merge of main clears them.
       The three phase-2 rows stay not-implemented with level refs: only the planner exists.
 resolves: []
-evidence:
-  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/wave-p2-suite.log
+evidence: {}
