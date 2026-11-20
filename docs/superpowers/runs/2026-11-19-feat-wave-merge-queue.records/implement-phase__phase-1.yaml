@@ -1,0 +1,96 @@
+schema_version: 12
+run: 2026-11-19-feat-wave-merge-queue
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T3.S4, P1.T3.S5]
+refactor:
+  P1.T1: "a smoke test and a change fragment; there is no code to clean"
+journal:
+  - kind: decision
+    id: p1-patch-id-unreadable-falls-back
+    phase: 1
+    title: An unreadable live patch-id is judged by reaches(), never as Void or Approved
+    body: |
+      `approval_verdict(..., patch_id=None)` with a recorded patch-id falls back to today's
+      `reaches()` rule, exactly as for an approval recorded before schema 13. The command
+      layer's `patch_id_reader` answers None when git cannot say (no branch known for the
+      PR, a head the clone cannot reach after one fetch of the PR branch, no default
+      branch), so a missing clone or a fake one degrades to the old rule rather than voiding
+      every approval or approving on no evidence. The reader is built once per repo per
+      pass over the clone fetched once per pass (the per-pass reset moved before the
+      settle, so the settle's reads share the pass's one fetch).
+  - kind: decision
+    id: p1-fr-updates-keep-approval
+    phase: 1
+    title: Until R22 removes PR-branch updates, reaches() over fr's own updates also keeps an approval
+    body: |
+      The first closing suite failed four real-git integration tests
+      (test_triage_batch_merge_git.py): the legacy merge train re-slots a PR's version by
+      updating its branch, which changes its diff and so its patch-id, and the second PR
+      read Void. Spec §E reads "Void when it differs"; the verdict now is Approved when the
+      patch-ids are equal OR fr's recorded updates lead from the approved head to the live
+      one (the approved head itself included), Void otherwise. Each half is sound on its
+      own: equal content, or a push fr made. A foreign push that changes the diff still
+      voids. Phase 5 (one merge path, R22) stops fr updating PR branches; revisit there
+      whether the reaches() half should narrow to approvals with no patch-id.
+  - kind: decision
+    id: p1-merge-gate-reads-patch-id
+    phase: 1
+    title: The merge gate (batch_merge._approved_and_ready) and `batch merge` read the patch-id too
+    body: |
+      The plan named `_settle_approvals` and the snapshot's verdict. The merge-time gate in
+      `batch_merge._approved_and_ready` re-judges the approval, and without the patch-id it
+      would have refused (Void by reaches) a PR the snapshot had just judged Approved after a
+      merge of main. So `MergeContext` gained an optional `patch_id_of`, set each pass by the
+      driver and by `fr triage batch merge`, which also settles with it. "A PR is approved
+      the same way everywhere" (approval.py) stays true.
+  - kind: discovery
+    id: p1-patch-id-in-schema-13
+    phase: 1
+    title: ApprovalEvent.patch_id landed with the schema-13 model (T2), not in T3.S4
+    body: |
+      Spec §E says judgements schema 13 adds `ApprovalEvent.patch_id`, so it was added in the
+      schema bump, with a refusal of a patch-id in a file stamped below 13. T3.S4's threading
+      (verdict, settle, command layer) is as planned.
+  - kind: discovery
+    id: p1-test-fakes-gain-patch-id
+    phase: 1
+    title: The merge and drive test fakes now answer reach_commit/patch_id
+    body: |
+      `FakeCheckout` (test_triage_batch_merge.py) and `DriveCheckout`
+      (test_triage_batch_drive_cmd.py) raise GitError from `patch_id`, so their approval
+      tests keep judging by reaches(). Schema pins (12 -> 13) were moved in 13 test files,
+      the fr-triage skill (and both mirrors), AGENTS.md, docs/herdr-control-sessions.md and
+      the two triage explainers.
+  - kind: discovery
+    id: p1-host-load
+    phase: 1
+    title: The host ran at load 30-45 on 12 cores during this phase
+    body: |
+      P1.T1.S1's "run the full suite and confirm green" was started and stopped at 2% after
+      five minutes (shared-host load). A full run took 2 h at six workers; its one unrelated
+      failure (test_suite_isolation_inherited_columns, a subprocess timeout under load)
+      passed alone. The closing suite is the log named in evidence.
+  - kind: lens
+    lens: security
+    title: The approval gate now trusts equal diff content (patch-id) instead of an fr-made head chain
+acceptance:
+  - id: wave-queue-approval-content
+    status: ci
+    notes: "phase 1: the verdict compares the recorded and live patch-ids; unit tests on a real repo and over the pure verdict"
+    levels:
+      unit:
+        - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_conflict_free_merge_of_main_keeps_the_patch_id
+        - super-fr:tests/unit/test_gitseam_patch_id.py#test_an_empty_commit_keeps_the_patch_id
+        - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_code_edit_changes_the_patch_id
+        - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_whitespace_only_edit_changes_the_patch_id
+        - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_binary_edit_changes_the_patch_id
+        - super-fr:tests/unit/test_triage_approval.py#test_the_same_patch_id_at_another_head_is_approved
+        - super-fr:tests/unit/test_triage_approval.py#test_another_patch_id_at_another_head_is_void
+        - super-fr:tests/unit/test_triage_approval.py#test_an_approval_with_no_patch_id_falls_back_to_reaches
+        - super-fr:tests/unit/test_triage_approval.py#test_settle_records_the_patch_id_it_is_given_for_a_first_verdict
+        - super-fr:tests/unit/test_triage_approval.py#test_settle_voids_on_a_patch_id_change_removing_the_label
+resolves: []
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/wave-p1-suite.log
