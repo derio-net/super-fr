@@ -489,3 +489,9 @@ amendments:
     acceptance: fr triage batch merge with no ids skips batches another scope holds,
       naming each, and queues the rest; naming a held batch still refuses.
     why: batch merge drives the wave merge queue (R23)
+  - row: batch-merge-skip-held
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest
+    why: renamed for the queue (R23)
