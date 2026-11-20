@@ -202,7 +202,7 @@ one artifact kind.
     - `fr triage drive record`: Apply the agent's recorded results to the scope's state, then push the state ref.
     - `fr triage drive failures`: The wave driver's failure ledger, most frequent cause first.
     - `fr triage drive status`: Whether a driver holds the scope, read-only.
-    - `fr triage drive log`: What the looping driver and its supervisor did, newest last, read-only: the last N lines of the scope's `drive.log`; with -f, then each new one.
+    - `fr triage drive log`: Show the last N lines of the scope's `drive.log`, newest last.
   - `fr triage history`: The history page: the snapshot timeline and the finished waves.
     - `fr triage history render`: Write the History page: the snapshot timeline, the finished waves as tabs, then the authored fragments `history/manifest.yaml` places among them.
   - `fr triage origins`: Defect origins: collect issues filed since a date, classify them, render the page.

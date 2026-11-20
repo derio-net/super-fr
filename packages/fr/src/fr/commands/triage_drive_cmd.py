@@ -1012,8 +1012,10 @@ def drive_log_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """What the looping driver and its supervisor did, newest last (batch-train-truth R22),
-    read-only: the last N lines of the scope's `drive.log`; with -f, then each new one."""
+    """Show the last N lines of the scope's `drive.log`, newest last. Read-only.
+
+    The log holds what the looping driver and its supervisor did (batch-train-truth R22);
+    with -f, each new line follows."""
     from fr.triage.drive_log import DriveLog
 
     scope = triage_cmd._scope(repo, org)
