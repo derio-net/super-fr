@@ -344,8 +344,20 @@ def test_an_interrupted_advance_kills_the_step_it_started(
 
     (proc,) = started
     assert proc.wait(timeout=5) != 0, "the step's shell is still running"
-    with pytest.raises(ProcessLookupError):
-        os.killpg(proc.pid, 0)
+    # The group is SIGKILLed, but on Linux dash forks `sleep` rather than
+    # exec-ing it, and the killed child is a zombie until init reaps it; a
+    # zombie still answers killpg(pgid, 0). Wait for the reap, never longer
+    # than a live `sleep 30` would take.
+    import time
+
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            os.killpg(proc.pid, 0)
+        except ProcessLookupError:
+            break
+        assert time.monotonic() < deadline, "the step's process group outlived the interrupt"
+        time.sleep(0.05)
 
 
 def test_non_utf8_stdout_is_stored_not_a_traceback(tmp_path: Path) -> None:
