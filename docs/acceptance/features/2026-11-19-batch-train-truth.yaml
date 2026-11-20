@@ -22,9 +22,12 @@ rows:
     - spec:2026-11-19-batch-train-truth#R5
     - spec:2026-11-19-batch-train-truth#R6
     - spec:2026-11-19-batch-train-truth#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_pass_boundary.py#test_a_push_refusal_ends_the_pass_not_the_loop
+      - super-fr:tests/unit/test_tripwire_drive_pass_boundary.py#test_no_direct_exit_inside_the_driver_the_loop_or_its_waits
+    status: ci
+    notes: 'CI: classification, the loop surviving a refused push, and the AST tripwire'
   - id: drive-failure-ledger
     capability: Driver refusals feed an improvement loop
     acceptance: A refusal is recorded with its cause and resume command and shown under
