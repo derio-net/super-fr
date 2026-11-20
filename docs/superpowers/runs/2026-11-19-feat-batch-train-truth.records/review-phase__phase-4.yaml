@@ -1,0 +1,52 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-train-truth
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+- kind: review
+  id: review-phase-4-a
+  phase: 4
+  title: 'Phase 4 review: swap-labels idempotence, clone-free cancel, R24 docs'
+  body: Independent read-only review of 1de111c8a, f050390cd and 4b8171acb against R20, R21, R24. R20 and R21 built as written; every docs number checked against code. Four minor findings, all in scope.
+- kind: finding
+  id: p4a-r1
+  phase: 4
+  title: SKILL.md said a failed forge read is retried after --interval; the code uses the doubling transient backoff
+  body: SKILL.md said a failed forge read is retried after --interval; the code uses the doubling transient backoff
+  review_scope: in
+- kind: finding
+  id: p4a-r2
+  phase: 4
+  title: fr-wave-driver.md said a signal stop ends the supervisor with the same code; supervise.py returns 128+signal
+  body: fr-wave-driver.md said a signal stop ends the supervisor with the same code; supervise.py returns 128+signal
+  review_scope: in
+- kind: finding
+  id: p4a-r3
+  phase: 4
+  title: a never-dispatched cancel still printed 'held by another scope; label and comments left to it'
+  body: a never-dispatched cancel still printed 'held by another scope; label and comments left to it'
+  review_scope: in
+- kind: finding
+  id: p4a-r4
+  phase: 4
+  title: the R21 test seeded no fr:in-progress label, so 'removes no label' was weakly proven
+  body: the R21 test seeded no fr:in-progress label, so 'removes no label' was weakly proven
+  review_scope: in
+resolves:
+- id: p4a-r1
+  state: fixed
+  body: The skill now says the read is retried after the transient backoff (--interval, doubling to 15 minutes); mirrors regenerated. Commit f2f927670.
+- id: p4a-r2
+  state: fixed
+  body: The explainer now says a signal stop ends with 128 plus the signal number. Commit f2f927670.
+- id: p4a-r3
+  state: fixed
+  body: That line prints only for a dispatched batch. Commit f2f927670.
+- id: p4a-r4
+  state: fixed
+  body: 'The test now seeds fr:in-progress and asserts it stays. That exposed a real gap: the claim release removed fr:in-progress (claim_sync always unlabels). ClaimOp gains unlabel (default True); cancel passes unlabel=dispatched, so a never-dispatched cancel removes only fr:claimed. Claim/cancel tests: 347 passed. Commit f2f927670.'
+evidence:
+  review: review-phase-4-a
+  reviewer: a7739ac36ee2abc78
+  model: claude-sonnet-5-5
