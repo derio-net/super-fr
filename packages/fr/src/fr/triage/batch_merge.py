@@ -12,6 +12,8 @@ on an earlier run drops out and a re-run resumes at the first unmerged batch.
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -585,7 +587,9 @@ def _update_message(
     return f"chore: re-slot version to {slot}"
 
 
-def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) -> list[str]:
+def _unresolvable(
+    version: VersionBlock | None, main: str, wt: WorktreeSeam, conflicted: list[str]
+) -> list[str]:
     """The conflicted paths merge may NOT resolve by taking main's side, and
     whether a relock must regenerate a lockfile it did take (spec §3.F step 3).
 
@@ -596,10 +600,9 @@ def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) ->
     only when a `relock` is declared to regenerate it from the manifests.
     Everything else is a real conflict.
     """
-    version = ctx.version
     if version is None:
         return list(conflicted)
-    base = wt.merge_base(ctx.main)
+    base = wt.merge_base(main)
     old_text, new_text = wt.show(base, version.source.file), wt.show("HEAD", version.source.file)
     if old_text is None or new_text is None:
         return list(conflicted)
@@ -622,6 +625,47 @@ def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) ->
     return out
 
 
+def merge_main(
+    wt: WorktreeSeam, main: str, version: VersionBlock | None
+) -> tuple[list[str], list[str]]:
+    """Start merging *main* into the PR branch checked out in *wt*: the conflicted paths,
+    and the ones merge will NOT resolve (`_unresolvable`). The merge is left in progress:
+    the caller takes main's side of the resolvable ones, or aborts it."""
+    conflicted = wt.merge(main)
+    return conflicted, (_unresolvable(version, main, wt, conflicted) if conflicted else [])
+
+
+def trial_conflicts(
+    checkout: CheckoutSeam,
+    main: str,
+    version: VersionBlock | None,
+    head: str,
+    *,
+    scratch_root: Path | None = None,
+) -> list[str]:
+    """R17: the paths on which PR head *head* really conflicts with *main* (what `_update`
+    would refuse), by a trial merge in a scratch worktree that is always aborted and
+    removed. A version file whose PR change is the version alone, and a lockfile when the
+    repo relocks, are resolved, not conflicts. Writes nothing the repo keeps."""
+    own = scratch_root is None
+    root = Path(tempfile.mkdtemp(prefix="fr-conflict-probe-")) if scratch_root is None else (
+        scratch_root
+    )  # fmt: skip
+    where = root / f"probe-{head[:12]}"
+    wt: WorktreeSeam | None = None
+    try:
+        wt = checkout.add_worktree(where, head)
+        conflicted, refused = merge_main(wt, main, version)
+        if conflicted:
+            wt.abort_merge()
+        return refused
+    finally:
+        if wt is not None or where.exists():
+            checkout.remove_worktree(where)
+        if own:
+            shutil.rmtree(root, ignore_errors=True)
+
+
 def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: str | None) -> str:
     """Step 3: bring the PR branch up to date and onto its slot; the new head."""
     pr = slot.step.pr
@@ -630,9 +674,8 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     ctx.scratch.add(where)
     relock = False
     if behind:
-        conflicted = wt.merge(ctx.main)
+        conflicted, refused = merge_main(wt, ctx.main, ctx.version)
         if conflicted:
-            refused = _unresolvable(ctx, wt, conflicted)
             if refused:
                 wt.abort_merge()
                 raise MergeConflictError(

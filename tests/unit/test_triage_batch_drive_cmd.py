@@ -322,6 +322,9 @@ class DriveCheckout:
         self.live: set[str] = set()  # paths still on origin/main
         self.status: dict[str, frozenset[str]] = {}  # head -> its `<status>\t<path>` diff
         self.commits: dict[str, tuple[str, ...]] = {}  # head -> commits past the base
+        self.conflicts: list[str] = []  # what a scratch merge with main reports conflicted
+        self.trials = 0  # scratch merges made
+        self.removed: list[Path] = []  # scratch worktrees removed
 
     def origin_repo(self) -> str | None:
         return REPO
@@ -372,7 +375,7 @@ class DriveCheckout:
         return _Worktree(self, where)
 
     def remove_worktree(self, where: Path) -> None:
-        pass
+        self.removed.append(where)
 
     def rev_parse(self, ref: str) -> str:
         return f"{ref}@fetched"
@@ -414,7 +417,11 @@ class _Worktree:
         self.checkout, self.path = checkout, path
 
     def merge(self, ref: str) -> list[str]:
-        return []
+        self.checkout.trials += 1
+        return list(self.checkout.conflicts)
+
+    def abort_merge(self) -> None:
+        pass
 
     def commit_all(self, message: str, version_files: list[str]) -> str | None:
         return "sha-updated"
@@ -5009,6 +5016,157 @@ def test_two_red_hand_backs_per_dispatch_then_the_third_needs_you(
         (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
     assert [e.delivered for e in _red_events(tmp_path)] == ["session", "session", "none"]
     assert len(messenger.messages) == 2
+
+
+def _red_draft(world: World, tmp_path: Path) -> None:
+    """PR #101 of b1 is an UNAPPROVED DRAFT, red at sha-101 on `lint` (R15)."""
+    _pr_open(world, tmp_path, draft=True, labels=[])
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    world.all_checks[101] = {"pass": 0, "fail": 1, "pending": 0}
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+
+
+def test_a_red_unapproved_draft_is_handed_back_to_its_idle_session_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red_draft(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1 and "sha-101" in text and "lint" in text, out
+    (event,) = _red_events(tmp_path)
+    assert (event.pr, event.head, event.delivered) == (101, "sha-101", "session")
+    assert world.merged == [] and "pr_ready 101" not in world.calls
+    _drive(tmp_path, "--once", "--yes")
+    assert len(messenger.messages) == 1 and len(_red_events(tmp_path)) == 1
+
+
+def test_a_red_unapproved_draft_whose_session_is_working_waits(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red_draft(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "working"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and _red_events(tmp_path) == []
+    (line,) = _lines(out, "warn")
+    assert "its session is working: nothing sent, retried next pass" in line
+
+
+@pytest.mark.parametrize("status", ["absent", "done"])
+def test_a_red_unapproved_draft_with_no_session_needs_you(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner, status: str
+) -> None:
+    _red_draft(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = status
+    _drive(tmp_path, "--once", "--yes")
+    (event,) = _red_events(tmp_path)
+    assert event.delivered == "none"
+    assert _red_needs(tmp_path) == ["red-pr"]
+
+
+def test_the_red_cap_counts_across_draft_and_ready_hand_backs(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red_draft(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    for head, draft in (("sha-a", True), ("sha-b", False), ("sha-c", True)):
+        world.prs[101].update(head_oid=head, draft=draft, labels=[] if draft else ["approved-fr"])
+        world.prs[101]["labels"] = [] if draft else ["approved-fr"]
+        _drive(tmp_path, "--once", "--yes")
+        (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert [e.delivered for e in _red_events(tmp_path)] == ["session", "session", "none"]
+
+
+# --------------------------- the conflict probe (R17)
+
+
+def _dirty_draft(world: World, tmp_path: Path, checkout: DriveCheckout, **kw: Any) -> None:
+    """PR #101 of b1: an UNAPPROVED DRAFT the forge reads as conflicting with main."""
+    _pr_open(world, tmp_path, draft=True, labels=[], mergeable="CONFLICTING",
+             merge_state="DIRTY", **kw)  # fmt: skip
+    checkout.conflicts = ["src/a.py"]
+
+
+def test_a_conflicting_draft_is_handed_to_its_idle_session_once_and_trial_merged_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1 and "src/a.py" in text, out
+    (event,) = _conflicts(tmp_path)
+    assert (event.head, event.paths, event.delivered) == ("sha-101", ["src/a.py"], "session")
+    assert messenger.dispatched == []  # never a fresh session
+    assert checkout.trials == 1 and len(checkout.removed) == 1  # the scratch worktree is gone
+    assert not (tmp_path / "merge-stops.json").exists()
+    assert world.merged == [] and "pr_ready 101" not in world.calls
+    _drive(tmp_path, "--once", "--yes")
+    assert len(messenger.messages) == 1 and len(_conflicts(tmp_path)) == 1
+    assert checkout.trials == 1
+
+
+def test_a_working_session_is_waited_on_with_one_trial_merge_across_passes(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "working"
+    seen: list[tuple[int, int, int]] = []
+
+    def _nap(seconds: float) -> None:
+        seen.append((len(seen), checkout.trials, len(messenger.messages)))
+        if len(seen) == 1:
+            messenger.status[BATCH_ITEM_B1] = "unknown"  # cannot be read: still waited on
+        elif len(seen) == 2:
+            messenger.status[BATCH_ITEM_B1] = "idle"
+        elif len(seen) == 4:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    assert isinstance(result.exception, _StopError), result.output
+    # passes 1 (working) and 2 (unknown) record and send nothing; pass 3 delivers
+    assert [(t, m) for _, t, m in seen] == [(1, 0), (1, 0), (1, 1), (1, 1)]  # one trial, ever
+    (event,) = _conflicts(tmp_path)
+    assert event.delivered == "session"
+
+
+@pytest.mark.parametrize("status", ["absent", "done"])
+def test_a_conflict_with_no_session_to_take_it_is_held(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner, status: str
+) -> None:
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = status
+    _drive(tmp_path, "--once", "--yes")
+    (event,) = _conflicts(tmp_path)
+    assert event.delivered == "held" and messenger.messages == []
+    assert messenger.dispatched == []
+    assert len(_needs(tmp_path)) == 1  # the board's Needs you: a merge conflict
+
+
+def test_a_clean_or_resolvable_pr_is_never_trial_merged_and_a_probe_adds_no_forge_read(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path, draft=True, labels=[])  # the forge reads it MERGEABLE
+    checkout.conflicts = ["src/a.py"]
+    _drive(tmp_path, "--once", "--yes")
+    assert checkout.trials == 0
+    clean_reads = world.calls.count("pr_view 101")  # what a pass reads of a clean PR
+    world.prs[101].update(mergeable="CONFLICTING")
+    checkout.conflicts = []  # a conflict only in a file merge resolves: a no-op
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    world.calls.clear()
+    monkeypatch.setattr(
+        world,
+        "repo_merge_methods",
+        lambda repo: (_ for _ in ()).throw(AssertionError("merge methods read")),
+    )
+    _drive(tmp_path, "--once", "--yes")
+    assert checkout.trials == 1 and messenger.messages == [] and _conflicts(tmp_path) == []
+    assert world.calls.count("pr_view 101") == clean_reads  # the probe reads nothing more
+    assert "base_rules" not in world.calls
 
 
 def test_the_base_rules_are_read_once_per_repo_per_pass_and_reach_the_merge_context(

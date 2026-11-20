@@ -225,6 +225,7 @@ from fr.triage.batch_merge import (
     plan_queue,
     pr_checks_verdict,
     run_queue,
+    trial_conflicts,
     update_failing,
 )
 from fr.triage.batch_version import read_source, reserve
@@ -3962,6 +3963,11 @@ class _Driver:
         # move only when the default branch does
         self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
         self._fetched: set[str] = set()  # per pass: repos whose origin was fetched (p4-r7)
+        # per pass: a repo's failed fetch, re-raised by every later read (R19)
+        self._fetch_failed: dict[str, GitError] = {}
+        # (repo, PR, head, default-branch sha) -> the paths its trial merge refused: one trial
+        # merge per key per process (R17); never reset, a commit and a sha never change
+        self._probed: dict[tuple[str, int, str, str], list[str]] = {}
 
     # -------------------------------------------------------------- reaching out
 
@@ -4366,6 +4372,8 @@ class _Driver:
                     head_ref=e.pr.head_ref,
                     trusted=True,  # the queue holds `batch_pr`s only (gh#936)
                     labels=tuple(str(n) for n in view.get("labels") or ()),
+                    mergeable=str(view.get("mergeable") or ""),  # R17: the conflict probe
+                    merge_state=str(view.get("merge_state") or ""),
                 )
             # Every landed batch, selected or not: adopting a finished close-out is
             # bookkeeping (gh#990). Only the selection is read further.
@@ -4882,11 +4890,22 @@ class _Driver:
     def _fetched_reader(self, repo: str) -> Checkout:
         """`_reader`, fetched once per pass (p4-r7): every read of `origin/<default>` a
         pass makes shares one fetch, however many batches ask."""
+        if repo in self._fetch_failed:
+            raise self._fetch_failed[repo]  # R19: one fetch per repo per pass, failed or not
         checkout = self._reader(repo)
         if repo not in self._fetched:
-            checkout.fetch()
+            try:
+                checkout.fetch()
+            except GitError as exc:
+                self._fetch_failed[repo] = exc
+                raise
             self._fetched.add(repo)
         return checkout
+
+    def _forget_fetches(self) -> None:
+        """A new pass fetches each repo again."""
+        self._fetched = set()
+        self._fetch_failed = {}
 
     def _reader(self, repo: str) -> Checkout:
         """The clone for a read: the checked one with --yes, else leniently opened
@@ -5320,7 +5339,7 @@ class _Driver:
         for ctx in self._merge.values():
             ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
-        self._fetched = set()
+        self._forget_fetches()
         self._ctx_checked, self._ctx_held = set(), {}
         self._rules = {}
         self._policies = {}
@@ -5380,7 +5399,8 @@ class _Driver:
                     action = replace(action, kind="warn")
                 if (
                     outcome
-                    or action.kind not in ("close", "claim", "refresh", "release", "settle")
+                    or action.kind
+                    not in ("close", "claim", "refresh", "release", "settle", "conflict-probe")
                     and not (action.kind == "warn" and action.red)
                 ):
                     # a close reported already stays quiet, as does a claim write that wrote
@@ -5690,6 +5710,9 @@ class _Driver:
         repo = batch_repo(batch, facts)
         if repo is None:
             return action.detail, False, in_flight
+        if action.kind == "conflict-probe":
+            line, did = self._probe_conflict(action, facts, judgements, batch, repo)
+            return line, did, in_flight
         if action.kind == "close":
             return self._close_sessions(action), False, in_flight  # never `acted`
         if action.kind == "awaiting-live":
@@ -6194,6 +6217,76 @@ class _Driver:
                 True,
             )
         return self._hand_back(exc, stopped, action, facts, judgements, batch, repo)
+
+    # ------------------------------------------------- the conflict probe (R17)
+
+    def _probe_conflict(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """A batch PR the forge reads as conflicting, other than the train's merge
+        candidate (R17): trial-merged with the default branch once per (PR, head, base sha)
+        per process, then `conflict_decision`'s say and the session's status. A real
+        conflict is messaged to an idle session (never a fresh one), waited on while the
+        session works or cannot be read, and held when no session can take it. Writes no
+        merge stop and builds no merge context. Returns the line ("" when nothing new)
+        and whether it acted (wrote an event or messaged a session)."""
+        if action.pr is None:
+            return "", False
+        if any(isinstance(e, ConflictEvent) and e.head == action.head for e in batch.events):
+            return "", False  # the decision's `skip`, made with no I/O
+        try:
+            checkout = self._fetched_reader(repo)
+            main = f"origin/{checkout.default_branch()}"
+            key = (repo, action.pr, action.head, checkout.rev_parse(main))
+            paths = self._probed.get(key)
+            if paths is None:
+                paths = trial_conflicts(
+                    checkout, main, facts.config_for(repo).version, action.head,
+                    scratch_root=self.target / "probe",
+                )  # fmt: skip
+                self._probed[key] = paths
+        except (GitError, TriageError) as exc:
+            why = f"the conflict probe could not run ({exc}): retried next pass"
+            return self._said_once(batch, action, "probe", why), False
+        if not paths:
+            return "", False  # nothing merge would refuse
+        earlier = self._conflicts.setdefault(repo, [])
+        decision = conflict_decision(batch.events, action.head, paths, tuple(earlier))
+        earlier.append((batch.id, tuple(paths)))
+        said = f"PR #{action.pr} conflicts with {main} in {', '.join(paths)}"
+        if decision.kind == "skip":
+            return "", False
+        if decision.kind == "wait-behind":
+            return f"{said}; waits behind {decision.behind}, whose conflict shares a path", False
+        event = ConflictEvent(
+            kind="conflict", at=_now_after(batch), head=action.head, paths=list(paths),
+            delivered="held",
+        )  # fmt: skip
+        if decision.kind == "held":
+            self._append(judgements, facts, batch, event)
+            return f"{said}; held: its hand-backs since its dispatch are spent, it needs you", True
+        name, target, _ = self._hand_back_target(facts, batch, repo)
+        if not self.adapter.carries(name):  # another driver's session
+            return f"{said}; its session runs on {name}, which this driver lacks: left to that "\
+                "runner's driver", False  # fmt: skip
+        last = last_dispatch(batch)
+        brief = conflict_brief(
+            batch, pr=action.pr, head=action.head, paths=tuple(paths),
+            branch=last.branch if last else batch_branch(batch), base=main,
+            mirrors=facts.config_for(repo).mirrors,
+        )  # fmt: skip
+        status, failure = self._offer(name, target, brief)
+        if status == "failed":
+            return f"{said}; hand-back to {target.id} failed, retried next pass: {failure}", False
+        if status == "idle":
+            event = event.model_copy(update={"delivered": "session", "handle": target.id})
+            self._append(judgements, facts, batch, event)
+            pending = " (pending)" if isinstance(self.runner(name), Mailbox) else ""
+            return f"{said}; handed back{pending} to its session {target.id}", True
+        if status not in (None, "absent", "done"):
+            return f"{said}; its session is {status}: nothing sent, retried next pass", False
+        self._append(judgements, facts, batch, event)  # no session can take it: it needs you
+        return f"{said}; no session can take it: it needs you", True
 
     # ------------------------------------------------- red recovery (merge-train-safety §C)
 

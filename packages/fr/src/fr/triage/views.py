@@ -47,6 +47,7 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_event,
     closeout_item_id,
+    conflict_at,
     drive_pass,
     enqueue_refusals,
     fact_ledger_unknown,
@@ -315,6 +316,8 @@ def needs_you(
         approval = snap.approvals.get(entry.batch.id)
         if verdict != "green" or (approval is not None and is_approved(approval)):
             continue
+        if conflict_at(entry.batch, live.head if live is not None else pr.head_oid) is not None:
+            continue  # R18: conflicting at its head: handed back, or the merge-conflict need
         was = (
             approval.approved_head
             if isinstance(approval, Void)
