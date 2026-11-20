@@ -42,11 +42,16 @@ from fr.triage.model import (
     QueueBuiltEvent,
     QueueEntryRef,
     QueueBlock,
+    QueueDrainEvent,
+    QueueEjectEvent,
+    QueueEvent,
     QueueLandEvent,
+    QueueOpenEvent,
     QueueRecord,
     VersionBlock,
 )
 from fr.triage.wave_queue import (
+    BuildConflict,
     QueueAction,
     QueueConfig,
     QueuePlan,
@@ -678,3 +683,215 @@ def post_merge_owed(record: QueueRecord, batches: Iterable[Batch]) -> tuple[str,
         if not any(isinstance(e, PostMergeEvent) and e.at >= land.at for e in batch.events):
             owed.append(batch.id)
     return tuple(owed)
+
+
+# ------------------------------------------------------------------ the executor (§A)
+
+
+class QueueWriter(Protocol):
+    """Appends *event* to this scope's current queue record of the repo, through the one
+    judgements writer; a `queue_open` starts a new record for *wave* at *base* (R24)."""
+
+    def __call__(self, event: QueueEvent, *, wave: int | None = None, base: str = "") -> None: ...
+
+
+@dataclass
+class QueuePorts:
+    """What the executor acts through: the repo's clone and forge client, its merge method
+    and version block, the queue's config, a scratch directory under the state directory,
+    the one writer, each entry as it is built now (*entry_of*) and its PR (*pr_of*:
+    number and head ref), the repo's `post_merge` for a landing (None: none; it returns
+    the failure, None on success, and records `post_merge` on every batch), and the
+    hand-back of an ejected entry (its line)."""
+
+    checkout: Checkout
+    client: Any
+    repo: str
+    scope: str
+    default: str
+    method: Method
+    version: VersionBlock | None
+    config: QueueConfig
+    scratch: Path
+    record: QueueWriter
+    entry_of: Callable[[str], EntryInput | None]
+    pr_of: PrOf
+    post_merge: Callable[[tuple[str, ...]], str | None] | None = None
+    hand_back: Callable[[QueueAction], str] | None = None
+    now: Callable[[], datetime] = _utcnow
+
+
+class QueueExecutor:
+    """Executes one repo's `QueuePlan` (§A). It keeps only the conflicts met building an
+    entry (the planner's `QueueSnapshot.conflicts`), which a restarted driver meets again
+    on its next build; everything else is read back from the events and the remote."""
+
+    def __init__(self, ports: QueuePorts) -> None:
+        self.ports = ports
+        self.conflicts: dict[str, BuildConflict] = {}
+
+    # ---------------------------------------------------------- resumption (R24)
+
+    def main_now(self) -> str:
+        return self.ports.checkout.remote_sha(f"refs/heads/{self.ports.default}") or ""
+
+    def resume(self, record: QueueRecord | None) -> list[str]:
+        """R24: finish what a driver killed mid-pass left. A combination recorded but not
+        pushed to its slot is pushed now; a landing pushed but not recorded (`main` is a
+        recorded combination's sha) is recorded, never pushed again."""
+        if record is None or not any(isinstance(e, QueueOpenEvent) for e in record.events):
+            return []
+        p, rep, lines = self.ports, replay(record), []
+        main = self.main_now()
+        landed = {e.main for e in record.events if isinstance(e, QueueLandEvent)}
+        combo = next((c for c in rep.combos.values() if c.sha == main), None)
+        if main and main != rep.base and combo is not None and main not in landed:
+            refs = _refs(record)
+            entries = [refs.get(k) or QueueEntryRef(batch=k) for k in combo.chain]
+            p.record(QueueLandEvent(kind="queue_land", at=p.now(), main=main, entries=entries))
+            lines.append(f"queue-land {p.repo}: {', '.join(combo.chain)} had landed at "
+                         f"{main[:12]} before the driver stopped: recorded, not pushed again")  # fmt: skip
+            return lines
+        for c in rep.combos.values():
+            ref = slot_ref(p.scope, c.slot)
+            held = p.checkout.remote_sha(ref)
+            if held == c.sha or not p.checkout.has_commit(c.sha):
+                continue
+            try:
+                p.checkout.push_leased([(c.sha, ref)], {ref: held}, atomic=False)
+            except GitError as exc:
+                lines.append(f"queue-build {p.repo}: slot {c.slot} was not re-pushed: {exc}")
+                continue
+            lines.append(f"queue-build {p.repo}: slot {c.slot} re-pushed at {c.sha[:12]} "
+                         "(recorded before the driver stopped)")  # fmt: skip
+        return lines
+
+    # ---------------------------------------------------------- gating (R33, R35)
+
+    def gate(self, plan: QueuePlan, record: QueueRecord | None, batches: Iterable[Batch]) -> QueuePlan:
+        """Before any landing: the last landing's `post_merge`, run once if it is owed
+        (R33), and its PRs read back from the forge (R35). Either one unfinished pauses
+        the landings with a Need."""
+        if record is None or plan.phase != "open":
+            return plan
+        p = self.ports
+        owed = post_merge_owed(record, batches) if p.post_merge is not None else ()
+        if owed and p.post_merge is not None:
+            failed = p.post_merge(owed)
+            if failed is not None:
+                return pause_landings(plan, f"post_merge failed after the landing of "
+                                      f"{', '.join(owed)}: {failed}; it runs again next pass")  # fmt: skip
+        if not any(a.kind == "queue-land" for a in plan.actions):
+            return plan
+        land = last_landing(record)
+        if land is None:
+            return plan
+        numbers = [known[0] for ref in land.entries if (known := p.pr_of(entry_key(ref)))]
+        unmerged = read_back(p.client, p.repo, numbers)
+        if unmerged:
+            prs = ", ".join(f"#{n}" for n in unmerged)
+            return pause_landings(plan, f"the forge did not mark {prs} merged after the "
+                                  "queue landed it; check the PR (on Gitea, enable "
+                                  "\"autodetect manual merge\")")  # fmt: skip
+        return plan
+
+    # ---------------------------------------------------------- executing (§C, §D)
+
+    def execute(self, plan: QueuePlan, record: QueueRecord | None) -> list[str]:
+        """Run *plan*'s writes in order, one line each."""
+        lines: list[str] = []
+        landed: str | None = None
+        failed_tip: str | None = None
+        for action in plan.actions:
+            line = f"{action.kind} {action.repo}: {action.detail}"
+            if action.kind in ("queue-held", "queue-need", "queue-warn"):
+                continue
+            if action.kind == "queue-open":
+                base = self.main_now()
+                self.ports.record(QueueOpenEvent(kind="queue_open", at=self.ports.now()),
+                                  wave=action.wave, base=base)  # fmt: skip
+                lines.append(f"{line}: opened at {base[:12]}")
+            elif action.kind in ("queue-build", "queue-rebuild") and record is not None:
+                if failed_tip is not None and action.base == failed_tip:
+                    lines.append(f"{line}: not built, the landing it builds on did not land")
+                    continue
+                queue_base = action.base if action.kind == "queue-rebuild" else (
+                    landed or replay(record).base)  # fmt: skip
+                lines.append(f"{line}: {self._build(action, queue_base)}")
+            elif action.kind == "queue-land" and record is not None:
+                outcome, said = self._land(action, record)
+                if outcome.outcome == "landed":
+                    landed = outcome.main
+                else:
+                    failed_tip = action.sha
+                lines.append(f"{line}: {said}")
+            elif action.kind == "queue-eject" and record is not None:
+                lines.append(f"{line}: {self._eject(action, record)}")
+            elif action.kind == "queue-drain":
+                self.ports.record(QueueDrainEvent(kind="queue_drain", at=self.ports.now(),
+                                                  main=action.sha or None))  # fmt: skip
+                lines.append(f"{line}: drained")
+            else:  # queue-hold, queue-cleared: the hold handshake
+                lines.append(f"{line}: planned, not executed (the hold is not written yet)")
+        return lines
+
+    def _build(self, action: QueueAction, queue_base: str) -> str:
+        p = self.ports
+        inputs = [p.entry_of(k) for k in action.entries]
+        if any(i is None for i in inputs):
+            return "not built: an entry's PR is not readable now"
+        try:
+            built = build(
+                p.checkout, action.base, [i for i in inputs if i is not None], p.method,
+                p.version, scope=p.scope, slots=action.slots, scratch=p.scratch,
+                queue_base=queue_base, record=p.record, now=p.now,
+            )  # fmt: skip
+        except MergeConflictError as exc:
+            self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths)
+            return f"{exc.batch} conflicts in {', '.join(exc.paths)}: it leaves the queue"
+        except LeaseLostError:
+            return "a slot moved under the build; built again next pass"
+        except (MergeStopError, GitError) as exc:
+            return f"not built: {exc}"
+        for b in built:
+            self.conflicts.pop(b.entry.key, None)
+        return "built " + ", ".join(f"slot-{b.slot} {b.sha[:12]}" for b in built)
+
+    def _land(self, action: QueueAction, record: QueueRecord) -> tuple[LandResult, str]:
+        p = self.ports
+        landings = landings_from(record, action.sha, p.pr_of)
+        if not landings:
+            return LandResult("stopped"), "not landed: an entry's PR is not readable now"
+        if p.config.land == "merge":
+            result = land_merge(p.client, p.checkout, p.repo, default=p.default, tip=action.sha,
+                                landings=landings, method=p.method, record=p.record, now=p.now)  # fmt: skip
+        else:
+            result = land_push(p.checkout, default=p.default, base=replay(record).base,
+                               landings=landings, method=p.method, record=p.record, now=p.now)  # fmt: skip
+        if result.outcome == "lease":
+            return result, "a lease failed: nothing landed, the queue is rebuilt next pass"
+        if result.outcome != "landed":
+            return result, f"held: {result.detail}" if result.outcome == "held" else (
+                f"stopped: {result.detail}")  # fmt: skip
+        said = f"landed at {result.main[:12]}"
+        keys = tuple(x.key for x in landings if x.ref.batch is not None)
+        if p.post_merge is not None and keys:  # R33: once per landing, right after it
+            failed = p.post_merge(keys)
+            said += "; post_merge ran" if failed is None else f"; post_merge failed: {failed}"
+        unmerged = read_back(p.client, p.repo, [x.pr for x in landings])
+        if unmerged:
+            said += "; the forge did not mark " + ", ".join(f"#{n}" for n in unmerged) + " merged"
+        return result, said
+
+    def _eject(self, action: QueueAction, record: QueueRecord) -> str:
+        p = self.ports
+        key = action.entries[0]
+        ref = _refs(record).get(key) or QueueEntryRef(batch=key)
+        reason: Literal["conflict", "red", "operator"] = (
+            "conflict" if action.reason == "conflict" else "red")  # fmt: skip
+        p.record(QueueEjectEvent(kind="queue_eject", at=p.now(), entry=ref, reason=reason,
+                                 detail=action.detail, head=action.head or None))  # fmt: skip
+        self.conflicts.pop(key, None)
+        if p.hand_back is None:
+            return "ejected"
+        return f"ejected; {p.hand_back(action)}"
