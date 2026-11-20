@@ -162,7 +162,10 @@ never holds a release, and nothing of a later wave enters meanwhile. With no wav
 between-waves entry (R2, R32). Entries join an open queue in readiness order. The
 wave drains once every batch of the wave is terminal (deferral included) and its
 close-out, if it has one, has landed. A between-waves queue drains when its one
-entry lands.
+entry lands, or, with nothing landed, once its entry has left (terminal, or no
+longer an open PR) or was ejected at the head it still has. It then drains at its
+base, like a drain by deferral (R29), and that entry opens no queue again until its
+head moves.
 
 The in-flight cap (`batch_drive.py:2012`) stops counting a batch whose PR waits on a
 queue that is not open (R36). Dispatch stays wave-ordered, so this only stops a

@@ -285,6 +285,10 @@ def _plan_idle(qs: QueueSnapshot) -> QueuePlan:
          if (w := effective_wave(b)) is not None}
     )  # fmt: skip
     ready = _by_readiness([b for b in qs.batches if _ready(b, qs)], qs)
+    # An entry a between-waves queue ejected is ejected, not waiting, until its head moves:
+    # it opens none again meanwhile, or a drain, a release and a re-open would loop on the
+    # same conflict (p2-r6).
+    ready = [b for b in ready if effective_wave(b) is not None or not _ejected_before(b, qs)]
     if unfinished:
         wave: int | None = unfinished[0]
         if not any(effective_wave(b) == wave for b in ready):
@@ -306,6 +310,18 @@ def _plan_idle(qs: QueueSnapshot) -> QueuePlan:
     )  # fmt: skip
     action = QueueAction("queue-open", qs.repo, why, wave=wave, entries=entries)
     return QueuePlan(qs.repo, "idle", wave, (action,), entries=entries, waiting=waiting)
+
+
+def _ejected_before(batch: Batch, qs: QueueSnapshot) -> bool:
+    """*batch*'s latest ejection in this scope's between-waves queues was at its live head."""
+    by_id = {batch.id: batch}
+    for record in reversed([r for r in qs.records if r.scope == qs.scope and r.wave is None]):
+        rep = replay(record)
+        if batch.id in rep.landed:
+            return False
+        if (head := _ejected_head(batch.id, rep, by_id)) is not None:
+            return head == _head(batch.id, qs)
+    return False
 
 
 def entry_key(ref: QueueEntryRef) -> str:
@@ -575,10 +591,24 @@ def _tail(
 
 def _drained(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> QueueAction | None:
     """§B: a wave drains once every batch of it is terminal (deferral included) and its
-    close-out, if it has one, has landed; a between-waves queue once its one entry landed."""
+    close-out, if it has one, has landed; a between-waves queue once its one entry landed,
+    or once nothing is left to land: every entry it named left (terminal, or no longer an
+    open PR) or was ejected at the head it still has. Like a drain by deferral (R29) it
+    drains at the base, so the hold reaches a release that clears it (p2-r6)."""
     wave = record.wave
     if wave is None:
-        done = bool(rep.landed)
+        by_id = {b.id: b for b in qs.batches}
+        named = {*rep.order, *rep.ejected}
+
+        def gone(key: str) -> bool:
+            batch = by_id.get(key)
+            if batch is None or is_terminal(batch, qs.stages.get(key)):
+                return True
+            if qs.stages.get(key) != "pr-open" or key not in qs.live:
+                return True
+            return _ejected_head(key, rep, by_id) == _head(key, qs)
+
+        done = bool(rep.landed) or all(gone(k) for k in named)
     else:
         done = qs.closeout_landed is not False and all(
             is_terminal(b, qs.stages.get(b.id)) for b in qs.batches if effective_wave(b) == wave

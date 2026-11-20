@@ -591,6 +591,48 @@ def test_a_between_waves_queue_drains_once_its_one_entry_landed() -> None:
     assert _kinds(plan) == ["queue-drain"] and plan.waiting == ("y",)
 
 
+def _loose(stages: dict[str, str], *events: dict[str, Any], **kw: Any) -> QueuePlan:
+    """A between-waves queue for x (y another loose batch), opened at MAIN."""
+    batches = [_batch("x", 1, wave=None), _batch("y", 2, wave=None)]
+    rec = _record(_open(), *events, wave=None)
+    hold = Hold(state="open", scope=ME, wave=None, parent=MAIN)
+    kw.setdefault("live", {"x": _live(100, "head-x")})
+    return plan_queue(_qs(batches, stages, records=(rec,), hold=hold, **kw))
+
+
+def test_a_between_waves_queue_whose_one_entry_was_ejected_drains_at_its_base() -> None:
+    # p2-r6: nothing landed and nothing left to land: it drains at the base it opened on
+    # (like a wave drained by deferral, R29), so the hold reaches a release and is cleared.
+    plan = _loose({"x": "pr-open", "y": "dispatched"},
+                  _eject("x", "conflict", head="head-x"))  # fmt: skip
+    assert _kinds(plan) == ["queue-drain"] and _one(plan, "queue-drain").sha == MAIN
+    assert plan.entries == () and plan.waiting == ()
+
+
+def test_a_between_waves_queue_whose_entry_left_before_it_was_built_drains() -> None:
+    plan = _loose({"x": "cancelled", "y": "dispatched"}, live={})
+    assert _kinds(plan) == ["queue-drain"]
+
+
+def test_a_between_waves_queue_whose_built_entry_is_only_pending_keeps_waiting() -> None:
+    # x pushed a new head after its build: not ready while its checks run, still its entry.
+    live = {"x": _live(100, "head-x2", checks="pending")}
+    plan = _loose({"x": "pr-open", "y": "dispatched"}, _built(1, "s1", "x"), live=live)
+    assert "queue-drain" not in _kinds(plan)
+
+
+def test_an_entry_ejected_from_a_between_waves_queue_opens_none_again_at_the_same_head() -> None:
+    drained = _record(_open(), _eject("x", "conflict", head="head-x"),
+                      {"kind": "queue_drain", "at": AT, "main": MAIN}, wave=None)  # fmt: skip
+    batches = [_batch("x", 1, wave=None)]
+    same = plan_queue(_qs(batches, {"x": "pr-open"}, records=(drained,)))
+    assert same.actions == () and same.waiting == ()
+    live = {"x": _live(100, "head-x2")}
+    moved = plan_queue(_qs(batches, {"x": "pr-open"}, records=(drained,), live=live,
+                           approvals={"x": First("head-x2")}))  # fmt: skip
+    assert _one(moved, "queue-open").entries == ("x",)
+
+
 def _spent(n: int) -> list[dict[str, Any]]:
     return [{"kind": "red_handback", "at": f"2026-11-20T09:4{i}:00Z", "pr": n, "head": f"r{i}",
              "checks": ["t"], "delivered": "session"} for i in range(2)]  # fmt: skip
