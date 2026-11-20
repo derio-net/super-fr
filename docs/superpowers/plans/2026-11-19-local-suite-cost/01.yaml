@@ -1,0 +1,94 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Scoped git answer cache for the default remote and ref (R1)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - git-answers-cached-per-invocation
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/git_cache.py
+  - packages/fr/src/fr/git.py
+  - packages/fr/src/fr/cli.py
+  - tests/unit/test_git_cache.py
+  - tests/unit/test_git_cache_call_count.py
+  - tests/unit/test_smoke_ci.py
+  - .changes/perf-test-suite-cost.yaml
+  - docs/**/*.md
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Smoke — CI green on a trivial test, and the change fragment
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add tests/unit/test_smoke_ci.py with one trivial passing test (asserts `fr.cli.app` is importable) and `.changes/perf-test-suite-cost.yaml` (`bump: minor`, summary: faster fr git lookups, a declared `tests: ci` default, a fast advisory test tier). Commit, `uv run fr push`, and confirm the draft PR's `ci-ok` goes green (record it with `tests: ci` evidence).
+- number: 2
+  title: Scope and repository location without git (spec §3.A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_git_cache.py — `with git_cache.scope():` a lookup stores and returns an entry; outside any scope `git_cache.active()` is None; `locate(root)` parses a `.git` dir, a `.git` file's `gitdir:` and `<gitdir>/commondir` for a linked worktree (real `git worktree add` fixture), and returns None for no `.git`, a `GIT_DIR`/`GIT_COMMON_DIR` env, a `<common>/reftable` dir, `extensions.worktreeConfig`, or an `[include`/`[includeIf` section in any config read.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/git_cache.py — a `ContextVar[dict | None]`, a `scope()` context manager, `active()`, `locate(root) -> Located | None` (git dir, common dir), and `fingerprint(located, remote, ref_names) -> tuple` built only from `os.stat` (mtime_ns, size, inode or ABSENT) over: the system config (none under GIT_CONFIG_NOSYSTEM; else GIT_CONFIG_SYSTEM; else the path from one `git config --system --list --show-origin` per scope), the global config (GIT_CONFIG_GLOBAL, else $XDG_CONFIG_HOME/git/config and ~/.gitconfig), `<common>/config`, the GIT_CONFIG_COUNT/KEY_*/VALUE_* env values, `<common>/packed-refs`, `<common>/refs/remotes/<remote>/HEAD` and each `refs/remotes/<remote>/<name>` consulted.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep git_cache.py free of fr imports beyond fr.git's types; docstrings state what is never cached.
+- number: 3
+  title: Route remote_name and remote_default_ref through the cache; open the scope
+    at CLI entry
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests in test_git_cache.py, each counting git starts with a `subprocess.run` spy. Two identical questions in one scope start git once. Each of these makes the next answer fresh inside one scope: a fetch that creates refs/remotes/origin/main, `git remote set-head origin -a`, `checkout.defaultRemote` set in GIT_CONFIG_GLOBAL, `git remote add`, a ref deleted from packed-refs (`git pack-refs --all`, then `update-ref -d`), a nested default `release/x/main`. GitRefusal, GitUnavailableError and a not-a-repo root are not cached. A call outside a scope starts git every time. An include-config repo is never cached.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: fr/git.py — `remote_name` and `remote_default_ref` consult `git_cache` (key `(resolved root, 'remote_name')` or `(..., 'remote_default_ref')`, value plus fingerprint; refresh on a fingerprint mismatch). fr/cli.py `_FrGroup.invoke` wraps the command in `git_cache.scope()`.
+  - id: P1.T3.S3
+    text: |-
+      RED then GREEN: tests/unit/test_git_cache_call_count.py — run record_support.started_run plus one resolve under a git-start counter and assert at most 500 git starts for the profiled scenario. Record the baseline (926) and the measuring command in the test's docstring.
+  - id: P1.T3.S4
+    text: |-
+      REFACTOR + quality gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, mypy over packages/fr/src; run the new test files and tests/unit/test_git*.py; commit; `uv run fr push`; wait for CI and record `tests: ci`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: '2026-11-19T10:18:37+00:00'
+      note: null
+  completion:
+    at: '2026-11-19T10:18:37+00:00'
+    note: null
+    observed_prs: []

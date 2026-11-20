@@ -17,9 +17,9 @@ set -eu
 # shellcheck source=lib/fr-isolation-decision.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 input=$(cat)
-name=$(printf '%s' "$input" | jq -r '.name // empty')
-cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
-session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
+name=$(printf '%s' "$input" | fr_jq -r '.name // empty')
+cwd=$(printf '%s' "$input" | fr_jq -r '.cwd // empty')
+session_id=$(printf '%s' "$input" | fr_jq -r '.session_id // empty')
 [ -n "$name" ] && [ -n "$cwd" ] || { echo "fr-worktree-create: missing name or cwd" >&2; exit 1; }
 fr_git_resolve || {
   echo "fr-worktree-create: no trusted git (only absolute PATH entries count)" >&2; exit 1; }

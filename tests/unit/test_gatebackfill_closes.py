@@ -17,6 +17,7 @@ from fr.gatebackfill.model import PlanEntry, PlanFile, PrHit, dropped_decisions,
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, owed_body
 from typer.testing import CliRunner
 
+from tests.unit import fixture_templates
 from tests.unit.fakes import FakeGhClient
 from tests.unit.gatebackfill_fixtures import (
     ME,
@@ -38,20 +39,49 @@ WRITES = {
 }  # fmt: skip
 
 
+def _publish(root: Path, msg: str = "work") -> None:
+    commit_at(root, msg, "2026-10-30T00:00:00+00:00")
+    git(root, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(root, "fetch", "-q", "origin")
+    git(root, "remote", "set-head", "origin", "main")
+
+
+def _build_checkout(tmp_path: Path) -> None:
+    """The template `Env` copies (spec 2026-11-19-local-suite-cost §3.B): a checkout of
+    `widgets` with a fetched default ref, and the bare origin `url.<bare>.insteadOf` routes to.
+    It sets its own committer identity (`git` here passes it), as a CI runner has none."""
+    root = tmp_path / "widgets"
+    root.mkdir()
+    bare = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
+    git(root, "init", "-q", "-b", "main")
+    git(root, "remote", "add", "origin", f"https://github.com/{REPO}.git")
+    git(root, "config", f"url.{bare}.insteadOf", f"https://github.com/{REPO}.git")
+    write_matrix(root, [row("r-done", "walked"), row("r-owed", "walk-owed")])
+    _publish(root, "seed")
+
+
+def _relink_checkout(dest: Path) -> None:
+    """Point the copy's `insteadOf` at the copy's own bare origin."""
+    root = dest / "widgets"
+    git(root, "config", "--remove-section", _old_section(root))
+    git(root, "config", f"url.{dest / 'origin.git'}.insteadOf", f"https://github.com/{REPO}.git")
+
+
+def _old_section(root: Path) -> str:
+    keys = git(root, "config", "--name-only", "--get-regexp", r"^url\..*\.insteadof$")
+    return keys.splitlines()[0].rsplit(".", 1)[0]
+
+
 class Env:
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.tmp = tmp_path
         self.plan_file = tmp_path / "home/.cache/fr/gate-backfill/example-org--widgets/plan.yaml"
+        fixture_templates.current().copy(
+            "gatebackfill_closes", _build_checkout, tmp_path, relink=_relink_checkout
+        )
         root = tmp_path / "widgets"
-        root.mkdir()
-        bare = tmp_path / "origin.git"
-        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
-        git(root, "init", "-q", "-b", "main")
-        git(root, "remote", "add", "origin", f"https://github.com/{REPO}.git")
-        git(root, "config", f"url.{bare}.insteadOf", f"https://github.com/{REPO}.git")
-        write_matrix(root, [row("r-done", "walked"), row("r-owed", "walk-owed")])
         self.root = root
-        self.publish("seed")
         self.fake = FakeGhClient()
         self.fake.comment_author = ME
         self.fake.add_pr(REPO, 41, state="MERGED", head_ref="feat/x", labels=["gate:tester-passed"])
@@ -62,10 +92,7 @@ class Env:
         monkeypatch.chdir(root)
 
     def publish(self, msg: str = "work") -> None:
-        commit_at(self.root, msg, "2026-10-30T00:00:00+00:00")
-        git(self.root, "push", "-q", "origin", "HEAD:refs/heads/main")
-        git(self.root, "fetch", "-q", "origin")
-        git(self.root, "remote", "set-head", "origin", "main")
+        _publish(self.root, msg)
 
     def tracked_only(self, n: int, key: str = DONE, pr: int = 41) -> None:
         body = t.passed_tracker_body(key, "t", "tester", pr, repo_root=self.root)

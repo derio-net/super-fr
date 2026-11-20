@@ -12,6 +12,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 import { run, type RunAnswer } from "../spawn";
+import { resolveTool } from "../tools";
 
 export const MISSING = "\u2014";
 export const SEGMENT_TIMEOUT_MS = 2000;
@@ -39,12 +40,19 @@ export function formatSegment(plain: string): string {
 
 export type Runner = (cmd: string, args: string[], options: { cwd?: string; timeoutMs: number }) => Promise<RunAnswer>;
 
-export type SegmentDeps = { run?: Runner; exists?: (p: string) => boolean };
+export type SegmentDeps = {
+  run?: Runner;
+  exists?: (p: string) => boolean;
+  /** The bash to run the script with (default: `resolveTool("bash")`, super-fr#1481). */
+  resolve?: () => string | null;
+};
 
 /** The segment for `cwd`: "" outside a repo, the formatted script output inside one. */
 export async function readSegment(cwd: string, script: string, deps: SegmentDeps = {}): Promise<string> {
   if (!inGitRepo(cwd, deps.exists)) return "";
-  const answer = await (deps.run ?? run)("bash", [script, "--format", "plain", "--cwd", cwd], {
+  const bash = (deps.resolve ?? (() => resolveTool("bash")))();
+  if (bash === null) return `${MISSING} · ${MISSING}`;
+  const answer = await (deps.run ?? run)(bash, [script, "--format", "plain", "--cwd", cwd], {
     cwd,
     timeoutMs: SEGMENT_TIMEOUT_MS,
   });

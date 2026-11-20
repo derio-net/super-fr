@@ -45,7 +45,11 @@ def test_an_inherited_columns_does_not_freeze_module_consoles(tmp_path: Path) ->
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
     (tmp_path / "conftest.py").write_text(CONFTEST.read_text())
     (tmp_path / "test_probe.py").write_text(PROBE)
-    env = {**os.environ, "COLUMNS": "80", "LINES": "24"}
+    # The copied conftest imports its siblings (`tests.unit.fixture_templates`), which
+    # live under the repo root, not beside the copy.
+    repo_root = str(CONFTEST.parents[1])
+    pythonpath = os.pathsep.join(p for p in (repo_root, os.environ.get("PYTHONPATH")) if p)
+    env = {**os.environ, "COLUMNS": "80", "LINES": "24", "PYTHONPATH": pythonpath}
 
     result = subprocess.run(
         [

@@ -10,7 +10,7 @@ set -eu
 # shellcheck source=lib/fr-isolation-decision.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib/fr-isolation-decision.sh"
 input=$(cat)
-path=$(printf '%s' "$input" | jq -r '.worktree_path // empty')
+path=$(printf '%s' "$input" | fr_jq -r '.worktree_path // empty')
 [ -n "$path" ] || exit 0
 case "$path" in
   */.claude/worktrees/agent-*|*/.cache/fr/agent-worktrees/*/agent-*)

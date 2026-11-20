@@ -9,10 +9,12 @@ from pathlib import Path
 import pytest
 from fr.run.model import load_run_state
 
+from tests.unit import fixture_templates
 from tests.unit.record_support import (
     RUN,
     commit_all,
     fr,
+    git,
     implement_record,
     resolve_empty_lens_review,
     snapshot,
@@ -24,6 +26,13 @@ PR = "https://github.com/derio-net/super-fr/pull/1"
 
 
 def _at_deliver(tmp_path: Path) -> Path:
+    """A run whose `deliver` step is briefed: an independent copy of the worker's
+    template (spec 2026-11-19-local-suite-cost §3.B), built once by `_build_at_deliver`."""
+    fixture_templates.current().copy("at_deliver", _build_at_deliver, tmp_path)
+    return tmp_path / "workspace"
+
+
+def _build_at_deliver(tmp_path: Path) -> None:
     root = started_run(tmp_path)
     impl = implement_record(
         journal=[
@@ -63,7 +72,16 @@ def _at_deliver(tmp_path: Path) -> Path:
     account_seeded_row(root)
     commit_all(root, "at deliver")
     (root / "suite.log").write_text("n passed\n")
-    return root
+    # the self-check: a template built wrong fails here, naming itself (review p2-r1)
+    from fr.run.code_tree import newest_code_mtime
+
+    assert load_run_state(root, RUN).steps["deliver"].state == "running", "deliver not briefed"
+    assert git(root, "status", "--porcelain").strip() == "?? suite.log", "tree not at deliver"
+    newest = newest_code_mtime(root, None, ignore=[root / "suite.log"])
+    assert newest is not None
+    assert (root / "suite.log").lstat().st_mtime >= newest[0], (
+        f"suite.log is older than {newest[1]}: deliver would refuse it as stale"
+    )
 
 
 def account_seeded_row(root: Path) -> None:

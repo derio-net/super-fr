@@ -8,6 +8,15 @@ from pathlib import Path
 
 import pytest
 
+from tests.unit.fixture_templates import (
+    FixtureTemplates,
+    build_paths,
+    forget_baseline,
+    home_sandbox,
+    note_baseline,
+)
+from tests.unit.fixture_templates import install as install_templates
+
 REPO_ROOT = Path(__file__).parent.parent
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 OPERATOR_HOME = Path(os.environ.get("HOME") or Path.home())
@@ -252,29 +261,41 @@ def _home_off_the_operators_machine(
     a `uv run` child neither re-downloads nor loses its interpreter.
     Pinned by `tests/unit/test_suite_home_sandbox.py`."""
     home = tmp_path_factory.mktemp("home")
-    monkeypatch.setenv("HOME", str(home))
-    gitconfig = home / ".gitconfig"
-    sections: dict[str, list[str]] = {}
-    for key, value in OPERATOR_GIT_IDENTITY.items():
-        section, name = key.split(".", 1)
-        quoted = value.replace("\\", "\\\\").replace('"', '\\"')
-        sections.setdefault(section, []).append(f'\t{name} = "{quoted}"')
-    gitconfig.write_text(
-        "".join(f"[{section}]\n" + "\n".join(lines) + "\n" for section, lines in sections.items()),
-        encoding="utf-8",
+    for key, value in home_sandbox(home, OPERATOR_GIT_IDENTITY, OPERATOR_HOME).items():
+        monkeypatch.setenv(key, value)
+
+
+@pytest.fixture(autouse=True)
+def _template_baseline(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    """Marks the patches the autouse fixtures made, so a template built inside a test leaves out
+    the patches that test made itself (`tests/unit/fixture_templates.py`). It asks for every other
+    autouse fixture first, by looking them up rather than naming them, so a new one is covered."""
+    for name in request.session._fixturemanager._getautousenames(request.node):  # type: ignore[attr-defined]
+        if name != "_template_baseline":
+            request.getfixturevalue(name)
+    note_baseline(monkeypatch)
+    yield
+    forget_baseline()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def fixture_templates(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[FixtureTemplates]:
+    """The worker's copyable repository templates (spec 2026-11-19-local-suite-cost §3.B).
+    Built lazily, on first use, under its OWN sandbox home (the same `home_sandbox` the
+    per-test fixture above uses) and handed out as independent copies. See
+    `tests/unit/fixture_templates.py`. Pinned by `tests/unit/test_fixture_templates.py`."""
+    home = tmp_path_factory.mktemp("template-home")
+    factory = FixtureTemplates(
+        tmp_path_factory.mktemp("templates"),
+        {**home_sandbox(home, OPERATOR_GIT_IDENTITY, OPERATOR_HOME), **build_paths(home)},
     )
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
-    lent = {
-        "UV_CACHE_DIR": Path(os.environ.get("XDG_CACHE_HOME") or OPERATOR_HOME / ".cache") / "uv",
-        "UV_PYTHON_INSTALL_DIR": Path(
-            os.environ.get("XDG_DATA_HOME") or OPERATOR_HOME / ".local" / "share"
-        )
-        / "uv"
-        / "python",
-    }
-    for key, path in lent.items():
-        if key not in os.environ and path.exists():
-            monkeypatch.setenv(key, str(path))
+    install_templates(factory)
+    yield factory
+    install_templates(None)
 
 
 @pytest.fixture(autouse=True)
@@ -630,3 +651,71 @@ def _fr_release_pin_never_hits_the_network(monkeypatch: pytest.MonkeyPatch) -> N
 
     stub.real = pin.default_ls_remote  # type: ignore[attr-defined]
     monkeypatch.setattr(pin, "default_ls_remote", stub)
+
+
+# -- the fast advisory tier and its advisory line (spec 2026-11-19-local-suite-cost R6, R7)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    from tests.fr_scope import DEFAULT_BASE
+
+    parser.addoption(
+        "--fr-scope",
+        nargs="?",
+        const=DEFAULT_BASE,
+        default=None,
+        metavar="BASE",
+        help=(
+            "fast advisory tier: only the tests the changes since the merge-base with "
+            "BASE (default: the remote default ref) reach, plus the smoke set; never "
+            "deliver evidence (tests/fr_scope.py)"
+        ),
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    value = config.getoption("--fr-scope")
+    if value is None:
+        return
+    from tests.fr_scope import (
+        ImportIndex,
+        ScopeError,
+        changed_paths,
+        keep_item,
+        resolve_base,
+        unparseable_line,
+        unreached,
+        unreached_line,
+    )
+    from tests.fr_scope import select as scope_select
+
+    root = config.rootpath
+    try:
+        changed = changed_paths(root, resolve_base(root, value))
+    except ScopeError as exc:
+        raise pytest.UsageError(str(exc)) from exc
+    index = ImportIndex.build(root)
+    selected = scope_select(index, changed)
+    # Printed in the terminal summary: what this tier covers with the smoke set alone.
+    lines = (unreached_line(unreached(index, changed)), unparseable_line(index))
+    config._fr_scope_unreached = [line for line in lines if line]  # type: ignore[attr-defined]
+    kept, dropped = [], []
+    for item in items:
+        rel = item.path.relative_to(root).as_posix()
+        marks = [m.name for m in item.iter_markers()]
+        (kept if keep_item(rel, marks, selected) else dropped).append(item)
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+        items[:] = kept
+
+
+def pytest_terminal_summary(terminalreporter: object, config: pytest.Config) -> None:
+    from tests.fr_scope import ADVISORY_LINE, reasons_line, session_reasons
+
+    for line in getattr(config, "_fr_scope_unreached", []):
+        terminalreporter.write_line(line)  # type: ignore[attr-defined]
+    reasons = session_reasons(config)
+    if reasons:
+        # The reasons on a line of their own, then the fixed line fr matches whole.
+        terminalreporter.write_line(reasons_line(reasons))  # type: ignore[attr-defined]
+        terminalreporter.write_line(ADVISORY_LINE)  # type: ignore[attr-defined]

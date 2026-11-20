@@ -9,7 +9,7 @@ covers:
   - .hermes/config.snippet.yaml
   - plugins/super-fr/hooks/hermes/**
   - HERMES.md
-reviewed: 2026-11-14 VK support removed; HERMES.md drops fr-vk from its package list and mypy line, which this page does not repeat
+reviewed: 2026-11-19 still true; the push guard runs the resolved gh, no registration changes (batch hook-hardening). 2026-11-14 VK support removed; HERMES.md drops fr-vk from its package list and mypy line, which this page does not repeat
 ---
 
 # Run super-fr under Hermes Agent

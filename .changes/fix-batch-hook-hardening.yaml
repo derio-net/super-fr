@@ -1,0 +1,2 @@
+bump: patch
+summary: "Hooks and the OpenCode plugin run jq, python3 (isolated), bash and gh only from absolute PATH entries, the Claude edit gate denies even with no jq installed, install.sh constrains fr's dependencies to the release's uv.lock and pins the devcontainer CLI, and the plugin's lock lifts glob and minimatch past two advisories."

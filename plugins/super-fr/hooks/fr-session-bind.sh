@@ -19,15 +19,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 input=$(cat)
 
-command -v jq >/dev/null 2>&1 || exit 0
+fr_jq_resolve || exit 0
 fr_fr_resolve || exit 0
 
-[ "$(printf '%s' "$input" | jq -r '.tool_name // empty')" = "Bash" ] || exit 0
-[ -z "$(printf '%s' "$input" | jq -r '.agent_id // empty')" ] || exit 0
+[ "$(printf '%s' "$input" | fr_jq -r '.tool_name // empty')" = "Bash" ] || exit 0
+[ -z "$(printf '%s' "$input" | fr_jq -r '.agent_id // empty')" ] || exit 0
 
-session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
-cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
-command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+session_id=$(printf '%s' "$input" | fr_jq -r '.session_id // empty')
+cwd=$(printf '%s' "$input" | fr_jq -r '.cwd // empty')
+command=$(printf '%s' "$input" | fr_jq -r '.tool_input.command // empty')
 [ -n "$session_id" ] && [ -n "$cwd" ] && [ -n "$command" ] || exit 0
 
 first=$(printf '%s\n' "$command" | sed -n '1p')
