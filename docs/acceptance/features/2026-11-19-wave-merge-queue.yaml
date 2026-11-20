@@ -400,3 +400,10 @@ amendments:
     notes: 'retired by spec 2026-11-19-wave-merge-queue R22: the queue never updates
       a PR branch, so strict up-to-date status checks have nothing to hold'
     why: R22 removes the update path and its strict-checks exemption
+  - row: merge-train-red-recovery
+    op: reword
+    base: 4
+    acceptance: A PR red at a session commit is handed back to an idle session once
+      per head; repeated passes over the same red head send nothing new; an unreachable
+      session puts it on Needs-you.
+    why: the reupdate rule and fr's own updates are gone (R22)
