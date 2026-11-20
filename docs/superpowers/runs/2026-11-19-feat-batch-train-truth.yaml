@@ -148,7 +148,7 @@ steps:
           visual: none
           findings: p3a-r1,p3a-r2,p3a-r3,p3a-r4,p3a-r5,p3a-r6,p3-orch-r12-parent-race
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-20T10:15:27+00:00'
           agent: a942f7d7a3b781526
@@ -158,6 +158,11 @@ steps:
           tier: standard
           bound: claude-sonnet-5
           session: 755bf926-d4e8-4f88-99cb-388408cbe75e
+          returned: '2026-11-20T10:42:50+00:00'
+          outcome: done
+        evidence:
+          tests: ci:1de111c8a54decb38be198ab810859fa14686db5+396e444d3f313b84df4b96971d9da98719556dbe;tree=37738b037d8658f423774f18aa609ac19836895114b8c0968f7dad9323c7d0f2
+          visual: none
   journal-check:
     state: pending
   lens-review:

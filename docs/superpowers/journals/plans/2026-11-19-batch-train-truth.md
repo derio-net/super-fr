@@ -474,3 +474,33 @@ Added each as a test. Commit 26a9a9231; scoped run 7785 passed (p3-fix.log).
 ### p3-orch-r12-parent-race-resolved · finding [fixed] · resolves p3-orch-r12-parent-race: The supervisor read getppid() late: a launcher that ended first left it adopted and running forever (R12) (phase 3)
 
 Supervisor takes the parent explicitly and stops before starting a driver when it already ended; the rig names its parent and the supervisor names itself; a new test (parent ended before run) and the repaired race both failed before the fix and pass after. Commit c28d94e42.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-r20-test-green-first created=2026-11-20T10:42:43+00:00 phase=4 -->
+### p4-r20-test-green-first · discovery · R20's partial-apply test was green first (phase 4) (phase 4)
+
+swap_issue_labels already repeated idempotent adds and removals, so the test proving a refused call that applied its add ends with the wanted labels passed before the docstring changed; the change is the docstring (P4.T1.S2). The R21 test was red first.
+
+<!-- fr:journal kind=decision scope=plan id=p4-docs-landed-early created=2026-11-20T10:42:43+00:00 phase=4 -->
+### p4-docs-landed-early · decision · R24 docs landed ahead of the phase (phase 4) (phase 4)
+
+The R24 docs and mirrors landed in f050390cd and 4b8171acb ahead of this phase so CI's docs-check could pass. Re-verified against phase 3's review fixes (26a9a9231, c28d94e42): added the no-session conflict hold and the R21 cancel wording, re-synced the three mirrors, fr docs check --base origin/main exits 0.
+
+<!-- fr:journal kind=decision scope=plan id=p4-cancel-gate-on-dispatch created=2026-11-20T10:42:43+00:00 phase=4 -->
+### p4-cancel-gate-on-dispatch · decision · cancel gates and withdraws on a dispatch event, not on stage (phase 4) (phase 4)
+
+batch cancel now computes dispatched from the events; without one, withdraws is empty and no tracking gate or clone is needed. Claims are still released (their label removal is the claim release, not a withdrawal).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-20T10:42:43+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+a docstring reword and one test; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-20T10:42:43+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+one computed flag replaced the stage test; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-20T10:42:43+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+docs and generated mirrors only
