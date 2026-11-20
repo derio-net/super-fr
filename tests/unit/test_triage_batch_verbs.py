@@ -1094,6 +1094,8 @@ def test_cancelling_a_never_dispatched_batch_withdraws_nothing_and_needs_no_clon
     own = marker(_me(), "lifecycle", expires=FAR)
     _with6(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "wave": 1})
     put_marker(gh, REPO, 577, own, 7)
+    # an fr:in-progress some other hand put there: a never-dispatched cancel leaves it be
+    gh.issues[(REPO, 577)].labels.add("fr:in-progress")
     before = list(gh.issue_comments.get((REPO, 577), []))
     code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
     assert code == 0, out
@@ -1101,6 +1103,7 @@ def test_cancelling_a_never_dispatched_batch_withdraws_nothing_and_needs_no_clon
     assert "post the withdrawal comment" not in out
     assert not any("withdr" in str(c).lower() for c in gh.issue_comments.get((REPO, 577), []))
     assert len(gh.issue_comments.get((REPO, 577), [])) == len(before)
+    assert "fr:in-progress" in gh.issues[(REPO, 577)].labels
     assert markers(gh, REPO, 577)[0].released is not None
     assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
 

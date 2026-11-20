@@ -974,7 +974,7 @@ def batch_cancel_command(
             f"  {key}: remove {FR_IN_PROGRESS.name}, post the withdrawal comment",
             markup=False,
         )
-    for key in sorted(held):
+    for key in sorted(held) if dispatched else ():  # undispatched: no label or comment
         console.print(
             f"  {key}: held by another triage scope; its label and comments are left to it",
             markup=False,
@@ -1020,7 +1020,11 @@ def batch_cancel_command(
         released: list[str] = []
         if releases and not failed:
             try:
-                result = execute(env, [ClaimOp("release", k, batch.id) for k in batch.ids], _now())
+                result = execute(
+                    env,
+                    [ClaimOp("release", k, batch.id, unlabel=dispatched) for k in batch.ids],
+                    _now(),
+                )
             except UnsupportedForgeOperation as exc:
                 _fail(str(exc))
             failed += [f"{op.key}: {why}" for op, why in result.failed]

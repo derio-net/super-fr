@@ -145,7 +145,7 @@ loop, so it does not combine with `--once`, and it needs `--yes`.
 
 The supervisor restarts the driver when it ends in a way you did not ask for. An exit
 with code 0, 2 or 3, or a clean stop on SIGINT, SIGTERM or SIGHUP, is deliberate: the
-supervisor ends with the same code. Any other exit code, or a death by another signal such
+supervisor ends with that code. After a signal stop, the code is 128 plus the signal number. Any other exit code, or a death by another signal such
 as SIGKILL, is a crash. The supervisor waits 5 seconds before the first restart and
 doubles the wait each time, up to 5 minutes. If the driver crashes a sixth time within 30
 minutes, the supervisor stops as a refusal with cause `crash-loop`, and the board shows it
