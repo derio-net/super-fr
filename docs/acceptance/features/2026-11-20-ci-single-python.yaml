@@ -84,3 +84,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_covers_every_test_leg
     why: test renamed
+  - row: ci-shards-complete
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_checks_the_one_leg
+    why: test renamed
