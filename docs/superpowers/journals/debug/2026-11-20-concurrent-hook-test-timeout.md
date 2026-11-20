@@ -20,3 +20,8 @@ Measured locally with a 35-entry PATH and PS4='+ ': hook xtrace was 47376 B befo
 ### 8b4fb1f742f6 · root-cause · Second, older cause: the hooks' mkdir lock is entered twice on Linux CI (exit-1 / OVERLAP variant)
 
 PR #1584 attempt 1 (py3.11 shard 3): both hooks' 'mkdir <lock>' succeeded 2 ms apart (.268119 and .270165), no cat/kill/rm/sleep between mkdir and trap, both wrote pid files, both stubs ran (OVERLAP) and hook 0's stub exited 1 on its rmdir. Same signature as #1463's instrumented recurrence on #1536 (66 us apart, before #1573). So it predates #1573; #1573 only moved how often it is seen. The hooks' exclusion rests on an external mkdir being atomic; the runner is ubuntu-26.04. Mechanism of mkdir succeeding twice is unverified (not reproducible on macOS: 480x2 passes in #1463). Decision: acquire the lock with bash's own noclobber redirect (open O_EXCL in the shell, no external binary), so the exclusion no longer depends on what mkdir does.
+
+<!-- fr:journal kind=finding scope=debug id=09222191fa55 created=2026-11-20T06:51:09+00:00 state=fixed -->
+### 09222191fa55 · finding [fixed] · run_twice drained pipes one at a time (timeout variant)
+
+tests/unit/test_hooks_worktree.py: run_twice reads both hooks' pipes concurrently. Pinned first by test_run_twice_drains_both_pipes_while_they_run (red before, green after).
