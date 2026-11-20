@@ -62,7 +62,7 @@ resolves:
     body: hold writes are merge commits via Checkout.ref_commit(previous=) (driver and release.py), readers take the first parent; a refused write is a queue_halt ("hold write refused") that stops landing with a Need until a write succeeds, and refused drained/cleared writes are Needs; spec R17/§G updated; tests under a no-force-push hook in test_queue_hold.py, planner and release-script tests.
   - id: p4-r2
     state: fixed
-    body: prepare's if runs an fr-hold push only when its head commit starts "fr-hold: drained"; deletion guard kept; test_release_workflow.py evaluates the expression per case.
+    body: "prepare's if runs an fr-hold push only when its head commit starts 'fr-hold: drained'; deletion guard kept; test_release_workflow.py evaluates the expression per case."
   - id: p4-r3
     state: fixed
     body: publish re-runs check_hold before push; held prints nothing is pushed and clears nothing; test_release_script.py.
