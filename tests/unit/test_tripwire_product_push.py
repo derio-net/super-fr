@@ -151,3 +151,61 @@ def test_the_scanner_sees_a_raw_push() -> None:
     visitor.visit(ast.parse('def h():\n    subprocess.run(["git", "push"])\n'))
     visitor.visit(ast.parse('def i():\n    stored(git_dir, "push", branch)\n'))
     assert visitor.found == {"f", "g", "h"}
+
+
+QUEUE_LEASED_PUSH_CALLERS = {
+    # the slot pushes (R4) and the one atomic landing (R10): the queue's executor alone
+    ("fr.triage.queue_exec", "build"),
+    ("fr.triage.queue_exec", "land_push"),
+    ("fr.triage.queue_exec", "QueueExecutor.resume"),
+}
+QUEUE_ATOMIC_PUSH_CALLERS = {("fr.triage.queue_exec", "land_push")}
+
+
+class _LeasedCalls(_Sites):
+    """Every call of a `push_leased` attribute, with its `atomic=` keyword."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.leased: list[tuple[str, ast.Call]] = []
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "push_leased":
+            self.leased.append((self._here(), node))
+        super().visit_Call(node)
+
+
+def _leased_calls() -> list[tuple[str, str, ast.Call]]:
+    out: list[tuple[str, str, ast.Call]] = []
+    for path in sorted((REPO / "packages").glob("*/src/**/*.py")):
+        visitor = _LeasedCalls()
+        visitor.visit(ast.parse(path.read_text(), filename=str(path)))
+        out += [(_module(path), where, call) for where, call in visitor.leased]
+    return out
+
+
+def test_only_the_queue_executor_calls_the_leased_push() -> None:
+    """p3-r6: `Checkout.push_leased` moves the default branch and PR branches by a leased
+    push (R10), which no placement scan sees; pinned by caller, so any new one fails until
+    it is argued into this list. Only the landing asks for `--atomic`; every other caller
+    passes the literal `atomic=False`."""
+    calls = _leased_calls()
+    callers = {(module, where) for module, where, _ in calls}
+    assert callers == QUEUE_LEASED_PUSH_CALLERS, (
+        f"Checkout.push_leased callers changed: {sorted(callers ^ QUEUE_LEASED_PUSH_CALLERS)}. "
+        "Only the wave merge queue's executor pushes leased; argue a new caller here"
+    )
+    for module, where, call in calls:
+        atomic = next((k.value for k in call.keywords if k.arg == "atomic"), None)
+        if (module, where) in QUEUE_ATOMIC_PUSH_CALLERS:
+            assert isinstance(atomic, ast.Constant) and atomic.value is True
+        else:
+            assert isinstance(atomic, ast.Constant) and atomic.value is False, (
+                f"{module}.{where} pushes leased without the literal atomic=False"
+            )
+
+
+def test_the_leased_push_scanner_sees_a_call() -> None:
+    visitor = _LeasedCalls()
+    visitor.visit(ast.parse("def f():\n    c.push_leased([], {}, atomic=True)\n"))
+    assert [where for where, _ in visitor.leased] == ["f"]

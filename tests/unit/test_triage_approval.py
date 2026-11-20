@@ -341,3 +341,22 @@ def test_an_approval_that_has_an_id_is_never_refreshed() -> None:
     _, written, _ = _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p1"})
 
     assert written == []
+
+
+# ------------------------------------------------------------------ a landed PR (R12, R35; p3-r4)
+
+
+def test_a_pr_the_queue_landed_is_never_settled_though_the_forge_reads_it_open() -> None:
+    """R12: a landed PR's approval is never read again. A forge that has not marked it
+    merged yet (R35) still reads it OPEN, and its patch-id against the new main is "":
+    settling it would void the approval and strip the label."""
+    forge = _Forge({"state": "OPEN", "head_oid": "h2", "labels": [LABEL]})
+    written: list[tuple[str, BatchEvent]] = []
+
+    got = settle_approvals(
+        forge, lambda bid, ev: written.append((bid, ev)), REPO,
+        [(_batch(_approval("h1", "p1")), 7)], lambda _: None, now=NOW,
+        patch_id_of=lambda pr, head, fresh=False: "", landed=frozenset({"a"}),
+    )  # fmt: skip
+
+    assert written == [] and forge.label_edits == [] and got == {}

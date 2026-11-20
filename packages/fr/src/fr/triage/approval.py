@@ -28,7 +28,7 @@ the id; the re-read tells that from a real change).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -195,6 +195,7 @@ def settle_approvals(
     now: datetime,
     dry_run: bool = False,
     patch_id_of: PatchIdOf | None = None,
+    landed: Collection[str] = frozenset(),
 ) -> dict[str, ApprovalVerdict]:
     """Record a `First` approval at the PR's live head, whatever its checks; void a
     `Void` one (remove the label, then record the void, so a failure between the two
@@ -203,9 +204,13 @@ def settle_approvals(
     settling: a recorded `First` is `Approved`, a voided one `Unlabelled`. *dry_run*
     says what it would do and changes nothing (§A "Recording and voiding"). *patch_id_of*
     reads the live head's patch-id, which a `First` approval records and the verdict
-    compares (wave-merge-queue R12); without it, approvals are judged by `reaches`."""
+    compares (wave-merge-queue R12); without it, approvals are judged by `reaches`.
+    A batch in *landed* (the merge queue landed it) is skipped: its PR is merged, and its
+    approval is never read again, even while the forge still reads it open (R12, R35)."""
     out: dict[str, ApprovalVerdict] = {}
     for batch, number in batches:
+        if batch.id in landed:
+            continue
         view = client.pr_view(repo, number)
         if view.get("state") != "OPEN":
             continue

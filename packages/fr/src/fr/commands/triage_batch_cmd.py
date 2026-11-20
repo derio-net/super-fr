@@ -318,7 +318,13 @@ from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 from fr.triage.wave_queue import REPORT_KINDS as QUEUE_REPORT_KINDS
-from fr.triage.wave_queue import QueueAction, QueuePlan, queue_action_line, queue_line
+from fr.triage.wave_queue import (
+    QueueAction,
+    QueuePlan,
+    queue_action_line,
+    queue_landed,
+    queue_line,
+)
 from fr.verification.labels import GATE_PASS_MARKER, close_gate_trackers, pass_gate
 
 if TYPE_CHECKING:
@@ -4380,9 +4386,10 @@ class _Driver:
         chosen = [b for b in chosen if repos.get(b.id) not in unread]
         ids = {b.id for b in chosen}
         stages = {b.id: derive_batch_stage(b, facts) for b in judgements.batches}
+        landed = queue_landed(judgements.queues)  # the queue's: merged, read OPEN or not
         queue = tuple(
             e
-            for e in pr_open_queue(judgements.batches, facts, judgements.issues)
+            for e in pr_open_queue(judgements.batches, facts, judgements.issues, landed=landed)
             if e.batch.id in ids and repos.get(e.batch.id) not in carried
         )
         live: dict[str, LivePr] = {}
@@ -5317,7 +5324,8 @@ class _Driver:
         # live when its probes next change or at the full pass, never on carried facts.
         unread = {s.repo for s in facts.skipped} | carried
         by_repo: dict[str, list[tuple[Batch, int]]] = {}
-        for e in pr_open_queue(judgements.batches, facts, judgements.issues):
+        landed = queue_landed(judgements.queues)  # R12: never read again once landed
+        for e in pr_open_queue(judgements.batches, facts, judgements.issues, landed=landed):
             repo = repos.get(e.batch.id)
             if e.batch.id in chosen and repo is not None and repo not in unread:
                 by_repo.setdefault(repo, []).append((e.batch, e.pr.number))
@@ -5339,7 +5347,7 @@ class _Driver:
                 ensure_approval_label(client, repo, _say, seen=self._label_seen)
                 settle_approvals(
                     client, record, repo, open_prs, _say, now=_now(),
-                    patch_id_of=self._patch_id_of(facts, repo),
+                    patch_id_of=self._patch_id_of(facts, repo), landed=landed,
                 )  # fmt: skip
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -5482,7 +5490,8 @@ class _Driver:
                     if executor is not None:
                         current = load_judgements(self.target / "judgements.yaml")
                         record = self._queue_record(current, qplan.repo)
-                        for line in executor.execute(qplan, record):
+                        history = self._queue_records(current, qplan.repo)
+                        for line in executor.execute(qplan, record, history):
                             _say(line)
                             acted = True
             for action in plan.actions:
@@ -6707,9 +6716,13 @@ class _Driver:
         line, _ = self._recover(red, facts)
         return line or "handed to the red recovery"
 
-    def _queue_record(self, judgements: Judgements, repo: str) -> QueueRecord | None:
+    def _queue_records(self, judgements: Judgements, repo: str) -> list[QueueRecord]:
+        """This scope's queue records of *repo*, oldest first: the slot leases' history."""
         scope = scope_id(self.scope)
-        mine = [q for q in judgements.queues if q.repo == repo and q.scope == scope]
+        return [q for q in judgements.queues if q.repo == repo and q.scope == scope]
+
+    def _queue_record(self, judgements: Judgements, repo: str) -> QueueRecord | None:
+        mine = self._queue_records(judgements, repo)
         return mine[-1] if mine else None
 
     def _queue_refusal(self, facts: Facts, repo: str) -> str | None:
@@ -6718,8 +6731,9 @@ class _Driver:
         if block is None:
             return None
         return forge_refusal(self.client(facts, repo)) or queue_refusal(
-            block, ci_none=self._ci_none(repo)
-        )
+            block, ci_none=self._ci_none(repo),
+            versioned=facts.config_for(repo).version is not None,
+        )  # fmt: skip
 
     def _queue_resume(self, facts: Facts, judgements: Judgements, skip: Iterable[str]) -> bool:
         """R24: before the pass reads anything, finish what a killed driver left in each
@@ -6732,14 +6746,16 @@ class _Driver:
             if executor is None:
                 continue
             try:
-                lines = executor.resume(self._queue_record(judgements, repo))
+                lines = executor.resume(
+                    self._queue_record(judgements, repo), self._queue_records(judgements, repo)
+                )
             except GitError as exc:
                 self._report_once(f"queue-resume\0{repo}\0{exc}",
                                   f"{repo}: the queue could not resume: {exc}")  # fmt: skip
                 continue
             for line in lines:
                 _say(line)
-            wrote = wrote or any("recorded" in line for line in lines)
+            wrote = wrote or bool(lines)  # a landing or a lost slot recorded, or a re-push
         return wrote
 
     def _wave_queue_reads(
