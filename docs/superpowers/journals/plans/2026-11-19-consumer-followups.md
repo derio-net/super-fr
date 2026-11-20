@@ -72,3 +72,37 @@ one try/except around one forge call; the isolation side needed no code change
 ### no-refactor-p1-t7 · discovery · no-refactor-because P1.T7 (phase 1)
 
 docs, acceptance rows and the gate run only; no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-20T02:25:22+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · execute.before and execute.after each ran an uncached session lookup on every tool call (phase 1)
+
+index.ts resolved the session's directory in execute.before and execute.after for every
+tool call. A failed lookup is uncached (R4), so a hanging session.get cost about 4 s per
+call, not the 2 s spec Design §A promises. The after-hook lookup only matters for a
+completed skill call (writePipelineSentinel arms on nothing else), and the before-hook
+lookup only matters when a gate judges the call (shell, or a writing tool without
+FR_BASE_OK=1).
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-20T02:25:22+00:00 phase=1 -->
+### review-p1-1 · review · Phase 1 code review — one in-scope finding (p1-r1), fixed (phase 1)
+
+An independent reviewer read spec R1-R7 and every changed file. It confirmed:
+- the resolver is bounded on every path and never rejects;
+- a failure is never cached and an id-mismatch answer is rejected;
+- unbind stays in the plugin directory;
+- the six tea sites stay fail-soft on non-login errors;
+- the predicate matches both login forms and nothing else;
+- Gate.default refuses with exit 2;
+- every Gitea checkout persists no credential;
+- fixtures use only RFC 2606 names;
+- the docs claims hold.
+It raised one finding, p1-r1, in scope. Suggested lens: errors, which the run already carries.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-20T02:25:22+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: execute.before and execute.after each ran an uncached session lookup on every tool call (phase 1)
+
+A new gateSkips(event) holds the edit gate's skip rule in one place. execute.before now
+looks the session up only for shell, or for a call the gate judges. execute.after looks it
+up only for a completed skill call. The new test in session-gates.test.ts ("a call no gate
+judges makes no session lookup") fails without the fix and passes with it. Full bun test
+349/0; tsc clean.
