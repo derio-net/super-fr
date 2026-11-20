@@ -31,6 +31,7 @@ from tests.unit.test_triage_batch_drive_cmd import (
     World,
     _drive,
     _lines,
+    _queued,
     _sandbox,  # noqa: F401 - the drive tests' autouse sandbox
     checkout_fixture,  # noqa: F401 - registered as `checkout`
     runner_fixture,  # noqa: F401 - registered as `runner`
@@ -187,19 +188,23 @@ def _under_way(pr: Any, *bids: str, handbacks: list[dict[str, Any]] | None = Non
 
 
 def _kinds_of(snap: Any) -> list[str]:
-    return [k for k, _ in _kinds(drive_pass(snap).actions)]
+    """The pass's action kinds, and `admitted` once for each close-out PR it admits to the
+    queue (R32: the PR a close-out would have merged, whose merge is the queue's now)."""
+    plan = drive_pass(snap)
+    return [k for k, _ in _kinds(plan.actions)] + ["admitted" for _ in plan.admitted]
 
 
 def test_a_green_mergeable_recorded_pr_is_readied_and_merged_at_the_recorded_head() -> None:
     plan = drive_pass(_under_way(_shared(draft=True), "a", "b", "c"))
-    (merge,) = [a for a in plan.actions if a.kind == "archive"]
-    assert (merge.pr, merge.head, merge.items, merge.draft, merge.key) == (
-        900, "h900", ("a", "b", "c"), True, ITEM)  # fmt: skip
+    (entry,) = plan.admitted.values()
+    assert (entry.kind, entry.pr.number, entry.pr.head, entry.pr.draft, entry.batch) == (
+        "closeout", 900, "h900", True, "a")  # fmt: skip
+    assert not [a for a in plan.actions if a.kind in ("closeout-handback", "closeout-stuck")]
 
 
 def test_a_collected_pr_not_yet_known_mergeable_waits() -> None:
     plan = drive_pass(_under_way(_shared(mergeable="UNKNOWN"), "a"))
-    assert [a for a in plan.actions if a.kind in ("archive", "closeout-handback")] == []
+    assert plan.admitted == {} and not [a for a in plan.actions if a.kind == "closeout-handback"]
 
 
 # p6b-r1: the forge's file list is a writer's; only the driver's own diff counts
@@ -212,7 +217,7 @@ def test_p6b_r1_a_code_change_the_forge_file_list_hides_is_never_auto_merged() -
     snap = _under_way(_shared(files=("docs/superpowers/runs/r.yaml",)), "a",
                       collected_diff={ITEM: hidden})  # fmt: skip
     plan = drive_pass(snap)
-    assert "archive" not in [a.kind for a in plan.actions]
+    assert plan.admitted == {}
     (need,) = [a for a in plan.actions if a.kind == "closeout-needs-review"]
     assert "packages/fr/src/fr/backdoor.py" in need.detail
 
@@ -227,12 +232,12 @@ def test_p6b_r1_only_an_archives_paths_are_ever_auto_merged(path: str) -> None:
     files = [*FILES, f"M\t{path}"]
     snap = _under_way(_shared(), "a", marker=_anchored(("a",), files=files),
                       collected_diff={ITEM: frozenset(files)})  # fmt: skip
-    assert "archive" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
+    assert "admitted" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
 
 
 def test_p6b_r1_an_unreadable_diff_is_never_auto_merged() -> None:
     snap = _under_way(_shared(), "a", collected_diff={ITEM: None})
-    assert "archive" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
+    assert "admitted" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
 
 
 # p6b-r3: membership is the verb's record, never the PR body
@@ -246,7 +251,7 @@ def test_p6b_r3_an_unrecorded_pr_is_a_need_never_reconciled_from_its_body() -> N
     plan = drive_pass(snap)
     (need,) = [a for a in plan.actions if a.kind == "closeout-unrecorded"]
     assert f"--branch {FIRST} --yes" in need.detail
-    assert [a for a in plan.actions if a.kind in ("archive", "closeout")] == []
+    assert plan.admitted == {} and not [a for a in plan.actions if a.kind == "closeout"]
 
 
 # p6b-r4: only the head the verb pushed, from the repo itself, alone past the base
@@ -261,7 +266,7 @@ def test_p6b_r4_any_head_commit_or_author_but_the_verbs_is_never_auto_merged(
     pr: Any, reads: dict[str, Any]
 ) -> None:
     snap = _under_way(pr, "a", **reads)
-    assert "archive" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
+    assert "admitted" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
 
 
 # p6b-r5: Closes is the recorded set, against today's narrowing, in this repo only
@@ -278,13 +283,13 @@ def test_p6b_r5_a_body_closing_anything_but_the_recorded_issues_is_never_auto_me
     snap = _under_way(_shared(), "a", marker=_anchored(("a",), closes=[f"{REPO}#7"]),
                       collected_body_closes={ITEM: frozenset(body)},
                       collected_narrowed={ITEM: narrowed})  # fmt: skip
-    assert "archive" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
+    assert "admitted" not in _kinds_of(snap) and "closeout-needs-review" in _kinds_of(snap)
 
 
 def test_p6b_r5_the_recorded_closes_merge() -> None:
     snap = _under_way(_shared(), "a", marker=_anchored(("a",), closes=[f"{REPO}#7"]),
                       collected_body_closes={ITEM: frozenset({f"{REPO}#7"})})  # fmt: skip
-    assert "archive" in _kinds_of(snap)
+    assert "admitted" in _kinds_of(snap)
 
 
 def test_a_conflicting_collected_pr_is_handed_back_once_to_its_session() -> None:
@@ -342,7 +347,7 @@ def test_p6b_r10_a_closed_then_reopened_pr_is_a_need_and_never_merged() -> None:
     snap = _landed("a", closeouts=(_anchored(("a",), closed=True),),
                    collected_reopened={ITEM: _shared()})  # fmt: skip
     kinds = _kinds_of(snap)
-    assert "closeout-reopened" in kinds and "archive" not in kinds
+    assert "closeout-reopened" in kinds and "admitted" not in kinds
 
 
 # p6b-r6: a hand run that died with nothing pushed never wedges the repo
@@ -454,7 +459,7 @@ def _started(world: World, tmp_path: Path, *bids: str, checkout: Any = None,
     return target
 
 
-def test_p6_r8_the_driver_merges_the_collected_pr_then_unlabels_what_it_closed(
+def test_p6_r8_the_collected_pr_is_a_queue_entry_and_once_landed_unlabels_what_it_closed(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _started(world, tmp_path, "b1", "b2", checkout=checkout, draft=True)
@@ -462,8 +467,10 @@ def test_p6_r8_the_driver_merges_the_collected_pr_then_unlabels_what_it_closed(
     code, out = _drive(tmp_path, "--once", "--yes")
 
     assert code == 0, out
-    assert world.calls.index("pr_ready 900") < world.calls.index("pr_merge 900")
-    assert world.calls.count("pr_merge 900") == 1
+    assert _queued(world) == ["closeout#900"]  # R32: an entry, between waves; never merged here
+    assert "pr_merge 900" not in world.calls and "label 7" not in world.calls
+    world.prs[900].update(state="MERGED", merged_at=NOW.isoformat())  # the queue landed it
+    code, out = _drive(tmp_path, "--once", "--yes")
     assert "label 7" in world.calls  # fr:awaiting-live off the issue its body Closes
     judgements = load_judgements(tmp_path / "judgements.yaml")
     assert {b.id: closeout_event(b).archived for b in judgements.batches} == {  # type: ignore[union-attr]
@@ -471,7 +478,7 @@ def test_p6_r8_the_driver_merges_the_collected_pr_then_unlabels_what_it_closed(
     assert judgements.closeouts[0].merged
 
 
-def test_p3_r2_labels_off_merges_the_collected_pr_and_leaves_its_closes_labelled(
+def test_p3_r2_labels_off_leaves_a_landed_collected_prs_closes_labelled(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     """R9: under `forge.labels: off` on the batch repo the merge stands and
@@ -480,8 +487,10 @@ def test_p3_r2_labels_off_merges_the_collected_pr_and_leaves_its_closes_labelled
     world.files[".fr/settings.yaml"] = "forge:\n  labels: 'off'\n"
 
     code, out = _drive(tmp_path, "--once", "--yes")
+    world.prs[900].update(state="MERGED", merged_at=NOW.isoformat())  # the queue landed it
+    code, out = _drive(tmp_path, "--once", "--yes")
 
-    assert world.calls.count("pr_merge 900") == 1
+    assert "pr_merge 900" not in world.calls
     assert "label 7" not in world.calls
     assert "fr:awaiting-live left on PR #900's closes: forge.labels: off" in out
 

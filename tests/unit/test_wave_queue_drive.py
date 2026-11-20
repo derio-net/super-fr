@@ -1,8 +1,8 @@
 """`drive_pass` with the wave merge queue wired in (spec 2026-11-19-wave-merge-queue §A, R36).
 
-A repo in `Snapshot.wave_queues` is planned by `fr.triage.wave_queue.plan_queue` in place of
-its merge train; until the queue's executor lands, the driver runs only the queue's report
-actions (held, Needs, warns) and says the rest.
+A repo in `Snapshot.wave_queues` is planned by `fr.triage.wave_queue.plan_queue`: the one
+merge path (R22). The pass runs only the queue's report actions (held, Needs, warns); the
+rest is the queue executor's.
 """
 
 from __future__ import annotations
@@ -36,14 +36,15 @@ def _queued(snap: Snapshot, **kw: Any) -> Snapshot:
     return replace(snap, wave_queues={REPO: QueueConfig()}, bases={REPO: MAIN}, **kw)
 
 
-def test_a_queue_repo_walks_no_train_and_merges_nothing() -> None:
+def test_a_queue_repo_plans_no_merge_action_only_the_queues_own() -> None:
     batches = [_dispatched("a", 1)]
-    plain = drive_pass(_snap(batches, {"a": "pr-open"}))
-    assert ("merge", "a") in _kinds(plain.actions) and plain.queues == ()
     got = drive_pass(_queued(_snap(batches, {"a": "pr-open"})))
-    assert "merge" not in {a.kind for a in got.actions} and got.trains == ()
+    assert "merge" not in {a.kind for a in got.actions}
     (plan,) = got.queues
     assert plan.repo == REPO and [a.kind for a in plan.actions] == ["queue-open"]
+    # a repo the pass does not drive has no queue plan, and no merge action either
+    bare = drive_pass(replace(_snap(batches, {"a": "pr-open"}), wave_queues={}))
+    assert bare.queues == () and not any(a.kind == "merge" for a in bare.actions)
 
 
 def test_an_open_queue_plans_a_build_and_no_report_reaches_the_actions() -> None:

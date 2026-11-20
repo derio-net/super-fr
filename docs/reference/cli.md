@@ -181,7 +181,7 @@ one artifact kind.
     - `fr triage batch replace`: Replace a managed batch harness/model in place, or reconcile without replay.
     - `fr triage batch dispatch`: Hand a batch to a runner as one fr-goal run, and mark its issues taken.
     - `fr triage batch adopt`: Put a running session under the wave driver as an existing batch; launches nothing.
-    - `fr triage batch merge`: Merge pr-open batch PRs in the computed order, re-slotting versions.
+    - `fr triage batch merge`: Merge pr-open batch PRs through the wave merge queue, in the foreground.
     - `fr triage batch closeout`: Close out every landed, ungated batch in ONE housekeeping PR.
     - `fr triage batch drive`: Drive batches to completion: merge what is ready, close out what merged, dispatch what may start (wave order, then merge order, then id).
   - `fr triage architecture`: The architecture page: measured sections plus authored fragments.

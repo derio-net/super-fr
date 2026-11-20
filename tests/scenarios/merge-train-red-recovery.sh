@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Rows merge-train-red-recovery and merge-train-strict-up-to-date (spec
-# 2026-10-11-merge-train-safety R9-R11, R14). The host driver (`fr triage batch drive
+# Row merge-train-red-recovery (spec 2026-10-11-merge-train-safety R9-R11). The host driver (`fr triage batch drive
 # --once --yes`) against the fake REST forge of merge-train-label-gate (its world in
 # $FAKE_FORGE, `red` and `strict` keys), a fake herdr whose `tab list` is a live capture
 # (the `batch-archive-followups` tab is idle) and which records every `agent prompt`, and
@@ -13,10 +12,8 @@
 #      once (one prompt naming the sha), a second pass over the same head sends nothing,
 #      and the board's `failing-ci` need is gone while the hand-back covers the head;
 #   B3. the session's tab is gone and a new head is red: the pass says no session can take
-#      it, records it once, and the board shows a `red-pr` need;
-#   C. the session fixes it, the operator labels it, main moves by an archive merge and the
-#      base requires strict checks: the PR, behind only routinely, is updated before it
-#      merges, then merged at the updated head.
+#      it, records it once, and the board shows a `red-pr` need.
+# The `update` event seeded in A is one an older judgements.yaml carries: it is still read.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export FR_HOST_ID=0123456789abcdef FR_FORGE_API=rest
@@ -153,20 +150,4 @@ refuse_grep "CI failing" "$out" "the Needs-you is decided once per head"
 expect_grep 'data-need="red-pr"' "$(board)" "the board shows a red-pr need"
 unset HERDR_NO_TAB
 
-# C. Fixed and labelled; main moves by an archive merge; the base requires strict checks.
-s3="$(push_branch a.txt "session three")"
-git -C "$seed" checkout -q main && mkdir -p "$seed/docs/superpowers/implemented" \
-  && printf 'archived\n' > "$seed/docs/superpowers/implemented/note.md" \
-  && git -C "$seed" add -A && git -C "$seed" commit -qm "archive merge" \
-  && git -C "$seed" push -q origin main || fail "the archive merge"
-forge "w['red'] = []; w['strict'] = True; w['pr']['labels'] = ['approved-fr']"
-drive
-expect_grep "updated PR #1080" "$out" "strict checks: a PR behind only routinely is updated first"
-refuse_grep "merged PR" "$out" "it is not merged in the same pass"
-refuse_grep "pulls/1080/merge" "$(log)" "no merge call before the update"
-h4="$(git -C "$bare" rev-parse feat/batch-archive-followups)"
-[ "$h4" != "$s3" ] || fail "strict checks pushed no update"
-drive
-expect_grep "merged PR #1080 at ${h4:0:12}" "$out" "the updated PR merges at its new head"
-expect_grep "^-X PUT $R/pulls/1080/merge" "$(log)" "the merge call was made"
 echo "ok: merge-train-red-recovery"

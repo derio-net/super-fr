@@ -21,7 +21,6 @@ from fr.triage.batch_drive import (
     IdleSession,
     LivePr,
     Snapshot,
-    Train,
     action_line,
     attributed,
     checks_verdict,
@@ -36,11 +35,11 @@ from fr.triage.batch_drive import (
     is_archived,
     is_finished,
     summary_line,
-    train_line,
     unfinished_waves,
     wave_group,
 )
 from fr.triage.model import Batch, Export, PullRequest
+from fr.triage.wave_queue import QueueConfig
 
 REPO = "derio-net/super-fr"
 SID = "s-11111111"  # this scope's id: the export head names it (gh#1101)
@@ -100,6 +99,7 @@ def _snap(
     }  # fmt: skip
     kw.setdefault("default_branch", {REPO: "main"})
     kw.setdefault("scope_id", SID)
+    kw.setdefault("wave_queues", {REPO: QueueConfig()})  # every repo's merges are the queue's
     # Every queued PR carries the operator's label unless a test says otherwise
     # (merge-train-safety §A): the walk's approval gate has its own tests.
     kw.setdefault("approvals", {e.batch.id: First(e.pr.head_oid) for e in queue})
@@ -212,13 +212,6 @@ def test_an_unsatisfiable_dependency_blocks_and_never_dispatches(dep_stage: str)
     assert "base" in blocked.detail and dep_stage in blocked.detail
 
 
-def test_a_merge_frees_a_slot_used_in_the_same_pass() -> None:
-    batches = [_dispatched("done", 1), _batch("next", 2)]
-    stages = {"done": "pr-open", "next": "proposed"}
-    got = drive_pass(_snap(batches, stages, max_inflight=1))
-    assert _kinds(got.actions) == [("merge", "done"), ("dispatch", "next")]
-
-
 def test_only_proposed_batches_are_dispatched() -> None:
     batches = [_dispatched("gone", 1, events=[{"kind": "cancel", "at": "2026-10-01T11:00:00Z"}])]
     got = drive_pass(_snap(batches, {"gone": "cancelled"}))
@@ -244,7 +237,7 @@ def test_a_pr_that_is_not_ready_and_green_is_never_merged(live: dict[str, Any], 
     got = drive_pass(
         _snap([b], {"x": "pr-open"}, live={"x": _live(1000, "head-x", **live)}, **unapproved)
     )
-    assert "merge" not in [a.kind for a in got.actions]
+    assert not [a for q in got.queues for a in q.actions if a.kind == "queue-open"]
     assert got.summary.in_flight == 1
 
 
@@ -254,10 +247,12 @@ def test_a_moved_head_is_never_merged() -> None:
     assert got.actions == ()
 
 
-def test_a_ready_green_pr_is_merged_at_its_head() -> None:
+def test_a_ready_green_pr_opens_the_queue_and_plans_no_merge() -> None:
     b = _dispatched("x", 1)
-    (action,) = drive_pass(_snap([b], {"x": "pr-open"})).actions
-    assert (action.kind, action.pr, action.head) == ("merge", 1000, "head-x")
+    got = drive_pass(_snap([b], {"x": "pr-open"}))
+    assert got.actions == ()  # R22: no merge action exists; the queue lands it by push
+    (plan,) = got.queues
+    assert [a.kind for a in plan.actions] == ["queue-open"]
 
 
 def test_a_failing_check_warns_every_pass_and_the_command_decides_what_is_new() -> None:
@@ -302,12 +297,6 @@ def test_a_foreign_pr_is_reported_only_for_a_selected_batch() -> None:
         _snap([b], {"x": "dispatched"}, foreign={"x": (_foreign(80),)}, selected=frozenset())
     )
     assert got.actions == ()
-
-
-def test_merges_follow_the_merge_order() -> None:
-    batches = [_dispatched("b", 1, order=2), _dispatched("a", 2, order=1)]
-    got = drive_pass(_snap(batches, {"a": "pr-open", "b": "pr-open"}))
-    assert _kinds(got.actions) == [("merge", "a"), ("merge", "b")]
 
 
 def test_checks_verdict_uses_required_checks_when_the_branch_has_any() -> None:
@@ -530,8 +519,10 @@ def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
     b = _closed("x", 1, archive="chore/archive-2026-10-01-x", run="r-x")
     pr = _archive(7, "chore/archive-2026-10-01-x", files=("docs/superpowers/runs/r-x.yaml",))
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
-    (action,) = got.actions
-    assert (action.kind, action.pr, action.head) == ("archive", 7, "h7")
+    assert got.actions == ()  # R32: no merge action; the PR is a queue entry between waves
+    (entry,) = got.admitted.values()
+    assert (entry.kind, entry.pr.number, entry.pr.head, entry.batch) == ("archive", 7, "h7", "x")
+    assert entry.wave is None
 
 
 @pytest.mark.parametrize("kw", [dict(checks="pending"), dict(checks="failing")])
@@ -539,7 +530,7 @@ def test_an_archive_pr_not_ready_and_green_waits(kw: dict[str, Any]) -> None:
     b = _closed("x", 1, archive="chore/archive-p", run="r-x")
     pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), **kw)
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
-    assert [a.kind for a in got.actions if a.kind == "archive"] == []
+    assert got.admitted == {}
     assert got.summary.closing == 1
 
 
@@ -572,17 +563,17 @@ def test_wrong_base_gets_only_the_blocked_line_no_warn() -> None:
     assert [a.kind for a in got.actions] == ["blocked"]
 
 
-def test_green_draft_archive_pr_gets_an_archive_action_flagged_draft() -> None:
-    """merge-truth R11: a close-out session that left its archive PR a draft no longer
-    strands it: the driver marks it ready, then merges it."""
+def test_green_draft_archive_pr_is_admitted_to_the_queue_as_a_draft() -> None:
+    """merge-truth R11, R32: a close-out session that left its archive PR a draft no longer
+    strands it: it is a queue entry, readied when the queue builds it."""
     b = _closed("x", 1, archive="chore/archive-p", run="r-x")
     pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), draft=True)
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
-    (action,) = got.actions
-    assert (action.kind, action.pr, action.draft) == ("archive", 7, True)
+    (entry,) = got.admitted.values()
+    assert (entry.kind, entry.pr.number, entry.pr.draft) == ("archive", 7, True)
     plain = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",))
-    (action,) = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (plain,)})).actions
-    assert (action.kind, action.draft) == ("archive", False)
+    (entry,) = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (plain,)})).admitted.values()
+    assert (entry.kind, entry.pr.draft) == ("archive", False)
 
 
 def test_conflicting_archive_pr_gets_archive_conflict_never_archive() -> None:
@@ -705,12 +696,13 @@ def test_a_recorded_archive_is_not_recorded_again() -> None:
 
 
 def test_one_line_per_action_and_a_summary() -> None:
-    a = Action(kind="merge", batch="x", detail="PR #1000 at head-x", pr=1000, head="head-x")
-    assert action_line(a) == "merge x: PR #1000 at head-x"
-    assert action_line(a, "merged PR #1000") == "merge x: merged PR #1000"
+    a = Action(kind="dispatch", batch="x", detail="wave 1")
+    assert action_line(a) == "dispatch x: wave 1"
+    assert action_line(a, "dispatched to fake") == "dispatch x: dispatched to fake"
     batches = [_dispatched("x", 1)]
     got = drive_pass(_snap(batches, {"x": "pr-open"}))
-    assert summary_line(got.summary) == "in flight 0, merged 1, pending 0, closing 1"
+    # a PR waiting in the queue is still in flight: the queue lands it on a later pass
+    assert summary_line(got.summary) == "in flight 1, merged 0, pending 0, closing 0"
 
 
 # ------------------------------------------------------------- purity (R8)
@@ -757,7 +749,9 @@ def test_only_selected_batches_are_acted_on() -> None:
     batches = [_dispatched("in", 1), _dispatched("out", 2), _batch("p", 3)]
     stages = {"in": "pr-open", "out": "pr-open", "p": "proposed"}
     got = drive_pass(_snap(batches, stages, selected=frozenset({"in", "p"})))
-    assert _kinds(got.actions) == [("merge", "in"), ("dispatch", "p")]
+    assert _kinds(got.actions) == [("dispatch", "p")]
+    (plan,) = got.queues
+    assert [a.kind for a in plan.actions] == ["queue-open"] and plan.waiting == ()
 
 
 def test_unknown_merge_time_is_not_yet_due() -> None:
@@ -812,15 +806,15 @@ def test_only_blocked_work_left_is_not_done() -> None:
     assert not got.summary.done and got.summary.waiting_on_operator
 
 
-def test_settle_moves_a_merge_that_did_not_land_back_in_flight() -> None:
-    """rg-1: the summary must not claim a merge that did not happen."""
+def test_settle_moves_a_dispatch_that_did_not_start_back_to_pending() -> None:
+    """rg-1: the summary must not claim a dispatch that did not happen."""
     from fr.triage.batch_drive import settle
 
-    batches = [_dispatched("b1", 1), _batch("b2", 2, after=["b1"])]
-    got = drive_pass(_snap(batches, {"b1": "pr-open", "b2": "proposed"}))
-    assert got.summary.merged == 1
-    settled = settle(got.summary, unlanded=1, held=1)
-    assert (settled.in_flight, settled.merged, settled.pending, settled.closing) == (1, 0, 1, 0)
+    batches = [_batch("b1", 1)]
+    got = drive_pass(_snap(batches, {"b1": "proposed"}))
+    assert got.summary.in_flight == 1
+    settled = settle(got.summary, held=1)
+    assert (settled.in_flight, settled.pending) == (0, 1)
 
 
 def test_archived_evidence_wins_over_a_hand_pr_and_an_unselected_batch_is_adopted_too() -> None:
@@ -963,134 +957,7 @@ def _ids(*names: str) -> tuple[list[Batch], dict[str, str]]:
     return [_dispatched(n, i + 1) for i, n in enumerate(names)], {n: "pr-open" for n in names}
 
 
-def _train_snap(names: tuple[str, ...], live: dict[str, Any] | None = None, **kw: Any) -> Snapshot:
-    batches, stages = _ids(*names)
-    snap = _snap(batches, stages, **kw)
-    if live:
-        snap = Snapshot(**{**snap.__dict__, "live": {**snap.live, **{
-            k: _live(snap.live[k].number, v.pop("head", snap.live[k].head), **v)
-            for k, v in live.items()}}})  # fmt: skip
-    return snap
-
-
-def test_ready_green_prs_form_one_train_in_order() -> None:
-    got = drive_pass(_train_snap(("c", "a", "b")))
-    assert _kinds(got.actions) == [("merge", "a"), ("merge", "b"), ("merge", "c")]
-    assert {a.train for a in got.actions} == {REPO}
-    assert got.trains == (
-        Train(repo=REPO, head="a", candidates=("a", "b", "c"), queued=(), stepped=(),
-              numbers={"a": 1001, "b": 1002, "c": 1000}),
-    )  # fmt: skip
-
-
-def test_a_pending_head_waits_and_the_rest_are_queued() -> None:
-    got = drive_pass(_train_snap(("a", "b", "c"), {"a": {"checks": "pending"}}))
-    assert "merge" not in [a.kind for a in got.actions]
-    (train,) = got.trains
-    assert (train.head, train.candidates, train.queued) == ("a", (), ("b", "c"))
-    assert got.summary.queued == 2
-
-
-def test_a_moved_head_waits_the_train() -> None:
-    got = drive_pass(_train_snap(("a", "b", "c"), {"a": {"head": "elsewhere"}}))
-    assert got.actions == ()
-    (train,) = got.trains
-    assert (train.head, train.queued) == ("a", ("b", "c"))
-
-
-def test_a_failing_head_is_stepped_over_and_the_next_leads() -> None:
-    live = {"a": {"checks": "failing", "failing": ("lint",)}}
-    got = drive_pass(_train_snap(("a", "b", "c"), live))
-    assert _kinds(got.actions) == [("warn", "a"), ("merge", "b"), ("merge", "c")]
-    (train,) = got.trains
-    assert (train.head, train.stepped, train.candidates) == ("b", ("a",), ("b", "c"))
-
-
-def test_green_pending_green_merges_one_and_queues_the_rest() -> None:
-    got = drive_pass(_train_snap(("a", "b", "c"), {"b": {"checks": "pending"}}))
-    assert _kinds(got.actions) == [("merge", "a")]
-    (train,) = got.trains
-    assert (train.head, train.candidates, train.queued) == ("a", ("a",), ("b", "c"))
-    assert got.summary.queued == 2
-
-
-def test_a_failing_member_behind_the_stop_is_warned_and_stepped_over() -> None:
-    live = {"a": {"checks": "pending"}, "b": {"checks": "failing", "failing": ("lint",)}}
-    got = drive_pass(_train_snap(("a", "b", "c"), live))
-    assert _kinds(got.actions) == [("warn", "b")]
-    (train,) = got.trains
-    assert (train.head, train.queued, train.stepped) == ("a", ("c",), ("b",))
-    assert got.summary.queued == 1
-
-
-def test_each_repo_has_its_own_train() -> None:
-    other = "derio-net/other"
-    got = drive_pass(
-        _train_snap(
-            ("a", "b", "c"),
-            repos={"a": other, "b": REPO, "c": REPO},
-        )
-    )
-    assert [(t.repo, t.head, t.candidates) for t in got.trains] == [
-        (other, "a", ("a",)),
-        (REPO, "b", ("b", "c")),
-    ]
-
-
-def test_the_train_order_survives_a_member_leaving() -> None:
-    """merge_order would rearrange b and c once a leaves (shared files); the train does not."""
-    batches, stages = _ids("a", "b", "c")
-    entries = tuple(
-        QueueEntry(batch=b, pr=_pr(b.id, 1000 + i, files=["x.py"])) for i, b in enumerate(batches)
-    )
-    snap = _snap(batches, stages)
-    first = drive_pass(Snapshot(**{**snap.__dict__, "queue": entries}))
-    assert [a.batch for a in first.actions] == ["a", "b", "c"]
-    rest = Snapshot(**{**snap.__dict__, "queue": entries[1:]})
-    assert drive_pass(rest).trains[0].head == "b"
-
-
-def test_a_green_member_ahead_is_the_head_with_no_stored_state() -> None:
-    """R5: a stepped-over PR that is green again takes back its place."""
-    got = drive_pass(_train_snap(("a", "b"), {"b": {"checks": "pending"}}))
-    assert _kinds(got.actions) == [("merge", "a")] and got.trains[0].head == "a"
-
-
-def test_a_waiting_head_is_not_counted_as_queued() -> None:
-    got = drive_pass(_train_snap(("a", "b"), {"a": {"checks": "pending"}}))
-    assert got.summary.queued == 1
-
-
 # ------------------------------------------------------------- lines (C)
-
-
-def _train(**kw: Any) -> Train:
-    base: dict[str, Any] = {
-        "repo": "derio-net/super-fr",
-        "head": "a",
-        "candidates": ("a", "b", "c"),
-        "queued": ("d",),
-        "stepped": ("e",),
-        "numbers": {"a": 12, "b": 13, "c": 14, "d": 15, "e": 16},
-    }
-    return Train(**{**base, **kw})
-
-
-def test_train_line_names_head_then_queued_and_stepped() -> None:
-    assert train_line(_train()) == (
-        "train derio-net/super-fr: head a (PR #12) · then b (#13), c (#14) · "
-        "queued d (#15) · stepped over e (#16)"
-    )
-
-
-def test_train_line_leaves_empty_parts_out() -> None:
-    line = train_line(_train(candidates=("a",), queued=(), stepped=()))
-    assert line == "train derio-net/super-fr: head a (PR #12)"
-
-
-def test_train_line_without_a_head() -> None:
-    line = train_line(_train(head=None, candidates=(), queued=()))
-    assert line == "train derio-net/super-fr: no head · stepped over e (#16)"
 
 
 def test_summary_line_adds_queued_between_closing_and_blocked() -> None:
@@ -1186,9 +1053,9 @@ def test_an_export_that_changed_nothing_needs_nothing() -> None:
 
 def test_a_recorded_open_green_ready_trusted_pr_is_merged_at_its_head() -> None:
     got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40)}))
-    assert _exports(got) == [("export-merge", REPO, "1", 40)]
-    (merge,) = [a for a in got.actions if a.kind == "export-merge"]
-    assert merge.head == "export-head-40"
+    assert _exports(got) == []  # R32: no merge action; the PR is a queue entry between waves
+    (entry,) = got.admitted.values()
+    assert (entry.kind, entry.pr.number, entry.pr.head) == ("export", 40, "export-head-40")
     assert not got.summary.done
 
 
@@ -1273,8 +1140,8 @@ def _covering(
 
 def test_an_open_covering_pr_is_merged_once_for_all_its_waves() -> None:
     got = drive_pass(_three_waves(exports=_covering(40), export_prs={(REPO, "10"): _trusted(40)}))
-    exports = [a for a in got.actions if a.wave is not None]
-    assert [(a.kind, a.wave, a.pr) for a in exports] == [("export-merge", "10", 40)]
+    assert [a for a in got.actions if a.wave is not None] == []
+    assert [(a.kind, a.pr.number) for a in got.admitted.values()] == [("export", 40)]
 
 
 def test_a_wave_finishing_while_an_export_pr_is_open_waits_for_its_merge() -> None:
@@ -1360,8 +1227,8 @@ def test_the_merge_is_pinned_to_the_recorded_head() -> None:
             exports=[_export(pr=40, head="pushed")], prs={(REPO, "1"): _trusted(40, head="pushed")}
         )
     )
-    (merge,) = [a for a in got.actions if a.kind == "export-merge"]
-    assert merge.head == "pushed"
+    (entry,) = got.admitted.values()
+    assert entry.pr.head == "pushed"  # admitted at the RECORDED head, never a later one
 
 
 def test_a_foreign_commit_on_the_export_branch_blocks_the_merge() -> None:
@@ -1470,7 +1337,7 @@ def test_a_recorded_export_pr_not_based_on_the_default_branch_is_never_merged(ba
     assert _exports(got) == [("warn", REPO, "1", 40)]
     assert "base" in got.actions[-1].detail
     assert got.summary.blocked == 1
-    assert not any(a.kind == "export-merge" for a in got.actions)
+    assert got.admitted == {}
 
 
 @pytest.mark.parametrize("base", ["release/1.x", ""], ids=["retargeted", "unknown"])
@@ -1484,7 +1351,8 @@ def test_an_orphan_not_based_on_the_default_branch_is_never_reused(base: str) ->
 
 def test_the_happy_path_is_based_on_the_default_branch() -> None:
     got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): _trusted(40)}))
-    assert [a.kind for a in got.actions if a.wave is not None] == ["export-merge"]
+    assert [a.kind for a in got.actions if a.wave is not None] == []
+    assert [a.kind for a in got.admitted.values()] == ["export"]
 
 
 def test_every_orphan_besides_the_reused_one_is_warned_stale_once() -> None:
@@ -1618,7 +1486,8 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_never_merged() -> No
     unknown = drive_pass(replace(snap, default_branch={}))
     assert unknown.actions == () and (unknown.summary.closing, unknown.summary.blocked) == (1, 0)
     on_main = drive_pass(replace(snap, archives={REPO: (replace(pr, base="main"),)}))
-    assert [(a.kind, a.pr) for a in on_main.actions] == [("archive", 5)]
+    assert on_main.actions == ()  # the right base: admitted to the queue, never merged here
+    assert [(a.kind, a.pr.number) for a in on_main.admitted.values()] == [("archive", 5)]
 
 
 # ------------------------------------------------- claims (triage-claims R3, R6, R8, R10, R11)
@@ -2028,15 +1897,12 @@ def test_a_conflicting_export_pr_is_its_own_export_conflict_kind() -> None:
 # ------------------------------------------- fr-ops R14 (p3-r9): the devops pre-merge hold
 
 
-@pytest.mark.parametrize("queue_mode", [False, True])
-def test_p3_r9_the_planner_never_merges_a_pr_held_by_gate_devops(queue_mode: bool) -> None:
+def test_p3_r9_the_queue_never_takes_a_pr_held_by_gate_devops() -> None:
     b = _dispatched("x", 1)
     snap0 = _snap([b], {"x": "pr-open"})
     entry = snap0.queue[0]
     live = {"x": _live(entry.pr.number, entry.pr.head_oid, labels=("gate:devops",))}
-    extra = {"queue_repos": frozenset({REPO})} if queue_mode else {}
-    plan = drive_pass(_snap([b], {"x": "pr-open"}, live=live, **extra))
-    kinds = [k for k, _ in _kinds(plan.actions)]
-    assert "merge" not in kinds and "enqueue" not in kinds
+    plan = drive_pass(_snap([b], {"x": "pr-open"}, live=live))
+    assert not [a for q in plan.queues for a in q.actions if a.kind == "queue-open"]
     (held,) = [a for a in plan.actions if a.kind == "held"]
     assert "awaiting DevOps" in held.detail and "gate:devops-passed" in held.detail

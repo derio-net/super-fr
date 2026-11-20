@@ -30,7 +30,7 @@ from fr_dispatch.testing import run_item
 from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
     REPO,
     DriveCheckout,
-    ScriptedMerge,
+    RecordingQueue,
     World,
     _batch,
     _conflict_error,
@@ -286,7 +286,7 @@ def test_a_conflict_on_a_completed_session_is_handed_back_by_message(
     tmp_path: Path,
     world: World,
     checkout: DriveCheckout,
-    train: ScriptedMerge,  # noqa: F811 - the imported fixture
+    train: type[RecordingQueue],  # noqa: F811 - the imported fixture
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = ClaudeCloudRunner.from_env()
@@ -297,7 +297,7 @@ def test_a_conflict_on_a_completed_session_is_handed_back_by_message(
 
     code, out = _drive(tmp_path, "--once", "--yes")
 
-    (line,) = _lines(out, "merge")
+    (line,) = _lines(out, "queue-eject")
     assert "handed-back (pending)" in line, out
     (event,) = _conflicts(tmp_path)
     assert event.delivered == "session" and event.handle == B1
@@ -396,14 +396,15 @@ def test_the_cloud_driver_never_loads_a_runner_it_does_not_carry(
     _state(state, world, _batch("b3", 3, events=herdr, launch="{runner: herdr}"))
 
     first = _pass(state, tmp_path / "o1.json")
-    world_merged = bool(world.merged)
+    queued = bool(world.queue_plans)  # the PR is the queue's now (R22), never merged here
+    world.prs[103].update(state="MERGED", merged_at=clock[0].isoformat())  # the queue landed it
     clock[0] = clock[0].replace(hour=clock[0].hour + 1)
     second = _pass(state, tmp_path / "o2.json")
 
     assert first.exit_code in (0, 3), first.output
     assert second.exit_code in (0, 3), second.output
     assert set(asked) <= {"claude-cloud"}, asked
-    assert world_merged
+    assert queued and not world.merged
     said = " ".join(second.output.split())
     assert "closeout b3: left to the driver of runner herdr" in said
 

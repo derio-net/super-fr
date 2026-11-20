@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Rows merge-train-queue and ci-merge-group-trigger (spec 2026-10-11-merge-train-safety
-# R12, R13, R15). The host driver (`fr triage batch drive --once --yes`) against the fake
-# REST forge of merge-train-label-gate (its world in $FAKE_FORGE, `queue` key) and a real
-# bare remote. Under `forge.api rest`, which cannot enqueue:
-#   A. the base's ruleset has a merge_queue rule: the pass holds the repo and says "forge.api
-#      rest cannot enqueue" (the approved, green PR is neither merged nor enqueued);
-#   B. the rule is gone: the same PR merges as it always did (the train is unchanged).
-# The GraphQL enqueue and ejection path has no live forge here: unit tests cover it. The
-# workflows' merge_group triggers are checked from the shipped files.
+# Rows merge-train-queue and ci-merge-group-trigger (spec 2026-11-19-wave-merge-queue R22,
+# 2026-10-11-merge-train-safety R15). The host driver (`fr triage batch drive --once --yes`)
+# against the fake REST forge of merge-train-label-gate (its world in $FAKE_FORGE, `queue`
+# key) and a real bare remote:
+#   A. the base's ruleset has a merge_queue rule: the pass holds the repo with the reason
+#      (fr no longer enqueues): the approved, green PR is neither merged nor enqueued;
+#   B. the rule is gone: the queue still needs `queue.ci`, so the pass says what to add and
+#      merges nothing: there is no other merge path.
+# The workflows' merge_group triggers are checked from the shipped files.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export FR_HOST_ID=0123456789abcdef FR_FORGE_API=rest
@@ -77,20 +77,21 @@ drive() { run_fr out triage batch drive --once --yes --keep-sessions --repo "$re
 log() { cat "$FAKE_GH_LOG"; }
 R="repos/$repo"
 
-# A. A merge queue is required and forge.api is rest: the repo is held, nothing merges.
+# A. A merge queue is required: the repo is queue-held with the reason, nothing merges.
 drive
-expect_grep "held b1: $repo requires a merge queue, and forge.api rest cannot enqueue" "$out" \
-  "a queue repo under forge.api rest is held with the spec's words"
+expect_grep "requires a forge merge queue" "$out" "a repo whose base requires a forge merge queue is held"
 refuse_grep "merged PR" "$out" "a held queue repo is never merged directly"
-refuse_grep "pulls/1080/merge" "$(log)" "no merge call under a merge queue"
+refuse_grep "pulls/1080/merge" "$(log)" "no merge call under a forge merge queue"
+refuse_grep "pulls/1080/auto" "$(log)" "fr never enqueues (R22)"
 expect_grep "rules/branches/main" "$(log)" "the driver read the base's rules"
 
-# B. No queue rule: the same approved, green PR merges as before.
+# B. No queue rule: the wave merge queue still needs `queue.ci`; the pass says what to add
+# and merges nothing (there is no other merge path).
 forge 'w["queue"] = False'
 drive
-expect_grep "^-X PUT $R/pulls/1080/merge" "$(log)" "without a queue the PR is merged"
-expect_grep "merged PR #1080" "$out" "the merge is reported"
-refuse_grep "merge queue" "$out" "no queue hold once the rule is gone"
+expect_grep "queue.ci" "$out" "without a queue rule the queue still needs its CI declared"
+refuse_grep "pulls/1080/merge" "$(log)" "no merge call: the queue lands by push, never by the forge API"
+refuse_grep "merge queue is held: .*forge merge queue" "$out" "no forge-queue hold once the rule is gone"
 
 # R15: both workflows build merge groups.
 root="$(cd "$here/../.." && pwd)"

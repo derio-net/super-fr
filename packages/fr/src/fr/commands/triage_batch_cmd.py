@@ -3070,7 +3070,7 @@ def batch_merge_command(
             done, said = _merge_progress(driver, names, plan)
             if done:
                 console.print(said, markup=False, soft_wrap=True)
-                if said.startswith(("stopped", "nothing left")) or driver.failed_write:
+                if said.startswith("stopped") or driver.failed_write:
                     raise typer.Exit(code=1)
                 return
             waited = 0.0 if acted else waited + MERGE_POLL_SECONDS
@@ -6470,24 +6470,24 @@ class _Driver:
         """R7, R20, R22, R35: why *repo*'s queue cannot run at all, None when it can. A
         base branch that requires a forge merge queue is held: the queue lands by pushing
         the tested combination, which that rule refuses, and fr no longer enqueues."""
-        why = forge_refusal(self.client(facts, repo)) or queue_refusal(
-            self._queue_block(facts, repo), ci_none=self._ci_none(repo),
-            versioned=facts.config_for(repo).version is not None,
-        )  # fmt: skip
+        why = forge_refusal(self.client(facts, repo))
         if why is not None:
             return why
         try:
             rules = self._base_rules(facts, repo)
         except DefaultBranchUnknown as exc:
             return f"cannot tell {repo}'s default branch ({exc.__cause__ or exc}): held"
-        if rules.merge_queue:
+        if rules.merge_queue:  # first: no setting of fr's queue makes it work (R22)
             return (
                 f"{repo}'s base branch requires a forge merge queue, and fr's queue lands by "
                 "pushing the tested combination, which that rule refuses: turn the rule off "
                 "for the branch, or give the driver's identity a bypass (fr never makes your "
                 "own credential one)"
             )
-        return None
+        return queue_refusal(
+            self._queue_block(facts, repo), ci_none=self._ci_none(repo),
+            versioned=facts.config_for(repo).version is not None,
+        )  # fmt: skip
 
     def _queue_resume(self, facts: Facts, judgements: Judgements, skip: Iterable[str]) -> bool:
         """R24: before the pass reads anything, finish what a killed driver left in each

@@ -647,23 +647,6 @@ class Checkout:
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)
 
-    def commits_behind(
-        self, head: str, ref: str
-    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
-        """The first-parent commits of *ref* that *head* lacks, each with its
-        (status, path) changes against its first parent, renames split into a
-        delete and an add (gh#927). Together they are everything *ref* changed
-        since *head* forked from it."""
-        shas = git(["rev-list", "--first-parent", f"{head}..{ref}"], self.path).split()
-        out = []
-        for sha in shas:
-            raw = git(
-                ["diff", "--name-status", "--no-renames", "-z", f"{sha}^1", sha], self.path
-            ).split("\0")
-            pairs = zip(raw[0::2], raw[1::2], strict=False)
-            out.append((sha, tuple((s, p) for s, p in pairs if s and p)))
-        return tuple(out)
-
     def changed_paths(self, ref: str, head: str) -> frozenset[str]:
         """The paths *head* changed since it forked from *ref* (`ref...head`)."""
         out = git(["diff", "--name-only", "--no-renames", "-z", f"{ref}...{head}"], self.path)
@@ -1007,11 +990,6 @@ class Worktree:
         """*file*'s UTF-8 text at *ref*, or None when it does not exist there (`show_text`)."""
         return show_text(self.path, ref, file)
 
-    def take_theirs(self, paths: list[str]) -> None:
-        """Resolve *paths* to main's side, so no file keeps conflict markers."""
-        git(["checkout", "--theirs", "--", *paths], self.path)
-        git(["add", "--", *paths], self.path)
-
     def abort_merge(self) -> None:
         git(["merge", "--abort"], self.path)
 
@@ -1021,20 +999,6 @@ class Worktree:
 
     def run(self, command: str, **fields: str) -> None:
         run_declared(command, self.path, **fields)
-
-    def commit_all(self, message: str, version_files: list[str]) -> str | None:
-        """Stage tracked changes plus the declared *version_files* globs, and
-        commit; the new head, or None when nothing changed.
-
-        Never `git add --all`: `set` / `relock` may leave build output behind,
-        and anything untracked would ride into another run's PR (review r3-f7).
-        """
-        self.stage(version_files)
-        merging = git_ok(["rev-parse", "-q", "--verify", "MERGE_HEAD"], self.path)
-        if not merging and git_ok(["diff", "--cached", "--quiet"], self.path):
-            return None
-        git(["commit", "--no-verify", "-m", message], self.path)
-        return git(["rev-parse", "HEAD"], self.path).strip()
 
     def stage(self, version_files: Sequence[str]) -> None:
         """Stage tracked changes plus untracked files matching the declared

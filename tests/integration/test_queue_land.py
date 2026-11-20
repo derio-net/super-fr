@@ -8,12 +8,13 @@ pinned head and then compares `main`'s tree with the tested one.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from fr.ghclient import UnsupportedBatchOps
-from fr.triage.model import QueueLandEvent
+from fr.triage.model import QueueEntryRef, QueueLandEvent
 from fr.triage.queue_exec import (
     Built,
     build,
@@ -42,6 +43,37 @@ def _two(tmp_path: Path, method: str) -> tuple[World, list[Built]]:
 def _land(w: World, built: list[Built], method: str, **kw: object):  # type: ignore[no-untyped-def]
     return land_push(w.checkout, default="main", base=built[0].base,
                      landings=landings_of(built), method=method, **kw)  # type: ignore[arg-type]  # fmt: skip
+
+
+@pytest.mark.parametrize("kind", ["closeout", "archive", "export", "housekeeping"])
+def test_another_entry_lands_in_the_same_push_and_is_recorded_by_its_kind(
+    tmp_path: Path, kind: str
+) -> None:
+    """R32: a close-out, archive, export or housekeeping PR is an entry like a batch's. It is
+    built behind the batch, lands in the same one atomic push, reads MERGED afterwards and is
+    recorded as `{pr, kind}`; the forge's merge API is never called under `land: push`."""
+    w = world(tmp_path)
+    w.pr(1, {"b.txt": "bravo\n"}, title="Add bravo")
+    w.pr(2, {"docs/superpowers/implemented/plans/p.md": "archived\n"}, title="chore: archive p")
+    w.fetch()
+    other = replace(w.entry(2), key=f"{kind}#2", ref=QueueEntryRef(pr=2, kind=kind))  # type: ignore[arg-type]
+    built = build(w.checkout, w.main(), [w.entry(1), other], "squash", None,  # type: ignore[arg-type]
+                  scope=SCOPE, slots=(1, 2), scratch=w.scratch)  # fmt: skip
+    recorded: list[QueueLandEvent] = []
+    result = land_push(w.checkout, default="main", base=built[0].base,
+                       landings=landings_of(built), method="squash",
+                       record=recorded.append, now=lambda: AT)  # fmt: skip
+    assert result.outcome == "landed" and w.main() == built[-1].sha  # the tested tip (R9)
+    assert [(e.batch, e.pr, e.kind) for e in recorded[0].entries] == [
+        ("b1", None, None), (None, 2, kind)]  # fmt: skip
+    forge_ = forge(w, tmp_path)
+    assert [forge_.pr_view("r", n)["state"] for n in (1, 2)] == ["MERGED", "MERGED"]
+    assert forge_.merges == []
+    assert (
+        w.clone / "docs/superpowers/implemented/plans/p.md"
+    ).exists() is False  # not yet fetched
+    w.fetch()
+    assert "archived" in git(w.clone, "show", "origin/main:docs/superpowers/implemented/plans/p.md")
 
 
 @pytest.mark.parametrize("method", ["squash", "rebase"])

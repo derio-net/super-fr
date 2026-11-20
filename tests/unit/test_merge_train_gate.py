@@ -1,32 +1,23 @@
-"""The approval gate in the drive walk and the merge paths (spec
-2026-10-11-merge-train-safety §A "Recording and voiding", "The walk", "Merging",
-§B "How an update is recorded"; R1, R2, R3, R8).
+"""The approval gate in the drive pass (spec 2026-10-11-merge-train-safety §A "Recording
+and voiding", "The walk"; R1, R2; wave-merge-queue R3, R22).
 
-Pure where the code is: `settle_approvals` and `merge_ready`/`merge_one` run over
-in-memory fakes, `_walk_train` over a built `Snapshot`.
+Pure where the code is: `settle_approvals` runs over in-memory fakes, the pass's reports
+and the queue's entries over a built `Snapshot`. The retired train's merge and update
+paths (`merge_ready`, `merge_one`) are gone: an approval reaches a merge only as a queue
+entry, and `reaches` only reads the `update` events an older `judgements.yaml` carries.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
-import pytest
-from fr.ghclient import UnsupportedForgeOperation
 from fr.labels import APPROVED_FR
 from fr.triage.approval import Approved, First, Unlabelled, Void, settle_approvals
-from fr.triage.batch import MergeStep, QueueEntry
-from fr.triage.batch_drive import LivePr, Snapshot, Train, drive_pass, train_line
-from fr.triage.batch_merge import (
-    MergeAttempt,
-    MergeContext,
-    MergeStopError,
-    Slot,
-    merge_one,
-    merge_ready,
-)
+from fr.triage.batch import QueueEntry
+from fr.triage.batch_drive import LivePr, Pass, Snapshot, drive_pass
 from fr.triage.model import ApprovalEvent, Batch, BatchEvent, PullRequest, UpdateEvent
+from fr.triage.wave_queue import QueueConfig
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
@@ -168,7 +159,7 @@ def test_a_preview_says_what_it_would_record_or_void_and_writes_nothing() -> Non
     ]
 
 
-# ------------------------------------------------------------------ the walk
+# ------------------------------------------------------------------ the pass's members
 
 
 def _pr(n: int, bid: str, head: str) -> PullRequest:
@@ -180,8 +171,9 @@ def _pr(n: int, bid: str, head: str) -> PullRequest:
 
 def _walk(
     members: list[tuple[str, bool, str]], approvals: dict[str, Any]
-) -> tuple[Train, list[Any]]:
-    """*members*: (batch id, draft, checks)."""
+) -> tuple[Pass, list[str]]:
+    """*members*: (batch id, draft, checks). The pass, and the batches the queue opens for
+    or holds as ready entries."""
     batches = [_batch(bid) for bid, _, _ in members]
     queue = tuple(
         QueueEntry(batch=b, pr=_pr(100 + i, b.id, f"h-{b.id}")) for i, b in enumerate(batches)
@@ -198,311 +190,58 @@ def _walk(
         repos={b.id: REPO for b in batches},
         now=NOW,
         approvals=approvals,
+        wave_queues={REPO: QueueConfig()},
     )
     plan = drive_pass(snap)
-    (train,) = plan.trains
-    return train, [a for a in plan.actions if a.kind == "merge"]
+    (queue_plan,) = plan.queues
+    ready = [k for a in queue_plan.actions for k in a.entries] + list(queue_plan.waiting)
+    return plan, ready
 
 
-def test_an_unapproved_green_member_awaits_and_never_stops_the_walk() -> None:
-    train, merges = _walk(
+def test_an_unapproved_green_member_awaits_and_never_stops_the_queue() -> None:
+    plan, ready = _walk(
         [("a", False, "green"), ("b", False, "green")],
         {"a": Unlabelled(), "b": Approved("h-b")},
     )
-    assert train.awaiting == ("a",)
-    assert train.head == "b" and train.candidates == ("b",)
-    assert [m.batch for m in merges] == ["b"]
-    assert "awaiting approval a (#100)" in train_line(train)
+    assert plan.awaiting == frozenset({"a"})
+    assert ready == ["b"]
 
 
 def test_a_missing_verdict_is_never_an_approval() -> None:
-    train, merges = _walk([("a", False, "green")], {})
-    assert (train.awaiting, merges) == (("a",), [])
+    plan, ready = _walk([("a", False, "green")], {})
+    assert (plan.awaiting, ready) == (frozenset({"a"}), [])
 
 
-def test_an_approved_or_first_draft_is_a_member_and_merges_when_green() -> None:
-    train, merges = _walk(
+def test_an_approved_or_first_draft_is_a_member_and_is_ready_when_green() -> None:
+    plan, ready = _walk(
         [("a", True, "green"), ("b", True, "green")], {"a": First("h-a"), "b": Approved("h-b")}
     )
-    assert train.candidates == ("a", "b")
-    assert [m.batch for m in merges] == ["a", "b"]
+    assert plan.awaiting == frozenset()
+    assert sorted(ready) == ["a", "b"]  # one opens a between-waves queue, the other waits
 
 
 def test_an_unapproved_draft_is_not_a_member() -> None:
-    train, merges = _walk(
+    plan, ready = _walk(
         [("a", True, "green"), ("b", False, "green")], {"a": Void("x"), "b": Approved("h-b")}
     )
-    assert train.awaiting == () and "a" not in train.numbers
-    assert [m.batch for m in merges] == ["b"]
+    assert plan.awaiting == frozenset() and ready == ["b"]
 
 
-def test_a_pending_unapproved_member_does_not_wait_the_train() -> None:
-    train, merges = _walk(
+def test_a_pending_unapproved_member_does_not_hold_the_queue() -> None:
+    plan, ready = _walk(
         [("a", False, "pending"), ("b", False, "green")],
         {"a": Unlabelled(), "b": Approved("h-b")},
     )
-    assert train.head == "b" and train.awaiting == ("a",)
-    assert [m.batch for m in merges] == ["b"]
+    assert plan.awaiting == frozenset({"a"}) and ready == ["b"]
 
 
-# ------------------------------------------------------------------ merging (R1, R3)
-
-
-class GateForge:
-    def __init__(self, pr: dict[str, Any]) -> None:
-        self.pr = {"state": "OPEN", "head_ref": "feat/batch-a", **pr}
-        self.merged: list[tuple[int, str]] = []
-        self.readied: list[int] = []
-        self.ready_unsupported = False
-
-    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-        return dict(self.pr)
-
-    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
-        return [{"name": "ci-ok", "bucket": "pass"}]
-
-    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
-        return self.pr_required_checks(repo, number)
-
-    def pr_ready(self, repo: str, number: int) -> None:
-        if self.ready_unsupported:
-            raise UnsupportedForgeOperation("pr_ready", "gitlab")
-        self.readied.append(number)
-        self.pr["draft"] = False
-
-    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
-        self.merged.append((number, head_sha))
-        self.pr["state"] = "MERGED"
-
-
-class UpToDate:
-    """A clone where every head is current: `_land` merges, never updates."""
-
-    path = Path("/nonexistent")
-
-    def fetch(self) -> None: ...
-    def default_branch(self) -> str:
-        return "main"
-
-    def show(self, ref: str, file: str) -> str | None:
-        return None
-
-    def is_ancestor(self, ancestor: str, descendant: str) -> bool:
-        return True
-
-    def commits_behind(self, head: str, ref: str) -> tuple[Any, ...]:
-        return ()
-
-    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
-        return frozenset()
-
-    def add_worktree(self, where: Path, ref: str) -> Any:
-        raise AssertionError("no update expected")
-
-    def remove_worktree(self, where: Path) -> None: ...
-
-    def rev_parse(self, ref: str) -> str:
-        return "m1"
-
-
-def _slot(batch: Batch, head: str = "h1") -> Slot:
-    pr = _pr(7, batch.id, head)
-    return Slot(step=MergeStep(batch=batch, pr=pr, reserved_version=None, shared=[]), head=head,
-                slot=None)  # fmt: skip
-
-
-def _ctx(forge: GateForge, tmp_path: Path, checkout: Any = None) -> MergeContext:
-    return MergeContext(
-        client=forge,  # type: ignore[arg-type]
-        checkout=checkout or UpToDate(),
-        repo=REPO,
-        version=None,
-        scratch_root=tmp_path,
-        method="squash",
-        say=lambda line: None,
+def test_a_failing_member_is_reported_red_and_is_no_entry() -> None:
+    plan, ready = _walk(
+        [("a", False, "failing"), ("b", False, "green")],
+        {"a": Approved("h-a"), "b": Approved("h-b")},
     )
-
-
-@pytest.mark.parametrize(
-    ("labels", "events"),
-    [([], [_approval(7, "h1")]), ([LABEL], []), ([LABEL], [_approval(7, "h0")])],
-    ids=["unlabelled", "never-recorded", "void"],
-)
-def test_merge_ready_and_merge_one_refuse_without_a_valid_approval(
-    tmp_path: Path, labels: list[str], events: list[ApprovalEvent]
-) -> None:
-    forge = GateForge({"draft": False, "head_oid": "h1", "labels": labels})
-    slot = _slot(_batch("a", *events))
-    assert merge_ready(_ctx(forge, tmp_path), slot, None).outcome == "unapproved"
-    held = merge_one(_ctx(forge, tmp_path), slot, None)
-    assert held is not None and (held.outcome, held.head) == ("unapproved", "h1")
-    assert forge.merged == []
-
-
-def test_an_approved_green_draft_is_readied_then_merged(tmp_path: Path) -> None:
-    forge = GateForge({"draft": True, "head_oid": "h1", "labels": [LABEL]})
-    slot = _slot(_batch("a", _approval(7, "h1")))
-    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
-    assert attempt.outcome == "merged"
-    assert forge.readied == [7] and forge.merged == [(7, "h1")]
-
-
-def test_merge_one_readies_an_approved_draft_too(tmp_path: Path) -> None:
-    forge = GateForge({"draft": True, "head_oid": "h1", "labels": [LABEL]})
-    slot = _slot(_batch("a", _approval(7, "h1")))
-    assert merge_one(_ctx(forge, tmp_path), slot, None) is None
-    assert forge.readied == [7] and forge.merged == [(7, "h1")]
-
-
-def test_a_forge_that_cannot_ready_leaves_the_draft_unready(tmp_path: Path) -> None:
-    forge = GateForge({"draft": True, "head_oid": "h1", "labels": [LABEL]})
-    forge.ready_unsupported = True
-    slot = _slot(_batch("a", _approval(7, "h1")))
-    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
-    assert attempt.outcome == "unready"
-    assert "pr_ready" in attempt.reason
-    assert forge.merged == []
-
-
-def test_run_queue_stops_on_an_unapproved_pr(tmp_path: Path) -> None:
-    from fr.triage.batch_merge import run_queue
-
-    forge = GateForge({"draft": False, "head_oid": "h1", "labels": []})
-    with pytest.raises(MergeStopError, match="approved-fr"):
-        run_queue(_ctx(forge, tmp_path), [_slot(_batch("a"))])
-
-
-def test_an_approval_recorded_this_run_counts(tmp_path: Path) -> None:
-    """`batch merge --yes` settles first; the context carries what it recorded."""
-    forge = GateForge({"draft": False, "head_oid": "h1", "labels": [LABEL]})
-    ctx = _ctx(forge, tmp_path)
-    ctx.recorded.setdefault("a", []).append(_approval(7, "h1"))
-    assert merge_ready(ctx, _slot(_batch("a")), None).outcome == "merged"
-
-
-# ------------------------------------------------------------------ updates (R8)
-
-
-class Behind(UpToDate):
-    def __init__(self, forge: GateForge) -> None:
-        self.forge = forge
-        self.pushed: list[str] = []
-
-    def is_ancestor(self, ancestor: str, descendant: str) -> bool:
-        return descendant != "h1"
-
-    def commits_behind(self, head: str, ref: str) -> tuple[Any, ...]:
-        return (("c1", (("M", "x.py"),)),)
-
-    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
-        return frozenset({"x.py"})
-
-    def add_worktree(self, where: Path, ref: str) -> Any:
-        clone = self
-
-        class _Wt:
-            path = where
-
-            def merge(self, ref: str) -> list[str]:
-                return []
-
-            def commit_all(self, message: str, version_files: list[str]) -> str | None:
-                return "h2"
-
-            def push(self, branch: str) -> None:
-                clone.pushed.append(branch)
-                clone.forge.pr["head_oid"] = "h2"
-
-        return _Wt()
-
-    def rev_parse(self, ref: str) -> str:
-        assert ref == "origin/main"
-        return "m7"
-
-
-def test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval(
-    tmp_path: Path,
-) -> None:
-    forge = GateForge({"draft": False, "head_oid": "h1", "labels": [LABEL]})
-    calls: list[tuple[Any, ...]] = []
-    ctx = _ctx(forge, tmp_path, Behind(forge))
-    ctx.on_update = lambda *a: calls.append(a)
-    slot = _slot(_batch("a", _approval(7, "h1")))
-    attempt = merge_ready(ctx, slot, None)
-    assert attempt == MergeAttempt("updated", head="h2")
-    assert calls == [(7, "h1", "h2", "m7", None)]  # no reader: no patch-id
-    (event,) = ctx.recorded["a"]
-    assert isinstance(event, UpdateEvent) and (event.head_before, event.base) == ("h1", "m7")
-    # the next attempt sees the new head as approved through fr's own update
-    forge.pr["head_oid"] = "h2"
-    again = merge_ready(ctx, _slot(_batch("a", _approval(7, "h1")), "h2"), None)
-    assert again.outcome == "merged"
-
-
-# ------------------------------------------------------------------ review fixes
-
-
-def test_a_forge_refusing_to_ready_leaves_the_draft_unready_with_its_words(
-    tmp_path: Path,
-) -> None:
-    """p1-r1: a refusal of `pr_ready` (a 403, a 422) is `unready`, never an escape."""
-    from fr.gh import GhError
-
-    forge = GateForge({"draft": True, "head_oid": "h1", "labels": [LABEL]})
-
-    def refuse(repo: str, number: int) -> None:
-        raise GhError("HTTP 422: Pull request is in clean status", returncode=1)
-
-    forge.pr_ready = refuse  # type: ignore[method-assign]
-    slot = _slot(_batch("a", _approval(7, "h1")))
-    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
-    assert attempt.outcome == "unready" and "422" in attempt.reason
-    assert forge.merged == []
-    held = merge_one(_ctx(forge, tmp_path), slot, None)
-    assert held is not None and held.outcome == "unready"
-
-
-def test_a_head_that_moves_while_the_draft_is_readied_is_not_merged(tmp_path: Path) -> None:
-    """p1-r7: the ready is head-pinned; a push in between voids the approval."""
-    forge = GateForge({"draft": True, "head_oid": "h1", "labels": [LABEL]})
-    real_ready = forge.pr_ready
-
-    def ready_then_push(repo: str, number: int) -> None:
-        real_ready(repo, number)
-        forge.pr["head_oid"] = "h-session"
-
-    forge.pr_ready = ready_then_push  # type: ignore[method-assign]
-    slot = _slot(_batch("a", _approval(7, "h1")))
-    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
-    assert attempt.outcome == "unapproved" and attempt.head == "h-session"
-    assert "h-session" in attempt.reason
-    assert forge.merged == []
-
-
-def test_an_update_is_recorded_before_its_push(tmp_path: Path) -> None:
-    """p1-r6: a push that fails still leaves the update recorded (a spare event for an
-    unpushed head is harmless; a lost one would void a valid approval)."""
-    forge = GateForge({"draft": False, "head_oid": "h1", "labels": [LABEL]})
-    checkout = Behind(forge)
-    calls: list[tuple[int, str, str, str]] = []
-    real_add = checkout.add_worktree
-
-    def failing_push(where: Path, ref: str) -> Any:
-        wt = real_add(where, ref)
-
-        def push(branch: str) -> None:
-            raise RuntimeError("push rejected")
-
-        wt.push = push
-        return wt
-
-    checkout.add_worktree = failing_push  # type: ignore[method-assign]
-    ctx = _ctx(forge, tmp_path, checkout)
-    ctx.on_update = lambda *a: calls.append(a)
-    with pytest.raises(RuntimeError):
-        merge_ready(ctx, _slot(_batch("a", _approval(7, "h1"))), None)
-    assert calls == [(7, "h1", "h2", "m7", None)]
-    assert [e.kind for e in ctx.recorded["a"]] == ["update"]
+    (red,) = [a for a in plan.actions if a.kind == "warn" and a.red]
+    assert red.batch == "a" and ready == ["b"]
 
 
 def test_reaches_follows_only_frs_own_updates() -> None:
@@ -514,78 +253,3 @@ def test_reaches_follows_only_frs_own_updates() -> None:
     )  # fmt: skip
     assert reaches([update], 7, "h1", "h2") and reaches([], 7, "h1", "h1")
     assert not reaches([update], 7, "h1", "h9") and not reaches([update], 8, "h1", "h2")
-
-
-# --------------------------------------------------------- patch-ids (wave-merge-queue R12)
-
-
-def _pinned(pr: int, head: str, patch_id: str) -> ApprovalEvent:
-    return ApprovalEvent(
-        kind="approval", at=datetime(2026, 10, 11, 11, tzinfo=UTC), pr=pr, head=head,
-        patch_id=patch_id,
-    )  # fmt: skip
-
-
-def _reader(ids: dict[str, str]) -> Any:
-    def of(pr: int, head: str, *, fresh: bool = False) -> str | None:
-        return ids.get(head)
-
-    return of
-
-
-def test_the_merge_gate_keeps_an_approval_whose_patch_id_holds_at_a_new_head(
-    tmp_path: Path,
-) -> None:
-    forge = GateForge({"draft": False, "head_oid": "h2", "labels": [LABEL]})
-    ctx = _ctx(forge, tmp_path)
-    ctx.patch_id_of = _reader({"h2": "p1"})
-
-    attempt = merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1")), "h2"), None)
-
-    assert attempt.outcome == "merged" and forge.merged == [(7, "h2")]
-
-
-def test_the_merge_gate_says_the_diff_changed_when_the_patch_id_did(tmp_path: Path) -> None:
-    """p1-r6: the hold names what voided the approval, as settle does."""
-    forge = GateForge({"draft": False, "head_oid": "h2", "labels": [LABEL]})
-    ctx = _ctx(forge, tmp_path)
-    ctx.patch_id_of = _reader({"h2": "p2"})
-
-    attempt = merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1")), "h2"), None)
-
-    assert attempt.outcome == "unapproved"
-    assert attempt.reason == (
-        f"was approved at h1, but its diff changed at h2; the {LABEL} label is void"
-    )
-    assert forge.merged == []
-
-
-def test_the_merge_gate_says_the_head_moved_when_no_patch_id_is_known(tmp_path: Path) -> None:
-    forge = GateForge({"draft": False, "head_oid": "h2", "labels": [LABEL]})
-
-    slot = _slot(_batch("a", _approval(7, "h1")), "h2")
-
-    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
-
-    assert attempt.reason == f"was approved at h1, but head moved to h2; the {LABEL} label is void"
-
-
-def test_an_update_records_the_patch_id_of_its_new_head(tmp_path: Path) -> None:
-    """p1-r7: fr's own update records the id it leaves the PR at, so a later clean merge of
-    `main` keeps the approval though the update moved the id."""
-    forge = GateForge({"draft": False, "head_oid": "h1", "labels": [LABEL]})
-    calls: list[tuple[Any, ...]] = []
-    ctx = _ctx(forge, tmp_path, Behind(forge))
-    ctx.on_update = lambda *a: calls.append(a)
-    ctx.patch_id_of = _reader({"h1": "p1", "h2": "p2"})
-
-    merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1"))), None)
-
-    assert calls == [(7, "h1", "h2", "m7", "p2")]
-    (event,) = ctx.recorded["a"]
-    assert isinstance(event, UpdateEvent) and event.patch_id == "p2"
-    # a merge of main at h3 keeps p2: the approval holds
-    forge.pr["head_oid"] = "h3"
-    ctx.patch_id_of = _reader({"h3": "p2"})
-    again = merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1")), "h3"), None)
-    assert again.outcome == "merged"

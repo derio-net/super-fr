@@ -294,7 +294,8 @@ def test_a_voided_approval_asks_for_a_re_label() -> None:
 
 
 def test_need_labels_name_the_new_kinds_and_drop_ready_pr() -> None:
-    assert {"approve-pr", "red-pr", "queue-ejected"} <= set(NEED_LABELS)
+    assert {"approve-pr", "red-pr"} <= set(NEED_LABELS)
+    assert not {"queue-ejected", "enqueue-refused"} & set(NEED_LABELS)  # R22: nothing enqueues
     assert "ready-pr" not in NEED_LABELS
 
 

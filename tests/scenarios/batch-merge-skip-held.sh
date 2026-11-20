@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Row batch-merge-skip-held (spec 2026-10-11-merge-train-safety R7). `fr triage batch merge`
-# with no ids skips each queued batch another scope holds, naming it, and merges the rest;
-# with every batch held it says "nothing to merge" and exits 0; naming a held batch still
-# refuses with exit 2. The fake REST forge and the bare remote are those of
+# with no ids skips each queued batch another scope holds, naming it, and drives the wave
+# merge queue for the rest (spec 2026-11-19-wave-merge-queue R23); with every batch held it
+# says "nothing to merge" and exits 0; naming a held batch still refuses with exit 2. The fake REST forge and the bare remote are those of
 # merge-train-label-gate. Batch b1 (issue 1074, PR 1080: green, labelled approved-fr, up to
 # date) is the free one. Batch b2 (issue 9999, PR 1081) exists only in the collected facts,
 # with another scope's live claim on its issue; the facts edit goes through the model's own
@@ -126,8 +126,11 @@ expect_grep "s-aaaaaaaa" "$out" "the refusal names the holder"
 # Only b2 held: b2 is skipped and b1 merges.
 hold no
 merge --yes
-require_exit 0 "$out"
+require_exit 1 "$out"
 expect_grep "skipped b2: held by s-aaaaaaaa" "$out" "b2 is skipped and named"
 refuse_grep "skipped b1" "$out" "the free batch is not skipped"
-expect_grep "^-X PUT $R/pulls/1080/merge" "$(log)" "the free batch's PR is merged"
+# The free batch goes to the queue, never to the forge's merge API: this repo declares no
+# `queue.ci`, so its queue is refused and says what to add.
+expect_grep "queue.ci" "$out" "the free batch's queue is refused, naming what to add"
+refuse_grep "pulls/1080/merge" "$(log)" "the forge's merge API is never called"
 echo "ok: batch-merge-skip-held"
