@@ -13,6 +13,7 @@ from typing import Any
 from fr.triage.batch_drive import Snapshot, drive_pass
 from fr.triage.model import QueueRecord
 from fr.triage.wave_queue import Hold, QueueConfig
+
 from tests.unit.test_triage_batch_drive import REPO, SID, _batch, _dispatched, _kinds, _snap
 
 OTHER = "s-22222222"
@@ -21,8 +22,13 @@ MAIN = "m" * 40
 
 def _record(wave: int | None = 1) -> QueueRecord:
     return QueueRecord.model_validate(
-        {"repo": REPO, "wave": wave, "scope": SID, "base": MAIN,
-         "events": [{"kind": "queue_open", "at": "2026-10-02T10:00:00Z"}]}  # fmt: skip
+        {
+            "repo": REPO,
+            "wave": wave,
+            "scope": SID,
+            "base": MAIN,
+            "events": [{"kind": "queue_open", "at": "2026-10-02T10:00:00Z"}],
+        }  # fmt: skip
     )
 
 
