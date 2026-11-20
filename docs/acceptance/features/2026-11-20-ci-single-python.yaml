@@ -78,3 +78,9 @@ amendments:
       file per run, and fails when the shards together did not run exactly the collected
       test set once each
     why: CI now runs one leg (#1589)
+  - row: ci-shards-complete
+    op: drop-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_covers_every_test_leg
+    why: test renamed
