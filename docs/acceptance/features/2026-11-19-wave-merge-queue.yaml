@@ -520,3 +520,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_drive.py#test_green_draft_archive_pr_is_admitted_to_the_queue_as_a_draft
     why: an attributed archive PR is a queue entry (R32)
+  - row: triage-archive-pr-draft-merged
+    op: drop-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_of_a_draft_calls_pr_ready_before_pr_merge_and_says_so
+    why: the archive step no longer merges (R32)
