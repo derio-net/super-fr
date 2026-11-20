@@ -1080,7 +1080,8 @@ def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> lis
     """Why the driver may NOT merge *marker*'s PR without `approved-fr` (R15's trust
     anchor); [] only when every condition holds: the PR head is the head the verb
     recorded; the driver's own diff to it is exactly the recorded file set and every
-    path is an archive's; the only commit past the base is that head; the PR is the
+    path is an archive's; the commits past the base are that head alone, or the verb's own
+    migration commit and then that head (R16); the PR is the
     repo's own by an allowed author; and its body closes exactly the recorded issues,
     less any a narrowing decision names now. Each unknown is a reason."""
     why: list[str] = []

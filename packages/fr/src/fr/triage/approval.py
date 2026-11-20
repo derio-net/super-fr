@@ -30,6 +30,7 @@ the id; the re-read tells that from a real change).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -331,6 +332,32 @@ def settle_entry_approval(
     return verdict, live.at if live is not None else None
 
 
+RELEASE_MARKER_PREFIX = "<!-- fr-queue:release"
+_RELEASE_MARKER = re.compile(
+    r"<!-- fr-queue:release head=(?P<head>[0-9a-f]+) patch-id=(?P<patch>[0-9a-f]*) -->"
+)
+_TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+
+
+def release_marker(head: str, patch_id: str) -> str:
+    """The comment the DevOps stage's stage 2 writes on the PR it releases (R26): the head
+    and patch-id it verified, which the driver records the release at (never a live head)."""
+    return f"{RELEASE_MARKER_PREFIX} head={head} patch-id={patch_id} -->"
+
+
+def read_release_marker(comments: Sequence[dict[str, Any]]) -> tuple[str, str] | None:
+    """The `(head, patch_id)` of the last `fr-queue:release` marker comment written by a
+    repo owner, member or collaborator, or None."""
+    found: tuple[str, str] | None = None
+    for c in comments:
+        if str(c.get("association") or "") not in _TRUSTED_ASSOCIATIONS:
+            continue
+        m = _RELEASE_MARKER.search(str(c.get("body") or ""))
+        if m is not None:
+            found = (m["head"], m["patch"])
+    return found
+
+
 def settle_release(
     client: Any,
     record: Callable[[QueueReleaseEvent], None],
@@ -344,30 +371,36 @@ def settle_release(
     now: datetime,
     dry_run: bool = False,
     patch_id_of: PatchIdOf | None = None,
+    marker: tuple[str, str] | None = None,
 ) -> bool:
     """Settle the DevOps stage's `fr-queue:release` label on the open PR in *view* into a
-    `queue_release` at its head and patch-id (R26, as `approved-fr` is settled): whether the
-    entry (whose PR is *number*) is released now. *events* are this entry's `queue_release`
-    events, in order.
+    `queue_release` (R26, as `approved-fr` is settled): whether the entry (whose PR is
+    *number*) is released now. *events* are this entry's `queue_release` events, in order;
+    *marker* is `(head, patch_id)` of the stage's marker comment (`read_release_marker`).
 
-    A label with no live event, or after a voided one, is a new release, recorded at the
-    live patch-id. A label whose last event pinned another patch-id is stale: the PR's diff
-    moved after the release, so the label is removed (R9: only while labels are on) and a
-    void is recorded (a `queue_release` with no patch-id), and the stage must run again.
-    An unreadable patch-id changes nothing. Nothing is written under *dry_run*."""
+    A label with no live event (none, or the last one voided) is a new release only at what
+    stage 2 verified: the marker's patch-id must equal the live one (an unreadable live
+    patch-id falls back to the marker's head being the live head), and it is recorded at
+    that patch-id. A label with no marker, or a marker for another diff, is no release: the
+    stage must run again. A label whose live event pinned another patch-id is stale: the
+    PR's diff moved after the release, so the label is removed (R9: only while labels are
+    on) and a void is recorded (`voided`), and the stage must run again. An unreadable
+    patch-id keeps a recorded release only at the head it was recorded at. Nothing is
+    written under *dry_run*."""
     if QUEUE_RELEASE.name not in {str(n) for n in view.get("labels") or ()}:
         return False
     head = str(view.get("head_oid") or "")
     patch_id = patch_id_of(number, head) if patch_id_of is not None else None
     last = events[-1] if events else None
-    if last is not None and last.patch_id and patch_id is None:
-        return True  # cannot read the diff now: the recorded release stands
-    if patch_id is None:
-        return False  # nothing to pin a first release to: not released yet
-    if last is not None and last.patch_id and last.patch_id != patch_id:
+    live = last if last is not None and not last.voided else None
+    if live is not None:
+        if patch_id is None:
+            return head == live.head  # cannot read the diff: only the recorded head stands
+        if live.patch_id == patch_id:
+            return True
         # the diff moved since the release: re-read once against a fresh default branch
         patch_id_fresh = patch_id_of(number, head, fresh=True) if patch_id_of else None
-        if patch_id_fresh == last.patch_id:
+        if patch_id_fresh == live.patch_id:
             return True
         if dry_run:
             say(f"would void the release of {entry_key(entry)}: its diff changed after it")
@@ -379,17 +412,30 @@ def settle_release(
                 repo, number, add=frozenset(), remove=frozenset({QUEUE_RELEASE.name})
             )
             record(QueueReleaseEvent(kind="queue_release", at=now, entry=entry, head=head,
-                                     patch_id=""))  # fmt: skip
+                                     patch_id=live.patch_id, voided=True))  # fmt: skip
             say(f"release of {entry_key(entry)} voided: its diff changed after the DevOps "
                 f"stage released it; run `fr ops gate` again")  # fmt: skip
         return False
-    if last is not None and last.patch_id == patch_id:
-        return True
+    if marker is None:
+        say(f"{entry_key(entry)} carries {QUEUE_RELEASE.name} but no release marker from the "
+            "DevOps stage: not released; run `fr ops gate` for its run")  # fmt: skip
+        return False
+    m_head, m_patch = marker
+    if patch_id is None:
+        verified = head == m_head
+    else:
+        verified = patch_id == m_patch
+        if not verified and patch_id_of is not None:
+            verified = patch_id_of(number, head, fresh=True) == m_patch
+    if not verified:
+        say(f"{entry_key(entry)} was pushed to after the DevOps stage verified it at "
+            f"{m_head[:12]}: not released; run `fr ops gate` again")  # fmt: skip
+        return False
     if dry_run:
         say(f"would record the release of {entry_key(entry)} at {head[:12]}")
         return True
     record(QueueReleaseEvent(kind="queue_release", at=now, entry=entry, head=head,
-                             patch_id=patch_id))  # fmt: skip
+                             patch_id=m_patch))  # fmt: skip
     say(f"release of {entry_key(entry)} recorded at {head[:12]}")
     return True
 

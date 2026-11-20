@@ -182,6 +182,28 @@ class HostCheckout:
         name = out.strip()
         return name.removeprefix("origin/") or None
 
+    def patch_id(self, head: str, default: str) -> str | None:
+        from fr.triage.gitseam import Checkout, GitError
+
+        try:
+            checkout = Checkout.at(self.primary)
+            checkout.refresh_remote_branch(default)
+            return checkout.patch_id(head, f"origin/{default}")
+        except GitError:
+            return None
+
+    def queue_configured(self, default: str) -> bool:
+        from fr.triage.gitseam import GitError, git
+
+        import yaml
+
+        try:
+            text = git(["show", f"origin/{default}:.fr/triage.yaml"], self.primary)
+            data = yaml.safe_load(text)
+        except (GitError, yaml.YAMLError):
+            return False
+        return isinstance(data, dict) and isinstance(data.get("queue"), dict)
+
     def workspace(self, branch: str) -> OpsWorkspace | None:
         from fr.isolation.types import load_state
 

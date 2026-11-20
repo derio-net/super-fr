@@ -30,6 +30,19 @@ from tests.integration.test_queue_drive_cmd import (  # noqa: F401 - fixtures
 )
 
 
+def _mark(origin: Origin, qw: QueueWorld, number: int, branch: str) -> None:
+    """What stage 2 writes: the marker comment naming the head and patch-id it verified."""
+    from fr.triage.approval import release_marker
+    from fr.triage.gitseam import Checkout
+
+    from tests.integration.test_queue_drive_cmd import _git
+
+    _git(origin.clone, "fetch", "--quiet", "origin")
+    head = origin.sha(f"refs/heads/{branch}")
+    pid = Checkout(origin.clone).patch_id(head, "origin/main")
+    qw.comments[number] = [{"association": "OWNER", "id": 1, "body": release_marker(head, pid)}]
+
+
 def _events(tmp_path: Path, kind: type) -> list:
     return [e for q in load_judgements(tmp_path / "judgements.yaml").queues
             for e in q.events if isinstance(e, kind)]  # fmt: skip
@@ -50,7 +63,10 @@ def test_a_released_devops_pr_lands_last_and_the_wave_drains_after_its_post_merg
     assert _landed(tmp_path) == [["b2"]] and _events(tmp_path, QueueReleaseEvent) == []
 
     qw.prs[101]["labels"] = ["approved-fr", "gate:devops", "fr-queue:release"]
-    _passes(tmp_path, 4)
+    _passes(tmp_path, 1)
+    assert _events(tmp_path, QueueReleaseEvent) == [], "a label with no stage 2 marker is none"
+    _mark(origin, qw, 101, "feat/batch-b1")
+    _passes(tmp_path, 3)
     (release,) = _events(tmp_path, QueueReleaseEvent)
     assert release.entry.batch == "b1" and release.patch_id and release.head
     assert _landed(tmp_path) == [["b2"], ["b1"]], "the release makes b1 an entry; it lands"
@@ -75,11 +91,12 @@ def test_a_diff_that_changes_after_the_release_voids_it_and_removes_the_label(
     qw.prs[101]["labels"] = ["approved-fr", "gate:devops", "fr-queue:release"]
     # b2 goes first; stop before b1 builds by never letting it be ready: release, then change
     # the diff on its branch before the next pass settles anything further
+    _mark(origin, qw, 101, "feat/batch-b1")
     _passes(tmp_path, 1)  # settles the release at the current diff
     (release,) = _events(tmp_path, QueueReleaseEvent)
     origin.branch("feat/batch-b1", {"b1.txt": "changed after the release\n"})
     qw.sync()
     _passes(tmp_path, 1)
     assert "fr-queue:release" not in qw.prs[101]["labels"], "the stale release is removed"
-    voids = [e for e in _events(tmp_path, QueueReleaseEvent) if e.patch_id == ""]
+    voids = [e for e in _events(tmp_path, QueueReleaseEvent) if e.voided]
     assert len(voids) == 1 and voids[0].head != release.head

@@ -1231,8 +1231,9 @@ class QueueClearedEvent(_Strict):
 
 class QueueReleaseEvent(_Strict):
     """The DevOps stage released `gate:devops`-held *entry* (its `fr-queue:release` label)
-    at *head* and *patch_id* (spec 2026-11-19-wave-merge-queue R24, R26). An empty *patch_id*
-    records that a release was voided (its diff moved after it; the label was removed).
+    at *head* and *patch_id* (spec 2026-11-19-wave-merge-queue R24, R26). *voided* records
+    that the release was voided (its diff moved after it; the label was removed): *patch_id*
+    is then the one it pinned. An empty *patch_id* is a real release at an empty diff.
     Needs judgements schema 13. Written by the engine only."""
 
     kind: Literal["queue_release"]
@@ -1240,6 +1241,7 @@ class QueueReleaseEvent(_Strict):
     entry: QueueEntryRef
     head: str = Field(min_length=1)
     patch_id: str
+    voided: bool = False
 
 
 class QueuePostmergeDoneEvent(_Strict):

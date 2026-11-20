@@ -82,13 +82,16 @@ Land it by its own pull request, so it does not ride the feature pull request
 fr records each stage's completion in a state directory outside every checkout. By
 default that is `~/.local/state/fr/ops-gate/`. fr commits pre-merge evidence only to the
 ops branch, never to the PR head, so the reviewed head and its checks stay valid. Stage 2
-is done only when the forge reads the PR as merged. fr never records it.
+is done only when the forge reads the PR as merged. fr never records it. A repo with no
+`queue:` in `.fr/triage.yaml` has no merge queue: stage 2 says so, and you merge the PR by
+hand. A PR you merged by hand counts as stage 2 done.
 
 ## How does the merge queue land the PR?
 
 The wave merge queue owns every merge of the repo. When stage 2 adds `fr-queue:release`, the
-driver records the release at the PR's head and diff. Then it lands the PR alone, as the
-last change of its push, after the entries ahead of it. It builds and tests the entries
+driver records the release at the diff that stage 2 verified, which stage 2 names in a marker
+comment. A push after stage 2 is no release. Then it lands the PR as the last entry of its
+push, after the entries ahead of it. It builds and tests the entries
 behind it meanwhile, but lands nothing behind it. It waits until stage 4 adds
 `fr-queue:postmerge-done`. After the PR lands, the driver adds a Needs-you entry that names
 `fr ops gate --run <id>`. Run it again: it resumes at stage 3. If someone pushes to the PR

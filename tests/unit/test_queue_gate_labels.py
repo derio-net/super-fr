@@ -29,9 +29,9 @@ class Client:
         return True
 
 
-def _event(patch_id: str, head: str = "h1") -> QueueReleaseEvent:
+def _event(patch_id: str, head: str = "h1", *, voided: bool = False) -> QueueReleaseEvent:
     return QueueReleaseEvent(kind="queue_release", at=NOW, entry=ENTRY, head=head,
-                             patch_id=patch_id)  # fmt: skip
+                             patch_id=patch_id, voided=voided)  # fmt: skip
 
 
 def _view(*labels: str, head: str = "h1") -> dict[str, Any]:
@@ -49,6 +49,7 @@ def _settle(
     patch: str | None,
     *,
     dry_run: bool = False,
+    marker: tuple[str, str] | None = ("h1", "p1"),
 ) -> tuple[bool, list[Any], Client, list[str]]:
     client = Client()
     got: list[Any] = []
@@ -58,7 +59,7 @@ def _settle(
         return patch
 
     ok = settle_release(client, got.append, REPO, ENTRY, 7, events, view, said.append,
-                        now=NOW, dry_run=dry_run, patch_id_of=reader)  # fmt: skip
+                        now=NOW, dry_run=dry_run, patch_id_of=reader, marker=marker)  # fmt: skip
     return ok, got, client, said
 
 
@@ -90,21 +91,72 @@ def test_a_diff_that_moved_after_the_release_voids_it_and_removes_the_label() ->
     assert not ok
     assert client.edits == [(7, frozenset(), frozenset({"fr-queue:release"}))]
     (event,) = got
-    assert event.patch_id == "" and event.head == "h2"  # the void
+    assert event.voided and event.patch_id == "p1" and event.head == "h2"  # the void
     assert any("voided" in line and "fr ops gate" in line for line in said)
 
 
 def test_after_a_void_the_label_back_is_a_new_release() -> None:
-    ok, got, _, _ = _settle([_event("p1"), _event("", head="h2")],
-                            _view("fr-queue:release", head="h2"), "p2")  # fmt: skip
-    assert ok and got[0].patch_id == "p2"
+    ok, got, _, _ = _settle([_event("p1"), _event("p1", head="h2", voided=True)],
+                            _view("fr-queue:release", head="h2"), "p2",
+                            marker=("h2", "p2"))  # fmt: skip
+    assert ok and got[0].patch_id == "p2" and not got[0].voided
 
 
 def test_an_unreadable_patch_id_changes_nothing() -> None:
     ok, got, client, _ = _settle([_event("p1")], _view("fr-queue:release"), None)
-    assert ok and got == [] and client.edits == []  # the recorded release stands
-    ok, got, client, _ = _settle([], _view("fr-queue:release"), None)
+    assert ok and got == [] and client.edits == []  # the recorded release stands at its head
+    ok, got, client, _ = _settle([], _view("fr-queue:release"), None, marker=None)
     assert not ok and got == []  # nothing to pin a first release to
+
+
+def test_an_unreadable_patch_id_keeps_a_release_only_at_its_recorded_head() -> None:
+    """p6-r1: a release valid at any head when the diff cannot be read let a push through."""
+    ok, got, client, _ = _settle([_event("p1")], _view("fr-queue:release", head="h2"), None)
+    assert not ok and got == [] and client.edits == []
+
+
+def test_a_push_between_stage_2_and_the_driver_is_not_released() -> None:
+    """p6-r2: the marker names what stage 2 verified; a live diff that differs is no release."""
+    ok, got, client, said = _settle([], _view("fr-queue:release", head="h2"), "p2",
+                                    marker=("h1", "p1"))  # fmt: skip
+    assert not ok and got == [] and client.edits == []
+    assert any("fr ops gate" in line for line in said)
+
+
+def test_a_matching_marker_is_released_at_the_live_head() -> None:
+    ok, got, _, _ = _settle([], _view("fr-queue:release", head="h2"), "p1", marker=("h1", "p1"))
+    assert ok and got[0].head == "h2" and got[0].patch_id == "p1"
+
+
+def test_a_label_with_no_marker_is_no_release() -> None:
+    ok, got, _, said = _settle([], _view("fr-queue:release"), "p1", marker=None)
+    assert not ok and got == [] and any("fr ops gate" in line for line in said)
+
+
+def test_an_unreadable_patch_id_releases_a_first_one_only_at_the_markers_head() -> None:
+    ok, got, _, _ = _settle([], _view("fr-queue:release", head="h2"), None, marker=("h1", "p1"))
+    assert not ok and got == []
+    ok, got, _, _ = _settle([], _view("fr-queue:release", head="h1"), None, marker=("h1", "p1"))
+    assert ok and got[0].patch_id == "p1"
+
+
+def test_a_release_at_an_empty_diff_is_a_real_release() -> None:
+    ok, got, _, _ = _settle([], _view("fr-queue:release"), "", marker=("h1", ""))
+    assert ok and got[0].patch_id == "" and not got[0].voided
+    ok, got, client, _ = _settle([got[0]], _view("fr-queue:release"), "", marker=("h1", ""))
+    assert ok and got == [] and client.edits == []
+
+
+def test_the_marker_is_read_from_trusted_comments_only() -> None:
+    from fr.triage.approval import read_release_marker, release_marker
+
+    body = release_marker("a" * 40, "b" * 8)
+    assert read_release_marker([{"association": "NONE", "body": body}]) is None
+    assert read_release_marker([{"association": "OWNER", "body": body}]) == ("a" * 40, "b" * 8)
+    assert read_release_marker([{"association": "OWNER", "body": release_marker("c", "")}]) == (
+        "c",
+        "",
+    )
 
 
 def test_a_dry_run_writes_nothing() -> None:

@@ -24,6 +24,7 @@ from fr.journal.model import (
 )
 from fr.ops import gate as gate_mod
 from fr.ops.evidence import record_op
+from fr.triage.approval import release_marker
 from fr.ops.gate import (
     Gate,
     GateResult,
@@ -183,6 +184,8 @@ class FakeHost:
         self.stale: dict[str, list[str]] = {}
         self.tip: str | None = TIP
         self.origin_default: str | None = "main"
+        self.queue = True  # `.fr/triage.yaml` declares a `queue:` block
+        self.patch: str | None = "ab12cd"  # the verified head's patch-id; None: unreadable
         self.how: dict[str, str] = {}
         self.materialised: list[Path] = []
         # `fr ops status <id> --json`, scripted per op: each call pops (exit, rows | text)
@@ -218,6 +221,12 @@ class FakeHost:
 
     def origin_head(self) -> str | None:
         return self.origin_default
+
+    def patch_id(self, head: str, default: str) -> str | None:
+        return self.patch
+
+    def queue_configured(self, default: str) -> bool:
+        return self.queue
 
     def fetch(self, ref: str) -> None:
         self.calls.append((["fetch", ref], False))
@@ -276,6 +285,7 @@ class FakeForge:
         self.unsupported = unsupported
         self.open_prs: dict[str, int] = {}
         self.default = "main"
+        self.comments: list[dict[str, Any]] = []
 
     def default_branch(self, *, cwd: Path, run: Any = None) -> str | None:
         return self.default
@@ -305,6 +315,19 @@ class FakeForge:
         self.pr["labels"] = [*self.pr["labels"], *sorted(add)]
         if self.queue_lands and "fr-queue:release" in add:
             self.land()
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return [dict(c) for c in self.comments]
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self.calls.append(("comment", body))
+        self.comments.append({"association": "OWNER", "id": len(self.comments) + 1, "body": body})
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        self.calls.append(("edit_comment", body))
+        for c in self.comments:
+            if c["id"] == comment_id:
+                c["body"] = body
 
     def land(self) -> None:
         """What the merge queue does between two runs of the stage."""
@@ -571,14 +594,21 @@ def test_stage_2_never_merges_and_waits_for_the_queue(ops_root: Path) -> None:
     assert result.waiting and not result.ok and result.code == 0 and result.ran == (2,)
     assert _labelled(forge, "fr-queue:release") and 2 not in _host(ops_root).stages()
     assert not any(a[:2] == ["isolation", "verify-merge"] for a, _ in host.calls)  # no stage 3
-    assert any("waits for the merge queue" in line for line in said)
+    assert any("waits for the PR to be merged" in line for line in said)
+    # p6-r2: the marker names what stage 2 verified, written before the label
+    assert forge.calls.index(("comment", release_marker(HEAD, "ab12cd"))) < forge.calls.index(
+        ("labels", (5, ["fr-queue:release"], []))
+    )
 
 
 def test_forge_labels_off_refuses_the_release_and_names_the_label(
     ops_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """R9: the queue is told by label, so `forge.labels: off` stops the stage."""
-    monkeypatch.setattr("fr.settings.ledger_block", lambda root, kind: "forge.labels is off")
+    monkeypatch.setattr(
+        "fr.settings.ledger_block",
+        lambda root, kind: "forge.labels is off" if kind == "labels" else None,
+    )
     _record_stages(ops_root, 1)
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
@@ -594,9 +624,66 @@ def test_a_rerun_while_released_asks_nothing_and_waits_again(ops_root: Path) -> 
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
     forge = FakeForge(queue_lands=False)
     forge.pr["labels"].append("fr-queue:release")
+    forge.comments.append({"association": "OWNER", "id": 1, "body": release_marker(HEAD, "ab12cd")})
     gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True, forge=forge)
     result = run(gate)
     assert result.waiting and prompt.asked == []
+    assert not [c for c in forge.calls if c[0] == "labels"]
+
+
+def test_a_released_pr_whose_marker_names_another_diff_is_released_again(ops_root: Path) -> None:
+    """p6-r2: a label whose marker is not what the stage verified now is not a release."""
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    forge.pr["labels"].append("fr-queue:release")
+    forge.comments.append({"association": "OWNER", "id": 1, "body": release_marker("0ld", "0ld")})
+    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    result = run(gate)
+    assert result.waiting and len(prompt.asked) == 1
+    assert ("edit_comment", release_marker(HEAD, "ab12cd")) in forge.calls  # in place
+    assert not [c for c in forge.calls if c[0] == "labels"]  # the label is already on
+
+
+def test_an_unreadable_patch_id_releases_nothing(ops_root: Path) -> None:
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True)
+    host.patch = None
+    result = run(gate)
+    assert result.failed == 2 and "patch-id" in result.why and forge.calls == []
+
+
+def test_a_repo_with_no_queue_is_told_to_merge_by_hand_and_a_hand_merge_completes_stage_2(
+    ops_root: Path,
+) -> None:
+    """p6-r4: the gate never merges; with no `queue:` it says so and waits for the forge."""
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    gate, host, tree, forge, prompt, said = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    host.queue = False
+    result = run(gate)
+    assert result.waiting and prompt.asked == [] and forge.calls == []
+    assert any("does not serve" in line and "merge PR #5 by hand" in line for line in said)
+    forge.land()  # the operator merges it
+    again = Gate(gate.target, host, forge, FakePrompt(), [].append, _host(ops_root))
+    assert run(again).ran[0] == 3 and 2 not in run(again).ran
+
+
+def test_stage_4_under_labels_off_finishes_when_the_label_was_added_by_hand(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p6-r3: the label already on is enough; nothing is written, so labels off cannot refuse."""
+    monkeypatch.setattr("fr.settings.ledger_block", lambda root, kind: "forge.labels is off")
+    forge = FakeForge(state="MERGED")
+    forge.pr["labels"].append("fr-queue:postmerge-done")
+    gate, host, tree, forge, *_ = _gate(ops_root, forge=forge)
+    result = run(gate)
+    assert 4 in result.ran and 4 in _host(ops_root).stages()
     assert not [c for c in forge.calls if c[0] == "labels"]
 
 

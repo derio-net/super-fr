@@ -153,3 +153,25 @@ def test_the_wave_does_not_drain_while_a_barrier_is_open() -> None:
         config=_config(),
     )
     assert "queue-drain" in _kinds(plan_queue(done))
+
+
+def test_a_voided_release_is_no_barrier_and_the_queue_lands_without_blocking() -> None:
+    """p6-r9: a void is its own flag; an ungated entry (released=False) lands on."""
+    from fr.triage.wave_queue import barrier_keys
+
+    void = {**_release(), "voided": True}
+    events = [*_chain(), _release(), void, _land("s2", "a", "d")]
+    plan = plan_queue(_wave(*events, slots=_green("s3"), base="s2", released=False))
+    assert "queue-need" not in _kinds(plan)
+    rec = _wave(*events, released=False).records
+    assert barrier_keys(rec) == frozenset()
+    assert barrier_keys(_wave(_release(), void, _release(at="2026-11-20T10:45:00Z")).records) == {
+        "d"
+    }
+
+
+def test_a_release_at_an_empty_diff_is_a_live_barrier() -> None:
+    from fr.triage.wave_queue import barrier_keys
+
+    empty = {**_release(), "patch_id": ""}
+    assert barrier_keys(_wave(empty).records) == {"d"}

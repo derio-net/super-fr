@@ -39,7 +39,7 @@ and land it by its own pull request, not on the feature branch.
 | Stage | What it does |
 |---|---|
 | 1 | Refuses an ops gap (a devops-gated run with command steps and no op, no `none:`), reading the PR head, or the default branch's tip once merged; then brings up the ops workspace `chore/ops-<slug>` from the PR head (from the default branch once the PR merged) on the ops profile, asks you to trust the op set when it changed (`fr ops trust`, on the host), then runs pre-merge status and applies each open op after its own confirmation |
-| 2 | Adds the label `fr-queue:release`, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state. It merges nothing: the wave merge queue lands the PR alone, and the run stops until the forge reads it merged; the driver then names `fr ops gate --run <id>` under Needs you, which resumes at stage 3 |
+| 2 | Posts a marker comment naming the head and diff it verified, then adds the label `fr-queue:release`, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state. It merges nothing: the wave merge queue lands the PR as the last entry of its push (a repo with no `queue:` in `.fr/triage.yaml` has none: merge the PR by hand), and the run stops until the forge reads it merged; the driver then names `fr ops gate --run <id>` under Needs you, which resumes at stage 3 |
 | 3 | `fr isolation verify-merge`, rebases the ops branch onto the default branch, runs every `ready:` |
 | 4 | Post-merge status and apply, then the label `fr-queue:postmerge-done`, which lifts the queue's barrier (nothing lands behind the PR until then) |
 | 5 | Probes each `(op: <id>)` step, asks for the others' outcome, and records it (`fr closeout outcome`) |
@@ -60,7 +60,7 @@ comes up (it merges in its own PR first), and so is a cut whose profile is not t
 default branch's (rebase an open PR onto it). So stopping is always safe: re-run
 the same command. Pre-merge evidence never lands on the PR head, so
 the reviewed head and its checks stay valid. Stage 2 is done only when the forge reads the
-PR merged, which the queue brings about; fr never records it. A push to the PR after the
+PR merged, which the queue brings about (or you, by hand, in a repo with no queue); fr never records it. A push to the PR after the
 release changes its diff, and the driver then removes the label: run the command again.
 
 ## Reading an OPEN reason

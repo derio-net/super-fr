@@ -119,6 +119,7 @@ from fr.triage.approval import (
     settle_approvals,
     settle_entry_approval,
     settle_postmerge_done,
+    read_release_marker,
     settle_release,
 )
 from fr.triage.batch import (
@@ -6676,8 +6677,8 @@ class _Driver:
     ) -> tuple[frozenset[str], dict[str, str]]:
         """R26: the DevOps stage's two labels, settled on the queue's own events as
         `approved-fr` is. A batch PR carrying `fr-queue:release` is recorded as a
-        `queue_release` at its head and patch-id (voided, label off, when its diff moved
-        after it); the entries that are released now are returned. A landed barrier's merged
+        `queue_release` at the patch-id its stage 2 verified (its marker comment; voided, label
+        off, when its diff moved after it); the entries that are released now are returned. A landed barrier's merged
         PR carrying `fr-queue:postmerge-done` is recorded as a `queue_postmerge_done`, and
         each still open is mapped to its run id for the Need that names `fr ops gate`.
         Nothing is written without --yes."""
@@ -6707,10 +6708,15 @@ class _Driver:
             mine = [x for x in events_of(where)
                     if isinstance(x, QueueReleaseEvent) and x.entry == ref]  # fmt: skip
             view = {"labels": list(pr.labels or ()), "head_oid": pr.head}
+            client = self.client(facts, where)
+            try:  # the stage's marker names what it verified (R26)
+                marker = read_release_marker(client.list_issue_comments(where, pr.number))
+            except Exception:  # noqa: BLE001 — an unreadable comment list: no marker, no release
+                marker = None
             if settle_release(
-                self.client(facts, where), partial(writer, where), where, ref,
+                client, partial(writer, where), where, ref,
                 pr.number, mine, view, _say, now=_now(), dry_run=not self.yes,
-                patch_id_of=self._patch_id_of(facts, where),
+                patch_id_of=self._patch_id_of(facts, where), marker=marker,
             ):  # fmt: skip
                 released.add(e.batch.id)
         for repo in sorted(set(repos.values()) - skipped):

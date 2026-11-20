@@ -353,11 +353,15 @@ def _ready(batch: Batch, qs: QueueSnapshot) -> bool:
 
 
 def barrier_keys(records: Sequence[QueueRecord]) -> frozenset[str]:
-    """R26: every entry the DevOps stage released to the queue (a `queue_release` in any
-    record of the scope): a gate:devops entry, which lands as the last entry of its push."""
-    return frozenset(
-        entry_key(e.entry) for r in records for e in r.events if isinstance(e, QueueReleaseEvent)
-    )
+    """R26: every entry the DevOps stage released to the queue whose release is live (its
+    last `queue_release` in any record of the scope is not a void): a gate:devops entry,
+    which lands as the last entry of its push."""
+    last: dict[str, QueueReleaseEvent] = {}
+    for r in records:
+        for e in r.events:
+            if isinstance(e, QueueReleaseEvent):
+                last[entry_key(e.entry)] = e
+    return frozenset(k for k, e in last.items() if not e.voided)
 
 
 def postmerge_done_keys(records: Sequence[QueueRecord]) -> frozenset[str]:
