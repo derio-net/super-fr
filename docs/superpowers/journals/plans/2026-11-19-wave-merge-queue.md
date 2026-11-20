@@ -786,3 +786,82 @@ fr-triage.md, index.md and herdr-control-sessions.md updated or re-stamped; the 
 ### p5-r8-resolved · finding [fixed] · resolves p5-r8: batch entries were never base-checked before a push landing (phase 3's executor) (phase 5)
 
 fixed with p5-r4; batch LivePr carries base and the planner refuses a non-default base; three planner tests.
+
+<!-- fr:journal kind=decision scope=plan id=p6-scenarios-use-journals created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-scenarios-use-journals · decision · The two scenarios stamp a journal, not a plan (phase 6) (phase 6)
+
+The plan says "a stale-but-migratable plan stamp", but the plan kind has no registered schema
+migration (`MIGRATIONS.schema_migrations("plan")` is empty): a v1 plan is unreachable, so
+`--allow-migratable` rightly fails it. Both scenarios use a version-3 journal, whose 3 to 4 hop
+is registered, and the validation scenario also asserts that a stale plan still fails
+("no registered migration reaches").
+
+<!-- fr:journal kind=decision scope=plan id=p6-drain-waits-on-the-barrier created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-drain-waits-on-the-barrier · decision · A wave does not drain while a landed DevOps barrier has no post-merge done (phase 6) (phase 6)
+
+R26 says nothing lands behind a landed barrier until `queue_postmerge_done`. The planner also
+holds the drain (`_tail`) while `barrier_open` names an entry, so the release does not cut an
+RC before the stage's post-merge ops ran. A `Needs you` entry names `fr ops gate --run <id>`
+(the run id from the entry's cursor, else `<run-id>`), said every pass until it is done.
+
+<!-- fr:journal kind=decision scope=plan id=p6-release-void-is-an-empty-patch-id created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-release-void-is-an-empty-patch-id · decision · A voided release is a queue_release with an empty patch_id (phase 6) (phase 6)
+
+The release label is settled like `approved-fr`: recorded at the head and patch-id (`settle_release`),
+kept while the patch-id holds, and voided (label removed, a `queue_release` with an empty
+patch-id recorded) when the diff moved after it, so a re-run of stage 2 that adds the label
+again is a new release and not read as the stale one. No model field was added, so no stamp
+moves; the model docstring says it. A `queue_release` or an `approval` may open a record of
+its own before any queue opened (the writer's existing rule for housekeeping approvals).
+
+<!-- fr:journal kind=decision scope=plan id=p6-placement-read-from-settings created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-placement-read-from-settings · decision · R15's placement condition is enforced from the clone's settings (phase 6) (phase 6)
+
+p5-driver-has-no-placement is closed: `_placements` reads each repo's `placement` with
+`load_settings` over the clone, `Snapshot.placements` carries it, and `queue_snapshot` drops the
+non-batch entries and the close-out wait for a repo that is not `repo` (R15: under quiet or
+stealth the queue holds batch PRs only). A repo whose settings cannot be read counts as `repo`.
+
+<!-- fr:journal kind=decision scope=plan id=p6-method-option-removed created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-method-option-removed · decision · `fr ops gate --method` is gone: the stage merges nothing (phase 6) (phase 6)
+
+The option picked a merge method for a merge the stage no longer makes (R26), and
+`GateTarget.method` and the forge port's `repo_merge_methods` and `pr_merge` went with it. The
+docs and the skill say the queue lands the PR. Stage 2 is done only when the forge reads the PR
+MERGED, and the run stops (`GateResult.waiting`, exit 0) until then; a host record of stage 2
+from before the queue no longer counts.
+
+<!-- fr:journal kind=decision scope=plan id=p6-closeout-migrates-what-its-members-name created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-closeout-migrates-what-its-members-name · decision · The close-out migrates the stale artifacts that carry a member's run, plan or spec name (phase 6) (phase 6)
+
+"Exactly the artifacts it archives" is decided by name: `CloseoutRead.scope` (run id, plan folder,
+spec slug) matched as a whole path component or stem against `plan_migrations`' stale paths
+(`owned_stale`). The migration is `fr migrate artifacts --yes --path ...` run in the scratch
+worktree and committed with `commit_paths` as its own commit; the archive is then squashed onto
+it (`squash_all(base=migration commit)`). A refused migration (a retiring hop) is undone and
+the archive goes on as it always did. `review_reasons` admits `(recorded head, migration)`
+when the migration commit only modifies files the recorded file set deletes.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-validate-tries-migrations-on-a-copy created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-validate-tries-migrations-on-a-copy · discovery · --allow-migratable cannot tell a refusing migration without running it (phase 6) (phase 6)
+
+A migration refuses at apply time (a v3 journal already holding a lens entry), so `Migratable`
+copies the checkout (minus .git and build dirs) once and runs every migration there, only
+when some artifact is stale; the checkout is never written (a test pins the bytes).
+
+<!-- fr:journal kind=discovery scope=plan id=p6-ops-gate-scenarios-fake-the-queue created=2026-11-20T23:02:13+00:00 phase=6 -->
+### p6-ops-gate-scenarios-fake-the-queue · discovery · The two fr-ops-gate scenarios now fake the queue, not the merge (phase 6) (phase 6)
+
+Their fake forge's `pr_merge` raises, and `edit_pr_labels` lands the PR (moves origin's main,
+marks it MERGED) when `fr-queue:release` is added, as the queue would; they expect the
+release prompt, not the merge one.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-11-20T23:02:13+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+the DevOps stage, the settle helpers and the planner barrier were new code beside the approval settle they mirror; nothing duplicated, so nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-11-20T23:02:13+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+the per-wave grouping replaced the per-repo one in the same loop and the migration commit is one new helper; nothing left over to clean
