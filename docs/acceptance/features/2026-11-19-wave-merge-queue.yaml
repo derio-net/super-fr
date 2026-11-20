@@ -420,3 +420,9 @@ amendments:
     ref: super-fr:tests/integration/test_queue_build.py
     why: the version slots are reserved and applied when the queue builds a combination
       (R6)
+  - row: triage-batch-merge-queue
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_triage_batch_merge_git.py
+    why: the retired merge loop's real-git test is gone with it (R22, R23)
