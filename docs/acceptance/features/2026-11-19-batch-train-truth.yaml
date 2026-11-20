@@ -56,9 +56,12 @@ rows:
     - spec:2026-11-19-batch-train-truth#R12
     - spec:2026-11-19-batch-train-truth#R13
     - spec:2026-11-19-batch-train-truth#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_triage_supervise_process.py#test_a_killed_driver_is_restarted_and_the_crash_is_recorded
+      - super-fr:tests/integration/test_triage_supervise_process.py#test_the_supervisor_and_its_driver_end_with_the_supervisors_parent
+    status: ci
+    notes: 'CI integration: real supervisor and child, SIGKILL the child, end the parent'
   - id: drive-red-drafts
     capability: Red CI on any open batch PR is handed back before approval
     acceptance: An unapproved draft batch PR with failing checks gets the red recovery
