@@ -1,2 +1,2 @@
 bump: major
-summary: The wave driver now merges only through its own queue, so a repo must add a `queue:` block (`ci: push|none`) to .fr/triage.yaml or its driver holds every merge
+summary: The wave driver now merges only through its own queue, so a repo must add a `queue:` block (`ci: push|none`) to .fr/triage.yaml or its driver holds every merge; `fr ops gate --method` is removed and the DevOps stage no longer merges (the queue lands the PR; a repo without a queue merges it by hand)
