@@ -8,7 +8,7 @@ from typing import Any
 
 from fr.labels import APPROVED_FR
 from fr.triage.approval import Approved, First, Unlabelled, Void, approval_verdict, settle_approvals
-from fr.triage.model import ApprovalEvent, Batch, BatchEvent
+from fr.triage.model import ApprovalEvent, Batch, BatchEvent, UpdateEvent
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
@@ -82,10 +82,23 @@ def test_the_same_patch_id_at_another_head_is_approved() -> None:
     assert verdict == Approved("h1")
 
 
-def test_another_patch_id_is_void_even_at_the_approved_head() -> None:
+def test_the_approved_head_itself_stays_approved_whatever_its_patch_id() -> None:
+    """The content at the approved head is what was approved; a patch-id that moved with
+    the merge base alone does not void it."""
     verdict = approval_verdict([_approval("h1", "p1")], 7, "h1", [LABEL], patch_id="p2")
 
-    assert verdict == Void("h1")
+    assert verdict == Approved("h1")
+
+
+def test_an_fr_update_keeps_the_approval_though_the_patch_id_moved() -> None:
+    """The legacy train's own update of the PR branch (an `update` event) is fr's push."""
+    update = UpdateEvent(
+        kind="update", at=datetime(2026, 11, 19, 11, 30, tzinfo=UTC), pr=7, head_before="h1",
+        head_after="h2", base="b1",
+    )  # fmt: skip
+    verdict = approval_verdict([_approval("h1", "p1"), update], 7, "h2", [LABEL], patch_id="p2")
+
+    assert verdict == Approved("h1")
 
 
 def test_another_patch_id_at_another_head_is_void() -> None:

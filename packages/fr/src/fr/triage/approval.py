@@ -11,11 +11,12 @@ The verdict rule (spec 2026-11-19-wave-merge-queue R12, §E): approval is pinned
 content. With no `approved-fr` label the PR is `Unlabelled`; with the label and no live
 approval it is `First`. A live approval that recorded a patch-id is `Approved` while the
 PR's live patch-id equals it, at any head (a merge of `main` with no conflict
-resolution, an empty commit), and `Void` once it differs (any change to the PR's own
-diff, whitespace and binary edits included). An approval recorded before schema 13 has
-no patch-id, and one whose live patch-id cannot be read is judged the old way: it holds
-only while fr's own recorded updates lead from the approved head to the live one
-(`reaches`).
+resolution, an empty commit). Otherwise, and for an approval recorded before schema 13
+(no patch-id) or a live patch-id that cannot be read, it is `Approved` only while fr's
+own recorded updates lead from the approved head to the live one (`reaches`): the
+approved head itself, or a push fr made, such as the legacy merge train's update of a PR
+branch. Anything else is `Void`: a push fr did not make that changes the PR's own diff,
+whitespace and binary edits included.
 """
 
 from __future__ import annotations
@@ -87,8 +88,8 @@ def approval_verdict(
         return First(head)
     approved = events[live]
     assert isinstance(approved, ApprovalEvent)
-    if approved.patch_id is not None and patch_id is not None:
-        return Approved(approved.head) if patch_id == approved.patch_id else Void(approved.head)
+    if approved.patch_id is not None and patch_id == approved.patch_id:
+        return Approved(approved.head)
     if reaches(events[live + 1 :], pr, approved.head, head):
         return Approved(approved.head)
     return Void(approved.head)
@@ -240,8 +241,8 @@ def _live_approval(events: Sequence[BatchEvent], pr: int) -> ApprovalEvent | Non
 
 
 def _why_void(recorded: ApprovalEvent | None, head: str, patch_id: str | None) -> str:
-    """What voided an approval, as said: its diff changed (R12, both patch-ids known), or
-    its head moved by a push fr did not make (`reaches`)."""
+    """What voided an approval, as said: its diff changed at a head fr did not push (R12,
+    both patch-ids known), or its head moved by a push fr did not make (`reaches`)."""
     if recorded is not None and recorded.patch_id is not None and patch_id is not None:
         return f"its diff changed at {head[:12]}"
     return f"head moved to {head[:12]}"
