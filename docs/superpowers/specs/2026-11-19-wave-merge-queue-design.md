@@ -155,9 +155,10 @@ A repo's queue has three phases, read from its records and the hold:
 3. **idle**: with the hold `cleared` or absent.
 
 Only an idle repo opens a queue, and only when the leased hold push succeeds (R31).
-It opens the lowest wave that has a non-terminal batch. When that wave has no entry
-ready yet, the queue still opens on its first ready entry, and nothing of a later
-wave enters meanwhile. With no waved batch unfinished, it takes the oldest
+It chooses the lowest wave that has a non-terminal batch, and opens that wave's
+queue only when the wave's first entry becomes ready. While no entry of that wave
+is ready, no queue opens and no hold is written, so a wave still in development
+never holds a release, and nothing of a later wave enters meanwhile. With no waved batch unfinished, it takes the oldest
 between-waves entry (R2, R32). Entries join an open queue in readiness order. The
 wave drains once every batch of the wave is terminal (deferral included) and its
 close-out, if it has one, has landed. A between-waves queue drains when its one
