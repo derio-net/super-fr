@@ -42,9 +42,19 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R5
     - spec:2026-11-19-wave-merge-queue#R10
     - spec:2026-11-19-wave-merge-queue#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/integration/test_queue_build.py#test_squash_builds_one_commit_per_entry_into_slots_and_moves_no_pr_branch
+      - super-fr:tests/integration/test_queue_build.py#test_merge_builds_no_ff_merge_commits_with_the_forge_subject
+      - super-fr:tests/integration/test_queue_build.py#test_rebase_replays_the_prs_commits
+      - super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+      - super-fr:tests/integration/test_queue_land.py#test_under_merge_the_heads_are_pushed_unchanged
+      - super-fr:tests/integration/test_queue_land.py#test_a_session_push_since_the_build_fails_the_whole_push
+      - super-fr:tests/integration/test_queue_land.py#test_land_merge_stops_on_a_tree_mismatch
+    status: ci
+    notes: 'phase 3: queue_exec builds each method''s history (squash, merge, rebase)
+      into slots and lands by one atomic leased push or by forge merge with a tree check,
+      over real bare remotes and a fake forge'
   - id: wave-queue-wave-exclusive
     capability: wave merge queue
     acceptance: While a wave's queue is open only that wave's PRs and its one close-out
