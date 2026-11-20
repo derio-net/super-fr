@@ -271,9 +271,19 @@ rows:
       stale cursor.
     origin:
     - spec:2026-11-19-wave-merge-queue#R21
-    levels: {}
-    status: not-implemented
-    notes: born at brainstorm; scenario written by its phase
+    levels:
+      unit:
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_stale_stamp_a_migration_moves_passes_and_prints_stale_migratable
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_migration_that_refuses_the_file_still_fails
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_stamp_no_migration_reaches_still_fails
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_stamp_newer_than_this_fr_still_fails
+      - super-fr:tests/unit/test_queue_ci_triggers.py#test_allow_migratable_is_used_only_where_a_stale_artifact_is_expected
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_wave_queue_migratable_validation
+    status: ci
+    notes: 'phase 6: validate --allow-migratable tries each stale artifact''s migration
+      on a scratch copy; ci.yml uses it on pull requests and fr-queue pushes only; unit
+      tests, a workflow pin and a scenario'
     scenario: tests/scenarios/wave-queue-migratable-validation.sh
   - id: wave-queue-visible
     capability: triage board
