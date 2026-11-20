@@ -20,9 +20,12 @@ cannot be loaded or keeps no mailbox); 1 a forge write failed.
 from __future__ import annotations
 
 import json
+import os
+import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any, Literal, NoReturn
 
 import typer
 from rich.markup import escape
@@ -38,6 +41,13 @@ from fr.commands.triage_cmd import (
     err_console,
     resolve_state_dir,
     triage_app,
+)
+from fr.commands.triage_cmd import fail as _fail
+from fr.triage.drive_errors import (
+    DriverRefusal,
+    TransientPassFailure,
+    classify,
+    unexpected,
 )
 from fr.triage.errors import TriageError
 from fr.triage.lease import (
@@ -72,11 +82,6 @@ triage_app.add_typer(drive_app)
 def _now() -> datetime:
     """The clock; tests replace it."""
     return datetime.now(UTC)
-
-
-def _fail(message: str, code: int = 2) -> NoReturn:
-    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise typer.Exit(code=code)
 
 
 IntervalOpt = Annotated[
@@ -594,12 +599,20 @@ def drive_pass_command(
             if newer is None and stop is None and not reexec:
                 acted, summary, _ = batch.one_pass(driver, lease_taken=True)
     except batch.ForgeReadError as exc:
-        if not is_rate_limited(str(exc)):
-            _fail(str(exc), code=exc.code)
+        if not is_rate_limited(str(exc)):  # the R3 transient `forge-read` (p1a-r5)
+            read = TransientPassFailure("forge-read", str(exc), code=exc.code, original=exc)
+            _pass_failed(outbox, driver, target, read)
+            raise typer.Exit(code=read.code) from exc
         # a rate limit ends the pass, not the session: record the wait, exit 3 (R2, R16)
         _write_outbox(outbox, driver.outbox())
         console.print(pacer.line(pacer.rate_limited()), markup=False, soft_wrap=True)
         raise typer.Exit(code=3) from exc
+    except Exception as exc:  # noqa: BLE001 - the pass's one boundary (batch-train-truth R6)
+        failure = classify(exc)
+        _pass_failed(outbox, driver, target, failure)
+        if unexpected(failure) is not None:
+            raise  # an fr bug: its traceback and exit 1, as before the boundary (R6)
+        raise typer.Exit(code=failure.code) from exc
     pacer.clean()
     if newer is not None:
         _stop_superseded(outbox, newer, generation, "it drove nothing")
@@ -619,6 +632,50 @@ def drive_pass_command(
     code = batch.pass_exit(driver, acted, summary)
     if code:
         raise typer.Exit(code=code)
+
+
+def _pass_failed(
+    outbox: Path, driver: Any, target: Path, failure: DriverRefusal | TransientPassFailure
+) -> None:
+    """A cloud pass that failed (R6): the outbox it has is written (what it asked so far is
+    still owed), the failure counted in the ledger (R9) and said; a refusal's line names
+    how to resume and how to track it (R10). An unexpected failure is only kept, with its
+    traceback: the caller re-raises it."""
+    from fr.commands.triage_batch_cmd import keep_traceback
+    from fr.triage.driver_record import FAILURES_COMMAND
+
+    _write_outbox(outbox, driver.outbox())
+    _record_failure(target, failure)
+    keep_traceback(target, failure)
+    if unexpected(failure) is not None:
+        return  # re-raised by the caller, with its traceback
+    if failure.message and not failure.said:
+        err_console.print(f"[red]error:[/red] {escape(failure.message)}", soft_wrap=True)
+    if isinstance(failure, DriverRefusal):
+        err_console.print(
+            f"[red]driver stopped[/red] ({failure.cause}); resume: {escape(failure.resume)}; "
+            f"track it: {FAILURES_COMMAND}",
+            soft_wrap=True,
+        )
+
+
+def _record_failure(target: Path, failure: DriverRefusal | TransientPassFailure) -> None:
+    """Count the pass's failure in the scope's ledger (R9); a ledger that cannot be written
+    is a warning, never the pass's exit."""
+    from fr import __version__
+    from fr.triage.driver_record import record_failure
+
+    kind: Literal["refusal", "transient"] = (
+        "refusal" if isinstance(failure, DriverRefusal) else "transient"
+    )
+    original = failure.original if isinstance(failure, TransientPassFailure) else None
+    exc = type(original if original is not None else failure).__name__
+    try:
+        record_failure(target, kind, failure.cause, failure.message, _now(), __version__,
+                       exception=exc)  # fmt: skip
+    except (OSError, TriageError) as err:
+        warning = f"the driver failure ledger: {escape(str(err))}"
+        err_console.print(f"[yellow]warning:[/yellow] {warning}", soft_wrap=True)
 
 
 @drive_app.command("record")
@@ -704,3 +761,287 @@ def _record(target: Path, outbox: Path, result: Path) -> None:
             _fail(f"no pending request is named {', '.join(unknown)}; the rest were recorded")
     _write_outbox(outbox, [])
     console.print(f"recorded {len(results) + len(mine)} result(s)", markup=False)
+
+
+def make_failures_client(repo: str, host: str = "github.com") -> Any:
+    """The forge adapter `drive failures --file` writes through (§3.J); tests replace it."""
+    from fr.hostclient import client_for_url
+
+    return client_for_url(f"https://{host}/{repo}")
+
+
+def failure_policy(client: Any, repo: str, checkout: Path | None) -> Any:
+    """*repo*'s forge policy (R9 of repo-feature-settings): its clone's when given (the
+    settings and `tracking: none`), else its `.fr/settings.yaml` read through the forge."""
+    from fr.settings.remote import local_policy, remote_policy
+
+    return local_policy(checkout) if checkout is not None else remote_policy(client, repo)
+
+
+def _failures_host(target: Path, repo: str) -> str:
+    """The forge host of *repo*, from the scope's collected facts when they name it."""
+    from urllib.parse import urlparse
+
+    from fr.triage.model import load_facts
+
+    try:
+        facts = load_facts(target / "facts.json")
+    except (OSError, TriageError, ValueError):
+        return "github.com"
+    for issue in facts.issues:
+        if issue.repo.lower() == repo.lower() and (host := urlparse(issue.url).hostname):
+            return host
+    return "github.com"
+
+
+@drive_app.command("failures")
+def drive_failures_command(
+    file: Annotated[
+        bool, typer.Option("--file", help="File one issue per cause that has none.")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="With --file: write; else the plan.")] = False,
+    checkout: Annotated[
+        Path | None,
+        typer.Option("--checkout", help="The target repo's clone: its policy, tracking included."),
+    ] = None,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """The wave driver's failure ledger, most frequent cause first (batch-train-truth R10).
+
+    With --file --yes, one issue per cause in the scope's state repo (else the scope's own
+    repo): filed once, commented when its count grew, filed anew when it recurred after its
+    issue closed. Its labels, marker and counts are written; the message never is."""
+    from fr.settings import SettingsError
+    from fr.triage.driver_failures import file_failures
+    from fr.triage.driver_record import filed, load_ledger, save_filed
+    from fr.triage.scope_config import load_durable
+
+    if yes and not file:
+        _fail("--yes only applies with --file")
+    scope = triage_cmd._scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    try:
+        ledger = load_ledger(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    if not ledger.causes:
+        console.print("no driver failures recorded", markup=False)
+    for cause, entry in ledger.by_count():
+        console.print(
+            f"{entry.count:>5}  {cause}  ({entry.kind}, last {entry.last.isoformat()}, "
+            f"fr {entry.fr_version}, issue {entry.issue or '-'})",
+            markup=False,
+            soft_wrap=True,
+        )
+        console.print(f"       {entry.message}", markup=False, soft_wrap=True)
+    if not file or not ledger.causes:
+        return
+    try:
+        state_repo = load_durable(target).state_repo
+    except TriageError as exc:
+        _fail(str(exc))
+    if state_repo is not None:
+        where = state_repo
+    elif scope.kind == "repo":
+        where = scope.target
+    else:
+        _fail(
+            f"the {scope.kind} scope {scope.name} has no state repo, so there is no one repo "
+            "to file its driver failures in: choose one at `fr triage collect`, or file them by "
+            "hand from the list above"
+        )
+    if checkout is not None:  # its policy is the target's only if it is the target (p1a-r9)
+        from fr.commands.triage_batch_cmd import _checkout_refusal
+
+        reason = _checkout_refusal(checkout, where)
+        if reason is not None:
+            _fail(reason)
+    client = make_failures_client(where, _failures_host(target, where))
+    try:
+        policy = failure_policy(client, where, checkout)
+    except SettingsError as exc:
+        _fail(str(exc))
+    if checkout is None:
+        console.print(
+            f"note: tracking was not checked (no --checkout): only {where}'s forge settings "
+            "gate the filing; pass --checkout <a clone of it> to honour `tracking: none` too",
+            markup=False,
+            soft_wrap=True,
+        )
+    before = filed(ledger)
+    filing = file_failures(ledger, client, where, policy, write=yes)
+    for line in filing.lines:
+        console.print(line, markup=False, soft_wrap=True)
+    if not yes:
+        console.print("nothing written: add --yes to file", markup=False)
+    if filing.changed:  # only what the filing changed, into the ledger as it stands now
+        after = filed(ledger)
+        save_filed(target, {c: v for c, v in after.items() if before.get(c) != v}, ledger)
+    if filing.error is not None:
+        _fail(f"filing stopped at a forge error; what was filed before it is recorded: "
+              f"{filing.error}")  # fmt: skip
+
+
+def _alive(pid: int) -> bool:
+    """Whether process *pid* of THIS host exists (`kill 0`: nothing is sent)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:  # it exists, under another user
+        return True
+    return True
+
+
+def _is_process(pid: int, started: str | None, *, trusted: bool) -> bool:
+    """Whether *pid* is the process that was recorded: alive, and with the recorded OS
+    start time (a recycled pid has another). A record with no start time is trusted only
+    when *trusted* (a live lease of this host vouches for it)."""
+    from fr.safe_spawn import process_start
+
+    if not _alive(pid):
+        return False
+    if started is None:
+        return trusted
+    return process_start(pid) == started
+
+
+@drive_app.command("status")
+def drive_status_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Whether a driver holds the scope (batch-train-truth R14), read-only.
+
+    Exit 0 when a live driver holds it, 3 when none does. A lease another host holds is
+    reported as held elsewhere and never probed: its pid means nothing here."""
+    from fr.triage.driver_record import load_record
+
+    scope = triage_cmd._scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    try:
+        lease = load_lease(target)
+        record = load_record(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    now = _now()
+    mine = driver_identity("host", host_id())
+    live_lease = lease is not None and not lease.expired(now)
+    elsewhere = lease is not None and not lease.holder.endswith(f" {mine}")
+    if elsewhere and lease is not None:
+        if not live_lease:
+            console.print(
+                f"no driver holds the scope: the lease {lease.holder} expired "
+                f"{lease.expires.isoformat()}",
+                markup=False, soft_wrap=True,
+            )  # fmt: skip
+            raise typer.Exit(code=3)
+        console.print(f"held elsewhere (not probed): {lease.holder}", markup=False, soft_wrap=True)
+        console.print(f"  lease expires {lease.expires.isoformat()}", markup=False)
+        if lease.last_pass is not None:
+            console.print(f"  last pass: {lease.last_pass.isoformat()}", markup=False)
+        return
+    running = (
+        record is not None
+        and (lease is None or live_lease)
+        and _is_process(record.pid, record.pid_start, trusted=lease is not None)
+    )
+    if (
+        not running
+        and record is not None
+        and record.supervised is not None
+        and _is_process(record.supervised, record.supervised_start, trusted=False)
+    ):  # the driver is between a crash and its restart: its supervisor is what runs
+        console.print(
+            f"supervisor alive, driver restarting: supervisor pid {record.supervised}",
+            markup=False,
+        )
+        _status_tail(record, lease)
+        return
+    if not running or record is None:
+        console.print("no driver holds the scope: not running on this host", markup=False)
+        if record is not None:
+            console.print(f"  last driver pid {record.pid}: not running", markup=False)
+            _status_tail(record, lease)
+        raise typer.Exit(code=3)
+    console.print(f"driver: running, pid {record.pid} (alive on this host)", markup=False)
+    if record.started is not None:
+        console.print(f"  started: {record.started.isoformat()}", markup=False)
+    _status_tail(record, lease)
+
+
+def _status_tail(record: Any, lease: Any) -> None:
+    """The supervision, restart, last pass and last refusal lines of `drive status`."""
+    if record.supervised is not None:
+        console.print(f"  supervised by pid {record.supervised}", markup=False)
+    else:
+        console.print("  not supervised", markup=False)
+    crash = f", last crash {record.last_crash}" if record.last_crash else ""
+    console.print(f"  restarts: {record.restarts}{crash}", markup=False)
+    passes = [t for t in (record.last_pass, lease.last_pass if lease else None) if t is not None]
+    console.print(f"  last pass: {max(passes).isoformat() if passes else 'none'}", markup=False)
+    refusal = record.last_refusal
+    if refusal is None:
+        console.print("  last refusal: none", markup=False)
+    else:
+        console.print(
+            f"  last refusal: {refusal.at.isoformat()} ({refusal.cause}): {refusal.message}; "
+            f"resume: {refusal.resume}",
+            markup=False, soft_wrap=True,
+        )  # fmt: skip
+
+
+def _quiet_stdout() -> None:
+    """After a broken pipe, point stdout at /dev/null so the exit flush says nothing."""
+    try:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (OSError, ValueError):
+        pass
+
+
+def _follow_sleep(seconds: float) -> None:
+    """`drive log -f`'s poll wait; tests replace it."""
+    time.sleep(seconds)
+
+
+@drive_app.command("log")
+def drive_log_command(
+    lines: Annotated[int, typer.Option("-n", min=1, help="How many of the newest lines.")] = 50,
+    follow: Annotated[
+        bool, typer.Option("-f", "--follow", help="Keep printing what is appended, until Ctrl-C.")
+    ] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Show the last N lines of the scope's `drive.log`, newest last. Read-only.
+
+    The log holds what the looping driver and its supervisor did (batch-train-truth R22);
+    with -f, each new line follows."""
+    from fr.triage.drive_log import DriveLog
+
+    scope = triage_cmd._scope(repo, org)
+    log = DriveLog(resolve_state_dir(scope, dir_override, workspace))
+    if follow:
+        # one read fixes both the tail and where following starts: no line falls between
+        try:
+            for line in log.follow(tail=lines, sleep=_follow_sleep):
+                console.print(line, markup=False, soft_wrap=True, highlight=False)
+                console.file.flush()
+        except KeyboardInterrupt:  # how a follow ends
+            return
+        except BrokenPipeError:  # the reader (`| head`) went away: quietly done
+            _quiet_stdout()
+        return
+    tail = log.tail(lines)
+    if not tail:
+        console.print("no driver has run: there is no drive.log yet", markup=False)
+        return
+    for line in tail:
+        console.print(line, markup=False, soft_wrap=True, highlight=False)

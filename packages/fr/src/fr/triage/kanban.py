@@ -43,6 +43,7 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_event,
     closeout_item_id,
+    conflict_at,
     default_selection,
     drive_pass,
     held_archive_conflict,
@@ -52,7 +53,7 @@ from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop, archive_stop_key, live_stop
-from fr.triage.mergeability import CONFLICT_HINT, conflicting
+from fr.triage.mergeability import CONFLICT_HANDED_BACK_HINT, CONFLICT_HINT, conflicting
 from fr.triage.model import (
     Batch,
     CancelEvent,
@@ -139,6 +140,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "release": "claims to release",
     "settle": "closed issues to settle",
     "archive-conflict": "archive PR conflicts; handed to its close-out",
+    "conflict-probe": "conflicting; the drive trial-merges it",  # only a live read plans one
     # The gate ledger (exit-gates R13, R14): a gated batch's first pass and its pass.
     "awaiting-live": "gated: its issues to label fr:awaiting-live",
     "gate-pass": "gate's rows walked; the drive passes it",
@@ -648,6 +650,12 @@ def _card(
         if first and first.kind == "warn"
         else None
     )
+    live_pr = batch_pr(batch, facts)
+    conflict = (
+        conflict_at(batch, live_pr.head_oid) if live_pr is not None and live_pr.state == "OPEN"
+        else None
+    )  # fmt: skip
+    handed_back = conflict is not None and conflict.delivered != "held"  # R18
     needs_you = (
         "blocked" in (status, closeout_status)
         or stop is not None
@@ -676,6 +684,8 @@ def _card(
         # The pass plans this batch's dispatch on the dependency merging first; a
         # stopped merge never lands, so it waits on it as the driver does ("held").
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
+    elif handed_back and red is None:
+        hint = CONFLICT_HANDED_BACK_HINT  # R18: its conflict went to its session; no approval
     elif batch.id in actions:
         hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
         if actions[batch.id].kind in ("merge", "enqueue") and _conflicting(batch, facts):

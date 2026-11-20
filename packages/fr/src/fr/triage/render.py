@@ -49,6 +49,7 @@ from fr.triage.components import (
     when,
 )
 from fr.triage.debt import digest_for, issue_figures, untrusted_for
+from fr.triage.driver_record import DriverView
 from fr.triage.fragments import Entry, Resolved, moved_notes, splice
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
@@ -967,8 +968,12 @@ def _needs_section(
     session_notes: Mapping[str, str] | None = None,
     ci_none: Collection[str] = (),
     stops: Mapping[str, MergeStop] | None = None,
+    driver: DriverView = (None, None),
 ) -> str:
-    rows = needs_you(facts, judgements, session_notes, ci_none=ci_none, stops=stops)
+    rows = needs_you(
+        facts, judgements, session_notes, ci_none=ci_none, stops=stops,
+        driver=driver[0], last_pass=driver[1],
+    )  # fmt: skip
 
     def section(body: str, count: int | None) -> str:
         return fold(
@@ -1365,6 +1370,7 @@ def _sections(
     session_notes: Mapping[str, str] | None,
     ci_none: Collection[str],
     stops: Mapping[str, MergeStop] | None,
+    driver: DriverView = (None, None),
 ) -> _Sections:
     show_repo = facts.kind != "repo"
     linker = Linker.from_facts(facts)
@@ -1431,7 +1437,7 @@ def _sections(
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
-        "needs": lambda: _needs_section(facts, judgements, session_notes, ci_none, stops),
+        "needs": lambda: _needs_section(facts, judgements, session_notes, ci_none, stops, driver),
         "next-up": lambda: _next_section(facts, judgements, linker),
         "waves": lambda: _waves_section(facts, judgements, linker),
         "batches": lambda: _batches(judgements, facts, board=board, linker=linker),
@@ -1499,6 +1505,7 @@ def render_backlog(
     stops: Mapping[str, MergeStop] | None = None,
     notes: Sequence[str] = (),
     rendered_at: Moment | None = None,
+    driver: DriverView = (None, None),
 ) -> str:
     """The Backlog, the decisions (triage-pages-ux R4): same inputs, same bytes.
 
@@ -1512,11 +1519,13 @@ def render_backlog(
     (cloud-triage R15), listed under Needs you now. *stops* are the driver's recorded merge
     stops: a conflicting export PR's is listed too (merge-truth R12). *notes* are the
     command's own page notes (a fragment-directory fallback, R3). *rendered_at* is the
-    moment the masthead states (R5).
+    moment the masthead states (R5). *driver* is the scope's `driver.yaml` and the lease's
+    last pass (`driver_record.view_inputs`): a driver stopped on a refusal is listed first
+    under Needs you now (batch-train-truth R8).
     """
     sections = _sections(
         facts, judgements, since, board=board, session_notes=session_notes, ci_none=ci_none,
-        stops=stops,
+        stops=stops, driver=driver,
     )  # fmt: skip
     return _page(
         "backlog", facts, judgements, sections,

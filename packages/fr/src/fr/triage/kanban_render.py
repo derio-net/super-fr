@@ -74,6 +74,12 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
   padding: 10px; min-width: 0; }
 .held { margin-top: 16px; background: color-mix(in srgb, var(--line) 35%, transparent);
   border-radius: 8px; padding: 10px; }
+.activity { margin-top: 16px; background: color-mix(in srgb, var(--line) 35%, transparent);
+  border-radius: 8px; padding: 10px; }
+.activity h2 { display: block; }
+.activity ol { margin: 0; padding: 0; list-style: none; }
+.activity li { margin: 4px 0; font-family: var(--mono); font-size: .8rem;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
 .held ul { margin: 0; padding-left: 18px; }
 .held li { margin: 4px 0; overflow-wrap: anywhere; }
 .count { color: var(--muted); font-weight: 400; }
@@ -490,6 +496,17 @@ def _column(
     )
 
 
+def _activity(entries: Sequence[str]) -> str:
+    """The Activity panel (R23): the driver's newest log entries, newest first, escaped."""
+    if not entries:
+        return (
+            '<section class="activity"><h2>Activity</h2>'
+            '<p class="meta">no driver has run</p></section>'
+        )
+    items = "".join(f"<li>{esc(e)}</li>" for e in entries)
+    return f'<section class="activity"><h2>Activity</h2><ol>{items}</ol></section>'
+
+
 def render_board(
     board: Board,
     *,
@@ -500,12 +517,14 @@ def render_board(
     budget: Budget | None = None,
     banner: str = "",
     present: Sequence[str] = ("batches",),
+    activity: Sequence[str] = (),
 ) -> str:
     """The board page: same inputs, same bytes. *budget* is the drive's last recorded forge
     budget (quota-pacing R14): the footer says what it was and how old the facts are, so a
     board that stopped moving is told apart from a quiet one. None: no quota clause.
     *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
-    commands carry; *refresh* is the reload interval in seconds, 0 for none."""
+    commands carry; *refresh* is the reload interval in seconds, 0 for none. *activity* is the
+    newest `drive.log` entries, newest first (batch-train-truth R23)."""
     hidden_waves = cutoff_hidden_waves((c for col in board.columns for c in col.cards), rendered_at)
     if board.batch_count or board.gated_count:
         body = (
@@ -546,6 +565,7 @@ def render_board(
         f"{page_header('batches', present)}\n{banner}\n"
         f"{_held(board.held)}\n"
         f"{body}\n"
+        f"{_activity(activity)}\n"
         f'<footer class="meta">{quota}Rendered by <code>fr triage batches</code> from facts.json '
         "and judgements.yaml.</footer>\n"
         f"</main>\n<script>{SCRIPT}{PAGE_SCRIPT}</script>\n</body>\n</html>\n"

@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Red and conflicting drafts handed back before approval; one fetch per pass
+    (R15-R19)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - drive-red-drafts
+  - drive-conflict-early
+  - drive-fetch-once
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_merge_train_*.py
+  - tests/unit/test_triage_batch_drive*.py
+  - tests/unit/test_triage_board_views.py
+  - tests/unit/test_triage_drive_conflict_probe.py
+  - tests/unit/test_triage_fetched_reader.py
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Red non-members in both walks (R15, R16)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in tests/unit/test_merge_train_queue_walk.py and the merge-train walk tests, an unapproved draft with failing checks yields a `warn` action `red=True` and sits in `Train.stepped`, in a repo where it is the only open PR (a Train with head None is returned) and beside members; it is never a merge candidate or a stop; an unapproved green draft yields nothing new.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: split the member filter in `_walk_queue` and `_walk_merge_train` (batch_drive.py :1533, :1632): non-member OPEN drafts get the failing-checks branch; return a Train when a member or a red/conflicting non-member exists. Walk tests green.
+  - id: P3.T1.S3
+    text: |-
+      RED->GREEN: _recover tests (test_merge_train_red_decision.py style) — for a red unapproved draft: idle session -> one `red_handback` at that head, a second pass sends nothing; working -> nothing sent, retried; done/absent -> a `red-pr` Needs you entry; the cap counts across draft and ready hand-backs. No code change expected beyond the walk; fix if red.
+- number: 2
+  title: The conflict probe (R17)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_drive_conflict_probe.py — `batch_merge.trial_conflicts(checkout, main, version, head)` on a scratch git repo: a real content conflict returns its path; a conflict only in a version file whose PR change is the version alone returns []; the scratch worktree is gone afterwards in both cases.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: factor the merge step and `_unresolvable` out of `_update` (batch_merge.py :625) into `trial_conflicts`, merge aborted and worktree removed in a `finally`; `_update` uses the shared helper. Probe and existing merge tests green.
+  - id: P3.T2.S3
+    text: |-
+      RED: walk tests — a non-member or non-candidate member whose LivePr `mergeable` is CONFLICTING or merge_state DIRTY yields a `conflict-probe` action; the merge candidate and clean PRs never do. Driver tests with fake sessions — idle -> the conflict brief through the message path and a `conflict` event `delivered: session` (never `_fresh_conflict`); working/unknown -> nothing recorded; done/absent -> a `conflict` event `delivered: held`; the same (PR, head, base sha) is trial-merged once per process (count calls); no merge-stops.json write; one `pr_view` per open batch PR per pass (count fake forge calls); no merge-methods or rules read for a draft-only repo.
+  - id: P3.T2.S4
+    text: |-
+      GREEN: fill `LivePr.mergeable/merge_state` in the per-pass read (triage_batch_cmd.py ~:4293); emit `conflict-probe` in both walks; `_Driver._probe_conflict` with the memo, `conflict_decision`, session status and the two deliveries. Tests green.
+- number: 3
+  title: The board never asks to approve a conflicting PR (R18)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED->GREEN: test_triage_board_views.py — a green PR whose batch has a `conflict` event at the PR's head gets no `approve-pr` need: a delivered one shows the card hint `conflicting — handed back`, a held one only the existing `merge-conflict` need (exactly one row); a conflict event at an older head does not suppress approval. Implement in `views.needs_you` and the card hint.
+- number: 4
+  title: One fetch per repo per pass (R19)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: tests/unit/test_triage_fetched_reader.py — a fake checkout whose `fetch` raises `GitError`: two `_fetched_reader(repo)` calls in one pass fetch once and both raise the same `GitError` (a `TriageError`, so `_ci_none` still degrades to False); a new pass fetches again.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: `_fetch_failed: dict[str, GitError]` beside `_fetched`, reset with it per pass; re-raise the recorded error. Tests green; ruff and mypy clean.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T2.S4:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-11-20T08:48:33+00:00'
+      note: null
+  completion:
+    at: '2026-11-20T08:48:33+00:00'
+    note: null
+    observed_prs: []

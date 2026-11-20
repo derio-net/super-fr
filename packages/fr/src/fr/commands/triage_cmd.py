@@ -28,7 +28,7 @@ from collections.abc import Callable, Collection, Iterable
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, NamedTuple
+from typing import Annotated, Any, NamedTuple, NoReturn
 from urllib.parse import urlparse
 
 import typer
@@ -53,6 +53,8 @@ from fr.triage.collect import (
     collect_facts_counted,
 )
 from fr.triage.components import fragment_dir, page, pages_present, refresh_navs, remove_legacy
+from fr.triage.drive_errors import fail_exit
+from fr.triage.driver_record import view_inputs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import moved_notes, resolve_manifest
 from fr.triage.merge_stops import load_stops
@@ -97,6 +99,14 @@ from fr.triage.state_ref import NEW_REPO, Ask, decide_state_repo
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+def fail(message: str, code: int = 2) -> NoReturn:
+    """Print *message* as an error and exit *code*: every triage command's refusal. The `Exit`
+    carries the message (`fr.triage.drive_errors.fail_exit`), because `str()` of an `Exit` is
+    its code: the wave driver's boundary records the text, and does not print it again."""
+    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
+    raise fail_exit(message, code)
 
 
 _NAV_WARNED: set[str] = set()
@@ -194,8 +204,7 @@ def resolve_state_dir(
             else state_dir(scope, dir_override, workspace=workspace, prepare=False)
         )
     except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
-        raise typer.Exit(code=2) from exc
+        fail(str(exc))
     if sync:
         _sync_with_ref(scope, target)
     return target
@@ -257,8 +266,7 @@ def _sync_with_ref(
             fetch_state(target, state_remote(state_repo), scope_id(scope), repo=clone)
             before = local_tree(target, repo=clone)
     except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
-        raise typer.Exit(code=2) from exc
+        fail(str(exc))
 
     def finish() -> None:
         _push_if_changed(scope, target, clone, before)
@@ -757,12 +765,7 @@ def _load_state(
     facts_path = target_dir / "facts.json"
     if not facts_path.exists():
         flag = "org" if scope.kind == "org" else "repo"
-        err_console.print(
-            f"[red]error:[/red] no facts at {escape(str(facts_path))}; run "
-            f"`fr triage collect --{flag} {escape(scope.target)}` first",
-            soft_wrap=True,
-        )
-        raise typer.Exit(code=2)
+        fail(f"no facts at {facts_path}; run `fr triage collect --{flag} {scope.target}` first")
     judgements_path = target_dir / "judgements.yaml"
     try:
         facts = load_scope_facts(facts_path, scope)
@@ -772,8 +775,7 @@ def _load_state(
             else Judgements.model_validate({"schema": 1})
         )
     except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
-        raise typer.Exit(code=2) from exc
+        fail(str(exc))
     return target_dir, facts, judgements
 
 
@@ -950,7 +952,6 @@ def clean_labels_command(
     from datetime import UTC, datetime
 
     from fr.commands import triage_batch_cmd
-    from fr.commands.triage_kanban_cmd import _fail
     from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS
     from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
@@ -996,7 +997,7 @@ def clean_labels_command(
             else:
                 console.print(f"removed {both} from {t.key}", markup=False)
         except UnsupportedForgeOperation as exc:
-            _fail(str(exc))
+            fail(str(exc))
         except FORGE_ERRORS as exc:
             failed += 1
             console.print(f"failed {t.key}: {exc}", markup=False, soft_wrap=True)
@@ -1125,6 +1126,7 @@ def write_backlog(
         board=(target / page("batches").file).is_file(), session_notes=noted,
         ci_none=local_ci_none(facts) if ci_none is None else ci_none,
         stops=load_stops(target), present=present, notes=backlog_notes, rendered_at=now,
+        driver=view_inputs(target),
     )  # fmt: skip
     issues = render_issues(
         facts, judgements, since, issues_resolved, present=present, notes=issues_notes,

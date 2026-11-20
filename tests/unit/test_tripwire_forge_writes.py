@@ -66,6 +66,10 @@ GATED: dict[str, str] = {
         "_Driver.forge_off(labels): the checkout's policy, else the forge-read policy",
     "fr/src/fr/commands/triage_batch_cmd.py::_Driver._collected_merged":
         "_Driver.forge_off(labels) on the marker's repo",
+    "fr/src/fr/triage/driver_failures.py::file_failures.create":
+        "file_failures: the target's RepoPolicy.block(issues), allows(labels) first",
+    "fr/src/fr/triage/driver_failures.py::file_failures.comment":
+        "file_failures: the target's RepoPolicy.block(issues), allows(comments) first",
     "fr/src/fr/triage/approval.py::settle_approvals":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::ensure_approval_label": "_labels_off: client_policy(labels)",

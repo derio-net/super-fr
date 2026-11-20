@@ -21,7 +21,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, NoReturn, get_args
+from typing import TYPE_CHECKING, Annotated, Any, get_args
 
 import typer
 from rich.markup import escape
@@ -49,6 +49,7 @@ from fr.commands.triage_cmd import (
     triage_app,
     warn_nav,
 )
+from fr.commands.triage_cmd import fail as _fail
 from fr.triage import gitseam, pacing_state
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
@@ -69,6 +70,7 @@ from fr.triage.components import (
 )
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
+from fr.triage.driver_record import stopped, stopped_line, view_inputs
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.kanban import BoardStatus, build_board
@@ -94,11 +96,6 @@ DISPATCH_INSTALL_HINT = (
     "this requires fr-dispatch — install it "
     "(e.g. `uv tool install --with fr-dispatch fr`) and re-run."
 )
-
-
-def _fail(message: str, code: int = 2) -> NoReturn:
-    err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise typer.Exit(code=code)
 
 
 def one_line(exc: BaseException) -> str:
@@ -393,6 +390,20 @@ def gated_notes(facts: Facts) -> list[str]:
     return notes
 
 
+ACTIVITY_ENTRIES = 50
+
+
+def _activity_entries(target: Path) -> list[str]:
+    """The newest `drive.log` entries, newest first (batch-train-truth R23); a log that
+    cannot be read is no log: the board is a view."""
+    from fr.triage.drive_log import DriveLog
+
+    try:
+        return DriveLog(target).tail(ACTIVITY_ENTRIES)[::-1]
+    except OSError:
+        return []
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -421,6 +432,8 @@ def write_board(
     if (labels_note := in_progress_note(facts, scope_args)) is not None:
         notes.append(labels_note)
     notes.extend(gated_notes(facts))
+    if (refusal := stopped(*view_inputs(target))) is not None:  # batch-train-truth R8
+        notes.insert(0, stopped_line(refusal))
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,
@@ -435,6 +448,7 @@ def write_board(
         budget=budget_from_json(pacing_state.load(target)[0].budget),
         banner=skew_banner(facts),
         present=pages_present(target, "batches"),
+        activity=_activity_entries(target),
     )
     out = target / page("batches").file
     write_text_atomic(out, html)

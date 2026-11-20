@@ -12,6 +12,8 @@ on an earlier run drops out and a re-run resumes at the first unmerged batch.
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -36,7 +38,8 @@ from fr.triage.batch_version import (
     read_source,
     slot_versions,
 )
-from fr.triage.errors import TriageError
+from fr.triage.errors import ConfigError, TriageError
+from fr.triage.gitseam import GitError
 from fr.triage.model import BatchEvent, UpdateEvent, VersionBlock
 
 FAILING_BUCKETS = frozenset({"fail", "cancel"})
@@ -95,6 +98,7 @@ class CheckoutSeam(Protocol):
     def changed_paths(self, ref: str, head: str) -> frozenset[str]: ...
     def add_worktree(self, where: Path, ref: str) -> Any: ...
     def remove_worktree(self, where: Path) -> None: ...
+    def prune_worktrees(self) -> None: ...
     def rev_parse(self, ref: str) -> str: ...
 
 
@@ -169,10 +173,10 @@ def choose_method(
     """
     allowed = sorted(str(m) for m in methods.get("allowed") or [] if m in MERGE_METHODS)
     if not allowed:
-        raise TriageError("the repo allows no merge method fr knows (merge, squash, rebase)")
+        raise ConfigError("the repo allows no merge method fr knows (merge, squash, rebase)")
     if explicit is not None:
         if explicit not in allowed:
-            raise TriageError(
+            raise ConfigError(
                 f"--method {explicit}: the repo does not allow it (allowed: {', '.join(allowed)})"
             )
         return explicit
@@ -181,14 +185,14 @@ def choose_method(
         return str(default)
     if configured is not None:
         if configured not in allowed:
-            raise TriageError(
+            raise ConfigError(
                 f"merge_method: {configured} in {TRIAGE_CONFIG_PATH}: the repo does not allow it "
                 f"(allowed: {', '.join(allowed)}); change it, or give --method"
             )
         return configured
     if len(allowed) == 1:
         return allowed[0]
-    raise TriageError(
+    raise ConfigError(
         "the repo names no default merge method you may use; set `merge_method` in "
         f"{TRIAGE_CONFIG_PATH} or give --method ({', '.join(allowed)})"
     )
@@ -585,7 +589,9 @@ def _update_message(
     return f"chore: re-slot version to {slot}"
 
 
-def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) -> list[str]:
+def _unresolvable(
+    version: VersionBlock | None, main: str, wt: WorktreeSeam, conflicted: list[str]
+) -> list[str]:
     """The conflicted paths merge may NOT resolve by taking main's side, and
     whether a relock must regenerate a lockfile it did take (spec §3.F step 3).
 
@@ -596,10 +602,9 @@ def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) ->
     only when a `relock` is declared to regenerate it from the manifests.
     Everything else is a real conflict.
     """
-    version = ctx.version
     if version is None:
         return list(conflicted)
-    base = wt.merge_base(ctx.main)
+    base = wt.merge_base(main)
     old_text, new_text = wt.show(base, version.source.file), wt.show("HEAD", version.source.file)
     if old_text is None or new_text is None:
         return list(conflicted)
@@ -622,6 +627,75 @@ def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) ->
     return out
 
 
+def merge_main(
+    wt: WorktreeSeam, main: str, version: VersionBlock | None
+) -> tuple[list[str], list[str]]:
+    """Start merging *main* into the PR branch checked out in *wt*: the conflicted paths,
+    and the ones merge will NOT resolve (`_unresolvable`). The merge is left in progress:
+    the caller takes main's side of the resolvable ones, or aborts it."""
+    conflicted = wt.merge(main)
+    return conflicted, (_unresolvable(version, main, wt, conflicted) if conflicted else [])
+
+
+def _clear_scratch(checkout: CheckoutSeam, where: Path, *, added: bool = False) -> str | None:
+    """Remove the probe's scratch worktree at *where* and its registration. A removal git
+    refuses falls back to deleting the directory (a probe's worktree never holds operator
+    work), then `git worktree prune` forgets it, so a registration whose directory is gone
+    never blocks the next `worktree add` there. *added*: this probe added it, so it is
+    removed even when its directory is not there to see. Why it is still there, else None."""
+    failed: str | None = None
+    if added or where.exists():
+        try:
+            checkout.remove_worktree(where)  # which prunes too
+            return None
+        except GitError as exc:
+            failed = str(exc)
+            shutil.rmtree(where, ignore_errors=True)
+    try:
+        checkout.prune_worktrees()
+    except GitError as exc:
+        return f"{failed}; {exc}" if failed else str(exc)
+    return failed if where.exists() else None
+
+
+def trial_conflicts(
+    checkout: CheckoutSeam,
+    main: str,
+    version: VersionBlock | None,
+    head: str,
+    *,
+    scratch_root: Path | None = None,
+    warn: Callable[[str], None] | None = None,
+) -> list[str]:
+    """R17: the paths on which PR head *head* really conflicts with *main* (what `_update`
+    would refuse), by a trial merge in a scratch worktree that is always aborted and
+    removed. A version file whose PR change is the version alone, and a lockfile when the
+    repo relocks, are resolved, not conflicts. Writes nothing the repo keeps. A scratch
+    worktree the cleanup could not clear is said to *warn*; it never masks the verdict."""
+    own = scratch_root is None
+    root = Path(tempfile.mkdtemp(prefix="fr-conflict-probe-")) if scratch_root is None else (
+        scratch_root
+    )  # fmt: skip
+    where = root / f"probe-{head[:12]}"
+    wt: WorktreeSeam | None = None
+    try:
+        _clear_scratch(checkout, where)  # a probe's leftover: `worktree add` says if it stays
+        wt = checkout.add_worktree(where, head)
+        conflicted, refused = merge_main(wt, main, version)
+        if conflicted:
+            wt.abort_merge()
+        return refused
+    finally:
+        try:  # cleanup never masks what is in flight, and never skips the temp root
+            added = wt is not None
+            left = _clear_scratch(checkout, where, added=added) if added or where.exists() else None
+            if left is not None and warn is not None:
+                warn(f"the conflict probe's scratch worktree {where} was not removed: {left}")
+        finally:
+            if own:
+                shutil.rmtree(root, ignore_errors=True)
+
+
 def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: str | None) -> str:
     """Step 3: bring the PR branch up to date and onto its slot; the new head."""
     pr = slot.step.pr
@@ -630,9 +704,8 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     ctx.scratch.add(where)
     relock = False
     if behind:
-        conflicted = wt.merge(ctx.main)
+        conflicted, refused = merge_main(wt, ctx.main, ctx.version)
         if conflicted:
-            refused = _unresolvable(ctx, wt, conflicted)
             if refused:
                 wt.abort_merge()
                 raise MergeConflictError(

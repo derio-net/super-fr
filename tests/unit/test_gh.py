@@ -894,3 +894,32 @@ def test_the_gh_cli_association_limit_counts_kept_issues_only(
     monkeypatch.setattr(gh, "_rest", lambda: None)
     got = gh.issue_associations(repo="o/r", state="open", limit=2)
     assert got == {1: "NONE", 3: "OWNER"}
+
+
+class TestSwapIssueLabelsPartialApply:
+    """R20: correctness does not rest on gh resolving every label before it mutates."""
+
+    def test_a_refused_call_that_applied_part_of_its_change_ends_with_the_wanted_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        labels = {"old", "x"}
+        calls: list[list[str]] = []
+        after_refusal: set[str] = set()
+
+        def fake_run(args: list[str]) -> str:
+            calls.append(args)
+            adds = [args[i + 1] for i, a in enumerate(args) if a == "--add-label"]
+            rems = [args[i + 1] for i, a in enumerate(args) if a == "--remove-label"]
+            labels.update(adds)  # the add lands first ...
+            if "never-defined" in rems:  # ... then the call is refused before any removal
+                after_refusal.update(labels)
+                raise gh.GhError("gh exited", stderr="'never-defined' not found\n", returncode=1)
+            labels.difference_update(rems)
+            return ""
+
+        monkeypatch.setattr(gh, "_run_gh", fake_run)
+        gh.swap_issue_labels(repo="o/r", number=1, add=["new"], remove=["old", "never-defined"])
+        assert after_refusal == {"old", "x", "new"}  # the refused call removed nothing
+        assert labels == {"x", "new"}  # so only the retry removed `old`
+        assert len(calls) == 2
+        assert "never-defined" not in calls[1] and "old" in calls[1]
