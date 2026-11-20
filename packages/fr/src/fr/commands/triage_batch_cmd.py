@@ -4301,9 +4301,9 @@ class _Driver:
         }
 
     def _base_now(self, repo: str) -> str:
-        """The base branch's sha as fetched now (the `UpdateEvent.base` the red path reads)."""
-        checkout = self._reader(repo)
-        checkout.fetch()
+        """The base branch's sha as fetched this pass (the `UpdateEvent.base` the red path
+        reads): through the pass's one fetch of the repo (R19)."""
+        checkout = self._fetched_reader(repo)
         return checkout.rev_parse(f"origin/{checkout.default_branch()}")
 
     # ------------------------------------------------------------------ snapshot

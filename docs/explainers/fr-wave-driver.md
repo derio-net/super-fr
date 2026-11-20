@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-20 batch train-truth R24 the driver sorts failures into transient and refusal, keeps a failure ledger, can run under a supervisor, writes drive.log (drive status, drive log, the board's Activity panel and Driver stopped need) and hands red and conflicting drafts back early, one fetch per repo per pass; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-20 batch train-truth R24 the driver sorts failures into transient and refusal (a push the remote refused is transient, a lost race on the state ref a refusal), keeps a failure ledger, can run under a supervisor (signalled or orphaned it exits 0, else with the driver's code), writes drive.log (drive status, drive log, the board's Activity panel and Driver stopped need) and hands red and conflicting drafts back early, one fetch per repo per pass, the merge queue's base read included; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -113,9 +113,9 @@ does not try again.
 A looping driver sorts every failure into one of two kinds.
 
 - A **transient failure** is one that another pass may heal: a forge call that timed out, a
-  push that lost a race, a git error. The pass ends and the driver waits. The wait starts at
-  `--interval` and doubles after each failed pass in a row, up to 15 minutes (or `--interval`,
-  if that is longer). The first pass that works resets it. After ten failed passes in a row,
+  push that the remote refused (a permission or a hook), a git error. The pass ends and the
+  driver waits. The wait starts at `--interval` and doubles after each failed pass in a row,
+  up to 15 minutes (or `--interval`, if that is longer). The first pass that works resets it. After ten failed passes in a row,
   the driver stops, as if it had met a refusal.
 - A **refusal** is one that only you can fix: another writer moved the state ref, another
   driver holds the scope, the forge cannot do what the driver asked, or a setting fr reads
@@ -145,15 +145,18 @@ loop, so it does not combine with `--once`, and it needs `--yes`.
 
 The supervisor restarts the driver when it ends in a way you did not ask for. An exit
 with code 0, 2 or 3, or a clean stop on SIGINT, SIGTERM or SIGHUP, is deliberate: the
-supervisor ends with that code. After a signal stop, the code is 128 plus the signal number. Any other exit code, or a death by another signal such
-as SIGKILL, is a crash. The supervisor waits 5 seconds before the first restart and
-doubles the wait each time, up to 5 minutes. If the driver crashes a sixth time within 30
+supervisor ends with the driver's code. After a stop on a signal, that code is 128 plus
+the signal number (130 after an interrupt or a SIGTERM stop). Any other exit code, or a
+death by another signal such as SIGKILL, is a crash.
+
+The supervisor waits 5 seconds before the first restart and doubles the wait each time,
+up to 5 minutes. If the driver crashes a sixth time within 30
 minutes, the supervisor stops as a refusal with cause `crash-loop`, and the board shows it
 as above. Each crash is counted in the ledger as `crash:<signal or code>`.
 
 The supervisor never detaches. It stays in the session that started it. When that session's
 process ends, or the supervisor receives SIGHUP, SIGINT or SIGTERM, it sends SIGTERM to the
-driver and SIGKILL after 10 seconds if the driver is still alive. The driver also checks
+driver and SIGKILL after 10 seconds if the driver is still alive, then exits 0. The driver also checks
 that its supervisor is still its parent, between passes and during its waits, and stops
 cleanly if it is not.
 

@@ -28,7 +28,7 @@ from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.claims import claims_from_comments, to_issue_claim
 from fr.triage.collect import CollectStats
 from fr.triage.errors import ForgeError
-from fr.triage.gitseam import Checkout
+from fr.triage.gitseam import Checkout, GitError
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
@@ -2462,6 +2462,46 @@ def test_a_failed_fetch_holds_the_repo_for_that_pass_only_and_fetches_once_per_p
     # re-fetched and was held, pass 3's was fine again (a context held
     # or checked once for the driver's lifetime would not have followed the pass).
     assert (1, "held") in uses and (2, "ok") in uses, uses
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_the_merge_queues_base_read_shares_the_passs_one_fetch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fails: bool
+) -> None:
+    """batch-train-truth R19 (l-docs-accuracy-r2): the merge queue's base read is one more
+    fetching read of the repo, so it shares the pass's one fetch, failed or not."""
+
+    class _Clone:
+        fetches = 0
+
+        def fetch(self) -> None:
+            self.fetches += 1
+            if fails:
+                raise GitError("`git fetch origin` failed in /x: no route")
+
+        def default_branch(self) -> str:
+            return "main"
+
+        def rev_parse(self, ref: str) -> str:
+            return f"{ref}@sha"
+
+    clone = _Clone()
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "_reader", lambda repo: clone)
+    if fails:
+        with pytest.raises(GitError) as first:
+            driver._base_now(REPO)
+        with pytest.raises(GitError) as again:
+            driver._fetched_reader(REPO)
+        assert again.value is first.value  # the same failure, remembered for the pass
+    else:
+        assert driver._base_now(REPO) == "origin/main@sha"
+        driver._fetched_reader(REPO)
+        assert driver._base_now(REPO) == "origin/main@sha"
+    assert clone.fetches == 1
 
 
 def test_the_merge_context_follows_each_passs_config_without_a_second_methods_read(
