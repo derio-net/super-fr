@@ -153,3 +153,8 @@ run_kind: none
 ### s-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1594] · resolves s-r7: fr-spec-status.yml pins setup-python 3.12 and pip-installs fr v3.0.0
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1594.
+
+<!-- fr:journal kind=finding scope=spec id=s-r8-resolved-2 created=2026-11-20T08:44:04+00:00 state=open resolves=s-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1595 -->
+### s-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1595] · resolves s-r8: Leftover 3.11 prose and a dead fallback in scripts/floors.py
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1595.
