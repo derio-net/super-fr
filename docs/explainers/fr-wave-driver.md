@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-20 wave-merge-queue phase 5, every merge is a queue entry and the train is gone; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-20 wave-merge-queue phase 6, one close-out per wave that migrates what it archives and a DevOps barrier through labels; wave-merge-queue phase 5, every merge is a queue entry and the train is gone; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -91,6 +91,13 @@ is true now, not from what it remembers. In order, a pass:
     after those two hand-backs, the pull request shows under **Needs you now**. A repo whose
     base branch requires a forge merge queue, or that has not said how its checks run on the
     combinations (`queue.ci` in `.fr/triage.yaml`), is held, and the driver says what to add.
+    A pull request that `gate:devops` holds before merge is a barrier. The DevOps stage
+    adds the label `fr-queue:release` (see [fr-devops-gate](fr-devops-gate.md)). The driver
+    admits it only with that release at its current diff, and lands it as the last entry of
+    its push. Nothing lands behind it until the stage adds `fr-queue:postmerge-done`, but the
+    queue builds and tests the entries behind it meanwhile. After it lands, **Needs you now**
+    names `fr ops gate --run <id>`.
+
     The driver never approves, and it never waits for CI inside a pass.
 
     **When you upgrade:** the old driver merged a ready pull request in any repo. The queue
@@ -99,15 +106,24 @@ is true now, not from what it remembers. In order, a pass:
     every workflow that reports a required check on pushes to `fr-queue/**`. A repo with no
     CI at all takes `queue: {ci: none}`.
 
-3. **Closes out what merged.** Once the release commit that followed the merge has landed
-   (or ten minutes have passed with none, for a pull request that releases nothing), the
-   driver fast-forwards its checkout. It then runs the repo's `post_merge` argument list,
-   once per merge. Next it closes the batch out. It records the batch's Test
-   Plan outcomes and archives its run, together with the other landed batches of that repo,
-   in one housekeeping pull request.
+3. **Closes out what merged.** Each wave has one collected close-out. It starts after
+   the last batch of the wave has landed and the repo's `post_merge` argument list has run
+   for each landing. The driver fast-forwards its checkout, then closes the batches out:
+   it records their Test Plan outcomes and archives their runs in one housekeeping pull
+   request. That pull request is the last entry of the wave's queue. The queue does not
+   drain, and the release does not start, until it has landed.
 
-    A batch held by an unpassed `gate:tester` or `gate:devops` waits; see
-    [exit gates](fr-exit-gates.md). The driver merges closed-out archive pull requests only
+    Before it archives, the close-out migrates the artifacts it is about to archive. A run
+    cursor written for an older version can be stale after a feature merges. The close-out
+    runs `fr migrate artifacts --yes --path <file>` for exactly those files, as its own
+    commit. Then it archives. The driver accepts that commit as part of the archive, as
+    long as it changes only files the archive moves. A migration that rewrites the whole
+    repository cannot run per file, and the close-out then stops there as it always did.
+
+    A batch held by an unpassed `gate:tester` or `gate:devops` waits, and the wave's
+    close-out leaves it out. Its own close-out follows once its gate passes, and it queues
+    between waves; see [exit gates](fr-exit-gates.md). The driver merges closed-out archive
+    pull requests only
     when they are the repo's own, green, and touch only what an archive touches. It can also
     export a finished wave's state at this point.
 

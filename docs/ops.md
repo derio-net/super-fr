@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 # fr ops — manual operations you can check and run
@@ -18,7 +18,7 @@ found out by hand which ones were done, and in what order the others should run.
 `fr ops` turns each one into a typed record. The record has a probe that says whether
 the operation is done, an apply that does it, and evidence that survives the session.
 The `devops` gate holds a run whose plan carries any op. The run's **DevOps stage**
-(`fr ops gate`) applies the ops, merges the PR and closes it out. (Spec:
+(`fr ops gate`) applies the ops, releases the PR to the merge queue and closes it out. (Spec:
 `docs/superpowers/specs/2026-10-22-fr-ops-design.md`.)
 
 Everything below that names a tool (an encryption tool, a cluster CLI, a forge) is an
@@ -213,11 +213,11 @@ stage is complete and names `fr isolation down --branch <branch>`. The brief's o
 ```bash
 fr ops gate --run <run-id>          # preview the 8 stages
 fr ops gate --run <run-id> --yes    # act
-fr ops gate --run <run-id> --yes --profile <ops-profile> --method squash
+fr ops gate --run <run-id> --yes --profile <ops-profile>
 ```
 
 `--profile` names the ops profile when the repo declares more than one (`ops: true`);
-`--method` picks the merge method (`merge`, `squash` or `rebase`; default: the repo's).
+The stage never merges: the merge queue lands the PR (stage 2 below).
 
 It runs on the harness host at a terminal. It does not run in a non-interactive context (no
 terminal, or `CI` set). That keeps out the agent that delivered the work. Run it from a
@@ -230,9 +230,9 @@ The skill `fr-devops-gate` holds the judgement it needs from you.
 | Stage | |
 |---|---|
 | 1 | Before anything comes up, stop on a PR that changes the ops profile itself. That is a PR whose own diff, from the merge base, touches `.devcontainer/<ops>/**` or `.devcontainer/fr-profiles.yaml`. That change must merge in its own PR first. Bring up or reuse the ops workspace `chore/ops-<slug>` on the ops profile. Cut it from exactly the PR head, or from the default branch's tip once the PR has merged (a merged head can never be rebased). Stop on a cut whose profile is not the same as the default branch's, because the workspace runs the cut's copy with the ops credentials. Rebase an open PR onto the default branch; a merged PR's stale workspace is cut again. Grant trust on the host if the op set changed. Then show the pre-merge status, then each open op. Each op is confirmed on the host terminal and run as `fr isolation exec --branch chore/ops-<slug> -- fr ops apply <id> --yes [--yes-mutating]`. Records the head it cut from. |
-| 2 | Merge through the forge, only when all of these are true: no pre-merge op is open; the PR's required checks are green on that head; the head is unchanged since stage 1; the operator confirms a terminal prompt that names the PR, its head and the pre-merge state (asked even under `--yes`). If fr cannot merge through the forge, the stage stops and names the manual merge. |
+| 2 | Release the PR to the merge queue, only when all of these are true: no pre-merge op is open; the PR's required checks are green on that head; the head is unchanged since stage 1; the operator confirms a terminal prompt that names the PR, its head and the pre-merge state (asked even under `--yes`). It then adds the label `fr-queue:release` and merges nothing. The driver records the label at the head and diff, and lands the PR alone as the last change of its push. The run stops until the forge reads the PR as merged. Then a Needs-you entry names `fr ops gate --run <id>`, which resumes at stage 3. If fr cannot add the label, the stage stops and names it. |
 | 3 | `fr isolation verify-merge`. Then rebase the ops branch onto the default branch (it then carries only its own evidence commits). Then every `ready:`. |
-| 4 | Post-merge status and apply. An op that a check already shows DONE still goes through `fr ops apply --yes`. That runs nothing and records the closure, so stage 6 can fold it. |
+| 4 | Post-merge status and apply. An op that a check already shows DONE still goes through `fr ops apply --yes`. That runs nothing and records the closure, so stage 6 can fold it. Then it adds the label `fr-queue:postmerge-done`, which lifts the queue's barrier: until then nothing lands behind the PR. |
 | 5 | Each Test Plan step whose effective gate is `devops`. A pointed step's probe runs (see Test Plan probes), and the stage asks about the others. Each answer is recorded with `fr closeout outcome`: `ran`, `na`, or `owed` (stage 6 then stops on it; see below). |
 | 6 | `fr gate pass --gate devops --run <id>` from the ops workspace. It folds only recorded evidence. |
 | 7 | The Tester gate's work is listed and `gate:tester` stays. That work is its steps with no outcome, its rows that are not walked, and a spec that declares `gate: tester`. When the Tester gate owns nothing, the stage passes `gate:tester` with a generated note. |
@@ -270,8 +270,8 @@ done. A failed push leaves the stage to retry.
 The first push makes the branch, and stops if the branch already exists. Every later push
 is leased on the sha that fr last pushed (`--force-with-lease`), recorded in the host state.
 A rerun resumes at the first stage that the host state does not record. A PR that the forge
-reports MERGED counts as stage 2 done. Stage 2 merges only the recorded head, and stage 3
-checks that the merged PR's head is that one.
+reports MERGED is what counts as stage 2 done; fr never records it. Stage 2 releases only the
+recorded head, and stage 3 checks that the merged PR's head is that one.
 
 The first failure stops the run, and names the stage (exit 1). This includes an op set that
 is not trusted when the stage asks. A refusal such as a moved head or a changed ops profile

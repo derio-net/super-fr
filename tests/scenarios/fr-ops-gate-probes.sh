@@ -119,17 +119,17 @@ class Forge:
     def pr_checks(self, repo, n):
         return [{"name": "ci", "bucket": "pass"}]
 
-    def repo_merge_methods(self, repo):
-        return {"default": "merge", "allowed": ["merge"]}
-
     def pr_merge(self, repo, n, *, head_sha, method):
+        raise AssertionError("the DevOps stage calls no pr_merge: the merge queue lands the PR")
+
+    def _queue_lands(self, n):
+        """What the wave merge queue does once the stage released the PR (R26)."""
         p = self._pr(n)
-        assert p["head_oid"] == head_sha, "merged a head the stage did not pin"
         subprocess.run(["git", "--git-dir", os.environ["ORIGIN"], "update-ref",
-                        "refs/heads/main", head_sha], check=True)
+                        "refs/heads/main", p["head_oid"]], check=True)
         p["state"] = "MERGED"
         p.setdefault("events", []).append("merged")
-        save()
+        print(f"FAKE-QUEUE landed #{n}")
 
     def open_pr_for_head(self, repo, branch):
         return prs.get("housekeeping", {}).get(branch)
@@ -147,12 +147,14 @@ class Forge:
     def edit_pr_labels(self, repo, n, *, add, remove):
         p = self._pr(n)
         p["labels"] = sorted((set(p["labels"]) | set(add)) - set(remove))
+        if "fr-queue:release" in add:
+            self._queue_lands(n)
         save()
 
     def list_issue_comments(self, repo, n):
         return []
 
-    def ensure_labels(self, repo, names):
+    def ensure_labels(self, repo, labels):
         pass
 
     def comment_pr(self, repo, n, body):
