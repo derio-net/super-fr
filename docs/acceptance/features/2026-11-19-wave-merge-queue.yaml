@@ -319,3 +319,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_4_the_session_status_decides
     why: the rule numbers moved when the reupdate rule went
+  - row: merge-train-red-recovery
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_3_the_session_status_decides
+    why: the rule numbers moved when the reupdate rule went
