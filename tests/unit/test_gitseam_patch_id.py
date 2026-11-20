@@ -231,3 +231,74 @@ def test_an_external_diff_driver_is_never_run(repo: Path, tmp_path: Path) -> Non
 
     assert Checkout(repo).patch_id("feat", "main")
     assert not marker.exists()
+
+
+# ------------------------------------------------------------------ a stale default branch (p1-r3)
+
+
+def test_a_pr_that_merged_a_newer_main_is_read_against_a_refetched_default(
+    tmp_path: Path,
+) -> None:
+    """The clone's `origin/main` predates a `main` the PR has since merged cleanly: read
+    against the stale copy, the merge base is old and `main`'s own change counts as the
+    PR's. The gate reads once more after fetching the default branch, and the approval
+    recorded before the merge holds."""
+    from datetime import UTC, datetime
+
+    from fr.commands.triage_batch_cmd import patch_id_reader
+    from fr.labels import APPROVED_FR
+    from fr.triage.approval import Approved, approval_verdict, judge_approval
+    from fr.triage.model import ApprovalEvent
+
+    work, clone, head = _clone_with_a_pr(tmp_path)
+    approved = Checkout(work).patch_id(head, "main")
+    _git(work, "checkout", "--quiet", "main")
+    (work / "other.txt").write_text("main moves on\n")
+    _commit(work, "main moves")
+    _git(work, "push", "--quiet", "origin", "main")
+    _git(work, "checkout", "--quiet", "feat")
+    _git(work, "merge", "--quiet", "--no-edit", "main")
+    merged = _git(work, "rev-parse", "HEAD")
+    _git(work, "push", "--quiet", "origin", "feat")
+    events = [
+        ApprovalEvent(
+            kind="approval", at=datetime(2026, 11, 19, 11, tzinfo=UTC), pr=7, head=head,
+            patch_id=approved,
+        )
+    ]  # fmt: skip
+    labels = [APPROVED_FR.name]
+
+    stale = patch_id_reader(Checkout(clone), {7: "feat"})(7, merged)
+    assert stale is not None and stale != approved  # the stale base's verdict would void
+    assert approval_verdict(events, 7, merged, labels, patch_id=stale) != Approved(head)
+
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+    verdict, read = judge_approval(events, 7, merged, labels, reader)
+
+    assert (verdict, read) == (Approved(head), approved)
+
+
+def test_a_real_change_still_voids_after_the_refetch(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from fr.commands.triage_batch_cmd import patch_id_reader
+    from fr.labels import APPROVED_FR
+    from fr.triage.approval import Void, judge_approval
+    from fr.triage.model import ApprovalEvent
+
+    work, clone, head = _clone_with_a_pr(tmp_path)
+    approved = Checkout(work).patch_id(head, "main")
+    (work / "code.py").write_text("x = 3\n")
+    edited = _commit(work, "a real change")
+    _git(work, "push", "--quiet", "origin", "feat")
+    events = [
+        ApprovalEvent(
+            kind="approval", at=datetime(2026, 11, 19, 11, tzinfo=UTC), pr=7, head=head,
+            patch_id=approved,
+        )
+    ]  # fmt: skip
+
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+    verdict, read = judge_approval(events, 7, edited, [APPROVED_FR.name], reader)
+
+    assert verdict == Void(head) and read not in (None, approved)

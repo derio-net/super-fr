@@ -198,3 +198,40 @@ def test_writing_stamps_13(tmp_path: Path) -> None:
 
     assert "\nschema: 13\n" in path.read_text("utf-8")
     assert load_judgements(path).schema_ == 13
+
+
+# ------------------------------------------------------------------ patch-ids (R12; p1-r5, p1-r7)
+
+_APPROVAL = {"kind": "approval", "at": "2026-11-19T10:00:00Z", "pr": 7, "head": SHA}
+_UPDATE = {
+    "kind": "update", "at": "2026-11-19T10:01:00Z", "pr": 7, "head_before": SHA,
+    "head_after": MAIN, "base": MAIN,
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("schema", [9, 12])
+def test_an_approval_patch_id_in_a_file_stamped_below_13_is_refused(schema: int) -> None:
+    events = [{**_APPROVAL, "patch_id": "p1"}]
+
+    with pytest.raises(ValidationError, match="an approval's `patch_id` needs schema 13"):
+        Judgements.model_validate(_doc(schema, batch_events=events))
+
+
+@pytest.mark.parametrize("schema", [9, 12])
+def test_an_update_patch_id_in_a_file_stamped_below_13_is_refused(schema: int) -> None:
+    events = [{**_UPDATE, "patch_id": "p1"}]
+
+    with pytest.raises(ValidationError, match="an update's `patch_id` needs schema 13"):
+        Judgements.model_validate(_doc(schema, batch_events=events))
+
+
+def test_approval_and_update_patch_ids_load_at_13_and_are_optional() -> None:
+    events = [{**_APPROVAL, "patch_id": "p1"}, {**_UPDATE, "patch_id": "p2"}, _UPDATE]
+    judgements = Judgements.model_validate(_doc(13, batch_events=events))
+
+    approval, update, bare = judgements.batches[0].events
+    assert getattr(approval, "patch_id") == "p1"
+    assert getattr(update, "patch_id") == "p2"
+    assert getattr(bare, "patch_id") is None
+    # the same events with no id still load at 12
+    Judgements.model_validate(_doc(12, batch_events=[_APPROVAL, _UPDATE]))

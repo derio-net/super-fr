@@ -424,13 +424,13 @@ def test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval(
     tmp_path: Path,
 ) -> None:
     forge = GateForge({"draft": False, "head_oid": "h1", "labels": [LABEL]})
-    calls: list[tuple[int, str, str, str]] = []
+    calls: list[tuple[Any, ...]] = []
     ctx = _ctx(forge, tmp_path, Behind(forge))
     ctx.on_update = lambda *a: calls.append(a)
     slot = _slot(_batch("a", _approval(7, "h1")))
     attempt = merge_ready(ctx, slot, None)
     assert attempt == MergeAttempt("updated", head="h2")
-    assert calls == [(7, "h1", "h2", "m7")]
+    assert calls == [(7, "h1", "h2", "m7", None)]  # no reader: no patch-id
     (event,) = ctx.recorded["a"]
     assert isinstance(event, UpdateEvent) and (event.head_before, event.base) == ("h1", "m7")
     # the next attempt sees the new head as approved through fr's own update
@@ -501,7 +501,7 @@ def test_an_update_is_recorded_before_its_push(tmp_path: Path) -> None:
     ctx.on_update = lambda *a: calls.append(a)
     with pytest.raises(RuntimeError):
         merge_ready(ctx, _slot(_batch("a", _approval(7, "h1"))), None)
-    assert calls == [(7, "h1", "h2", "m7")]
+    assert calls == [(7, "h1", "h2", "m7", None)]
     assert [e.kind for e in ctx.recorded["a"]] == ["update"]
 
 
@@ -514,3 +514,78 @@ def test_reaches_follows_only_frs_own_updates() -> None:
     )  # fmt: skip
     assert reaches([update], 7, "h1", "h2") and reaches([], 7, "h1", "h1")
     assert not reaches([update], 7, "h1", "h9") and not reaches([update], 8, "h1", "h2")
+
+
+# --------------------------------------------------------- patch-ids (wave-merge-queue R12)
+
+
+def _pinned(pr: int, head: str, patch_id: str) -> ApprovalEvent:
+    return ApprovalEvent(
+        kind="approval", at=datetime(2026, 10, 11, 11, tzinfo=UTC), pr=pr, head=head,
+        patch_id=patch_id,
+    )  # fmt: skip
+
+
+def _reader(ids: dict[str, str]) -> Any:
+    def of(pr: int, head: str, *, fresh: bool = False) -> str | None:
+        return ids.get(head)
+
+    return of
+
+
+def test_the_merge_gate_keeps_an_approval_whose_patch_id_holds_at_a_new_head(
+    tmp_path: Path,
+) -> None:
+    forge = GateForge({"draft": False, "head_oid": "h2", "labels": [LABEL]})
+    ctx = _ctx(forge, tmp_path)
+    ctx.patch_id_of = _reader({"h2": "p1"})
+
+    attempt = merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1")), "h2"), None)
+
+    assert attempt.outcome == "merged" and forge.merged == [(7, "h2")]
+
+
+def test_the_merge_gate_says_the_diff_changed_when_the_patch_id_did(tmp_path: Path) -> None:
+    """p1-r6: the hold names what voided the approval, as settle does."""
+    forge = GateForge({"draft": False, "head_oid": "h2", "labels": [LABEL]})
+    ctx = _ctx(forge, tmp_path)
+    ctx.patch_id_of = _reader({"h2": "p2"})
+
+    attempt = merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1")), "h2"), None)
+
+    assert attempt.outcome == "unapproved"
+    assert attempt.reason == (
+        f"was approved at h1, but its diff changed at h2; the {LABEL} label is void"
+    )
+    assert forge.merged == []
+
+
+def test_the_merge_gate_says_the_head_moved_when_no_patch_id_is_known(tmp_path: Path) -> None:
+    forge = GateForge({"draft": False, "head_oid": "h2", "labels": [LABEL]})
+
+    slot = _slot(_batch("a", _approval(7, "h1")), "h2")
+
+    attempt = merge_ready(_ctx(forge, tmp_path), slot, None)
+
+    assert attempt.reason == f"was approved at h1, but head moved to h2; the {LABEL} label is void"
+
+
+def test_an_update_records_the_patch_id_of_its_new_head(tmp_path: Path) -> None:
+    """p1-r7: fr's own update records the id it leaves the PR at, so a later clean merge of
+    `main` keeps the approval though the update moved the id."""
+    forge = GateForge({"draft": False, "head_oid": "h1", "labels": [LABEL]})
+    calls: list[tuple[Any, ...]] = []
+    ctx = _ctx(forge, tmp_path, Behind(forge))
+    ctx.on_update = lambda *a: calls.append(a)
+    ctx.patch_id_of = _reader({"h1": "p1", "h2": "p2"})
+
+    merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1"))), None)
+
+    assert calls == [(7, "h1", "h2", "m7", "p2")]
+    (event,) = ctx.recorded["a"]
+    assert isinstance(event, UpdateEvent) and event.patch_id == "p2"
+    # a merge of main at h3 keeps p2: the approval holds
+    forge.pr["head_oid"] = "h3"
+    ctx.patch_id_of = _reader({"h3": "p2"})
+    again = merge_ready(ctx, _slot(_batch("a", _pinned(7, "h1", "p1")), "h3"), None)
+    assert again.outcome == "merged"

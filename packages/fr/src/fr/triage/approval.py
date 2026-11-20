@@ -9,14 +9,21 @@ in, the judgements file only through the writer passed in, and git only through 
 
 The verdict rule (spec 2026-11-19-wave-merge-queue R12, §E): approval is pinned to
 content. With no `approved-fr` label the PR is `Unlabelled`; with the label and no live
-approval it is `First`. A live approval that recorded a patch-id is `Approved` while the
-PR's live patch-id equals it, at any head (a merge of `main` with no conflict
-resolution, an empty commit). Otherwise, and for an approval recorded before schema 13
-(no patch-id) or a live patch-id that cannot be read, it is `Approved` only while fr's
-own recorded updates lead from the approved head to the live one (`reaches`): the
-approved head itself, or a push fr made, such as the legacy merge train's update of a PR
-branch. Anything else is `Void`: a push fr did not make that changes the PR's own diff,
-whitespace and binary edits included.
+approval it is `First`. A live approval is `Approved` while the PR's live patch-id equals
+one fr recorded since it (`approved_patch_ids`: the approval's own, and each of fr's own
+updates' after it), at any head (a merge of `main` with no conflict resolution, an empty
+commit). Otherwise, and for an approval recorded before schema 13 (no patch-id) or a live
+patch-id that cannot be read, it is `Approved` only while fr's own recorded updates lead
+from the approved head to the live one (`reaches`): the approved head itself, or a push
+fr made, such as the legacy merge train's update of a PR branch. Anything else is `Void`:
+a push fr did not make that changes the PR's own diff, whitespace and binary edits
+included. `git patch-id` drops hunk line numbers, so a push that moves an otherwise
+identical hunk within a file keeps the id, and the approval: R12 states that limit.
+
+`judge_approval` is the one reading every call site makes: it reads the live patch-id
+only for a labelled PR, and reads it once more against a refetched default branch before
+a mismatch voids (a merge base newer than the clone's copy of the default branch moves
+the id; the re-read tells that from a real change).
 """
 
 from __future__ import annotations
@@ -24,7 +31,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from fr.labels import APPROVED_FR, READY_FR
 from fr.triage.model import (
@@ -80,19 +87,50 @@ def approval_verdict(
     carries a valid approval: the rule in this module's docstring."""
     if labels is None or APPROVED_FR.name not in labels:
         return Unlabelled()
-    live: int | None = None
-    for i, event in enumerate(events):
-        if isinstance(event, ApprovalEvent) and event.pr == pr:
-            live = None if event.voided_at is not None else i
+    live = _live_index(events, pr)
     if live is None:
         return First(head)
     approved = events[live]
     assert isinstance(approved, ApprovalEvent)
-    if approved.patch_id is not None and patch_id == approved.patch_id:
+    if patch_id is not None and patch_id in _pinned_ids(events[live:], pr):
         return Approved(approved.head)
     if reaches(events[live + 1 :], pr, approved.head, head):
         return Approved(approved.head)
     return Void(approved.head)
+
+
+def approved_patch_ids(events: Sequence[BatchEvent], pr: int) -> frozenset[str]:
+    """The patch-ids PR *pr*'s live approval holds at (R12): the one it recorded and each
+    one fr's own updates recorded after it. Empty with no live approval, or none known."""
+    live = _live_index(events, pr)
+    return frozenset() if live is None else _pinned_ids(events[live:], pr)
+
+
+def _live_index(events: Sequence[BatchEvent], pr: int) -> int | None:
+    live: int | None = None
+    for i, event in enumerate(events):
+        if isinstance(event, ApprovalEvent) and event.pr == pr:
+            live = None if event.voided_at is not None else i
+    return live
+
+
+def _pinned_ids(since: Sequence[BatchEvent], pr: int) -> frozenset[str]:
+    """The ids recorded by *since*'s first event (the live approval) and the updates after."""
+    ids = {
+        e.patch_id
+        for e in since
+        if isinstance(e, ApprovalEvent | UpdateEvent) and e.pr == pr and e.patch_id is not None
+    }
+    return frozenset(ids)
+
+
+def void_reason(events: Sequence[BatchEvent], pr: int, head: str, patch_id: str | None) -> str:
+    """What voids PR *pr*'s live approval at *head*, as said: its diff changed (a recorded
+    patch-id and the live one known, and different), or its head moved by a push fr did
+    not make (judged by `reaches`)."""
+    if patch_id is not None and approved_patch_ids(events, pr):
+        return f"its diff changed at {head[:12]}"
+    return f"head moved to {head[:12]}"
 
 
 def reaches(events: Sequence[BatchEvent], pr: int, start: str, head: str) -> bool:
@@ -117,9 +155,34 @@ def is_approved(verdict: ApprovalVerdict) -> bool:
 EventWriter = Callable[[str, BatchEvent], None]
 """Appends one event to batch *id* through the one judgements writer."""
 
-PatchIdOf = Callable[[int, str], "str | None"]
-"""The patch-id of PR *pr* at *head* (`Checkout.patch_id` against the default branch), or
-None when it cannot be read: the command layer's reader, so this module runs no git."""
+
+class PatchIdOf(Protocol):
+    """The patch-id of PR *pr* at *head* (`Checkout.patch_id` against the default branch), or
+    None when it cannot be read: the command layer's reader, so this module runs no git.
+    *fresh* fetches the default branch first (at most once per reader), for the re-read
+    `judge_approval` makes before a mismatch voids."""
+
+    def __call__(self, pr: int, head: str, *, fresh: bool = False) -> str | None: ...
+
+
+def judge_approval(
+    events: Sequence[BatchEvent],
+    pr: int,
+    head: str,
+    labels: Sequence[str] | None,
+    patch_id_of: PatchIdOf | None,
+) -> tuple[ApprovalVerdict, str | None]:
+    """The verdict for PR *pr* at *head*, and the live patch-id it read (None when unread):
+    read only for a labelled PR, and read again against a refetched default branch before
+    a patch-id mismatch voids (p1-r3: a stale `origin/<default>` moves the merge base)."""
+    if patch_id_of is None or labels is None or APPROVED_FR.name not in labels:
+        return approval_verdict(events, pr, head, labels), None
+    patch_id = patch_id_of(pr, head)
+    verdict = approval_verdict(events, pr, head, labels, patch_id=patch_id)
+    if isinstance(verdict, Void) and patch_id is not None and approved_patch_ids(events, pr):
+        patch_id = patch_id_of(pr, head, fresh=True)
+        verdict = approval_verdict(events, pr, head, labels, patch_id=patch_id)
+    return verdict, patch_id
 
 
 def settle_approvals(
@@ -147,15 +210,24 @@ def settle_approvals(
         if view.get("state") != "OPEN":
             continue
         head = str(view.get("head_oid") or "")
-        labels = view.get("labels")
-        patch_id = (
-            patch_id_of(number, head)
-            if patch_id_of is not None and labels is not None and APPROVED_FR.name in labels
-            else None
+        verdict, patch_id = judge_approval(
+            batch.events, number, head, view.get("labels"), patch_id_of
         )
-        verdict = approval_verdict(batch.events, number, head, labels, patch_id=patch_id)
         voided_head = _voided_head(verdict)
-        if isinstance(verdict, First):
+        if isinstance(verdict, Approved) and _unpinned(batch.events, number, patch_id):
+            # p1-r8: an approval recorded with no patch-id gains the one its head reads now,
+            # so R12 applies from here on rather than `reaches` for the approval's life.
+            assert patch_id is not None
+            if dry_run:
+                say(f"would pin approval of PR #{number} at {head[:12]} to its patch-id")
+            else:
+                writer(
+                    batch.id,
+                    ApprovalEvent(kind="approval", at=now, pr=number, head=head, patch_id=patch_id),
+                )
+                say(f"approval of PR #{number} at {head[:12]} pinned to its patch-id")
+                verdict = Approved(head)
+        elif isinstance(verdict, First):
             if dry_run:
                 say(f"would record approval of PR #{number} at {head[:12]}")
             else:
@@ -168,7 +240,8 @@ def settle_approvals(
         elif isinstance(verdict, Void):
             was = verdict.approved_head
             if dry_run:
-                say(f"would void approval of PR #{number} at {was[:12]}: head moved to {head[:12]}")
+                why = void_reason(batch.events, number, head, patch_id)
+                say(f"would void approval of PR #{number} at {was[:12]}: {why}")
             elif (off := _labels_off(client, repo)) is not None:
                 # R9: the label stays, so no void is recorded and nothing is approved
                 say(f"approval of PR #{number} at {was[:12]} not voided: {off}")
@@ -176,6 +249,7 @@ def settle_approvals(
                 client.edit_issue_labels(
                     repo, number, add=frozenset(), remove=frozenset({APPROVED_FR.name})
                 )
+                why = void_reason(batch.events, number, head, patch_id)
                 recorded = _live_approval(batch.events, number)
                 writer(
                     batch.id,
@@ -184,7 +258,6 @@ def settle_approvals(
                         patch_id=recorded.patch_id if recorded is not None else None,
                     ),
                 )  # fmt: skip
-                why = _why_void(recorded, head, patch_id)
                 say(f"approval of PR #{number} at {was[:12]} voided: {why}")
                 verdict = Unlabelled()
         _dequeue_unapproved(
@@ -240,12 +313,13 @@ def _live_approval(events: Sequence[BatchEvent], pr: int) -> ApprovalEvent | Non
     return last if last is not None and last.voided_at is None else None
 
 
-def _why_void(recorded: ApprovalEvent | None, head: str, patch_id: str | None) -> str:
-    """What voided an approval, as said: its diff changed at a head fr did not push (R12,
-    both patch-ids known), or its head moved by a push fr did not make (`reaches`)."""
-    if recorded is not None and recorded.patch_id is not None and patch_id is not None:
-        return f"its diff changed at {head[:12]}"
-    return f"head moved to {head[:12]}"
+def _unpinned(events: Sequence[BatchEvent], pr: int, patch_id: str | None) -> bool:
+    """Whether PR *pr* has a live approval that no patch-id pins yet, and one was read."""
+    return (
+        patch_id is not None
+        and _live_approval(events, pr) is not None
+        and not approved_patch_ids(events, pr)
+    )
 
 
 def _voided_head(verdict: ApprovalVerdict) -> str:

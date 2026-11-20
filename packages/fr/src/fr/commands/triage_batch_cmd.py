@@ -104,10 +104,10 @@ from fr.triage.approval import (
     ApprovalVerdict,
     EventWriter,
     PatchIdOf,
-    approval_verdict,
     ensure_approval_label,
     facts_without_label,
     is_approved,
+    judge_approval,
     reaches,
     settle_approvals,
 )
@@ -528,8 +528,10 @@ def make_checkout(path: Path | None) -> Checkout:
 
 
 def pr_branches(facts: Facts, repo: str) -> dict[int, str]:
-    """Each of *repo*'s PRs in *facts*, by number, with its head branch."""
-    return {p.number: p.head_ref for p in (*facts.batch_prs, *facts.prs) if p.repo == repo}
+    """Each of *repo*'s PRs in *facts*, by number, with its head branch: the batch PRs, the
+    unlinked ones and every PR an issue links (where collect files a batch's own PR)."""
+    linked = (p for i in facts.issues for p in i.prs)
+    return {p.number: p.head_ref for p in (*facts.batch_prs, *facts.prs, *linked) if p.repo == repo}
 
 
 def patch_id_reader(checkout: Checkout, branches: Mapping[int, str]) -> PatchIdOf:
@@ -537,10 +539,20 @@ def patch_id_reader(checkout: Checkout, branches: Mapping[int, str]) -> PatchIdO
     §E): PR *pr*'s patch-id at *head* against `origin/<default>` in *checkout*, as last
     fetched, fetching the PR's branch (*branches*) once when the clone lacks *head*. None
     when git cannot say (no such commit, no default branch), which the verdict reads by
-    `reaches`. Memoised per reader: build one per pass."""
+    `reaches`. *fresh* fetches the default branch first, once per reader, and reads again
+    (p1-r3: a PR that merged a newer default branch reads a merge base the stale copy does
+    not know). Memoised per reader: build one per pass."""
     seen: dict[tuple[int, str], str | None] = {}
+    refreshed: list[bool] = []
 
-    def of(pr: int, head: str) -> str | None:
+    def of(pr: int, head: str, *, fresh: bool = False) -> str | None:
+        if fresh and not refreshed:
+            refreshed.append(True)
+            seen.clear()  # every id read so far was against the stale copy
+            try:
+                checkout.refresh_remote_branch(checkout.default_branch())
+            except GitError:
+                return None  # cannot refetch: the verdict falls back to `reaches`
         if (pr, head) not in seen:
             seen[pr, head] = _read_patch_id(checkout, branches.get(pr, ""), head)
         return seen[pr, head]
@@ -555,6 +567,11 @@ def _read_patch_id(checkout: Checkout, branch: str, head: str) -> str | None:
         return checkout.patch_id(head, f"origin/{checkout.default_branch()}")
     except GitError:
         return None
+
+
+def _no_patch_id(pr: int, head: str, *, fresh: bool = False) -> str | None:
+    """The reader for a repo whose clone cannot be read: every approval by `reaches`."""
+    return None
 
 
 def load_runner(name: str) -> Runner:
@@ -586,15 +603,16 @@ def event_writer(target: Path, facts: Facts, *, read_errors: bool = False) -> Ev
 
 def update_recorder(
     writer: EventWriter, batch_of: Callable[[int], str | None]
-) -> Callable[[int, str, str, str], None]:
-    """`MergeContext.on_update` for a writer: an `update` event on the PR's batch (R8)."""
+) -> Callable[[int, str, str, str, str | None], None]:
+    """`MergeContext.on_update` for a writer: an `update` event on the PR's batch (R8),
+    with the new head's patch-id (wave-merge-queue R12)."""
 
-    def record(pr: int, before: str, after: str, base: str) -> None:
+    def record(pr: int, before: str, after: str, base: str, patch_id: str | None) -> None:
         batch_id = batch_of(pr)
         if batch_id is not None:
             event = UpdateEvent(
                 kind="update", at=datetime.now(UTC), pr=pr, head_before=before,
-                head_after=after, base=base,
+                head_after=after, base=base, patch_id=patch_id,
             )  # fmt: skip
             writer(batch_id, event)
 
@@ -4334,9 +4352,9 @@ class _Driver:
                     ci_none=self._ci_none(repo),
                 )
                 head = str(view.get("head_oid") or "")
-                approvals[e.batch.id] = approval_verdict(
+                approvals[e.batch.id], _ = judge_approval(
                     e.batch.events, e.pr.number, head, view.get("labels"),
-                    patch_id=self._live_patch_id(facts, repo, e.pr.number, head, view),
+                    self._live_patch_ids(facts, repo, view),
                 )  # fmt: skip
                 live[e.batch.id] = LivePr(
                     number=e.pr.number,
@@ -4883,19 +4901,16 @@ class _Driver:
             try:
                 checkout = self._fetched_reader(repo)
             except GitError:
-                self._patch_ids[repo] = lambda pr, head: None
+                self._patch_ids[repo] = _no_patch_id
             else:
                 self._patch_ids[repo] = patch_id_reader(checkout, pr_branches(facts, repo))
         return self._patch_ids[repo]
 
-    def _live_patch_id(
-        self, facts: Facts, repo: str, pr: int, head: str, view: dict[str, Any]
-    ) -> str | None:
-        """The snapshot's patch-id for open PR *pr* at *head*, read only when it carries
-        `approved-fr` (R12: read while the PR is open and before it lands)."""
-        if view.get("state") != "OPEN" or APPROVED_FR.name not in (view.get("labels") or ()):
-            return None
-        return self._patch_id_of(facts, repo)(pr, head)
+    def _live_patch_ids(self, facts: Facts, repo: str, view: dict[str, Any]) -> PatchIdOf | None:
+        """The snapshot's patch-id reader for the PR in *view*: none unless it is open (R12:
+        read while the PR is open and before it lands); `judge_approval` reads it only
+        when the PR carries `approved-fr`."""
+        return self._patch_id_of(facts, repo) if view.get("state") == "OPEN" else None
 
     def _reader(self, repo: str) -> Checkout:
         """The clone for a read: the checked one with --yes, else leniently opened

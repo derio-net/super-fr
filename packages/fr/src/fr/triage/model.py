@@ -935,6 +935,10 @@ class UpdateEvent(_Strict):
     head_before: str = Field(min_length=1)
     head_after: str = Field(min_length=1)
     base: str = Field(min_length=1)
+    # The PR's patch-id at *head_after* (2026-11-19-wave-merge-queue R12): an approval holds
+    # while the live patch-id equals one fr recorded since it. None when unread, and on an
+    # update recorded before schema 13.
+    patch_id: str | None = None
 
 
 class ApprovalEvent(_Strict):
@@ -1522,6 +1526,12 @@ class Judgements(_Strict):
             for e in b.events
         ):
             raise ValueError("an approval's `patch_id` needs schema 13")
+        if self.schema_ < 13 and any(
+            isinstance(e, UpdateEvent) and e.patch_id is not None
+            for b in self.batches
+            for e in b.events
+        ):
+            raise ValueError("an update's `patch_id` needs schema 13")
         carried: set[str] = {e.kind for b in self.batches for e in b.events}
         carried |= {e.kind for q in self.queues for e in q.events}
         if self.schema_ < 12 and any(

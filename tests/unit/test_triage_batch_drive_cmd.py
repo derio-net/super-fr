@@ -352,11 +352,19 @@ class DriveCheckout:
     def reach_commit(self, sha: str, branch: str) -> bool:
         return bool(sha)
 
+    # head -> its patch-id (R12); a head not here has none, and the gate judges by `reaches`
+    patch_ids: dict[str, str] = {}  # noqa: RUF012 - replaced per instance by a test
+    refreshed: int = 0
+
     def patch_id(self, head: str, ref: str) -> str:
-        """No patch-id in a fake clone: the approval gate judges by `reaches` (R12)."""
         from fr.triage.gitseam import GitError
 
-        raise GitError("a fake clone has no patch-id")
+        if head not in self.patch_ids:
+            raise GitError("a fake clone has no patch-id")
+        return self.patch_ids[head]
+
+    def refresh_remote_branch(self, branch: str) -> None:
+        self.refreshed += 1
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         prefix = directory.rstrip("/") + "/"
@@ -4771,6 +4779,64 @@ def test_a_driver_update_is_recorded_and_keeps_the_approval(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert world.merged == [(101, "sha-updated", "squash")], out
     assert "voided" not in out
+
+
+def test_a_session_push_that_keeps_the_patch_id_keeps_the_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r4 (wave-merge-queue R12): the driver's reader reaches all three readings, the
+    settle, the snapshot's verdict and the merge gate. A session merges `main` cleanly: a
+    new head, the same patch-id, and the PR merges at it (any one of them unwired would
+    judge by `reaches`, which fails at a head fr did not push, and hold it)."""
+    _pr_open(world, tmp_path)
+    checkout.patch_ids = {"sha-101": "p1", "sha-session": "p1"}
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")  # records the approval at sha-101 with p1
+    (approval,) = _approvals(tmp_path, "b1")
+    assert (approval.head, approval.patch_id) == ("sha-101", "p1")
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "voided" not in out
+    assert world.merged == [(101, "sha-session", "squash")], out
+
+
+def test_a_session_push_that_changes_the_patch_id_voids_saying_so(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    checkout.patch_ids = {"sha-101": "p1", "sha-session": "p2"}
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "approval of PR #101 at sha-101 voided: its diff changed at sha-session" in out
+    assert checkout.refreshed == 1  # read again against a refetched default first
+    assert world.prs[101]["labels"] == [] and world.merged == []
+
+
+def test_a_driver_update_records_its_patch_id_and_a_clean_merge_after_it_keeps_the_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r7: fr's update moves the patch-id and records the new one; the session then
+    merges `main` cleanly, at a head `reaches` does not lead to, and the PR still merges."""
+    _pr_open(world, tmp_path)
+    checkout.behind.add("sha-101")
+    checkout.patch_ids = {"sha-101": "p1", "sha-updated": "p2", "sha-session": "p2"}
+    _drive(tmp_path, "--once", "--yes")
+    approval, update = _approvals(tmp_path, "b1")
+    assert (approval.patch_id, update.head_after, update.patch_id) == ("p1", "sha-updated", "p2")
+    world.prs[101]["head_oid"] = "sha-session"
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "voided" not in out
+    assert world.merged == [(101, "sha-session", "squash")], out
 
 
 def test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it(

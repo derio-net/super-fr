@@ -23,7 +23,7 @@ from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import APPROVED_FR
-from fr.triage.approval import Approved, Void, approval_verdict
+from fr.triage.approval import Approved, PatchIdOf, Void, judge_approval, void_reason
 from fr.triage.batch import MergeStep, QueueEntry, merge_order, with_forecast
 from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
 from fr.triage.batch_drive import ChecksVerdict, checks_verdict
@@ -124,9 +124,10 @@ class MergeContext:
     # The repo declares `ci none` on its default branch (R4): green on non-draft alone.
     ci_none: bool = False
     scratch: set[Path] = field(default_factory=set)  # worktrees this run created
-    # Called as (pr, head_before, head_after, base) after each update push, so the
-    # caller records it through the one judgements writer (merge-train-safety §B, R8).
-    on_update: Callable[[int, str, str, str], None] | None = None
+    # Called as (pr, head_before, head_after, base, patch_id) after each update push, so
+    # the caller records it through the one judgements writer (merge-train-safety §B, R8;
+    # *patch_id* is the new head's, wave-merge-queue R12, None when unread).
+    on_update: Callable[[int, str, str, str, str | None], None] | None = None
     # batch id -> the events this context recorded or was told of after the batch was
     # read (an approval settled this run, an update pushed): the gate reads them too.
     recorded: dict[str, list[BatchEvent]] = field(default_factory=dict)
@@ -136,7 +137,7 @@ class MergeContext:
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     # Reads a PR's patch-id at a head (spec 2026-11-19-wave-merge-queue R12): the approval
     # gate compares it; None judges approvals by `reaches` alone.
-    patch_id_of: Callable[[int, str], str | None] | None = None
+    patch_id_of: PatchIdOf | None = None
 
     @property
     def strict_checks(self) -> bool:
@@ -447,12 +448,11 @@ def _approved_and_ready(
     if hold is not None:
         return MergeAttempt("unapproved", head=head, reason=hold)
     events = [*batch.events, *ctx.recorded.get(batch.id, [])]
-    labelled = APPROVED_FR.name in (view.get("labels") or ())
-    patch_id = ctx.patch_id_of(pr.number, head) if ctx.patch_id_of and labelled else None
-    verdict = approval_verdict(events, pr.number, head, view.get("labels"), patch_id=patch_id)
+    verdict, patch_id = judge_approval(events, pr.number, head, view.get("labels"), ctx.patch_id_of)
     if isinstance(verdict, Void):
         why = (
-            f"was approved at {verdict.approved_head[:12]}, but its head moved to {head[:12]}; "
+            f"was approved at {verdict.approved_head[:12]}, but "
+            f"{void_reason(events, pr.number, head, patch_id)}; "
             f"the {APPROVED_FR.name} label is void"
         )
         return MergeAttempt("unapproved", head=head, reason=why)
@@ -667,13 +667,17 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     # head nobody pushed, which is harmless; a recorded-after one could be lost, and the
     # next settle would void a valid approval over fr's own update.
     base = ctx.checkout.rev_parse(ctx.main)  # fetched by `_land` before this update
+    # The id fr leaves the PR at (wave-merge-queue R12, p1-r7): a later clean merge of the
+    # default branch keeps it, and with it the approval this update carried over.
+    patch_id = ctx.patch_id_of(pr.number, new) if ctx.patch_id_of is not None else None
     ctx.recorded.setdefault(slot.step.batch.id, []).append(
         UpdateEvent(
-            kind="update", at=ctx.now(), pr=pr.number, head_before=head, head_after=new, base=base
+            kind="update", at=ctx.now(), pr=pr.number, head_before=head, head_after=new,
+            base=base, patch_id=patch_id,
         )
-    )
+    )  # fmt: skip
     if ctx.on_update is not None:
-        ctx.on_update(pr.number, head, new, base)
+        ctx.on_update(pr.number, head, new, base, patch_id)
     wt.push(pr.head_ref)
     ctx.say(f"PR #{pr.number}: pushed {new[:12]} ({message}); waiting for its checks")
     return new

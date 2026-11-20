@@ -57,18 +57,28 @@ class _Forge:
 
 
 def _settle(
-    forge: _Forge, batch: Batch, patch_ids: dict[str, str]
+    forge: _Forge,
+    batch: Batch,
+    patch_ids: dict[str, str],
+    *,
+    fresh_ids: dict[str, str] | None = None,
+    said: list[str] | None = None,
+    dry_run: bool = False,
 ) -> tuple[dict[str, Any], list[tuple[str, BatchEvent]], list[tuple[int, str]]]:
+    """Settle *batch*'s PR #7 with a reader that answers *patch_ids*, or *fresh_ids* once
+    asked to re-read against a refetched default branch (asked: `(pr, "fresh:" + head)`)."""
     written: list[tuple[str, BatchEvent]] = []
     asked: list[tuple[int, str]] = []
 
-    def patch_id_of(pr: int, head: str) -> str | None:
-        asked.append((pr, head))
-        return patch_ids.get(head)
+    def patch_id_of(pr: int, head: str, *, fresh: bool = False) -> str | None:
+        asked.append((pr, f"fresh:{head}" if fresh else head))
+        ids = fresh_ids if fresh and fresh_ids is not None else patch_ids
+        return ids.get(head)
 
     got = settle_approvals(
-        forge, lambda bid, ev: written.append((bid, ev)), REPO, [(batch, 7)], lambda _: None,
-        now=NOW, patch_id_of=patch_id_of,
+        forge, lambda bid, ev: written.append((bid, ev)), REPO, [(batch, 7)],
+        (said.append if said is not None else lambda _: None),
+        now=NOW, patch_id_of=patch_id_of, dry_run=dry_run,
     )  # fmt: skip
     return got, written, asked
 
@@ -177,3 +187,157 @@ def test_settle_with_no_patch_id_reader_records_none() -> None:
 
     ((_, event),) = written
     assert isinstance(event, ApprovalEvent) and event.patch_id is None
+
+
+# ------------------------------------------------------------------ a stale default branch (p1-r3)
+
+
+def test_a_mismatch_is_read_again_against_a_refetched_default_before_voiding() -> None:
+    """The first read ran against `origin/<default>` as last fetched; the PR merged a newer
+    `main`, so its merge base is newer than the clone knows. The re-read after a fetch
+    sees the same diff, and the approval holds."""
+    forge = _Forge({"state": "OPEN", "head_oid": "h2", "labels": [LABEL]})
+
+    got, written, asked = _settle(
+        forge, _batch(_approval("h1", "p1")), {"h2": "p-stale"}, fresh_ids={"h2": "p1"}
+    )
+
+    assert got == {"a": Approved("h1")}
+    assert written == [] and forge.label_edits == []
+    assert asked == [(7, "h2"), (7, "fresh:h2")]
+
+
+def test_a_mismatch_that_survives_the_refetch_voids() -> None:
+    forge = _Forge({"state": "OPEN", "head_oid": "h2", "labels": [LABEL]})
+
+    got, _, asked = _settle(
+        forge, _batch(_approval("h1", "p1")), {"h2": "p2"}, fresh_ids={"h2": "p2"}
+    )
+
+    assert got == {"a": Unlabelled()}
+    assert forge.label_edits == [(7, frozenset(), frozenset({LABEL}))]
+    assert asked == [(7, "h2"), (7, "fresh:h2")]
+
+
+def test_a_matching_read_is_never_read_again() -> None:
+    forge = _Forge({"state": "OPEN", "head_oid": "h2", "labels": [LABEL]})
+
+    _, _, asked = _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p1"})
+
+    assert asked == [(7, "h2")]
+
+
+# ------------------------------------------------------------------ fr's own updates (p1-r7)
+
+
+def _update(before: str, after: str, patch_id: str | None, *, minute: int = 30) -> UpdateEvent:
+    return UpdateEvent(
+        kind="update", at=datetime(2026, 11, 19, 11, minute, tzinfo=UTC), pr=7,
+        head_before=before, head_after=after, base="b1", patch_id=patch_id,
+    )  # fmt: skip
+
+
+def test_a_clean_merge_of_main_after_an_fr_update_keeps_the_approval() -> None:
+    """fr's update moved the patch-id (its version slot, say) and recorded the new one; a
+    later merge of `main` with no conflict resolution keeps that id, so it keeps the
+    approval though `reaches` no longer leads to the head."""
+    events = [_approval("h1", "p1"), _update("h1", "h2", "p2")]
+
+    assert approval_verdict(events, 7, "h3", [LABEL], patch_id="p2") == Approved("h1")
+
+
+def test_an_update_recorded_before_the_approval_does_not_count() -> None:
+    events = [
+        _approval("h0", "p0"),
+        _update("h0", "h1", "p9", minute=5),
+        ApprovalEvent(
+            kind="approval", at=datetime(2026, 11, 19, 11, 10, tzinfo=UTC), pr=7, head="h0",
+            voided_at="h1", patch_id="p0",
+        ),
+        ApprovalEvent(
+            kind="approval", at=datetime(2026, 11, 19, 11, 20, tzinfo=UTC), pr=7, head="h1",
+            patch_id="p1",
+        ),
+    ]  # fmt: skip
+
+    assert approval_verdict(events, 7, "h3", [LABEL], patch_id="p9") == Void("h1")
+
+
+def test_another_prs_update_does_not_count() -> None:
+    other = UpdateEvent(
+        kind="update", at=datetime(2026, 11, 19, 11, 30, tzinfo=UTC), pr=8, head_before="x",
+        head_after="y", base="b1", patch_id="p2",
+    )  # fmt: skip
+
+    assert approval_verdict([_approval("h1", "p1"), other], 7, "h3", [LABEL], patch_id="p2") == (
+        Void("h1")
+    )
+
+
+def test_a_change_after_an_fr_update_voids_saying_the_diff_changed() -> None:
+    forge = _Forge({"state": "OPEN", "head_oid": "h3", "labels": [LABEL]})
+    said: list[str] = []
+
+    _settle(forge, _batch(_approval("h1", "p1"), _update("h1", "h2", "p2")), {"h3": "p3"},
+            said=said)  # fmt: skip
+
+    assert said == ["approval of PR #7 at h1 voided: its diff changed at h3"]
+
+
+# ------------------------------------------------------------------ an approval with no id (p1-r8)
+
+
+def test_an_approval_with_no_patch_id_gains_one_while_it_still_holds() -> None:
+    """Recorded with no id (unreadable then, or before schema 13): once its head is still
+    the live one and the id is readable, settle records it, so R12 applies from then on."""
+    forge = _Forge({"state": "OPEN", "head_oid": "h1", "labels": [LABEL]})
+    said: list[str] = []
+
+    got, written, _ = _settle(forge, _batch(_approval("h1")), {"h1": "p1"}, said=said)
+
+    ((_, event),) = written
+    assert isinstance(event, ApprovalEvent)
+    assert (event.pr, event.head, event.patch_id, event.voided_at) == (7, "h1", "p1", None)
+    assert got == {"a": Approved("h1")}
+    assert forge.label_edits == []
+    assert said == ["approval of PR #7 at h1 pinned to its patch-id"]
+
+
+def test_the_refreshed_approval_then_survives_a_clean_merge_of_main() -> None:
+    forge = _Forge({"state": "OPEN", "head_oid": "h1", "labels": [LABEL]})
+    _, written, _ = _settle(forge, _batch(_approval("h1")), {"h1": "p1"})
+    ((_, refreshed),) = written
+    assert isinstance(refreshed, ApprovalEvent)
+    events = [_approval("h1"), refreshed]
+
+    assert approval_verdict(events, 7, "h9", [LABEL], patch_id="p1") == Approved("h1")
+
+
+def test_an_approval_held_by_reaches_gains_the_id_at_the_live_head() -> None:
+    forge = _Forge({"state": "OPEN", "head_oid": "h2", "labels": [LABEL]})
+
+    _, written, _ = _settle(forge, _batch(_approval("h1"), _update("h1", "h2", None)),
+                            {"h2": "p2"})  # fmt: skip
+
+    ((_, event),) = written
+    assert isinstance(event, ApprovalEvent) and (event.head, event.patch_id) == ("h2", "p2")
+
+
+def test_an_unreadable_id_records_nothing_and_a_dry_run_only_says_so() -> None:
+    forge = _Forge({"state": "OPEN", "head_oid": "h1", "labels": [LABEL]})
+    _, written, _ = _settle(forge, _batch(_approval("h1")), {})
+    assert written == []
+
+    said: list[str] = []
+    _, written, _ = _settle(forge, _batch(_approval("h1")), {"h1": "p1"}, said=said,
+                            dry_run=True)  # fmt: skip
+    assert written == []
+    assert said == ["would pin approval of PR #7 at h1 to its patch-id"]
+
+
+def test_an_approval_that_has_an_id_is_never_refreshed() -> None:
+    forge = _Forge({"state": "OPEN", "head_oid": "h2", "labels": [LABEL]})
+
+    _, written, _ = _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p1"})
+
+    assert written == []

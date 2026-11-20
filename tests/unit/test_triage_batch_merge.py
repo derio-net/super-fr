@@ -200,11 +200,19 @@ class FakeCheckout:
     def reach_commit(self, sha: str, branch: str) -> bool:
         return bool(sha)
 
+    # head -> its patch-id (R12); a head not here has none, and the gate judges by `reaches`
+    patch_ids: dict[str, str] = {}  # noqa: RUF012 - replaced per instance by a test
+    refreshed: int = 0
+
     def patch_id(self, head: str, ref: str) -> str:
-        """No patch-id in a fake clone: the approval gate judges by `reaches` (R12)."""
         from fr.triage.gitseam import GitError
 
-        raise GitError("a fake clone has no patch-id")
+        if head not in self.patch_ids:
+            raise GitError("a fake clone has no patch-id")
+        return self.patch_ids[head]
+
+    def refresh_remote_branch(self, branch: str) -> None:
+        self.refreshed += 1
 
     def default_branch(self) -> str:
         return "main"
@@ -996,3 +1004,57 @@ def test_pr_checks_verdict_matches_live_checks(
     )  # fmt: skip
     direct = pr_checks_verdict(forge, "derio-net/super-fr", 7, ci_none=ci_none)  # type: ignore[arg-type]
     assert direct == live_checks(ctx, 7)
+
+
+# ------------------------------------------------- approval by content (wave-merge-queue R12)
+
+
+def _approved_at(tmp_path: Path, bid: str, pr: int, head: str, patch_id: str) -> None:
+    """Record, on *bid*, the operator's approval at *head* with *patch_id* (schema 13)."""
+    path = tmp_path / "judgements.yaml"
+    doc = yaml.safe_load(path.read_text("utf-8"))
+    doc["schema"] = 13
+    batch = next(b for b in doc["batches"] if b["id"] == bid)
+    batch["events"].append(
+        {"kind": "approval", "at": "2026-09-25T10:30:00Z", "pr": pr, "head": head,
+         "patch_id": patch_id}
+    )  # fmt: skip
+    path.write_text(yaml.safe_dump(doc), "utf-8")
+
+
+def test_batch_merge_keeps_an_approval_whose_patch_id_holds_at_a_new_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r4: the command's reader reaches both the settle and the merge gate. Approved at
+    an older head, the PR's live head reads the same patch-id: nothing is voided and the
+    gate in `merge_one` lets it merge (either reader unwired would judge by `reaches`,
+    which fails here, and hold it)."""
+    forge, checkout = _setup(
+        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
+    )
+    _approved_at(tmp_path, "solo", 1001, "head-before-a-main-merge", "p1")
+    checkout.patch_ids = {"head-solo": "p1"}
+
+    code, out = _merge(tmp_path, "--yes", "--method", "merge")
+
+    assert code == 0, out
+    assert "voided" not in out
+    assert forge.label_edits == []
+    assert forge.merged == [(1001, "head-solo", "merge")]
+
+
+def test_batch_merge_voids_an_approval_whose_patch_id_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _setup(
+        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
+    )
+    _approved_at(tmp_path, "solo", 1001, "head-before-an-edit", "p1")
+    checkout.patch_ids = {"head-solo": "p2"}
+
+    code, out = _merge(tmp_path, "--yes", "--method", "merge")
+
+    assert "approval of PR #1001 at head-before- voided: its diff changed at head-solo" in out
+    assert checkout.refreshed == 1  # read once more against a refetched default first
+    assert forge.label_edits == [(1001, frozenset(), frozenset({"approved-fr"}))]
+    assert forge.merged == []
