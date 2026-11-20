@@ -163,3 +163,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1595.
 ### gate-round2-trigger-gap · finding [open] (reviewer: out of scope) · fr-goal has no honest round-2 trigger when a round-1 answer reopens the scope
 
 The brainstorm gate accepts round 2 only as design-risk (forecast in round 1) or operator-request (operator asked in prose). In this run the brief put requires-python out of scope, round 1 forecast no second round, and a free-text round-1 answer moved the whole base to 3.14, which needed round 2. resolve refused design-risk; the run recorded operator-request with the operator's after-the-fact confirmation in the reason. Wanted: a trigger such as answer-reopened-scope, verified against the transcript. Out of scope: a gap in fr-goal's gate, not caused by this change.
+
+<!-- fr:journal kind=finding scope=spec id=gate-round2-trigger-gap-resolved created=2026-11-20T08:45:55+00:00 state=open resolves=gate-round2-trigger-gap out_of_scope=true -->
+### gate-round2-trigger-gap-resolved · finding [out-of-scope] · resolves gate-round2-trigger-gap: fr-goal has no honest round-2 trigger when a round-1 answer reopens the scope
+
+A gap in fr-goal's brainstorm gate, met by this run, not caused by this change.
