@@ -1,0 +1,221 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-train-truth
+step: lens-review
+outcome: done
+journal:
+- kind: review
+  id: lens-review-a
+  global: true
+  title: 'Lens review: errors, tests, simplicity, docs-accuracy over the whole feature'
+  body: One read-only reviewer per lens over merge-base 396e444d3..HEAD. 22 in-scope findings (21 fixed, 1 refuted with the spec's reason) and 1 out of scope, filed as derio-net/super-fr#1601.
+- kind: finding
+  id: l-errors-r1
+  global: true
+  title: '--once/plan mode: an unexpected exception exited 2 (was traceback, exit 1) and printed nothing on an empty message'
+  body: '--once/plan mode: an unexpected exception exited 2 (was traceback, exit 1) and printed nothing on an empty message'
+  review_scope: in
+- kind: finding
+  id: l-errors-r2
+  global: true
+  title: looping and cloud drivers kept no traceback for unexpected:* causes
+  body: looping and cloud drivers kept no traceback for unexpected:* causes
+  review_scope: in
+- kind: finding
+  id: l-errors-r3
+  global: true
+  title: a bare typer.Exit(2) from _load_state/resolve_state_dir inside a pass became a refusal with an empty message
+  body: a bare typer.Exit(2) from _load_state/resolve_state_dir inside a pass became a refusal with an empty message
+  review_scope: in
+- kind: finding
+  id: l-errors-r4
+  global: true
+  title: refusals raised through _fail never wrote their reason to drive.log
+  body: refusals raised through _fail never wrote their reason to drive.log
+  review_scope: in
+- kind: finding
+  id: l-errors-r5
+  global: true
+  title: the supervisor's Child() OSError killed it with a traceback and recorded nothing; its record/ledger writes failed silently
+  body: the supervisor's Child() OSError killed it with a traceback and recorded nothing; its record/ledger writes failed silently
+  review_scope: in
+- kind: finding
+  id: l-errors-r6
+  global: true
+  title: trial_conflicts cleanup swallowed failures and its rmtree fallback skipped prune, so a stale registration blocked the probe
+  body: trial_conflicts cleanup swallowed failures and its rmtree fallback skipped prune, so a stale registration blocked the probe
+  review_scope: in
+- kind: finding
+  id: l-errors-r7
+  global: true
+  title: an invalid scope config read in take_lease was transient triage:TriageError instead of an R2 refusal
+  body: an invalid scope config read in take_lease was transient triage:TriageError instead of an R2 refusal
+  review_scope: in
+- kind: finding
+  id: l-tests-r1
+  global: true
+  title: supervisor process test cleanup could leak a launcher-started supervisor and an unwritten-pid driver forever
+  body: supervisor process test cleanup could leak a launcher-started supervisor and an unwritten-pid driver forever
+  review_scope: in
+- kind: finding
+  id: l-tests-r2
+  global: true
+  title: a fixed sleep raced the fake driver's SIG_IGN
+  body: a fixed sleep raced the fake driver's SIG_IGN
+  review_scope: in
+- kind: finding
+  id: l-tests-r3
+  global: true
+  title: the R20 swap_issue_labels test passed without the retry
+  body: the R20 swap_issue_labels test passed without the retry
+  review_scope: in
+- kind: finding
+  id: l-tests-r4
+  global: true
+  title: no test moved the PR head or default-branch sha between passes, so a PR-only probe cache would pass
+  body: no test moved the PR head or default-branch sha between passes, so a PR-only probe cache would pass
+  review_scope: in
+- kind: finding
+  id: l-tests-r5
+  global: true
+  title: no test exercised the old-file drain at a DriveLog rotation
+  body: no test exercised the old-file drain at a DriveLog rotation
+  review_scope: in
+- kind: finding
+  id: l-tests-r6
+  global: true
+  title: R17's lockfile case had no trial_conflicts test
+  body: R17's lockfile case had no trial_conflicts test
+  review_scope: in
+- kind: finding
+  id: l-simplicity-r1
+  global: true
+  title: three near-identical dedupe-once helpers with inconsistent keys
+  body: three near-identical dedupe-once helpers with inconsistent keys
+  review_scope: in
+- kind: finding
+  id: l-simplicity-r2
+  global: true
+  title: drive_errors derives a cause from traceback frame names; have _fail raise with an explicit cause
+  body: drive_errors derives a cause from traceback frame names; have _fail raise with an explicit cause
+  review_scope: in
+- kind: finding
+  id: l-simplicity-r3
+  global: true
+  title: _fail duplicated in triage_drive_cmd and triage_kanban_cmd
+  body: _fail duplicated in triage_drive_cmd and triage_kanban_cmd
+  review_scope: in
+- kind: finding
+  id: l-simplicity-r4
+  global: true
+  title: driver_record repeated the load-or-None block and loaded twice in record_refusal
+  body: driver_record repeated the load-or-None block and loaded twice in record_refusal
+  review_scope: in
+- kind: finding
+  id: l-simplicity-r5
+  global: true
+  title: supervise.py had three identical swallow-and-pass wrappers with redundant local imports
+  body: supervise.py had three identical swallow-and-pass wrappers with redundant local imports
+  review_scope: in
+- kind: finding
+  id: l-simplicity-r6
+  global: true
+  title: driver_failures double str() and a closure-heavy file_failures
+  body: driver_failures double str() and a closure-heavy file_failures
+  review_scope: in
+- kind: finding
+  id: l-docs-accuracy-r1
+  global: true
+  title: fr-wave-driver.md listed a lost push race as transient; it is a StateRefConflict refusal
+  body: fr-wave-driver.md listed a lost push race as transient; it is a StateRefConflict refusal
+  review_scope: in
+- kind: finding
+  id: l-docs-accuracy-r2
+  global: true
+  title: '''each pass fetches a repo once'' was false on merge-queue paths (_base_now fetched directly)'
+  body: '''each pass fetches a repo once'' was false on merge-queue paths (_base_now fetched directly)'
+  review_scope: in
+- kind: finding
+  id: l-docs-accuracy-r3
+  global: true
+  title: the signal-stop exit code sentence was imprecise
+  body: the signal-stop exit code sentence was imprecise
+  review_scope: in
+- kind: finding
+  id: l-errors-r8
+  global: true
+  title: a failing close-out take-back after a failed dispatch hides the dispatch error and leaves the close-out stuck as started
+  body: a failing close-out take-back after a failed dispatch hides the dispatch error and leaves the close-out stuck as started (triage_batch_cmd.py close-out take-back; same code on main).
+  review_scope: out
+resolves:
+- id: l-errors-r1
+  state: fixed
+  body: --once, plan and the cloud pass ledger then re-raise unexpected:* (traceback, exit 1); classify never leaves a message empty (class name fallback). Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-errors-r2
+  state: fixed
+  body: drive_log.append_traceback writes once per (state dir, cause) per process to host-local drive-tracebacks.log (5 MB rotation); the warning and drive.log line name it. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-errors-r3
+  state: fixed
+  body: Shared triage_cmd.fail raises fail_exit at the four sites; a bare Exit gets '<function> exited <code>'. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-errors-r4
+  state: fixed
+  body: _stop logs the refusal message even when already printed. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-errors-r5
+  state: fixed
+  body: OSError on spawn records a spawn-failed refusal, refuses, says it and returns 2; _best_effort says each failing write once. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-errors-r6
+  state: fixed
+  body: New Checkout.prune_worktrees; _clear_scratch rmtree-then-prune before each probe and in cleanup, an unclearable one reported once; the probe removes a worktree it added even with no directory visible. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-errors-r7
+  state: fixed
+  body: load_durable and load_scope_config raise ConfigError (a TriageError subclass) on YAML/validation errors; OSError stays transient. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-tests-r1
+  state: fixed
+  body: Cleanup kills supervisor-* pids first then re-reads drivers until stable; the fake driver has a hard deadline; the err handle is closed. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-tests-r2
+  state: fixed
+  body: The driver signals readiness after installing its handler and the test waits on it. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-tests-r3
+  state: fixed
+  body: The fake refuses before any removal lands; exactly 2 calls asserted, the second without the undefined label. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-tests-r4
+  state: fixed
+  body: The looping probe test moves rev_parse and head_oid separately and asserts a second trial; unchanged stays one. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-tests-r5
+  state: fixed
+  body: One poll appends two lines, the second rotating; both yielded in order. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-tests-r6
+  state: fixed
+  body: 'test_a_lockfile_conflict_is_resolved_only_when_the_repo_relocks: relock declared -> [], none -> [''uv.lock'']. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).'
+- id: l-simplicity-r1
+  state: fixed
+  body: One _Driver._once backs _stopped_line, _probe_said and _said_once; red and probe keys no longer hold error text. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-simplicity-r2
+  state: refuted
+  body: Spec R4 (2026-11-19-batch-train-truth-design.md:57) defines the cause as exit:<function>, the function that raised, and the Design (line 100) leaves the pass's helpers, bare typer.Exit included, as they are, covered by R4; ~156 _fail call sites and bare Exits cannot carry a cause argument, and a constant default would merge every ledger cause. The frame walk is the spec's mechanism; 'fail' was added to FAIL_HELPERS for the shared helper.
+- id: l-simplicity-r3
+  state: fixed
+  body: One triage_cmd.fail, imported by kanban, drive, claim and batch. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-simplicity-r4
+  state: fixed
+  body: _old(state_dir) and _current(old); record_refusal loads once. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-simplicity-r5
+  state: fixed
+  body: One _best_effort helper; the local imports are gone. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-simplicity-r6
+  state: fixed
+  body: '_view_state returns str (the double conversion is gone). The planner/applier split was declined: dry-run and write already share one path via the write guards, and the action depends on a mid-way forge read (view_issue), so the split would not be simpler. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).'
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: The transient example is a push the remote refused (a permission or a hook); the lost race stays a refusal. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-docs-accuracy-r2
+  state: fixed
+  body: 'Code fixed per R19: _base_now goes through _fetched_reader/_fetch_once, tested for one fetch and a remembered failure; the claim now holds. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).'
+- id: l-docs-accuracy-r3
+  state: fixed
+  body: A signalled or orphaned supervisor exits 0; otherwise it exits with the driver's code (130 after an interrupt or SIGTERM stop). The duplicated reviewed note was removed too. Commits 689ab1306, dcdf75d90, 4f29ad692, 1adf7a983, 51122abb3; scoped run 5170 passed (lens-fix.log).
+- id: l-errors-r8
+  state: out-of-scope
+  body: 'Predates this change: the same take-back code is on main (triage_batch_cmd.py ~6575, ~6650). Filed as derio-net/super-fr#1601.'
+evidence:
+  review: lens-review-a
+  reviewer: docs-accuracy=a957e03d6414fbe0b,errors=abeb5dd334813f798,simplicity=a60f45cb111e6319a,tests=a28636610294de79d
