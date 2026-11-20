@@ -465,3 +465,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval
     why: fr no longer updates PR branches (R22)
+  - row: merge-train-label-gate
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_or_first_draft_is_a_member_and_is_ready_when_green
+    why: an approved draft is a queue member (R22)
