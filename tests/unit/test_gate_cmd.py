@@ -33,7 +33,17 @@ def _fake(labels: list[str], state: str = "MERGED") -> FakeGhClient:
 
 
 @pytest.fixture
-def forge(monkeypatch: pytest.MonkeyPatch) -> Any:
+def forge(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
+    """A fake forge, run from an empty checkout of its own. The verbs under test read the
+    journals and plans of the checkout they run in: from the working directory they used to
+    read THIS repository's (770 journals, parsed again for every key: 41 s for one test,
+    spec 2026-11-19-local-suite-cost R3), which is also a test touching the repo under test."""
+    import subprocess
+
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(checkout)], check=True)
+    monkeypatch.chdir(checkout)
     holder: dict[str, Any] = {"urls": []}
 
     def client(url: str) -> FakeGhClient:
@@ -975,3 +985,75 @@ def test_p4_r4_a_repo_fr_cannot_name_is_no_checkout(
     _with_tracker(fake)
     monkeypatch.setattr("fr.archive_followups.owed_identity", lambda *a, **k: (None, "no origin"))
     assert _pass("--gate", "tester", "--keep", KEEP).exit_code == 2
+
+
+# --- l-tests-r4: the journal and plan read path, in the fixture's own checkout ---------
+
+_MINIMAL_PLAN = Path(__file__).resolve().parents[1] / "fixtures/plan_folders/valid/minimal"
+
+
+def _seed_journal_and_plan(checkout: Path) -> None:
+    """A complete one-phase plan and a plan journal whose `owed` entry was resolved fixed,
+    committed and pushed to a local origin whose HEAD names `main` (R15: evidence is stated
+    only from a checkout at the default ref as last fetched, with clean evidence trees)."""
+    import shutil
+    import subprocess
+
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path, owed_body
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+            cwd=checkout, check=True, capture_output=True,
+        )  # fmt: skip
+
+    plan = checkout / "docs/superpowers/plans/corpus-minimal"
+    shutil.copytree(_MINIMAL_PLAN, plan)
+    phase = plan / "01.yaml"
+    phase.write_text(phase.read_text().replace('{ state: " "', '{ state: "x"'))
+    path = journal_path(checkout, "plan", "corpus-minimal")
+    for entry in (
+        JournalEntry(
+            kind="owed", scope="plan", id="o1", created="2026-10-11T10:00:00+00:00", title="o",
+            body=owed_body(what="w", why="y", how="h", key="row:r-journal"),
+        ),
+        JournalEntry(
+            kind="finding", scope="plan", id="o1-r", created="2026-10-11T10:00:00+00:00",
+            title="r", resolves="o1", state="fixed",
+        ),
+    ):  # fmt: skip
+        append_journal_entry(path, "corpus-minimal", entry)
+    origin = checkout.parent / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+    git("add", "-A")
+    git("commit", "-q", "-m", "seed")
+    git("remote", "add", "origin", str(origin))
+    git("push", "-q", "origin", "main")
+    git("fetch", "-q", "origin")
+    git("remote", "set-head", "origin", "main")
+
+
+def test_a_pass_reads_the_checkouts_journal_and_plan_for_the_discharge(keep_forge: Any) -> None:
+    """The `forge` fixture's empty checkout keeps the suite off this repo's journals; this is
+    the one test that puts a journal and a plan in it, so the read path still runs: a key
+    resolved fixed in a plan journal and a plan phase that is complete both read as already
+    discharged in the closing comments."""
+    from fr.gatebackfill import trackers
+
+    _seed_journal_and_plan(Path.cwd())
+    fake = keep_forge(["gate:tester"])
+    fake.comment_author = "fr-bot"
+    for n, key in ((12, "row:r-journal"), (13, "plan:corpus-minimal#p1")):
+        fake.add_issue(
+            REPO, n, labels={"fr:owed"}, body=trackers.tracker_body(key, "t", "tester", 5)
+        )
+
+    result = _pass("--gate", "tester", "--yes")
+
+    assert result.exit_code == 0, result.output
+    comments = {c[1]["number"]: c[1]["comment"] for c in fake.calls if c[0] == "close_issue"}
+    assert "`row:r-journal` is already discharged: the journal's owed entry" in comments[12]
+    assert (
+        "`plan:corpus-minimal#p1` is already discharged: plan corpus-minimal phase 1 is complete"
+        in comments[13]
+    ), comments

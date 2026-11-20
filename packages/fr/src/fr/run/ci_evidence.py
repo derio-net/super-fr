@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -43,6 +43,19 @@ its head (§I step 6, p2-r3)."""
 NO_CI_WAIT_SECONDS = 15 * 60
 """How long after HEAD was committed a walk with no check at all stays pending;
 after that `verify_ci` refuses "no CI ran" (§I step 5, p2-r5)."""
+
+
+ADVISORY_LINE = "fr-scope: advisory — not deliver evidence"
+"""The line a pytest session that is not the whole configured suite prints on a
+line of its own (this repo's `tests/conftest.py`, spec 2026-11-19-local-suite-cost
+R7). `run_cmd._read_suite_log` refuses a `tests` log holding it as a whole line."""
+
+
+def is_advisory_log(data: bytes) -> bool:
+    """True when some line of `data`, stripped, is exactly `ADVISORY_LINE`. A log
+    that only quotes the string inside other output is not advisory."""
+    text = data.decode("utf-8", errors="replace")
+    return any(line.strip() == ADVISORY_LINE for line in text.splitlines())
 
 
 class CiEvidenceRefused(Exception):  # noqa: N818 — the name the plan (P2.T2) fixes
@@ -96,6 +109,112 @@ def load_gate_checks(repo_root: Path, rev: str = "HEAD") -> list[str] | None:
             "with at least one name"
         )
     return [n.strip() for n in names]
+
+
+_ABSENT_AT_HEAD = (
+    f"path '{CI_CONFIG}' does not exist in 'HEAD'",
+    f"path '{CI_CONFIG}' exists on disk, but not in 'HEAD'",
+)
+"""git's own words (C locale, `git_answer`) for "HEAD has no such path": the only
+failure of `git show HEAD:<path>` that means the file is absent."""
+
+
+def _ci_yaml_at_head(repo_root: Path) -> dict[str, Any] | None:
+    """`.fr/ci.yaml` at HEAD as a mapping; None when HEAD has no such path or the
+    file is empty. Every other failure (an unborn HEAD, an unreadable object) is
+    refused, never read as "absent", and so is a file that is not a YAML mapping
+    (l-errors-r4)."""
+    try:
+        res = git_answer(repo_root, "show", f"HEAD:{CI_CONFIG}")
+    except GitUnavailableError as e:
+        raise CiEvidenceRefused(f"git could not read {CI_CONFIG}: {e}") from e
+    if res.returncode != 0:
+        if any(words in res.stderr for words in _ABSENT_AT_HEAD):
+            return None
+        raise CiEvidenceRefused(
+            f"git could not read {CI_CONFIG} at HEAD: "
+            f"{res.stderr.strip() or f'exit {res.returncode}'}"
+        )
+    try:
+        data = yaml.safe_load(res.stdout)
+    except yaml.YAMLError as e:
+        raise CiEvidenceRefused(f"{CI_CONFIG} at HEAD is not YAML: {e}") from e
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise CiEvidenceRefused(
+            f"{CI_CONFIG} at HEAD must be a mapping (`gate_checks:`, `tests:`, ...); "
+            f"it is a {type(data).__name__}"
+        )
+    return data
+
+
+def declared_tests_mode(repo_root: Path) -> Literal["ci"] | None:
+    """`"ci"` when `.fr/ci.yaml` at HEAD declares `tests: ci`, else None (spec
+    2026-11-19-local-suite-cost R8, §3.F). The repo's default suite evidence for
+    `deliver` and its phases: CI, with the repo's own fast tier (`fast_tier`,
+    when it names one) as a phase's last local act.
+
+    Read at HEAD alone, unlike `declared_gates`: the key relaxes no gate (a local
+    full-suite log stays accepted), so a branch may declare it for its own runs.
+    Any other value of `tests` is refused, and so is `tests: ci` in a file whose
+    `gate_checks` `load_gate_checks` refuses: `deliver` reads those checks to
+    accept CI, so a declaration with none could never be met. Other unknown keys
+    stay ignored, as `load_gate_checks` ignores them."""
+    data = _ci_yaml_at_head(repo_root)
+    if data is None or "tests" not in data:
+        return None
+    if data["tests"] != "ci":
+        raise CiEvidenceRefused(
+            f"{CI_CONFIG} at HEAD declares tests: {data['tests']!r}; the only value is "
+            "`tests: ci` (or leave the key out)"
+        )
+    try:
+        load_gate_checks(repo_root, "HEAD")
+    except CiEvidenceRefused as e:
+        raise CiEvidenceRefused(
+            f"{CI_CONFIG} at HEAD declares tests: ci without valid gate_checks: CI is "
+            f"accepted only once the named gate checks are green, so name them ({e})"
+        ) from e
+    return "ci"
+
+
+FAST_TIER_PLACEHOLDER = "base"
+"""The one placeholder a declared `fast_tier` may carry: the run's default ref."""
+
+
+def declared_fast_tier(repo_root: Path) -> str | None:
+    """The repo's own fast-tier command, `.fr/ci.yaml`'s `fast_tier` at HEAD, with
+    `{base}` unsubstituted; None when the file names none (spec
+    2026-11-19-local-suite-cost R8, §3.F). fr ships no fast tier: the command is
+    the repo's. A value that is not a non-empty string, that names a placeholder
+    other than `{base}`, or that sits in a file not declaring `tests: ci`, is
+    refused."""
+    from string import Formatter
+
+    data = _ci_yaml_at_head(repo_root)
+    if data is None or "fast_tier" not in data:
+        return None
+    value = data["fast_tier"]
+    shape = (
+        f"{CI_CONFIG} at HEAD: fast_tier must be a command string whose only "
+        f"placeholder is {{{FAST_TIER_PLACEHOLDER}}}"
+    )
+    if not isinstance(value, str) or not value.strip():
+        raise CiEvidenceRefused(f"{shape}; it is {value!r}")
+    try:
+        fields = [(f, conv, spec) for _, f, spec, conv in Formatter().parse(value) if f is not None]
+    except ValueError as e:
+        raise CiEvidenceRefused(f"{shape}; {value!r} does not parse: {e}") from e
+    bad = [f for f, conv, spec in fields if f != FAST_TIER_PLACEHOLDER or conv or spec]
+    if bad:
+        raise CiEvidenceRefused(f"{shape}; {value!r} names {', '.join(repr(b) for b in bad)}")
+    if declared_tests_mode(repo_root) != "ci":
+        raise CiEvidenceRefused(
+            f"{CI_CONFIG} at HEAD declares fast_tier without tests: ci; the fast tier "
+            "is a phase's last act only under the declared CI default"
+        )
+    return value
 
 
 def declared_gates(repo_root: Path, base: str | None) -> list[str] | None:

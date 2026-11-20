@@ -11,7 +11,7 @@ description: >
   on the shared feature branch one phase at a time (parallel phase execution is
   `fr apply --to <runner>`'s job).
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
-fr_artifact_version: 5
+fr_artifact_version: 6
 ---
 
 # fr-phase-executor
@@ -137,7 +137,8 @@ summary: |
    filled — screenshots taken, opened, and named by `shows`>
 ```
 
-**Your last act before returning is the full suite**, after your last code
+**Your last act before returning is the full suite** — unless your brief
+carries `tests.mode: ci` (below) — after your last code
 commit, with the code tree clean: written to a log the host can read, outside
 the repo's `<run>.records/` directory, in the long-command form below so it
 ends in its `exit=N` line. Name that log in the record's
@@ -146,10 +147,24 @@ file after the suite ran. fr verifies you wrote it, refuses it on a dirty code
 tree or when any code path is newer than the log, and stores the code tree it
 covered, so `deliver` can reuse it (`tests: reuse`) instead of running the
 suite a second time. `tests_log: none` only when the phase is `failed` or
-`blocked` before a suite could mean anything.
+`blocked` before a suite could mean anything, or under the declared default
+below.
+
+**The declared default.** When your brief carries `tests.mode: ci`, the repo
+declares CI as its suite evidence (`.fr/ci.yaml`'s `tests: ci`). Do not run the
+full suite: your last act, after your last code commit and with the code tree
+clean, is the repo's own fast tier, through `fr isolation exec -- …` like every
+other command. When the brief also carries `fast_tier` (a command), the repo names
+that tier in `.fr/ci.yaml` and you run exactly that command; without it, run the
+tests your changes touch and their neighbours by the repo's own means. fr ships
+no fast tier, so the command and what it selects are the repo's. Either run is
+advisory, never `tests` evidence, so name no log in the record. Return `tests_log: none` with the
+fast tier's pass/fail line in `summary`; a red fast tier is fixed before you return,
+like a red suite.
 
 **CI evidence.** When your brief says the phase's test evidence is CI
-(`tests: ci`, for a repo whose suite is too slow to run where you are), do not
+(`tests: ci`, for a repo whose suite is too slow to run where you are, and that
+does not declare the default above), do not
 run the full suite: run the test files you touched and their neighbours, then
 commit, push the branch with `fr push` (`uv run fr push` in a worktree, never `git
 push`: it applies the repo's git policy), put `evidence: {tests: ci}` in the record,

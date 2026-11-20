@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -231,13 +231,23 @@ the separate reviewer that did it, and never the agent that wrote the code.
 Delivery has to name the log of a test run the orchestrator did itself, not a
 report it got from a helper. The tool can confirm who wrote that log and when.
 It cannot confirm that the command was a real test suite. That check aims at a
-relayed "all green", not at deliberate forgery.
+relayed "all green", not at deliberate forgery. It does refuse a log that says it
+is only part of the suite: a repository's test setup can print a fixed advisory
+line when a run is narrowed, and the tool refuses any log that holds that line.
 
 The suite may be too slow to run where the agent is (a small cloud container,
 say). Then a phase or delivery may name the forge's CI instead, and the tool
 reads the checks itself. It wants the checks the repository names as its gate,
 each finished green on the pushed commit. Nothing may be left uncommitted or
 unpushed, and an open pull request must not conflict.
+
+A repository can also make CI its default evidence, with one line in its CI
+settings file. Then each phase's agent runs only a quick check of the tests its
+change reaches, as its last step, and delivery names the CI checks. The quick
+check is the repository's own: it can name the command in the same file, and
+without one the agent runs the tests its change touches. The tool ships no quick
+check of its own. Either way the check is never evidence, so it can never stand
+in for the whole suite.
 
 CI tested your branch
 merged into its base, not your branch alone, and the record says so by naming

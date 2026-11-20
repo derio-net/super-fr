@@ -39,10 +39,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 input=$(cat)
 
-tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty')
+tool_name=$(printf '%s' "$input" | fr_jq -r '.tool_name // empty')
 [ "$tool_name" = "Bash" ] || exit 0
 
-session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
+session_id=$(printf '%s' "$input" | fr_jq -r '.session_id // empty')
 [ -n "$session_id" ] || exit 0
 
 dir="${FR_SENTINEL_DIR:-$HOME/.cache/fr/sentinels}"
@@ -61,10 +61,10 @@ touch -c "$sentinel" 2>/dev/null || true
 # (another session's `down`, the 48h GC) or be caught mid-write. Under `set -e`
 # jq's failure would exit non-zero, which the harness treats as a BLOCK — a
 # spurious deny for a pipeline that no longer exists (review L3).
-repo_root=$(jq -r '.repo_root // empty' "$sentinel" 2>/dev/null) || exit 0
+repo_root=$(fr_jq -r '.repo_root // empty' "$sentinel" 2>/dev/null) || exit 0
 [ -n "$repo_root" ] || exit 0
 
-cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
+cwd=$(printf '%s' "$input" | fr_jq -r '.cwd // empty')
 [ -n "$cwd" ] || exit 0
 
 # Resolve symlinks on both sides; trailing slash prevents prefix collisions
@@ -90,7 +90,7 @@ if fr_isolation_marker_valid "$rroot"; then
   exit 0
 fi
 
-command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+command=$(printf '%s' "$input" | fr_jq -r '.tool_input.command // empty')
 
 # Transition allowance (#279): a command LEADING with `cd <dir>` whose
 # target resolves inside an allowed prefix (fr worktrees, temp dirs)
@@ -333,7 +333,7 @@ fi
 # A FAILED `git worktree list` (non-git cwd) is unknown, not orphaned: it falls
 # through and denies, as it always has.
 sentinel_workspaces() {
-  jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
+  fr_jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
          | select(type == "string" and . != "")' "$sentinel" 2>/dev/null || true
 }
 # Unlocked peek first: a fresh sentinel (the common case) never takes the lock.
@@ -429,6 +429,6 @@ else
   reason="fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the isolation worktree. Where is this session's workspace? \`fr isolation status\`. No workspace yet? \`fr isolation up --branch <name>\` (prefix \`FR_ISOLATION_TARGET=worktree\` if this repo has no devcontainer profile). Then run via \`fr isolation exec -- …\`, or lead with \`cd <worktree> && …\` to work from the worktree cwd. Working in a DIFFERENT repo? \`cd <other-repo> && fr isolation up --branch <name>\` is allowed from here — enter that repo's isolation and work from its worktree. LAST RESORT, and rarely right: \`fr isolation down --all\` acts on EVERY workspace in this repo, including other sessions' — a workspace with no PR yet is torn down with whatever was uncommitted in it. \`fr isolation down --all --dry-run\` shows its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing down another session's workspace needs \`--yes\`. See plugins/super-fr/skills/fr-isolation (exec-bridge discipline, #265/#279/#329/#421/#432)."
 fi
 
-jq -n --arg reason "$reason" \
+fr_jq -n --arg reason "$reason" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
 exit 0

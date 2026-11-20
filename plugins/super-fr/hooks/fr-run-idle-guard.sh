@@ -53,13 +53,13 @@ exec 2>/dev/null
 
 input=$(cat)
 
-command -v jq >/dev/null 2>&1 || exit 0
+fr_jq_resolve || exit 0
 fr_fr_resolve || exit 0
 
 # One expression, one answer: the session id, or nothing. Anything unexpected
 # in the payload — wrong event, a subagent, a missing or non-boolean
 # `stop_hook_active`, work in flight — yields nothing.
-session_id=$(printf '%s' "$input" | jq -r '
+session_id=$(printf '%s' "$input" | fr_jq -r '
   if type == "object"
      and .hook_event_name == "Stop"
      and .stop_hook_active == false
@@ -72,7 +72,7 @@ case "$session_id" in ''|*/*|.|..) exit 0 ;; esac
 sessions_dir="${FR_SESSIONS_DIR:-${HOME:-}/.cache/fr/sessions}"
 binding="$sessions_dir/$session_id.json"
 [ -f "$binding" ] || exit 0
-worktree=$(jq -r 'if type == "object" then (.worktree | strings) else empty end' <"$binding")
+worktree=$(fr_jq -r 'if type == "object" then (.worktree | strings) else empty end' <"$binding")
 [ -n "$worktree" ] && [ -d "$worktree" ] || exit 0
 
 # fr costs ~2s of interpreter start and may block on something this hook cannot
@@ -97,13 +97,13 @@ rm -f "$out"
 # Exit 3 AND a parsed object saying idle AND both strings present. Either half
 # alone is not an answer.
 [ "$rc" -eq 3 ] || exit 0
-verdict=$(printf '%s' "$answer" | jq -r 'if type == "object" and .idle == true then "idle" else empty end')
+verdict=$(printf '%s' "$answer" | fr_jq -r 'if type == "object" and .idle == true then "idle" else empty end')
 [ "$verdict" = "idle" ] || exit 0
-position=$(printf '%s' "$answer" | jq -r '(.position | strings) // empty')
-next_command=$(printf '%s' "$answer" | jq -r '(.next_command | strings) // empty')
+position=$(printf '%s' "$answer" | fr_jq -r '(.position | strings) // empty')
+next_command=$(printf '%s' "$answer" | fr_jq -r '(.next_command | strings) // empty')
 [ -n "$position" ] && [ -n "$next_command" ] || exit 0
-run=$(printf '%s' "$answer" | jq -r '(.run | strings) // "this run"')
-detail=$(printf '%s' "$answer" | jq -r '(.detail | strings) // ""')
+run=$(printf '%s' "$answer" | fr_jq -r '(.run | strings) // "this run"')
+detail=$(printf '%s' "$answer" | fr_jq -r '(.detail | strings) // ""')
 
 # The loop breaker. Remember FIRST, block second — and only if the memory took.
 memory="$sessions_dir/$session_id.idle-guard"
@@ -111,7 +111,7 @@ memory="$sessions_dir/$session_id.idle-guard"
 printf '%s\n' "$position" >"$memory" || exit 0
 [ "$(cat "$memory")" = "$position" ] || exit 0
 
-jq -n --arg run "$run" --arg detail "$detail" --arg next "$next_command" --arg wt "$worktree" '{
+fr_jq -n --arg run "$run" --arg detail "$detail" --arg next "$next_command" --arg wt "$worktree" '{
   decision: "block",
   reason: ("fr run \($run) is idle — \($detail) (gh#518). Nothing is blocking it: "
     + "run `\($next)` now, in \($wt), and act on what it prints — a dispatch brief "

@@ -1,0 +1,112 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-local-suite-cost
+repo: derio-net/super-fr
+rows:
+  - id: git-answers-cached-per-invocation
+    capability: fr git access
+    acceptance: Within one fr invocation, fr asks git each default-remote, default-branch,
+      git-dir and toplevel question at most once per repository state, and an fr git
+      write in that invocation never leaves a stale answer
+    origin:
+    - spec:2026-11-19-local-suite-cost#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_git_cache.py#test_two_identical_questions_in_one_scope_start_git_once
+      - super-fr:tests/unit/test_git_cache.py#test_outside_a_scope_git_starts_every_time
+      - super-fr:tests/unit/test_git_cache.py#test_a_fetch_that_creates_the_default_ref_is_seen
+      - super-fr:tests/unit/test_git_cache.py#test_remote_set_head_is_seen
+      - super-fr:tests/unit/test_git_cache.py#test_a_reftable_repository_is_never_cached
+      - super-fr:tests/unit/test_git_cache.py#test_the_cli_entry_opens_a_scope
+      - super-fr:tests/unit/test_git_cache_call_count.py#test_the_profiled_scenario_starts_far_fewer_git_processes
+    status: ci
+    notes: 'R1 pinned by unit tests in CI: one git start per scope, a fresh answer after
+      each in-scope change, no cache outside a scope, includes and reftable never stale,
+      and the call-count drop on the profiled scenario'
+  - id: scenario-tier-deselected-locally
+    capability: Test tiers
+    acceptance: A default local pytest run deselects the scenario tier, while CI's shards
+      and the release's staged suite still run every test, scenarios included
+    origin:
+    - spec:2026-11-19-local-suite-cost#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_scenario_tier_commands.py#test_ci_collect_and_test_jobs_run_the_scenario_tier
+      - super-fr:tests/unit/test_scenario_tier_commands.py#test_the_release_staged_suite_runs_the_scenario_tier
+      - super-fr:tests/unit/test_scenario_tier_commands.py#test_the_default_local_run_keeps_only_the_tripwire_of_the_scenario_file
+    status: ci
+    notes: 'phase 3: every CI and release pytest command line pinned to run the scenario
+      tier; the local default keeps only the tripwire'
+  - id: fast-tier-advisory-and-refused
+    capability: Test tiers
+    acceptance: '`--fr-scope <base>` runs changed, import-touched and smoke tests, prints
+      the advisory marker line, and fr refuses any tests log carrying that line at deliver
+      and at a phase unit'
+    origin:
+    - spec:2026-11-19-local-suite-cost#R6
+    - spec:2026-11-19-local-suite-cost#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_scope.py#test_a_changed_source_module_selects_through_tests_helpers
+      - super-fr:tests/unit/test_fr_scope.py#test_any_narrowed_session_is_advisory
+      - super-fr:tests/unit/test_run_advisory_log.py#test_deliver_refuses_an_advisory_log
+      - super-fr:tests/unit/test_run_advisory_log.py#test_a_phase_unit_refuses_an_advisory_log
+    status: ci
+    notes: 'phase 3: selection over a fixture repo, the advisory line''s conditions,
+      and the refusal at deliver and at a phase unit'
+  - id: repo-declares-ci-tests-evidence
+    capability: Delivery evidence
+    acceptance: 'A repo whose .fr/ci.yaml declares `tests: ci` gets deliver and implement-phase
+      briefs naming CI as the suite evidence and the fast tier as the phase''s local
+      run'
+    origin:
+    - spec:2026-11-19-local-suite-cost#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tests_mode.py#test_tests_ci_is_declared
+      - super-fr:tests/unit/test_tests_mode.py#test_the_briefs_carry_the_declared_mode_and_the_fast_tier
+      - super-fr:tests/unit/test_tests_mode.py#test_the_phase_executor_brief_carries_the_key_when_declared
+    status: ci
+    notes: 'phase 3: declared_tests_mode and both briefs'' tests key pinned'
+  - id: ci-ok-required-on-main
+    capability: Merge protection
+    acceptance: main refuses a merge whose ci-ok check is not green
+    origin:
+    - spec:2026-11-19-local-suite-cost#R9
+    levels: {}
+    status: not-implemented
+    notes: 'Manual phase 4 of this run (operator: configure-main-protection --stage
+      bypass, an app-pushed release, then --stage require); tracked by derio-net/super-fr#1580,
+      verified live post-merge.'
+    issues:
+    - derio-net/super-fr#1580
+  - id: template-fixture-copies-independent
+    capability: Test fixtures
+    acceptance: A started-run or isolated-workspace template is built once per test
+      worker inside the test sandbox, and each test's copy is an independent repository
+      with its own origin and state that passes the same workspace checks
+    origin:
+    - spec:2026-11-19-local-suite-cost#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fixture_templates.py#test_a_copied_started_run_is_a_valid_workspace_with_a_working_run
+      - super-fr:tests/unit/test_fixture_templates.py#test_a_push_in_one_copy_leaves_the_other_copys_origin_alone
+      - super-fr:tests/unit/test_fixture_templates.py#test_a_write_in_a_copy_leaves_the_template_unchanged
+      - super-fr:tests/unit/test_fixture_templates.py#test_the_templates_home_and_git_config_are_the_sandboxs_not_the_operators
+    status: ci
+    notes: 'R2 pinned by unit tests in CI: a copied started run is a valid workspace
+      with a working run, copies do not share an origin or touch the template, and builds
+      run in the sandbox home'
+amendments:
+  - row: git-answers-cached-per-invocation
+    op: reword
+    base: 0
+    acceptance: While a CLI invocation runs, fr asks git each default-remote and default-branch
+      question at most once per repository state, a change inside the invocation makes
+      the next question go to git, and a library caller outside a CLI invocation never
+      uses the cache
+    why: 'sr-r6: R1 narrowed to the two default-remote helpers'

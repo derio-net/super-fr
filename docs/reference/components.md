@@ -7,7 +7,7 @@ covers:
   - packages/*/pyproject.toml
   - packages/fr-opencode-plugin/package.json
   - plugins/*/.claude-plugin/plugin.json
-reviewed: 2026-11-14 VK support removed; the fr-vk package and its MCP requirement are gone
+reviewed: 2026-11-19 still true; the plugin lock overrides glob and minimatch, no component changes (batch hook-hardening). 2026-11-14 VK support removed; the fr-vk package and its MCP requirement are gone
 ---
 
 # Components and requirements

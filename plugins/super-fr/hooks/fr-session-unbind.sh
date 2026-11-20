@@ -27,12 +27,12 @@ set -eu
 
 input=$(cat)
 
-command -v jq >/dev/null 2>&1 || exit 0
+fr_jq_resolve || exit 0
 fr_fr_resolve || exit 0
 
-[ "$(printf '%s' "$input" | jq -r '.reason // empty')" != "resume" ] || exit 0
+[ "$(printf '%s' "$input" | fr_jq -r '.reason // empty')" != "resume" ] || exit 0
 
-session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
+session_id=$(printf '%s' "$input" | fr_jq -r '.session_id // empty')
 [ -n "$session_id" ] || exit 0
 
 nohup "$FR_FR_BIN" isolation detach --session "$session_id" >/dev/null 2>&1 </dev/null &

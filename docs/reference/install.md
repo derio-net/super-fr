@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-19 the OpenCode gates and the sentinel judge in the session directory (batch consumer-followups, gh#1552); 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
+reviewed: 2026-11-19 the OpenCode gates and the sentinel judge in the session directory (batch consumer-followups, gh#1552); install constrained to uv.lock, devcontainer CLI pinned, plugin spawns resolved bash and gh (batch hook-hardening). 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
 ---
 
 # Install super-fr
@@ -23,6 +23,13 @@ rules. When OpenCode or Hermes Agent is present, it also installs their skills a
 commands. It keeps a managed clone of this repo under `~/.cache/fr/src/super-fr`
 (`FR_SRC_DIR` moves it). When you run it again, it updates that clone. To read the script
 first, download it with `-o bootstrap.sh` and run `bash bootstrap.sh`.
+
+The installer installs `fr` with the dependency versions that the release was tested with.
+It exports the repo's `uv.lock` to `~/.local/share/fr/install-constraints.txt` and gives that
+file to `uv tool install` as constraints. The file stays as the record of what it asked for.
+If `uv` cannot export the lock, or its `tool install` has no `--constraints`, the installer
+installs without constraints and prints a warning. When it installs the devcontainer CLI with
+npm, it installs a pinned version. `FR_DEVCONTAINER_CLI_VERSION` sets a different one.
 
 For Claude Code it registers the `derio-net--super-fr` marketplace and enables
 `super-fr@derio-net--super-fr` and `super-fr-dispatch@derio-net--super-fr`.
@@ -88,6 +95,9 @@ the OpenCode server inherited. If git cannot be found, the edit gate lets the ed
 because it cannot name a repository to judge. The shell gate stays closed for a live
 pipeline, because it cannot confirm the workspace marker. The plugin gives one warning at
 load when no git candidate is executable, so that pass-through is never silent.
+
+The plugin runs `bash` (for the status line) and `gh` (for the push guard) only from an absolute `PATH`
+entry. A relative entry can point into the repo, so the plugin does not use it.
 
 ## Hermes Agent
 
