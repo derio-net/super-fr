@@ -621,7 +621,7 @@ def _card(
     awaiting: frozenset[str] = frozenset(),
     queued: frozenset[str] = frozenset(),
     ready: frozenset[str] = frozenset(),
-    queue_held: Mapping[str, str] | None = None,
+    queue_held: Mapping[str, tuple[str, str]] | None = None,
     ci_none: Collection[str] = (),
 ) -> Card:
     stop = stops.get(batch.id)

@@ -106,18 +106,18 @@ QUEUE_CONFIG_NEED = (
 )
 
 
-def queue_unconfigured(snap: Snapshot, facts: Facts) -> dict[str, str]:
+def queue_unconfigured(snap: Snapshot, facts: Facts) -> dict[str, tuple[str, str]]:
     """Each repo with a `pr-open` batch whose `.fr/triage.yaml` names no `queue.ci`: the
     driver's queue refuses it and merges nothing (wave-merge-queue R7, R22), so the board
-    says so from the facts alone. Repo -> the one line to act on."""
-    out: dict[str, str] = {}
+    says so from the facts alone. Repo -> (its first such batch, the one line to act on)."""
+    out: dict[str, tuple[str, str]] = {}
     for b in snap.batches:
         repo = snap.repos.get(b.id)
         if repo is None or repo in out or snap.stages.get(b.id) != "pr-open":
             continue
         block = facts.config_for(repo).queue
         if block is None or block.ci is None:
-            out[repo] = QUEUE_CONFIG_NEED.format(repo=repo)
+            out[repo] = (b.id, QUEUE_CONFIG_NEED.format(repo=repo))
     return out
 
 
@@ -308,8 +308,8 @@ def needs_you(
         )
         out.append(Need("approve-pr", entry.batch.id, text, pr.url))
 
-    for held_repo, why in sorted(queue_unconfigured(snap, facts).items()):
-        out.append(Need("queue-unconfigured", held_repo, why, None))
+    for held_repo, (first, why) in sorted(queue_unconfigured(snap, facts).items()):
+        out.append(Need("queue-unconfigured", held_repo, why, f"#batch-{first}"))
 
     for action in plan.actions:
         if action.kind == "warn":
