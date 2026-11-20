@@ -8,7 +8,7 @@ forge, no clock. Every test builds a snapshot by hand and reads the plan it retu
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +116,9 @@ def _kinds(plan: QueuePlan) -> list[str]:
 def _one(plan: QueuePlan, kind: str) -> QueueAction:
     (got,) = [a for a in plan.actions if a.kind == kind]
     return got
+
+
+GREEN, PENDING = SlotCheck("green"), SlotCheck("pending")
 
 
 def _green(*shas: str) -> dict[str, SlotCheck]:
@@ -250,6 +253,134 @@ def test_an_entry_needs_an_open_pr_a_valid_approval_and_green_checks() -> None:
     assert _one(plan, "queue-open").entries == ("ok",) and plan.waiting == ()
 
 
+# --------------------------------------------- building, depth and landing (R8, R9)
+
+
+def _approved(n: int, minute: int) -> dict[str, Any]:
+    return {"kind": "approval", "at": f"2026-11-20T09:{minute:02d}:00Z", "pr": n,
+            "head": f"head-{n}"}  # fmt: skip
+
+
+def _abc(*events: dict[str, Any], **kw: Any) -> QueueSnapshot:
+    """An open wave-1 queue of a, b, c (approved in that order) at depth 2."""
+    batches = [
+        _batch("c", 3, events=[_approved(102, 30)]),
+        _batch("a", 1, events=[_approved(100, 10)]),
+        _batch("b", 2, events=[_approved(101, 20)]),
+    ]
+    numbers = {"a": 100, "b": 101, "c": 102}
+    kw.setdefault("hold", Hold(state="open", scope=ME, wave=1, parent=MAIN))
+    stages = kw.pop("stages", dict.fromkeys("abc", "pr-open"))
+    return _qs(batches, stages, numbers=numbers, records=(_record(_open(), *events),),
+               **kw)  # fmt: skip
+
+
+def test_an_open_queue_builds_its_first_depth_entries_into_slots_on_the_base() -> None:
+    plan = plan_queue(_abc())
+    assert plan.phase == "open" and plan.entries == ("a", "b", "c")
+    build = _one(plan, "queue-build")
+    assert (build.entries, build.slots, build.base, build.fresh) == (("a", "b"), (1, 2), MAIN,
+                                                                     False)  # fmt: skip
+    assert "queue-land" not in _kinds(plan)
+
+
+def test_both_slots_green_lands_the_prefix_at_the_second_slots_sha_and_builds_on() -> None:
+    plan = plan_queue(_abc(_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"),
+                           slots=_green("s1", "s2")))  # fmt: skip
+    land = _one(plan, "queue-land")
+    assert (land.entries, land.sha) == (("a", "b"), "s2")
+    build = _one(plan, "queue-build")
+    assert (build.entries, build.slots, build.base) == (("c",), (1,), "s2")
+    assert _kinds(plan) == ["queue-land", "queue-build"]
+    assert plan.entries == ("c",)
+
+
+def test_a_green_first_slot_lands_alone_and_the_second_keeps_testing_on_the_landed_main() -> None:
+    plan = plan_queue(_abc(_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"),
+                           slots={"s1": GREEN, "s2": PENDING}))  # fmt: skip
+    land = _one(plan, "queue-land")
+    assert (land.entries, land.sha) == (("a",), "s1")
+    build = _one(plan, "queue-build")  # c, on main+a+b, into the slot a freed
+    assert (build.entries, build.slots, build.base) == (("c",), (1,), "s2")
+    assert plan.entries == ("b", "c")
+
+
+def test_a_pending_first_slot_lands_nothing() -> None:
+    plan = plan_queue(_abc(_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"),
+                           slots={"s1": PENDING, "s2": GREEN}))  # fmt: skip
+    assert plan.actions == ()
+
+
+def test_after_a_recorded_landing_the_queue_goes_on_from_the_landed_main() -> None:
+    events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"), _land("s1", "a"),
+              _built(1, "s3", "c", parent="s2", base="s1"))  # fmt: skip
+    live = {"b": _live(101, "head-b"), "c": _live(102, "head-c")}
+    plan = plan_queue(_abc(*events, base="s1", live=live, slots=_green("s2", "s3"),
+                           stages={"a": "merged", "b": "pr-open", "c": "pr-open"}))  # fmt: skip
+    land = _one(plan, "queue-land")
+    assert (land.entries, land.sha) == (("b", "c"), "s3")
+    assert _kinds(plan) == ["queue-land"]
+
+
+def test_a_head_that_moved_since_its_build_is_built_again() -> None:
+    live = {"a": _live(100, "head-a"), "b": _live(101, "head-b2"), "c": _live(102, "head-c")}
+    plan = plan_queue(_abc(_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"), live=live,
+                           slots=_green("s1", "s2")))  # fmt: skip
+    assert _one(plan, "queue-land").entries == ("a",)
+    build = _one(plan, "queue-build")
+    assert (build.entries, build.base, build.slots) == (("b", "c"), "s1", (1, 2))
+
+
+def test_a_ci_none_repo_lands_each_built_combination_without_a_wait() -> None:
+    plan = plan_queue(_abc(_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"),
+                           config=QueueConfig(ci="none")))  # fmt: skip
+    assert _one(plan, "queue-land").entries == ("a", "b")
+
+
+def test_a_later_waves_ready_entry_never_joins_the_open_queue() -> None:
+    snap = _abc()
+    later = _batch("w2", 9, wave=2, events=[_approved(109, 5)])
+    live = {**snap.live, "w2": _live(109)}
+    approvals = {**snap.approvals, "w2": First("head-109")}
+    stages = {**snap.stages, "w2": "pr-open"}
+    from dataclasses import replace
+
+    plan = plan_queue(replace(snap, batches=(*snap.batches, later), live=live,
+                              approvals=approvals, stages=stages))  # fmt: skip
+    assert plan.entries == ("a", "b", "c") and plan.waiting == ("w2",)
+
+
+# ---------------------------------------------------- a foreign move of main (R14)
+
+
+def test_a_foreign_base_move_rebuilds_every_slot_on_the_new_base_and_says_so_once() -> None:
+    events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"))
+    plan = plan_queue(_abc(*events, base="f1", slots=_green("s1", "s2")))
+    assert "queue-land" not in _kinds(plan)
+    rebuild = _one(plan, "queue-rebuild")
+    assert (rebuild.entries, rebuild.slots, rebuild.base) == (("a", "b"), (1, 2), "f1")
+    warn = _one(plan, "queue-warn")
+    assert "f1" in warn.detail and warn.key
+    again = plan_queue(_abc(*events, base="f1", warned=frozenset({warn.key})))
+    assert _kinds(again) == ["queue-rebuild"]
+    for action in (*plan.actions, *again.actions):
+        assert "feat/batch-" not in action.detail  # no action names a PR head ref
+
+
+def test_once_rebuilt_on_the_new_base_the_queue_lands_again() -> None:
+    events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"),
+              _built(1, "r1", "a", parent="f1", base="f1"),
+              _built(2, "r2", "b", parent="r1", base="f1"))  # fmt: skip
+    plan = plan_queue(_abc(*events, base="f1", slots=_green("r1", "r2")))
+    assert _one(plan, "queue-land").sha == "r2" and "queue-warn" not in _kinds(plan)
+
+
+def test_an_unread_base_is_no_foreign_move() -> None:
+    events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"))
+    plan = plan_queue(_abc(*events, base="", slots=_green("s1", "s2")))
+    assert _one(plan, "queue-land").entries == ("a", "b")
+
+
 # ------------------------------------------------------------- purity
 
 
@@ -268,6 +399,3 @@ def test_the_planner_reaches_no_git_forge_process_or_clock() -> None:
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
     }
     assert not calls & {"now", "utcnow", "today"}
-
-
-_ = timedelta  # used by later sections
