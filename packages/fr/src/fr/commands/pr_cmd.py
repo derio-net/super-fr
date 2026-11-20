@@ -101,7 +101,7 @@ def create_cmd(
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
     from fr.git_policy.push import PushRefusedError
     from fr.records_commit import commit_records
-    from fr.run.model import run_path, save_run_state
+    from fr.run.model import RunStateConflictError, run_path, save_run_state
     from fr.settings import SettingsError, load_settings
 
     repo_root = resolve_repo_root()
@@ -175,7 +175,15 @@ def create_cmd(
     if state is None:
         console.print(f"opened draft PR {url} (this branch has no run to record it on)")
         return
-    save_run_state(repo_root, state.model_copy(update={"pr": url}))
+    try:
+        save_run_state(repo_root, state.model_copy(update={"pr": url}))
+    except RunStateConflictError as e:
+        # super-fr#1511: the PR is open; only recording it on the cursor refused.
+        err_console.print(
+            escape(f"fr pr create: opened draft PR {url}, but did not record it: {e}"),
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
     commit_records(
         repo_root, [run_path(repo_root, state.run)], f"chore(fr): run {state.run} — pr create"
     )

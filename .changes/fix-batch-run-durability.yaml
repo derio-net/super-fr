@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr run and fr plan write cursors, plans and specs atomically; two fr run commands no longer lose a cursor update; a kind: cli step has a timeout and stores a bounded stdout tail"

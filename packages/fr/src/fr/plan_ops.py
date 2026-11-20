@@ -29,6 +29,7 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
+from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.paths import KIND_DIRS, feature_roots, kind_dir, space_for
 from fr.journal.model import JournalEntry, journal_header, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
@@ -354,20 +355,21 @@ def create(
         on_disk_meta = meta_p.read_text()
         if _strip_created(on_disk_meta) != _strip_created(meta_text):
             created = [ln for ln in on_disk_meta.splitlines() if ln.startswith("created:")]
-            meta_p.write_text(
+            write_text_atomic(
+                meta_p,
                 "".join(
                     created[0] + "\n" if ln.startswith("created:") and created else ln
                     for ln in meta_text.splitlines(keepends=True)
-                )
+                ),
             )
             written.append(meta_p)
     else:
         plans_dir.mkdir(parents=True, exist_ok=True)
         folder.mkdir()
-        (folder / "_meta.yaml").write_text(meta_text)
-        (folder / "_prose.md").write_text(prose_text)
+        write_text_atomic(folder / "_meta.yaml", meta_text)
+        write_text_atomic(folder / "_prose.md", prose_text)
         for name, text in phase_files.items():
-            (folder / name).write_text(text)
+            write_text_atomic(folder / name, text)
         written.extend([folder / "_meta.yaml", folder / "_prose.md"])
         written.extend(folder / name for name in phase_files)
 
@@ -380,13 +382,13 @@ def create(
         journal_p = journal_path(repo_root, "plan", slug)
         if not journal_p.exists():
             journal_p.parent.mkdir(parents=True, exist_ok=True)
-            journal_p.write_text(journal_header(slug))
+            write_text_atomic(journal_p, journal_header(slug))
             written.append(journal_p)
 
     if spec_path is not None:
         spec_text = spec_path.read_text()
         if not _SPEC_TABLE_HEADER_RE.search(spec_text):
-            spec_path.write_text(_ensure_section_text(spec_text))
+            write_text_atomic(spec_path, _ensure_section_text(spec_text))
         _append_spec_row(
             spec_path,
             plan_name=slug,
@@ -661,7 +663,7 @@ def _append_spec_row(
 
     new_row = f"| {plan_name} | `{repo}` | `{file}` | {depends_on} |\n"
     new_text = text[:abs_offset] + new_row + text[abs_offset:]
-    spec_path.write_text(new_text)
+    write_text_atomic(spec_path, new_text)
 
 
 # ---------------------------------------------------------------------------
@@ -714,7 +716,7 @@ def tick(
         "ticked_at": _now_iso(),
         "note": note,
     }
-    phase_path.write_text(rewrite_phase_text(text, raw, "state"))
+    write_text_atomic(phase_path, rewrite_phase_text(text, raw, "state"))
 
     # Re-parse to validate schema still holds
     parse(plan_dir)
@@ -745,7 +747,7 @@ def complete_phase(plan_dir: Path, phase_n: int, *, note: str | None = None) -> 
     raw["state"]["completion"]["at"] = _now_iso()
     if note is not None:
         raw["state"]["completion"]["note"] = note
-    phase_path.write_text(rewrite_phase_text(text, raw, "state"))
+    write_text_atomic(phase_path, rewrite_phase_text(text, raw, "state"))
     parse(plan_dir)
     _stage(plan.repo_root, [phase_path])
 
@@ -765,7 +767,7 @@ def set_tracking_issue(plan_dir: Path, phase_n: int, url: str) -> None:
     if raw["phase"].get("tracking_issue") == url:
         return
     raw["phase"]["tracking_issue"] = url
-    phase_path.write_text(rewrite_phase_text(text, raw, "phase"))
+    write_text_atomic(phase_path, rewrite_phase_text(text, raw, "phase"))
     try:
         parse(plan_dir)
     except PlanSchemaError as e:
@@ -790,7 +792,7 @@ def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
     if raw["phase"].get("tracking_issue") is None:
         return False
     raw["phase"]["tracking_issue"] = None
-    phase_path.write_text(rewrite_phase_text(text, raw, "phase"))
+    write_text_atomic(phase_path, rewrite_phase_text(text, raw, "phase"))
     try:
         parse(plan_dir)
     except PlanSchemaError as e:
@@ -918,7 +920,7 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     if prior_rework_rel:
         meta["prior_rework"] = prior_rework_rel
     meta["origin_items"] = []
-    (rework_folder / "_meta.yaml").write_text(_yaml_dump(meta))
+    write_text_atomic(rework_folder / "_meta.yaml", _yaml_dump(meta))
 
     parent_title = (
         (parent_dir / "_prose.md").read_text().splitlines()[0]
@@ -930,7 +932,7 @@ def rework_create(parent_plan_dir: Path) -> Plan:
         f"Rework plan against `{parent_dir.name}`. See `_meta.yaml` for "
         f"`parent_plan`, `prior_rework`, and `origin_items`.\n"
     )
-    (rework_folder / "_prose.md").write_text(prose)
+    write_text_atomic(rework_folder / "_prose.md", prose)
 
     written: list[Path] = [rework_folder / "_meta.yaml", rework_folder / "_prose.md"]
 
@@ -996,7 +998,7 @@ def rework_add_origin(
     next_id = (max((it["id"] for it in items), default=0) + 1) if items else 1
     items.append({"id": next_id, "item": item, "source": source, "track": track})
     raw["origin_items"] = items
-    (rework_dir / "_meta.yaml").write_text(_yaml_dump(raw))
+    write_text_atomic(rework_dir / "_meta.yaml", _yaml_dump(raw))
     parse(rework_dir)  # validate
     _stage(plan.repo_root, [rework_dir / "_meta.yaml"])
     return next_id

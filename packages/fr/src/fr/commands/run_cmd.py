@@ -19,12 +19,14 @@ forking the done/failed cursor asymmetry a second time.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import functools
 import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
@@ -102,12 +104,14 @@ from fr.run.model import (
     AnsweredBy,
     DispatchOutcome,
     RunState,
+    RunStateConflictError,
     RunStateError,
     StepRecord,
     current_run_schema_version,
     existing_run_id_colliding_with,
     load_run_state,
     parse_run_state,
+    read_run_state,
     run_path,
     save_run_state,
     validate_run_id,
@@ -369,7 +373,12 @@ def _remember(path: Path) -> None:
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
     """`save_run_state`, noted for the command's closing commit."""
     _remember(run_path(repo_root, state.run))
-    path = save_run_state(repo_root, state)
+    try:
+        path = save_run_state(repo_root, state)
+    except RunStateConflictError as e:
+        # super-fr#1511: a refusal, not a crash — nothing was written.
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
     _note_record_write(repo_root, path, state)
     return path
 
@@ -5356,7 +5365,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
         return None
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except (RunStateError, OSError):
             continue  # a broken run file is a different problem
         if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
@@ -5884,7 +5893,7 @@ def adopt_cmd(
             dry_run=not yes,
             superseded=effects,
         )
-    except AdoptError as e:
+    except (AdoptError, RunStateConflictError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     if effects.old and not effects.written_new:
@@ -6165,7 +6174,7 @@ def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
     same fallback `load_run_usage` makes for the usage file (review p2-r1), so
     a closed-out run keeps its per-phase table. `None` when neither reads: an
     archived cursor older than the live model prints the step table only."""
-    from fr.run.model import archived_run_path, parse_run_state
+    from fr.run.model import archived_run_path
 
     try:
         return load_run_state(repo_root, run_id)
@@ -6619,26 +6628,132 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         )
         raise typer.Exit(2)
 
-    proc = subprocess.run(  # noqa: S602 — manifest is operator-authored; values are shlex-quoted
-        command, shell=True, cwd=repo_root, capture_output=True, text=True
-    )
-    if proc.returncode == 0:
+    timeout = _cli_step_timeout()
+    returncode, stdout, timed_out = _run_cli_command(command, repo_root, timeout)
+    stdout = _bounded_stdout(stdout)
+    if returncode == 0:
         new_state = _complete_step(
-            state, manifest, state.cursor, "done", exit_code=0, stdout=proc.stdout
+            state, manifest, state.cursor, "done", exit_code=0, stdout=stdout
         )
         _save_run_state(repo_root, new_state)
         console.print(f"{step.id}: done (exit 0)")
         return "cli-done"
     else:
         new_state = _complete_step(
-            state, manifest, state.cursor, "failed", exit_code=proc.returncode, stdout=proc.stdout
+            state, manifest, state.cursor, "failed", exit_code=returncode, stdout=stdout
         )
         _save_run_state(repo_root, new_state)
-        err_console.print(f"{step.id}: failed (exit {proc.returncode})")
+        if timed_out:
+            err_console.print(
+                f"{step.id}: timed out after {timeout:g}s (exit {returncode}); "
+                f"set {CLI_STEP_TIMEOUT_ENV} to allow longer, 0 for no limit"
+            )
+        else:
+            err_console.print(f"{step.id}: failed (exit {returncode})")
         # A return value, not `typer.Exit(1)`: only this branch knows a step
         # ran and failed, so only it may say so (review r1-1). Every
         # `typer.Exit` raised under `_advance_step` is a refusal.
         return "cli-failed"
+
+
+CLI_STEP_TIMEOUT_ENV = "FR_CLI_STEP_TIMEOUT"
+CLI_STEP_DEFAULT_TIMEOUT = 600.0
+CLI_STEP_TIMEOUT_EXIT = 124  # what coreutils `timeout` reports
+CLI_STEP_STDOUT_MAX_CHARS = 16 * 1024
+
+
+def _cli_step_timeout() -> float | None:
+    """Seconds a `kind: cli` step may run (super-fr#1507). `FR_CLI_STEP_TIMEOUT`
+    overrides the default; `0` means no limit. A bad value is a refusal, never
+    a silent default."""
+    raw = os.environ.get(CLI_STEP_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return CLI_STEP_DEFAULT_TIMEOUT
+    try:
+        value = float(raw)
+    except ValueError:
+        value = -1.0
+    if not value >= 0:  # negative, NaN, or unparsable
+        err_console.print(
+            f"[red]{CLI_STEP_TIMEOUT_ENV}={escape(raw)}: expected a number of seconds "
+            "(0 for no limit)[/red]"
+        )
+        raise typer.Exit(2)
+    return value or None
+
+
+def _run_cli_command(command: str, cwd: Path, timeout: float | None) -> tuple[int, str, bool]:
+    """Run `command` in a shell; returns (exit code, stdout, timed out).
+
+    The shell leads its own process group, so a timeout kills the whole
+    pipeline: killing only the shell leaves `sleep 30 | cat`'s children holding
+    stdout open, and the read would still wait for them.
+
+    A group of its own is also out of reach of the Ctrl-C or kill that stops
+    fr, so any exception here (KeyboardInterrupt included) kills the group
+    before it propagates, as `subprocess.run` killed its child. After a kill the
+    read waits only briefly: a process that left the group (`setsid`) may hold
+    stdout open for as long as it likes."""
+    proc = subprocess.Popen(  # noqa: S602 — manifest is operator-authored; values are shlex-quoted
+        command,
+        shell=True,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
+        errors="replace",
+        start_new_session=True,
+    )
+
+    def kill_group() -> None:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, signal.SIGKILL)
+
+    try:
+        try:
+            stdout, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            kill_group()
+            try:
+                stdout, _ = proc.communicate(timeout=_CLI_STEP_DRAIN_SECONDS)
+            except subprocess.TimeoutExpired as drained:
+                stdout = _partial_text(drained.stdout)
+                for pipe in (proc.stdout, proc.stderr):
+                    if pipe is not None:
+                        pipe.close()
+                proc.wait()
+            return CLI_STEP_TIMEOUT_EXIT, stdout or "", True
+    except BaseException:
+        kill_group()
+        proc.wait()
+        raise
+    return proc.returncode, stdout or "", False
+
+
+_CLI_STEP_DRAIN_SECONDS = 5.0
+
+
+def _partial_text(data: str | bytes | None) -> str:
+    """What `communicate` had read before it timed out: bytes on POSIX even in
+    text mode."""
+    if data is None:
+        return ""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data
+
+
+def _bounded_stdout(stdout: str) -> str:
+    """The tail the cursor keeps of a cli step's stdout (super-fr#1507). The
+    cursor is a git-tracked file; the end of the output is where a failure
+    says why."""
+    if len(stdout) <= CLI_STEP_STDOUT_MAX_CHARS:
+        return stdout
+    dropped = len(stdout) - CLI_STEP_STDOUT_MAX_CHARS
+    return (
+        f"[fr: stdout truncated: first {dropped} of {len(stdout)} characters dropped]\n"
+        + stdout[-CLI_STEP_STDOUT_MAX_CHARS:]
+    )
 
 
 def _resolve_member(
@@ -8786,7 +8901,7 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     found: list[RunState] = []
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except (RunStateError, OSError):
             continue
         if state.branch == branch:

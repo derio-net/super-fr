@@ -184,6 +184,12 @@ def main(
     # The cloud remedy block (spec 2026-10-07-cloud-triage R23, §H), once, after fr's own
     # error: failures note their items instead of appending it (p7-r3).
     ctx.call_on_close(_print_cloud_remedy)
+    # super-fr#1511: a cursor's lost-update check compares against what THIS
+    # command read, so an earlier invocation in the same process (CliRunner, an
+    # embedding host) never counts as this one's read.
+    from fr.run.model import forget_observed_run_states
+
+    forget_observed_run_states()
     # super-fr#746: before anything else — a wrong fr must not migrate
     # artifacts either. Refuses a PATH-reached fr that disagrees with the fr the
     # harness's integrations pinned; see fr.binary_identity.
