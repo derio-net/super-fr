@@ -3,7 +3,7 @@ run: 2026-11-19-feat-batch-consumer-followups
 workflow: fr-goal@1
 branch: feat/batch-consumer-followups
 started: '2026-11-19T22:17:21+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -88,7 +88,10 @@ steps:
           visual: none
           findings: p1-r1
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-20T02:25:28+00:00'
+    exit: 0
+    stdout: ''
   lens-review:
     state: pending
   deliver:
