@@ -305,3 +305,11 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_approval.py#test_an_approval_with_no_patch_id_gains_one_while_it_still_holds
     why: 'p1 review fix: evidence for the reworded row'
+  - row: merge-train-red-recovery
+    op: reword
+    base: 0
+    acceptance: A batch PR red at any head, the driver's own update included, is handed
+      back to an idle session once per head and never updated again; repeated passes
+      over the same red head send nothing new; an unreachable session puts it on Needs-you.
+    why: 'wave-merge-queue R13, R22: red_decision''s reupdate rule is gone; the queue
+      never updates a PR branch'
