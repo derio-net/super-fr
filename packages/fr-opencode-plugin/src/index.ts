@@ -193,13 +193,18 @@ type GateEvent = { tool: string; input?: unknown };
 
 /** The edit gate: throws to reject the call, which OpenCode 2 allows from
  * `execute.before` alone. */
-async function gate(directory: string, event: GateEvent): Promise<void> {
+/** True when the edit gate passes the call without judging it, so it needs no
+ * directory (and the hook need not look the session up for it). */
+function gateSkips(event: GateEvent): boolean {
   // OpenCode cannot intercept filesystem effects of Bash. Other known
   // read-only tools are excluded; every remaining tool is inspected.
-  if (typeof event.tool === "string" && NON_WRITING_TOOLS.has(event.tool)) return;
-
+  if (typeof event.tool === "string" && NON_WRITING_TOOLS.has(event.tool)) return true;
   // Deliberate base-clone edit — the documented escape hatch.
-  if (process.env.FR_BASE_OK === "1") return;
+  return process.env.FR_BASE_OK === "1";
+}
+
+async function gate(directory: string, event: GateEvent): Promise<void> {
+  if (gateSkips(event)) return;
 
   const targets = extractTargets(event.input);
   if (targets.unresolvablePatch) {
@@ -295,7 +300,10 @@ const plugin: Plugin.Plugin = {
       // Before the gate, and whatever the tool: a child's first call of ANY
       // kind is the earliest moment it can be named. Neither throws.
       await claimChild(event);
-      const here = await sessionDir(event.sessionID);
+      // Look the session up only when a gate will judge this call: an uncached
+      // failed lookup is paid per call, so a read-only tool pays nothing (p1-r1).
+      const judged = event.tool === "shell" || !gateSkips(event);
+      const here = judged ? await sessionDir(event.sessionID) : directory;
       if (event.tool === "shell") {
         // The shell gate decides on the WHOLE command line, before any path
         // inspection (R3); a refusal rejects this call alone.
@@ -311,7 +319,11 @@ const plugin: Plugin.Plugin = {
     });
     await ctx.tool.hook("execute.after", async (event) => {
       // Neither throws: they follow a call that already ran.
-      writePipelineSentinel(event, await sessionDir(event.sessionID));
+      // Only a completed skill call can arm the sentinel; any other call skips
+      // the session lookup (p1-r1).
+      if (event.tool === "skill" && event.status === "completed") {
+        writePipelineSentinel(event, await sessionDir(event.sessionID));
+      }
       await bind(event);
     });
     await ctx.session.hook("context", async (event) => {

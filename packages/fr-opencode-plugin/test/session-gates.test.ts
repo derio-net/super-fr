@@ -149,6 +149,23 @@ describe("the gates judge in the session's directory (#1552)", () => {
     expect(sharedSessionDirectories().has("ses_1")).toBe(false);
   });
 
+  test("a call no gate judges makes no session lookup (p1-r1)", async () => {
+    // The resolver caches every directory it finds, so an empty cache after a
+    // successful-lookup session proves no lookup ran.
+    const { executeBefore, executeAfter } = await load({ directory: repoA, session: livesIn(repoB) });
+    const read = { tool: "read", sessionID: "ses_1", status: "completed", input: { filePath: "README.md" } };
+    await executeBefore(read);
+    await executeAfter(read);
+    await executeAfter({ ...pipeline, status: "running" });
+    process.env.FR_BASE_OK = "1";
+    await executeBefore(edit("README.md"));
+    delete process.env.FR_BASE_OK;
+    expect(sharedSessionDirectories().has("ses_1")).toBe(false);
+    // A call a gate does judge looks it up.
+    await executeBefore(shell("git status"));
+    expect(sharedSessionDirectories().get("ses_1")).toBe(repoB);
+  });
+
   test("a failed lookup from a plain plugin directory leaves the session's repo unjudged", async () => {
     const outside = join(root, "plain");
     mkdirSync(outside);
