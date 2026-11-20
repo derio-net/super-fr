@@ -407,3 +407,9 @@ amendments:
       per head; repeated passes over the same red head send nothing new; an unreachable
       session puts it on Needs-you.
     why: the reupdate rule and fr's own updates are gone (R22)
+  - row: triage-batch-version-reserve
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_triage_batch_merge_git.py
+    why: the retired merge loop's real-git test is gone with it (R22)
