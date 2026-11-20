@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-20-ci-single-python-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-20T07:34:46+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-20T07:34:46+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: 2a1dc9d0-c116-4771-a0af-bbbc6d36f40b
   plan:
     state: pending
   plan-review:
