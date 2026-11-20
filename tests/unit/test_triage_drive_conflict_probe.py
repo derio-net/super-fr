@@ -23,6 +23,10 @@ def _repo(tmp_path: Path) -> Path:
     repo = tmp_path / "clone"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
+    # the probe's own `git merge` runs without the -c identity above: a CI runner has
+    # no global one, so the clone (and the scratch worktree it lends) carries its own
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "config", "user.email", "t@example.com")
     (repo / "a.txt").write_text("one\ntwo\nthree\n")
     (repo / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "1.0.0"\n')
     _git(repo, "add", "-A")
