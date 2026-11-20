@@ -11,6 +11,7 @@ spawn site uses both: `fr_argv` for the argv, `safe_fr_env` for the environment.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from collections.abc import Mapping
 
@@ -28,3 +29,35 @@ def safe_fr_env(base: Mapping[str, str] | None = None) -> dict[str, str]:
     if entries:
         env["PYTHONPATH"] = os.pathsep.join(entries)
     return env
+
+
+class Child:
+    """A started child process, as the driver supervisor (`fr.triage.supervise`) sees it. It
+    lives here because `fr.triage` starts no process outside its git seam."""
+
+    def __init__(self, argv: list[str]) -> None:
+        # No `start_new_session`: the child stays in its caller's session and process group.
+        self._proc = subprocess.Popen(argv, env=safe_fr_env())
+        self.pid = self._proc.pid
+
+    def wait(self, timeout: float | None = None) -> int | None:
+        """The child's return code (negative: killed by that signal), None on a timeout."""
+        try:
+            return self._proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return None
+
+    def poll(self) -> int | None:
+        return self._proc.poll()
+
+    def terminate(self) -> None:
+        try:
+            self._proc.terminate()
+        except ProcessLookupError:
+            pass
+
+    def kill(self) -> None:
+        try:
+            self._proc.kill()
+        except ProcessLookupError:
+            pass

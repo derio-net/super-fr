@@ -7827,14 +7827,14 @@ def batch_drive_command(
                 end = _host_loop(driver, once=once, interval=interval, pacer=pacer)
         except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
             driver.release_lease()
-            _emit("stop", "interrupted: the driver stopped cleanly")
+            _log("stop", "interrupted: the driver stopped cleanly")
             if supervised_by is not None:  # its supervisor reads this as deliberate (R11)
                 raise typer.Exit(code=130) from None
             raise
         finally:
             _SUPERVISOR = None
         if log is not None:
-            _emit("stop", f"the driver stopped (exit {end.code})")
+            _log("stop", f"the driver stopped (exit {end.code})")
         if once:
             driver.warn_single_pass()
         if end.code != 2:  # a clean stop; a refusal keeps what it found

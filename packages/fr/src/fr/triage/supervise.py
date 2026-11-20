@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import os
 import signal
-import subprocess
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -21,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import FrameType
 
+from fr.safe_spawn import Child
 from fr.triage.drive_log import DriveLog
 from fr.triage.driver_record import FailureKind
 from fr.triage.errors import TriageError
@@ -114,7 +114,7 @@ class Supervisor:
         self.restarts = 0
         self.last_crash: str | None = None
         self._signal: int | None = None
-        self._child: subprocess.Popen[bytes] | None = None
+        self._child: Child | None = None
 
     # -- the one-line records ------------------------------------------------------------
 
@@ -165,22 +165,20 @@ class Supervisor:
 
     # -- the child -----------------------------------------------------------------------
 
-    def _terminate(self, child: subprocess.Popen[bytes]) -> int:
+    def _terminate(self, child: Child) -> int:
         """SIGTERM *child*, SIGKILL after the grace; its return code."""
         if child.poll() is None:
-            try:
-                child.terminate()
-            except ProcessLookupError:
-                pass
-            try:
-                return child.wait(timeout=self.grace)
-            except subprocess.TimeoutExpired:
-                self._say("stop", f"driver pid {child.pid} ignored SIGTERM for "
-                          f"{self.grace:g}s: SIGKILL")  # fmt: skip
-                child.kill()
-        return child.wait()
+            child.terminate()
+            end = child.wait(self.grace)
+            if end is not None:
+                return end
+            self._say(
+                "stop", f"driver pid {child.pid} ignored SIGTERM for {self.grace:g}s: SIGKILL"
+            )
+            child.kill()
+        return child.wait() or 0
 
-    def _watch(self, child: subprocess.Popen[bytes], parent: int) -> tuple[int, str | None]:
+    def _watch(self, child: Child, parent: int) -> tuple[int, str | None]:
         """Wait for *child*; `(its code, why we stopped it or None)`. Stops it when this
         process got SIGHUP, SIGINT or SIGTERM, or its own parent changed (R12)."""
         while True:
@@ -189,10 +187,9 @@ class Supervisor:
                 return self._terminate(child), f"{name} received"
             if os.getppid() != parent:
                 return self._terminate(child), "the supervisor's parent ended"
-            try:
-                return child.wait(timeout=self.poll), None
-            except subprocess.TimeoutExpired:
-                continue
+            end = child.wait(self.poll)
+            if end is not None:
+                return end, None
 
     def _sleep(self, seconds: float, parent: int) -> str | None:
         """Wait *seconds* before a restart, still watching the parent and signals."""
@@ -218,7 +215,7 @@ class Supervisor:
     def _run(self, parent: int) -> int:
         me = os.getpid()
         while True:
-            child = subprocess.Popen(self.make_argv(me))
+            child = Child(self.make_argv(me))
             self._child = child
             self._record(child.pid)
             end, why = self._watch(child, parent)
