@@ -1,0 +1,10 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-train-truth
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1564
+evidence:
+  tests: ci
+  walk: none
