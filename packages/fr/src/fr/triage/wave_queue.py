@@ -525,7 +525,7 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
     drained = None if entries or landing else _drained(record, rep, qs)
     if drained is not None:
         actions.append(drained)
-    elif (need := _stall_need(record, qs)) is not None:
+    elif (need := _stall_need(record, qs, entries)) is not None:
         actions.append(need)
     return QueuePlan(qs.repo, "open", wave, tuple(actions), tuple(entries), tuple(waiting))
 
@@ -559,16 +559,19 @@ def _budget_spent(batch: Batch) -> bool:
             or held_conflict(batch) is not None)  # fmt: skip
 
 
-def _stall_need(record: QueueRecord, qs: QueueSnapshot) -> QueueAction | None:
-    """R30: every other batch of the open wave is terminal, and the one left has spent its
-    hand-back budget or made no progress (no new head, no event) for `stall_hours`. The
-    driver proposes; the operator defers or requeues. Never a write."""
+def _stall_need(
+    record: QueueRecord, qs: QueueSnapshot, entries: Sequence[str]
+) -> QueueAction | None:
+    """R30: every other batch of the open wave is terminal, and the one left, which is not
+    in the queue (*entries*: those move by building and landing), has spent its hand-back
+    budget or made no progress (no new head, no event) for `stall_hours`. The driver
+    proposes; the operator defers or requeues. Never a write."""
     wave = record.wave
     if wave is None:
         return None
     left = [b for b in qs.batches
             if effective_wave(b) == wave and not is_terminal(b, qs.stages.get(b.id))]  # fmt: skip
-    if len(left) != 1:
+    if len(left) != 1 or left[0].id in entries:
         return None
     batch = left[0]
     stall = timedelta(hours=qs.config.stall_hours)
@@ -611,3 +614,23 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
     if phase == "idle":
         return _plan_idle(qs)
     return _plan_open(mine[-1], qs)
+
+
+# ------------------------------------------------------------------ lines
+
+
+def queue_line(plan: QueuePlan) -> str:
+    """One repo's queue in one line: `queue <repo>: open wave 3 · entries a, b · waiting c`.
+    The full line of R25 (each entry's state, what landed, the hold) is the operator view's."""
+    wave = "between waves" if plan.wave is None else f"wave {plan.wave}"
+    parts = [plan.phase if plan.phase != "open" else f"open {wave}"]
+    if plan.entries:
+        parts.append("entries " + ", ".join(plan.entries))
+    if plan.waiting:
+        parts.append("waiting " + ", ".join(plan.waiting))
+    return f"queue {plan.repo}: " + " · ".join(parts)
+
+
+def queue_action_line(action: QueueAction) -> str:
+    """The line a queue action prints."""
+    return f"{action.kind} {action.repo}: {action.detail}"

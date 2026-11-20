@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import QueueState
@@ -52,8 +52,19 @@ from fr.triage.model import (
     EnqueueEvent,
     Export,
     Facts,
+    QueueRecord,
     RedHandbackEvent,
 )
+
+if TYPE_CHECKING:  # `fr.triage.wave_queue` imports this module: read at run time lazily
+    from fr.triage.wave_queue import (
+        BuildConflict,
+        Hold,
+        QueueConfig,
+        QueuePlan,
+        QueueSnapshot,
+        SlotCheck,
+    )
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -409,6 +420,20 @@ class Snapshot:
     collected_narrowed: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_pushed: frozenset[str] = frozenset()
     collected_reopened: Mapping[str, LivePr] = field(default_factory=dict)
+    # The wave merge queue (spec 2026-11-19-wave-merge-queue §A): repo -> its `queue:`
+    # config for every repo the queue drives (its train is not walked), the queue records,
+    # each repo's hold, each combination's checks by sha, the conflicts the executor met
+    # building an entry, each open wave's close-out (repo -> landed; absent: none), each
+    # batch's last head change and its session's status. `bases` gives `main` now. The
+    # board and `drive --plan` read none of these, so they leave them empty.
+    wave_queues: Mapping[str, QueueConfig] = field(default_factory=dict)
+    queue_records: tuple[QueueRecord, ...] = ()
+    queue_holds: Mapping[str, Hold] = field(default_factory=dict)
+    queue_slots: Mapping[str, SlotCheck] = field(default_factory=dict)
+    queue_conflicts: Mapping[str, BuildConflict] = field(default_factory=dict)
+    queue_closeouts: Mapping[str, bool] = field(default_factory=dict)
+    head_changed: Mapping[str, datetime] = field(default_factory=dict)
+    session_status: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -519,6 +544,9 @@ class Pass:
     trains: tuple[Train, ...] = ()
     # (batch id, the scope ids holding its members): the batches waiting on another scope
     held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # One plan per repo the wave merge queue drives (spec 2026-11-19-wave-merge-queue §A):
+    # its report actions are in `actions`, the rest are the queue executor's.
+    queues: tuple[QueuePlan, ...] = ()
 
 
 # ------------------------------------------------------- idle sessions (R7, R8)
@@ -1722,6 +1750,53 @@ def _gate_actions(batch: Batch, snap: Snapshot, labelled: set[str]) -> list[Acti
     return out
 
 
+def queue_snapshot(snap: Snapshot, repo: str, held: Iterable[str] = ()) -> QueueSnapshot:
+    """*repo*'s slice of the pass's snapshot, for `fr.triage.wave_queue.plan_queue`: every
+    batch of it (the wave choice reads them all), and as entries only the selected ones
+    that no other scope's claim holds (*held*)."""
+    from fr.triage.wave_queue import QueueSnapshot
+
+    batches = tuple(b for b in snap.batches if snap.repos.get(b.id) == repo)
+    skip = set(held)
+    eligible = frozenset(
+        b.id for b in batches
+        if (snap.selected is None or b.id in snap.selected) and b.id not in skip
+    )  # fmt: skip
+    return QueueSnapshot(
+        repo=repo, scope=snap.scope_id or snap.me, config=snap.wave_queues[repo], now=snap.now,
+        batches=batches, stages=snap.stages, live=snap.live, approvals=snap.approvals,
+        records=tuple(r for r in snap.queue_records if r.repo == repo),
+        hold=snap.queue_holds.get(repo), base=snap.bases.get(repo, ""), slots=snap.queue_slots,
+        conflicts=snap.queue_conflicts, eligible=eligible, sessions=snap.session_status,
+        head_changed=snap.head_changed, closeout_landed=snap.queue_closeouts.get(repo),
+        warned=snap.warned, scope_args=snap.scope_args,
+    )  # fmt: skip
+
+
+def _queue_plans(snap: Snapshot, held: Iterable[str]) -> list[QueuePlan]:
+    """One wave-queue plan per repo the queue drives, in repo order."""
+    if not snap.wave_queues:
+        return []
+    from fr.triage.wave_queue import plan_queue
+
+    held = tuple(held)
+    return [plan_queue(queue_snapshot(snap, repo, held)) for repo in sorted(snap.wave_queues)]
+
+
+def _queue_reports(plan: QueuePlan) -> list[Action]:
+    """The queue's report actions, as the pass's own: a held repo is `held` (R31), a Need is
+    `blocked` (the operator's, R28, R30), a report said once is a `warn` keyed in `warned`."""
+    out: list[Action] = []
+    for a in plan.actions:
+        if a.kind == "queue-held":
+            out.append(Action("held", plan.repo, a.detail))
+        elif a.kind == "queue-need":
+            out.append(Action("blocked", a.batch or plan.repo, a.detail))
+        elif a.kind == "queue-warn":
+            out.append(Action("warn", plan.repo, a.detail, head=a.key))
+    return out
+
+
 def drive_pass(snap: Snapshot) -> Pass:
     """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
     then report duplicate candidates of newly finished waves — in that order, so a slot a
@@ -1766,11 +1841,17 @@ def drive_pass(snap: Snapshot) -> Pass:
         by_repo.setdefault(snap.repos.get(bid, ""), []).append(entry)
     trains: list[Train] = []
     for repo in sorted(by_repo):
+        if repo in snap.wave_queues:
+            continue  # the wave merge queue plans it, below
         train, merges = _walk_train(repo, by_repo[repo], snap)
         actions.extend(merges)
         merging.update(a.batch for a in merges if a.kind == "merge")
         if train is not None:
             trains.append(train)
+    queues = _queue_plans(snap, held_ids)
+    for qplan in queues:
+        actions.extend(_queue_reports(qplan))
+    open_waves = {q.repo: q.wave for q in queues if q.phase == "open"}
 
     # 2. Close out. Recording a close-out that has already finished starts nothing and
     # writes nothing to the forge, so it reads every landed batch, selected or not
@@ -1959,15 +2040,22 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 4. Dispatch.
     # The cap counts every batch in flight, selected or not (review rg-3); the
     # summary's own figure is the selection's, which is what this drive waits on.
+    from fr.triage.wave_queue import waits_on_queue
+
     occupants = {
-        b.id for b in snap.batches if stages.get(b.id) in IN_FLIGHT and b.id not in merging
-    }
+        b.id for b in snap.batches
+        if stages.get(b.id) in IN_FLIGHT and b.id not in merging
+        # R36: a delivered PR waiting on a later queue than the open one takes no slot
+        and not ((repo := snap.repos.get(b.id, "")) in open_waves
+                 and waits_on_queue(b, stages.get(b.id), open_wave=open_waves[repo]))
+    }  # fmt: skip
     driven = {b.id for b in chosen}
     in_flight = sum(1 for b in driven if stages.get(b) in IN_FLIGHT) - len(merging)
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held
+    queue_needs = sum(a.kind == "queue-need" for q in queues for a in q.actions)
+    pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held + queue_needs
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue
@@ -2056,6 +2144,7 @@ def drive_pass(snap: Snapshot) -> Pass:
         ),
         trains=tuple(trains),
         held_by=tuple(held_by),
+        queues=tuple(queues),
     )
 
 

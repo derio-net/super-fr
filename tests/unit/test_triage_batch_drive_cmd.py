@@ -744,6 +744,31 @@ def test_a_ready_green_pr_is_merged_without_waiting(
     assert _lines(out, "merge") == ["merge b1: merged PR #101 at sha-101"]
 
 
+def test_a_wave_queue_repo_is_planned_by_the_queue_and_only_reported(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Spec 2026-11-19-wave-merge-queue §A, phase 2: the planner replaces the repo's train;
+    until the executor lands, the driver says its writes and runs none of them."""
+    from fr.triage import batch_drive
+    from fr.triage.wave_queue import QueueConfig
+
+    real = batch_drive.drive_pass
+    monkeypatch.setattr(
+        triage_batch_cmd, "drive_pass",
+        lambda snap: real(replace(snap, wave_queues={REPO: QueueConfig()})),
+    )  # fmt: skip
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert world.merged == [] and _lines(out, "merge") == []
+    assert f"queue {REPO}: idle" in out
+    (line,) = _lines(out, "queue-open")
+    assert line.endswith(": planned, not executed") and "wave 1" in line
+    queues = load_judgements(tmp_path / "judgements.yaml").queues
+    assert queues == []  # nothing recorded: the executor is phase 3's
+
+
 @pytest.mark.parametrize(
     "setup",
     [

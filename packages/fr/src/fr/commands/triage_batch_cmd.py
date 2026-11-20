@@ -301,6 +301,8 @@ from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
+from fr.triage.wave_queue import REPORT_KINDS as QUEUE_REPORT_KINDS
+from fr.triage.wave_queue import queue_action_line, queue_line
 from fr.verification.labels import GATE_PASS_MARKER, close_gate_trackers, pass_gate
 
 if TYPE_CHECKING:
@@ -5396,6 +5398,15 @@ class _Driver:
         try:  # a pass that aborts after a post_merge still restarts what it owes (p2-r1)
             for train in plan.trains:
                 _say(train_line(train))
+            for qplan in plan.queues:  # spec 2026-11-19-wave-merge-queue §A
+                _say(queue_line(qplan))
+                for qaction in qplan.actions:
+                    if qaction.kind in QUEUE_REPORT_KINDS:
+                        continue  # in `plan.actions`, run like any report below
+                    line = queue_action_line(qaction)
+                    # Report mode: the queue's executor is not wired yet, so its writes
+                    # (open, build, land, eject, drain) are planned and said, never run.
+                    _say(line if not self.yes else f"{line}: planned, not executed")
             for action in plan.actions:
                 if not self.yes:
                     _say(action_line(action))
