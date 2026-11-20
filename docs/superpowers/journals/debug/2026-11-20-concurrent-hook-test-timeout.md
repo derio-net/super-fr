@@ -15,3 +15,8 @@ communicate() on proc 0 never reads proc 1's pipes. Both run under bash -x. If p
 ### 34765ce58e70 · root-cause · Sequential pipe drain in run_twice deadlocks once the hook's xtrace exceeds the pipe buffer; #1573 tripled the trace
 
 Measured locally with a 35-entry PATH and PS4='+ ': hook xtrace was 47376 B before #1573 and 150739 B after (fr_jq's _fr_first_candidate PATH walks, ~1570 traced lines). 150KB > 64KB Linux pipe buffer; the old 47KB sat under it. Test harness defect, not a hook defect: the hook and its lock behave correctly. The sibling removals test shares run_twice and is exposed the same way.
+
+<!-- fr:journal kind=root-cause scope=debug id=8b4fb1f742f6 created=2026-11-20T06:45:10+00:00 -->
+### 8b4fb1f742f6 · root-cause · Second, older cause: the hooks' mkdir lock is entered twice on Linux CI (exit-1 / OVERLAP variant)
+
+PR #1584 attempt 1 (py3.11 shard 3): both hooks' 'mkdir <lock>' succeeded 2 ms apart (.268119 and .270165), no cat/kill/rm/sleep between mkdir and trap, both wrote pid files, both stubs ran (OVERLAP) and hook 0's stub exited 1 on its rmdir. Same signature as #1463's instrumented recurrence on #1536 (66 us apart, before #1573). So it predates #1573; #1573 only moved how often it is seen. The hooks' exclusion rests on an external mkdir being atomic; the runner is ubuntu-26.04. Mechanism of mkdir succeeding twice is unverified (not reproducible on macOS: 480x2 passes in #1463). Decision: acquire the lock with bash's own noclobber redirect (open O_EXCL in the shell, no external binary), so the exclusion no longer depends on what mkdir does.
