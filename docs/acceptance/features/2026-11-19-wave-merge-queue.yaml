@@ -149,9 +149,21 @@ rows:
       and is voided only by a change to that diff.
     origin:
     - spec:2026-11-19-wave-merge-queue#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_conflict_free_merge_of_main_keeps_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_an_empty_commit_keeps_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_code_edit_changes_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_whitespace_only_edit_changes_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_binary_edit_changes_the_patch_id
+      - super-fr:tests/unit/test_triage_approval.py#test_the_same_patch_id_at_another_head_is_approved
+      - super-fr:tests/unit/test_triage_approval.py#test_another_patch_id_at_another_head_is_void
+      - super-fr:tests/unit/test_triage_approval.py#test_an_approval_with_no_patch_id_falls_back_to_reaches
+      - super-fr:tests/unit/test_triage_approval.py#test_settle_records_the_patch_id_it_is_given_for_a_first_verdict
+      - super-fr:tests/unit/test_triage_approval.py#test_settle_voids_on_a_patch_id_change_removing_the_label
+    status: ci
+    notes: 'phase 1: the verdict compares the recorded and live patch-ids; unit tests
+      on a real repo and over the pure verdict'
   - id: wave-queue-release-hold
     capability: release
     acceptance: A repo cuts no release while a wave's queue drains and exactly one release
