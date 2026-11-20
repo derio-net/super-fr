@@ -174,9 +174,16 @@ rows:
     origin:
     - spec:2026-11-19-wave-merge-queue#R33
     - spec:2026-11-19-wave-merge-queue#R35
-    levels: {}
-    status: not-implemented
-    notes: born at spec review
+    levels:
+      unit:
+      - super-fr:tests/integration/test_queue_resume.py#test_a_wave_opens_builds_lands_once_runs_post_merge_once_and_drains
+      - super-fr:tests/integration/test_queue_resume.py#test_a_failed_post_merge_pauses_landings_with_a_need
+      - super-fr:tests/integration/test_queue_resume.py#test_a_landed_pr_the_forge_still_shows_open_pauses_the_queue
+      - super-fr:tests/unit/test_queue_exec.py#test_post_merge_is_owed_for_the_last_landing_until_every_batch_recorded_it
+    status: ci
+    notes: 'phase 3: post_merge runs once per landing and a failure pauses landings
+      with a Need; a landed PR the forge still shows open pauses the queue (executor
+      over real git and a fake forge)'
   - id: wave-queue-approval-content
     capability: approval gate
     acceptance: An approved-fr approval survives any push that leaves the PR's own diff
