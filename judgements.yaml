@@ -8849,6 +8849,11 @@ batches:
     checks:
     - 2 failing check(s)
     delivered: none
+  - kind: approval
+    at: '2026-11-20T05:18:01.550710Z'
+    pr: 1568
+    head: af9f939e00589e500f7830d73819d0f0f8217adc
+    voided_at: e8adbba8df874fc76e88e131520e4dd26b30fa9d
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
