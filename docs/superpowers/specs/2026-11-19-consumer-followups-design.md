@@ -151,9 +151,10 @@ after the change:
   refusal where it used to base the branch on `main`, which is intended (R7). The DevOps gate
   (`ops/gate.py:336`) catches nothing today: `Gate.default` gains `except FORGE_ERRORS`,
   raising `StageFailed(..., code=2)` with the error's text (R7).
-- `file_exists`: `migrate.py:928-934` catches `Exception` and degrades to "unresolved
-  locally — confirm and re-run". It is left as it is, because the degrade is documented and
-  the note already sends the operator to look. `spec.py:246` catches `FORGE_ERRORS`.
+- `file_exists`: `migrate.py:928-934` degrades to "unresolved locally — confirm and
+  re-run". The degrade stays, but a forge error (`FORGE_ERRORS`) now appends its text to
+  that note, so a login page is named instead of re-run forever (lens review l-errors-r1).
+  `spec.py:246` catches `FORGE_ERRORS`.
 - `list_dir`, `list_linked_prs`, `pr_status_by_url`: the callers checked by the spec
   review (`observe.py:53`, `gatebackfill/forge.py:94`) catch forge errors.
 

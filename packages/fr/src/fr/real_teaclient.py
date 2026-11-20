@@ -297,8 +297,9 @@ class RealTeaClient(UnsupportedBatchOps):
         tea's listing has no `merged` field and no merge time. `label`, not
         `ref`: a same-repo PR's label is the bare branch, a fork's is
         `owner:branch`, so a fork's same-named branch is not this one. None on
-        a TeaError, except one naming a login page, which is re-raised: an
-        unreachable forge is not "no PR" (gh#1554)."""
+        a TeaError, except one naming a login page, which is re-raised: a
+        login page is not "no PR" (gh#1554). Any other TeaError (a timeout, a
+        5xx, a non-zero tea exit) still reads as None."""
         try:
             entries = _tea.api_json(
                 "/repos/{owner}/{repo}/pulls?state=all&sort=recentupdate&limit=50",
