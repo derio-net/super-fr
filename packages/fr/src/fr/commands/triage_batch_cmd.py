@@ -692,7 +692,7 @@ OrderOpt = Annotated[
     int | None,
     typer.Option(
         "--order",
-        help="Merge order among entries that are ready together (lower first); readiness comes first.",
+        help="Merge order among entries ready together (lower first); readiness comes first.",
     ),
 ]
 WaveOpt = Annotated[
