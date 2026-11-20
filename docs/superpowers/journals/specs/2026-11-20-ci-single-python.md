@@ -173,3 +173,9 @@ A gap in fr-goal's brainstorm gate, met by this run, not caused by this change.
 ### gate-round2-trigger-gap-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1599] · resolves gate-round2-trigger-gap: fr-goal has no honest round-2 trigger when a round-1 answer reopens the scope
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1599.
+
+<!-- fr:journal kind=owed scope=spec id=owed-main-push-walk created=2026-11-20T08:50:54+00:00 -->
+### owed-main-push-walk · owed · Walk ci-single-leg-main-push after #1593 merges
+
+owed_key: row:ci-single-leg-main-push
+On the first push to main after merge: ci.yml's split-check merges the durations-shard-* files and saves test-durations-<run_id>, and the Release workflow's shards run green on Python 3.14. Record it with fr acceptance set-status --id ci-single-leg-main-push --walk … --status walked --feature 2026-11-20-ci-single-python.
