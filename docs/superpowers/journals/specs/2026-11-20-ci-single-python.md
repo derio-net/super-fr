@@ -179,3 +179,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1599.
 
 owed_key: row:ci-single-leg-main-push
 On the first push to main after merge: ci.yml's split-check merges the durations-shard-* files and saves test-durations-<run_id>, and the Release workflow's shards run green on Python 3.14. Record it with fr acceptance set-status --id ci-single-leg-main-push --walk … --status walked --feature 2026-11-20-ci-single-python.
+
+<!-- fr:journal kind=finding scope=spec id=owed-main-push-walk-resolved created=2026-11-20T08:51:03+00:00 state=open resolves=owed-main-push-walk filed_as=derio-net/super-fr#1600 -->
+### owed-main-push-walk-resolved · finding [filed → derio-net/super-fr#1600] · resolves owed-main-push-walk: Walk ci-single-leg-main-push after #1593 merges
+
+Filed at deliver as derio-net/super-fr#1600; still owed until discharged.
