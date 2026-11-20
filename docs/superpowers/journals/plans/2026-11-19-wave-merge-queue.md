@@ -233,3 +233,8 @@ replay/_valid/_plan_open were written once against the final combination model (
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 ejection reuses batch_drive.red_decision and conflict_decision unchanged in shape; the cleanup was the removal of the reupdate rule, its executor and update_failing in the same commit
+
+<!-- fr:journal kind=decision scope=plan id=p2-queue-opens-on-first-ready created=2026-11-20T08:42:29+00:00 phase=2 -->
+### p2-queue-opens-on-first-ready · decision · The wave queue opens only once the wave's first entry is ready (phase 2)
+
+Spec §B's 'the queue still opens on its first ready entry' means: an idle repo chooses the lowest wave with a non-terminal batch and opens its queue only when an entry of that wave is ready. While none is, no queue opens and no hold is written, so a wave still in development never blocks a release; a later wave's ready PRs wait as before (R2). Pinned by tests/unit/test_wave_queue_planner.py::test_an_idle_repo_opens_nothing_while_no_entry_of_the_lowest_unfinished_wave_is_ready and ::test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry; spec §B reworded to say so.
