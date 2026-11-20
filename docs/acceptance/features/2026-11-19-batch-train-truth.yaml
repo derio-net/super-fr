@@ -38,9 +38,12 @@ rows:
     - spec:2026-11-19-batch-train-truth#R8
     - spec:2026-11-19-batch-train-truth#R9
     - spec:2026-11-19-batch-train-truth#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_driver_failures.py#test_failures_file_files_one_issue_per_cause_without_the_message
+      - super-fr:tests/unit/test_triage_driver_failures.py#test_failures_file_comments_a_grown_count_on_the_open_issue
+    status: ci
+    notes: 'CI: ledger writer and drive failures --file against a fake GhClient'
   - id: drive-session-supervisor
     capability: A supervised driver restarts after a crash and dies with its owning
       session
