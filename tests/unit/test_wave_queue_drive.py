@@ -65,8 +65,11 @@ def test_another_scopes_hold_is_a_held_action_of_the_pass() -> None:
 
 
 def test_a_stall_proposal_is_a_blocked_action_the_summary_counts() -> None:
-    spent = [{"kind": "red_handback", "at": f"2026-10-01T11:0{i}:00Z", "pr": 1000,
-              "head": f"r{i}", "checks": ["t"], "delivered": "session"} for i in range(2)]  # fmt: skip
+    spent = [
+        {"kind": "red_handback", "at": f"2026-10-01T11:0{i}:00Z", "pr": 1000, "head": f"r{i}",
+         "checks": ["t"], "delivered": "session"}
+        for i in range(2)
+    ]  # fmt: skip
     batches = [_dispatched("a", 1, events=spent), _dispatched("b", 2)]
     hold = Hold(state="open", scope=SID, wave=1, parent=MAIN)
     snap = _snap(batches, {"a": "pr-open", "b": "merged"})
