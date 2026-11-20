@@ -70,9 +70,11 @@ rows:
     origin:
     - spec:2026-11-19-batch-train-truth#R15
     - spec:2026-11-19-batch-train-truth#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_draft_red.py#test_a_red_unapproved_draft_alone_is_reported_and_stepped_over
+    status: ci
+    notes: 'CI: both walks hand back a red unapproved draft'
   - id: drive-conflict-early
     capability: Conflicts on any open batch PR are handed back before approval
     acceptance: An open batch PR the forge reports conflicting, draft or not, approved
