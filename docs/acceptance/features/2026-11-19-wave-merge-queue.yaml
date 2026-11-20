@@ -433,3 +433,11 @@ amendments:
     ref: super-fr:tests/integration/test_queue_drive_cmd.py
     why: batch merge drives the wave merge queue, which this test runs over real git
       (R23)
+  - row: merge-train-label-gate
+    op: reword
+    base: 0
+    acceptance: 'fr queues a batch PR only with a valid approved-fr label bound to its
+      diff: an unlabelled green PR is held naming the label, a session push that changes
+      the diff after labelling voids the approval and removes the label, and a merge
+      of the base or an empty commit keeps it.'
+    why: a labelled PR is a queue entry now, and fr no longer updates PR branches (R22)
