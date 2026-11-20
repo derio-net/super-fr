@@ -25,3 +25,8 @@ PR #1584 attempt 1 (py3.11 shard 3): both hooks' 'mkdir <lock>' succeeded 2 ms a
 ### 09222191fa55 · finding [fixed] · run_twice drained pipes one at a time (timeout variant)
 
 tests/unit/test_hooks_worktree.py: run_twice reads both hooks' pipes concurrently. Pinned first by test_run_twice_drains_both_pipes_while_they_run (red before, green after).
+
+<!-- fr:journal kind=finding scope=debug id=4abac92c55d0 created=2026-11-20T06:51:11+00:00 state=fixed -->
+### 4abac92c55d0 · finding [fixed] · hook lock rested on an external mkdir (exit-1 / OVERLAP variant)
+
+fr-worktree-create.sh and fr-worktree-remove.sh now create a <name>.lock file with a shell noclobber redirect (O_EXCL, pid written in the same step). Pinned first by test_the_lock_does_not_depend_on_an_external_mkdir_being_atomic (a mkdir shim that always says yes: red before, green after). The mechanism by which mkdir succeeded twice on Linux CI is NOT verified; the fix removes the dependency instead. Not changed: the dead-holder reclaim (rm then retry) is still check-then-act.
