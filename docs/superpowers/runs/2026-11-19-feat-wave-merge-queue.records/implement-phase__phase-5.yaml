@@ -107,3 +107,5 @@ journal:
   - kind: lens
     lens: security
     title: "The driver now admits non-batch PRs to a queue that lands them by push, on trust rules the old merge step applied"
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/wave-p5-suite.log
