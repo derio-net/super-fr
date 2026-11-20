@@ -58,9 +58,12 @@ rows:
     acceptance: The consumer CI fr scaffolds runs in a python:3.14 image
     origin:
     - spec:2026-11-20-ci-single-python#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_publish.py
+      - super-fr:tests/unit/test_acceptance_services.py
+    status: ci
+    notes: Scaffold goldens pin python:3.14
     verify: none
 amendments:
   - row: ci-coverage-newest-leg
