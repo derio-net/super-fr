@@ -1,0 +1,14 @@
+schema_version: 12
+run: 2026-11-20-feat-ci-single-python
+step: lens-review
+outcome: done
+journal:
+  - {kind: finding, id: l-tests-r1, global: true, review_scope: in, title: "test_ci_tests_one_python_the_floor does not reject setup-uv `with: python-version`", body: "tests/unit/test_ci_python_floor.py:54-64; a setup-uv step pinned to another interpreter would pass."}
+  - {kind: finding, id: l-tests-r2, global: true, review_scope: in, title: "release.yml's floor is checked only at workflow env", body: "tests/unit/test_ci_python_floor.py:50-51; row ci-floor-python-3-14 claims the release suite runs on the floor (R6)."}
+  - {kind: finding, id: l-tests-r3, global: true, review_scope: in, title: "Row ci-scaffold-python-3-14 cites whole test files, not the golden comparisons", body: "docs/acceptance/features/2026-11-20-ci-single-python.yaml:63-64."}
+  - {kind: review, id: lens-review-1, global: true, title: "lens review: docs-accuracy (no findings), tests (3 in-scope findings)", body: "docs-accuracy: every substantive page edit checked against scaffold.py, the pyproject files, install.sh and release.yml; none. tests: l-tests-r1..r3 fixed; the one-python test is now parametrized over ci.yml and release.yml and refuses setup-uv python-version, proven red by a mutated setup-uv step in each workflow."}
+resolves:
+  - {id: l-tests-r1, state: fixed, body: "test_one_python_the_floor refuses `python-version` in any step's `with`; red on a mutated ci.yml setup-uv step."}
+  - {id: l-tests-r2, state: fixed, body: "The same test is parametrized over release.yml (its test job must exist); red on a mutated release.yml setup-uv step."}
+  - {id: l-tests-r3, state: fixed, body: "Row levels re-pointed to test_published_render_matches_the_golden and TestGoldenRenders::test_debt_on_matches_the_golden; ci-single-leg re-pointed to the renamed test; fr acceptance check passes."}
+evidence: {review: lens-review-1, reviewer: "docs-accuracy=aa83b63d78c33c743,tests=a7e559c2bfb1ed1ef"}
