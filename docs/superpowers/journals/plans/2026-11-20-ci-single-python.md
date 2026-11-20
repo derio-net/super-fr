@@ -99,3 +99,38 @@ Pre-existing compatibility code that stays correct; removal is an unrelated clea
 ### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: Other workflows set no UV_PYTHON, so uv downloads 3.14 every run (phase 1)
 
 Pre-existing: those workflows never pinned an interpreter; behaviour stays correct under the new floor.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-20T08:43:07+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · test_ci_tests_one_python_the_floor does not reject setup-uv `with: python-version`
+
+tests/unit/test_ci_python_floor.py:54-64; a setup-uv step pinned to another interpreter would pass.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-20T08:43:07+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · release.yml's floor is checked only at workflow env
+
+tests/unit/test_ci_python_floor.py:50-51; row ci-floor-python-3-14 claims the release suite runs on the floor (R6).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-20T08:43:07+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · Row ci-scaffold-python-3-14 cites whole test files, not the golden comparisons
+
+docs/acceptance/features/2026-11-20-ci-single-python.yaml:63-64.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-20T08:43:07+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy (no findings), tests (3 in-scope findings)
+
+docs-accuracy: every substantive page edit checked against scaffold.py, the pyproject files, install.sh and release.yml; none. tests: l-tests-r1..r3 fixed; the one-python test is now parametrized over ci.yml and release.yml and refuses setup-uv python-version, proven red by a mutated setup-uv step in each workflow.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-20T08:43:07+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: test_ci_tests_one_python_the_floor does not reject setup-uv `with: python-version`
+
+test_one_python_the_floor refuses `python-version` in any step's `with`; red on a mutated ci.yml setup-uv step.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-20T08:43:07+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: release.yml's floor is checked only at workflow env
+
+The same test is parametrized over release.yml (its test job must exist); red on a mutated release.yml setup-uv step.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-20T08:43:07+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: Row ci-scaffold-python-3-14 cites whole test files, not the golden comparisons
+
+Row levels re-pointed to test_published_render_matches_the_golden and TestGoldenRenders::test_debt_on_matches_the_golden; ci-single-leg re-pointed to the renamed test; fr acceptance check passes.
