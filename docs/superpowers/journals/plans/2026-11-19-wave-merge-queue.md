@@ -705,3 +705,84 @@ stays: it is the R22 hold's input.
 ### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
 
 the three admission paths (a collected close-out, an attributed archive PR, an export PR) each returned an Action already; they return one Admitted type instead and nothing was duplicated, so there was nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p5-review-1 created=2026-11-20T21:31:46+00:00 phase=5 -->
+### p5-review-1 · review · Phase 5 review — seven in-scope findings and one out-of-scope, all fixed (phase 5)
+
+An independent reviewer read the one-merge-path diff (0fa9fa1..3f73c4bf9) against R1–R36. It confirmed
+stored events still load (UpdateEvent and EnqueueEvent stay in the union), approval voiding, the conflict
+and red budgets, version slots, gate labels, Closes unlabelling and post_merge survive on the queue path,
+and that other features' rows changed only by amendment. It raised p5-r1..p5-r7 (in) and p5-r8 (out,
+fixed with p5-r4). Fixes are 1f18c4f2d..571c8345f; full suite after them: 16950 passed, 122 skipped.
+
+<!-- fr:journal kind=decision scope=plan id=p5-major-bump created=2026-11-20T21:31:46+00:00 phase=5 -->
+### p5-major-bump · decision · The change fragment is bump major, because a consumer's driver merges nothing until it adds a queue block (phase 5)
+
+R7/R22 refuse a repo with no queue.ci, so on upgrade every consumer's wave driver holds every merge until
+.fr/triage.yaml gains `queue: {ci: push|none}` and CI runs on `fr-queue/**`. That is a breaking behaviour
+change for consumers, so the fragment is major, its summary says so, and the wave-driver page carries the
+migration note. The operator may lower it at the PR.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · approved green draft batch PRs were never marked ready by the queue (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · a consumer repo with no queue block silently stopped merging, with no Need, a board saying merge ready, and a minor fragment (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · an ejected close-out or archive entry lost its session hand-back (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=in -->
+### p5-r4 · finding [open] (reviewer: in scope) · housekeeping admission never checked the PR's base branch (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=in -->
+### p5-r5 · finding [open] (reviewer: in scope) · dead MergeContext fields rules, patch_id_of and say were written and never read (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=in -->
+### p5-r6 · finding [open] (reviewer: in scope) · --order help and the Batches page still called order a hard merge constraint (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=in -->
+### p5-r7 · finding [open] (reviewer: in scope) · docs left stale by the phase (fr-triage explainer, index stamp, herdr page, skill event list) (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8 created=2026-11-20T21:31:46+00:00 phase=5 state=open review_scope=out -->
+### p5-r8 · finding [open] (reviewer: out of scope) · batch entries were never base-checked before a push landing (phase 3's executor) (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: approved green draft batch PRs were never marked ready by the queue (phase 5)
+
+_queue_entry readies an approved green draft batch PR when the queue builds it, both land methods; explainer and the merge-train-label-gate amendment match; test_wave_queue_phase5_fixes.py.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: a consumer repo with no queue block silently stopped merging, with no Need, a board saying merge ready, and a minor fragment (phase 5)
+
+a queue-unconfigured Need names the repo and what to add, the board shows the held reason instead of merge ready, the fragment is bump major with a rewritten summary and the wave-driver page carries the migration note (decision p5-major-bump); tests in test_wave_queue_phase5_fixes.py.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: an ejected close-out or archive entry lost its session hand-back (phase 5)
+
+_queue_hand_back_other resolves closeout#N to the collected close-out's session and archive#N to its batch's close-out session, else names the operator; tests.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r4 -->
+### p5-r4-resolved · finding [fixed] · resolves p5-r4: housekeeping admission never checked the PR's base branch (phase 5)
+
+wave_queue.base_refusal and _queue_entry refuse any entry whose base is not the default branch, with a Need naming the base; housekeeping test.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r5 -->
+### p5-r5-resolved · finding [fixed] · resolves p5-r5: dead MergeContext fields rules, patch_id_of and say were written and never read (phase 5)
+
+the dead MergeContext fields and their writes are removed.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r6 -->
+### p5-r6-resolved · finding [fixed] · resolves p5-r6: --order help and the Batches page still called order a hard merge constraint (phase 5)
+
+--order help and the Batches page say order breaks ties among entries ready together; tie-break test.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r7 -->
+### p5-r7-resolved · finding [fixed] · resolves p5-r7: docs left stale by the phase (fr-triage explainer, index stamp, herdr page, skill event list) (phase 5)
+
+fr-triage.md, index.md and herdr-control-sessions.md updated or re-stamped; the skill says update and enqueue events are read from older files and never written; mirrors synced; fr docs check current.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8-resolved created=2026-11-20T21:31:46+00:00 phase=5 state=fixed resolves=p5-r8 -->
+### p5-r8-resolved · finding [fixed] · resolves p5-r8: batch entries were never base-checked before a push landing (phase 3's executor) (phase 5)
+
+fixed with p5-r4; batch LivePr carries base and the planner refuses a non-default base; three planner tests.
