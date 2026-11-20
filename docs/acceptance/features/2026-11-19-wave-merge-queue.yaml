@@ -262,3 +262,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_pr_that_merged_a_newer_main_is_read_against_a_refetched_default
     why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_that_keeps_the_patch_id_keeps_the_approval
+    why: 'p1 review fix: evidence for the reworded row'
