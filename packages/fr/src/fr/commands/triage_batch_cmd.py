@@ -3129,7 +3129,7 @@ def _collected_member(
     return collected.Member(
         batch=batch.id, branch=branch, run=read.run, passed=tuple(sorted(passed)),
         evidence=evidence, missing=read.missing,
-        closes=collected.issues_to_close(cited, narrowed=read.narrowed), scope=read.scope,
+        closes=collected.issues_to_close(cited, narrowed=read.narrowed),
     )  # fmt: skip
 
 

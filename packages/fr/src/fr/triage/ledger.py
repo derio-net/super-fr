@@ -162,9 +162,6 @@ class CloseoutRead:
     missing: tuple[int, ...] = ()
     rows: tuple[GatedRow, ...] = ()
     narrowed: tuple[str, ...] = ()
-    # the names its live artifacts carry (run id, plan folder, spec and journal slug): what
-    # the close-out's migration (R16) matches a stale artifact against
-    scope: tuple[str, ...] = ()
 
 
 def closeout_read(checkout: Checkout, ref: str, branch: str, repo: str) -> CloseoutRead:
@@ -213,6 +210,4 @@ def closeout_read(checkout: Checkout, ref: str, branch: str, repo: str) -> Close
                         ]  # fmt: skip
     except (RunStateError, JournalParseError, OSError, ValueError, TestPlanHeadingError) as exc:
         raise TriageError(f"run {run} cannot be read for its close-out: {exc}") from exc
-    names = [run, Path(plan).name if plan else "", spec_slug_of(Path(spec)) if spec else ""]
-    return CloseoutRead(run, missing, rows, tuple(dict.fromkeys(narrowed)),
-                        tuple(n for n in dict.fromkeys(names) if n))  # fmt: skip
+    return CloseoutRead(run, missing, rows, tuple(dict.fromkeys(narrowed)))

@@ -99,6 +99,11 @@ class CloseoutTree(Protocol):
 
     def stale_artifacts(self) -> list[str]: ...
 
+    def archive_moves(self, branch: str, default_ref: str) -> list[str] | None:
+        """The live artifact paths `fr archive --branch <branch>` would move (its own
+        classification of what the branch changed), or None when they cannot be read."""
+        ...
+
     def commit_paths(self, paths: list[str], message: str) -> str | None: ...
 
     def push(self, branch: str, *, force: bool = False) -> None: ...
@@ -127,7 +132,6 @@ class Member:
     evidence: str | None = None
     missing: tuple[int, ...] = ()
     closes: tuple[str, ...] = ()
-    scope: tuple[str, ...] = ()  # the names its live artifacts carry (`CloseoutRead.scope`)
 
 
 @dataclass(frozen=True)
@@ -301,19 +305,17 @@ def closeout_title(branch: str, batches: Sequence[str]) -> str:
 MIGRATION_SUBJECT = "chore(fr): migrate the artifacts this close-out archives"
 
 
-def owned_stale(stale: Iterable[str], members: Sequence[Member]) -> list[str]:
-    """The stale artifacts (repo-relative paths) the *members*' archives move (R16): those
-    whose path carries one of a member's names (its run id, plan folder or spec slug) as a
-    whole path component or file stem. A stale artifact no member owns is left alone."""
-    names = {n for m in members for n in m.scope}
-    out: list[str] = []
-    for rel in stale:
-        parts = rel.split("/")
-        stems = {*parts, *(part.rsplit(".", 1)[0] for part in parts), *(
-            part.partition(".records")[0] for part in parts)}  # fmt: skip
-        if names & stems:
-            out.append(rel)
-    return out
+def owned_stale(stale: Iterable[str], moves: Iterable[str]) -> list[str]:
+    """The stale artifacts (repo-relative paths) the archive moves (R16): those that are
+    one of *moves* (what `fr archive --branch <b>` will move for the members, derived from
+    the archive's own classification) or sit under one that is a directory (a plan folder).
+    Anything the archive leaves alone (an acceptance fragment) or no member moves is left
+    for its own migration."""
+    wanted = {m.rstrip("/") for m in moves}
+    return [
+        rel for rel in stale
+        if rel in wanted or any(rel.startswith(w + "/") for w in wanted)
+    ]  # fmt: skip
 
 
 def migrate_args(paths: Sequence[str]) -> list[str]:
@@ -325,14 +327,24 @@ def migrate_args(paths: Sequence[str]) -> list[str]:
 
 
 def _migrate_first(
-    members: Sequence[Member], tree: CloseoutTree, say: Callable[[str], None]
+    members: Sequence[Member], tree: CloseoutTree, say: Callable[[str], None], default: str
 ) -> str:
     """R16: migrate the stale artifacts the *members*' archives move, as the close-out
     branch's first commit, so no stale artifact holds the close-out. Returns the commit the
     archive then builds on (the tree's head when nothing was stale or the migration was
     refused: a retiring hop is not per file, and the archive then holds as it always did)."""
     base = tree.head()
-    paths = owned_stale(tree.stale_artifacts(), members)
+    stale = tree.stale_artifacts()
+    if not stale:
+        return base
+    moves: list[str] = []
+    for m in members:
+        found = tree.archive_moves(m.branch, f"origin/{default}")
+        if found is None:
+            say(f"{m.batch}: what its archive moves could not be read; nothing of it migrated")
+        else:
+            moves += found
+    paths = owned_stale(stale, moves)
     if not paths:
         return base
     code, out = tree.run_fr(migrate_args(paths))
@@ -372,7 +384,9 @@ def execute(
     commit, one push and one PR. *hold*(batch id, why) each batch held (the *unreadable*
     ones first); *record*(batch id, branch) each batch the PR carries, only once it is
     open."""
-    base = _migrate_first(members, tree, say)  # R16: its own commit; the archive builds on it
+    base = _migrate_first(
+        members, tree, say, default
+    )  # R16: its own commit; the archive builds on it
     done: list[Member] = []
     held: list[tuple[str, str]] = list(unreadable)
     skipped: list[tuple[str, str]] = list(transient)
