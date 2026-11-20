@@ -394,3 +394,9 @@ amendments:
       requiring a forge merge queue is queue-held with the reason (tests/unit/test_triage_batch_drive_cmd.py#test_a_repo_whose_base_requires_a_forge_merge_queue_is_held_with_the_reason,
       scenario merge-train-queue.sh)'
     why: R22 removes the forge merge-queue mode
+  - row: merge-train-strict-up-to-date
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: the queue never updates
+      a PR branch, so strict up-to-date status checks have nothing to hold'
+    why: R22 removes the update path and its strict-checks exemption
