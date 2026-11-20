@@ -538,3 +538,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_forge_refused_archive_merge_records_a_stop
     why: the archive step no longer merges (R32)
+  - row: wave-queue-approval-content
+    op: drop-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_driver_update_records_its_patch_id_and_a_clean_merge_after_it_keeps_the_approval
+    why: 'fr''s own updates are gone (R22): an old update event is only read'
