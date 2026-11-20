@@ -160,3 +160,8 @@ a 5xx, a non-zero tea exit) still reads as None.
 The two fail-open swallows predate this change and are documented as deliberate. This
 change did not cause them. Naming a login page there is a separate decision about whether
 the push guard and adopt should warn.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved-2 created=2026-11-20T07:21:35+00:00 state=open resolves=l-errors-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1592 -->
+### l-errors-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1592] · resolves l-errors-r3: adopt.py and push_cmd.py swallow forge errors silently, so a login page is never named there
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1592.
