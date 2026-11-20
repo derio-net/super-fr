@@ -139,3 +139,8 @@ Row levels re-pointed to test_published_render_matches_the_golden and TestGolden
 ### p1-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1596] · resolves p1-r4: test_ci_shards.py:4 docstring still says 6-way matrix (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1596.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved-2 created=2026-11-20T08:44:21+00:00 phase=1 state=open resolves=p1-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1597 -->
+### p1-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1597] · resolves p1-r5: scripts/floors.py keeps dead 3.11 tokenizer compatibility (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1597.
