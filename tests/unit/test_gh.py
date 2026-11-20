@@ -894,3 +894,29 @@ def test_the_gh_cli_association_limit_counts_kept_issues_only(
     monkeypatch.setattr(gh, "_rest", lambda: None)
     got = gh.issue_associations(repo="o/r", state="open", limit=2)
     assert got == {1: "NONE", 3: "OWNER"}
+
+
+class TestSwapIssueLabelsPartialApply:
+    """R20: correctness does not rest on gh resolving every label before it mutates."""
+
+    def test_a_refused_call_that_applied_part_of_its_change_ends_with_the_wanted_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        labels = {"old", "x"}
+        calls: list[list[str]] = []
+
+        def fake_run(args: list[str]) -> str:
+            calls.append(args)
+            adds = [args[i + 1] for i, a in enumerate(args) if a == "--add-label"]
+            rems = [args[i + 1] for i, a in enumerate(args) if a == "--remove-label"]
+            labels.update(adds)  # the add lands first ...
+            for lbl in rems:
+                if lbl == "never-defined":  # ... then a removal is refused
+                    raise gh.GhError("gh exited", stderr=f"'{lbl}' not found\n", returncode=1)
+                labels.discard(lbl)
+            return ""
+
+        monkeypatch.setattr(gh, "_run_gh", fake_run)
+        gh.swap_issue_labels(repo="o/r", number=1, add=["new"], remove=["old", "never-defined"])
+        assert labels == {"x", "new"}
+        assert len(calls) <= 3

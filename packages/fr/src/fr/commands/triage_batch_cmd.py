@@ -956,15 +956,17 @@ def batch_cancel_command(
     owes = batch.wave is not None or any(e.kind == "dispatch" for e in batch.events)
     claimed = any(_own_claim_batch(facts, k, env.me) for k in batch.ids)
     releases = owes or claimed
-    withdraws = [k for k in batch.ids if k not in held] if stage != "proposed" else []
+    # R21: only a dispatch labels and comments on members; a batch that never dispatched
+    # withdraws nothing, so it takes no tracking gate and needs no clone
+    dispatched = any(e.kind == "dispatch" for e in batch.events)
+    withdraws = [k for k in batch.ids if k not in held] if dispatched else []
     # a proposed batch reached the forge only when its claims were written; a wave owes
     # claims from the moment it is set, so ones written since the last collect may
     # exist whatever facts say (p1-r8)
     touches_forge = stage != "proposed" or claimed or batch.wave is not None
-    if touches_forge:
+    if dispatched:
         # gh#803: withdrawing writes labels and comments to the tracker, so it
-        # is gated as dispatch is — a proposed batch writes nothing and needs
-        # no clone.
+        # is gated as dispatch is; a never-dispatched batch withdraws nothing.
         _tracking_gate(checkout_path, owner_repo, yes=yes)
     console.print(f"cancel batch {batch.id} ({stage})", markup=False)
     for key in withdraws:

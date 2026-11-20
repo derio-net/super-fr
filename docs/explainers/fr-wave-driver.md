@@ -202,7 +202,8 @@ The driver tries a given head against a given default-branch commit once for eac
 A pull request that has been handed back for its current head is not shown as awaiting
 approval: its card says it is conflicting and handed back. The brief says to merge the base without
 rebasing, and to regenerate generated files rather than resolve them by hand. A batch gets
-two hand-backs; after that it sits in the board's **Needs you now** until you resolve it.
+two hand-backs; after that it sits in the board's **Needs you now** until you resolve it. A batch
+with no session to take the conflict, because it has no dispatch and no named runner, goes there at once.
 
 A repo can set `merge_method` in `.fr/triage.yaml`. Without it the driver uses the forge's
 default method. Where a repo allows several and fr reaches the forge through REST only, the

@@ -1082,3 +1082,45 @@ def test_cancelling_a_waved_proposed_batch_releases_claims_facts_never_saw(
     assert markers(gh, REPO, 577)[0].released is not None
     assert "fr:claimed" not in gh.issues[(REPO, 577)].labels
     assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
+
+
+def test_cancelling_a_never_dispatched_batch_withdraws_nothing_and_needs_no_clone(
+    tmp_path: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R21: no dispatch event means nothing was ever labelled or commented, so cancel takes
+    no tracking gate, removes no fr:in-progress and posts no withdrawal; claims still go."""
+    gated: list[str] = []
+    monkeypatch.setattr(triage_batch_cmd, "_tracking_gate", lambda *a, **k: gated.append("gate"))
+    own = marker(_me(), "lifecycle", expires=FAR)
+    _with6(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "wave": 1})
+    put_marker(gh, REPO, 577, own, 7)
+    before = list(gh.issue_comments.get((REPO, 577), []))
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert gated == []
+    assert "post the withdrawal comment" not in out
+    assert not any("withdr" in str(c).lower() for c in gh.issue_comments.get((REPO, 577), []))
+    assert len(gh.issue_comments.get((REPO, 577), [])) == len(before)
+    assert markers(gh, REPO, 577)[0].released is not None
+    assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
+
+
+def test_cancelling_a_dispatched_batch_still_takes_the_tracking_gate(
+    tmp_path: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gated: list[str] = []
+    monkeypatch.setattr(triage_batch_cmd, "_tracking_gate", lambda *a, **k: gated.append("gate"))
+    _with6(
+        tmp_path,
+        {
+            "id": "lifecycle",
+            "title": "t",
+            "ids": ["super-fr#577"],
+            "wave": 1,
+            "events": [_DISPATCH],
+        },
+    )
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert gated == ["gate"]
+    assert "fr:in-progress" not in gh.issues[(REPO, 577)].labels
