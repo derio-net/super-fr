@@ -297,3 +297,79 @@ _plan_idle opens nothing while no entry of the lowest unfinished wave is ready; 
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: a between-waves queue whose only entry was ejected, with nothing landed, never drained (phase 2)
 
 a between-waves queue drains at its base once nothing is left to land (R29/R17 support drain, not clear); an entry ejected from an earlier between-waves queue at its live head opens no new queue until its head moves; spec §B reworded; four planner tests.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-suite-evidence-tmpdir created=2026-11-20T11:54:35+00:00 phase=3 -->
+### p3-suite-evidence-tmpdir · discovery · fr's tests-log witness does not expand $TMPDIR, so phase 3's suite log is left out (phase 3)
+
+The executor's full suite passed (17014 passed, 122 skipped, exit 0) into `$TMPDIR/wave-p3-suite.log`.
+`fr run resolve` refuses the expanded path as written by no command of the holder: the witness
+matches the literal redirect target and does not expand `$TMPDIR`. The log is left out of the record;
+deliver's own full suite covers this phase. Worth an fr fix (out of this feature's scope).
+
+<!-- fr:journal kind=decision scope=plan id=p3-open-drain-record-only created=2026-11-20T11:54:35+00:00 phase=3 -->
+### p3-open-drain-record-only · decision · queue-open and queue-drain only record their events in phase 3; the hold pushes are phase 4's (phase 3)
+
+The executor records `queue_open` (a new QueueRecord at main's sha) and `queue_drain`
+through the one writer, so the queue runs end to end, but writes no
+`refs/heads/fr-hold/queue`; `queue-hold` and `queue-cleared` print "planned, not executed
+(the hold is not written yet)". Phase 4 adds the leased hold pushes to these two actions.
+No repo has a `queue:` block until phase 7, so nothing changes behaviour in between.
+
+<!-- fr:journal kind=decision scope=plan id=p3-gating-in-the-command created=2026-11-20T11:54:35+00:00 phase=3 -->
+### p3-gating-in-the-command · decision · Refusals, slot-check Needs and landing pauses are applied to the plan by the command, not in batch_drive (phase 3)
+
+batch_drive.py is outside phase 3's file list, so `drive_pass` is unchanged: the command
+post-processes `Pass.queues` (`held_plan` for no queue.ci / ci: none with CI / a glab or
+tea client; queue-need for a required check that never reported; `QueueExecutor.gate`
+for post_merge (R33) and the forge read-back (R35)) and prints those reports itself via
+`_report_once`. It also drops `drive_pass`'s per-batch `post-merge` actions for queue
+repos: the queue runs post_merge once per landing (`_post_merge(..., also=...)` records
+it on every landed batch).
+
+<!-- fr:journal kind=decision scope=plan id=p3-queue-built-before-push-resume created=2026-11-20T11:54:35+00:00 phase=3 -->
+### p3-queue-built-before-push-resume · decision · queue_built is recorded before each slot push, so resume re-pushes a recorded combination (phase 3)
+
+As the plan says, `queue_built` is written before the slot push. A driver killed between
+the two leaves a recorded sha the slot lacks; `QueueExecutor.resume` re-pushes it
+(leased on what the slot holds) when the clone has the commit. A landing pushed but not
+recorded is recognised by `main` equal to a recorded combination's sha and recorded as
+`queue_land`, never pushed again (R24). A recorded combination whose commit is on no
+clone the driver has (another host built it) stays pending until rebuilt.
+
+<!-- fr:journal kind=decision scope=plan id=p3-facts-schema-16 created=2026-11-20T11:54:35+00:00 phase=3 -->
+### p3-facts-schema-16 · decision · TriageConfig.queue moves the facts stamp to 16 (phase 3)
+
+`Facts.to_json` dumps every config, `queue: null` included, which a closed-world
+schema-15 reader rejects, so FACTS_SCHEMA is 16 (15 is released); the four scenario
+fixture generators were re-run.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-rebase-version-conflicts created=2026-11-20T11:54:35+00:00 phase=3 -->
+### p3-rebase-version-conflicts · discovery · Under rebase, R6's version rule is applied per replayed commit (phase 3)
+
+`rebase` cherry-picks the PR's non-merge commits onto the combination; a conflicted pick
+is resolved by the same `unresolvable` rule over the PR's whole change (taking the
+combination's side), and the slot version is folded into the last replayed commit. A PR
+whose history contains merges of main may conflict where its tree would not; that is a
+real conflict, handed back.
+
+<!-- fr:journal kind=decision scope=plan id=p3-queue-push-site-pinned created=2026-11-20T11:54:35+00:00 phase=3 -->
+### p3-queue-push-site-pinned · decision · Checkout.push_leased is pinned as its own git push site, not routed through push_product_branch (phase 3)
+
+tests/unit/test_tripwire_product_push.py pins every git push site. The queue's landing
+pushes the default branch, but it carries approved, tested PR content (the forge
+merge's job done by push), not fr's own files, so the placement scan of
+push_product_branch does not apply; it is allowlisted as QUEUE_PUSHERS with that
+argument. The slot pushes go through the same method.
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-2 created=2026-11-20T11:54:35+00:00 phase=3 lens=security step=implement-phase -->
+### lens-security-2 · lens · The driver now pushes the default branch directly (atomic, leased) and rewrites PR head refs under squash and rebase (phase 3)
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-20T11:54:35+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+build was written once against the refactored batch_merge.unresolvable (split out of _unresolvable in the same commit) and Worktree.stage (split out of commit_all); no second copy left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-20T11:54:35+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+land_push, land_merge and read_back share Landing/LandResult from the start; the refusal wording lives in one refusal_reason; nothing duplicated
