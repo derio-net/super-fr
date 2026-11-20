@@ -86,6 +86,7 @@ def test_pr_gating_workflows_run_once_per_pr_push() -> None:
         on = _workflow(name)["on"]
         assert isinstance(on, dict), f"{name}: `on:` must be a mapping, got {on!r}"
         assert "pull_request" in on, name
-        assert (on.get("push") or {}).get("branches") == ["main"], (
-            f"{name}: push must be scoped to main, or every PR push runs it twice"
+        # main, and the wave merge queue's slot branches (R7): `fr-queue/**` is no PR branch
+        assert (on.get("push") or {}).get("branches") == ["main", "fr-queue/**"], (
+            f"{name}: push must be scoped to main and fr-queue/**, or every PR push runs it twice"
         )

@@ -1660,26 +1660,20 @@ def _wave_of(batch: Batch) -> int | None:
 
 def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
     """R15: whether *wave*'s collected close-out may start: every batch of it is terminal (the
-    wave's landings are over: landed, cancelled, abandoned or deferred) and, where the repo
-    runs a `post_merge`, every landed one has it recorded, so the close-out starts only after
-    the last landing's `post_merge`. A batch with no wave stands alone: always."""
+    wave's landings are over: landed, cancelled, abandoned or deferred), so one close-out takes
+    all of its ungated landed batches. The repo's `post_merge` for the last landing is planned
+    before it in the same pass (`post-merge` actions come first), and the close-out itself is
+    held while a landed batch has none recorded (`_Driver._close_out`). A batch with no wave
+    stands alone: always."""
     from fr.triage.wave_queue import is_terminal
 
     if wave is None:
         return True
-    for batch in snap.batches:
-        if snap.repos.get(batch.id) != repo or _wave_of(batch) != wave:
-            continue
-        stage = snap.stages.get(batch.id)
-        if not is_terminal(batch, stage):
-            return False
-        if (
-            stage in LANDED
-            and repo in snap.post_merge_repos
-            and not any(e.kind == "post_merge" for e in batch.events)
-        ):
-            return False
-    return True
+    return all(
+        is_terminal(batch, snap.stages.get(batch.id))
+        for batch in snap.batches
+        if snap.repos.get(batch.id) == repo and _wave_of(batch) == wave
+    )
 
 
 def queue_snapshot(

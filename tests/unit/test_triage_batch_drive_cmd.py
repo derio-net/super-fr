@@ -1997,7 +1997,7 @@ def test_closeout_and_batch_dispatch_resolve_the_same_model(
     world.pr(101, "feat/batch-b1", [1], state="MERGED",
              merged_at=(NOW - timedelta(minutes=2)).isoformat())  # fmt: skip
     b1 = _batch("b1", 1, events=_dispatch_event("b1")).replace(LAUNCH, no_model)
-    b2 = _batch("b2", 2).replace(LAUNCH, no_model)
+    b2 = _batch("b2", 2, wave=2).replace(LAUNCH, no_model)  # wave 1 is over: its close-out starts
     _state(tmp_path, world, b1, b2)
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")

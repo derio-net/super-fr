@@ -70,7 +70,11 @@ GATED: dict[str, str] = {
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::settle_entry_approval":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
+    "fr/src/fr/triage/approval.py::settle_release":
+        "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::ensure_approval_label": "_labels_off: client_policy(labels)",
+    "fr/src/fr/ops/gate.py::add_queue_label":
+        "ledger_block(primary, labels): forge.labels off refuses with the label to add by hand",
     "fr/src/fr/triage/claim_writes.py::_add_label":
         "reached only from claim/refresh, after _gate (quiet_block: labels, comments)",
     "fr/src/fr/triage/claim_writes.py::_remove_label":

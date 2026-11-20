@@ -116,6 +116,5 @@ never pass it by hand with a note you made up.
 ## What the stage never does
 
 - It never runs a probe of an untrusted op set, and trust is granted only on the host.
-- It never pushes to the PR head, never releases a head it did not verify, and never calls
-  a merge: the queue lands the PR.
+- It never pushes to the PR head, releases a head it did not verify, or calls a merge.
 - It never skips a failed stage: the first failure stops the run, naming the stage.

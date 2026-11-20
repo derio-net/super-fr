@@ -460,7 +460,7 @@ def test_is_archived_needs_an_added_run_artifact_and_none_still_live(
 
 
 def test_closeout_comes_before_dispatch_in_a_pass() -> None:
-    batches = [_merged("x", 1), _batch("y", 2)]
+    batches = [_merged("x", 1), _batch("y", 2, wave=2)]  # wave 1 is over: its close-out starts
     snap = _snap(batches, {"x": "merged", "y": "proposed"}, released=frozenset({"x"}))
     assert _kinds(drive_pass(snap).actions) == [("closeout", "x"), ("dispatch", "y")]
 

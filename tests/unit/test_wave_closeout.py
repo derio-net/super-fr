@@ -55,13 +55,14 @@ def test_one_close_out_takes_the_whole_wave_and_another_wave_gets_its_own() -> N
     assert first.items == ("a", "b")  # the lowest wave; one at a time per repo (R15)
 
 
-def test_the_close_out_starts_only_after_the_last_landings_post_merge() -> None:
+def test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out() -> None:
     snap = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=frozenset({REPO}),
                  a_events=[POST_MERGE])  # fmt: skip
-    assert _closeouts(snap) == []  # b's landing has run no post_merge yet
+    kinds = [(a.kind, a.batch) for a in drive_pass(snap).actions]
+    assert kinds == [("post-merge", "b"), ("closeout", "a")]  # b's landing has none yet
     done = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=frozenset({REPO}),
                  a_events=[POST_MERGE], b_events=[POST_MERGE])  # fmt: skip
-    assert _closeouts(done) == [("a", "b")]
+    assert [a.kind for a in drive_pass(done).actions] == ["closeout"]
 
 
 def test_a_tester_gated_batch_is_left_out_and_its_own_close_out_follows_its_gate() -> None:

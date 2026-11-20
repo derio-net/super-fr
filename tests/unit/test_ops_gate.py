@@ -574,6 +574,20 @@ def test_stage_2_never_merges_and_waits_for_the_queue(ops_root: Path) -> None:
     assert any("waits for the merge queue" in line for line in said)
 
 
+def test_forge_labels_off_refuses_the_release_and_names_the_label(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R9: the queue is told by label, so `forge.labels: off` stops the stage."""
+    monkeypatch.setattr("fr.settings.ledger_block", lambda root, kind: "forge.labels is off")
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True)
+    result = run(gate)
+    assert result.failed == 2 and "forge.labels is off" in result.why
+    assert "fr-queue:release" in result.why and not [c for c in forge.calls if c[0] == "labels"]
+
+
 def test_a_rerun_while_released_asks_nothing_and_waits_again(ops_root: Path) -> None:
     _record_stages(ops_root, 1)
     for op in ("pre", "mut"):

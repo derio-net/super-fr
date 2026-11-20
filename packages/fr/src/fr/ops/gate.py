@@ -747,7 +747,18 @@ def add_queue_label(gate: Gate, label: LabelDef) -> None:
     """Say a word to the wave merge queue (R26): create *label* on the repo when it is
     missing, then add it to the PR. The DevOps stage reads no triage state and calls no
     merge; the driver settles the label into a queue event on its next pass."""
+    from fr.settings import SettingsError, ledger_block
+
     t = gate.target
+    try:
+        off = ledger_block(t.primary, "labels")  # R9: only `forge.labels` decides the ledger
+    except SettingsError as exc:
+        off = str(exc)
+    if off is not None:
+        raise StageFailed(
+            f"the queue is told by the label {label.name} on PR #{t.pr}, and {off}: add it by "
+            "hand if the queue is to act on this PR"
+        )
     try:
         gate.forge.ensure_labels(t.repo, [label])
         gate.forge.edit_pr_labels(t.repo, t.pr, add=frozenset({label.name}), remove=frozenset())
