@@ -4225,7 +4225,7 @@ class _Driver:
                 continue
             try:
                 bases[repo] = self._base_now(repo)
-            except (GitError, TriageError):  # unknown base: decide nothing this pass
+            except GitError, TriageError:  # unknown base: decide nothing this pass
                 continue
             states.update(seen)
         return {
@@ -7187,7 +7187,7 @@ def _cursors(root: Path) -> list[object]:
     for path in sorted(below(root, "run").glob("*.yaml")):
         try:
             out.append(yaml.safe_load(path.read_text(encoding="utf-8")))
-        except (OSError, yaml.YAMLError):
+        except OSError, yaml.YAMLError:
             continue
     return out
 

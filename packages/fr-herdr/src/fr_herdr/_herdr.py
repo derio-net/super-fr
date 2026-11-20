@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -20,17 +20,15 @@ PANE_BUSY_TRIES = 15
 PANE_BUSY_WAIT = 2.0
 """Seconds between those tries."""
 
-_T = TypeVar("_T")
 
-
-def poll(
-    check: Callable[[], _T | None],
+def poll[T](
+    check: Callable[[], T | None],
     *,
     timeout: float,
     clock: Callable[[], float],
     sleep: Callable[[float], None],
     interval: float = 1.0,
-) -> _T | None:
+) -> T | None:
     """Bounded foreground/startup observation shared by both harnesses."""
     deadline = clock() + timeout
     while True:

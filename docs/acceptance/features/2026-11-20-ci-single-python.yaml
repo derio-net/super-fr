@@ -1,0 +1,127 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-20-ci-single-python
+repo: derio-net/super-fr
+rows:
+  - id: ci-floor-python-3-14
+    capability: ci
+    acceptance: The workspace declares Python 3.14 as its floor (every requires-python,
+      ruff target, mypy version), and both ci.yml and release.yml run on exactly that
+      floor
+    origin:
+    - spec:2026-11-20-ci-single-python#R1
+    - spec:2026-11-20-ci-single-python#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_ci_pins_the_requires_python_floor
+      - super-fr:tests/unit/test_ci_python_floor.py#test_release_suite_runs_on_the_requires_python_floor
+      - super-fr:tests/unit/test_ci_python_floor.py#test_the_floor_is_3_14_everywhere
+      - super-fr:tests/unit/test_ops_isolated_python.py#test_the_python_floor_has_safe_path
+    status: ci
+    notes: Floor pinned by unit tests CI runs
+    verify: none
+  - id: ci-single-leg
+    capability: ci
+    acceptance: PR CI runs the suite on one interpreter in 7 shards, every shard measures
+      coverage for the fail-under 75 gate, and split-check proves the shards ran exactly
+      the collected set
+    origin:
+    - spec:2026-11-20-ci-single-python#R3
+    - spec:2026-11-20-ci-single-python#R4
+    - spec:2026-11-20-ci-single-python#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_every_shard_feeds_coverage
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_checks_the_one_leg
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_collect_job_collects_once_with_the_shards_addopts_and_no_split
+      - super-fr:tests/unit/test_ci_python_floor.py#test_one_python_the_floor
+    status: ci
+    notes: 'One 3.14 leg, 7 shards, coverage on every shard, one split-check; pinned
+      by test_ci_python_floor.py (test_one_python_the_floor over ci.yml and release.yml,
+      test_every_shard_feeds_coverage), test_ci_split_workflow.py and test_ci_shards.py;
+      green on PR #1593.'
+    verify: none
+  - id: ci-single-leg-main-push
+    capability: ci
+    acceptance: After merge, a push to main saves the one leg's measured shard durations
+      as the next run's plan, and the release suite runs green on Python 3.14
+    origin:
+    - spec:2026-11-20-ci-single-python#R5
+    - spec:2026-11-20-ci-single-python#R6
+    levels: {}
+    status: walk-owed
+    notes: 'Post-merge walk tracked in derio-net/super-fr#1600: the first main push''s
+      durations save and the release suite on 3.14.'
+    verify: live
+    issues:
+    - derio-net/super-fr#1600
+  - id: ci-scaffold-python-3-14
+    capability: acceptance
+    acceptance: The consumer CI fr scaffolds runs in a python:3.14 image
+    origin:
+    - spec:2026-11-20-ci-single-python#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_publish.py#test_published_render_matches_the_golden
+      - super-fr:tests/unit/test_acceptance_services.py#TestGoldenRenders::test_debt_on_matches_the_golden
+    status: ci
+    notes: Golden comparisons pin the python:3.14 image byte for byte (test_published_render_matches_the_golden,
+      TestGoldenRenders::test_debt_on_matches_the_golden).
+    verify: none
+amendments:
+  - row: ci-coverage-newest-leg
+    op: reword
+    base: 0
+    acceptance: The combined coverage gate (fail-under 75) is measured on every shard
+      of the one 3.14 leg
+    why: CI now runs one leg on 3.14 (#1589)
+  - row: ci-coverage-newest-leg
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
+    why: test renamed
+  - row: ci-coverage-newest-leg
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_ci_python_floor.py#test_every_shard_feeds_coverage
+    why: test renamed
+  - row: ci-shards-complete
+    op: reword
+    base: 1
+    acceptance: CI splits the one leg's tests across 7 shards by one CI-derived durations
+      file per run, and fails when the shards together did not run exactly the collected
+      test set once each
+    why: CI now runs one leg (#1589)
+  - row: ci-shards-complete
+    op: drop-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_covers_every_test_leg
+    why: test renamed
+  - row: ci-shards-complete
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_checks_the_one_leg
+    why: test renamed
+  - row: ci-coverage-newest-leg
+    op: set-status
+    base: 3
+    status: ci
+    notes: 'Coverage measured and uploaded on every shard of the one 3.14 leg (#1589);
+      coverage job (fail-under 75) unchanged and green on PR #1593.'
+    why: 'one leg (#1589): the two-leg note is no longer true'
+  - row: ci-shards-complete
+    op: set-status
+    base: 4
+    status: ci
+    notes: 'split-check runs on every CI run over the one 3.14 leg''s 7 shards (#1589,
+      green on PR #1593); shape and pure check/merge pinned by unit tests; xdist writer
+      pinned by integration test.'
+    why: 'one leg (#1589): the both-legs, 6-shard note is no longer true'

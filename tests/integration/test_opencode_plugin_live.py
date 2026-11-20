@@ -167,7 +167,7 @@ def _service_pid(env: dict[str, str]) -> int | None:
     path = Path(env["XDG_STATE_HOME"]) / "opencode" / "service.json"
     try:
         return int(json.loads(path.read_text())["pid"])
-    except (OSError, ValueError, KeyError, TypeError):
+    except OSError, ValueError, KeyError, TypeError:
         return None
 
 
@@ -181,7 +181,7 @@ def _reap_service(pid: int | None) -> None:
     for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
             os.kill(pid, sig)
-        except (ProcessLookupError, PermissionError):
+        except ProcessLookupError, PermissionError:
             return
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:

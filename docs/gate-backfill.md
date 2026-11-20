@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/gatebackfill/**
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-17 a tracker close reports every error kind and never raises (batch triage-intake)
+reviewed: 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-17 a tracker close reports every error kind and never raises (batch triage-intake)
 ---
 
 # `fr gate backfill` — bring old owed work into the gate lanes

@@ -328,7 +328,7 @@ def _verification(repo_root: Path, spec_rel: str | None, plan: Plan | None) -> S
 
     try:
         section = spec_section_at(repo_root, spec_rel)
-    except (SectionError, OSError):
+    except SectionError, OSError:
         section = None
     shape: str | None = None
     if plan is not None:

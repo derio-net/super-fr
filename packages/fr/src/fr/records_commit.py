@@ -36,7 +36,7 @@ def _shown(root: Path, paths: Iterable[Path]) -> str:
     for p in paths:
         try:
             out.append(p.resolve().relative_to(root.resolve()).as_posix())
-        except (ValueError, OSError):
+        except ValueError, OSError:
             out.append(str(p))
     return ", ".join(out)
 
@@ -92,7 +92,7 @@ def commit_records(
         if not todo or isinstance(git_context(repo_root), NoRepo):
             return outcome  # not in a git repo (or nothing written): a no-op, as before
         reason = outcome.reason
-    except (QuietProductWriteError, StealthPushError):
+    except QuietProductWriteError, StealthPushError:
         # R23 / R24: a hard error (exit 2), never a stderr line over exit 0 (p3-r1); a
         # tracking push that did not land refuses the step.
         raise

@@ -21,7 +21,7 @@ import subprocess
 import urllib.parse
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Concatenate, Literal, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, Literal, cast
 
 from fr import gh as _gh
 from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, QueueState, run_cli
@@ -50,19 +50,15 @@ def workflow_run_args(repo: str, workflow: str, inputs: dict[str, str]) -> list[
     return argv
 
 
-_P = ParamSpec("_P")
-_R = TypeVar("_R")
-
-
-def _hosted(
-    method: Callable[Concatenate[RealGhClient, _P], _R],
-) -> Callable[Concatenate[RealGhClient, _P], _R]:
+def _hosted[**P, R](
+    method: Callable[Concatenate[RealGhClient, P], R],
+) -> Callable[Concatenate[RealGhClient, P], R]:
     """Run `method`'s `gh` calls against the client's host (`fr.gh.host_scope`,
     spec 2026-10-06-forge-remainder §4.E). Every method that reaches `fr.gh`
     carries it; `test_every_gh_method_is_hosted` keeps it that way."""
 
     @functools.wraps(method)
-    def wrapper(self: RealGhClient, /, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    def wrapper(self: RealGhClient, /, *args: P.args, **kwargs: P.kwargs) -> R:
         with _gh.host_scope(self._host):
             # The trust gate runs BEFORE the body: a soft-fail method catches
             # `GhError` and would turn a refused host into "no PR" / "no
@@ -624,7 +620,7 @@ class RealGhClient:
 
         try:
             return from_github(json.loads(_gh._run_gh(["api", f"repos/{repo}/pages"])))
-        except (_gh.GhError, ValueError, OSError):
+        except _gh.GhError, ValueError, OSError:
             return UNKNOWN
 
     @_hosted
@@ -767,7 +763,7 @@ class RealGhClient:
             return None
         try:
             raw = json.loads(_gh._run_gh(["repo", "view", repo, "--json", "hasIssuesEnabled"]))
-        except (_gh.GhError, ValueError, OSError):
+        except _gh.GhError, ValueError, OSError:
             return None
         value = raw.get("hasIssuesEnabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None

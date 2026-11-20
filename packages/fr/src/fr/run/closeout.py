@@ -432,7 +432,7 @@ def _effective_strategy_of(repo_root: Path, state: RunState) -> Callable[[Row], 
     if spec_rel is not None:
         try:
             verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
-        except (SectionError, OSError):
+        except SectionError, OSError:
             verification = None
 
     def strategy_of(row: Row) -> str:
@@ -628,7 +628,7 @@ def devops_gated(repo_root: Path, state: RunState) -> bool:
 
     try:
         return "devops" in run_exit(repo_root, state).gates
-    except (AcceptanceError, OpsLoadError, SectionError, OSError):
+    except AcceptanceError, OpsLoadError, SectionError, OSError:
         plan_dir = run_plan_dir(repo_root, state)
         return plan_dir is not None and plan_has_ops(repo_root, plan_dir)
 

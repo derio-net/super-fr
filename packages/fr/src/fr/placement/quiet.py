@@ -501,7 +501,7 @@ def owner_of(fr_root: Path, fid: str) -> str | None:
     (lens l-security-r2)."""
     try:
         text = (fr_root / paths.FEATURES_DIR / fid / paths.FEATURE_OWNER).read_text()
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return None
     owner = text.strip()
     if not owner:

@@ -210,5 +210,5 @@ def _effective_outcomes(journal: Path) -> dict[int, str]:
         return {}
     try:
         return fold_step_outcomes(parse_journal(journal.read_text()))
-    except (JournalParseError, OSError):
+    except JournalParseError, OSError:
         return {}

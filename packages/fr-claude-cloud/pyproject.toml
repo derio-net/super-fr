@@ -2,7 +2,7 @@
 name = "fr-claude-cloud"
 version = "8.3.0rc6"
 description = "super-fr claude-cloud adapter: a run-unit runner whose session actions the cloud driver's agent executes with its session tools (a mailbox)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = ["fr", "fr-dispatch", "pyyaml>=6"]
 
 [project.entry-points."fr.runners"]

@@ -229,7 +229,7 @@ class HostGateState:
     def _data(self) -> dict[str, Any]:
         try:
             data = json.loads(self.path.read_text())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return {}
         return data if isinstance(data, dict) else {}
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final, TypeVar, cast
+from typing import Any, Final, cast
 
 from fr.settings import SettingsError
 
@@ -114,12 +114,10 @@ class StealthForgeGuard:
         return getattr(object.__getattribute__(self, "_inner"), name)
 
 
-C = TypeVar("C")
-
 _GUARD_TYPES: dict[tuple[type, ...], type] = {}
 
 
-def guard(client: C, repo_root: Path | None = None) -> C:
+def guard[C](client: C, repo_root: Path | None = None) -> C:
     """*client* as is, or wrapped in the guard when stealth applies. The wrapper keeps the
     adapter's marker bases (`UnsupportedBatchOps`), which callers test with isinstance."""
     if isinstance(client, StealthForgeGuard) or not in_stealth(repo_root):

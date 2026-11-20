@@ -54,7 +54,7 @@ class EvidenceReader:
 
         try:
             return load_effective(self.root).rows
-        except (AcceptanceError, OSError):
+        except AcceptanceError, OSError:
             return ()
 
     @cached_property

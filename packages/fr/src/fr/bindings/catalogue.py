@@ -68,7 +68,7 @@ def _entry(header: str, body: str) -> CatalogueEntry | None:
     if isinstance(cost, dict) and "input" in cost and "output" in cost:
         try:
             price = float(cost["input"]) + float(cost["output"])
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             price = None
     caps = raw.get("capabilities")
     family = raw.get("family")
@@ -137,7 +137,7 @@ class SnapshotStore:
     def _load(self) -> dict[str, Any]:
         try:
             raw = json.loads(self.path.read_text())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return {}
         return raw if isinstance(raw, dict) else {}
 

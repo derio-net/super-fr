@@ -123,7 +123,7 @@ def _git_common_dir(repo_root: Path) -> Path:
             capture_output=True,
             text=True,
         ).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         # Not a git repo (e.g. a bare tmp path in a unit test) — degrade to the
         # legacy literal; there is no worktree to be blind to here.
         return repo_root / ".git"
@@ -177,7 +177,7 @@ def slug_holder(repo_root: Path, branch: str) -> str | None:
     p = state_path(repo_root, branch)
     try:
         recorded = json.loads(p.read_text()).get("branch")
-    except (OSError, ValueError, AttributeError):
+    except OSError, ValueError, AttributeError:
         return None
     return recorded if isinstance(recorded, str) and recorded != branch else None
 
@@ -432,7 +432,7 @@ def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
             return  # a live writer holds it: skip the record rather than race it
         try:
             data = json.loads(f.read_text())
-        except (OSError, json.JSONDecodeError):
+        except OSError, json.JSONDecodeError:
             return
         if not isinstance(data, dict) or not isinstance(data.get("repo_root"), str):
             return
@@ -517,7 +517,7 @@ def clear_workspace_sentinels(
 def _clear_one(f: Path, target: str, rel: str | None, ids: set[str]) -> int:
     try:
         data = json.loads(f.read_text())
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return 0
     if not isinstance(data, dict):
         return 0
@@ -555,7 +555,7 @@ def clear_repo_sentinels(repo_root: Path) -> int:
     for f in sorted(d.glob("*.json")):
         try:
             data = json.loads(f.read_text())
-        except (OSError, json.JSONDecodeError):
+        except OSError, json.JSONDecodeError:
             continue
         root = data.get("repo_root") if isinstance(data, dict) else None
         if root and str(Path(root).resolve()) == target:

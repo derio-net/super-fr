@@ -40,7 +40,7 @@ def load_memory(state_dir: Path) -> PagesMemory | None:
     trusted): schema 1, `unfinished` a list of strings, `owed` a bool, no other key."""
     try:
         data = json.loads((state_dir / PAGES_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     if not isinstance(data, dict) or not _KEYS <= data.keys() <= _KEYS | _OLD_KEYS:
         return None

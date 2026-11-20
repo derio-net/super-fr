@@ -1,0 +1,2 @@
+bump: major
+summary: Python 3.14 is now the floor (requires-python >=3.14) and the only interpreter CI and the release test; a uv install fetches 3.14 when the host has none

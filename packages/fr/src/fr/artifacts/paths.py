@@ -189,7 +189,7 @@ def product_checkout_for(layout_root: Path, toplevel: Path) -> Path | None:
     def confirms(cand: Path) -> bool:
         try:
             return feature_root(space_for(cand, create=False)).resolve() == target
-        except (SettingsError, OSError, ValueError):
+        except SettingsError, OSError, ValueError:
             return False
 
     # gh#1438: every parse searched every recorded workspace. A checkout already named in
@@ -439,7 +439,7 @@ def _recorded_states(root: Path) -> dict[str, tuple[str, str, str | None]]:
     for f in sorted(states.glob("*.json")):
         try:
             data = json.loads(f.read_text())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             continue
         if not isinstance(data, dict):
             continue

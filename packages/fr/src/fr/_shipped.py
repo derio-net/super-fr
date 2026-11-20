@@ -65,7 +65,7 @@ def packaged_dir(dirname: str) -> Path | None:
         root = resources.files("fr") / dirname
         if root.is_dir():
             resolved = Path(_RESOURCE_STACK.enter_context(resources.as_file(root)))
-    except (ModuleNotFoundError, FileNotFoundError, TypeError, OSError):
+    except ModuleNotFoundError, FileNotFoundError, TypeError, OSError:
         resolved = None
     _PACKAGED_CACHE[dirname] = resolved if (resolved and resolved.is_dir()) else None
     return _PACKAGED_CACHE[dirname]

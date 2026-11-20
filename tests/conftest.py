@@ -41,7 +41,7 @@ def _operator_git_identity() -> dict[str, str]:
                 check=False,
                 timeout=10,
             )
-        except (OSError, subprocess.SubprocessError):
+        except OSError, subprocess.SubprocessError:
             continue
         if got.returncode == 0 and got.stdout.strip():
             found[key] = got.stdout.strip()

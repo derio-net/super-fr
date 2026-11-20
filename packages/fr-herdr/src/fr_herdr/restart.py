@@ -23,7 +23,7 @@ import shlex
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 from fr_herdr import managed, opencode
 from fr_herdr._herdr import (
@@ -318,10 +318,7 @@ class RestartReport:
         return f"{done} {verb}, {skipped} skipped, {failed} failed"
 
 
-_T = TypeVar("_T")
-
-
-def _poll(check: Callable[[], _T | None], *, timeout: float) -> _T | None:
+def _poll[T](check: Callable[[], T | None], *, timeout: float) -> T | None:
     """Call *check* until it answers something other than None, or *timeout* runs out.
     The one wait both the exit and the resume use."""
     return poll(check, timeout=timeout, clock=_clock, sleep=_sleep, interval=POLL_INTERVAL)

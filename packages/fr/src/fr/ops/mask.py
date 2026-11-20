@@ -42,7 +42,7 @@ def _decodes_to_a_piece(run: str, pieces: set[str]) -> bool:
     for altchars in (None, b"-_"):
         try:
             decoded = base64.b64decode(padded, altchars=altchars, validate=False)
-        except (binascii.Error, ValueError):
+        except binascii.Error, ValueError:
             continue
         if any(p.encode() in decoded for p in pieces if len(p) >= MIN_TOKEN):
             return True

@@ -489,7 +489,7 @@ def _find_task_body(md_text: str, phase_number: int, task_number: int) -> str:
         # match the integer task.number that `_RE_TASK` exposes on the model.
         try:
             num = int(re.match(r"^\d+", label).group())  # type: ignore[union-attr]
-        except (AttributeError, ValueError):
+        except AttributeError, ValueError:
             continue
         if num == task_number:
             start = m.end()
@@ -552,7 +552,7 @@ def _find_task_intro(md_text: str, phase_number: int, task_number: int) -> str:
     for i, m in enumerate(matches):
         try:
             num = int(re.match(r"^\d+", m.group(1)).group())  # type: ignore[union-attr]
-        except (AttributeError, ValueError):
+        except AttributeError, ValueError:
             continue
         if num == task_number:
             start = m.end()
@@ -710,7 +710,7 @@ def _git_mv_best_effort(repo_root: Path, src: Path, dst: Path) -> None:
             text=True,
         )
         return
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+    except subprocess.CalledProcessError, FileNotFoundError, OSError:
         pass
     shutil.move(str(src), str(dst))
 

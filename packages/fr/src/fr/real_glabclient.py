@@ -31,7 +31,7 @@ import json
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Concatenate, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, cast
 from urllib.parse import quote, urlparse
 
 from fr import glab as _glab
@@ -58,13 +58,10 @@ _MR_URL_RE = re.compile(r"^https://[^/]+/([^:@]+?)(?:/-)?/merge_requests/(\d+)/?
 # against a master-default self-hosted instance (spec §2.A).
 _CONTENTS_REF = "HEAD"
 
-_P = ParamSpec("_P")
-_R = TypeVar("_R")
 
-
-def _hosted(
-    method: Callable[Concatenate[RealGlabClient, _P], _R],
-) -> Callable[Concatenate[RealGlabClient, _P], _R]:
+def _hosted[**P, R](
+    method: Callable[Concatenate[RealGlabClient, P], R],
+) -> Callable[Concatenate[RealGlabClient, P], R]:
     """Run the host trust gate (`fr.glab.host_env`, gh#1014) BEFORE `method`'s
     body, as `fr.real_ghclient._hosted` does for gh: five methods soft-fail on
     `GlabError`, and would otherwise turn a refused host into "no MR" / "no
@@ -73,7 +70,7 @@ def _hosted(
     keeps it that way."""
 
     @functools.wraps(method)
-    def wrapper(self: RealGlabClient, /, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    def wrapper(self: RealGlabClient, /, *args: P.args, **kwargs: P.kwargs) -> R:
         _glab.host_env(self._host)
         return method(self, *args, **kwargs)
 
@@ -428,7 +425,7 @@ class RealGlabClient(UnsupportedBatchOps):
             if names_login_page(str(exc)):
                 raise  # a login page is named, not read as "unknown"
             return None
-        except (ValueError, OSError):
+        except ValueError, OSError:
             return None
         value = raw.get("issues_enabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None
@@ -465,7 +462,7 @@ class RealGlabClient(UnsupportedBatchOps):
             if names_login_page(str(exc)):
                 raise  # a login page is named, not read as "unknown" (as issues_enabled)
             return UNKNOWN
-        except (ValueError, OSError):
+        except ValueError, OSError:
             return UNKNOWN
 
     @_hosted

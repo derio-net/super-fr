@@ -11,7 +11,7 @@ import pytest
 
 
 @pytest.fixture()
-def tmp_repo(tmp_path: Path) -> Generator[Path, None, None]:
+def tmp_repo(tmp_path: Path) -> Generator[Path]:
     """Create a temporary git repo with plan-config.yaml."""
     subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
     subprocess.run(
