@@ -504,3 +504,48 @@ one computed flag replaced the stage test; nothing to clean
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 docs and generated mirrors only
+
+<!-- fr:journal kind=review scope=plan id=review-phase-4-a created=2026-11-20T10:53:42+00:00 phase=4 -->
+### review-phase-4-a · review · Phase 4 review: swap-labels idempotence, clone-free cancel, R24 docs (phase 4)
+
+Independent read-only review of 1de111c8a, f050390cd and 4b8171acb against R20, R21, R24. R20 and R21 built as written; every docs number checked against code. Four minor findings, all in scope.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r1 created=2026-11-20T10:53:42+00:00 phase=4 state=open review_scope=in -->
+### p4a-r1 · finding [open] (reviewer: in scope) · SKILL.md said a failed forge read is retried after --interval; the code uses the doubling transient backoff (phase 4)
+
+SKILL.md said a failed forge read is retried after --interval; the code uses the doubling transient backoff
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r2 created=2026-11-20T10:53:42+00:00 phase=4 state=open review_scope=in -->
+### p4a-r2 · finding [open] (reviewer: in scope) · fr-wave-driver.md said a signal stop ends the supervisor with the same code; supervise.py returns 128+signal (phase 4)
+
+fr-wave-driver.md said a signal stop ends the supervisor with the same code; supervise.py returns 128+signal
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r3 created=2026-11-20T10:53:42+00:00 phase=4 state=open review_scope=in -->
+### p4a-r3 · finding [open] (reviewer: in scope) · a never-dispatched cancel still printed 'held by another scope; label and comments left to it' (phase 4)
+
+a never-dispatched cancel still printed 'held by another scope; label and comments left to it'
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r4 created=2026-11-20T10:53:42+00:00 phase=4 state=open review_scope=in -->
+### p4a-r4 · finding [open] (reviewer: in scope) · the R21 test seeded no fr:in-progress label, so 'removes no label' was weakly proven (phase 4)
+
+the R21 test seeded no fr:in-progress label, so 'removes no label' was weakly proven
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r1-resolved created=2026-11-20T10:53:42+00:00 phase=4 state=fixed resolves=p4a-r1 -->
+### p4a-r1-resolved · finding [fixed] · resolves p4a-r1: SKILL.md said a failed forge read is retried after --interval; the code uses the doubling transient backoff (phase 4)
+
+The skill now says the read is retried after the transient backoff (--interval, doubling to 15 minutes); mirrors regenerated. Commit f2f927670.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r2-resolved created=2026-11-20T10:53:42+00:00 phase=4 state=fixed resolves=p4a-r2 -->
+### p4a-r2-resolved · finding [fixed] · resolves p4a-r2: fr-wave-driver.md said a signal stop ends the supervisor with the same code; supervise.py returns 128+signal (phase 4)
+
+The explainer now says a signal stop ends with 128 plus the signal number. Commit f2f927670.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r3-resolved created=2026-11-20T10:53:42+00:00 phase=4 state=fixed resolves=p4a-r3 -->
+### p4a-r3-resolved · finding [fixed] · resolves p4a-r3: a never-dispatched cancel still printed 'held by another scope; label and comments left to it' (phase 4)
+
+That line prints only for a dispatched batch. Commit f2f927670.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r4-resolved created=2026-11-20T10:53:42+00:00 phase=4 state=fixed resolves=p4a-r4 -->
+### p4a-r4-resolved · finding [fixed] · resolves p4a-r4: the R21 test seeded no fr:in-progress label, so 'removes no label' was weakly proven (phase 4)
+
+The test now seeds fr:in-progress and asserts it stays. That exposed a real gap: the claim release removed fr:in-progress (claim_sync always unlabels). ClaimOp gains unlabel (default True); cancel passes unlabel=dispatched, so a never-dispatched cancel removes only fr:claimed. Claim/cancel tests: 347 passed. Commit f2f927670.
