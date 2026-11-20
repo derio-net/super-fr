@@ -1,0 +1,74 @@
+# Step record, phase 3 (R15-R19).
+schema_version: 12
+run: 2026-11-19-feat-batch-train-truth
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3, P3.T2.S1, P3.T2.S2, P3.T2.S3, P3.T2.S4, P3.T3.S1, P3.T4.S1, P3.T4.S2]
+refactor:
+  P3.T1: "the member split is one helper (_nonmember) shared by both walks; nothing duplicated to fold"
+  P3.T2: "_update's merge step and _unresolvable were factored into merge_main/trial_conflicts as the green step itself; nothing further to clean"
+  P3.T4: "a four-line change beside _fetched; nothing to clean"
+journal:
+  - kind: decision
+    id: p3-probe-scope-and-memo
+    phase: 3
+    title: "conflict-probe covers every conflicting non-candidate; the memo holds the paths, per driver process"
+    body: |
+      The walks emit `conflict-probe` for each OPEN batch PR that reads conflicting except the
+      merge train's candidates (merge-train mode) and PRs already in the merge queue (queue mode).
+      A conflicting non-member (unapproved draft) is also stepped over and puts a Train in the
+      pass, so the train line names it (R16). `_Driver._probed` maps (repo, PR, head, default
+      branch sha) to the refused paths, so a session that was working or unreadable is retried
+      on the next pass from the cached paths with no second trial merge. A `conflict` event at
+      the head is the `skip` and is decided with no I/O. The probe's scratch root is
+      `<state dir>/probe/`, and trial_conflicts removes the worktree in a `finally`.
+  - kind: decision
+    id: p3-probe-no-session-held
+    phase: 3
+    title: "a runner that cannot be inspected or messaged counts as no session for the probe: held"
+    body: |
+      `_offer` returns None for a runner that is neither inspector nor messenger. The conflict
+      hand-back would start a fresh session; the probe never does (R17), so None, absent and
+      done are all `conflict` event `delivered: held`; idle messages; working, unknown and a
+      failed read wait.
+  - kind: decision
+    id: p3-card-hint-placement
+    phase: 3
+    title: "the card hint `conflicting - handed back` sits after the lane/stop/idle hints and yields to a red phrase"
+    body: |
+      R18's hint (`CONFLICT_HANDED_BACK_HINT`, mergeability.py) is chosen only for a delivered
+      `conflict` event at the PR's current head, after every needs-you hint and before the
+      driver-action and awaiting-approval ones; a red PR keeps its red phrase.
+  - kind: discovery
+    id: p3-t1s3-green-first
+    phase: 3
+    title: "P3.T1.S3 (red recovery for an unapproved draft) was green on its first run"
+    body: |
+      As the plan expected, _recover needs nothing beyond the walk's new `warn red=True`: the
+      five command tests for idle / working / absent / done / the cross-draft-and-ready cap
+      passed at once. P3.T1.S1 went red (4 of 6 failed) and P3.T2/T3/T4 each went red first.
+  - kind: discovery
+    id: p3-drive-is-one-process
+    phase: 3
+    title: "the per-process memo needs a looping drive in a test; each `--once` is a new process"
+    body: |
+      `_drive(..., "--once")` builds a new _Driver per call, so the once-per-process trial
+      merge is shown through a loop run with a `_sleep` hook. The existing pass also reads each
+      batch PR twice (the snapshot and `settle_approvals`); the probe adds no read, which the
+      test checks against the clean-PR count.
+  - kind: discovery
+    id: p3-scenario-caught-launch-requirement
+    phase: 3
+    title: "the cloud-triage-version-drift scenario failed on the first full suite: a red draft's hand-back asked for a launch model"
+    body: |
+      The scenario's batches are unapproved drafts with no `launch.model`. Now that they are
+      walked as red non-members, `_recover` reached `_hand_back_target`, whose `_launch` raises
+      for a batch with no model, ending the pass with code 2. A message to a session never
+      starts one, so `_session_target` (name and work item, no launch) now serves `_recover`
+      and `_probe_conflict`; `_hand_back_target` builds on it. Test:
+      test_a_hand_back_to_a_session_needs_no_model_to_launch_with (red before, green after).
+      The same run's other failure, test_run_evidence_visual
+      test_an_ignored_shot_inside_the_repo_passes_through_git, passed alone and is load-flaky
+      (host load ~45); the log of that first run is p3-suite-run1.log beside the final one.
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/755bf926-d4e8-4f88-99cb-388408cbe75e/scratchpad/train-truth/p3-fast.log}
