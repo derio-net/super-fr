@@ -21,9 +21,18 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R9
     - spec:2026-11-19-wave-merge-queue#R14
     - spec:2026-11-19-wave-merge-queue#R36
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_open_queue_builds_its_first_depth_entries_into_slots_on_the_base
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_green_first_slot_lands_alone_and_the_second_keeps_testing_on_the_landed_main
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_foreign_base_move_rebuilds_every_slot_on_the_new_base_and_says_so_once
+      - super-fr:tests/unit/test_wave_queue_drive.py#test_a_queue_repo_walks_no_train_and_merges_nothing
+      - super-fr:tests/unit/test_wave_queue_drive.py#test_later_waves_waiting_prs_take_no_in_flight_slot_while_the_queue_is_open
     status: not-implemented
-    notes: ''
+    notes: 'phase 2: the pure planner builds depth slots, lands the longest green prefix
+      at the tested sha, rebuilds every slot on a foreign move of main, and drive_pass
+      plans queue repos with it (report-only); the executor that builds, pushes and
+      lands is phase 3'
   - id: wave-queue-land-methods
     capability: wave merge queue
     acceptance: Landing by atomic push leaves every landed PR reading MERGED on the
