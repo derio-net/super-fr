@@ -168,3 +168,8 @@ The brainstorm gate accepts round 2 only as design-risk (forecast in round 1) or
 ### gate-round2-trigger-gap-resolved · finding [out-of-scope] · resolves gate-round2-trigger-gap: fr-goal has no honest round-2 trigger when a round-1 answer reopens the scope
 
 A gap in fr-goal's brainstorm gate, met by this run, not caused by this change.
+
+<!-- fr:journal kind=finding scope=spec id=gate-round2-trigger-gap-resolved-2 created=2026-11-20T08:46:04+00:00 state=open resolves=gate-round2-trigger-gap tracked_by=https://github.com/derio-net/super-fr/issues/1599 -->
+### gate-round2-trigger-gap-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1599] · resolves gate-round2-trigger-gap: fr-goal has no honest round-2 trigger when a round-1 answer reopens the scope
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1599.
