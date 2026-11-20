@@ -508,3 +508,9 @@ amendments:
       merge queue once green, with no approved-fr label; the queue readies and lands
       it.
     why: an attributed archive PR is a queue entry (R32)
+  - row: triage-archive-pr-draft-merged
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive.py#test_green_draft_archive_pr_gets_an_archive_action_flagged_draft
+    why: renamed for the queue (R32)
