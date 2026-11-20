@@ -20,6 +20,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
@@ -51,17 +52,22 @@ def test_release_suite_runs_on_the_requires_python_floor() -> None:
     assert _workflow("release.yml").get("env", {}).get("UV_PYTHON") == _floor()
 
 
-def test_ci_tests_one_python_the_floor() -> None:
-    # R3: no ci.yml job picks another interpreter, so every job inherits the
-    # workflow's floor (#1589).
-    jobs = _workflow("ci.yml")["jobs"]
-    assert {"test", "collect"} <= set(jobs)
+@pytest.mark.parametrize(
+    ("workflow", "suite_jobs"), [("ci.yml", {"test", "collect"}), ("release.yml", {"test"})]
+)
+def test_one_python_the_floor(workflow: str, suite_jobs: set[str]) -> None:
+    # R3/R6: no job picks another interpreter, so every job inherits the
+    # workflow's floor (#1589). setup-uv's `with: python-version` is the
+    # override this repo's own setup action offers, so it is refused too.
+    jobs = _workflow(workflow)["jobs"]
+    assert suite_jobs <= set(jobs)
     for name, job in jobs.items():
         assert "python" not in (job.get("strategy") or {}).get("matrix", {}), name
         assert "UV_PYTHON" not in (job.get("env") or {}), name
         for step in job.get("steps", []):
             assert "setup-python" not in str(step.get("uses", "")), name
             assert "UV_PYTHON" not in (step.get("env") or {}), name
+            assert "python-version" not in (step.get("with") or {}), name
 
 
 def test_every_shard_feeds_coverage() -> None:
