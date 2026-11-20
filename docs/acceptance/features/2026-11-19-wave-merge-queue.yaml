@@ -149,9 +149,21 @@ rows:
       the stage records the post-merge ops done.
     origin:
     - spec:2026-11-19-wave-merge-queue#R26
-    levels: {}
-    status: not-implemented
-    notes: born at brainstorm
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_2_never_merges_and_waits_for_the_queue
+      - super-fr:tests/unit/test_wave_queue_barrier.py#test_the_barrier_lands_as_the_last_entry_of_its_push_and_nothing_behind_it
+      - super-fr:tests/unit/test_wave_queue_barrier.py#test_nothing_lands_after_the_barrier_until_its_post_merge_ops_are_done
+      - super-fr:tests/unit/test_wave_queue_barrier.py#test_a_combination_behind_the_barrier_is_built_and_tested_meanwhile
+      - super-fr:tests/unit/test_queue_gate_labels.py#test_a_diff_that_moved_after_the_release_voids_it_and_removes_the_label
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_stage
+    status: ci
+    notes: 'phase 6: stage 2 adds fr-queue:release and calls no pr_merge, stage 4 adds
+      fr-queue:postmerge-done; the driver settles both into queue events; the planner
+      admits a gate:devops entry only when released, lands it as the last entry of its
+      push and nothing behind it until post-merge is done; unit tests and the ops-gate
+      scenarios'
   - id: wave-queue-broken-hold
     capability: wave merge queue
     acceptance: A deleted or expired hold, a stray merge or a mid-queue release never
