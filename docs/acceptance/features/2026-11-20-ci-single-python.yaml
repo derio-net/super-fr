@@ -52,3 +52,10 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: ci-coverage-newest-leg
+    op: reword
+    base: 0
+    acceptance: The combined coverage gate (fail-under 75) is measured on every shard
+      of the one 3.14 leg
+    why: CI now runs one leg on 3.14 (#1589)
