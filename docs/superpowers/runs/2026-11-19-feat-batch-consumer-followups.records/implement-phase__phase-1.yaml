@@ -50,5 +50,19 @@ journal:
       live where fr settings paths says" failed once in a full `bun test` run (263 ms) and
       passed alone and in the next full run. Not touched by this change (nag is unchanged);
       recorded in case it recurs in CI.
+  - kind: discovery
+    id: p1-full-suite-load-failures
+    phase: 1
+    title: The full suite went 10 failed / 16879 passed under host load 40-146; all 10 pass when rerun alone
+    body: |
+      Four sessions ran full suites at once (load average 40, peaking at 146 on 12 cores),
+      so the suite ran with FR_PYTEST_WORKERS=6 and took 2h39m. The 10 failures were the 9
+      tests of `tests/unit/test_isolation_agent_worktrees.py` (the sweep answered
+      `skipped` where `reaped`/`warned` was expected) and
+      `tests/integration/test_scenarios.py::test_placement_move_and_drift`. None of them
+      touches a file this phase changed. Rerun alone on the same code tree, all 20 tests of
+      those two targets passed (95 s). The full-suite log is the evidence as it ran; a
+      rerun on a quieter host, or CI, is needed for a green full-suite log.
 resolves: []
-evidence: {}
+evidence:
+  tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99/scratchpad/p1-full-suite.log
