@@ -62,6 +62,30 @@ def test_follow_yields_lines_appended_after_a_rotation(tmp_path: Path) -> None:
     assert (tmp_path / "drive.log.1").exists()  # it did rotate while followed
 
 
+def test_follow_yields_both_lines_of_one_poll_whose_second_rotates(tmp_path: Path) -> None:
+    """The first line lands in the file being followed, the second moves it to drive.log.1:
+    the follower drains the old file before it reads the new one, so neither is lost."""
+    log = DriveLog(tmp_path, limit=100)
+    log.append("action", "old", NOW)
+    rounds = iter([("a" * 20, "b" * 60)])
+    seen: list[str] = []
+
+    def poll(_: float) -> None:
+        try:
+            first, second = next(rounds)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+        log.append("action", first, NOW)
+        assert not (tmp_path / "drive.log.1").exists()
+        log.append("action", second, NOW)
+        assert (tmp_path / "drive.log.1").exists()  # the second line rotated the file
+
+    with pytest.raises(KeyboardInterrupt):
+        for line in log.follow(sleep=poll):
+            seen.append(line)
+    assert [x.rsplit(" ", 1)[1] for x in seen] == ["a" * 20, "b" * 60]
+
+
 class _Console:
     def __init__(self) -> None:
         self.lines: list[str] = []

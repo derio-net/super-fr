@@ -11,6 +11,7 @@ import textwrap
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import IO
 
 import pytest
 import yaml
@@ -20,11 +21,14 @@ DRIVER = textwrap.dedent(
     """
     import os, signal, sys, time
     d = sys.argv[1]
-    with open(d + "/pids", "a") as f:
-        f.write(str(os.getpid()) + "\\n")
+    # the handler is in place before the pid is written, so a test that sees the pid may
+    # signal at once; the hard deadline ends a driver its rig failed to clean up
     if os.path.exists(d + "/ignore-term"):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    while True:
+    with open(d + "/pids", "a") as f:
+        f.write(str(os.getpid()) + "\\n")
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
         ctl = open(d + "/control").read().strip() if os.path.exists(d + "/control") else "run"
         if ctl.startswith("exit:"):
             sys.exit(int(ctl[5:]))
@@ -71,6 +75,13 @@ def wait_for(pred: Callable[[], bool], timeout: float = 15.0) -> bool:
     return pred()
 
 
+def kill(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
 def alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -87,27 +98,37 @@ class Rig:
         (root / "parent.py").write_text(PARENT)
         (root / "state").mkdir()
         self.procs: list[subprocess.Popen[bytes]] = []
+        self.handles: list[IO[bytes]] = []
 
     def pids(self) -> list[int]:
         path = self.root / "pids"
         return [int(x) for x in path.read_text().split()] if path.exists() else []
 
     def start(self) -> subprocess.Popen[bytes]:
+        err = (self.root / "supervisor.err").open("ab")
+        self.handles.append(err)
         proc = subprocess.Popen(
-            [sys.executable, str(self.root / "supervisor.py"), str(self.root)],
-            stderr=(self.root / "supervisor.err").open("ab"),
+            [sys.executable, str(self.root / "supervisor.py"), str(self.root)], stderr=err
         )
         self.procs.append(proc)
         return proc
 
     def cleanup(self) -> None:
+        # every supervisor first, the ones a test started and the ones a parent did, so none
+        # starts a driver after the drivers are killed; then the drivers, until no new one
         for proc in self.procs:
             if proc.poll() is None:
                 proc.kill()
                 proc.wait()
-        for pid in self.pids():
-            if alive(pid):
-                os.kill(pid, signal.SIGKILL)
+        for marker in self.root.glob("supervisor-*"):
+            kill(int(marker.name.split("-")[1]))
+        seen: set[int] = set()
+        while set(self.pids()) != seen:
+            seen = set(self.pids())
+            for pid in seen:
+                kill(pid)
+        for handle in self.handles:
+            handle.close()
 
 
 @pytest.fixture
@@ -187,8 +208,7 @@ def test_a_driver_that_ignores_sigterm_is_killed_after_the_grace(rig: Rig) -> No
     (rig.root / "ignore-term").write_text("")
     sup = rig.start()
     assert wait_for(lambda: len(rig.pids()) == 1)
-    child = rig.pids()[0]
-    time.sleep(0.3)  # let the driver install its handler
+    child = rig.pids()[0]  # its pid is written only once it ignores SIGTERM
     started = time.monotonic()
     sup.send_signal(signal.SIGTERM)
     assert sup.wait(timeout=15) == 0

@@ -904,19 +904,22 @@ class TestSwapIssueLabelsPartialApply:
     ) -> None:
         labels = {"old", "x"}
         calls: list[list[str]] = []
+        after_refusal: set[str] = set()
 
         def fake_run(args: list[str]) -> str:
             calls.append(args)
             adds = [args[i + 1] for i, a in enumerate(args) if a == "--add-label"]
             rems = [args[i + 1] for i, a in enumerate(args) if a == "--remove-label"]
             labels.update(adds)  # the add lands first ...
-            for lbl in rems:
-                if lbl == "never-defined":  # ... then a removal is refused
-                    raise gh.GhError("gh exited", stderr=f"'{lbl}' not found\n", returncode=1)
-                labels.discard(lbl)
+            if "never-defined" in rems:  # ... then the call is refused before any removal
+                after_refusal.update(labels)
+                raise gh.GhError("gh exited", stderr="'never-defined' not found\n", returncode=1)
+            labels.difference_update(rems)
             return ""
 
         monkeypatch.setattr(gh, "_run_gh", fake_run)
         gh.swap_issue_labels(repo="o/r", number=1, add=["new"], remove=["old", "never-defined"])
-        assert labels == {"x", "new"}
-        assert len(calls) <= 3
+        assert after_refusal == {"old", "x", "new"}  # the refused call removed nothing
+        assert labels == {"x", "new"}  # so only the retry removed `old`
+        assert len(calls) == 2
+        assert "never-defined" not in calls[1] and "old" in calls[1]

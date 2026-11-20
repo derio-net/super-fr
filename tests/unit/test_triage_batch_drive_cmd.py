@@ -5173,6 +5173,32 @@ def test_a_working_session_is_waited_on_with_one_trial_merge_across_passes(
     assert event.delivered == "session"
 
 
+@pytest.mark.parametrize("moves", ["base", "head"])
+def test_a_new_base_or_head_between_passes_is_trial_merged_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch, moves: str,
+) -> None:  # fmt: skip
+    """R17: a trial merge per (PR, head, default-branch sha) per process: one that moves is a
+    new key, so the next pass trial-merges again; the unchanged pass after it does not."""
+    _dirty_draft(world, tmp_path, checkout)
+    messenger.status[BATCH_ITEM_B1] = "working"  # waited on: nothing recorded, probed again
+    trials: list[int] = []
+
+    def _nap(seconds: float) -> None:
+        trials.append(checkout.trials)
+        if len(trials) == 1 and moves == "base":
+            monkeypatch.setattr(checkout, "rev_parse", lambda ref: f"{ref}@moved")
+        elif len(trials) == 1:
+            world.prs[101]["head_oid"] = "sha-101b"
+        elif len(trials) == 3:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    assert isinstance(result.exception, _StopError), result.output
+    assert trials == [1, 2, 2]  # a second trial for the new key, none for the same one again
+
+
 @pytest.mark.parametrize("status", ["absent", "done"])
 def test_a_conflict_with_no_session_to_take_it_is_held(
     tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner, status: str
