@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from fr.gh import GhError
 from fr.triage.gitseam import Checkout
 from fr.triage.model import QueueEntryRef, VersionBlock
 from fr.triage.queue_exec import EntryInput
@@ -193,7 +194,7 @@ class FakeForge:
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
         if number in self.refuse:
-            raise RuntimeError(self.refuse[number])
+            raise GhError(self.refuse[number])
         assert self.w.head(number) == head_sha, "--match-head-commit"
         self.merges.append((number, head_sha, method))
         git(self.worker, "fetch", "--quiet", "origin")
@@ -205,7 +206,7 @@ class FakeForge:
             git(self.worker, "merge", "--quiet", "--no-ff", "-m",
                 f"Merge pull request #{number} from {self.w.prs[number]}", head_sha)  # fmt: skip
         if self.main_after_merge is not None:
-            (self.worker / self.main_after_merge).write_text("forge drift\n")
+            (self.worker / self.main_after_merge).write_text(f"forge drift {number}\n")
             git(self.worker, "add", "--all")
             git(self.worker, "commit", "--quiet", "-m", "forge drift")
         git(self.worker, "push", "--quiet", "origin", "main")

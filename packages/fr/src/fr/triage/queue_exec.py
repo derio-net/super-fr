@@ -276,3 +276,216 @@ def built_event(built: Built, at: datetime) -> QueueBuiltEvent:
         kind="queue_built", at=at, slot=built.slot, sha=built.sha, entry=built.entry.ref,
         head=built.entry.head, patch_id=built.patch_id, base=built.base, parent=built.parent,
     )  # fmt: skip
+
+
+# ------------------------------------------------------------------ landing (§D)
+
+
+@dataclass(frozen=True)
+class Landing:
+    """One entry of a landing: its PR's head ref, the head its combination was built from
+    and the entry's own commit in the combination (R10)."""
+
+    key: str
+    ref: QueueEntryRef
+    pr: int
+    head_ref: str
+    head: str
+    commit: str
+
+
+@dataclass(frozen=True)
+class LandResult:
+    """What a landing did: `landed` (main is *main*), `lease` (a lease failed, nothing
+    moved: rebuilt next pass), `held` (the repo cannot land this way, R22, R34) or
+    `stopped` (a forge merge refused or left an untested tree, R11)."""
+
+    outcome: Literal["landed", "lease", "held", "stopped"]
+    main: str = ""
+    detail: str = ""
+
+
+def landings_of(built: Sequence[Built]) -> list[Landing]:
+    """The landing of the combinations *built*, front first."""
+    return [Landing(b.entry.key, b.entry.ref, b.entry.pr, b.entry.head_ref, b.entry.head, b.sha)
+            for b in built]  # fmt: skip
+
+
+class PrOf(Protocol):
+    def __call__(self, key: str) -> tuple[int, str] | None: ...
+
+
+def landings_from(record: QueueRecord, tip: str, pr_of: PrOf) -> list[Landing]:
+    """The landing of combination *tip* as *record*'s events rebuild it (R24): each
+    combination from the queue's base to *tip*, by their parents, with each entry's PR
+    number and head ref from *pr_of* (None: unknown, so nothing lands)."""
+    rep = replay(record)
+    by_sha = {c.sha: c for c in rep.combos.values()}
+    chain = []
+    at = by_sha.get(tip)
+    while at is not None:
+        chain.append(at)
+        at = by_sha.get(at.parent)
+    chain.reverse()
+    out: list[Landing] = []
+    refs = _refs(record)
+    for combo in chain:
+        key = combo.chain[-1]
+        known = pr_of(key)
+        if known is None:
+            return []
+        out.append(Landing(key, refs[key], known[0], known[1], combo.heads[-1], combo.sha))
+    return out
+
+
+def _refs(record: QueueRecord) -> dict[str, QueueEntryRef]:
+    out: dict[str, QueueEntryRef] = {}
+    for event in record.events:
+        ref = getattr(event, "entry", None)
+        if isinstance(ref, QueueEntryRef):
+            out[entry_key(ref)] = ref
+    return out
+
+
+def land_event(landings: Sequence[Landing], main: str, at: datetime) -> QueueLandEvent:
+    return QueueLandEvent(kind="queue_land", at=at, main=main,
+                          entries=[x.ref for x in landings])  # fmt: skip
+
+
+def protection_reason(words: str) -> str:
+    """R34's held reason for a push the default branch's protection refused."""
+    return (
+        f"the default branch refused the queue's push ({words.strip()}). Under `queue.land: "
+        "push` it must accept the driver's direct push: a ruleset with no \"require a pull "
+        "request\" rule (a tested combination's required checks already passed), or a bypass "
+        "identity dedicated to the driver; fr never makes your own credential a bypass actor. "
+        "Or set `queue.land: merge` in .fr/triage.yaml to land through the forge's merge API"
+    )
+
+
+def refusal_reason(exc: PushRefusedError | AtomicUnsupportedError) -> str:
+    """Why a landing push the remote refused holds the queue (R22, R34)."""
+    words = str(exc)
+    if isinstance(exc, AtomicUnsupportedError):
+        return (
+            "the remote refuses `git push --atomic`, and the queue never lands by a partial "
+            "push (R22): a PR branch would hold another PR's change. Land through the forge "
+            "with `queue.land: merge` in .fr/triage.yaml"
+        )
+    if any(code in words for code in PROTECTION_CODES):
+        return protection_reason(words)
+    return f"the remote refused the queue's landing push: {words}"
+
+
+def land_push(
+    checkout: Checkout,
+    *,
+    default: str,
+    base: str,
+    landings: Sequence[Landing],
+    method: Method,
+    record: Callable[[QueueLandEvent], None] | None = None,
+    now: Callable[[], datetime] | None = None,
+) -> LandResult:
+    """R10: ONE `git push --atomic` that moves *default* by fast-forward to the last
+    entry's commit, leased on *base*, and every landed PR's head ref, leased on the head
+    its combination was built from: under `squash` and `rebase` to the PR's own commit in
+    the combination, under `merge` unchanged (so a session push since the build still
+    fails the lease). Nothing moves unless everything does. *record* gets the
+    `queue_land` after a successful landing."""
+    if not landings:
+        return LandResult("stopped", detail="nothing to land")
+    tip = landings[-1].commit
+    main_ref = f"refs/heads/{default}"
+    refspecs = [(tip, main_ref)]
+    leases: dict[str, str | None] = {main_ref: base}
+    for x in landings:
+        ref = f"refs/heads/{x.head_ref}"
+        refspecs.append((x.head if method == "merge" else x.commit, ref))
+        leases[ref] = x.head
+    try:
+        checkout.push_leased(refspecs, leases, atomic=True)
+    except LeaseLostError as exc:
+        return LandResult("lease", detail=f"a lease failed, nothing landed: {exc}")
+    except (AtomicUnsupportedError, PushRefusedError) as exc:
+        return LandResult("held", detail=refusal_reason(exc))
+    if record is not None:
+        record(land_event(landings, tip, (now or _utcnow)()))
+    return LandResult("landed", main=tip)
+
+
+class MergingForge(Protocol):
+    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None: ...
+
+
+def land_merge(
+    client: MergingForge,
+    checkout: Checkout,
+    repo: str,
+    *,
+    default: str,
+    tip: str,
+    landings: Sequence[Landing],
+    method: Method,
+    record: Callable[[QueueLandEvent], None] | None = None,
+    now: Callable[[], datetime] | None = None,
+) -> LandResult:
+    """R11: merge each landed PR through the forge's merge API at its pinned head, in
+    queue order, with *method*; then `main`'s tree must equal the tested combination's
+    (*tip*). A refusal stops at that PR; a mismatch stops the queue. Neither is ever
+    retried in a way that lands an untested tree. What did merge is recorded (*record*)
+    as landed, at the `main` the forge left."""
+    done: list[Landing] = []
+    stop = ""
+    for x in landings:
+        try:
+            client.pr_merge(repo, x.pr, head_sha=x.head, method=method)
+        except FORGE_ERRORS as exc:
+            stop = f"the forge refused to merge PR #{x.pr} ({x.key}): {exc}"
+            break
+        done.append(x)
+    main = ""
+    if done:
+        checkout.refresh_remote_branch(default)
+        main = checkout.rev_parse(f"origin/{default}")
+        if record is not None:
+            record(land_event(done, main, (now or _utcnow)()))
+    if stop:
+        return LandResult("stopped", main=main, detail=f"{stop}; the queue stops here")
+    if checkout.tree_of(main) != checkout.tree_of(tip):
+        return LandResult(
+            "stopped", main=main,
+            detail=f"{default}'s tree after the forge merges ({main[:12]}) is not the tested "
+            f"combination's ({tip[:12]}); the queue stops and lands nothing more",
+        )  # fmt: skip
+    return LandResult("landed", main=main)
+
+
+class ViewingForge(Protocol):
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]: ...
+
+
+def read_back(client: ViewingForge, repo: str, prs: Iterable[int]) -> tuple[int, ...]:
+    """R35: the landed PRs the forge does not read `MERGED` yet (an unreadable one
+    included: unknown is not merged)."""
+    out: list[int] = []
+    for number in prs:
+        try:
+            state = client.pr_view(repo, number).get("state")
+        except FORGE_ERRORS:
+            state = None
+        if state != "MERGED":
+            out.append(number)
+    return tuple(out)
+
+
+def forge_refusal(client: object) -> str | None:
+    """R35: the forges whose client implements what the queue needs are the GitHub ones;
+    a glab or tea client is held, naming gh#611."""
+    if isinstance(client, UnsupportedBatchOps):
+        return (
+            f"the merge queue needs commit checks, PR views, merges, label and comment edits, "
+            f"which the {client.backend} client does not implement ({FORGE_PARITY}); this "
+            "repo's merges are held"
+        )
+    return None
