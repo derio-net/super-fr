@@ -90,13 +90,19 @@ class ValidationReport:
 class Migratable:
     """Whether a stale artifact is one a registered migration moves (R21): a chain reaches the
     kind's current version from its stamp, and the migration does not refuse it. The refusal is
-    found by running every migration once on a scratch copy of the checkout (never the
-    checkout itself), lazily, and only when some artifact is stale."""
+    found by running every migration once on a scratch copy of the ARTIFACTS' root (never the
+    checkout itself), lazily, and only when some artifact is stale. The artifacts' root is
+    where the placement keeps them (`feature_root(space_for(repo_root))`: the checkout under
+    `repo`, the fr worktree's feature root under quiet, the tracking clone's under stealth);
+    the relative layout is the same under every placement, so the copy runs as a plain tree
+    and a refusal is keyed by the path relative to that root, as the artifact's own is. Any
+    error trying them is a failure of every stale artifact, never a pass."""
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
         self._refused: dict[Path, str] | None = None
         self._broken: str | None = None
+        self._root: Path | None = None
 
     def verdict(self, kind: ArtifactKind, path: Path, version: int) -> str | None:
         """None when *path* is migratable, else why it is not."""
@@ -108,38 +114,39 @@ class Migratable:
             return (f"stale and no registered migration reaches version {kind.current_version} "
                     f"from version {version}: {e}")  # fmt: skip
         refused = self._run()
-        if self._broken is not None:
+        if self._broken is not None or self._root is None:
             return f"stale and its migration cannot be tried: {self._broken}"
         try:
-            rel = path.resolve().relative_to(self.repo_root.resolve())
+            rel = path.resolve().relative_to(self._root.resolve())
         except ValueError:
-            rel = path
+            return f"stale and its migration cannot be tried: {path} is outside {self._root}"
         why = refused.get(rel)
         return None if why is None else f"stale and its migration refuses it: {why}"
 
     def _run(self) -> dict[Path, str]:
         if self._refused is not None:
             return self._refused
-        from fr.artifacts.runner import MigrationChainError, run_migrations
+        from fr.artifacts.paths import artifact_root
+        from fr.artifacts.runner import run_migrations
 
         refused: dict[Path, str] = {}
-        with tempfile.TemporaryDirectory(prefix="fr-validate-migratable-") as tmp:
-            copy = Path(tmp) / "tree"
-            shutil.copytree(
-                self.repo_root, copy, symlinks=True, ignore=shutil.ignore_patterns(*_NOT_COPIED)
-            )
-            try:
+        try:
+            self._root = artifact_root(self.repo_root)
+            with tempfile.TemporaryDirectory(prefix="fr-validate-migratable-") as tmp:
+                copy = Path(tmp) / "tree"
+                shutil.copytree(
+                    self._root, copy, symlinks=True, ignore=shutil.ignore_patterns(*_NOT_COPIED)
+                )
                 report = run_migrations(copy, dry_run=False)
-            except MigrationChainError as e:  # a registry gap: nothing can be told apart
-                self._broken = str(e)
-            else:
                 for failure in report.failed:
                     refused[failure.path.relative_to(copy)] = failure.error
+        except Exception as e:  # noqa: BLE001 — a trial that cannot run is a failure, not a pass
+            self._broken = f"{type(e).__name__}: {e}"
         self._refused = refused
         return refused
 
 
-_NOT_COPIED = (".git", ".venv", "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache",
+_NOT_COPIED = (".git", ".fr-isolation", ".venv", "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache",
                ".ruff_cache", ".tox")  # fmt: skip
 
 

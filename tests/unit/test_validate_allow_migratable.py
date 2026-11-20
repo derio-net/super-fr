@@ -100,3 +100,75 @@ def test_the_cli_flag_exits_zero_and_names_stale_migratable(
                                  "--allow-migratable"])  # fmt: skip
     assert ok.exit_code == 0, ok.output
     assert "stale, migratable" in ok.output
+
+
+# ---- p6-r8: the trial runs over the artifacts' own root, whatever the placement ----
+
+
+def _stale_in(fr_root: Path, text: str, name: str = "p") -> Path:
+    path = fr_root / "docs/superpowers/journals/plans" / f"{name}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def _check_placement(ws: Path, before_untouched: bool = True) -> None:
+    from fr.artifacts.paths import artifact_root
+
+    root = artifact_root(ws)
+    assert root != ws, "the placement keeps its artifacts outside the checkout"
+    good = _stale_in(root, "<!-- fr:journal-schema=3 -->\n" + BODY, "good")
+    bad = _stale_in(root, "<!-- fr:journal-schema=3 -->\n# Journal: p\n\n" + LENS_ENTRY, "bad")
+    snap = {p: p.read_bytes() for p in (good, bad)}
+    report = validate_repo(ws, kind_name="journal", allow_migratable=True)
+    # the refused one FAILS (the old lookup never matched and let it through) ...
+    assert [i.path.name for i in report.issues] == ["bad.md"]
+    assert "refuses" in report.issues[0].message
+    # ... and the migratable one passes, with nothing written to the real tree
+    assert [i.path.name for i in report.migratable] == ["good.md"]
+    assert {p: p.read_bytes() for p in (good, bad)} == snap
+
+
+def test_under_quiet_a_refused_artifact_fails_and_the_real_tree_is_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.isolation.hostworktree import HostWorktreeTarget
+
+    from tests.unit.settings_repo import make_repo
+    from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
+    state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
+    monkeypatch.chdir(state.worktree)
+    _check_placement(state.worktree)
+
+
+def test_under_stealth_the_isolation_marker_is_not_copied_and_a_refusal_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.isolation.hostworktree import HostWorktreeTarget
+    from fr.placement import stealth
+
+    from tests.unit.stealth_repo import stealth_home, stealth_pair  # noqa: F401
+
+    target, track = stealth_pair(tmp_path)
+    state = HostWorktreeTarget(target).up(
+        profile=None, branch="feat/s", stealth=stealth.parse_ref(f"{track}@main")
+    )
+    monkeypatch.chdir(state.worktree)
+    _check_placement(state.worktree)
+
+
+def test_a_trial_that_cannot_run_fails_the_stale_artifact_rather_than_passing_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _journal(tmp_path, "<!-- fr:journal-schema=3 -->\n" + BODY)
+
+    def boom(*a: object, **k: object) -> None:
+        raise RuntimeError("scratch copy failed")
+
+    monkeypatch.setattr("fr.artifacts.validate.shutil.copytree", boom)
+    report = _only_journals(tmp_path, allow_migratable=True)
+    assert not report.ok and "cannot be tried" in report.issues[0].message
+    assert "scratch copy failed" in report.issues[0].message
