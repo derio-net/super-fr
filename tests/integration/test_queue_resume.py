@@ -260,11 +260,9 @@ def test_a_land_merge_tree_mismatch_stops_the_queue_until_the_operator_acts(
 def test_a_push_the_protection_refuses_holds_the_queue_with_a_need(tmp_path: Path) -> None:
     d = _driver(tmp_path)
     hook = d.w.origin / "hooks" / "pre-receive"
-    hook.write_text('#!/bin/sh\necho "error: GH013: Repository rule violations found" >&2\n'
-                    'echo x >> "$GIT_DIR/refused"\nexit 1\n')  # fmt: skip
+    hook.write_text("#!/bin/sh\nexit 0\n")  # the hold and the slots push fine
     hook.chmod(0o755)
-    d.one_pass()  # open
-    hook.write_text("#!/bin/sh\nexit 0\n")  # the slots push fine
+    d.one_pass()  # open: the hold is written
     d.one_pass()  # build
     hook.write_text('#!/bin/sh\necho "error: GH013: Repository rule violations found" >&2\n'
                     'echo x >> "$GIT_DIR/refused"\nexit 1\n')  # fmt: skip
