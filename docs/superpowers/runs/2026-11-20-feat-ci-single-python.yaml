@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-20-feat-ci-single-python
+workflow: fr-goal@1
+branch: feat/ci-single-python
+started: '2026-11-20T06:57:57+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 8.3.0rc6
+issue: 1589
