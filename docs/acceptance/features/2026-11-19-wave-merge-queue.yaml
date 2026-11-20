@@ -532,3 +532,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_merged_archive_pr_clears_its_stop
     why: the archive step no longer merges; its landing hook clears the stop (R32)
+  - row: triage-archive-pr-conflict-handed
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_forge_refused_archive_merge_records_a_stop
+    why: the archive step no longer merges (R32)
