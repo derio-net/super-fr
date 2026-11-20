@@ -495,3 +495,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest
     why: renamed for the queue (R23)
+  - row: batch-merge-skip-held
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_queues_the_rest
+    why: batch merge drives the queue (R23)
