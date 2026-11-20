@@ -119,9 +119,11 @@ rows:
       writes no label or comment, releases this scope''s claims and records the cancel'
     origin:
     - spec:2026-11-19-batch-train-truth#R21
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_cancelling_a_never_dispatched_batch_withdraws_nothing_and_needs_no_clone
+    status: ci
+    notes: 'CI: batch cancel --yes of a never-dispatched batch with no --checkout'
   - id: drive-activity-log
     capability: The operator can watch the driver's actions live
     acceptance: Every line a looping driver or its supervisor prints lands, timestamped
