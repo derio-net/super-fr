@@ -26,7 +26,7 @@ import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from fr.safe_spawn import fr_argv, safe_fr_env
 from fr.triage.errors import TriageError
@@ -96,6 +96,28 @@ def _run(
             f"`{shlex.join(argv)}` failed in {cwd}: {words or f'exit {result.returncode}'}"
         )
     return result.stdout
+
+
+# The patch-id an approval is pinned to (spec 2026-11-19-wave-merge-queue R12, §E): porcelain
+# `git diff` with every setting that shapes its output pinned on the command line, so the id
+# is the same on every host. `-c` pins what has no flag; the flags override the rest.
+PATCH_ID_DIFF: Final[tuple[str, ...]] = (
+    "git",
+    "-c", "diff.noprefix=false",
+    "-c", "diff.mnemonicPrefix=false",
+    "-c", "diff.relative=false",
+    "-c", "diff.suppressBlankEmpty=false",
+    "-c", "core.quotePath=true",
+    "diff", "--binary", "--full-index", "--no-color", "--no-ext-diff", "--no-textconv",
+    "--no-renames", "--diff-algorithm=myers", "--unified=3", "--inter-hunk-context=0",
+    "--indent-heuristic", "--src-prefix=a/", "--dst-prefix=b/", "--no-relative",
+    "--ignore-submodules=none", "--submodule=short", "-O/dev/null",
+)  # fmt: skip
+PATCH_ID: Final[tuple[str, ...]] = (
+    "git", "-c", "patchid.stable=false", "-c", "patchid.verbatim=true", "patch-id", "--verbatim",
+)  # fmt: skip
+# `GIT_DIFF_OPTS` may set the context width; this pins it to the flag's own value.
+PATCH_ID_ENV: Final[dict[str, str]] = {"GIT_DIFF_OPTS": "--unified=3"}
 
 
 def git_bytes(args: list[str], cwd: Path, *, ok: tuple[int, ...] = (0,)) -> bytes:
@@ -641,19 +663,29 @@ class Checkout:
 
     def patch_id(self, head: str, ref: str) -> str:
         """*head*'s patch-id against its merge base with *ref* (spec 2026-11-19-wave-merge-queue
-        R12): exactly `git diff --binary --full-index --no-color <merge-base> <head> | git
-        patch-id --verbatim`, so whitespace and binary content count. The first field of the
-        output; "" for an empty diff, which `git patch-id` answers with nothing."""
+        R12): `PATCH_ID_DIFF` from the merge base to *head*, piped to `PATCH_ID`, so
+        whitespace and binary content count and no host configuration (prefixes, renames,
+        context, algorithm, order, textconv, an external diff) moves it. The first field of
+        the output; "" for an empty diff, which `git patch-id` answers with nothing."""
         base = git(["merge-base", head, ref], self.path).strip()
-        diff = git_bytes(["diff", "--binary", "--full-index", "--no-color", base, head], self.path)
+        diff: bytes = _run(
+            [*PATCH_ID_DIFF, base, head], self.path, text=False, timeout=GIT_TIMEOUT_SECONDS,
+            env=PATCH_ID_ENV,
+        )  # fmt: skip
         if not diff:
             return ""
         out: bytes = _run(
-            ["git", "patch-id", "--verbatim"], self.path, text=False, stdin=diff,
-            timeout=GIT_TIMEOUT_SECONDS,
+            list(PATCH_ID), self.path, text=False, stdin=diff, timeout=GIT_TIMEOUT_SECONDS,
+            env=PATCH_ID_ENV,
         )  # fmt: skip
         fields = out.decode("ascii", "replace").split()
         return fields[0] if fields else ""
+
+    def refresh_remote_branch(self, branch: str) -> None:
+        """Fetch origin's *branch* into `origin/<branch>` now (forced: the remote is the
+        truth), for a read that must not use a stale copy (wave-merge-queue R12)."""
+        git(["fetch", "--quiet", "--no-tags", "origin",
+             f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], self.path)  # fmt: skip
 
     def commits_since(self, ref: str, head: str) -> tuple[str, ...]:
         """The commits on *ref*..*head*, newest first."""

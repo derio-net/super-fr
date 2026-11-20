@@ -137,3 +137,97 @@ def test_the_reader_says_none_when_git_cannot(tmp_path: Path) -> None:
 
     assert reader(8, head) is None  # no branch known for the PR
     assert reader(7, "f" * 40) is None  # a head the branch does not hold
+
+
+# ------------------------------------------------------------------ the known limit (p1-r1)
+
+
+def test_a_moved_identical_hunk_keeps_the_patch_id(tmp_path: Path) -> None:
+    """`git patch-id` drops hunk line numbers, so a change that moves an otherwise
+    identical hunk (same lines, same context) within a file keeps the id, and with it the
+    approval. R12 states this limit; this test pins it, so the doc claim is tested."""
+    root = tmp_path / "moved"
+    root.mkdir()
+    _git(root, "init", "--quiet", "--initial-branch=main")
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(root, "config", k, v)
+    block = ["a", "b", "c", "X", "d", "e", "f"]
+    filler = [f"line {n}" for n in range(20)]
+    (root / "f.txt").write_text("\n".join([*block, *filler, *block]) + "\n")
+    _commit(root, "seed")
+    _git(root, "checkout", "--quiet", "-b", "feat")
+    edited = ["a", "b", "c", "Y", "d", "e", "f"]
+    (root / "f.txt").write_text("\n".join([*edited, *filler, *block]) + "\n")
+    _commit(root, "edit the first copy")
+    checkout = Checkout(root)
+    before = checkout.patch_id("feat", "main")
+    (root / "f.txt").write_text("\n".join([*block, *filler, *edited]) + "\n")
+    _commit(root, "move the edit to the second copy")
+
+    assert before
+    assert checkout.patch_id("feat", "main") == before
+
+
+# ------------------------------------------------------------------ host-independent (p1-r2)
+
+
+def _hostile(repo: Path) -> None:
+    """Diff configuration a host may carry, each of which would change porcelain `git
+    diff`'s output: none of it may change the patch-id."""
+    for k, v in (
+        ("diff.noprefix", "true"),
+        ("diff.mnemonicPrefix", "true"),
+        ("diff.renames", "copies"),
+        ("diff.algorithm", "histogram"),
+        ("diff.context", "9"),
+        ("diff.interHunkContext", "20"),
+        ("diff.indentHeuristic", "false"),
+        ("diff.suppressBlankEmpty", "true"),
+        ("diff.external", "false"),
+        ("diff.orderFile", str(repo / "order")),
+        ("core.quotePath", "false"),
+        ("patchid.stable", "true"),
+    ):
+        _git(repo, "config", k, v)
+    (repo / "order").write_text("other.txt\ncode.py\n")
+
+
+def test_hostile_diff_configuration_does_not_change_the_patch_id(repo: Path) -> None:
+    (repo / "other.txt").write_text("other, on feat\n")
+    (repo / "naïve.txt").write_text("x\n")
+    _commit(repo, "two more files")
+    plain = Checkout(repo).patch_id("feat", "main")
+    _hostile(repo)
+
+    assert plain
+    assert Checkout(repo).patch_id("feat", "main") == plain
+
+
+def test_a_textconv_attribute_does_not_hide_a_binary_edit(repo: Path) -> None:
+    """A textconv driver that maps every blob to the same text (as a size-only or
+    metadata-only converter would) must not make a same-size binary edit look unchanged."""
+    _git(repo, "config", "diff.same.textconv", "sh -c 'echo same'")
+    _git(repo, "config", "diff.same.binary", "false")
+    info = repo / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "attributes").write_text("*.bin diff=same\n")
+    (repo / "blob.bin").write_bytes(bytes(range(256)))
+    _commit(repo, "add a binary")
+    checkout = Checkout(repo)
+    before = checkout.patch_id("feat", "main")
+    (repo / "blob.bin").write_bytes(bytes(reversed(range(256))))
+    _commit(repo, "same size, other bytes")
+
+    assert checkout.patch_id("feat", "main") != before
+
+
+def test_an_external_diff_driver_is_never_run(repo: Path, tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    _git(repo, "config", "diff.external", f"sh -c 'touch {marker}'")
+    _git(repo, "config", "diff.ext.command", f"sh -c 'touch {marker}'")
+    info = repo / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "attributes").write_text("*.py diff=ext\n")
+
+    assert Checkout(repo).patch_id("feat", "main")
+    assert not marker.exists()
