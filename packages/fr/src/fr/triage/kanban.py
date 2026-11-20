@@ -116,11 +116,8 @@ _DEAD: frozenset[DependencyState] = frozenset({"unsatisfiable", "unknown"})
 # R6: what the driver's action means for a card, by action kind.
 _ACTION_PHRASES: Mapping[str, str] = {
     "dispatch": "dispatch next",
-    "merge": "merge ready",
-    "enqueue": "enqueue PR",  # `action_phrase` adds the number (merge-train-safety R13)
     "warn": "CI failing",
     "closeout": "close-out due",
-    "archive": "archive PR ready to merge",
     "held": "held by the in-flight cap",
     "adopt": "close-out found; the drive records it",
     "foreign": "foreign PR on its branch",
@@ -128,7 +125,6 @@ _ACTION_PHRASES: Mapping[str, str] = {
     # The wave driver's state export (triage-pages-goal R13) acts per repo, not per batch,
     # so these never reach a card; every kind still needs a phrase.
     "export": "triage state export due",
-    "export-merge": "state export PR ready to merge",
     "export-reconcile": "state export merged; the drive records it",
     "export-closed": "state export PR closed; the drive re-exports",
     "export-conflict": "state export PR conflicts; the operator must act",
@@ -465,12 +461,14 @@ def _first_actions(plan: Pass) -> dict[str, Action]:
 
 
 def _in_merge_queue(plan: Pass) -> frozenset[str]:
-    return frozenset(b for t in plan.trains for b in t.in_merge_queue)
+    """The batches the wave merge queue holds as entries or ready entries (R25)."""
+    return frozenset(k for q in plan.queues for k in (*q.entries, *q.waiting))
 
 
 def _awaiting(snapshot: Snapshot, plan: Pass) -> frozenset[str]:
-    held = (b for t in plan.trains for b in t.awaiting)
-    return frozenset(b for b in held if (pr := snapshot.live.get(b)) and pr.checks == "green")
+    return frozenset(
+        b for b in plan.awaiting if (pr := snapshot.live.get(b)) and pr.checks == "green"
+    )
 
 
 def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
@@ -482,7 +480,7 @@ def awaiting_approval(
     facts: Facts, judgements: Judgements, ci_none: Collection[str] = ()
 ) -> frozenset[str]:
     """The green train members the driver holds for the operator's `approved-fr` label
-    (`Train.awaiting`, merge-train-safety R5); a pending one still reads `CI pending`."""
+    (`Pass.awaiting`, merge-train-safety R5); a pending one still reads `CI pending`."""
     return _awaiting(*_default_plan(facts, judgements, ci_none))
 
 
@@ -494,8 +492,6 @@ def action_phrase(action: Action) -> str:
         return "held: its members await a live walk"
     if action.kind == "held" and "requires a merge queue" in action.detail:
         return f"held: {action.detail}"
-    if action.kind == "enqueue":
-        return f"enqueue PR #{action.pr}"
     if action.kind == "warn" and action.detail.startswith(ARCHIVE_WAIT):
         return action.detail  # an archive PR's waiting line, never "CI failing" (R9)
     return _ACTION_PHRASES[action.kind]
@@ -678,8 +674,8 @@ def _card(
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
         hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
-        if actions[batch.id].kind in ("merge", "enqueue") and _conflicting(batch, facts):
-            hint = CONFLICT_HINT  # R19: the train still plans it; the card never says ready
+    elif batch.id in queued and _conflicting(batch, facts):
+        hint = CONFLICT_HINT  # R19: the queue still plans it; the card never says ready
     elif batch.id in queued:
         hint = HINT_IN_MERGE_QUEUE
     elif batch.id in awaiting:

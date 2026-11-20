@@ -41,19 +41,16 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
-    REFUSALS_BEFORE_NEED,
     LivePr,
     Snapshot,
     checks_verdict,
     closeout_event,
     closeout_item_id,
     drive_pass,
-    enqueue_refusals,
     fact_ledger_unknown,
     fact_ledgers,
     held_archive_conflict,
     held_conflict,
-    last_enqueue,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
@@ -153,7 +150,6 @@ def drive_snapshot(
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
         rejected=rejected_by_batch(batches, facts),
         approvals=fact_approvals(queue),
-        queue_inferred=True,
         ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)
         ledger_unknown=fact_ledger_unknown(batches, facts, stages),
         post_merge_repos=frozenset(
@@ -186,7 +182,7 @@ class Need:
     # | closeout-pr-closed | closeout-needs-review | closeout-unrecorded | closeout-reopened
     #   (a collected close-out PR the driver will not merge unasked, R15)
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
-    # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
+    # | unplaced | merge-conflict | session-blocked | red-pr
     # | archive-conflict
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
@@ -197,8 +193,6 @@ class Need:
 NEED_LABELS = {
     "approve-pr": "Label a green PR approved-fr",
     "red-pr": "Red PR its session cannot fix",
-    "queue-ejected": "PR ejected from the merge queue",
-    "enqueue-refused": "PR the merge queue refuses",
     "failing-ci": "Failing CI",
     "foreign-pr": "Foreign PR on a batch branch",
     "blocked-batch": "Blocked batch",
@@ -221,35 +215,6 @@ NEED_LABELS = {
     "needs-tester": "Needs you · Tester",
     "needs-devops": "Needs you · DevOps",
 }
-
-
-def queue_needs(snap: Snapshot) -> list[Need]:
-    """What the driver recorded about a PR it enqueued, as needs (merge-train-safety §D):
-    one that left the merge queue unmerged with the base unmoved (`ejected`), and one the
-    forge refused to enqueue twice at its current head (`refused`). Read from the events,
-    like `red-pr`, so the facts-only board shows them too."""
-    out: list[Need] = []
-    for entry in snap.queue:
-        live = snap.live.get(entry.batch.id)
-        if live is None or live.state != "OPEN":
-            continue
-        event = last_enqueue(entry.batch, live.number)
-        if event is None or event.head != live.head:
-            continue
-        if event.outcome == "ejected":
-            out.append(
-                Need("queue-ejected", entry.batch.id,
-                     f"PR #{live.number} left the merge queue unmerged", entry.pr.url)
-            )  # fmt: skip
-        elif event.outcome == "refused":
-            refused = enqueue_refusals(entry.batch, live.number, live.head)
-            if len(refused) >= REFUSALS_BEFORE_NEED:
-                why = f": {event.detail}" if event.detail else ""
-                out.append(
-                    Need("enqueue-refused", entry.batch.id,
-                         f"PR #{live.number} cannot be put in the merge queue{why}", entry.pr.url)
-                )  # fmt: skip
-    return out
 
 
 def gated_unread_needs(facts: Facts) -> list[Need]:
@@ -319,9 +284,8 @@ def needs_you(
         )
         out.append(Need("approve-pr", entry.batch.id, text, pr.url))
 
-    out.extend(queue_needs(snap))
     for action in plan.actions:
-        if action.kind == "warn" and not action.ejected:
+        if action.kind == "warn":
             if action.detail.startswith(ARCHIVE_WAIT):
                 continue  # an archive PR's waiting line (merge-truth R9), never a Need
             failing_pr = batch_pr(by_id[action.batch], facts)

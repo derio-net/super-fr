@@ -14,8 +14,10 @@ one fr recorded since it (`approved_patch_ids`: the approval's own, and each of 
 updates' after it), at any head (a merge of `main` with no conflict resolution, an empty
 commit). Otherwise, and for an approval recorded before schema 13 (no patch-id) or a live
 patch-id that cannot be read, it is `Approved` only while fr's own recorded updates lead
-from the approved head to the live one (`reaches`): the approved head itself, or a push
-fr made, such as the legacy merge train's update of a PR branch. Anything else is `Void`:
+from the approved head to the live one (`reaches`): the approved head itself, or an update
+the retired merge train recorded. Nothing writes an `update` event any more (the queue never
+touches a PR branch, R22): `reaches` and the pinned ids of `UpdateEvent` stay only so that a
+`judgements.yaml` written before that still judges its open PRs as it did. Anything else is `Void`:
 a push fr did not make that changes the PR's own diff, whitespace and binary edits
 included. `git patch-id` drops hunk line numbers, so a push that moves an otherwise
 identical hunk within a file keeps the id, and the approval: R12 states that limit.
@@ -38,9 +40,10 @@ from fr.triage.model import (
     ApprovalEvent,
     Batch,
     BatchEvent,
-    EnqueueEvent,
     Facts,
     PullRequest,
+    QueueApprovalEvent,
+    QueueEntryRef,
     UpdateEvent,
 )
 
@@ -218,7 +221,6 @@ def settle_approvals(
         verdict, patch_id = judge_approval(
             batch.events, number, head, view.get("labels"), patch_id_of
         )
-        voided_head = _voided_head(verdict)
         if isinstance(verdict, Approved) and _unpinned(batch.events, number, patch_id):
             # p1-r8: an approval recorded with no patch-id gains the one its head reads now,
             # so R12 applies from here on rather than `reaches` for the approval's life.
@@ -265,48 +267,66 @@ def settle_approvals(
                 )  # fmt: skip
                 say(f"approval of PR #{number} at {was[:12]} voided: {why}")
                 verdict = Unlabelled()
-        _dequeue_unapproved(
-            client, writer, repo, batch, number, {head, voided_head}, verdict, say, now, dry_run
-        )
         out[batch.id] = verdict
     return out
 
 
-def _dequeue_unapproved(
-    client: Any, writer: EventWriter, repo: str, batch: Batch, number: int, heads: set[str],
-    verdict: ApprovalVerdict, say: Callable[[str], None], now: datetime, dry_run: bool,
-) -> None:  # fmt: skip
-    """A PR fr enqueued whose approval is gone is taken out of the queue (merge-train-safety
-    §D, R13: GitHub would otherwise merge a PR the operator un-approved). Its last event is
-    an `enqueued` one at the current head, or at the head a void names; a `dequeued` event
-    supersedes it, so a later re-label enqueues it afresh. A forge that cannot dequeue is
-    said, never fatal."""
-    if is_approved(verdict):
-        return
-    last = next(
-        (e for e in reversed(batch.events) if isinstance(e, EnqueueEvent) and e.pr == number),
-        None,
-    )
-    if last is None or last.outcome != "enqueued" or last.head not in heads:
-        return
-    if dry_run:
-        say(f"would dequeue PR #{number}: its {APPROVED_FR.name} approval is gone")
-        return
-    from fr.ghclient import UnsupportedForgeOperation
-    from fr.hostclient import FORGE_ERRORS
-
-    soft: tuple[type[Exception], ...] = (UnsupportedForgeOperation, *FORGE_ERRORS)
-    try:
-        client.pr_dequeue(repo, number)
-    except soft as exc:
-        say(f"cannot dequeue PR #{number} though its {APPROVED_FR.name} approval is gone: {exc}")
-        return
-    writer(
-        batch.id,
-        EnqueueEvent(kind="enqueue", at=now, pr=number, head=last.head, base=last.base,
-                     outcome="dequeued"),
-    )  # fmt: skip
-    say(f"dequeued PR #{number}: its {APPROVED_FR.name} approval is gone")
+def settle_entry_approval(
+    client: Any,
+    record: Callable[[QueueApprovalEvent], None],
+    repo: str,
+    entry: QueueEntryRef,
+    events: Sequence[QueueApprovalEvent],
+    view: dict[str, Any],
+    say: Callable[[str], None],
+    *,
+    now: datetime,
+    dry_run: bool = False,
+    patch_id_of: PatchIdOf | None = None,
+) -> tuple[ApprovalVerdict, datetime | None]:
+    """`settle_approvals` for a non-batch queue entry (R32: a DevOps housekeeping PR, whose
+    `approved-fr` is recorded as a queue `approval` event instead of a batch's): the verdict
+    for the open PR in *view* after settling, and when its live approval was recorded (None
+    when it holds none). *events* are the queue's `approval` events of this entry, in order;
+    the same rule judges them (R12: pinned to the patch-id; a push that changes the diff
+    voids it, label removed first), and nothing is written under *dry_run*."""
+    number = entry.pr
+    assert number is not None
+    as_batch: list[BatchEvent] = [
+        ApprovalEvent(kind="approval", at=e.at, pr=number, head=e.head, voided_at=e.voided_at,
+                      patch_id=e.patch_id)
+        for e in events
+        if e.entry.pr == number and e.entry.kind == entry.kind
+    ]  # fmt: skip
+    head = str(view.get("head_oid") or "")
+    verdict, patch_id = judge_approval(as_batch, number, head, view.get("labels"), patch_id_of)
+    if isinstance(verdict, First):
+        if dry_run:
+            say(f"would record approval of PR #{number} at {head[:12]}")
+            return verdict, None
+        record(QueueApprovalEvent(kind="approval", at=now, entry=entry, head=head,
+                                  patch_id=patch_id))  # fmt: skip
+        say(f"approval of {entry.kind} PR #{number} recorded at {head[:12]}")
+        return Approved(head), now
+    if isinstance(verdict, Void):
+        was = verdict.approved_head
+        why = void_reason(as_batch, number, head, patch_id)
+        if dry_run:
+            say(f"would void approval of PR #{number} at {was[:12]}: {why}")
+        elif (off := _labels_off(client, repo)) is not None:
+            say(f"approval of PR #{number} at {was[:12]} not voided: {off}")  # R9
+        else:
+            client.edit_issue_labels(
+                repo, number, add=frozenset(), remove=frozenset({APPROVED_FR.name})
+            )
+            recorded = _live_approval(as_batch, number)
+            record(QueueApprovalEvent(
+                kind="approval", at=now, entry=entry, head=was, voided_at=head,
+                patch_id=recorded.patch_id if recorded is not None else None))  # fmt: skip
+            say(f"approval of {entry.kind} PR #{number} at {was[:12]} voided: {why}")
+            verdict = Unlabelled()
+    live = _live_approval(as_batch, number) if is_approved(verdict) else None
+    return verdict, live.at if live is not None else None
 
 
 def _live_approval(events: Sequence[BatchEvent], pr: int) -> ApprovalEvent | None:
@@ -325,10 +345,6 @@ def _unpinned(events: Sequence[BatchEvent], pr: int, patch_id: str | None) -> bo
         and _live_approval(events, pr) is not None
         and not approved_patch_ids(events, pr)
     )
-
-
-def _voided_head(verdict: ApprovalVerdict) -> str:
-    return verdict.approved_head if isinstance(verdict, Void) else ""
 
 
 def facts_without_label(facts: Facts, prs: set[tuple[str, int]], name: str) -> Facts:

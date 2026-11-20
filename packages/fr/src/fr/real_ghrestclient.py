@@ -38,8 +38,6 @@ from fr.ghclient import (
     BaseRules,
     CommandRunner,
     HostRefusedError,
-    QueueState,
-    UnsupportedForgeOperation,
     filter_issues_by_body,
     run_cli,
 )
@@ -1228,27 +1226,6 @@ class RealGhRestClient:
             f"repos/{repo}/pulls/{number}/merge",
             method="PUT",
             fields={"merge_method": method, "sha": head_sha},
-        )
-
-    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
-        """REST has no route to enqueue (it needs GraphQL's enqueuePullRequest): raises."""
-        raise UnsupportedForgeOperation(
-            "pr_enqueue", "github-rest", tracked_by="merge-train-safety R13"
-        )
-
-    def pr_queue_state(self, repo: str, number: int) -> QueueState:
-        """`pulls/{n}.auto_merge`; queue membership is not in REST: `in_queue` None."""
-        pull = self._api(f"repos/{repo}/pulls/{number}") or {}
-        return QueueState(
-            in_queue=None,
-            auto_merge=bool(pull.get("auto_merge")),
-            open=pull.get("state", "open") == "open" and not pull.get("merged"),
-        )
-
-    def pr_dequeue(self, repo: str, number: int) -> None:
-        """REST has no route to clear auto-merge (it needs GraphQL): raises."""
-        raise UnsupportedForgeOperation(
-            "pr_dequeue", "github-rest", tracked_by="merge-train-safety R13"
         )
 
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:

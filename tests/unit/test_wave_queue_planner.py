@@ -931,3 +931,105 @@ def test_a_refused_cleared_write_under_release_none_is_a_need() -> None:
     plan = plan_queue(_qs([], {}, records=(record,), config=QueueConfig(release="none"),
                           hold=_hold("drained", ago=timedelta(hours=1))))  # fmt: skip
     assert _kinds(plan) == ["queue-need", "queue-cleared"]
+
+
+# ------------------------------------------- other entries: close-out, archive, export (R32)
+
+
+def _other(kind: str, n: int, *, wave: int | None = None, at: str = AT, batch: str = "") -> Any:
+    from fr.triage.wave_queue import OtherEntry
+
+    return OtherEntry(key=f"{kind}#{n}", kind=kind, pr=n, wave=wave,  # type: ignore[arg-type]
+                      at=datetime.fromisoformat(at.replace("Z", "+00:00")), batch=batch)  # fmt: skip
+
+
+def _o(kind: str, n: int, **kw: Any) -> tuple[Any, dict[str, LivePr]]:
+    return _other(kind, n, **kw), {f"{kind}#{n}": _live(n, f"head-{kind}-{n}")}
+
+
+def test_an_other_entry_opens_a_one_entry_queue_between_waves() -> None:
+    entry, live = _o("export", 7)
+    plan = plan_queue(_qs([], {}, live=live, others=(entry,)))
+    opened = _one(plan, "queue-open")
+    assert opened.wave is None and opened.entries == ("export#7",)
+
+
+def test_an_other_entry_waits_while_a_waved_batch_is_unfinished() -> None:
+    entry, live = _o("archive", 8)
+    plan = plan_queue(_qs([_batch("w2", 1, wave=2)], {"w2": "dispatched"}, live=live,
+                          others=(entry,)))  # fmt: skip
+    assert plan.actions == () and plan.waiting == ("archive#8",)
+
+
+def test_a_closeout_of_the_open_wave_joins_that_waves_queue_and_builds_behind_the_batches() -> None:
+    batches = [_batch("a", 1), _batch("b", 2)]
+    entry, live = _o("closeout", 9, wave=1, batch="a", at="2026-11-20T11:00:00Z")
+    live |= {"b": _live(101, "head-b")}
+    rec = _record(_open(), _built(1, "s1", "a"), _land("s1", "a"))
+    hold = Hold(state="open", scope=ME, wave=1, parent=MAIN)
+    plan = plan_queue(_qs(batches, {"a": "merged", "b": "pr-open"}, records=(rec,), hold=hold,
+                          base="s1", live=live, others=(entry,)))  # fmt: skip
+    build = _one(plan, "queue-build")
+    assert build.entries == ("b", "closeout#9")
+
+
+def test_a_wave_does_not_drain_while_its_closeout_waits_and_drains_once_it_landed() -> None:
+    entry, live = _o("closeout", 9, wave=1, batch="a")
+    rec = _record(_open(), _built(1, "s1", "a"), _land("s1", "a"))
+    hold = Hold(state="open", scope=ME, wave=1, parent=MAIN)
+    snap = _qs([_batch("a", 1)], {"a": "merged"}, records=(rec,), hold=hold, base="s1",
+               live=live, others=(entry,), closeout_landed=False)  # fmt: skip
+    assert "queue-drain" not in _kinds(plan_queue(snap))
+    rec2 = _record(_open(), _built(1, "s1", "a"), _land("s1", "a"),
+                   _built(1, "s2", "closeout#9"), _land("s2", "closeout#9"))  # fmt: skip
+    from dataclasses import replace
+
+    done = plan_queue(replace(snap, records=(rec2,), base="s2", live={}, others=(),
+                              closeout_landed=True))  # fmt: skip
+    assert _kinds(done) == ["queue-drain"]
+
+
+def test_a_non_batch_entry_needs_an_open_pr_and_green_checks_whatever_its_rule_admitted() -> None:
+    red, live_red = _o("export", 7)
+    live_red[red.key] = _live(7, "head-export-7", checks="pending")
+    assert plan_queue(_qs([], {}, live=live_red, others=(red,))).actions == ()
+    closed, live_closed = _o("archive", 8)
+    live_closed[closed.key] = _live(8, "head-archive-8", state="MERGED")
+    assert plan_queue(_qs([], {}, live=live_closed, others=(closed,))).actions == ()
+
+
+def test_the_oldest_between_waves_entry_opens_first_whatever_its_kind() -> None:
+    old, live = _o("archive", 8, at="2026-11-20T09:00:00Z")
+    new, live2 = _o("export", 7, at="2026-11-20T10:00:00Z")
+    plan = plan_queue(_qs([], {}, live={**live, **live2}, others=(new, old)))
+    assert _one(plan, "queue-open").entries == ("archive#8",) and plan.waiting == ("export#7",)
+
+
+def test_a_between_waves_other_entry_lands_and_the_queue_drains() -> None:
+    entry, live = _o("export", 7)
+    rec = _record(_open(), _built(1, "s1", "export#7", head="head-export-7") | {
+        "entry": {"pr": 7, "kind": "export"}}, wave=None)  # fmt: skip
+    green = SlotCheck("green")
+    hold = Hold(state="open", scope=ME, wave=None, parent=MAIN)
+    plan = plan_queue(_qs([], {}, live=live, others=(entry,), records=(rec,), hold=hold,
+                          slots={"s1": green}))  # fmt: skip
+    land = _one(plan, "queue-land")
+    assert land.entries == ("export#7",) and land.sha == "s1"
+
+
+def test_an_other_entry_ejected_at_its_head_is_a_need_and_stays_out_until_its_head_moves() -> None:
+    entry, live = _o("closeout", 9, wave=1, batch="a")
+    eject = {"kind": "queue_eject", "at": AT, "entry": {"pr": 9, "kind": "closeout"},
+             "reason": "conflict", "head": "head-closeout-9"}  # fmt: skip
+    rec = _record(_open(), eject)
+    hold = Hold(state="open", scope=ME, wave=1, parent=MAIN)
+    snap = _qs([_batch("a", 1)], {"a": "merged"}, records=(rec,), hold=hold, live=live,
+               others=(entry,), closeout_landed=False)  # fmt: skip
+    plan = plan_queue(snap)
+    assert plan.entries == ()
+    need = _one(plan, "queue-need")
+    assert "closeout PR #9" in need.detail and need.batch == "a"
+    from dataclasses import replace
+
+    moved = replace(snap, live={entry.key: _live(9, "head-new")})
+    assert _one(plan_queue(moved), "queue-build").entries == ("closeout#9",)

@@ -842,6 +842,10 @@ class QueuePorts:
     pr_of: PrOf
     post_merge: Callable[[tuple[str, ...]], str | None] | None = None
     hand_back: Callable[[QueueAction], str] | None = None
+    # Called with each landing that succeeded, before the read-back (R32): the command
+    # records what a landed non-batch entry owes (an archive PR's `archived`), since a PR
+    # attributed by its files alone is not found again once it is no open PR.
+    landed: Callable[[Sequence[Landing]], None] | None = None
     now: Callable[[], datetime] = _utcnow
 
 
@@ -1258,6 +1262,8 @@ class QueueExecutor:
             self._halt(result.outcome, result.detail, result.main)
             return result, f"{result.outcome}: {result.detail}"
         said = f"landed at {result.main[:12]}"
+        if p.landed is not None:
+            p.landed(landings)
         keys = tuple(x.key for x in landings if x.ref.batch is not None)
         if p.post_merge is not None and keys:  # R33: once per landing, right after it
             failed = p.post_merge(keys)

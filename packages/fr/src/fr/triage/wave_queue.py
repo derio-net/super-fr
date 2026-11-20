@@ -40,6 +40,7 @@ from fr.triage.model import (
     QueueClearedEvent,
     QueueDrainEvent,
     QueueEjectEvent,
+    QueueEntryKind,
     QueueEntryRef,
     QueueHaltEvent,
     QueueLandEvent,
@@ -180,6 +181,25 @@ class BuildConflict:
 
 
 @dataclass(frozen=True)
+class OtherEntry:
+    """A queue entry that is no batch (R32): a collected close-out, a legacy archive PR, a
+    wave's state-export PR or a DevOps housekeeping PR. The command admits it under its own
+    trust rule (`review_reasons`, `attributed` and `archive_allowed`, `_export_row`'s checks,
+    or `approved-fr` recorded on the queue's events) and lists it here only then; its PR is
+    in `QueueSnapshot.live` under *key* (`entry_key`: `<kind>#<pr>`), at the head the rule
+    judged. *wave* is the wave whose queue it joins (None: between waves, R2); *at* is when
+    it was admitted, which orders it among the entries (R3); *batch* is the batch it is
+    about (a close-out's first member), for the Needs."""
+
+    key: str
+    kind: QueueEntryKind
+    pr: int
+    wave: int | None = None
+    at: datetime | None = None
+    batch: str = ""
+
+
+@dataclass(frozen=True)
 class QueueSnapshot:
     """Everything one repo's queue decides from. Built fresh each pass, never stored."""
 
@@ -206,6 +226,7 @@ class QueueSnapshot:
     head_changed: Mapping[str, datetime] = field(default_factory=dict)  # batch id -> when
     # The open wave's close-out: None, it has none; False, not landed yet; True, landed.
     closeout_landed: bool | None = None
+    others: tuple[OtherEntry, ...] = ()  # the non-batch entries admitted this pass (R32)
     warned: frozenset[str] = frozenset()  # report keys said already
     scope_args: tuple[str, ...] = ()  # the drive's own scope arguments, for pasted commands
 
@@ -310,20 +331,63 @@ def _ready(batch: Batch, qs: QueueSnapshot) -> bool:
     return pr.checks == "green" and not pre_merge_held(pr.labels)
 
 
+@dataclass(frozen=True)
+class _Cand:
+    """A ready entry as the queue orders it: a batch or an `OtherEntry`, by key."""
+
+    key: str
+    wave: int | None
+    at: datetime | None
+    order: int | None = None
+    last: bool = False  # R15: a wave's close-out is its queue's last entry
+
+
+def _other_ready(o: OtherEntry, qs: QueueSnapshot) -> bool:
+    """R3, R32: its trust rule admitted it (it is listed), its PR is open and its own
+    head's checks are green."""
+    pr = qs.live.get(o.key)
+    return pr is not None and pr.state == "OPEN" and pr.checks == "green"
+
+
+def _unfinished_waves(qs: QueueSnapshot) -> frozenset[int]:
+    return frozenset(
+        w for b in qs.batches if not is_terminal(b, qs.stages.get(b.id))
+        if (w := effective_wave(b)) is not None
+    )  # fmt: skip
+
+
+def _cands(qs: QueueSnapshot, open_wave: int | None = None) -> list[_Cand]:
+    """Every ready entry, batch or other, with the wave it queues in. An other entry of a
+    wave that is neither unfinished nor *open_wave* (the open queue's) queues between
+    waves: its own wave is done, and a late close-out waits for the next idle moment."""
+    out = [
+        _Cand(b.id, effective_wave(b), _ready_at(b, qs.live[b.id]), b.order)
+        for b in qs.batches if _ready(b, qs)
+    ]  # fmt: skip
+    live_waves = _unfinished_waves(qs)
+    for o in qs.others:
+        if not _other_ready(o, qs):
+            continue
+        wave = o.wave if o.wave is not None and (o.wave in live_waves or o.wave == open_wave) \
+            else None  # fmt: skip
+        out.append(_Cand(o.key, wave, o.at, last=o.kind == "closeout"))
+    return out
+
+
 def _by_readiness(
-    batches: Sequence[Batch], qs: QueueSnapshot, since: Mapping[str, datetime] | None = None
-) -> list[Batch]:
-    """*batches* in the order they became ready (R3): the latest approval, or a later
+    cands: Sequence[_Cand], since: Mapping[str, datetime] | None = None
+) -> list[_Cand]:
+    """*cands* in the order they became ready (R3): the latest approval, or a later
     ejection (*since*) it re-entered after; unknown last, then by wave order."""
 
-    def key(b: Batch) -> tuple[bool, datetime | str, int, int, str]:
-        at = _ready_at(b, qs.live[b.id])
-        floor = (since or {}).get(b.id)
+    def key(c: _Cand) -> tuple[bool, bool, datetime | str, int, int, str]:
+        at = c.at
+        floor = (since or {}).get(c.key)
         if floor is not None and (at is None or floor > at):
             at = floor
-        return (at is None, at or "", b.order is None, b.order or 0, b.id)
+        return (c.last, at is None, at or "", c.order is None, c.order or 0, c.key)
 
-    return sorted(batches, key=key)
+    return sorted(cands, key=key)
 
 
 # ------------------------------------------------------------------ planning
@@ -388,48 +452,46 @@ def _plan_idle_open(qs: QueueSnapshot) -> QueuePlan:
     """§B: the lowest wave with a non-terminal batch opens once its first entry is ready;
     until then nothing opens and no hold is written, so a wave still being developed never
     holds the repo's releases (plan decision p2-queue-opens-on-first-ready). With no waved
-    batch unfinished, a one-entry queue for the oldest ready between-waves entry."""
-    unfinished = sorted(
-        {w for b in qs.batches if not is_terminal(b, qs.stages.get(b.id))
-         if (w := effective_wave(b)) is not None}
-    )  # fmt: skip
-    ready = _by_readiness([b for b in qs.batches if _ready(b, qs)], qs)
+    batch unfinished, a one-entry queue for the oldest ready between-waves entry (a batch
+    with no wave, or any other entry of R32)."""
+    unfinished = sorted(_unfinished_waves(qs))
+    ready = _by_readiness(_cands(qs))
     # An entry a between-waves queue ejected is ejected, not waiting, until its head moves:
     # it opens none again meanwhile, or a drain, a release and a re-open would loop on the
     # same conflict (p2-r6).
-    ready = [b for b in ready if effective_wave(b) is not None or not _ejected_before(b, qs)]
+    ready = [c for c in ready if c.wave is not None or not _ejected_before(c.key, qs)]
     if unfinished:
         wave: int | None = unfinished[0]
-        if not any(effective_wave(b) == wave for b in ready):
-            return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(b.id for b in ready))
+        if not any(c.wave == wave for c in ready):
+            return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(c.key for c in ready))
         entries: tuple[str, ...] = ()
         why = f"open {qs.repo}'s merge queue for wave {wave}"
     else:
-        loose = [b for b in ready if effective_wave(b) is None]
+        loose = [c for c in ready if c.wave is None]
         if not loose:
-            return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(b.id for b in ready))
-        wave, entries = None, (loose[0].id,)
-        why = f"open {qs.repo}'s merge queue between waves for {loose[0].id}"
+            return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(c.key for c in ready))
+        wave, entries = None, (loose[0].key,)
+        why = f"open {qs.repo}'s merge queue between waves for {loose[0].key}"
     if qs.hold is not None and qs.hold.state != "cleared":
         # Our own `open` hold with no open record: the hold's writer settles it (R27).
         return QueuePlan(qs.repo, "idle", None, ())
     waiting = tuple(
-        b.id for b in ready
-        if b.id not in entries and (wave is None or effective_wave(b) != wave)
+        c.key for c in ready
+        if c.key not in entries and (wave is None or c.wave != wave)
     )  # fmt: skip
     action = QueueAction("queue-open", qs.repo, why, wave=wave, entries=entries)
     return QueuePlan(qs.repo, "idle", wave, (action,), entries=entries, waiting=waiting)
 
 
-def _ejected_before(batch: Batch, qs: QueueSnapshot) -> bool:
-    """*batch*'s latest ejection in this scope's between-waves queues was at its live head."""
-    by_id = {batch.id: batch}
+def _ejected_before(key: str, qs: QueueSnapshot) -> bool:
+    """*key*'s latest ejection in this scope's between-waves queues was at its live head."""
+    by_id = {b.id: b for b in qs.batches}
     for record in reversed([r for r in qs.records if r.scope == qs.scope and r.wave is None]):
         rep = replay(record)
-        if batch.id in rep.landed:
+        if key in rep.landed:
             return False
-        if (head := _ejected_head(batch.id, rep, by_id)) is not None:
-            return head == _head(batch.id, qs)
+        if (head := _ejected_head(key, rep, by_id)) is not None:
+            return head == _head(key, qs)
     return False
 
 
@@ -551,6 +613,18 @@ def queue_landed(records: Sequence[QueueRecord]) -> frozenset[str]:
     )
 
 
+def landed_keys(records: Sequence[QueueRecord]) -> frozenset[str]:
+    """Every entry key (`entry_key`: a batch id, or `<kind>#<pr>`) a queue of *records*
+    landed: a non-batch PR it landed is merged, whatever the forge still reads (R32, R35)."""
+    return frozenset(
+        entry_key(ref)
+        for record in records
+        for event in record.events
+        if isinstance(event, QueueLandEvent)
+        for ref in event.entries
+    )
+
+
 def is_hold_halt(event: QueueHaltEvent) -> bool:
     return event.detail.startswith(HOLD_HALT)
 
@@ -666,25 +740,26 @@ def _entries(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> tuple[list[
     entries that wait on a later queue. An ejected entry re-enters once its head moves;
     until then it is ejected, neither an entry nor waiting (R25)."""
     by_id = {b.id: b for b in qs.batches}
-    ready = [b for b in qs.batches if _ready(b, qs)]
-    mine = [b for b in ready if effective_wave(b) == record.wave]
+    ready = _cands(qs, record.wave)
+    mine = [c for c in ready if c.wave == record.wave]
     if record.wave is None:  # one entry between waves: the one built, else the oldest
         if rep.landed:
             mine = []
         else:
-            built = [by_id[k] for k in rep.order if k in by_id]
-            mine = [b for b in built if b in mine][:1] or _by_readiness(mine, qs)[:1]
-    keep = [b.id for b in mine]
+            names = {c.key for c in mine}
+            built = [k for k in rep.order if k in names]
+            mine = [c for c in mine if c.key == built[0]] if built else _by_readiness(mine)[:1]
+    keep = {c.key for c in mine}
     queued = [k for k in rep.order if k in keep]
-    out = {b.id for b in ready if effective_wave(b) == record.wave
-           and _ejected_head(b.id, rep, by_id) == _head(b.id, qs)}  # fmt: skip
+    out = {c.key for c in ready if c.wave == record.wave
+           and _ejected_head(c.key, rep, by_id) == _head(c.key, qs)}  # fmt: skip
     fresh = [
-        b.id for b in _by_readiness([b for b in mine if b.id not in queued], qs, rep.ejected_at)
-        if b.id not in rep.landed and b.id not in out
+        c.key for c in _by_readiness([c for c in mine if c.key not in queued], rep.ejected_at)
+        if c.key not in rep.landed and c.key not in out
     ]  # fmt: skip
     entries = [*queued, *fresh]
-    waiting = [b.id for b in _by_readiness(ready, qs) if b.id not in entries
-               and b.id not in rep.landed and b.id not in out]  # fmt: skip
+    waiting = [c.key for c in _by_readiness(ready) if c.key not in entries
+               and c.key not in rep.landed and c.key not in out]  # fmt: skip
     return entries, waiting
 
 
@@ -795,8 +870,26 @@ def _tail(
         actions.append(drained)
     elif (need := _stall_need(record, qs, entries)) is not None:
         actions.append(need)
+    actions.extend(_ejected_other_needs(record, rep, qs))
     return QueuePlan(qs.repo, "open", record.wave, tuple(actions), tuple(entries),
                      tuple(waiting))  # fmt: skip
+
+
+def _ejected_other_needs(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> list[QueueAction]:
+    """R32: a non-batch entry ejected at the head it still has has no session to hand it
+    back to, so it is a Need until its head moves or it is closed."""
+    out: list[QueueAction] = []
+    for o in qs.others:
+        head = rep.ejected.get(o.key)
+        pr = qs.live.get(o.key)
+        if head is None or pr is None or pr.state != "OPEN" or head != pr.head:
+            continue
+        out.append(QueueAction(
+            "queue-need", qs.repo, f"{o.kind} PR #{o.pr} was ejected from {qs.repo}'s merge "
+            f"queue at {head[:12]} (it conflicts or its combination failed): the queue holds "
+            "it out until its head moves; fix it on its branch, or close it",
+            wave=record.wave, batch=o.batch))  # fmt: skip
+    return out
 
 
 def _drained(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> QueueAction | None:
@@ -810,9 +903,16 @@ def _drained(record: QueueRecord, rep: Replay, qs: QueueSnapshot) -> QueueAction
         by_id = {b.id: b for b in qs.batches}
         named = {*rep.order, *rep.ejected}
 
+        others = {o.key for o in qs.others}
+
         def gone(key: str) -> bool:
             batch = by_id.get(key)
-            if batch is None or is_terminal(batch, qs.stages.get(key)):
+            if batch is None:  # another entry (R32): gone once it is no open PR it admits
+                pr = qs.live.get(key)
+                if key not in others or pr is None or pr.state != "OPEN":
+                    return True
+                return _ejected_head(key, rep, by_id) == _head(key, qs)
+            if is_terminal(batch, qs.stages.get(key)):
                 return True
             if qs.stages.get(key) != "pr-open" or key not in qs.live:
                 return True

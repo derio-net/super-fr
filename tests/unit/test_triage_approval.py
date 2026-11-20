@@ -6,8 +6,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from fr.labels import APPROVED_FR
-from fr.triage.approval import Approved, First, Unlabelled, Void, approval_verdict, settle_approvals
+from fr.triage.approval import (
+    Approved,
+    First,
+    Unlabelled,
+    Void,
+    approval_verdict,
+    settle_approvals,
+)
 from fr.triage.model import ApprovalEvent, Batch, BatchEvent, UpdateEvent
 
 REPO = "derio-net/super-fr"
@@ -360,3 +368,80 @@ def test_a_pr_the_queue_landed_is_never_settled_though_the_forge_reads_it_open()
     )  # fmt: skip
 
     assert written == [] and forge.label_edits == [] and got == {}
+
+
+# ------------------------------------- a non-batch queue entry's approval (R32, R12)
+
+
+class _EntryClient:
+    def __init__(self) -> None:
+        self.removed: list[tuple[int, frozenset[str]]] = []
+
+    def edit_issue_labels(self, repo: str, n: int, *, add: frozenset[str],
+                          remove: frozenset[str]) -> None:  # fmt: skip
+        self.removed.append((n, remove))
+
+
+def _entry_view(head: str, labels: tuple[str, ...] = ("approved-fr",)) -> dict[str, object]:
+    return {"state": "OPEN", "head_oid": head, "labels": list(labels)}
+
+
+def test_a_housekeeping_pr_with_the_label_is_recorded_as_a_queue_approval_then_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import UTC, datetime
+
+    from fr.triage.approval import Approved, settle_entry_approval
+    from fr.triage.model import QueueApprovalEvent, QueueEntryRef
+
+    monkeypatch.setattr("fr.triage.approval._labels_off", lambda *a: None)
+    ref = QueueEntryRef(pr=41, kind="housekeeping")
+    recorded: list[QueueApprovalEvent] = []
+    now = datetime(2026, 11, 20, 12, tzinfo=UTC)
+    verdict, at = settle_entry_approval(
+        _EntryClient(), recorded.append, "o/r", ref, [], _entry_view("h1"), lambda s: None,
+        now=now, patch_id_of=lambda pr, head, fresh=False: "pid-1")  # fmt: skip
+    assert isinstance(verdict, Approved) and at == now
+    (event,) = recorded
+    assert (event.head, event.patch_id, event.entry.kind) == ("h1", "pid-1", "housekeeping")
+    # a later pass, the head moved by a push that kept the diff: still approved
+    again, when = settle_entry_approval(
+        _EntryClient(), recorded.append, "o/r", ref, recorded, _entry_view("h2"),
+        lambda s: None, now=now, patch_id_of=lambda pr, head, fresh=False: "pid-1")  # fmt: skip
+    assert isinstance(again, Approved) and when == now and len(recorded) == 1
+
+
+def test_a_housekeeping_approval_is_voided_when_the_diff_changes_and_the_label_is_removed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import UTC, datetime
+
+    from fr.triage.approval import Unlabelled, settle_entry_approval
+    from fr.triage.model import QueueApprovalEvent, QueueEntryRef
+
+    monkeypatch.setattr("fr.triage.approval._labels_off", lambda *a: None)
+    ref = QueueEntryRef(pr=41, kind="housekeeping")
+    now = datetime(2026, 11, 20, 12, tzinfo=UTC)
+    first = QueueApprovalEvent(kind="approval", at=now, entry=ref, head="h1", patch_id="pid-1")
+    recorded: list[QueueApprovalEvent] = []
+    client = _EntryClient()
+    verdict, at = settle_entry_approval(
+        client, recorded.append, "o/r", ref, [first], _entry_view("h2"), lambda s: None,
+        now=now, patch_id_of=lambda pr, head, fresh=False: "pid-2")  # fmt: skip
+    assert isinstance(verdict, Unlabelled) and at is None
+    assert client.removed == [(41, frozenset({"approved-fr"}))]
+    assert recorded[0].voided_at == "h2" and recorded[0].head == "h1"
+
+
+def test_a_dry_run_records_and_removes_nothing() -> None:
+    from datetime import UTC, datetime
+
+    from fr.triage.approval import First, settle_entry_approval
+    from fr.triage.model import QueueEntryRef
+
+    said: list[str] = []
+    verdict, at = settle_entry_approval(
+        _EntryClient(), lambda e: pytest.fail("wrote"), "o/r",
+        QueueEntryRef(pr=41, kind="housekeeping"), [], _entry_view("h1"), said.append,
+        now=datetime(2026, 11, 20, tzinfo=UTC), dry_run=True)  # fmt: skip
+    assert isinstance(verdict, First) and at is None and "would record" in said[0]

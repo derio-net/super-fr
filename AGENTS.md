@@ -216,14 +216,28 @@ uv workspace monorepo, version lockstepped across every manifest (see
      (wave-merge-queue R12, R24).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
-    `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
-    `closeout`, `archive`, `dispatch`, `blocked`, `warn` actions out; no
+    `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,
+    `dispatch`, `blocked`, `warn` actions and one `QueuePlan` per repo out; no
     `fr_dispatch`, no git, no process, the clock passed in); the command
-    re-collects facts each pass (`triage_cmd.collect_into`), executes through
-    `dispatch_batch`/`merge_ready`, fast-forwards and runs the repo's
-    `post_merge` argument list through `gitseam.Checkout`, and starts each
-    close-out as a `unit="run"` item with `payload.kind: closeout`. A
-    `drive.lock` (pid, start time) refuses a second driver.
+    re-collects facts each pass (`triage_cmd.collect_into`), executes the queue
+    through `fr.triage.queue_exec`, dispatches through `dispatch_batch`,
+    fast-forwards and runs the repo's `post_merge` argument list through
+    `gitseam.Checkout`, and starts each close-out as a `unit="run"` item with
+    `payload.kind: closeout`. A `drive.lock` (pid, start time) refuses a second driver.
+    **One merge path** (2026-11-19 spec `wave-merge-queue`, R22, R23, R32): the per-merge
+    train, the forge merge-queue mode, the `enqueue` executor and the update path are
+    gone, and `batch_merge.py` keeps only what the queue shares (the merge method choice,
+    the required-checks rule, `unresolvable`). Every merge is an entry of
+    `fr.triage.wave_queue`: a batch PR, or an `OtherEntry` (a collected close-out, an
+    attributed archive PR, the per-wave export PR, a DevOps housekeeping PR) that the
+    pure pass admits under its own trust rule (`Admitted`: `review_reasons`,
+    `attributed` plus `archive_allowed`, `_export_row`'s checks, or `approved-fr` recorded
+    as a queue `approval`, settled by `approval.settle_entry_approval`); `_archive` and
+    `_export_merge` are gone. A repo with no `queue.ci`, a forge merge queue on its base,
+    or a forge that is glab or tea is `queue-held` with the reason. `fr triage batch merge`
+    drives the same engine in the foreground (`_Driver.queue_only`). Old `update` and
+    `enqueue` events are still read (the approval verdict's `reaches` keeps judging an
+    approval recorded before schema 13); nothing writes them.
   - **`fr/usage`** (2026-09-25 spec, `lean-cost-aware-process` §5.A) — what a
     session or run cost, and on what, reconstructed from the harness's own
     records: `readers/` (one per harness — Claude Code transcripts, OpenCode and
