@@ -35,12 +35,15 @@ rows:
     - spec:2026-11-20-ci-single-python#R5
     levels:
       unit:
-      - super-fr:tests/unit/test_ci_python_floor.py#test_ci_tests_one_python_the_floor
       - super-fr:tests/unit/test_ci_python_floor.py#test_every_shard_feeds_coverage
       - super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_checks_the_one_leg
       - super-fr:tests/unit/test_ci_split_workflow.py#test_collect_job_collects_once_with_the_shards_addopts_and_no_split
+      - super-fr:tests/unit/test_ci_python_floor.py#test_one_python_the_floor
     status: ci
-    notes: Layout pinned by unit tests CI runs
+    notes: 'One 3.14 leg, 7 shards, coverage on every shard, one split-check; pinned
+      by test_ci_python_floor.py (test_one_python_the_floor over ci.yml and release.yml,
+      test_every_shard_feeds_coverage), test_ci_split_workflow.py and test_ci_shards.py;
+      green on PR #1593.'
     verify: none
   - id: ci-single-leg-main-push
     capability: ci
