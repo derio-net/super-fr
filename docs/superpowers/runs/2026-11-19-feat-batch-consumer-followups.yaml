@@ -110,8 +110,10 @@ steps:
           findings: l-errors-r1,l-errors-r2,l-errors-r3
           lenses: docs-accuracy=9:none;errors=5:l-errors-r1,l-errors-r2,l-errors-r3;security=8:none
   deliver:
-    state: running
-    at: '2026-11-20T02:29:27+00:00'
+    state: done
+    at: '2026-11-20T07:32:20+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1583
     units:
       step/deliver:
         attempts:
@@ -119,5 +121,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-20T07:31:26+00:00'
+          outcome: done
+        evidence:
+          tests: ci:60c9d2d960f5d9510fb18d143ca406fe9c8654e2+396e444d3f313b84df4b96971d9da98719556dbe;tree=77b196f76e52248cf614c52e8a19671862835a8b003c2070fea09ee9f56542a7
+          walk: 20261120T071229Z.log@0075f83673e4
+          proportionality: 396e444d3f313b84df4b96971d9da98719556dbe:4c2d374869b048193c40c3e2feadc4b3c701c2a39e2bbc6b869e70216743d71f
+          docs: 396e444d3f313b84df4b96971d9da98719556dbe:d9af5272ee03fbbcace8cabad793113dba18319bd2ca2245b65f4f54acd6537e
+          visual: none
 fr_version: 8.3.0rc6
 pr: https://github.com/derio-net/super-fr/pull/1583
