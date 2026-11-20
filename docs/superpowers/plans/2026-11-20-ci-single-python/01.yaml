@@ -1,0 +1,131 @@
+schema_version: 2
+phase:
+  number: 1
+  title: One Python, 3.14, for the whole base (R1-R11)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - ci-floor-python-3-14
+  - ci-single-leg
+  - ci-scaffold-python-3-14
+  - ci-single-leg-main-push
+  tier: standard
+  files:
+  - pyproject.toml
+  - packages/*/pyproject.toml
+  - uv.lock
+  - packages/*/src/**/*.py
+  - tests/**/*.py
+  - tests/fixtures/acceptance_scaffold/*
+  - .github/workflows/ci.yml
+  - .github/workflows/release.yml
+  - .github/ci-budget.yaml
+  - AGENTS.md
+  - docs/**/*.md
+  - docs/acceptance/features/*.yaml
+  - .changes/feat-ci-single-python.yaml
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: The floor moves to 3.14 (spec §A, R1, R2)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_ops_isolated_python.py make `test_the_python_floor_has_safe_path` parse `requires-python` from packages/fr/pyproject.toml (`>=X.Y`), assert the version is >= (3, 11) (where `-P` exists) and that it equals the root pyproject's floor. Add to tests/unit/test_ci_python_floor.py a test that every member pyproject's `requires-python`, ruff `target-version` and mypy `python_version` agree with the root floor, and that the floor is 3.14. Run `uv run pytest tests/unit/test_ops_isolated_python.py tests/unit/test_ci_python_floor.py -q --no-cov` (single files only; the host is loaded): the new floor test is red.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: set `requires-python = ">=3.14"` in pyproject.toml and packages/{fr,fr-dispatch,fr-cncd,fr-herdr,fr-claude-cloud}/pyproject.toml, ruff `target-version = "py314"`, mypy `python_version = "3.14"`; set `UV_PYTHON: "3.14"` in .github/workflows/ci.yml (workflow env) and release.yml, rewriting both comments (the floor we declare is the one interpreter we test, #1589). Run `uv lock` (no --upgrade) and check `git diff uv.lock`: the header moves, below-3.14-only entries and wheels (tomli, cp311-cp313) drop, no package version changes. Re-run the two test files: green.
+  - id: P1.T1.S3
+    text: |-
+      Fix the findings the new targets raise, in code: `uv run ruff check packages/ tests/` (12 UP047 become PEP 695 generic functions, dropping a module TypeVar nothing else uses; 1 UP043), `uv run ruff format packages/ tests/`, then `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src` and fix any new error. Run the test file of every module touched (single files).
+- number: 2
+  title: CI runs one leg (spec §B, §D, R3-R5, R7)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: rewrite the layout tests to the one-leg shape. tests/unit/test_ci_python_floor.py: replace `test_ci_tests_the_floor_and_a_newer_python` with `test_ci_tests_one_python_the_floor` (neither `test` nor `collect` has a `strategy.matrix.python` or a job-level `UV_PYTHON`) and `test_only_the_newest_leg_feeds_coverage` with `test_every_shard_feeds_coverage` (the coverage-shard upload has no `if:`; the pytest step's run contains `--cov --cov-report=`; no `matrix.cov_args`); rewrite the module docstring. tests/unit/test_ci_split_workflow.py: drop the python assertions; assert `collect` has no `strategy` and uploads `collected`, shards upload `durations-shard-${{ matrix.shard }}`, the merge step reads `durations-shard-*`; rename `test_split_check_covers_every_test_leg` to `test_split_check_checks_the_one_leg` (one `split_check.py check --collected collected/collected.txt`). tests/unit/test_ci_shards.py: update the docstring and any cov_args assertion. Run the three files: red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: edit .github/workflows/ci.yml per spec §B. `collect` loses strategy, env and the leg in its name, and uploads `collected`. `test` keeps `shard: [1..7]` only, drops python/include/UV_PYTHON/COV_ARGS, passes `--cov --cov-report=` in the run, is named `test (${{ matrix.shard }})`, uploads `durations-shard-${{ matrix.shard }}`, and its coverage upload is unconditional. `split-check` downloads `durations-shard-*` and `collected`, runs one check, merges `shards/durations-shard-*/shard-durations.json` on main pushes, with step names that no longer say "3.14 leg". Re-run the three test files plus tests/unit/test_ci_budget.py: green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: reread ci.yml's comments (top env block, test job, split-check, coverage) so none names two legs or 3.11; `.github/ci-budget.yaml` keeps ci.yml at 360 s with its comment saying the budget is for one leg (R9). Re-run tests/unit/test_ci_budget.py.
+- number: 3
+  title: Scaffold image and pages (spec §E, §G, R8, R11)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: change `python:3.12` to `python:3.14` in tests/fixtures/acceptance_scaffold/gitlab-ci.golden and gitlab-ci.published.golden; run `uv run pytest tests/unit/test_acceptance_scaffold_publish.py tests/unit/test_acceptance_services.py -q --no-cov`: red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: the three `image: python:3.12` lines in packages/fr/src/fr/acceptance/scaffold.py (:290, :391, :548) become `python:3.14`; re-run both files: green.
+  - id: P1.T3.S3
+    text: |-
+      Pages: docs/reference/acceptance-matrix.md:190 and docs/explainers/fr-acceptance.md:261 name `python:3.14`; docs/reference/components.md's Requirements state Python 3.14 and that uv downloads it when the host has none; docs/merge-protection.md is edited if it names the interpreter, else its `reviewed` stamp is bumped with a note. Bump the `reviewed` stamp (with a note) of any other page `uv run fr docs check --base origin/main` reports, until it exits 0.
+- number: 4
+  title: Rows, notes, fragment (spec §F, R9, R10)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Amend the merged rows (feature 2026-11-20-ci-single-python) with `uv run fr acceptance amend`: `ci-coverage-newest-leg` reword to "The combined coverage gate (fail-under 75) is measured on every shard of the one 3.14 leg", drop-level `unit=super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage`, add-level `unit=super-fr:tests/unit/test_ci_python_floor.py#test_every_shard_feeds_coverage`; `ci-shards-complete` reword to "CI splits the one leg's tests across 7 shards by one CI-derived durations file per run, and fails when the shards together did not run exactly the collected test set once each", re-pointing `#test_split_check_covers_every_test_leg` to `#test_split_check_checks_the_one_leg`. Move the three new pre-merge rows (ci-floor-python-3-14, ci-single-leg, ci-scaffold-python-3-14) to `ci` with `uv run fr acceptance set-status --status ci --notes ... --level unit=super-fr:<test>` naming the tests of T1-T3. Run `uv run fr acceptance check --no-fetch`: exit 0.
+  - id: P1.T4.S2
+    text: |-
+      AGENTS.md: the durations-merge recipe says each shard uploads `durations-shard-<n>` and names "the shards' `shard-durations.json` files"; the measurement paragraph says those figures were measured when CI ran two legs and that CI now runs one leg on 3.14. Add `.changes/feat-ci-single-python.yaml` (`bump: major`, summary: "Python 3.14 is now the floor (requires-python >=3.14) and the only interpreter CI and the release test; a uv install fetches 3.14 when the host has none"). Run `uv run --no-project python scripts/check-change-fragment.py origin/main`.
+  - id: P1.T4.S3
+    text: |-
+      Commit, `uv run fr push`, and run the CI-layout test files once more (test_ci_python_floor.py, test_ci_split_workflow.py, test_ci_shards.py, test_ci_budget.py, test_ops_isolated_python.py) as the last command; CI on the draft PR is the suite evidence (`tests: ci`).
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

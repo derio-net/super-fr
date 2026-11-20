@@ -171,3 +171,9 @@ gate: ci-single-leg-main-push=developer
 - post-merge — operator-driven: on the first push to `main` after merge, `ci.yml`'s `split-check`
   merges and saves `test-durations-<run_id>` from the `durations-shard-*` files, and the Release
   workflow's shards run green on Python 3.14 (row `ci-single-leg-main-push`).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-20-ci-single-python | `derio-net/super-fr` | `2026-11-20-ci-single-python` | — |
