@@ -11,6 +11,15 @@ refactor:
   P3.T1: "build was written once against the refactored batch_merge.unresolvable (split out of _unresolvable in the same commit) and Worktree.stage (split out of commit_all); no second copy left to clean"
   P3.T2: "land_push, land_merge and read_back share Landing/LandResult from the start; the refusal wording lives in one refusal_reason; nothing duplicated"
 journal:
+  - kind: discovery
+    id: p3-suite-evidence-tmpdir
+    phase: 3
+    title: fr's tests-log witness does not expand $TMPDIR, so phase 3's suite log is left out
+    body: |
+      The executor's full suite passed (17014 passed, 122 skipped, exit 0) into `$TMPDIR/wave-p3-suite.log`.
+      `fr run resolve` refuses the expanded path as written by no command of the holder: the witness
+      matches the literal redirect target and does not expand `$TMPDIR`. The log is left out of the record;
+      deliver's own full suite covers this phase. Worth an fr fix (out of this feature's scope).
   - kind: decision
     id: p3-open-drain-record-only
     phase: 3
@@ -76,5 +85,4 @@ journal:
     lens: security
     title: The driver now pushes the default branch directly (atomic, leased) and rewrites PR head refs under squash and rebase
 resolves: []
-evidence:
-  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/wave-p3-suite.log
+evidence: {}
