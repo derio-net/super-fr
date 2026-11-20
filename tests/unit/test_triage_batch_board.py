@@ -300,3 +300,61 @@ def test_the_stage_scripts_link_selector_matches_the_batch_links_the_page_carrie
 def test_the_checker_refuses_a_prefix_selector_against_a_page_qualified_href() -> None:
     assert _attribute_matches('a[href*="#batch-"]', "backlog.html#batch-b1")
     assert not _attribute_matches('a[href^="#batch-"]', "backlog.html#batch-b1")
+
+
+# ---------------------------------------------- the Activity panel (batch-train-truth R23)
+
+
+def _panel(page: str) -> str:
+    m = re.search(r'<section class="activity">.*?</section>', page, re.S)
+    assert m
+    return m.group(0)
+
+
+def _render(activity: list[str] | None = None) -> str:
+    from datetime import UTC, datetime
+
+    from fr.triage.kanban import build_board
+    from fr.triage.kanban_render import render_board
+    from fr.triage.model import Judgements
+
+    board = build_board(FACTS, Judgements(), {})
+    extra = {} if activity is None else {"activity": activity}
+    return render_board(
+        board, scope_args=[], rendered_at=datetime(2026, 11, 19, tzinfo=UTC), refresh=0, notes=[],
+        **extra,  # type: ignore[arg-type]
+    )  # fmt: skip
+
+
+def test_the_board_says_no_driver_has_run_without_a_log() -> None:
+    assert "no driver has run" in _panel(_render())
+
+
+def test_the_activity_panel_lists_entries_newest_first_and_escapes_them() -> None:
+    panel = _panel(
+        _render(["2026-11-19T12:00:02Z pass <b>new</b>", "2026-11-19T12:00:01Z pass old"])
+    )
+    assert panel.index("&lt;b&gt;new&lt;/b&gt;") < panel.index("old")
+    assert "<b>" not in panel and "no driver has run" not in panel
+
+
+def test_the_activity_panel_wraps_at_phone_width_with_the_token_styles() -> None:
+    from fr.triage.kanban_render import CSS
+
+    rule = re.search(r"\.activity li \{[^}]*\}", CSS, re.S)
+    assert rule and "overflow-wrap: anywhere" in rule.group(0) and "var(--mono)" in rule.group(0)
+    assert "var(--line)" in re.search(r"\.activity \{[^}]*\}", CSS, re.S).group(0)  # type: ignore[union-attr]
+
+
+def test_write_board_reads_the_newest_fifty_log_entries(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from datetime import UTC, datetime
+
+    from fr.commands.triage_kanban_cmd import _activity_entries
+    from fr.triage.drive_log import DriveLog
+
+    log = DriveLog(tmp_path)
+    for i in range(60):
+        log.append("action", f"entry {i}", datetime(2026, 11, 19, tzinfo=UTC))
+    got = _activity_entries(tmp_path)
+    assert len(got) == 50 and got[0].endswith("entry 59") and got[-1].endswith("entry 10")
+    assert _activity_entries(tmp_path / "nowhere") == []

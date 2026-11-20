@@ -213,6 +213,45 @@ def _current(state_dir: Path) -> DriverRecord:
     return old.model_copy(update={"pid": pid, "started": None})
 
 
+def record_supervisor(
+    state_dir: Path,
+    *,
+    supervisor: int,
+    child: int | None,
+    restarts: int,
+    last_crash: str | None,
+) -> DriverRecord:
+    """The supervisor's view of its driver on `driver.yaml` (R13): who supervises, the restart
+    count and the last crash. *child* is the driver's pid, None between a crash and the next
+    start (the record keeps the dead one's)."""
+    try:
+        old = load_record(state_dir)
+    except TriageError:
+        old = None
+    pid = child if child is not None else (old.pid if old else 0)
+    base = old if old is not None else DriverRecord(pid=pid)
+    update: dict[str, object] = {"pid": pid, "supervised": supervisor, "restarts": restarts}
+    if last_crash is not None:
+        update["last_crash"] = last_crash
+    if child is not None and (old is None or old.pid != child):
+        update["started"] = None
+    record = base.model_copy(update=update)
+    save_record(state_dir, record)
+    return record
+
+
+def record_start(state_dir: Path, now: datetime, supervisor: int | None) -> DriverRecord:
+    """A looping driver started (R12, R14): its pid and time, and its supervisor's pid when it
+    has one. An unsupervised driver forgets an earlier supervisor's counts; a supervised one
+    keeps what that supervisor wrote."""
+    update: dict[str, object] = {"started": now, "supervised": supervisor}
+    if supervisor is None:
+        update.update(restarts=0, last_crash=None)
+    record = _current(state_dir).model_copy(update=update)
+    save_record(state_dir, record)
+    return record
+
+
 def record_refusal(
     state_dir: Path, cause: str, message: str, resume: str, now: datetime, fr_version: str
 ) -> DriverRecord:

@@ -20,6 +20,8 @@ cannot be loaded or keeps no mailbox); 1 a forge write failed.
 from __future__ import annotations
 
 import json
+import os
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal, NoReturn
@@ -872,3 +874,123 @@ def drive_failures_command(
     if filing.error is not None:
         _fail(f"filing stopped at a forge error; what was filed before it is recorded: "
               f"{filing.error}")  # fmt: skip
+
+
+def _alive(pid: int) -> bool:
+    """Whether process *pid* of THIS host exists (`kill 0`: nothing is sent)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:  # it exists, under another user
+        return True
+    return True
+
+
+@drive_app.command("status")
+def drive_status_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Whether a driver holds the scope (batch-train-truth R14), read-only.
+
+    Exit 0 when a live driver holds it, 3 when none does. A lease another host holds is
+    reported as held elsewhere and never probed: its pid means nothing here."""
+    from fr.triage.driver_record import load_record
+
+    scope = triage_cmd._scope(repo, org)
+    target = resolve_state_dir(scope, dir_override, workspace)
+    try:
+        lease = load_lease(target)
+        record = load_record(target)
+    except TriageError as exc:
+        _fail(str(exc))
+    now = _now()
+    mine = driver_identity("host", host_id())
+    live_lease = lease is not None and not lease.expired(now)
+    elsewhere = lease is not None and not lease.holder.endswith(f" {mine}")
+    if elsewhere and lease is not None:
+        if not live_lease:
+            console.print(
+                f"no driver holds the scope: the lease {lease.holder} expired "
+                f"{lease.expires.isoformat()}",
+                markup=False, soft_wrap=True,
+            )  # fmt: skip
+            raise typer.Exit(code=3)
+        console.print(f"held elsewhere (not probed): {lease.holder}", markup=False, soft_wrap=True)
+        console.print(f"  lease expires {lease.expires.isoformat()}", markup=False)
+        if lease.last_pass is not None:
+            console.print(f"  last pass: {lease.last_pass.isoformat()}", markup=False)
+        return
+    running = record is not None and _alive(record.pid) and (lease is None or live_lease)
+    if not running or record is None:
+        console.print("no driver holds the scope: not running on this host", markup=False)
+        if record is not None:
+            console.print(f"  last driver pid {record.pid}: not running", markup=False)
+            _status_tail(record, lease)
+        raise typer.Exit(code=3)
+    console.print(f"driver: running, pid {record.pid} (alive on this host)", markup=False)
+    if record.started is not None:
+        console.print(f"  started: {record.started.isoformat()}", markup=False)
+    _status_tail(record, lease)
+
+
+def _status_tail(record: Any, lease: Any) -> None:
+    """The supervision, restart, last pass and last refusal lines of `drive status`."""
+    if record.supervised is not None:
+        console.print(f"  supervised by pid {record.supervised}", markup=False)
+    else:
+        console.print("  not supervised", markup=False)
+    crash = f", last crash {record.last_crash}" if record.last_crash else ""
+    console.print(f"  restarts: {record.restarts}{crash}", markup=False)
+    passes = [t for t in (record.last_pass, lease.last_pass if lease else None) if t is not None]
+    console.print(f"  last pass: {max(passes).isoformat() if passes else 'none'}", markup=False)
+    refusal = record.last_refusal
+    if refusal is None:
+        console.print("  last refusal: none", markup=False)
+    else:
+        console.print(
+            f"  last refusal: {refusal.at.isoformat()} ({refusal.cause}): {refusal.message}; "
+            f"resume: {refusal.resume}",
+            markup=False, soft_wrap=True,
+        )  # fmt: skip
+
+
+def _follow_sleep(seconds: float) -> None:
+    """`drive log -f`'s poll wait; tests replace it."""
+    time.sleep(seconds)
+
+
+@drive_app.command("log")
+def drive_log_command(
+    lines: Annotated[int, typer.Option("-n", min=1, help="How many of the newest lines.")] = 50,
+    follow: Annotated[
+        bool, typer.Option("-f", "--follow", help="Keep printing what is appended, until Ctrl-C.")
+    ] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """What the looping driver and its supervisor did, newest last (batch-train-truth R22),
+    read-only: the last N lines of the scope's `drive.log`; with -f, then each new one."""
+    from fr.triage.drive_log import DriveLog
+
+    scope = triage_cmd._scope(repo, org)
+    log = DriveLog(resolve_state_dir(scope, dir_override, workspace))
+    tail = log.tail(lines)
+    if not tail and not follow:
+        console.print("no driver has run: there is no drive.log yet", markup=False)
+        return
+    for line in tail:
+        console.print(line, markup=False, soft_wrap=True, highlight=False)
+    if not follow:
+        return
+    try:
+        for line in log.follow(sleep=_follow_sleep):
+            console.print(line, markup=False, soft_wrap=True, highlight=False)
+            console.file.flush()
+    except KeyboardInterrupt:  # how a follow ends
+        return

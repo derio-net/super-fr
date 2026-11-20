@@ -50,7 +50,7 @@ from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple, NoReturn
 from urllib.parse import urlparse
 
 import typer
@@ -245,6 +245,7 @@ from fr.triage.dedupe import candidates
 from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
+from fr.triage.drive_log import DriveLog
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.driver_record import (
     FAILURES_COMMAND,
@@ -252,6 +253,7 @@ from fr.triage.driver_record import (
     record_failure,
     record_pass,
     record_refusal,
+    record_start,
 )
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
@@ -3520,6 +3522,22 @@ def _report_read_failure(driver: _Driver, message: str, action: str) -> None:
     if message not in driver.read_failures:
         driver.read_failures.add(message)
         err_console.print(f"[yellow]warning:[/yellow] {escape(message)}; {action}", soft_wrap=True)
+        _log("transient", f"{message}; {action}")
+
+
+_SUPERVISOR: int | None = None
+"""The pid of the supervisor this driver runs under (`--supervised-by`), else None (R12)."""
+SUPERVISED_POLL_S = 1.0  # a supervised driver's waits are cut to this, to look at its parent
+
+
+class SupervisorGone(BaseException):  # noqa: N818 - carried past the loop's boundary untouched
+    """The supervisor is no longer this driver's parent: stop cleanly (R12). Not an
+    `Exception`, so no pass boundary mistakes it for a failure."""
+
+
+def _check_supervisor() -> None:
+    if _SUPERVISOR is not None and os.getppid() != _SUPERVISOR:
+        raise SupervisorGone
 
 
 class _WaitEnded(BaseException):
@@ -3535,7 +3553,16 @@ class _WaitEnded(BaseException):
 def _wait(seconds: float) -> None:
     """The loop's every wait: `_sleep`, its exceptions carried as `_WaitEnded`."""
     try:
-        _sleep(seconds)
+        if _SUPERVISOR is None:
+            _sleep(seconds)
+        else:  # a supervised driver wakes every second to see that its supervisor still runs
+            left = seconds
+            while left > 0:
+                _check_supervisor()
+                chunk = min(left, SUPERVISED_POLL_S)
+                _sleep(chunk)
+                left -= chunk
+            _check_supervisor()
     except Exception as exc:  # noqa: BLE001 - re-raised as itself past the boundary
         raise _WaitEnded(exc) from exc
 
@@ -5376,7 +5403,7 @@ class _Driver:
                     closing=summary.closing - self._export_refusals,
                     blocked=summary.blocked + self._export_refusals,
                 )
-            _say(summary_line(summary))
+            _emit("pass", summary_line(summary))
         finally:
             if self.yes:
                 self._restart_sessions()  # soft: never raises out of here
@@ -5408,7 +5435,7 @@ class _Driver:
         """R9: nothing changed since the last planned pass, so nothing is collected,
         read, planned or rendered; that pass's summary stands for this one."""
         self.failed_write = False
-        _say(f"quiet: {plural(paced.probes, 'probe')} unchanged")
+        _emit("pass", f"quiet: {plural(paced.probes, 'probe')} unchanged")
         assert self.pacer is not None and self.pacer.state.summary is not None
         return False, Summary(**self.pacer.state.summary), []
 
@@ -7195,8 +7222,41 @@ def _covers(action: Action) -> tuple[str, ...]:
     return action.covers or ((action.wave,) if action.wave is not None else ())
 
 
-def _say(line: str) -> None:
+_DRIVE_LOG: DriveLog | None = None
+"""The activity log a looping driver (loop mode with `--yes`) is attached to, else None:
+plan mode and `--once` attach none, so their output is unchanged (batch-train-truth R22)."""
+
+
+@contextmanager
+def drive_log_attached(log: DriveLog | None) -> Iterator[None]:
+    """Attach *log* for the block: every `_emit` is then appended to it too."""
+    global _DRIVE_LOG
+    previous, _DRIVE_LOG = _DRIVE_LOG, log
+    try:
+        yield
+    finally:
+        _DRIVE_LOG = previous
+
+
+def _log(kind: str, line: str) -> None:
+    """Append *line* to the attached drive log; the log is a view, so a failed write is
+    never a reason to stop the driver."""
+    if _DRIVE_LOG is None:
+        return
+    try:
+        _DRIVE_LOG.append(kind, line, _now())
+    except OSError:
+        pass
+
+
+def _emit(kind: str, line: str) -> None:
+    """Print *line* and, while a drive log is attached, append it as a *kind* entry."""
     console.print(line, markup=False, soft_wrap=True, highlight=False)
+    _log(kind, line)
+
+
+def _say(line: str) -> None:
+    _emit("action", line)
 
 
 def _cursors(root: Path) -> list[object]:
@@ -7448,6 +7508,9 @@ def _host_loop(
         return _loop(driver, once=once, interval=interval, pacer=pacer)
     except _WaitEnded as ended:
         raise ended.original from None
+    except SupervisorGone:  # a clean stop: the caller releases the lease (R12)
+        _emit("stop", "the supervisor is no longer this driver's parent: stopping")
+        return LoopEnd(0)
 
 
 def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) -> LoopEnd:
@@ -7461,6 +7524,7 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
     pace: Pace | None = None
     failed = 0  # failed passes in a row (R3, R5)
     while True:
+        _check_supervisor()  # between passes (R12)
         try:
             if paced is not None:
                 pace = paced.before_pass()
@@ -7512,7 +7576,7 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
             if driver.restart_to is not None:
                 return LoopEnd(0, driver.restart_to)
             if summary.stalled:
-                _say(_stalled_line(blocked, driver.held_by))
+                _emit("stop", _stalled_line(blocked, driver.held_by))
                 return LoopEnd(3)
             if pace is not None and pace.essential and pace.until is not None:
                 wait_out(driver, Pace("wait", pace.until, "below floor"))  # 4x, lease-safe (R16)
@@ -7549,6 +7613,8 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
                     f"its state kept; the next pass in {wait}s",
                     soft_wrap=True,
                 )
+                _log("transient", f"{failure.message} ({failure.cause}); the pass ended, "
+                     f"the next pass in {wait}s")  # fmt: skip
             if driver.restart_to is not None:
                 return LoopEnd(0, driver.restart_to)
             _wait(wait)
@@ -7556,6 +7622,7 @@ def _loop(driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None) ->
 
 def _error(message: str) -> None:
     err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
+    _log("refusal", message)
 
 
 def _ledger(driver: _Driver, kind: FailureKind, cause: str, message: str, exc: str) -> None:
@@ -7572,6 +7639,27 @@ def _ledger_failure(driver: _Driver, failure: DriverRefusal | TransientPassFailu
     original = failure.original if isinstance(failure, TransientPassFailure) else None
     exc = type(original if original is not None else failure).__name__
     _ledger(driver, kind, failure.cause, failure.message, exc)
+
+
+def _driver_started(driver: _Driver, supervisor: int | None) -> None:
+    """A looping driver's start, on `driver.yaml` (R12, R14)."""
+    try:
+        record_start(driver.target, _now(), supervisor)
+    except (OSError, TriageError) as err:
+        _report_read_failure(driver, f"the driver record: {err}", "not recorded")
+
+
+def _supervise(args: list[str], target: Path) -> NoReturn:
+    """`drive --supervise --yes` (R11-R13): run the driver as this process's child, with
+    *args* (the same arguments less `--supervise`) and `--supervised-by <our pid>`. It takes
+    neither `drive.lock` nor the lease: the child does."""
+    from fr.safe_spawn import fr_argv
+    from fr.triage.supervise import Supervisor
+
+    code = Supervisor(
+        lambda pid: fr_argv(*args, "--supervised-by", str(pid)), target, fr_version=__version__
+    ).run()
+    raise typer.Exit(code=code)
 
 
 def _driver_pass(driver: _Driver) -> None:
@@ -7603,6 +7691,8 @@ def _stop(
         f"track it: {FAILURES_COMMAND}",
         soft_wrap=True,
     )
+    _log("refusal", f"driver stopped ({refusal.cause}); resume: {refusal.resume}; "
+         f"track it: {FAILURES_COMMAND}")  # fmt: skip
 
 
 @batch_app.command("drive")
@@ -7647,6 +7737,15 @@ def batch_drive_command(
             "driver behind).",
         ),
     ] = False,
+    supervise: Annotated[
+        bool,
+        typer.Option(
+            "--supervise",
+            help="With --yes, loop mode: run the driver as a child this process restarts "
+            "when it crashes, and stops with its caller (it never detaches).",
+        ),
+    ] = False,
+    supervised_by: Annotated[int | None, typer.Option("--supervised-by", hidden=True)] = None,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
@@ -7662,8 +7761,30 @@ def batch_drive_command(
         _fail("--workspace-prefix must not be blank")
     if single_pass and not once:
         _fail("--single-pass only applies to --once: a looping driver is not a single pass")
+    if supervise and once:
+        _fail("--supervise runs a looping driver: it cannot be combined with --once")
+    if supervise and not yes:
+        _fail("--supervise acts: add --yes (without it the driver only prints one pass's plan)")
+    if supervise and supervised_by is not None:
+        _fail("--supervise and --supervised-by are exclusive: the second is the child's")
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
+    if supervise:
+        _supervise(
+            loop_command(
+                batch_ids=batch_ids,
+                scope=scope,
+                scope_args=triage_kanban_cmd.scope_args(repo, org, dir_override, workspace),
+                max_inflight=max_inflight,
+                interval=interval,
+                workspace_prefix=workspace_prefix,
+                keep_sessions=keep_sessions,
+                checkout=checkout,
+                toplevel=None,
+            )[1:]
+            + (["--quota-floor", str(quota_floor)] if quota_floor is not None else []),
+            target,
+        )
     pacer = make_pacer(target, quota_floor=quota_floor, interval_s=interval)  # refuses a bad floor
     guard: SinglePass | None = None
     if once and yes:
@@ -7695,13 +7816,25 @@ def batch_drive_command(
         single_pass=guard,
     )
     end = LoopEnd(0)
-    with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
+    global _SUPERVISOR
+    _SUPERVISOR = supervised_by
+    log = DriveLog(target) if yes and not once else None  # plan mode and --once keep none
+    with drive_lock(drive_lock_dir(scope, dir_override)), drive_log_attached(log):
+        if log is not None:
+            _driver_started(driver, supervised_by)
         try:
             with _sigterm_interrupts():
                 end = _host_loop(driver, once=once, interval=interval, pacer=pacer)
         except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
             driver.release_lease()
+            _emit("stop", "interrupted: the driver stopped cleanly")
+            if supervised_by is not None:  # its supervisor reads this as deliberate (R11)
+                raise typer.Exit(code=130) from None
             raise
+        finally:
+            _SUPERVISOR = None
+        if log is not None:
+            _emit("stop", f"the driver stopped (exit {end.code})")
         if once:
             driver.warn_single_pass()
         if end.code != 2:  # a clean stop; a refusal keeps what it found

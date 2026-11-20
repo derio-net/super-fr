@@ -398,6 +398,20 @@ def gated_notes(facts: Facts) -> list[str]:
     return notes
 
 
+ACTIVITY_ENTRIES = 50
+
+
+def _activity_entries(target: Path) -> list[str]:
+    """The newest `drive.log` entries, newest first (batch-train-truth R23); a log that
+    cannot be read is no log: the board is a view."""
+    from fr.triage.drive_log import DriveLog
+
+    try:
+        return DriveLog(target).tail(ACTIVITY_ENTRIES)[::-1]
+    except OSError:
+        return []
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -442,6 +456,7 @@ def write_board(
         budget=budget_from_json(pacing_state.load(target)[0].budget),
         banner=skew_banner(facts),
         present=pages_present(target, "batches"),
+        activity=_activity_entries(target),
     )
     out = target / page("batches").file
     write_text_atomic(out, html)
