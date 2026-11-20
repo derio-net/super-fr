@@ -1128,6 +1128,10 @@ class QueueBuiltEvent(_Strict):
     head: str = Field(min_length=1)
     patch_id: str
     base: str = Field(min_length=1)
+    # The commit this combination was built on: *base* for the queue's first entry, else
+    # the combination of the entry ahead. The planner rebuilds each slot's chain from it
+    # (`fr.triage.wave_queue`); None reads as *base*.
+    parent: str | None = None
 
 
 class QueueEjectEvent(_Strict):
