@@ -65,16 +65,14 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R17
     levels:
       unit:
-      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_idle_repo_opens_the_lowest_unfinished_wave_even_with_nothing_of_it_ready
       - super-fr:tests/unit/test_wave_queue_planner.py#test_a_later_waves_ready_entry_never_joins_the_open_queue
       - super-fr:tests/unit/test_wave_queue_planner.py#test_another_scopes_hold_is_held_naming_it_and_nothing_else
       - super-fr:tests/unit/test_wave_queue_planner.py#test_a_wave_whose_batches_are_all_terminal_drains_at_the_landed_main
       - super-fr:tests/unit/test_wave_queue_planner.py#test_between_waves_entries_open_a_one_entry_queue_once_every_wave_is_done
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry
     status: not-implemented
-    notes: 'phase 2: the pure planner opens the lowest unfinished wave, keeps later
-      waves and no-wave batches waiting, opens one-entry queues between waves, holds
-      a repo another scope''s hold holds, and drains a finished wave; the hold handshake
-      and the wave close-out are phases 4 and 6'
+    notes: '''phase 2: the pure planner opens the lowest unfinished wave, keeps later      waves
+      and no-wave batches waiting, opens one-entry queues between waves, holds'
   - id: wave-queue-eject
     capability: wave merge queue
     acceptance: A combination that fails twice or conflicts takes only its own PR out
