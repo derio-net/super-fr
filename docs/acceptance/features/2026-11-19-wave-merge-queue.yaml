@@ -313,3 +313,9 @@ amendments:
       over the same red head send nothing new; an unreachable session puts it on Needs-you.
     why: 'wave-merge-queue R13, R22: red_decision''s reupdate rule is gone; the queue
       never updates a PR branch'
+  - row: merge-train-red-recovery
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_4_the_session_status_decides
+    why: the rule numbers moved when the reupdate rule went
