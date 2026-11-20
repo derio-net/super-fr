@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-20-feat-ci-single-python
+captures:
+- host: h-b912cede
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-20T07:34:42+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 2a1dc9d0-c116-4771-a0af-bbbc6d36f40b
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 64
+        cache_write: 155791
+        cache_read: 4437112
+        output: 24423
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 4
+      other:
+        usd: null
+        turns: 13
+      paperwork:
+        usd: null
+        turns: 12
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 100347
+        cache_read: 136703
+        output: 926
+      brainstorm:
+        usd: null
+        turns: 27
+        input: 58
+        cache_write: 55444
+        cache_read: 4300409
+        output: 23497
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 100347
+          cache_read: 136703
+          output: 926
+        brainstorm:
+          usd: null
+          turns: 27
+          input: 58
+          cache_write: 55444
+          cache_read: 4300409
+          output: 23497
