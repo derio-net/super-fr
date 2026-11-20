@@ -145,7 +145,9 @@ git -C "$seed" fetch -q origin && git -C "$seed" checkout -q -B feat/batch-b1 or
 pushed="$(git -C "$bare" rev-parse feat/batch-b1)"
 forge 'w["pending"] = []'
 drive
-expect_grep "approval of PR #1080 at ${labelled:0:12} voided: head moved to ${pushed:0:12}" \
+# The approval recorded its patch-id (wave-merge-queue R12), and the push changed the
+# PR's diff: the void says so.
+expect_grep "approval of PR #1080 at ${labelled:0:12} voided: its diff changed at ${pushed:0:12}" \
   "$out" "a push fr did not make voids the approval"
 expect_grep "^-X DELETE $R/issues/1080/labels/approved-fr" "$(log)" "the void removes the label"
 refuse_grep "merged PR" "$out" "a void PR is never merged"
