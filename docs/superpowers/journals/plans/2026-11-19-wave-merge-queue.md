@@ -238,3 +238,62 @@ ejection reuses batch_drive.red_decision and conflict_decision unchanged in shap
 ### p2-queue-opens-on-first-ready · decision · The wave queue opens only once the wave's first entry is ready (phase 2)
 
 Spec §B's 'the queue still opens on its first ready entry' means: an idle repo chooses the lowest wave with a non-terminal batch and opens its queue only when an entry of that wave is ready. While none is, no queue opens and no hold is written, so a wave still in development never blocks a release; a later wave's ready PRs wait as before (R2). Pinned by tests/unit/test_wave_queue_planner.py::test_an_idle_repo_opens_nothing_while_no_entry_of_the_lowest_unfinished_wave_is_ready and ::test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry; spec §B reworded to say so.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-11-20T09:41:53+00:00 phase=2 -->
+### p2-review-1 · review · Phase 2 review — four reviewer findings plus two raised in fixing, all in scope, all fixed (phase 2)
+
+An independent reviewer read the planner diff (4d27bd0f1..7a39c6c67) against R1–R36. It confirmed
+prefix and depth, R13's one rebuild per tree, wave exclusivity and the hold, the R36 cap exemption,
+purity, the report-only wiring, and that removing reupdate kept approval voiding, the conflict and
+red budgets and version slots. It raised p2-r1..p2-r4 and a spec reading (filed by the orchestrator
+as p2-r5); the fix round found p2-r6. Fixes are b03614fc5..da7300a6e. The full suite after p2-r1..r5
+passed (16966 passed, 122 skipped); p2-r6 is a pure planner change covered by the 54 wave-queue tests,
+and deliver's full suite covers it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-20T09:41:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · a conflict-ejected entry re-entered at the same head on the next pass (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-20T09:41:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · a foreign move of main with an empty window left the queue open forever (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-20T09:41:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · queue-build's fresh flag marked every entry, not only the R13 same-tree retry (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-20T09:41:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · QueuePlan.waiting listed open-wave entries ejected at an unchanged head (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-20T09:41:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · an idle repo opened the lowest wave's queue before any entry was ready, holding releases for the wave's whole development (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-20T09:41:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · a between-waves queue whose only entry was ejected, with nothing landed, never drained (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-20T09:41:53+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: a conflict-ejected entry re-entered at the same head on the next pass (phase 2)
+
+QueueEjectEvent and the eject action carry the head left at, with a fallback to the batch's conflict event; tests in test_wave_queue_planner.py (no re-entry at an unchanged head, no duplicate eject, re-entry once the head moves).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-20T09:41:53+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: a foreign move of main with an empty window left the queue open forever (phase 2)
+
+with nothing to rebuild, a foreign move adopts the moved main; every open pass ends in a shared _tail deciding drain or R30 stall; tests drain at the moved main and still propose the stalled batch.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-20T09:41:53+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: queue-build's fresh flag marked every entry, not only the R13 same-tree retry (phase 2)
+
+QueueAction.fresh became fresh_entry naming the one retried entry; test at depth 3 shows only b fresh.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-20T09:41:53+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: QueuePlan.waiting listed open-wave entries ejected at an unchanged head (phase 2)
+
+ejected-at-head entries of the open wave are excluded from waiting and entries; tests for conflict and red ejection.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-20T09:41:53+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: an idle repo opened the lowest wave's queue before any entry was ready, holding releases for the wave's whole development (phase 2)
+
+_plan_idle opens nothing while no entry of the lowest unfinished wave is ready; spec §B reworded; decision p2-queue-opens-on-first-ready; tests for both cases.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-20T09:41:53+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: a between-waves queue whose only entry was ejected, with nothing landed, never drained (phase 2)
+
+a between-waves queue drains at its base once nothing is left to land (R29/R17 support drain, not clear); an entry ejected from an earlier between-waves queue at its live head opens no new queue until its head moves; spec §B reworded; four planner tests.
