@@ -367,3 +367,10 @@ amendments:
     notes: red_decision, the driver recovery and the board changes; the scenario drives
       an fr-made red head handed back (never re-updated), hand-back once, needs-you.
     why: the scenario's phase A now proves the hand-back of an fr-made red head
+  - row: drive-merge-train-head-only
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: the per-merge train is
+      gone; the wave merge queue''s entry order and landing are the planner tests (tests/unit/test_wave_queue_planner.py)'
+    why: 'R22 removes the merge train: the queue plans every merge, and a head-only
+      walk no longer exists'
