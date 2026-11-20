@@ -101,6 +101,7 @@ steps:
           returned: '2026-11-20T08:32:38+00:00'
           outcome: abandoned
         - dispatched: '2026-11-20T08:32:40+00:00'
+          agent: aaeb47b708555dc16
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
           tier: hard
