@@ -5,8 +5,11 @@ scratch worktree and pushes it to an fr-owned slot branch (R4–R6), lands the l
 green prefix by ONE atomic leased push (R10) or through the forge's merge API (R11),
 reads every landed PR back (R35), tells a repo it cannot drive apart from one it can
 (R7, R22, R34, R35), reads each combination's checks (R7, R20) and decides when the
-repo's `post_merge` runs and when it pauses landings (R33). A restarted driver resumes
-from the queue's events and the remote (`resume`, R24).
+repo's `post_merge` runs and when it pauses landings (R33). A landing that is held or
+stopped is recorded (`queue_halt`), so the planner lands nothing more until the operator
+acts; a slot push whose lease another writer's push failed is recorded too
+(`queue_slot_lost`), never overwritten by a re-push. A restarted driver resumes from the
+queue's events, the remote and the forge (`resume`, R24).
 
 Every git operation goes through the `fr.triage.gitseam` classes and every forge one
 through the `GhClient` adapter, both passed in, so this module starts no process itself
@@ -45,9 +48,11 @@ from fr.triage.model import (
     QueueEjectEvent,
     QueueEntryRef,
     QueueEvent,
+    QueueHaltEvent,
     QueueLandEvent,
     QueueOpenEvent,
     QueueRecord,
+    QueueSlotLostEvent,
     VersionBlock,
 )
 from fr.triage.wave_queue import (
@@ -58,6 +63,7 @@ from fr.triage.wave_queue import (
     SlotCheck,
     entry_key,
     replay,
+    slot_leases,
 )
 
 Method = Literal["merge", "squash", "rebase"]
@@ -187,12 +193,57 @@ def _combine(
                     wt.run(version.relock)
         _apply_slot(wt, version, slot, False)
         tip = wt.amend(files) if version and slot else wt.head()
+        if checkout.has_merges(base, entry.head):
+            _keeps_merge_content(checkout, wt, prev, entry, version, slot, base, tip)
         return "", tip
+    return _merged_tree(wt, entry, version, slot, base), ""
+
+
+def _merged_tree(
+    wt: Worktree, entry: EntryInput, version: VersionBlock | None, slot: str | None, base: str
+) -> str:
+    """The tree of a plain merge of *entry* on the worktree's HEAD, R6's conflicts resolved
+    and the slot version applied: what `merge` and `squash` build."""
     conflicted = wt.merge(entry.head)
     relock = _resolve(wt, version, entry, conflicted, base, wt.abort_merge) if conflicted else False
     _apply_slot(wt, version, slot, relock)
-    wt.stage(files)
-    return wt.write_tree(), ""
+    wt.stage(version.files if version else [])
+    return wt.write_tree()
+
+
+def _keeps_merge_content(
+    checkout: Checkout,
+    wt: Worktree,
+    prev: str,
+    entry: EntryInput,
+    version: VersionBlock | None,
+    slot: str | None,
+    base: str,
+    tip: str,
+) -> None:
+    """p3-r9: `rebase` replays the branch's non-merge commits only, so what a merge commit
+    of the branch adds (an evil merge, a conflict resolution) would be dropped without a
+    word. The replayed tip's tree must equal a plain merge's of the PR head on *prev*;
+    when it does not, the entry leaves the queue, naming the paths."""
+    wt.reset_hard(prev)
+    merged = _merged_tree(wt, entry, version, slot, base)
+    dropped = checkout.diff_paths(checkout.tree_of(tip), merged)
+    wt.reset_hard(tip)
+    if dropped:
+        raise MergeConflictError(
+            f"PR #{entry.pr} ({entry.key}): rebase would drop content from its merge commits "
+            f"({', '.join(dropped)}); land by squash or merge, or rebase the branch",
+            batch=entry.key, head=entry.head, paths=dropped,
+        )  # fmt: skip
+
+
+class SlotLostError(LeaseLostError):  # noqa: N818 - a LeaseLostError, named for its slot
+    """The push of combination *sha* to slot *slot* lost its lease: another writer moved
+    the slot (R4). The combinations ahead of it were built and pushed (*built*)."""
+
+    def __init__(self, words: str, *, slot: int, sha: str, built: Sequence[Built]) -> None:
+        super().__init__(words)
+        self.slot, self.sha, self.built = slot, sha, tuple(built)
 
 
 def _fresh_commit(
@@ -226,8 +277,9 @@ def build(
     """Build *entries* in order on *base* (the queue's base, or the combination ahead),
     entry i into slot *slots*[i], in *method* (R4, R5, R6): each commit on the one before
     it, so slot k holds base + 1..k. Each is recorded (*record*, a `queue_built`) and
-    then pushed to its slot, leased on the sha the slot held (*leases*, else read from
-    origin now). A slot lease that fails raises `LeaseLostError`; a real conflict raises
+    then pushed to its slot, leased on the sha the queue last recorded for it (*leases*:
+    `fr.triage.wave_queue.slot_leases`; without them, what origin reads now, for a caller
+    with no record). A slot lease that fails raises `SlotLostError`; a real conflict raises
     `MergeConflictError` after the entries ahead of it were built and pushed.
 
     *queue_base* is the queue's `main` (default: *base*). No PR branch is touched."""
@@ -262,7 +314,11 @@ def build(
             if record is not None:  # recorded BEFORE the push: `resume` re-pushes it
                 record(built_event(built, clock()))
             ref = slot_ref(scope, slot)
-            checkout.push_leased([(sha, ref)], {ref: held.get(slot)}, atomic=False)
+            try:
+                checkout.push_leased([(sha, ref)], {ref: held.get(slot)}, atomic=False)
+            except LeaseLostError as exc:
+                raise SlotLostError(str(exc), slot=slot, sha=sha, built=out) from exc
+            held[slot] = sha
             out.append(built)
             prev = sha
     finally:
@@ -305,6 +361,7 @@ class Landing:
     head_ref: str
     head: str
     commit: str
+    parent: str = ""  # the commit this entry's combination was built on ("": unknown)
 
 
 @dataclass(frozen=True)
@@ -320,8 +377,8 @@ class LandResult:
 
 def landings_of(built: Sequence[Built]) -> list[Landing]:
     """The landing of the combinations *built*, front first."""
-    return [Landing(b.entry.key, b.entry.ref, b.entry.pr, b.entry.head_ref, b.entry.head, b.sha)
-            for b in built]  # fmt: skip
+    return [Landing(b.entry.key, b.entry.ref, b.entry.pr, b.entry.head_ref, b.entry.head, b.sha,
+                    b.parent) for b in built]  # fmt: skip
 
 
 class PrOf(Protocol):
@@ -347,8 +404,24 @@ def landings_from(record: QueueRecord, tip: str, pr_of: PrOf) -> list[Landing]:
         known = pr_of(key)
         if known is None:
             return []
-        out.append(Landing(key, refs[key], known[0], known[1], combo.heads[-1], combo.sha))
+        out.append(Landing(key, refs[key], known[0], known[1], combo.heads[-1], combo.sha,
+                           combo.parent))  # fmt: skip
     return out
+
+
+def _lease_before(records: Sequence[QueueRecord], combo: Any) -> str | None:
+    """The sha *combo*'s slot held, as *records* tell it, just before *combo* was built
+    into it: what a re-push of it is leased on (R4, R24)."""
+    held: dict[int, str | None] = {}
+    for record in records:
+        for event in record.events:
+            if isinstance(event, QueueBuiltEvent):
+                if event.slot == combo.slot and event.sha == combo.sha:
+                    return held.get(event.slot)
+                held[event.slot] = event.sha
+            elif isinstance(event, QueueSlotLostEvent):
+                held[event.slot] = event.found
+    return held.get(combo.slot)
 
 
 def _refs(record: QueueRecord) -> dict[str, QueueEntryRef]:
@@ -409,6 +482,14 @@ def land_push(
     if not landings:
         return LandResult("stopped", detail="nothing to land")
     tip = landings[-1].commit
+    if (landings[0].parent and landings[0].parent != base) or not checkout.is_ancestor(base, tip):
+        # p3-r7: a lease on *base* checks the remote, not the tip, and a leased push may
+        # move a ref by any amount: only a tip built on *base* is a fast-forward of it.
+        return LandResult(
+            "held",
+            detail=f"combination {tip[:12]} is not built on the queue's base {base[:12]}, so "
+            f"landing it would not fast-forward {default}; the queue never rewrites it",
+        )  # fmt: skip
     main_ref = f"refs/heads/{default}"
     refspecs = [(tip, main_ref)]
     leases: dict[str, str | None] = {main_ref: base}
@@ -517,9 +598,10 @@ def queue_config(block: QueueBlock) -> QueueConfig:
     )  # fmt: skip
 
 
-def queue_refusal(block: QueueBlock, *, ci_none: bool) -> str | None:
-    """R7, R20: why the driver refuses to run *block*'s queue, None when it may. *ci_none*:
-    the repo's services say `ci none` on its default branch."""
+def queue_refusal(block: QueueBlock, *, ci_none: bool, versioned: bool = False) -> str | None:
+    """R7, R11, R20: why the driver refuses to run *block*'s queue, None when it may.
+    *ci_none*: the repo's services say `ci none` on its default branch; *versioned*: its
+    `.fr/triage.yaml` declares a `version:` block."""
     if block.ci is None:
         return (
             "the merge queue needs `queue.ci` in .fr/triage.yaml: add `ci: push` under "
@@ -531,6 +613,15 @@ def queue_refusal(block: QueueBlock, *, ci_none: bool) -> str | None:
             "`queue.ci: none` in .fr/triage.yaml, but this repo's services do not report "
             "`ci none`: its required checks must run on the combinations. Set `ci: push` and "
             "run them on pushes to fr-queue/**"
+        )
+    if block.land == "merge" and versioned:
+        # p3-r2: the forge merges each PR's own head, which never carries the reserved
+        # version slot the tested combination does (R4, R6): the tree check would fail.
+        return (
+            "`queue.land: merge` cannot land a repo with a `version:` block in "
+            ".fr/triage.yaml: the forge merges each PR's own head, which never carries the "
+            "version slot the tested combination does, so main's tree would never be the "
+            "tested one. Use `queue.land: push`, or drop the `version:` block"
         )
     return None
 
@@ -728,44 +819,132 @@ class QueueExecutor:
     def __init__(self, ports: QueuePorts) -> None:
         self.ports = ports
         self.conflicts: dict[str, BuildConflict] = {}
+        self._leases: dict[int, str | None] = {}
 
     # ---------------------------------------------------------- resumption (R24)
 
     def main_now(self) -> str:
         return self.ports.checkout.remote_sha(f"refs/heads/{self.ports.default}") or ""
 
-    def resume(self, record: QueueRecord | None) -> list[str]:
-        """R24: finish what a driver killed mid-pass left. A combination recorded but not
-        pushed to its slot is pushed now; a landing pushed but not recorded (`main` is a
-        recorded combination's sha) is recorded, never pushed again."""
+    def resume(self, record: QueueRecord | None, history: Sequence[QueueRecord] = ()) -> list[str]:
+        """R24: finish what a driver killed mid-pass left, from the events and the forge.
+        A landing made but not recorded is recorded, never made again: under `land: push`
+        a recorded combination that is an ancestor of `main` (a foreign move since it
+        included), under `land: merge` the front entries whose PRs the forge reads
+        `MERGED`. Otherwise a combination recorded but not pushed to its slot is pushed
+        now, leased on what the slot held before it (*history*: this scope's records of
+        the repo, oldest first; default *record* alone); a lost lease is recorded, never
+        overwritten."""
         if record is None or not any(isinstance(e, QueueOpenEvent) for e in record.events):
             return []
-        p, rep, lines = self.ports, replay(record), []
-        main = self.main_now()
-        landed = {e.main for e in record.events if isinstance(e, QueueLandEvent)}
-        combo = next((c for c in rep.combos.values() if c.sha == main), None)
-        if main and main != rep.base and combo is not None and main not in landed:
-            refs = _refs(record)
-            entries = [refs.get(k) or QueueEntryRef(batch=k) for k in combo.chain]
-            p.record(QueueLandEvent(kind="queue_land", at=p.now(), main=main, entries=entries))
-            lines.append(
-                f"queue-land {p.repo}: {', '.join(combo.chain)} had landed at "
-                f"{main[:12]} before the driver stopped: recorded, not pushed again"
-            )
+        lines = self._resume_landing(record)
+        if lines:
             return lines
+        p, rep = self.ports, replay(record)
+        records = list(history) or [record]
         for c in rep.combos.values():
             ref = slot_ref(p.scope, c.slot)
             held = p.checkout.remote_sha(ref)
             if held == c.sha or not p.checkout.has_commit(c.sha):
                 continue
             try:
-                p.checkout.push_leased([(c.sha, ref)], {ref: held}, atomic=False)
+                p.checkout.push_leased([(c.sha, ref)], {ref: _lease_before(records, c)},
+                                       atomic=False)  # fmt: skip
+            except LeaseLostError:
+                lines.append(self._slot_lost(c.slot, c.sha, "before the driver re-pushed it"))
+                continue
             except GitError as exc:
                 lines.append(f"queue-build {p.repo}: slot {c.slot} was not re-pushed: {exc}")
                 continue
             lines.append(f"queue-build {p.repo}: slot {c.slot} re-pushed at {c.sha[:12]} "
                          "(recorded before the driver stopped)")  # fmt: skip
         return lines
+
+    def _resume_landing(self, record: QueueRecord) -> list[str]:
+        """The landing a killed driver made and never recorded, recorded now (R24)."""
+        p, rep = self.ports, replay(record)
+        main = self.main_now()
+        if not main or main == rep.base or not rep.combos:
+            return []
+        if p.config.land == "merge":
+            return self._resume_merged(record, rep.combos.values())
+        p.checkout.refresh_remote_branch(p.default)
+        at = f"origin/{p.default}"
+        landed = [
+            c for c in rep.combos.values()
+            if p.checkout.has_commit(c.sha) and p.checkout.is_ancestor(c.sha, at)
+            and not (p.checkout.has_commit(rep.base) and p.checkout.is_ancestor(c.sha, rep.base))
+        ]  # fmt: skip
+        if not landed:
+            return []
+        combo = max(landed, key=lambda c: len(c.chain))
+        self._record_landing(record, combo.chain, combo.sha)
+        moved = "" if combo.sha == main else f"; {p.default} has moved on to {main[:12]} since"
+        return [f"queue-land {p.repo}: {', '.join(combo.chain)} had landed at {combo.sha[:12]} "
+                f"before the driver stopped: recorded, not pushed again{moved}"]  # fmt: skip
+
+    def _resume_merged(self, record: QueueRecord, combos: Iterable[Any]) -> list[str]:
+        """`land: merge` (R11): the front entries of the deepest combination whose PRs the
+        forge reads `MERGED` landed before the driver stopped. Recorded at the `main` the
+        forge left; a tree that is not the tested one for that prefix stops the queue."""
+        p = self.ports
+        deepest = max(combos, key=lambda c: len(c.chain))
+        merged: list[str] = []
+        for key in deepest.chain:
+            known = p.pr_of(key)
+            try:
+                state = p.client.pr_view(p.repo, known[0]).get("state") if known else None
+            except FORGE_ERRORS:
+                state = None
+            if state != "MERGED":
+                break
+            merged.append(key)
+        if not merged:
+            return []
+        p.checkout.refresh_remote_branch(p.default)
+        main = p.checkout.rev_parse(f"origin/{p.default}")
+        self._record_landing(record, tuple(merged), main)
+        lines = [f"queue-land {p.repo}: {', '.join(merged)} had merged through the forge "
+                 f"before the driver stopped: recorded at {main[:12]}"]  # fmt: skip
+        tested = next((c for c in combos if c.chain == tuple(merged)), None)
+        if tested is None or p.checkout.tree_of(main) != p.checkout.tree_of(tested.sha):
+            detail = (
+                f"{p.default}'s tree after the forge merges ({main[:12]}) is not the tested "
+                "combination's for what merged before the driver stopped; the queue stops "
+                "and lands nothing more"
+            )
+            self._halt("stopped", detail, main)
+            lines.append(f"queue-land {p.repo}: stopped: {detail}")
+        return lines
+
+    def _record_landing(self, record: QueueRecord, chain: Sequence[str], main: str) -> None:
+        refs = _refs(record)
+        entries = [refs.get(k) or QueueEntryRef(batch=k) for k in chain]
+        self.ports.record(
+            QueueLandEvent(kind="queue_land", at=self.ports.now(), main=main, entries=entries)
+        )
+
+    def _halt(self, state: Literal["held", "stopped"], detail: str, main: str = "") -> None:
+        """R11, R22, R34: the queue lands nothing more until the operator acts
+        (`fr.triage.wave_queue.live_halt` reads it back)."""
+        p = self.ports
+        at = main or self.main_now() or None
+        p.record(QueueHaltEvent(kind="queue_halt", at=p.now(), state=state, detail=detail,
+                                land=p.config.land, main=at))  # fmt: skip
+
+    def _slot_lost(self, slot: int, sha: str, when: str) -> str:
+        """R4: another writer moved slot *slot*: recorded with what it holds now, so the
+        combination is built again leased on it and never re-pushed over it."""
+        p = self.ports
+        found = p.checkout.remote_sha(slot_ref(p.scope, slot))
+        p.record(QueueSlotLostEvent(kind="queue_slot_lost", at=p.now(), slot=slot, sha=sha,
+                                    found=found))  # fmt: skip
+        self._leases[slot] = found
+        return (
+            f"queue-build {p.repo}: slot {slot} was moved by another writer {when} (it holds "
+            f"{(found or 'nothing')[:12]}, not {sha[:12]}): not overwritten; its combination "
+            "is built again"
+        )
 
     # ---------------------------------------------------------- gating (R33, R35)
 
@@ -803,8 +982,13 @@ class QueueExecutor:
 
     # ---------------------------------------------------------- executing (§C, §D)
 
-    def execute(self, plan: QueuePlan, record: QueueRecord | None) -> list[str]:
-        """Run *plan*'s writes in order, one line each."""
+    def execute(
+        self, plan: QueuePlan, record: QueueRecord | None, history: Sequence[QueueRecord] = ()
+    ) -> list[str]:
+        """Run *plan*'s writes in order, one line each. *history* is this scope's records of
+        the repo, oldest first (default *record* alone): each slot push is leased on the sha
+        they last record for it (R4)."""
+        self._leases = slot_leases(list(history) or ([record] if record else []))
         lines: list[str] = []
         landed: str | None = None
         failed_tip: str | None = None
@@ -850,17 +1034,23 @@ class QueueExecutor:
             built = build(
                 p.checkout, action.base, [i for i in inputs if i is not None], p.method,
                 p.version, scope=p.scope, slots=action.slots, scratch=p.scratch,
-                queue_base=queue_base, record=p.record, now=p.now,
+                queue_base=queue_base, record=p.record, now=p.now, leases=dict(self._leases),
             )  # fmt: skip
         except MergeConflictError as exc:
-            self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths)
+            dropped = "rebase would drop" in str(exc)
+            self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths,
+                                                      str(exc) if dropped else "")  # fmt: skip
+            if dropped:
+                return f"{exc}: it leaves the queue"
             return f"{exc.batch} conflicts in {', '.join(exc.paths)}: it leaves the queue"
-        except LeaseLostError:
-            return "a slot moved under the build; built again next pass"
+        except SlotLostError as exc:
+            self._leases.update({b.slot: b.sha for b in exc.built})
+            return self._slot_lost(exc.slot, exc.sha, "since the queue last pushed it")
         except (MergeStopError, GitError) as exc:
             return f"not built: {exc}"
         for b in built:
             self.conflicts.pop(b.entry.key, None)
+            self._leases[b.slot] = b.sha
         return "built " + ", ".join(f"slot-{b.slot} {b.sha[:12]}" for b in built)
 
     def _land(self, action: QueueAction, record: QueueRecord) -> tuple[LandResult, str]:
@@ -892,9 +1082,10 @@ class QueueExecutor:
             )
         if result.outcome == "lease":
             return result, "a lease failed: nothing landed, the queue is rebuilt next pass"
-        if result.outcome != "landed":
-            return result, f"held: {result.detail}" if result.outcome == "held" else (
-                f"stopped: {result.detail}")  # fmt: skip
+        if result.outcome == "held" or result.outcome == "stopped":
+            # R11, R22, R34: recorded, so the next pass lands nothing and says so as a Need
+            self._halt(result.outcome, result.detail, result.main)
+            return result, f"{result.outcome}: {result.detail}"
         said = f"landed at {result.main[:12]}"
         keys = tuple(x.key for x in landings if x.ref.batch is not None)
         if p.post_merge is not None and keys:  # R33: once per landing, right after it

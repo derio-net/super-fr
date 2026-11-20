@@ -39,9 +39,11 @@ from fr.triage.model import (
     QueueDrainEvent,
     QueueEjectEvent,
     QueueEntryRef,
+    QueueHaltEvent,
     QueueLandEvent,
     QueueOpenEvent,
     QueueRecord,
+    QueueSlotLostEvent,
     RedHandbackEvent,
     RequeuedEvent,
 )
@@ -108,10 +110,13 @@ class SlotCheck:
 @dataclass(frozen=True)
 class BuildConflict:
     """A conflict the executor met building an entry at *head* (R6): the paths it could not
-    resolve. The planner ejects the entry through `conflict_decision`."""
+    resolve, and why when it is not a merge conflict (*reason*: a `rebase` that would drop
+    what the branch's merge commits carry, p3-r9). The planner ejects the entry through
+    `conflict_decision`."""
 
     head: str
     paths: tuple[str, ...]
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -406,7 +411,65 @@ def replay(record: QueueRecord) -> Replay:
             ejected[key] = event.head or last
             ejected_at[key] = event.at
             order = [k for k in order if k != key]
+        elif isinstance(event, QueueSlotLostEvent):
+            # The combination never reached its slot (R4): no CI runs on it, so it is
+            # built again, never tested or landed as if it stood.
+            if (lost := combos.get(event.slot)) is not None and lost.sha == event.sha:
+                del combos[event.slot]
     return Replay(base, combos, tuple(order), frozenset(landed), ejected, ejected_at, builds)
+
+
+def slot_leases(records: Sequence[QueueRecord]) -> dict[int, str | None]:
+    """The sha each slot branch holds as the queue last recorded it, across *records*
+    (this scope's for the repo, oldest first): its last `queue_built`, or what a lost lease
+    found there (`queue_slot_lost`). A slot push is leased on it (R4), never on what the
+    remote reads at build time, so another writer's push fails the lease."""
+    out: dict[int, str | None] = {}
+    for record in records:
+        for event in record.events:
+            if isinstance(event, QueueBuiltEvent):
+                out[event.slot] = event.sha
+            elif isinstance(event, QueueSlotLostEvent):
+                out[event.slot] = event.found
+    return out
+
+
+def queue_landed(records: Sequence[QueueRecord]) -> frozenset[str]:
+    """Every batch a queue of *records* landed (R12): its PR is merged, so its approval is
+    never read again, even while the forge still reads it open (R35)."""
+    return frozenset(
+        ref.batch
+        for record in records
+        for event in record.events
+        if isinstance(event, QueueLandEvent)
+        for ref in event.entries
+        if ref.batch is not None
+    )
+
+
+def live_halt(record: QueueRecord, qs: QueueSnapshot) -> QueueHaltEvent | None:
+    """The halt that still stops *record*'s queue (R11, R22, R34): its last `queue_halt`,
+    while `queue.land` is the one it was written under and the default branch has not
+    moved from where it stood (an unread base keeps it). None when there is none, or the
+    operator has acted on it."""
+    halt = next((e for e in reversed(record.events) if isinstance(e, QueueHaltEvent)), None)
+    if halt is None or halt.land != qs.config.land:
+        return None
+    if halt.main and qs.base and qs.base != halt.main:
+        return None
+    return halt
+
+
+def _halted(record: QueueRecord, qs: QueueSnapshot, halt: QueueHaltEvent) -> QueuePlan:
+    """A halted queue builds and lands nothing; the operator owns it (R28)."""
+    detail = (
+        f"{qs.repo}'s merge queue is {halt.state} and lands nothing: {halt.detail}. It "
+        "goes on once you change `queue.land` in .fr/triage.yaml or move the default "
+        "branch (a fix by hand); every combination is then rebuilt"
+    )
+    rep = replay(record)
+    need = QueueAction("queue-need", qs.repo, detail, wave=record.wave)
+    return QueuePlan(qs.repo, "open", record.wave, (need,), rep.order)
 
 
 def _verdict(combo: Combo, qs: QueueSnapshot) -> SlotCheck:
@@ -519,8 +582,9 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                    if batch is not None else "")  # fmt: skip
         earlier.append((key, met.paths))
         entries.remove(key)
+        said = met.reason or f"it conflicts in {', '.join(met.paths)}"
         actions.append(QueueAction(
-            "queue-eject", qs.repo, f"eject {key}: it conflicts in {', '.join(met.paths)}",
+            "queue-eject", qs.repo, f"eject {key}: {said}",
             wave=wave, entries=(key,), reason="conflict", paths=met.paths, decision=decided,
             batch=key if batch is not None else "", head=met.head))  # fmt: skip
     valid = _valid(entries, rep.base, rep.combos, qs)
@@ -686,6 +750,9 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
         return QueuePlan(qs.repo, phase, mine[-1].wave if mine else None, ())
     if phase == "idle":
         return _plan_idle(qs)
+    halt = live_halt(mine[-1], qs)
+    if halt is not None:
+        return _halted(mine[-1], qs, halt)
     return _plan_open(mine[-1], qs)
 
 

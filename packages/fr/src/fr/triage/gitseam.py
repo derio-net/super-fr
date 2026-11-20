@@ -887,6 +887,15 @@ class Checkout:
         return tuple(git(["rev-list", "--reverse", "--no-merges", f"{base}..{head}"],
                          self.path).split())  # fmt: skip
 
+    def has_merges(self, base: str, head: str) -> bool:
+        """*base*..*head* holds a merge commit: what `rebase` would not replay (p3-r9)."""
+        return bool(git(["rev-list", "--merges", "-1", f"{base}..{head}"], self.path).strip())
+
+    def diff_paths(self, one: str, two: str) -> tuple[str, ...]:
+        """The paths whose content differs between commits (or trees) *one* and *two*."""
+        out = git(["diff", "--name-only", "--no-renames", "-z", one, two], self.path)
+        return tuple(p for p in out.split("\0") if p)
+
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).
 

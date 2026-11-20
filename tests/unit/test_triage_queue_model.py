@@ -33,6 +33,8 @@ QUEUE_KINDS = (
     "queue_cleared",
     "queue_release",
     "queue_postmerge_done",
+    "queue_halt",
+    "queue_slot_lost",
 )
 
 
@@ -69,6 +71,15 @@ def _queue_events() -> list[dict[str, Any]]:
             "patch_id": "d" * 40,
         },  # fmt: skip
         {"kind": "queue_postmerge_done", "at": at.format(6), "entry": closeout},
+        {"kind": "queue_slot_lost", "at": at.format(7), "slot": 2, "sha": SHA, "found": MAIN},
+        {
+            "kind": "queue_halt",
+            "at": at.format(7),
+            "state": "held",
+            "detail": "GH013",
+            "land": "push",
+            "main": MAIN,
+        },  # fmt: skip
         {"kind": "queue_drain", "at": at.format(7), "main": MAIN},
         {"kind": "queue_cleared", "at": at.format(8)},
     ]

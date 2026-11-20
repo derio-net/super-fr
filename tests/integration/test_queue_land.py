@@ -168,3 +168,28 @@ def test_a_glab_or_tea_client_is_held_naming_the_parity_issue() -> None:
     reason = forge_refusal(Glab())
     assert reason is not None and "gh#611" in reason and "glab" in reason
     assert forge_refusal(object()) is None
+
+
+def test_a_tip_not_built_on_the_base_is_held_and_main_never_rewritten(tmp_path: Path) -> None:
+    """p3-r7: a leased push moves a ref by any amount; the landing pushes only a tip that
+    fast-forwards the queue's base (its chain's bottom built on it, the base its
+    ancestor). Built on the old main, after a foreign move it is held, main untouched."""
+    w, built = _two(tmp_path, "squash")
+    moved = w.move_main({"f.txt": "foreign\n"})
+    w.fetch()
+    result = land_push(w.checkout, default="main", base=moved, landings=landings_of(built),
+                       method="squash")  # fmt: skip
+    assert result.outcome == "held" and "fast-forward" in result.detail
+    assert w.main() == moved and w.head(1) == built[0].entry.head
+
+
+def test_a_chain_whose_bottom_was_built_on_another_commit_is_held(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    w, built = _two(tmp_path, "squash")
+    main = w.main()
+    landings = landings_of(built)
+    landings[0] = replace(landings[0], parent="f" * 40)
+    result = land_push(w.checkout, default="main", base=main, landings=landings,
+                       method="squash")  # fmt: skip
+    assert result.outcome == "held" and w.main() == main

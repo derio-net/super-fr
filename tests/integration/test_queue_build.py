@@ -135,3 +135,62 @@ def test_any_other_conflict_raises_with_its_paths(tmp_path: Path) -> None:
     assert raised.value.paths == ("a.txt",) and raised.value.batch == "b2"
     assert raised.value.head == w.head(2)
     assert w.remote(slot_ref(SCOPE, 1))  # the entry ahead was built
+
+
+def _merge_pr(w: World, *, evil: bool) -> None:
+    """PR 1 whose branch holds a merge commit: a side branch merged into it, with a line
+    the merge itself adds when *evil* (content no non-merge commit carries)."""
+    seed = w.seed
+    git(seed, "fetch", "--quiet", "origin")
+    git(seed, "checkout", "--quiet", "-B", "feat/pr-1", "origin/main")
+    (seed / "b.txt").write_text("bravo\n")
+    git(seed, "add", "--all")
+    git(seed, "commit", "--quiet", "-m", "pr 1 part 0")
+    git(seed, "checkout", "--quiet", "-B", "side", "origin/main")
+    (seed / "s.txt").write_text("side\n")
+    git(seed, "add", "--all")
+    git(seed, "commit", "--quiet", "-m", "side work")
+    git(seed, "checkout", "--quiet", "feat/pr-1")
+    git(seed, "merge", "--quiet", "--no-ff", "--no-commit", "side")
+    if evil:
+        (seed / "s.txt").write_text("side\nresolved by the merge\n")
+        git(seed, "add", "--all")
+    git(seed, "commit", "--quiet", "-m", "merge side")
+    git(seed, "push", "--quiet", "--force", "origin", "feat/pr-1:feat/pr-1")
+    git(seed, "checkout", "--quiet", "--detach")
+    w.prs[1], w.titles[1] = "feat/pr-1", "Add bravo"
+    w.fetch()
+
+
+def test_rebase_ejects_a_pr_whose_merge_commits_carry_content(tmp_path: Path) -> None:
+    """p3-r9: `rebase` replays a branch's non-merge commits only, so what a merge commit
+    adds (an evil merge, a conflict resolution) would be dropped silently. The replayed
+    tree is compared with a plain merge's, and a difference ejects the entry by name."""
+    w = world(tmp_path)
+    _merge_pr(w, evil=True)
+    with pytest.raises(MergeConflictError) as raised:
+        build(w.checkout, w.main(), [w.entry(1)], "rebase", None, scope=SCOPE, slots=(1,),
+              scratch=w.scratch)  # fmt: skip
+    assert "rebase would drop content from its merge commits" in str(raised.value)
+    assert "squash or merge" in str(raised.value)
+    assert raised.value.paths == ("s.txt",) and raised.value.batch == "b1"
+    assert w.checkout.remote_sha(slot_ref(SCOPE, 1)) is None  # nothing pushed
+
+
+def test_rebase_of_a_branch_with_a_plain_merge_builds(tmp_path: Path) -> None:
+    w = world(tmp_path)
+    _merge_pr(w, evil=False)
+    (one,) = build(w.checkout, w.main(), [w.entry(1)], "rebase", None, scope=SCOPE,
+                   slots=(1,), scratch=w.scratch)  # fmt: skip
+    assert _files(w, one.sha) >= {"a.txt", "b.txt", "s.txt"}
+
+
+def test_a_slot_lease_lost_names_the_slot_and_its_combination(tmp_path: Path) -> None:
+    from fr.triage.queue_exec import SlotLostError
+
+    w = _two(tmp_path)
+    _build(w, "squash")
+    with pytest.raises(SlotLostError) as raised:
+        _build(w, "squash", leases={1: w.main(), 2: None})
+    assert raised.value.slot == 1 and raised.value.sha
+    assert isinstance(raised.value, LeaseLostError)

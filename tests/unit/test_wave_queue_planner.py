@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fr.triage.approval import Approved, First, Void
 from fr.triage.batch_drive import LivePr
 from fr.triage.model import Batch, QueueRecord
@@ -702,3 +703,90 @@ def test_the_planner_reaches_no_git_forge_process_or_clock() -> None:
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
     }
     assert not calls & {"now", "utcnow", "today"}
+
+
+# ------------------------------------------------ a halted queue (R11, R22, R24, R34; p3-r1)
+
+
+REFUSED = "the default branch refused the queue's push (GH013)"
+
+
+def _halt(state: str = "held", *, land: str = "push", main: str = MAIN,
+          detail: str = REFUSED) -> dict[str, Any]:  # fmt: skip
+    return {"kind": "queue_halt", "at": AT, "state": state, "detail": detail, "land": land,
+            "main": main}  # fmt: skip
+
+
+@pytest.mark.parametrize("state", ["held", "stopped"])
+def test_a_recorded_halt_lands_and_builds_nothing_and_is_a_need(state: str) -> None:
+    events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"), _halt(state))
+    plan = plan_queue(_abc(*events, slots=_green("s1", "s2")))
+    assert _kinds(plan) == ["queue-need"]
+    need = _one(plan, "queue-need")
+    assert "GH013" in need.detail and state in need.detail
+    assert "queue.land" in need.detail  # what lifts it
+
+
+def test_a_halt_lifts_when_the_operator_changes_queue_land() -> None:
+    events = (_built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"), _halt("held"))
+    plan = plan_queue(_abc(*events, slots=_green("s1", "s2"), config=QueueConfig(land="merge")))
+    assert _one(plan, "queue-land").entries == ("a", "b")
+
+
+def test_a_halt_lifts_when_the_default_branch_moves_and_the_queue_rebuilds() -> None:
+    events = (_built(1, "s1", "a"), _halt("stopped", land="merge", main=MAIN))
+    plan = plan_queue(_abc(*events, base="m1" * 20, slots=_green("s1"),
+                           config=QueueConfig(land="merge")))  # fmt: skip
+    assert "queue-need" not in _kinds(plan)
+    assert _one(plan, "queue-rebuild").base == "m1" * 20
+
+
+def test_a_halt_is_a_blocked_action_of_the_pass_so_needs_you_lists_it() -> None:
+    from fr.triage.batch_drive import _queue_reports
+
+    plan = plan_queue(_abc(_built(1, "s1", "a"), _halt("held"), slots=_green("s1")))
+    (action,) = _queue_reports(plan)
+    assert action.kind == "blocked" and "GH013" in action.detail
+
+
+# ------------------------------------------------ a lost slot lease (R4, R24; p3-r8)
+
+
+def test_a_combination_whose_slot_push_lost_its_lease_is_built_again() -> None:
+    from fr.triage.wave_queue import replay, slot_leases
+
+    lost = {"kind": "queue_slot_lost", "at": AT, "slot": 1, "sha": "s1", "found": "x9"}
+    record = _record(_open(), _built(1, "s1", "a"), lost)
+    assert 1 not in replay(record).combos
+    assert slot_leases([record]) == {1: "x9"}
+    plan = plan_queue(_abc(_built(1, "s1", "a"), lost, slots=_green("s1")))
+    assert "queue-land" not in _kinds(plan)
+    assert _one(plan, "queue-build").entries == ("a", "b")
+
+
+def test_slot_leases_are_the_last_recorded_sha_of_each_slot_across_records() -> None:
+    from fr.triage.wave_queue import slot_leases
+
+    old = _record(_open(), _built(1, "s1", "a"), _built(2, "s2", "b", parent="s1"))
+    new = _record(_open(), _built(1, "s3", "c"))
+    assert slot_leases([old, new]) == {1: "s3", 2: "s2"}
+
+
+# ------------------------------------------------ what the queue landed (R12; p3-r4)
+
+
+def test_queue_landed_names_every_batch_a_queue_landed() -> None:
+    from fr.triage.wave_queue import queue_landed
+
+    one = _record(_open(), _built(1, "s1", "a"), _land("s1", "a"))
+    two = _record(_open(), _land("s9", "b"), wave=2)
+    assert queue_landed([one, two]) == frozenset({"a", "b"})
+
+
+def test_a_conflict_with_a_reason_names_it_in_the_ejection() -> None:
+    from fr.triage.wave_queue import BuildConflict
+
+    why = "rebase would drop content from its merge commits"
+    plan = plan_queue(_abc(conflicts={"a": BuildConflict("head-a", ("x.py",), why)}))
+    eject = _one(plan, "queue-eject")
+    assert why in eject.detail and eject.reason == "conflict"

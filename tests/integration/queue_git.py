@@ -186,9 +186,9 @@ class FakeForge:
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         head = self.w.head(number)
-        merged = (
-            number not in self.sticky
-            and subprocess.run(
+        merged = number not in self.sticky and (
+            any(n == number for n, _, _ in self.merges)  # merged through the API
+            or subprocess.run(
                 ["git", "merge-base", "--is-ancestor", head, "refs/heads/main"], cwd=self.w.origin
             ).returncode
             == 0

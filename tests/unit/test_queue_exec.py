@@ -82,6 +82,21 @@ def test_queue_ci_push_is_accepted() -> None:
     assert config.queue is not None and queue_refusal(config.queue, ci_none=False) is None
 
 
+def test_land_merge_with_a_version_block_is_refused_naming_both() -> None:
+    """p3-r2: under `land: merge` the forge merges each PR's own head, which never carries
+    the reserved version slot the tested combination does (R4, R6), so `main`'s tree could
+    never equal it (R11): the pair is refused up front, naming both settings."""
+    config, _ = parse_triage_config({"queue": {"ci": "push", "land": "merge"}})
+    assert config.queue is not None
+    why = queue_refusal(config.queue, ci_none=False, versioned=True)
+    assert why is not None and "queue.land: merge" in why and "version:" in why
+    assert "queue.land: push" in why  # what to do instead
+    assert queue_refusal(config.queue, ci_none=False, versioned=False) is None
+    push, _ = parse_triage_config({"queue": {"ci": "push"}})
+    assert push.queue is not None
+    assert queue_refusal(push.queue, ci_none=False, versioned=True) is None
+
+
 # ------------------------------------------------------------------ slot checks (R7)
 
 

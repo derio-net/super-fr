@@ -1191,6 +1191,35 @@ class QueueDrainEvent(_Strict):
     main: str | None = None
 
 
+class QueueHaltEvent(_Strict):
+    """The queue stopped landing: a landing was *held* (the remote refused the push, or it
+    was not a fast-forward: R10, R22, R34) or *stopped* (a forge merge refused, or left a
+    tree the queue never tested: R11). Written under `queue.land: <land>` with the default
+    branch at *main*; the planner lands nothing more while both still hold, so the halt
+    lifts when the operator changes `queue.land` or moves the default branch (spec
+    2026-11-19-wave-merge-queue R11, R22, R24, R34). Needs judgements schema 13."""
+
+    kind: Literal["queue_halt"]
+    at: AwareDatetime
+    state: Literal["held", "stopped"]
+    detail: str = Field(min_length=1)
+    land: Literal["push", "merge"]
+    main: str | None = None
+
+
+class QueueSlotLostEvent(_Strict):
+    """The push of combination *sha* to slot *slot* lost its lease: another writer had
+    moved the slot to *found* (None: deleted it). The combination never reached its slot,
+    so the planner builds it again, leased on *found*, and a restarted driver never
+    re-pushes *sha* (spec 2026-11-19-wave-merge-queue R4, R24). Needs judgements schema 13."""
+
+    kind: Literal["queue_slot_lost"]
+    at: AwareDatetime
+    slot: int = Field(ge=1)
+    sha: str = Field(min_length=1)
+    found: str | None = None
+
+
 class QueueClearedEvent(_Strict):
     """The release cleared the hold, or the driver cleared it under `release: none` (spec
     2026-11-19-wave-merge-queue R24, R18). Needs judgements schema 13. Engine-written."""
@@ -1241,6 +1270,8 @@ QueueEvent = Annotated[
     | QueueEjectEvent
     | QueueLandEvent
     | QueueDrainEvent
+    | QueueHaltEvent
+    | QueueSlotLostEvent
     | QueueClearedEvent
     | QueueReleaseEvent
     | QueuePostmergeDoneEvent
@@ -1284,6 +1315,8 @@ SCHEMA_13_EVENTS = frozenset(
         "queue_eject",
         "queue_land",
         "queue_drain",
+        "queue_halt",
+        "queue_slot_lost",
         "queue_cleared",
         "queue_release",
         "queue_postmerge_done",
