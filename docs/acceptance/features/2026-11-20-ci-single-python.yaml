@@ -33,9 +33,14 @@ rows:
     - spec:2026-11-20-ci-single-python#R3
     - spec:2026-11-20-ci-single-python#R4
     - spec:2026-11-20-ci-single-python#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_ci_tests_one_python_the_floor
+      - super-fr:tests/unit/test_ci_python_floor.py#test_every_shard_feeds_coverage
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_checks_the_one_leg
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_collect_job_collects_once_with_the_shards_addopts_and_no_split
+    status: ci
+    notes: Layout pinned by unit tests CI runs
     verify: none
   - id: ci-single-leg-main-push
     capability: ci
