@@ -16,10 +16,12 @@ through the `GhClient` adapter, both passed in, so this module starts no process
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Protocol
+
+import yaml
 
 from fr.ghclient import UnsupportedBatchOps
 from fr.hostclient import FORGE_ERRORS
@@ -39,11 +41,19 @@ from fr.triage.model import (
     PostMergeEvent,
     QueueBuiltEvent,
     QueueEntryRef,
+    QueueBlock,
     QueueLandEvent,
     QueueRecord,
     VersionBlock,
 )
-from fr.triage.wave_queue import QueueConfig, SlotCheck, entry_key, replay
+from fr.triage.wave_queue import (
+    QueueAction,
+    QueueConfig,
+    QueuePlan,
+    SlotCheck,
+    entry_key,
+    replay,
+)
 
 Method = Literal["merge", "squash", "rebase"]
 
@@ -489,3 +499,182 @@ def forge_refusal(client: object) -> str | None:
             "repo's merges are held"
         )
     return None
+
+
+# ------------------------------------------------------------------ config and refusals (R7)
+
+
+def queue_config(block: QueueBlock) -> QueueConfig:
+    """`.fr/triage.yaml`'s `queue:` block as the planner reads it."""
+    return QueueConfig(
+        ci=block.ci, depth=block.depth, land=block.land,
+        check_wait_minutes=block.check_wait_minutes, release=block.release,
+        release_workflow=block.release_workflow, release_wait_hours=block.release_wait_hours,
+        stall_hours=block.stall_hours,
+    )  # fmt: skip
+
+
+def queue_refusal(block: QueueBlock, *, ci_none: bool) -> str | None:
+    """R7, R20: why the driver refuses to run *block*'s queue, None when it may. *ci_none*:
+    the repo's services say `ci none` on its default branch."""
+    if block.ci is None:
+        return (
+            "the merge queue needs `queue.ci` in .fr/triage.yaml: add `ci: push` under "
+            "`queue:` once every workflow that reports a required check runs on pushes to "
+            "fr-queue/**, or `ci: none` in a repo whose services report `ci none`"
+        )
+    if block.ci == "none" and not ci_none:
+        return (
+            "`queue.ci: none` in .fr/triage.yaml, but this repo's services do not report "
+            "`ci none`: its required checks must run on the combinations. Set `ci: push` and "
+            "run them on pushes to fr-queue/**"
+        )
+    return None
+
+
+def held_plan(plan: QueuePlan, reason: str) -> QueuePlan:
+    """*plan* replaced by one `queue-held` that says *reason* (R7, R22, R34, R35)."""
+    action = QueueAction("queue-held", plan.repo, f"{plan.repo}'s merge queue is held: {reason}")
+    return QueuePlan(plan.repo, plan.phase, plan.wave, (action,), plan.entries, plan.waiting)
+
+
+def pause_landings(plan: QueuePlan, reason: str | None) -> QueuePlan:
+    """*plan* with no landing, and a Need saying *reason* (R33, R35): the queue still builds
+    and tests, but lands nothing until *reason* clears. *plan* itself when *reason* is None."""
+    if reason is None:
+        return plan
+    kept = tuple(a for a in plan.actions if a.kind != "queue-land")
+    need = QueueAction("queue-need", plan.repo,
+                       f"{plan.repo}'s queue lands nothing until this clears: {reason}",
+                       wave=plan.wave)  # fmt: skip
+    return replace(plan, actions=(*kept, need))
+
+
+# ------------------------------------------------------------------ checks (R7)
+
+_FAILED = frozenset({"failure", "cancelled", "timed_out", "action_required", "startup_failure",
+                     "stale", "error"})  # fmt: skip
+
+
+def gate_checks_of(text: str | None) -> list[str] | None:
+    """The gate-check names `.fr/ci.yaml`'s *text* declares, None when it declares none
+    (or is not that file's shape): the base's required checks then decide."""
+    if text is None:
+        return None
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return None
+    names = data.get("gate_checks") if isinstance(data, dict) else None
+    if not isinstance(names, list) or not names:
+        return None
+    out = [n.strip() for n in names if isinstance(n, str) and n.strip()]
+    return out or None
+
+
+def _state(check: Mapping[str, Any]) -> Literal["pass", "fail", "pending"]:
+    if check.get("status") != "completed":
+        return "pending"
+    return "fail" if str(check.get("conclusion") or "").lower() in _FAILED else "pass"
+
+
+def slot_check(
+    checks: Sequence[Mapping[str, Any]],
+    required: Sequence[str],
+    *,
+    built_at: datetime,
+    now: datetime,
+    wait_minutes: int,
+) -> tuple[SlotCheck, tuple[str, ...]]:
+    """R7: a combination's verdict from `commit_checks` on its own sha, under the same
+    required-checks rule as a PR (`checks_verdict`): the *required* names when the repo has
+    any, else every check; nothing reported is pending, never green. With it, the
+    required checks that have not reported `wait_minutes` after the build: each a Need."""
+    if required:
+        by_name: dict[str, list[Mapping[str, Any]]] = {}
+        for c in checks:
+            by_name.setdefault(str(c.get("name")), []).append(c)
+        failing = tuple(sorted(n for n in required
+                               if any(_state(c) == "fail" for c in by_name.get(n, []))))  # fmt: skip
+        missing = tuple(sorted(n for n in required if n not in by_name))
+        pending = [n for n in required
+                   if n in by_name and any(_state(c) == "pending" for c in by_name[n])]  # fmt: skip
+        late = missing if now - built_at >= timedelta(minutes=wait_minutes) else ()
+        if failing:
+            return SlotCheck("failing", failing), late
+        if missing or pending:
+            return SlotCheck("pending"), late
+        return SlotCheck("green"), ()
+    states = [_state(c) for c in checks]
+    if "fail" in states:
+        names = tuple(sorted(str(c.get("name")) for c in checks if _state(c) == "fail"))
+        return SlotCheck("failing", names), ()
+    if not states or "pending" in states:
+        return SlotCheck("pending"), ()
+    return SlotCheck("green"), ()
+
+
+class ChecksForge(Protocol):
+    def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]: ...
+    def required_check_names(self, repo: str, base: str) -> list[str]: ...
+
+
+def required_names(client: ChecksForge, checkout: Checkout, repo: str, default: str) -> list[str]:
+    """The checks that gate *default* (R7): `.fr/ci.yaml`'s `gate_checks` at
+    `origin/<default>`, else the base's `required_check_names`."""
+    declared = gate_checks_of(checkout.show(f"origin/{default}", ".fr/ci.yaml"))
+    return declared if declared is not None else list(client.required_check_names(repo, default))
+
+
+def read_slots(
+    client: ChecksForge,
+    repo: str,
+    record: QueueRecord,
+    required: Sequence[str],
+    *,
+    now: datetime,
+    wait_minutes: int,
+) -> tuple[dict[str, SlotCheck], list[str]]:
+    """Each standing combination of *record* (sha -> its verdict), and a Need per required
+    check that never reported on one of them in time, naming it (R7)."""
+    built_at = {e.sha: e.at for e in record.events if isinstance(e, QueueBuiltEvent)}
+    out: dict[str, SlotCheck] = {}
+    needs: list[str] = []
+    for combo in replay(record).combos.values():
+        verdict, late = slot_check(
+            client.commit_checks(repo, combo.sha), required,
+            built_at=built_at.get(combo.sha, now), now=now, wait_minutes=wait_minutes,
+        )  # fmt: skip
+        out[combo.sha] = verdict
+        if late:
+            needs.append(
+                f"{repo}: required check{'s' if len(late) > 1 else ''} {', '.join(late)} did "
+                f"not report on combination {combo.sha[:12]} within {wait_minutes} min: the "
+                "workflow that reports it does not run on pushes to fr-queue/**; add "
+                "`push: branches: ['fr-queue/**']` to it"
+            )
+    return out, needs
+
+
+# ------------------------------------------------------------------ post_merge (R33)
+
+
+def last_landing(record: QueueRecord) -> QueueLandEvent | None:
+    return next((e for e in reversed(record.events) if isinstance(e, QueueLandEvent)), None)
+
+
+def post_merge_owed(record: QueueRecord, batches: Iterable[Batch]) -> tuple[str, ...]:
+    """R33: the batches of *record*'s last landing with no `post_merge` recorded since it;
+    while any is, `post_merge` runs (once, for the whole landing) and nothing more lands."""
+    land = last_landing(record)
+    if land is None:
+        return ()
+    by_id = {b.id: b for b in batches}
+    owed: list[str] = []
+    for ref in land.entries:
+        batch = by_id.get(ref.batch or "")
+        if batch is None:
+            continue
+        if not any(isinstance(e, PostMergeEvent) and e.at >= land.at for e in batch.events):
+            owed.append(batch.id)
+    return tuple(owed)

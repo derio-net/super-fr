@@ -81,7 +81,10 @@ from fr.triage.stage import Stage, derive_stage
 # intake trust gate reads it, and `to_json` dumps it, `null` included, which a closed-world
 # schema-14 reader rejects; a file below 15 reads it as None, so an outside author's issue is
 # never admitted by it (the rule fails closed) and its body is withheld on the next collect.
-FACTS_SCHEMA: Final[int] = 15
+# 16 adds (2026-11-19-wave-merge-queue §Config) per-config `TriageConfig.queue`, the wave merge
+# queue's block: `to_json` dumps it, `null` included, which a closed-world schema-15 reader
+# rejects; a file below 16 reads it as None, so no repo is driven by the queue until collect.
+FACTS_SCHEMA: Final[int] = 16
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
 # `queues:` list and its events, a batch's `deferred` and `requeued` events and an
@@ -538,6 +541,21 @@ class ExitBlock(_Strict):
     ] = {}
 
 
+class QueueBlock(_Strict):
+    """`.fr/triage.yaml`'s `queue:` (spec 2026-11-19-wave-merge-queue § Config): the repo's
+    merges go through the wave driver's own merge queue. `ci` has no default on purpose:
+    a block without it is refused by the driver, naming the line to add (R7)."""
+
+    ci: Literal["push", "none"] | None = None
+    depth: int = Field(default=2, ge=1)
+    land: Literal["push", "merge"] = "push"
+    check_wait_minutes: int = Field(default=60, ge=1)
+    release: Literal["workflow", "none"] = "workflow"
+    release_workflow: str | None = None
+    release_wait_hours: int = Field(default=6, ge=1)
+    stall_hours: int = Field(default=4, ge=1)
+
+
 class TriageConfig(_Strict):
     """`.fr/triage.yaml` of one repo, read at its default branch (spec §3.I).
 
@@ -573,6 +591,9 @@ class TriageConfig(_Strict):
     merge_method: Literal["merge", "squash", "rebase"] | None = None
     # The repo's remap of each strategy kind's gate (spec 2026-10-14 exit-gates R4).
     exit: ExitBlock | None = None
+    # The wave merge queue (spec 2026-11-19-wave-merge-queue): None, the repo's merges are
+    # not the queue's.
+    queue: QueueBlock | None = None
 
 
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:
