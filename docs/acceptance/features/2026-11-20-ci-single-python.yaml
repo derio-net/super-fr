@@ -59,3 +59,9 @@ amendments:
     acceptance: The combined coverage gate (fail-under 75) is measured on every shard
       of the one 3.14 leg
     why: CI now runs one leg on 3.14 (#1589)
+  - row: ci-coverage-newest-leg
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
+    why: test renamed
