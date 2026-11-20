@@ -15,9 +15,14 @@ rows:
     origin:
     - spec:2026-11-20-ci-single-python#R1
     - spec:2026-11-20-ci-single-python#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_ci_pins_the_requires_python_floor
+      - super-fr:tests/unit/test_ci_python_floor.py#test_release_suite_runs_on_the_requires_python_floor
+      - super-fr:tests/unit/test_ci_python_floor.py#test_the_floor_is_3_14_everywhere
+      - super-fr:tests/unit/test_ops_isolated_python.py#test_the_python_floor_has_safe_path
+    status: ci
+    notes: Floor pinned by unit tests CI runs
     verify: none
   - id: ci-single-leg
     capability: ci
