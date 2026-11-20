@@ -227,3 +227,14 @@ amendments:
       DevOps housekeeping PRs queue alone between waves.
     why: later waves wait for the previous wave's release; gated close-outs leave the
       wave close-out (operator, round 3)
+  - row: wave-queue-approval-content
+    op: reword
+    base: 0
+    acceptance: 'An approved-fr approval survives any push that leaves the PR''s own
+      diff unchanged (a merge of main, an empty commit, fr''s own update and a clean
+      merge of main after it, the queue''s own landing rewrite), on every host whatever
+      its diff configuration, and is voided by a change to that diff, with one stated
+      limit: patch-ids ignore hunk line numbers, so moving an otherwise identical hunk
+      within a file keeps the approval.'
+    why: 'p1-r1 review: git patch-id is position-blind within a file, so the row no
+      longer claims every diff change voids; p1-r2/r7 widen what keeps it.'
