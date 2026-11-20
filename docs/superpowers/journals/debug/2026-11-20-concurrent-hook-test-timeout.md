@@ -30,3 +30,8 @@ tests/unit/test_hooks_worktree.py: run_twice reads both hooks' pipes concurrentl
 ### 4abac92c55d0 · finding [fixed] · hook lock rested on an external mkdir (exit-1 / OVERLAP variant)
 
 fr-worktree-create.sh and fr-worktree-remove.sh now create a <name>.lock file with a shell noclobber redirect (O_EXCL, pid written in the same step). Pinned first by test_the_lock_does_not_depend_on_an_external_mkdir_being_atomic (a mkdir shim that always says yes: red before, green after). The mechanism by which mkdir succeeded twice on Linux CI is NOT verified; the fix removes the dependency instead. Not changed: the dead-holder reclaim (rm then retry) is still check-then-act.
+
+<!-- fr:journal kind=review scope=debug id=d8e60ded9de7 created=2026-11-20T06:51:24+00:00 -->
+### d8e60ded9de7 · review · self-review of the two fixes
+
+Raised, no new findings: (1) a stale dead-holder lock is still reclaimed check-then-act (rm then retry), unchanged and out of scope; (2) a leftover lock DIRECTORY from an older hook is ignored because the file lock has a new '.lock' name; harmless garbage. Not reviewed by a separate agent.
