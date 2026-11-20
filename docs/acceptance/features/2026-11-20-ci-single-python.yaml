@@ -103,3 +103,10 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_checks_the_one_leg
     why: test renamed
+  - row: ci-coverage-newest-leg
+    op: set-status
+    base: 3
+    status: ci
+    notes: 'Coverage measured and uploaded on every shard of the one 3.14 leg (#1589);
+      coverage job (fail-under 75) unchanged and green on PR #1593.'
+    why: 'one leg (#1589): the two-leg note is no longer true'
