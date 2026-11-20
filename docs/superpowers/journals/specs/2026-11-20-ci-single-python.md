@@ -40,3 +40,111 @@ Round 1 Q4: strategy none before merge (pinned unit tests and the PR's own CI); 
 ### gate-question-rounds-brainstorm · decision · Operator gate `brainstorm` took two question rounds
 
 Trigger: operator-request. Round 1's free-text answer moved the whole base to Python 3.14, which the brief listed as out of scope (requires-python). Round 2 was not forecast in round 1; it was needed to settle the floor, the scaffolded consumer CI image, the meaning of "Nowhere but for 3.11", and the shard count chosen under the 3.11-coverage premise. After fr refused design-risk, the operator confirmed in prose: "yes, go for the second round, it's necessary".
+
+<!-- fr:journal kind=finding scope=spec id=s-r1 created=2026-11-20T07:41:57+00:00 state=open review_scope=in -->
+### s-r1 · finding [open] (reviewer: in scope) · `gate: developer` does not reach the live row ci-single-leg-main-push (live.yaml gives it tester)
+
+packages/fr/src/fr/verification/rows.py:99-128; plugins/super-fr/verifications/live.yaml:12. Against decision d-verification.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2 created=2026-11-20T07:41:57+00:00 state=open review_scope=in -->
+### s-r2 · finding [open] (reviewer: in scope) · Four docs pages cover paths this change edits; the spec said none
+
+docs/reference/acceptance-matrix.md:190, docs/explainers/fr-acceptance.md:261 (python:3.12), docs/reference/components.md (covers packages/*/pyproject.toml), docs/merge-protection.md (covers release.yml).
+
+<!-- fr:journal kind=finding scope=spec id=s-r3 created=2026-11-20T07:41:57+00:00 state=open review_scope=in -->
+### s-r3 · finding [open] (reviewer: in scope) · Merged row ci-shards-complete cites the renamed test and says every leg / 6 shards
+
+docs/acceptance/features/2026-11-01-ci-speed.yaml:26-42.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4 created=2026-11-20T07:41:57+00:00 state=open review_scope=in -->
+### s-r4 · finding [open] (reviewer: in scope) · Test Plan names only the post-merge row; the three none rows have no Test Plan entry
+
+spec ## Verification vs ## Test Plan.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5 created=2026-11-20T07:41:57+00:00 state=open review_scope=in -->
+### s-r5 · finding [open] (reviewer: in scope) · uv.lock moves more than the header under >=3.14
+
+uv.lock:155 tomli marker, :773 tomli package, cp311-cp313 wheels.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6 created=2026-11-20T07:41:57+00:00 state=open review_scope=in -->
+### s-r6 · finding [open] (reviewer: in scope) · AGENTS.md names the durations-py<v>-shard-<n> artifact that R5 renames
+
+AGENTS.md:448-450.
+
+<!-- fr:journal kind=finding scope=spec id=s-r7 created=2026-11-20T07:41:57+00:00 state=open review_scope=out -->
+### s-r7 · finding [open] (reviewer: out of scope) · fr-spec-status.yml pins setup-python 3.12 and pip-installs fr v3.0.0
+
+.github/workflows/fr-spec-status.yml:20-24; installs an old tag with floor 3.11, unaffected by this change.
+
+<!-- fr:journal kind=finding scope=spec id=s-r8 created=2026-11-20T07:41:57+00:00 state=open review_scope=out -->
+### s-r8 · finding [open] (reviewer: out of scope) · Leftover 3.11 prose and a dead fallback in scripts/floors.py
+
+scripts/floors.py:31-38; safe_spawn.py:5 stays true; check-run names in fixtures are captured data.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-20T07:41:57+00:00 -->
+### spec-review-1 · review · independent spec review: 8 findings (6 in scope, 2 out of scope)
+
+Reviewer fr-spec-reviewer. In scope s-r1..s-r6 fixed in the spec; s-r7, s-r8 out of scope. All six operator decisions honoured once s-r1 is fixed.
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-20T07:41:57+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · The change rewrites the tests that pin CI layout and the rows that cite them; check renamed tests still assert and anchors resolve
+
+<!-- fr:journal kind=finding scope=spec id=s-r1-resolved created=2026-11-20T07:41:57+00:00 state=fixed resolves=s-r1 -->
+### s-r1-resolved · finding [fixed] · resolves s-r1: `gate: developer` does not reach the live row ci-single-leg-main-push (live.yaml gives it tester)
+
+Added `gate: ci-single-leg-main-push=developer`; fr verification exit reports gates developer, gated no.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2-resolved created=2026-11-20T07:41:57+00:00 state=fixed resolves=s-r2 -->
+### s-r2-resolved · finding [fixed] · resolves s-r2: Four docs pages cover paths this change edits; the spec said none
+
+New R11 and §G name the four pages and what each owes; dropped the claim that docs owe nothing.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3-resolved created=2026-11-20T07:41:57+00:00 state=fixed resolves=s-r3 -->
+### s-r3-resolved · finding [fixed] · resolves s-r3: Merged row ci-shards-complete cites the renamed test and says every leg / 6 shards
+
+§F amends ci-shards-complete: reword (one leg, 7 shards) and re-point its level to test_split_check_checks_the_one_leg.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4-resolved created=2026-11-20T07:41:57+00:00 state=fixed resolves=s-r4 -->
+### s-r4-resolved · finding [fixed] · resolves s-r4: Test Plan names only the post-merge row; the three none rows have no Test Plan entry
+
+Test Plan gains three pre-merge CI entries naming each none row and its tests, plus the amended rows.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5-resolved created=2026-11-20T07:41:57+00:00 state=fixed resolves=s-r5 -->
+### s-r5-resolved · finding [fixed] · resolves s-r5: uv.lock moves more than the header under >=3.14
+
+§A states the true uv lock expectation: header moves, below-3.14-only entries and wheels drop, no version changes.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6-resolved created=2026-11-20T07:41:57+00:00 state=fixed resolves=s-r6 -->
+### s-r6-resolved · finding [fixed] · resolves s-r6: AGENTS.md names the durations-py<v>-shard-<n> artifact that R5 renames
+
+§F names the artifact rename in the AGENTS.md recipe.
+
+<!-- fr:journal kind=finding scope=spec id=s-r7-resolved created=2026-11-20T07:41:57+00:00 state=open resolves=s-r7 out_of_scope=true -->
+### s-r7-resolved · finding [out-of-scope] · resolves s-r7: fr-spec-status.yml pins setup-python 3.12 and pip-installs fr v3.0.0
+
+Pre-existing; the workflow installs fr v3.0.0 (floor 3.11) and tests nothing, so this change does not affect it.
+
+<!-- fr:journal kind=finding scope=spec id=s-r8-resolved created=2026-11-20T07:41:57+00:00 state=open resolves=s-r8 out_of_scope=true -->
+### s-r8-resolved · finding [out-of-scope] · resolves s-r8: Leftover 3.11 prose and a dead fallback in scripts/floors.py
+
+Pre-existing prose that stays true, captured fixture data, and an optional dead-branch cleanup not caused by this change.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-20T07:42:00+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  ci-floor-python-3-14: none
+  ci-scaffold-python-3-14: none
+  ci-single-leg: none
+  ci-single-leg-main-push: developer
+row_kinds:
+  ci-floor-python-3-14: none
+  ci-scaffold-python-3-14: none
+  ci-single-leg: none
+  ci-single-leg-main-push: live
+run_gate: developer
+run_kind: none
+```
