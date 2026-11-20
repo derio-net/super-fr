@@ -4,11 +4,13 @@ step: brainstorm
 outcome: done
 questions:
   rounds: 2
-  trigger: design-risk
+  trigger: operator-request
   reason: >-
     Round 1's free-text answer moved the whole base to Python 3.14, which the brief listed as out
-    of scope (requires-python); that reopened the floor, the scaffolded consumer CI image, the
-    meaning of "Nowhere but for 3.11", and the shard count chosen under the 3.11-coverage premise.
+    of scope (requires-python). Round 2 was not forecast in round 1; it was needed to settle the
+    floor, the scaffolded consumer CI image, the meaning of "Nowhere but for 3.11", and the shard
+    count chosen under the 3.11-coverage premise. After fr refused design-risk, the operator
+    confirmed in prose: "yes, go for the second round, it's necessary".
 journal:
   - kind: discovery
     input: true
