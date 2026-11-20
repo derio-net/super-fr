@@ -784,3 +784,8 @@ A signalled or orphaned supervisor exits 0; otherwise it exits with the driver's
 ### l-errors-r8-resolved · finding [out-of-scope] · resolves l-errors-r8: a failing close-out take-back after a failed dispatch hides the dispatch error and leaves the close-out stuck as started
 
 Predates this change: the same take-back code is on main (triage_batch_cmd.py ~6575, ~6650). Filed as derio-net/super-fr#1601.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved-2 created=2026-11-20T13:45:07+00:00 state=open resolves=l-errors-r8 tracked_by=derio-net/super-fr#1601 -->
+### l-errors-r8-resolved-2 · finding [deferred → derio-net/super-fr#1601] · resolves l-errors-r8: a failing close-out take-back after a failed dispatch hides the dispatch error and leaves the close-out stuck as started
+
+Predates this change (same take-back code on main); filed as derio-net/super-fr#1601 before deliver.
