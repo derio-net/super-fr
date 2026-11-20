@@ -58,6 +58,9 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_wave_queue_planner.py#test_a_second_red_at_the_same_tree_ejects_it_and_rebuilds_what_was_behind
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_first_red_behind_a_green_slot_is_rebuilt_once_fresh_in_its_own_slot
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_conflict_met_at_build_ejects_the_entry_through_the_conflict_decision
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_ejected_entry_re_enters_only_when_its_head_moves
     status: not-implemented
     notes: 'phase 2: the pure planner ejects (one fresh rebuild, then red_decision /
       conflict_decision) and rebuilds only what was behind; the executor that pushes
