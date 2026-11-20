@@ -544,3 +544,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_driver_update_records_its_patch_id_and_a_clean_merge_after_it_keeps_the_approval
     why: 'fr''s own updates are gone (R22): an old update event is only read'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 9
+    level: unit
+    ref: super-fr:tests/unit/test_triage_approval.py#test_a_housekeeping_approval_is_voided_when_the_diff_changes_and_the_label_is_removed
+    why: a non-batch entry's approval is judged by the same rule (R12, R32)
