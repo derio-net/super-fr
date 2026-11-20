@@ -144,3 +144,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1596.
 ### p1-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1597] · resolves p1-r5: scripts/floors.py keeps dead 3.11 tokenizer compatibility (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1597.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-11-20T08:44:29+00:00 phase=1 state=open resolves=p1-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1598 -->
+### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1598] · resolves p1-r6: Other workflows set no UV_PYTHON, so uv downloads 3.14 every run (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1598.
