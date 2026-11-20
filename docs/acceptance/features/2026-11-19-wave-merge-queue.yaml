@@ -109,9 +109,26 @@ rows:
     - spec:2026-11-19-wave-merge-queue#R32
     - spec:2026-11-19-wave-merge-queue#R34
     - spec:2026-11-19-wave-merge-queue#R35
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_repo_whose_base_requires_a_forge_merge_queue_is_held_with_the_reason
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_batch_merge_drives_the_queue_in_the_foreground_until_the_batches_landed
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_a_repo_without_queue_ci_is_refused_with_what_to_add
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_other_entry_opens_a_one_entry_queue_between_waves
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_wave_does_not_drain_while_its_closeout_waits_and_drains_once_it_landed
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_an_attributed_ready_green_archive_pr_is_merged
+      - super-fr:tests/unit/test_triage_collected_closeout_drive.py#test_a_green_mergeable_recorded_pr_is_readied_and_merged_at_the_recorded_head
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_green_recorded_export_pr_is_merged_at_its_recorded_head_and_recorded
+      - super-fr:tests/unit/test_triage_approval.py#test_a_housekeeping_pr_with_the_label_is_recorded_as_a_queue_approval_then_holds
+      int:
+      - super-fr:tests/integration/test_queue_land.py#test_another_entry_lands_in_the_same_push_and_is_recorded_by_its_kind
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_queue
+    status: ci
+    notes: 'phase 5: every merge is a queue entry. drive_pass has no merge action; a
+      close-out, archive, export and housekeeping PR are entries under their own trust
+      rule; a base requiring a forge merge queue, a repo with no queue.ci or glab/tea
+      is queue-held; batch merge drives the same engine in the foreground; _archive
+      and _export_merge no longer merge. Earlier phases: R7, R20, R24, R31, R34, R35'
   - id: wave-queue-live-wave
     capability: wave merge queue
     acceptance: A real wave on super-fr drains through the queue with no PR updates,
