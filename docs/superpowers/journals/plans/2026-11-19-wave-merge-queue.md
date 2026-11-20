@@ -536,3 +536,78 @@ reports the git-answers-cached, scenario-tier and fast-tier rows of main (behind
 ### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
 
 the hold read and write went into queue_exec once (read_hold, push_hold, _hold_write); open, refresh, re-arm, drain and clear all share them, so nothing was duplicated to clean
+
+<!-- fr:journal kind=review scope=plan id=p4-review-1 created=2026-11-20T16:25:17+00:00 phase=4 -->
+### p4-review-1 · review · Phase 4 review — eight in-scope findings, all fixed (phase 4)
+
+An independent reviewer read the hold-handshake diff (da39227..ea991ddcd) against R17–R19, R27, R31,
+§G and §K and AGENTS.md's release invariants. It confirmed every cutting path checks the hold, the
+hold read fails closed, the clear is drained-only and leased on the sha read, credentials stay scoped
+to the jobs holding GH_TOKEN, and the tripwire pin adds exactly push_hold. It raised p4-r1..p4-r8.
+Fixes are 9f6b70339..062bbcb86: every hold write is a merge commit (first parent keeps its spec
+meaning, second the hold it replaces), so each write fast-forwards; a refused hold write is a halt
+with a Need. Full suite after the fixes: 17116 passed, 122 skipped, exit 0.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · refused hold pushes (every later write non-fast-forward) were only a pass line, letting the hold go stale and a refused drained push wedge the repo (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · release.yml ran prepare on every push to fr-hold/**, not only drained (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · publish did not re-check the hold before pushing (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · _finish_and_clear cleared after finish returned EXIT_FLOOR, a failed run (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · fr release status failed open on an unreadable hold (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · AGENTS.md still said two pushes authenticate; the cleared-hold push is a third (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · a naive refreshed stamp raised TypeError reported as a malformed PR record (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-11-20T16:25:17+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · no test for a remote-refused hold push or the race between the free check and the leased write (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: refused hold pushes (every later write non-fast-forward) were only a pass line, letting the hold go stale and a refused drained push wedge the repo (phase 4)
+
+hold writes are merge commits via Checkout.ref_commit(previous=) (driver and release.py), readers take the first parent; a refused write is a queue_halt ("hold write refused") that stops landing with a Need until a write succeeds, and refused drained/cleared writes are Needs; spec R17/§G updated; tests under a no-force-push hook in test_queue_hold.py, planner and release-script tests.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: release.yml ran prepare on every push to fr-hold/**, not only drained (phase 4)
+
+prepare's if runs an fr-hold push only when its head commit starts 'fr-hold: drained'; deletion guard kept; test_release_workflow.py evaluates the expression per case.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: publish did not re-check the hold before pushing (phase 4)
+
+publish re-runs check_hold before push; held prints nothing is pushed and clears nothing; test_release_script.py.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: _finish_and_clear cleared after finish returned EXIT_FLOOR, a failed run (phase 4)
+
+_finish_and_clear clears only on EXIT_OK; docstring fixed; test_a_run_the_floor_check_fails_clears_nothing.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: fr release status failed open on an unreadable hold (phase 4)
+
+_hold_facts returns the unread reason; status reports hold_unknown and "no final can be confirmed"; tests in test_release_status.py.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: AGENTS.md still said two pushes authenticate; the cleared-hold push is a third (phase 4)
+
+AGENTS.md, release.py's docstring and docs/merge-protection.md name the leased cleared-hold push as a third authenticated push; the hold fetch stays credential-free.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: a naive refreshed stamp raised TypeError reported as a malformed PR record (phase 4)
+
+hold_verdict treats a naive or unparseable stamp as an unreadable hold that holds, with a warning; tests in test_release_status.py.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-11-20T16:25:17+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: no test for a remote-refused hold push or the race between the free check and the leased write (phase 4)
+
+test_queue_hold.py covers a remote refusing hold pushes and a writer taking the hold between the check and the lease (lease fails, nothing lands, reported as queue-held naming the other scope).
