@@ -678,13 +678,46 @@ def test_stage_4_under_labels_off_finishes_when_the_label_was_added_by_hand(
     ops_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """p6-r3: the label already on is enough; nothing is written, so labels off cannot refuse."""
-    monkeypatch.setattr("fr.settings.ledger_block", lambda root, kind: "forge.labels is off")
+    monkeypatch.setattr(
+        "fr.settings.ledger_block",
+        lambda root, kind: "forge.labels is off" if kind == "labels" else None,
+    )
     forge = FakeForge(state="MERGED")
     forge.pr["labels"].append("fr-queue:postmerge-done")
     gate, host, tree, forge, *_ = _gate(ops_root, forge=forge)
     result = run(gate)
     assert 4 in result.ran and 4 in _host(ops_root).stages()
     assert not [c for c in forge.calls if c[0] == "labels"]
+
+
+def test_stage_4_writes_the_postmerge_marker_before_the_label(ops_root: Path) -> None:
+    """l-security-r2: the label alone lifts nothing, so the marker comes first."""
+    from fr.triage.approval import postmerge_marker
+
+    forge = FakeForge(state="MERGED")
+    gate, host, tree, forge, *_ = _gate(ops_root, forge=forge)
+    result = run(gate)
+    assert 4 in result.ran
+    assert forge.calls.index(("comment", postmerge_marker(HEAD))) < forge.calls.index(
+        ("labels", (5, ["fr-queue:postmerge-done"], []))
+    )
+
+
+def test_a_marker_is_edited_only_when_it_is_trusted_and_its_own_form(ops_root: Path) -> None:
+    """l-security-r3: a stranger's comment that starts like the marker is never overwritten;
+    the stage posts a new one."""
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    forge.comments.append({"association": "NONE", "id": 1, "body": release_marker("0ld", "0ld")})
+    forge.comments.append(
+        {"association": "OWNER", "id": 2, "body": "see " + release_marker("x", "y")}
+    )
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    run(gate)
+    assert not [c for c in forge.calls if c[0] == "edit_comment"]
+    assert ("comment", release_marker(HEAD, "ab12cd")) in forge.calls
 
 
 def test_a_recorded_stage_2_no_longer_skips_the_wait(ops_root: Path) -> None:

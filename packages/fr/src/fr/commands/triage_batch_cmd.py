@@ -100,6 +100,7 @@ from fr.labels import (
     APPROVED_FR,
     FR_AWAITING_LIVE,
     FR_IN_PROGRESS,
+    QUEUE_POSTMERGE_DONE,
     QUEUE_RELEASE,
     held_gates,
     passed_gates,
@@ -3702,6 +3703,16 @@ class ForgeReadError(Exception):
         self.code = code
 
 
+def _read_comments(client: Any, repo: str, number: int) -> list[dict[str, Any]]:
+    """PR *number*'s comments, or `ForgeReadError` naming the failed read: a marker the
+    queue acts on is never judged absent for want of a read (l-errors-r6)."""
+    try:
+        comments: list[dict[str, Any]] = client.list_issue_comments(repo, number)
+    except Exception as exc:  # noqa: BLE001 — any forge failure skips this settle
+        raise ForgeReadError(f"cannot read the comments of {repo}#{number}: {exc}", code=2) from exc
+    return comments
+
+
 class DefaultBranchUnknown(ForgeReadError):  # noqa: N818 - the spec's name (R13)
     """*repo*'s clone cannot name its default branch because origin cannot answer: the
     fetch, or `checkout.default_branch()`, failed (merge-truth R13, gh#1176). Raised
@@ -6963,10 +6974,9 @@ class _Driver:
                     if isinstance(x, QueueReleaseEvent) and x.entry == ref]  # fmt: skip
             view = {"labels": list(pr.labels or ()), "head_oid": pr.head}
             client = self.client(facts, where)
-            try:  # the stage's marker names what it verified (R26)
-                marker = read_release_marker(client.list_issue_comments(where, pr.number))
-            except Exception:  # noqa: BLE001 — an unreadable comment list: no marker, no release
-                marker = None
+            # the stage's marker names what it verified (R26); an unreadable comment list is a
+            # failed forge read (l-errors-r6), never "no marker"
+            marker = read_release_marker(_read_comments(client, where, pr.number))
             if settle_release(
                 client, partial(writer, where), where, ref,
                 pr.number, mine, view, _say, now=_now(), dry_run=not self.yes,
@@ -6980,10 +6990,14 @@ class _Driver:
                 pr_row = batch_pr(batch, facts) if batch is not None else None
                 if batch is None or pr_row is None:
                     continue
-                view = self.client(facts, repo).pr_view(repo, pr_row.number)
+                client = self.client(facts, repo)
+                view = client.pr_view(repo, pr_row.number)
+                comments: list[dict[str, Any]] | None = None
+                if QUEUE_POSTMERGE_DONE.name in {str(n) for n in view.get("labels") or ()}:
+                    comments = _read_comments(client, repo, pr_row.number)
                 if settle_postmerge_done(
                     partial(writer, repo), QueueEntryRef(batch=key), view,
-                    _say, now=_now(), dry_run=not self.yes,
+                    _say, now=_now(), dry_run=not self.yes, comments=comments,
                 ):  # fmt: skip
                     continue
                 clone = self.path_of(repo)

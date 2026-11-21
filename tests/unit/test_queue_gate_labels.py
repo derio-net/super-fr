@@ -166,15 +166,50 @@ def test_a_dry_run_writes_nothing() -> None:
     assert ok and got == [] and "would record" in said[0]
 
 
-def test_the_postmerge_done_label_is_recorded_once_it_is_there() -> None:
+def test_the_postmerge_done_label_alone_lifts_nothing() -> None:
+    from fr.triage.approval import postmerge_marker
+
     got: list[QueuePostmergeDoneEvent] = []
     said: list[str] = []
+    label = _view("fr-queue:postmerge-done")
     assert not settle_postmerge_done(got.append, ENTRY, _view("gate:devops"), said.append, now=NOW)
-    assert got == []
+    assert not settle_postmerge_done(got.append, ENTRY, label, said.append, now=NOW)
+    assert not settle_postmerge_done(got.append, ENTRY, label, said.append, now=NOW, comments=[])
+    stranger = [{"association": "NONE", "body": postmerge_marker("a" * 40)}]
+    assert not settle_postmerge_done(got.append, ENTRY, label, said.append, now=NOW,
+                                     comments=stranger)  # fmt: skip
+    assert got == [] and any("no marker comment" in s for s in said)
+
+
+def test_the_postmerge_done_label_with_a_trusted_marker_is_recorded_once() -> None:
+    from fr.triage.approval import postmerge_marker
+
+    got: list[QueuePostmergeDoneEvent] = []
+    said: list[str] = []
+    marked = [{"association": "OWNER", "body": postmerge_marker("a" * 40)}]
     assert settle_postmerge_done(got.append, ENTRY, _view("fr-queue:postmerge-done"),
-                                 said.append, now=NOW)  # fmt: skip
+                                 said.append, now=NOW, comments=marked)  # fmt: skip
     assert [e.kind for e in got] == ["queue_postmerge_done"]
     assert settle_postmerge_done(lambda e: got.append(e), ENTRY,
                                  _view("fr-queue:postmerge-done"), said.append, now=NOW,
-                                 dry_run=True)  # fmt: skip
+                                 dry_run=True, comments=marked)  # fmt: skip
     assert len(got) == 1
+
+
+def test_a_marker_only_counts_at_the_start_of_a_trusted_comment() -> None:
+    from fr.triage.approval import has_postmerge_marker, postmerge_marker, release_marker
+
+    quoted = f"> quoting\n{release_marker('a' * 40, 'b' * 8)}"
+    assert read_release(quoted) is None
+    assert read_release(f"  \n{release_marker('a' * 40, 'b' * 8)}") == ("a" * 40, "b" * 8)
+    assert not has_postmerge_marker(
+        [{"association": "OWNER", "body": "see " + postmerge_marker("a")}]
+    )
+    assert has_postmerge_marker([{"association": "MEMBER", "body": postmerge_marker("a")}])
+    assert not has_postmerge_marker([{"association": "CONTRIBUTOR", "body": postmerge_marker("a")}])
+
+
+def read_release(body: str) -> tuple[str, str] | None:
+    from fr.triage.approval import read_release_marker
+
+    return read_release_marker([{"association": "OWNER", "body": body}])

@@ -76,7 +76,7 @@ GATED: dict[str, str] = {
     "fr/src/fr/triage/approval.py::settle_release":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::ensure_approval_label": "_labels_off: client_policy(labels)",
-    "fr/src/fr/ops/gate.py::write_release_marker":
+    "fr/src/fr/ops/gate.py::_write_marker":
         "ledger_block(primary, comments): forge.comments off refuses with the marker to post",
     "fr/src/fr/ops/gate.py::add_queue_label":
         "ledger_block(primary, labels): forge.labels off refuses with the label to add by hand",

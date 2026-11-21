@@ -358,6 +358,12 @@ class DriveCheckout:
             raise GitError("a fake clone has no patch-id")
         return self.patch_ids[head]
 
+    # head -> whether it follows the approved head by diff-neutral moves only (default yes)
+    clean: dict[str, bool] = {}  # noqa: RUF012 - replaced per instance by a test
+
+    def clean_succession(self, approved: str, head: str) -> bool:
+        return self.clean.get(head, True)
+
     def refresh_remote_branch(self, branch: str) -> None:
         self.refreshed += 1
 
@@ -4521,16 +4527,50 @@ def test_the_driver_holds_an_unlabelled_green_pr_and_says_it_awaits_approval(
 def test_a_session_push_after_labelling_voids_the_approval(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
+    """l-tests-r3: a code change pushed to a queued PR's branch voids its approval: the label
+    comes off, the void is recorded, and the entry is out of the queue."""
     _pr_open(world, tmp_path)
+    checkout.patch_ids = {"sha-101": "p1", "sha-session": "p2"}
     world.checks[101] = [{"name": "lint", "bucket": "fail"}]
     _drive(tmp_path, "--once", "--yes")  # records the approval at sha-101; CI is red
     world.prs[101]["head_oid"] = "sha-session"
     world.checks[101] = [{"name": "lint", "bucket": "pass"}]
     code, out = _drive(tmp_path, "--once", "--yes")
-    assert "approval of PR #101 at sha-101 voided: head moved to sha-session" in out
+    assert "approval of PR #101 at sha-101 voided: its diff changed at sha-session" in out
     assert "label 101" in world.calls and world.prs[101]["labels"] == []
-    assert world.merged == []
+    assert world.merged == [] and not _opened(world)  # nothing queued behind it
     assert _approvals(tmp_path, "b1")[-1].voided_at == "sha-session"
+    assert "approved-fr" not in world.prs[101]["labels"]
+
+
+def test_a_session_push_the_succession_check_refuses_voids_though_the_patch_id_matches(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """l-security-r1 at the drive: the same patch-id at a head that moved a hunk."""
+    _pr_open(world, tmp_path)
+    checkout.patch_ids = {"sha-101": "p1", "sha-session": "p1"}
+    checkout.clean = {"sha-session": False}
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "approval of PR #101 at sha-101 voided" in out and world.prs[101]["labels"] == []
+
+
+def test_an_unreadable_patch_id_keeps_the_label_and_holds_the_entry(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """l-errors-r4: git that cannot say never removes `approved-fr`."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "held this pass, label kept" in out and "voided" not in out
+    assert world.prs[101]["labels"] == ["approved-fr"] and not _opened(world)
+    assert _approvals(tmp_path, "b1")[-1].voided_at is None
 
 
 def test_a_session_push_that_keeps_the_patch_id_keeps_the_approval(
@@ -4606,6 +4646,7 @@ def test_the_pass_that_voids_an_approval_leaves_facts_and_board_without_the_labe
     from fr.triage.views import needs_you
 
     _pr_open(world, tmp_path)
+    checkout.patch_ids = {"sha-101": "p1", "sha-session": "p2"}
     world.checks[101] = [{"name": "lint", "bucket": "fail"}]
     _drive(tmp_path, "--once", "--yes")  # records the approval at sha-101
     world.prs[101]["head_oid"] = "sha-session"

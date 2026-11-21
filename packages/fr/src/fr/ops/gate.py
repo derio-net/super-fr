@@ -788,10 +788,26 @@ def add_queue_label(gate: Gate, label: LabelDef) -> None:
 
 def write_release_marker(gate: Gate, head: str, patch_id: str) -> None:
     """Write (or update in place) the marker comment on the PR naming what stage 2 verified
-    (R26): the head and patch-id the driver records the release at. The ledger's `comments`
-    setting decides, as it does for the label."""
-    from fr.settings import SettingsError, ledger_block
+    (R26): the head and patch-id the driver records the release at."""
     from fr.triage.approval import RELEASE_MARKER_PREFIX, release_marker
+
+    _write_marker(gate, RELEASE_MARKER_PREFIX, release_marker(head, patch_id))
+
+
+def write_postmerge_marker(gate: Gate, head: str) -> None:
+    """Write the marker comment stage 4 leaves on the merged PR (R26, l-security-r2): the
+    driver lifts the barrier only with it and the label together."""
+    from fr.triage.approval import POSTMERGE_MARKER_PREFIX, postmerge_marker
+
+    _write_marker(gate, POSTMERGE_MARKER_PREFIX, postmerge_marker(head))
+
+
+def _write_marker(gate: Gate, prefix: str, body: str) -> None:
+    """Post *body*, or edit in place the last comment that is its own form (it starts with
+    *prefix*) AND from a trusted author (l-security-r3: never overwrite a stranger's
+    comment). The ledger's `comments` setting decides, as it does for the label."""
+    from fr.settings import SettingsError, ledger_block
+    from fr.triage.claims import trusted_author
 
     t = gate.target
     try:
@@ -801,13 +817,13 @@ def write_release_marker(gate: Gate, head: str, patch_id: str) -> None:
     if off is not None:
         raise StageFailed(
             f"the queue reads what the stage verified from a comment on PR #{t.pr}, and {off}: "
-            f"post `{release_marker(head, patch_id)}` on it by hand if the queue is to act"
+            f"post `{body}` on it by hand if the queue is to act"
         )
-    body = release_marker(head, patch_id)
     try:
         mine = [
             c for c in gate.forge.list_issue_comments(t.repo, t.pr)
-            if RELEASE_MARKER_PREFIX in str(c.get("body") or "") and c.get("id")
+            if str(c.get("body") or "").lstrip().startswith(prefix) and c.get("id")
+            and trusted_author(c, frozenset())
         ]  # fmt: skip
         if mine:
             try:
@@ -819,7 +835,7 @@ def write_release_marker(gate: Gate, head: str, patch_id: str) -> None:
     except UnsupportedForgeOperation as exc:
         raise StageFailed(f"{exc}: post `{body}` on PR #{t.pr} by hand") from exc
     except Exception as exc:  # noqa: BLE001 — the forge's refusal is the operator's to read
-        raise StageFailed(f"the forge refused the release marker on PR #{t.pr}: {exc}") from exc
+        raise StageFailed(f"the forge refused the marker on PR #{t.pr}: {exc}") from exc
 
 
 def _release_marker_now(gate: Gate) -> tuple[str, str] | None:
@@ -941,7 +957,9 @@ def stage_4(gate: Gate) -> None:
     """Post-merge ops. Their completion lifts the queue's barrier (R26): the label
     `fr-queue:postmerge-done`, which the driver settles into `queue_postmerge_done`."""
     apply_phase(gate, "post-merge")
-    labels = {str(n) for n in gate.view(fresh=True).get("labels") or ()}
+    view = gate.view(fresh=True)
+    write_postmerge_marker(gate, str(view.get("head_oid") or ""))  # first: label implies marker
+    labels = {str(n) for n in view.get("labels") or ()}
     if QUEUE_POSTMERGE_DONE.name not in labels:  # added by hand under `forge.labels: off`
         add_queue_label(gate, QUEUE_POSTMERGE_DONE)
     gate.finish(gate.tree(), 4, "post-merge ops closed")

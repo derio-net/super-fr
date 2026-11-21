@@ -380,7 +380,8 @@ RELEASE_MARKER_PREFIX = "<!-- fr-queue:release"
 _RELEASE_MARKER = re.compile(
     r"<!-- fr-queue:release head=(?P<head>[0-9a-f]+) patch-id=(?P<patch>[0-9a-f]*) -->"
 )
-_TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+POSTMERGE_MARKER_PREFIX = "<!-- fr-queue:postmerge-done"
+_POSTMERGE_MARKER = re.compile(r"<!-- fr-queue:postmerge-done head=(?P<head>[0-9a-f]*) -->")
 
 
 def release_marker(head: str, patch_id: str) -> str:
@@ -389,17 +390,41 @@ def release_marker(head: str, patch_id: str) -> str:
     return f"{RELEASE_MARKER_PREFIX} head={head} patch-id={patch_id} -->"
 
 
+def postmerge_marker(head: str) -> str:
+    """The comment stage 4 writes on the merged PR (R26, l-security-r2): the label
+    `fr-queue:postmerge-done` alone lifts nothing, the driver records the barrier lifted only
+    with this marker from a trusted author beside it."""
+    return f"{POSTMERGE_MARKER_PREFIX} head={head} -->"
+
+
+def _trusted_markers(
+    comments: Sequence[dict[str, Any]], pattern: re.Pattern[str]
+) -> list[re.Match[str]]:
+    """The marker of each comment by a repo owner, member or collaborator (the one rule
+    `claims.trusted_author` states) whose body STARTS with it, oldest first: a marker quoted
+    or buried in prose is no marker (l-security-r3)."""
+    from fr.triage.claims import trusted_author
+
+    found = []
+    for c in comments:
+        if not trusted_author(c, frozenset()):
+            continue
+        m = pattern.match(str(c.get("body") or "").lstrip())
+        if m is not None:
+            found.append(m)
+    return found
+
+
 def read_release_marker(comments: Sequence[dict[str, Any]]) -> tuple[str, str] | None:
     """The `(head, patch_id)` of the last `fr-queue:release` marker comment written by a
-    repo owner, member or collaborator, or None."""
-    found: tuple[str, str] | None = None
-    for c in comments:
-        if str(c.get("association") or "") not in _TRUSTED_ASSOCIATIONS:
-            continue
-        m = _RELEASE_MARKER.search(str(c.get("body") or ""))
-        if m is not None:
-            found = (m["head"], m["patch"])
-    return found
+    repo owner, member or collaborator, at the start of its body, or None."""
+    found = _trusted_markers(comments, _RELEASE_MARKER)
+    return (found[-1]["head"], found[-1]["patch"]) if found else None
+
+
+def has_postmerge_marker(comments: Sequence[dict[str, Any]]) -> bool:
+    """Whether a trusted comment carries stage 4's `fr-queue:postmerge-done` marker."""
+    return bool(_trusted_markers(comments, _POSTMERGE_MARKER))
 
 
 def settle_release(
@@ -492,11 +517,18 @@ def settle_postmerge_done(
     *,
     now: datetime,
     dry_run: bool = False,
+    comments: Sequence[dict[str, Any]] | None = None,
 ) -> bool:
     """Settle `fr-queue:postmerge-done` on a landed *entry*'s merged PR into a
-    `queue_postmerge_done` (R26): whether the label was there. Recorded once; the caller
-    asks only for entries with none."""
+    `queue_postmerge_done` (R26): whether the barrier is lifted. It needs the label AND
+    stage 4's marker comment from a trusted author in *comments* (l-security-r2: a label
+    anyone with triage rights can add is not the stage's word); None *comments* (unread)
+    lifts nothing. Recorded once; the caller asks only for entries with none."""
     if QUEUE_POSTMERGE_DONE.name not in {str(n) for n in view.get("labels") or ()}:
+        return False
+    if comments is None or not has_postmerge_marker(comments):
+        say(f"{entry_key(entry)} carries {QUEUE_POSTMERGE_DONE.name} but no marker comment "
+            "from the DevOps stage: the barrier stays; run `fr ops gate` for its run")  # fmt: skip
         return False
     if dry_run:
         say(f"would record the post-merge ops of {entry_key(entry)} as done")
