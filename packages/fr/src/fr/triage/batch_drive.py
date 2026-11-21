@@ -1557,7 +1557,7 @@ def _member_reports(
         if not approved:
             awaiting.append(bid)
             continue
-        if pre_merge_held(pr.labels):  # fr-ops R14: the DevOps stage merges it
+        if pre_merge_held(pr.labels):  # fr-ops R14: held until the DevOps stage released it
             awaiting.append(bid)
             actions.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
             continue
@@ -1752,9 +1752,10 @@ def _queue_reports(plan: QueuePlan) -> list[Action]:
 
 
 def drive_pass(snap: Snapshot) -> Pass:
-    """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
-    then report duplicate candidates of newly finished waves — in that order, so a slot a
-    merge frees is used in the same pass."""
+    """One pass: report foreign PRs, plan the queue and the close-outs, archive, dispatch,
+    close sessions, then report duplicate candidates of newly finished waves — in that
+    order. A landing the queue makes frees its slots on a LATER pass (the executor runs
+    after the plan), never the pass that made it."""
     actions: list[Action] = _claim_actions(snap)
     stages = dict(snap.stages)
     chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)

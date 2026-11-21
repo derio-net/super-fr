@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?
@@ -93,7 +93,8 @@ driver records the release at the diff that stage 2 verified, which stage 2 name
 comment. A push after stage 2 is no release. Then it lands the PR as the last entry of its
 push, after the entries ahead of it. It builds and tests the entries
 behind it meanwhile, but lands nothing behind it. It waits until stage 4 adds
-`fr-queue:postmerge-done`. After the PR lands, the driver adds a Needs-you entry that names
+`fr-queue:postmerge-done` and a marker comment that a trusted author wrote; the label alone
+lifts nothing. After the PR lands, the driver adds a Needs-you entry that names
 `fr ops gate --run <id>`. Run it again: it resumes at stage 3. If someone pushes to the PR
 after the release, the diff changes, so fr removes the label. Run the command again to
 release the new diff.

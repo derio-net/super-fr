@@ -41,7 +41,7 @@ and land it by its own pull request, not on the feature branch.
 | 1 | Refuses an ops gap (a devops-gated run with command steps and no op, no `none:`), reading the PR head, or the default branch's tip once merged; then brings up the ops workspace `chore/ops-<slug>` from the PR head (from the default branch once the PR merged) on the ops profile, asks you to trust the op set when it changed (`fr ops trust`, on the host), then runs pre-merge status and applies each open op after its own confirmation |
 | 2 | Posts a marker comment naming the head and diff it verified, then adds the label `fr-queue:release`, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state. It merges nothing: the wave merge queue lands the PR as the last entry of its push (a repo with no `queue:` in `.fr/triage.yaml` has none: merge the PR by hand), and the run stops until the forge reads it merged; the driver then names `fr ops gate --run <id>` under Needs you, which resumes at stage 3 |
 | 3 | `fr isolation verify-merge`, rebases the ops branch onto the default branch, runs every `ready:` |
-| 4 | Post-merge status and apply, then the label `fr-queue:postmerge-done`, which lifts the queue's barrier (nothing lands behind the PR until then) |
+| 4 | Post-merge status and apply, then a marker comment and the label `fr-queue:postmerge-done`, which together lift the queue's barrier (nothing lands behind the PR until then) |
 | 5 | Probes each `(op: <id>)` step, asks for the others' outcome, and records it (`fr closeout outcome`) |
 | 6 | `fr gate pass --gate devops --run <id>` from the ops workspace |
 | 7 | Keeps `gate:tester` and lists the steps the Tester gate owns |

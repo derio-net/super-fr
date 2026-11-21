@@ -79,7 +79,10 @@ def entry_comments(
             position += 1
             combo = next((c for c in rep.combos.values() if key in c.chain), None) if rep else None
             if state == "barrier":
-                text = f"queued at position {position} (a DevOps barrier: it lands alone)"
+                text = (
+                    f"queued at position {position} "
+                    "(a DevOps barrier: it lands as the last entry of its push)"
+                )
             elif state == "building" or combo is None:
                 text = f"queued at position {position}"
             else:
