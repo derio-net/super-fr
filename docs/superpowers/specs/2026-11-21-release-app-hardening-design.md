@@ -211,7 +211,8 @@ After this change:
   narrow this to reviewed code. That is a separate decision.
 - **What a leak allows.** Until the key is revoked: pushing a commit that skips
   CI onto `main`, creating tags and releases, writing issues. Revoking it in the
-  app's settings ends that at once.
+  app's settings stops new tokens at once; a token already minted from it
+  stays valid until it expires, at most 1 hour.
 
 ## Verification
 
@@ -239,7 +240,8 @@ merge; the rest after it.
 2. Rerun it: every step prints `ok` or the same wait, and nothing is written.
 3. Merge the PR. The merge's Release run passes `publish`, and the new `v*`
    tag's commit has a push-event CI run triggered by `derio-fr-automation[bot]`.
-   (If you unset the variable in step 1, rerun the script first. It sets the
+   (If the variable is not set, because you unset it in step 1 or the repo never
+   had it, rerun the script first. It sets the
    variable, and the next release goes out as the app.)
 4. Push a throwaway branch with a workflow that declares `environment: release`
    and prints whether the secret is empty. The job is refused by the branch

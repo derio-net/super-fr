@@ -90,7 +90,8 @@ The app is `derio-fr-automation`. This is what it can do, and where its key live
   They can push a commit that skips CI onto `main`.
   They can create tags and releases.
   They can write issues.
-  Revoking the key in the app's settings ends all of it at once.
+  Deleting the key in the app's settings stops new tokens at once. A token already
+  minted from it stays valid until it expires, at most 1 hour.
 
 The release token is minted per job and revoked when the job ends.
 It is never persisted in the checkout's git config.
@@ -131,7 +132,7 @@ If you decline an optional cleanup, the script goes on.
     - It removes the app's bypass from `protect main`. When `protect main` still holds the old `ci-ok` rule, it keeps the bypass there and leaves the move to the require step (step 6).
     - It creates `protect release tags`.
     - It says that the require step waits for a release that the app pushed.
-5. **Merge the PR.** The Release run passes `publish`. Confirm the new `v*` tag's commit has a push-event CI run that `derio-fr-automation[bot]` triggered. If you unset the variable in step 4, run the script again first. It sets the variable. The next release goes out as the app.
+5. **Merge the PR.** The Release run passes `publish`. Confirm the new `v*` tag's commit has a push-event CI run that `derio-fr-automation[bot]` triggered. If the variable is not set (you unset it in step 4, or the repo never had it), run the script again first. It sets the variable now that `main` declares the environment. The next release goes out as the app.
 6. **Run the script again.** The require step creates `require ci-ok`.
     It holds the `ci-ok` check with "require branches to be up to date".
     The app is its only bypass actor.
@@ -167,7 +168,7 @@ Roll back one step at a time, in the reverse order.
 
 ## Revoke or rotate a leaked key
 
-1. In the web UI, open the app's settings. Delete the leaked private key. This ends its use at once.
+1. In the web UI, open the app's settings. Delete the leaked private key. No new token can be minted with it. A token already minted stays valid for at most 1 hour.
 2. Generate a new private key. Download the `.pem` file.
 3. Run `scripts/setup-release-app.sh --rotate-key`. It proves the new key and replaces the environment secret.
 4. Read the audit log of the org and the repo. Look for pushes, tags and releases by the app during the leak.
