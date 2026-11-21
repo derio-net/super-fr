@@ -320,3 +320,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1609.
 ### l-tests-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1610] · resolves l-tests-r5: release.yml header test is substring-only
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1610.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved-2 created=2026-11-21T13:00:44+00:00 state=open resolves=l-errors-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1611 -->
+### l-errors-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1611] · resolves l-errors-r6: environment: release fails generically on another ref or auto-creates an unprotected environment
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1611.
