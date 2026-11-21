@@ -1,0 +1,97 @@
+schema_version: 12
+run: 2026-11-21-feat-release-app-hardening
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+- kind: finding
+  id: p1-r1
+  title: setup-release-app.sh env/repo secret checks turned any gh failure into 'absent' via && echo 1
+    || echo 0
+  body: setup-release-app.sh env/repo secret checks turned any gh failure into 'absent' via && echo 1
+    || echo 0
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r2
+  title: R8 said the no-key path asks for a confirm; the code (rightly) only prints the settings URL
+  body: R8 said the no-key path asks for a confirm; the code (rightly) only prints the settings URL
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r3
+  title: --dry-run skipped the require step's variable wait and printed a POST a real run would not make
+  body: --dry-run skipped the require step's variable wait and printed a POST a real run would not make
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r4
+  title: The variable-never-set test only exercised the key step's early exit; tangled and/or assertion;
+    R14's variable-wait exit 0 lacked spec wording
+  body: The variable-never-set test only exercised the key step's early exit; tangled and/or assertion;
+    R14's variable-wait exit 0 lacked spec wording
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r5
+  title: HUP/QUIT untrapped; make_jwt under || ran with set -e off, so a signing failure became a misleading
+    HTTP 401
+  body: HUP/QUIT untrapped; make_jwt under || ran with set -e off, so a signing failure became a misleading
+    HTTP 401
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r6
+  title: main_release_declares_env grep missed quoted/commented/mapping forms and accepted one job
+  body: main_release_declares_env grep missed quoted/commented/mapping forms and accepted one job
+  review_scope: in
+  phase: 1
+- kind: finding
+  id: p1-r7
+  title: Earlier features' acceptance notes still name configure-main-protection
+  body: Earlier features' acceptance notes still name configure-main-protection
+  review_scope: out
+  phase: 1
+- kind: review
+  id: p1-review-1
+  title: 'phase 1 review: 7 findings (6 in scope, 1 out)'
+  body: Reviewer read script, tests, docs, workflow and fragment against R1-R15. No critical findings;
+    secret handling sound. p1-r1..p1-r6 fixed with tests; p1-r7 out of scope. Suggested lens live-api-fidelity
+    is not an effective lens; the tests lens covers stub fidelity.
+  phase: 1
+resolves:
+- id: p1-r1
+  state: fixed
+  body: secret_present runs in the caller's shell, stops with the gh error on any failure, and sets PRESENT
+    from jq under set -e; test_a_failing_secret_list_stops_the_script_and_is_never_read_as_absent covers
+    both lists.
+- id: p1-r2
+  state: fixed
+  body: Spec R8 reworded (tells the operator to confirm there; asks nothing, so a rerun stays non-interactive);
+    the test renamed to test_an_existing_environment_secret_is_ok_and_points_at_the_installation_to_confirm
+    and its row ref updated.
+- id: p1-r3
+  state: fixed
+  body: Dropped the dry-run condition; test_dry_run_require_waits_on_the_variable_like_a_real_run.
+- id: p1-r4
+  state: fixed
+  body: 'Added test_a_declined_key_store_never_sets_the_variable and linked it on setup-script-variable-last;
+    untangled the half-done assertion; R14 now states that a waiting variable makes require wait (real
+    run and dry-run). The guard in step_variable is defensive: no path reaches it without the secret.'
+- id: p1-r5
+  state: fixed
+  body: Traps for HUP and QUIT added; make_jwt returns non-zero on every failed part or empty segment;
+    test_a_key_openssl_cannot_sign_with_is_refused_before_any_curl_call.
+- id: p1-r6
+  state: fixed
+  body: An awk parse accepts the scalar form (quoted or not, trailing comment) and the mapping form's
+    name:, and requires both prepare and publish; parametrised form test and test_the_variable_waits_while_only_one_app_token_job_declares_the_environment.
+- id: p1-r7
+  state: out-of-scope
+  body: 'Historical notes on rows earlier features merged: main-protection-script is retired by amendment
+    here and ci-ok-required-on-main''s note is amended in this feature''s fragment; the original lines
+    stay as the fold''s history and are not caused by this change.'
+evidence:
+  review: p1-review-1
+  reviewer: a833e2eea43e8028d
+  model: claude-opus-5-5
