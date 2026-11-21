@@ -75,9 +75,14 @@ rows:
       secret exists, and offers to undo a variable set without one
     origin:
     - spec:2026-11-21-release-app-hardening#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_half_done_state_is_named_and_the_unset_is_offered
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_waits_while_mains_release_yml_lacks_the_environment
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_is_set_to_the_installations_app_id_once_both_hold
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_is_never_set_without_the_environment_secret
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
     verify: none
   - id: setup-script-rulesets
     capability: release
