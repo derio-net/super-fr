@@ -28,7 +28,7 @@ from fr.triage.model import (
 
 Outcome = Literal["landed", "ejected", "deferred"]
 
-REPORT_HEADING = "## Wave merge queue report"
+REPORT_TITLE = "## Wave merge queue report"
 """The PR body section's heading. `review_reasons` reads only the body's `Closes` lines, so a
 section without one is ignored by it (R28)."""
 
@@ -164,7 +164,7 @@ def render_markdown(reports: Sequence[WaveReport]) -> str:
     """The report as a Markdown section for a PR body: one table a wave. "" when empty."""
     if not reports:
         return ""
-    lines = [REPORT_HEADING, ""]
+    lines = [REPORT_TITLE, ""]
     for report in reports:
         which = "between waves" if report.wave is None else f"wave {report.wave}"
         header = "| PR | outcome | CI cycles | wall time | approvals | detail |"

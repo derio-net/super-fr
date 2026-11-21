@@ -62,6 +62,9 @@ GATED: dict[str, str] = {
         "callers dispatch_batch / adopt_batch run _tracking_gate (labels, comments) first",
     "fr/src/fr/commands/triage_batch_cmd.py::adopt_batch._comment":
         "adopt_batch runs _tracking_gate (labels, comments) before any forge call",
+    "fr/src/fr/triage/queue_comment.py::upsert":
+        "queue_comment.sync(allowed=...): the driver's _queue_comments returns before any "
+        "write unless _Driver.forge_off(comments) is None",
     "fr/src/fr/commands/triage_batch_cmd.py::_Driver._label_awaiting":
         "_Driver.forge_off(labels): the checkout's policy, else the forge-read policy",
     "fr/src/fr/commands/triage_batch_cmd.py::_Driver._collected_merged":
