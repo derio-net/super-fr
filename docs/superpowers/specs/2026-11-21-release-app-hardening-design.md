@@ -78,8 +78,9 @@ it store the file as the `release` environment secret `FR_AUTOMATION_APP_KEY`,
 from the file on stdin, and offer to delete the file. It is a no-op when the
 environment secret exists, unless the operator asks to replace it
 (`--rotate-key`). With no key at hand, the repository list is not checked. The
-script then prints the installation's settings URL and asks the operator to
-confirm that only this repo is selected.
+script then prints the installation's settings URL and tells the operator to
+confirm there that only this repo is selected. It asks nothing, so a rerun
+stays non-interactive (R4).
 
 R9. The script never prints, logs or passes in argv the key, the JWT or the
 installation token. The key reaches only `openssl` (by path) and `gh secret
@@ -122,7 +123,8 @@ It runs only when all of these hold: the environment secret and the variable
 exist, "protect main" has no bypass actor (or is in R12's deferred state), and
 the newest `v*` tag's commit has a push-event run triggered by the app. When
 the release check fails, the step says what it waits for and the script exits
-0. `--force` skips only the release check. In R12's deferred state, the step
+0. So does a variable that the variable step reported as waiting (R11): the
+require step waits with it, in a real run and under `--dry-run` alike. `--force` skips only the release check. In R12's deferred state, the step
 creates "require ci-ok" first. Then, in one write, it removes the
 `required_status_checks` rule and the app's bypass from "protect main".
 

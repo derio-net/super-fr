@@ -68,8 +68,12 @@ case "$*" in
   "api -X DELETE repos/o/r/environments/release/deployment-branch-policies/"*)
     s="$*"; id="${s##*/}"
     jq --argjson id "$id" 'map(select(.id != $id))' "$d/policies.json" > "$d/p.tmp" && mv "$d/p.tmp" "$d/policies.json" ;;
-  "secret list --env release --repo o/r --json name") cat "$d/secrets_env.json" ;;
-  "secret list --repo o/r --json name") cat "$d/secrets_repo.json" ;;
+  "secret list --env release --repo o/r --json name")
+    [ -f "$d/secrets_env.fail" ] && { echo "HTTP 403: Resource not accessible" >&2; exit 1; }
+    cat "$d/secrets_env.json" ;;
+  "secret list --repo o/r --json name")
+    [ -f "$d/secrets_repo.fail" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+    cat "$d/secrets_repo.json" ;;
   "secret set FR_AUTOMATION_APP_KEY --env release --repo o/r")
     sha256sum_="$(cat | openssl dgst -sha256 | awk '{print $NF}')"
     echo "$sha256sum_" > "$d/env_secret.sha"
@@ -256,6 +260,7 @@ def sandbox(tmp_path: Path) -> Path:
     _j(tmp_path, "variables.json", [{"name": "FR_AUTOMATION_APP_ID", "value": str(APP_ID)}])
     (d / "release_yml.txt").write_text(
         "jobs:\n  prepare:\n    environment: release\n    runs-on: x\n"
+        "  publish:\n    environment: release\n    runs-on: x\n"
     )
     _j(tmp_path, "rulesets.json", [protect_main(), tag_ruleset(), require_ruleset()])
     _j(
@@ -649,7 +654,7 @@ def test_a_declined_secret_write_revokes_the_token_and_stops(sandbox: Path, key_
     assert (sandbox / "stub" / "revoked.log").exists()
 
 
-def test_an_existing_environment_secret_is_ok_and_asks_to_confirm_the_installation(
+def test_an_existing_environment_secret_is_ok_and_points_at_the_installation_to_confirm(
     sandbox: Path,
 ) -> None:
     r = run(sandbox)
@@ -692,11 +697,8 @@ def test_a_repository_secret_is_not_offered_before_the_environment_secret_exists
 def test_the_half_done_state_is_named_and_the_unset_is_offered(sandbox: Path) -> None:
     _j(sandbox, "secrets_env.json", [])
     r = run(sandbox, "--dry-run")
-    assert (
-        "half-done" in r.stdout
-        and "releases fail" in r.stdout.lower()
-        or "Releases fail" in r.stdout
-    )
+    assert "half-done" in r.stdout
+    assert "releases fail" in r.stdout.lower()
     assert "would offer: unset FR_AUTOMATION_APP_ID" in r.stdout
 
 
@@ -724,6 +726,79 @@ def test_the_variable_is_never_set_without_the_environment_secret(sandbox: Path)
     r = run(sandbox, stdin=answers(""))  # the key step reads an empty path and stops
     assert r.returncode != 0
     assert not any(c.startswith("variable set") for c in calls(sandbox))
+
+
+def test_a_declined_key_store_never_sets_the_variable(sandbox: Path, key_pem: Path) -> None:
+    _j(sandbox, "secrets_env.json", [])
+    _j(sandbox, "variables.json", [])
+    r = run(sandbox, stdin=answers(str(key_pem), "n"))
+    assert r.returncode != 0
+    assert not any(c.startswith(("secret set", "variable set")) for c in calls(sandbox))
+
+
+@pytest.mark.parametrize("which", ["secrets_env.fail", "secrets_repo.fail"])
+def test_a_failing_secret_list_stops_the_script_and_is_never_read_as_absent(
+    sandbox: Path, which: str
+) -> None:
+    (sandbox / "stub" / which).write_text("")
+    r = run(sandbox, stdin=answers("y", "y", "y"))
+    assert r.returncode != 0
+    assert "error: gh secret list" in r.stderr
+    assert "releases fail" not in r.stdout.lower()  # never read as the half-done state
+    assert "path to the app private key" not in r.stdout  # nor as a missing key
+    assert writes(sandbox) == []
+
+
+def test_a_key_openssl_cannot_sign_with_is_refused_before_any_curl_call(sandbox: Path) -> None:
+    _no_secret_state(sandbox)
+    bad = sandbox / "bad.pem"
+    bad.write_text("-----BEGIN PRIVATE KEY-----\nbm90IGEga2V5\n-----END PRIVATE KEY-----\n")
+    r = run(sandbox, stdin=answers(str(bad)))
+    assert r.returncode != 0 and "could not sign" in r.stderr
+    assert not (sandbox / "stub" / "curl_calls.log").exists()
+    assert writes(sandbox) == []
+
+
+@pytest.mark.parametrize(
+    "yml",
+    [
+        "jobs:\n  prepare:\n    environment: 'release'  # key\n  publish:\n    environment: \"release\"\n",
+        "jobs:\n  prepare:\n    environment:\n      name: release\n  publish:\n    environment: release\n",
+    ],
+    ids=["quoted-with-comment", "mapping-form"],
+)
+def test_the_variable_accepts_every_form_of_the_environment_on_both_jobs(
+    sandbox: Path, yml: str
+) -> None:
+    _j(sandbox, "variables.json", [])
+    (sandbox / "stub" / "release_yml.txt").write_text(yml)
+    r = run(sandbox, stdin=answers("y"))
+    assert r.returncode == 0, r.stderr
+    assert writes(sandbox) == [f"variable set FR_AUTOMATION_APP_ID --body {APP_ID} --repo o/r"]
+
+
+def test_the_variable_waits_while_only_one_app_token_job_declares_the_environment(
+    sandbox: Path,
+) -> None:
+    _j(sandbox, "variables.json", [])
+    (sandbox / "stub" / "release_yml.txt").write_text(
+        "jobs:\n  prepare:\n    environment: release\n  publish:\n    runs-on: x\n"
+    )
+    r = run(sandbox)
+    assert r.returncode == 0, r.stderr
+    assert "waits: main's release.yml" in r.stdout
+    assert writes(sandbox) == []
+
+
+def test_dry_run_require_waits_on_the_variable_like_a_real_run(sandbox: Path) -> None:
+    _j(sandbox, "variables.json", [])
+    _j(sandbox, "rulesets.json", [protect_main(), tag_ruleset()])
+    (sandbox / "stub" / "release_yml.txt").write_text("jobs: {}\n")
+    r = run(sandbox, "--dry-run")
+    assert r.returncode == 0, r.stderr
+    assert "waits: FR_AUTOMATION_APP_ID is not set yet" in r.stdout
+    step7 = r.stdout.split("== 7 require ==")[1]
+    assert not any(line.startswith("would:") for line in step7.splitlines())
 
 
 def test_the_variable_waits_while_mains_release_yml_lacks_the_environment(sandbox: Path) -> None:

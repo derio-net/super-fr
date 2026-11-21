@@ -91,15 +91,19 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 129' HUP
+trap 'exit 131' QUIT
 
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
 make_jwt() { # make_jwt KEYPATH
   local now h p s
   now="$(date +%s)"
-  h="$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)"
-  p="$(printf '{"iat":%s,"exp":%s,"iss":%s}' $((now - 60)) $((now + 540)) "$APP_ID" | b64url)"
-  s="$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -sign "$1" | b64url)"
+  # Called under `||`, where set -e is off: every failure returns explicitly.
+  h="$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)" || return 1
+  p="$(printf '{"iat":%s,"exp":%s,"iss":%s}' $((now - 60)) $((now + 540)) "$APP_ID" | b64url)" || return 1
+  s="$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -sign "$1" 2>/dev/null | b64url)" || return 1
+  [ -n "$h" ] && [ -n "$p" ] && [ -n "$s" ] || return 1
   printf '%s.%s.%s' "$h" "$p" "$s"
 }
 
@@ -169,13 +173,16 @@ APP_ID="" INST_ID=""
 ENV_EXISTS=0 ENV_SECRET=0 VAR_VAL="" VAR_WAIT=0
 MAIN_ID="" MAIN_JSON="" MAIN_BYPASS=0 MAIN_DEFERRED=0 ASSUME_MAIN_CLEAN=0
 
-env_secret_present() {
-  gh secret list --env "$ENV_NAME" --repo "$repo" --json name </dev/null \
-    | jq -e --arg n "$SECRET_NAME" 'any(.[]; .name == $n)' >/dev/null && echo 1 || echo 0
-}
-repo_secret_present() {
-  gh secret list --repo "$repo" --json name </dev/null \
-    | jq -e --arg n "$SECRET_NAME" 'any(.[]; .name == $n)' >/dev/null && echo 1 || echo 0
+# secret_present [--env NAME]: sets PRESENT to 1 or 0. Any gh or jq failure stops
+# the script (in this shell, never a subshell): an error is never read as "absent".
+PRESENT=0
+secret_present() {
+  local out
+  if ! out="$(gh secret list "$@" --repo "$repo" --json name </dev/null 2>"$TMPD/err")"; then
+    echo "error: gh secret list $* failed: $(head -c 300 "$TMPD/err")" >&2
+    exit 1
+  fi
+  PRESENT="$(jq -r --arg n "$SECRET_NAME" 'if any(.[]; .name == $n) then 1 else 0 end' <<<"$out")"
 }
 var_value() {
   gh variable list --repo "$repo" --json name,value </dev/null \
@@ -189,7 +196,8 @@ preflight() {
   if read_json "repos/$repo/environments/$ENV_NAME"; then
     ENV_EXISTS=1
     ENV_JSON="$READ_OUT"
-    ENV_SECRET="$(env_secret_present)"
+    secret_present --env "$ENV_NAME"
+    ENV_SECRET="$PRESENT"
   else
     ENV_EXISTS=0
     ENV_JSON=""
@@ -356,7 +364,9 @@ step_key() {
     ENV_SECRET=1
     offer "delete the key file" remove_key_file
   fi
-  if [ "$ENV_SECRET" -eq 1 ] && [ "$(repo_secret_present)" -eq 1 ]; then
+  PRESENT=0
+  if [ "$ENV_SECRET" -eq 1 ]; then secret_present; fi
+  if [ "$PRESENT" -eq 1 ]; then
     note "leak path: a repository-level secret $SECRET_NAME exists; any branch workflow can read it."
     offer "delete the repository-level secret $SECRET_NAME" gh secret delete "$SECRET_NAME" --repo "$repo"
   fi
@@ -368,7 +378,19 @@ main_release_declares_env() {
   local out
   read_json "repos/$repo/contents/.github/workflows/release.yml?ref=main" || return 1
   out="$(jq -r '.content // empty' <<<"$READ_OUT" | openssl base64 -d 2>/dev/null)" || return 1
-  grep -Eq "^    environment: ${ENV_NAME}[[:space:]]*\$" <<<"$out"
+  # Both app-token jobs must declare the environment: the scalar form, quoted or
+  # not, with an optional trailing comment, or the mapping form's `name:`.
+  awk -v env="$ENV_NAME" '
+    function val(line) {
+      sub(/^[^:]*:[[:space:]]*/, "", line); sub(/[[:space:]]+#.*$/, "", line)
+      sub(/[[:space:]]+$/, "", line); gsub(/^["\047]|["\047]$/, "", line); return line
+    }
+    /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { job = $1; sub(/:$/, "", job); inenv = 0; next }
+    /^    environment:/ { v = val($0); if (v == env) ok[job] = 1; inenv = (v == ""); next }
+    inenv && /^      name:/ { if (val($0) == env) ok[job] = 1; next }
+    /^    [^ ]/ { inenv = 0 }
+    END { exit !(ok["prepare"] && ok["publish"]) }
+  ' <<<"$out"
 }
 
 step_variable() {
@@ -527,7 +549,7 @@ step_require() {
     echo "refusing: the $ENV_NAME environment secret $SECRET_NAME does not exist." >&2
     exit 1
   fi
-  if [ -z "$VAR_VAL" ] && [ "$dry" -eq 0 ]; then
+  if [ -z "$VAR_VAL" ]; then
     if [ "$VAR_WAIT" -eq 1 ]; then
       note "waits: $VAR_NAME is not set yet (see step 4); the require step follows it."
       return 0
