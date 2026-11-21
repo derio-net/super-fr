@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-21 wave-merge-queue phase 7 fixes, requeue targets, the marker comment's trust and scope, the close-out body written once; 2026-11-21 wave-merge-queue phase 7, the queue line, the marker comment, the wave report, defer, requeue and queue-retry; 2026-11-20 wave-merge-queue phase 6, one close-out per wave that migrates what it archives and a DevOps barrier through labels; wave-merge-queue phase 5, every merge is a queue entry and the train is gone; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-21 wave-merge-queue phase 7 fixes, requeue targets, the marker comment's trust and scope, the close-out body written once; 2026-11-21 wave-merge-queue phase 7, the queue line, the marker comment, the wave report, defer, requeue and queue-retry; 2026-11-20 wave-merge-queue phase 6, one close-out per wave that migrates what it archives and a DevOps barrier through labels; wave-merge-queue phase 5, every merge is a queue entry and the train is gone; 2026-11-21 wave-merge-queue lens fixes, a moved block of changes, a hand-edited merge and a rewritten branch void an approval, and a pr-open batch waiting on a later queue takes no slot; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit, since replaced); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -74,10 +74,11 @@ is true now, not from what it remembers. In order, a pass:
    request you approved that is still a draft is marked ready by the driver when the queue
    builds it. Your
    approval belongs to the pull request's own changes, not to one commit: a merge of the
-   base branch or an empty commit keeps it. Other changes to its diff (even to spaces or to
-   a binary file) void it and remove the label. One change does not: git compares the
-   changed lines without their line numbers, so moving an unchanged block of changes to
-   another place in the same file keeps the approval.
+   base branch with no conflict to resolve, or an empty commit, keeps it. Other changes to
+   its diff void it and remove the label: an edit (even to spaces or to a binary file), a
+   block of changes moved to another place in the file, a merge you resolved by hand, and a
+   branch rewritten. If git cannot read the diff in one pass, the approval is held for that
+   pass and the label stays.
 
     The queue never changes a pull request's branch. It builds each ready pull request on
     the base branch and on the ones ahead of it, tests that combination on a branch of its
@@ -160,10 +161,12 @@ is true now, not from what it remembers. In order, a pass:
     export a finished wave's state at this point.
 
 4. **Dispatches what may start.** It counts the batches in flight (dispatched, or with an
-   open pull request) over every batch in the state file. While that count is under the cap,
+   open pull request) over every batch in the state file. A batch whose pull request is open
+   but waits for a later queue (its wave has not opened) takes no slot, so later waves'
+   finished work never starves a batch of the open wave. While that count is under the cap,
    it starts the next batch by wave, then merge order, then id. It skips any batch whose
-   `after` batches have not all merged. A merge that landed earlier in the same pass frees
-   its slot at once.
+   `after` batches have not all merged. A landing the queue made frees its slots on the next
+   pass, not in the pass that made it.
 5. **Tidies.** The driver closes a finished batch's sessions. When it sees a wave go from
    unfinished to finished while duplicate candidates exist, it prints one `dedupe` line
    naming the `fr triage check` command to judge them.
@@ -183,14 +186,13 @@ and an open pull request somebody may have to review; a wave of fifteen would bu
 The driver refuses to merge any of these:
 
 - an unapproved draft;
-- a pull request whose checks are pending, failing or absent (a head it has only just
-  pushed is pending, not green);
+- a pull request whose checks are pending, failing or absent;
 - a pull request without your label;
 - a pull request from a fork or a foreign author;
 - a batch another scope holds.
 
-It refuses to guess. When you push a change that alters a batch's diff, fr removes the label,
-and you label it again: you approved those changes, not a branch.
+It refuses to guess. When a push alters a batch's diff, fr removes the label, and you label
+it again: you approved those changes, not a branch.
 
 The driver hands a real merge conflict back to the batch's session when that session is
 idle, or to a fresh session on the batch's branch. The brief says to merge the base without

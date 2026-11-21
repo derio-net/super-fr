@@ -7,7 +7,7 @@ covers:
   - scripts/configure-main-protection.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
+reviewed: 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
 ---
 
 # Merge protection for `main`
@@ -106,7 +106,8 @@ release fails with a protection refusal (`release.py` reports it by name).
 
 Copy the pieces that the repo needs:
 
-- a `ci-ok` aggregate job in its CI (run on `merge_group` too if it uses a merge queue);
+- a `ci-ok` aggregate job in its CI (run it on pushes to `fr-queue/**` too, because the
+  wave driver tests each combination there; a forge `merge_group` is not used);
 - the `app-token` step and the `steps.app-token.outputs.token || github.token` expression
   from `release.yml`;
 - the script, whose ruleset name (`protect main`), app slug and variable name are
@@ -116,11 +117,16 @@ Install the app on the repo, then follow the steps above with `--repo`.
 
 ## What the wave driver does with it
 
-Nothing to configure. If the base branch's rules include a merge queue, the
-driver puts an approved batch in the queue and does not merge it directly. It reads the
-queue's state each pass, and raises a `queue-ejected` need if the queue drops
-it. If the rules need up-to-date branches, the driver updates the PR branch
-before it merges. See spec §D and §E.
+The wave driver has its own merge queue, and it does not use a forge merge queue. A repo
+whose base branch rules include a forge merge queue is held, and the driver says so.
+
+With `queue.land: push` (the default), the driver lands each tested combination with one
+atomic `git push` straight to the default branch. A ruleset that requires pull requests or
+checks refuses that push. So the identity that pushes must be a bypass actor of the
+ruleset, or the repo must use `queue.land: merge`, where the driver merges each pull
+request through the forge's merge API. The operator's own credential is never a bypass actor.
+The checks must also run on pushes to `fr-queue/**`, where the driver tests each combination.
+See spec `2026-11-19-wave-merge-queue-design.md` §D and R22.
 
 ## Issue intake
 
