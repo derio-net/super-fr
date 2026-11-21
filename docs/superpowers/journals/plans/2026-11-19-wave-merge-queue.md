@@ -1372,3 +1372,8 @@ Fixed in b7b622cac..558b129c3 with tests; full suite green after.
 ### l-docs-accuracy-r7-resolved · finding [fixed] · resolves l-docs-accuracy-r7: code strings in labels.py, queue_comment.py and drive_pass still said the DevOps stage merges
 
 Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r10-resolved-2 created=2026-11-21T06:32:33+00:00 phase=6 state=open resolves=p6-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1604 -->
+### p6-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1604] · resolves p6-r10: anyone with triage permission can add the two fr-queue labels (phase 6)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1604.
