@@ -194,3 +194,79 @@ def test_a_slot_lease_lost_names_the_slot_and_its_combination(tmp_path: Path) ->
         _build(w, "squash", leases={1: w.main(), 2: None})
     assert raised.value.slot == 1 and raised.value.sha
     assert isinstance(raised.value, LeaseLostError)
+
+
+# --------------------------------------------------------- R6 over the queue build (l-tests-r1)
+
+RELOCK = """\
+import pathlib, re
+v = re.search(r'^version = "([^"]*)"', pathlib.Path("pyproject.toml").read_text(), re.M)[1]
+pathlib.Path("uv.lock").write_text(f"relocked at {v}\\n")
+pathlib.Path("build-output.txt").write_text("untracked build output\\n")
+"""
+
+
+def _locked_world(tmp_path: Path, *, relock: bool) -> tuple[World, object]:
+    from fr.triage.model import VersionBlock
+
+    w = world(tmp_path)
+    w.move_main({"scripts/relock.py": RELOCK, "uv.lock": "relocked at 1.0.0\n"})
+    w.pr(1, {"b.txt": "bravo\n", "uv.lock": "lock one\nextra dependency\n"}, version="1.0.1")
+    w.pr(2, {"c.txt": "charlie\n", "uv.lock": "lock two\nanother dependency\n"}, version="1.0.2")
+    w.fetch()
+    import shlex
+    import sys
+
+    block = {
+        "source": {"file": "pyproject.toml", "key": "project.version"},
+        "files": ["pyproject.toml", "uv.lock"],
+        "set": f"{shlex.quote(sys.executable)} scripts/setv.py {{version}}",
+    }
+    if relock:
+        block["relock"] = f"{shlex.quote(sys.executable)} scripts/relock.py"
+    return w, VersionBlock.model_validate(block)
+
+
+def _build_locked(w: World, block: object, method: str = "squash") -> list:  # type: ignore[type-arg]
+    return build(
+        w.checkout, w.main(), [w.entry(1, bump="patch"), w.entry(2, bump="minor")], method,
+        block, scope=SCOPE, slots=(1, 2), scratch=w.scratch,  # type: ignore[arg-type]
+    )  # fmt: skip
+
+
+def test_a_version_file_changed_beyond_the_version_is_a_real_conflict(tmp_path: Path) -> None:
+    w = world(tmp_path)
+    w.pr(1, {"b.txt": "bravo\n"}, version="1.0.1")
+    # PR 2 also renames the project: its change to the version file is not the version alone
+    w.pr(2, {"pyproject.toml": '[project]\nname = "renamed"\nversion = "1.0.0"\n'}, version="1.0.2")
+    w.fetch()
+    with pytest.raises(MergeConflictError) as raised:
+        build(w.checkout, w.main(), [w.entry(1, bump="patch"), w.entry(2, bump="minor")],
+              "squash", version_block(), scope=SCOPE, slots=(1, 2), scratch=w.scratch)  # fmt: skip
+    assert raised.value.paths == ("pyproject.toml",) and raised.value.batch == "b2"
+
+
+@pytest.mark.parametrize("method", ["squash", "merge"])
+def test_a_lockfile_changed_beyond_the_version_is_taken_and_relocked(
+    tmp_path: Path, method: str
+) -> None:
+    w, block = _locked_world(tmp_path, relock=True)
+    one, two = _build_locked(w, block, method)
+    assert git(w.origin, "show", f"{two.sha}:uv.lock") == "relocked at 1.1.0"
+    assert 'version = "1.1.0"' in git(w.origin, "show", f"{two.sha}:pyproject.toml")
+    assert {"b.txt", "c.txt"} <= _files(w, two.sha)
+
+
+def test_a_lockfile_conflict_with_no_relock_command_stops_the_build(tmp_path: Path) -> None:
+    w, block = _locked_world(tmp_path, relock=False)
+    with pytest.raises(MergeConflictError) as raised:
+        _build_locked(w, block)
+    assert "uv.lock" in raised.value.paths and raised.value.batch == "b2"
+
+
+def test_the_version_update_commits_no_untracked_build_output(tmp_path: Path) -> None:
+    """r3-f7: the relock leaves `build-output.txt` in the scratch worktree; only the version
+    files are staged, so no combination carries it."""
+    w, block = _locked_world(tmp_path, relock=True)
+    for built in _build_locked(w, block):
+        assert "build-output.txt" not in _files(w, built.sha)

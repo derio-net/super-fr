@@ -5362,7 +5362,10 @@ def test_p6_r6_a_wave_close_out_waits_for_every_members_post_merge_then_starts_o
 
 
 def test_a_queue_repo_whose_base_cannot_be_read_says_why_it_was_skipped(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """l-errors-r12: the queue's read of `origin/<default>` failed: the pass names the cause."""
