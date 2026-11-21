@@ -42,6 +42,7 @@ ME = "s-11111111"
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 AT = "2026-11-20T10:00:00Z"
 MAIN = "m0" * 20
+TRUSTED = ("bot",)
 
 
 def _batch(bid: str, n: int, *, wave: int | None = 1) -> Batch:
@@ -276,7 +277,7 @@ class _FakeForge:
     def comment_pr(self, repo: str, pr: int, body: str) -> None:
         self.calls.append(f"create {pr}")
         thread = self.comments.setdefault(pr, [])
-        thread.append({"id": 1000 + len(thread), "body": body})
+        thread.append({"id": 1000 + len(thread), "body": body, "author": "bot"})
 
     def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
         self.calls.append(f"edit {comment_id}")
@@ -284,6 +285,10 @@ class _FakeForge:
             for c in thread:
                 if c["id"] == comment_id:
                     c["body"] = body
+
+
+def _qs_view(record: QueueRecord, batches: Sequence[Batch], **kw: Any) -> QueuePlan:
+    return plan_queue(_qs(batches, record, hold=_hold(), **kw))
 
 
 def _states(record: QueueRecord, batches: Sequence[Batch], **kw: Any) -> list[Any]:
@@ -314,7 +319,7 @@ def test_the_marker_comment_is_created_once_and_edited_in_place_through_every_st
         cs = [c for c in _states(record, batches) if c.key == "a"]
         assert len(cs) == 1 and cs[0].body.startswith(MARKER)
         seen.append(cs[0].body)
-        sync(forge, REPO, cs, allowed=True)
+        sync(forge, REPO, cs, allowed=True, trusted=TRUSTED)
     assert "queued at position 1" in seen[0]
     assert "testing in combination s1s1s1s1s1s1" in seen[1]
     assert "ejected (red)" in seen[2] and "re-enters the queue" in seen[2]
@@ -331,11 +336,17 @@ def test_an_unchanged_comment_costs_no_write_and_forge_comments_off_writes_nothi
 
     forge = _FakeForge()
     cs = [c for c in _states(_record({"kind": "queue_open", "at": AT}), [_batch("a", 1)])]
-    assert len(sync(forge, REPO, cs, allowed=True)) == 1
-    assert sync(forge, REPO, cs, allowed=True) == []  # reads, finds the same body, writes none
+    assert len(sync(forge, REPO, cs, allowed=True, trusted=TRUSTED)) == 1
+    assert (
+        sync(forge, REPO, cs, allowed=True, trusted=TRUSTED) == []
+    )  # reads, finds the same body, writes none
     assert forge.calls == ["list 100", "create 100", "list 100"]
     off = _FakeForge()
-    assert sync(off, REPO, cs, allowed=False) == [] and off.calls == [] and off.comments == {}
+    assert (
+        sync(off, REPO, cs, allowed=False, trusted=TRUSTED) == []
+        and off.calls == []
+        and off.comments == {}
+    )
 
 
 def test_a_comment_that_fails_to_write_is_said_and_never_stops_the_pass() -> None:
@@ -347,8 +358,91 @@ def test_a_comment_that_fails_to_write_is_said_and_never_stops_the_pass() -> Non
 
     said: list[str] = []
     cs = _states(_record({"kind": "queue_open", "at": AT}), [_batch("a", 1), _batch("b", 2)])
-    assert sync(Refusing(), REPO, cs, allowed=True, say=said.append) == []
+    assert sync(Refusing(), REPO, cs, allowed=True, trusted=TRUSTED, say=said.append) == []
     assert len(said) == 2 and "HTTP 403" in said[0]
+
+
+def test_a_marker_a_stranger_planted_first_is_never_edited_nor_taken_for_ours() -> None:
+    from fr.triage.queue_comment import MARKER, sync
+
+    forge = _FakeForge()
+    forge.comments[100] = [
+        {"id": 7, "body": f"{MARKER}\nforged", "author": "mallory", "association": "NONE"}
+    ]
+    cs = [c for c in _states(_record({"kind": "queue_open", "at": AT}), [_batch("a", 1)])]
+    sync(forge, REPO, cs, allowed=True, trusted=TRUSTED)
+    assert forge.comments[100][0]["body"].endswith("forged")  # untouched
+    assert (
+        len(forge.comments[100]) == 2 and "queued at position 1" in forge.comments[100][1]["body"]
+    )
+    sync(forge, REPO, cs, allowed=True, trusted=TRUSTED)
+    assert "edit 7" not in forge.calls and len(forge.comments[100]) == 2
+
+
+def test_a_waiting_pr_gets_no_comment_and_the_position_counts_entries_in_testing() -> None:
+    batches = [_batch("a", 1), _batch("b", 2), _batch("c", 3, wave=2)]
+    rec = _record({"kind": "queue_open", "at": AT}, _built(1, "s1" * 20, "a"))
+    cs = {c.key: c.body for c in _states(rec, batches)}
+    assert "c" not in cs  # it waits on a later queue: it is no entry
+    assert "testing in combination" in cs["a"]
+    assert "queued at position 2" in cs["b"]  # a, in testing, is position 1
+
+
+def test_the_comment_reads_the_passes_own_view_so_it_agrees_with_the_pass_line() -> None:
+    batches = [_batch("a", 1)]
+    rec = _record({"kind": "queue_open", "at": AT}, _built(1, "s1" * 20, "a"))
+    plan = _qs_view(rec, batches, slots={"s1" * 20: SlotCheck(verdict="failing")})
+    from fr.triage.queue_comment import entry_comments
+
+    (c,) = entry_comments(plan, rec, {"a": 100})
+    assert plan.view is not None and plan.view.entries == (("a", "ejected"),)
+    assert "a ejected" in queue_line(plan) and "ejected (red)" in c.body
+
+
+def test_a_pr_that_leaves_the_queue_is_told_so_once() -> None:
+    from fr.triage.queue_comment import CommentBook, sync
+
+    forge = _FakeForge()
+    book = CommentBook(REPO)
+    rec = _record({"kind": "queue_open", "at": AT})
+    batches = [_batch("a", 1)]
+    plan = _qs_view(rec, batches)
+    cs = book.comments(plan, rec, [rec], {"a": 100}, {})
+    sync(forge, REPO, cs, allowed=True, trusted=TRUSTED, seen=book.seen)
+    assert "queued at position 1" in forge.comments[100][0]["body"]
+    cs = book.comments(plan, rec, [rec], {"a": 100}, {"a": "deferred by the operator"})
+    sync(forge, REPO, cs, allowed=True, trusted=TRUSTED, seen=book.seen)
+    assert "left the queue (deferred by the operator)" in forge.comments[100][0]["body"]
+    before = list(forge.calls)
+    cs = book.comments(plan, rec, [rec], {"a": 100}, {"a": "deferred by the operator"})
+    assert sync(forge, REPO, cs, allowed=True, trusted=TRUSTED, seen=book.seen) == []
+    assert forge.calls == before  # said once: no read, no write
+
+
+def test_a_landed_comment_that_failed_to_write_is_retried_until_it_lands() -> None:
+    from fr.triage.queue_comment import CommentBook, sync
+
+    class Flaky(_FakeForge):
+        fail = True
+
+        def comment_pr(self, repo: str, pr: int, body: str) -> None:
+            if self.fail and "landed at" in body:
+                raise RuntimeError("HTTP 502")
+            super().comment_pr(repo, pr, body)
+
+    forge, book, said = Flaky(), CommentBook(REPO), []
+    rec = _record(
+        {"kind": "queue_open", "at": AT}, _built(1, "s1" * 20, "a"),
+        {"kind": "queue_land", "at": AT, "main": "s1" * 20, "entries": [{"batch": "a"}]},
+    )  # fmt: skip
+    plan = _qs_view(rec, [_batch("a", 1)])
+    cs = book.comments(plan, rec, [rec], {"a": 100}, {})  # the pass it landed in: PR still live
+    sync(forge, REPO, cs, allowed=True, trusted=TRUSTED, seen=book.seen, say=said.append)
+    assert said and forge.comments == {}
+    forge.fail = False
+    cs = book.comments(plan, rec, [rec], {}, {})  # next pass: the merged PR is no live PR
+    sync(forge, REPO, cs, allowed=True, trusted=TRUSTED, seen=book.seen, say=said.append)
+    assert "landed at" in forge.comments[100][0]["body"]
 
 
 # ------------------------------------------------------------ the driver writes it (R28)

@@ -133,6 +133,7 @@ from fr.triage.batch import (
     batch_workflow,
     check_dependencies,
     check_open_membership,
+    claim_authors,
     closeout_state,
     dependency_state,
     derive_batch_stage,
@@ -311,7 +312,7 @@ from fr.triage.operation_lock import replacement_scope_lock
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
-from fr.triage.queue_comment import entry_comments
+from fr.triage.queue_comment import CommentBook
 from fr.triage.queue_comment import sync as queue_comments_sync
 from fr.triage.queue_exec import (
     EntryInput,
@@ -4106,7 +4107,7 @@ class _Driver:
         self.last_queues: list[QueuePlan] = []
         self.last_pass: Pass | None = None
         self._queue_live: Mapping[str, LivePr] = {}
-        self._comment_seen: dict[str, str] = {}  # PR ref -> the marker body last written
+        self._comment_books: dict[str, CommentBook] = {}  # repo -> its marker comments (R28)
         self._queue_needs: dict[str, list[str]] = {}
         self._allowed: dict[str, dict[str, Any]] = {}  # repo -> its merge methods, read at build
         # per pass (triage-intake R9): repos whose origin this pass checked, and those held
@@ -6543,12 +6544,34 @@ class _Driver:
         if self.forge_off(facts, repo, "comments") is not None:
             return []  # `forge.comments: off`, or a policy that could not be read
         current = load_judgements(self.target / "judgements.yaml")
-        numbers = {k: lv.number for k, lv in self._queue_live.items()}
-        comments = entry_comments(qplan, self._queue_record(current, repo), numbers)
-        return queue_comments_sync(
-            self.client(facts, repo), repo, comments, allowed=True, seen=self._comment_seen,
-            say=self._say_queue_comment,
+        book = self._comment_books.setdefault(repo, CommentBook(repo))
+        departed = {
+            b.id: why
+            for b in current.batches
+            if (why := self._queue_departure(b, qplan.wave)) is not None
+        }
+        comments = book.comments(
+            qplan, self._queue_record(current, repo), self._queue_records(current, repo),
+            {k: lv.number for k, lv in self._queue_live.items()}, departed,
         )  # fmt: skip
+        return queue_comments_sync(
+            self.client(facts, repo), repo, comments, allowed=True, seen=book.seen,
+            trusted=claim_authors(repo, facts), say=self._say_queue_comment,
+        )  # fmt: skip
+
+    @staticmethod
+    def _queue_departure(batch: Batch, wave: int | None) -> str | None:
+        """Why *batch*'s PR is no entry of the queue for *wave* by the operator's word (R29):
+        deferred out of it, or requeued into another queue."""
+        if is_deferred(batch):
+            return "deferred by the operator"
+        if (
+            any(isinstance(e, RequeuedEvent) for e in batch.events)
+            and effective_wave(batch) != wave
+        ):
+            to = effective_wave(batch)
+            return "requeued to " + ("a between-waves queue" if to is None else f"wave {to}")
+        return None
 
     def _queue_batch(self, key: str) -> Batch | None:
         judgements = load_judgements(self.target / "judgements.yaml")
