@@ -28,11 +28,14 @@ rows:
       - super-fr:tests/unit/test_wave_queue_planner.py#test_a_foreign_base_move_rebuilds_every_slot_on_the_new_base_and_says_so_once
       - super-fr:tests/unit/test_wave_queue_drive.py#test_later_waves_waiting_prs_take_no_in_flight_slot_while_the_queue_is_open
       - super-fr:tests/unit/test_wave_queue_drive.py#test_a_queue_repo_plans_no_merge_action_only_the_queues_own
-    status: not-implemented
-    notes: 'phase 2: the pure planner builds depth slots, lands the longest green prefix
-      at the tested sha, rebuilds every slot on a foreign move of main; phase 5: no
-      merge action exists in drive_pass, every merge is a queue entry; the live wave
-      walk is owed'
+      int:
+      - super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+      - super-fr:tests/integration/test_queue_errors.py#test_main_moving_after_the_base_was_read_fails_the_lease_and_the_next_pass_rebuilds
+    status: ci
+    notes: 'Planner (phase 2) and executor (phase 3) are CI-tested: slots, longest green
+      prefix landed at the tested sha by one atomic leased push over real bare git,
+      a foreign move of main rebuilds; no merge action in drive_pass. The live wave
+      walk is wave-queue-live-wave''s.'
   - id: wave-queue-land-methods
     capability: wave merge queue
     acceptance: Landing by atomic push leaves every landed PR reading MERGED on the
