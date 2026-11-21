@@ -1127,3 +1127,248 @@ the board snapshot carries scope_args like the driver.
 ### p7-r13-resolved · finding [fixed] · resolves p7-r13: a failed landed comment was never retried (phase 7)
 
 CommentBook retries a failed landed comment until it lands.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-21T05:47:17+00:00 -->
+### lens-review-1 · review · Lens review — security, errors, tests, docs-accuracy: 27 in-scope findings fixed, 3 pre-existing
+
+Four lens reviewers read the whole feature diff against origin/main, one per lens in the run's lens set. They raised 30 findings: 27 in scope, all fixed in b7b622cac..558b129c3, and 3 security findings that predate this change. Spec R12 and §E (approval succession), R26 and §J (postmerge marker) and Test Plan 5 were amended. Full suite after the fixes (-m ""): 17355 passed, 122 skipped, exit 0; ruff, mypy, fr docs check, fr validate artifacts, fr acceptance check and the sync checks pass.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · patch-id approval was position-blind: a moved hunk kept approved-fr
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · a bare fr-queue:postmerge-done label lifted the DevOps barrier
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · the release marker matched anywhere in a body and used its own trusted-author list
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-21T05:47:17+00:00 state=open review_scope=out -->
+### l-security-r4 · finding [open] (reviewer: out of scope) · ci.yml declares no token permissions
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5 created=2026-11-21T05:47:17+00:00 state=open review_scope=out -->
+### l-security-r5 · finding [open] (reviewer: out of scope) · a push to fr-hold/** can run release.yml with the app key
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6 created=2026-11-21T05:47:17+00:00 state=open review_scope=out -->
+### l-security-r6 · finding [open] (reviewer: out of scope) · the version and relock commands run in a worktree holding PR code
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · a transport failure on the landing push read as a refusal and halted the queue
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · a hold write that failed in transport halted the queue
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · a GitError mid-execute ended the drive and could lose the halt or slot-lost record
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · an unreadable patch-id voided the approval
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · an unreadable queue config told the DevOps stage to merge by hand
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · an unreadable comment list read as no markers
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · an unreadable PR read back as unmerged
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r8 · finding [open] (reviewer: in scope) · resume read a failed merge check as not merged
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r9 · finding [open] (reviewer: in scope) · resume failed on a recorded combination this clone never had
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r10 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r10 · finding [open] (reviewer: in scope) · a failed queue entry write lost its cause
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r11 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r11 · finding [open] (reviewer: in scope) · archive_moves raised without its cause
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r12 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r12 · finding [open] (reviewer: in scope) · a queue repo whose base could not be read was skipped silently
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r13 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-errors-r13 · finding [open] (reviewer: in scope) · clear_hold's failure did not say the release had published
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · removing the train dropped the version-conflict, relock and build-output tests
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · no real-git test of the leased push failing after main moved
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · no drive-level test of a session push voiding an approval
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · the smoke test did not pin judgements schema 13
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-wave-driver.md said a waiting pr-open batch takes a slot
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · fr-wave-driver.md said a landing frees its slots in the same pass
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · fr-wave-driver.md's 'head it has only just pushed' was false
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: in scope) · merge-protection.md still described the forge-queue mode and omitted the land: push bypass need
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r5 · finding [open] (reviewer: in scope) · fr-exit-gates.md said the DevOps stage merges
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r6 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r6 · finding [open] (reviewer: in scope) · fr-triage.md's verb list lacked defer, requeue and queue-retry
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r7 created=2026-11-21T05:47:17+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r7 · finding [open] (reviewer: in scope) · code strings in labels.py, queue_comment.py and drive_pass still said the DevOps stage merges
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: patch-id approval was position-blind: a moved hunk kept approved-fr
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: a bare fr-queue:postmerge-done label lifted the DevOps barrier
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: the release marker matched anywhere in a body and used its own trusted-author list
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-21T05:47:17+00:00 state=open resolves=l-security-r4 out_of_scope=true -->
+### l-security-r4-resolved · finding [out-of-scope] · resolves l-security-r4: ci.yml declares no token permissions
+
+Pre-existing: ci.yml had no permissions block before this change; the queue adds a trigger, not the token scope.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved created=2026-11-21T05:47:17+00:00 state=open resolves=l-security-r5 out_of_scope=true -->
+### l-security-r5-resolved · finding [out-of-scope] · resolves l-security-r5: a push to fr-hold/** can run release.yml with the app key
+
+Pre-existing exposure class: release.yml already minted the app token on push; tracked as a hardening follow-up outside this feature.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6-resolved created=2026-11-21T05:47:17+00:00 state=open resolves=l-security-r6 out_of_scope=true -->
+### l-security-r6-resolved · finding [out-of-scope] · resolves l-security-r6: the version and relock commands run in a worktree holding PR code
+
+Pre-existing: the old train ran the same version and relock commands in the PR checkout; this change keeps that behaviour.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: a transport failure on the landing push read as a refusal and halted the queue
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: a hold write that failed in transport halted the queue
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: a GitError mid-execute ended the drive and could lose the halt or slot-lost record
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: an unreadable patch-id voided the approval
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: an unreadable queue config told the DevOps stage to merge by hand
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: an unreadable comment list read as no markers
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [fixed] · resolves l-errors-r7: an unreadable PR read back as unmerged
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r8 -->
+### l-errors-r8-resolved · finding [fixed] · resolves l-errors-r8: resume read a failed merge check as not merged
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r9 -->
+### l-errors-r9-resolved · finding [fixed] · resolves l-errors-r9: resume failed on a recorded combination this clone never had
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r10-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r10 -->
+### l-errors-r10-resolved · finding [fixed] · resolves l-errors-r10: a failed queue entry write lost its cause
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r11-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r11 -->
+### l-errors-r11-resolved · finding [fixed] · resolves l-errors-r11: archive_moves raised without its cause
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r12-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r12 -->
+### l-errors-r12-resolved · finding [fixed] · resolves l-errors-r12: a queue repo whose base could not be read was skipped silently
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r13-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-errors-r13 -->
+### l-errors-r13-resolved · finding [fixed] · resolves l-errors-r13: clear_hold's failure did not say the release had published
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: removing the train dropped the version-conflict, relock and build-output tests
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: no real-git test of the leased push failing after main moved
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: no drive-level test of a session push voiding an approval
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: the smoke test did not pin judgements schema 13
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-wave-driver.md said a waiting pr-open batch takes a slot
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-wave-driver.md said a landing frees its slots in the same pass
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: fr-wave-driver.md's 'head it has only just pushed' was false
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-docs-accuracy-r4 -->
+### l-docs-accuracy-r4-resolved · finding [fixed] · resolves l-docs-accuracy-r4: merge-protection.md still described the forge-queue mode and omitted the land: push bypass need
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-docs-accuracy-r5 -->
+### l-docs-accuracy-r5-resolved · finding [fixed] · resolves l-docs-accuracy-r5: fr-exit-gates.md said the DevOps stage merges
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r6-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-docs-accuracy-r6 -->
+### l-docs-accuracy-r6-resolved · finding [fixed] · resolves l-docs-accuracy-r6: fr-triage.md's verb list lacked defer, requeue and queue-retry
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r7-resolved created=2026-11-21T05:47:17+00:00 state=fixed resolves=l-docs-accuracy-r7 -->
+### l-docs-accuracy-r7-resolved · finding [fixed] · resolves l-docs-accuracy-r7: code strings in labels.py, queue_comment.py and drive_pass still said the DevOps stage merges
+
+Fixed in b7b622cac..558b129c3 with tests; full suite green after.
