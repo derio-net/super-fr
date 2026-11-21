@@ -50,7 +50,9 @@ echo "$*" >> "$d/calls.log"
 body() { local b; b="$(cat)"; echo "$1 $2 $(jq -c . <<<"$b")" >> "$d/bodies.log"; printf '%s' "$b"; }
 nf() { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
 case "$*" in
-  "api orgs/o/installations") cat "$d/installations.json" ;;
+  "api --paginate orgs/o/installations?per_page=100")
+    [ -f "$d/installations.404" ] && nf
+    cat "$d/installations.json"; [ -f "$d/installations2.json" ] && cat "$d/installations2.json"; : ;;
   "api repos/o/r/environments/release") [ -f "$d/environment.json" ] && cat "$d/environment.json" || nf ;;
   "api repos/o/r/environments/release/deployment-branch-policies")
     jq '{total_count: length, branch_policies: .}' "$d/policies.json" ;;
@@ -98,7 +100,9 @@ case "$*" in
     b="$(body PUT "ruleset/$id")"
     jq --argjson b "$b" --argjson id "$id" \
       'map(if .id == $id then $b + {id: $id, source_type: "Repository"} else . end)' "$d/rulesets.json" > "$d/r.tmp" && mv "$d/r.tmp" "$d/rulesets.json" ;;
-  "api --paginate repos/o/r/tags?per_page=100") cat "$d/tags.json" ;;
+  "api --paginate repos/o/r/tags?per_page=100")
+    [ -f "$d/tags.fail" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+    cat "$d/tags.json" ;;
   "api repos/o/r/actions/runs?head_sha=$STUB_SHA&event=push") cat "$d/runs.json" ;;
   *) echo "stub gh: unexpected call: $*" >&2; exit 99 ;;
 esac
@@ -124,15 +128,16 @@ code=200
 case "$method $url" in
   "GET https://api.github.com/app")
     code="$(cat "$d/app_status" 2>/dev/null || echo 200)"
-    if [ "$code" = 200 ]; then cp "$d/app.json" "$out"; else echo '{"message":"BODYSECRET"}' > "$out"; fi ;;
+    if [ "$code" = 200 ]; then cp "$d/app.json" "$out"; else echo '{"message":"Bad credentials","documentation_url":"BODYSECRET"}' > "$out"; fi ;;
   "POST https://api.github.com/app/installations/55/access_tokens")
     code=201; echo '{"token":"ghs_STUBTOKEN0123456789abcdef"}' > "$out" ;;
   "GET https://api.github.com/installation/repositories")
+    [ -f "$d/repos_slow" ] && sleep 20
     if [ "$auth" = "Authorization: Bearer ghs_STUBTOKEN0123456789abcdef" ]; then
       cp "$d/inst_repos.json" "$out"
-    else code=401; echo '{"message":"BODYSECRET"}' > "$out"; fi ;;
+    else code=401; echo '{"message":"Bad credentials","documentation_url":"BODYSECRET"}' > "$out"; fi ;;
   "DELETE https://api.github.com/installation/token")
-    code=204; : > "$out"; echo revoked >> "$d/revoked.log" ;;
+    code="$(cat "$d/revoke_status" 2>/dev/null || echo 204)"; : > "$out"; echo revoked >> "$d/revoked.log" ;;
   *) echo "stub curl: unexpected call: $method $url" >&2; exit 99 ;;
 esac
 printf '%s' "$code"
@@ -360,17 +365,19 @@ def test_a_declined_step_write_stops_the_script_with_no_later_write(sandbox: Pat
     _rm(sandbox, "environment.json")
     _rm(sandbox, "policies.json")
     _j(sandbox, "rulesets.json", [])  # later steps would also write
+    _j(sandbox, "variables.json", [])  # no half-done offer: the one answer reaches the write
     r = run(sandbox, stdin=answers("n"))
-    assert r.returncode != 0 and "declined" in r.stderr
+    assert r.returncode != 0 and "declined: stopping" in r.stderr
+    assert "offer:" not in r.stdout
     assert writes(sandbox) == []
 
 
 def test_a_declined_offer_continues(sandbox: Path) -> None:
     _j(sandbox, "secrets_repo.json", [{"name": "FR_AUTOMATION_APP_KEY"}])
     r = run(sandbox, stdin=answers("n"))
-    assert r.returncode == 0, r.stderr
-    assert "leak path" in r.stdout and "== 7 require ==" in r.stdout
+    assert "leak path" in r.stdout and "== 7 require ==" in r.stdout  # every later step ran
     assert writes(sandbox) == []
+    assert r.returncode != 0 and "incomplete:" in r.stderr  # the kept leak path is reported
 
 
 def test_dry_run_from_the_half_done_state_prints_every_pending_step_in_order(sandbox: Path) -> None:
@@ -612,8 +619,8 @@ def test_an_http_error_from_get_app_refuses_and_stores_nothing(
     _no_secret_state(sandbox)
     (sandbox / "stub" / "app_status").write_text(status)
     r = run(sandbox, stdin=answers(str(key_pem), "y"))
-    assert r.returncode != 0 and f"HTTP {status}" in r.stderr
-    assert "BODYSECRET" not in r.stdout + r.stderr
+    assert r.returncode != 0 and f"HTTP {status} (Bad credentials)" in r.stderr
+    assert "BODYSECRET" not in r.stdout + r.stderr  # only `message`, never the rest of the body
     assert not any(c.startswith("secret set") for c in calls(sandbox))
 
 
@@ -1023,3 +1030,220 @@ def test_the_end_to_end_order_and_an_idempotent_rerun(sandbox: Path, key_pem: Pa
     second = run(sandbox)  # no stdin at all
     assert second.returncode == 0, second.stderr
     assert not [c for c in calls(sandbox)[before:] if WRITE_RE.match(c)]
+
+
+# --- lens-review fixes: failure paths and alternate inputs ---
+
+
+def test_the_refusal_names_github_s_message_and_never_a_token(sandbox: Path, key_pem: Path) -> None:
+    _no_secret_state(sandbox)
+    (sandbox / "stub" / "app_status").write_text("401")
+    r = run(sandbox, stdin=answers(str(key_pem)))
+    assert r.returncode != 0
+    assert "HTTP 401 (Bad credentials)" in r.stderr
+    assert TOKEN not in r.stdout + r.stderr
+
+
+def test_a_failed_revoke_is_reported(sandbox: Path, key_pem: Path) -> None:
+    _no_secret_state(sandbox)
+    (sandbox / "stub" / "revoke_status").write_text("500")
+    r = run(sandbox, stdin=answers(str(key_pem), "y", "n"))
+    assert "revoking the installation token answered HTTP 500" in r.stderr
+    assert TOKEN not in r.stdout + r.stderr
+
+
+def test_installations_are_read_across_every_page(sandbox: Path) -> None:
+    other = {"installations": [{"id": 1, "app_id": 1, "app_slug": "other"}]}
+    second = installation()
+    _j(sandbox, "installations.json", other)
+    _j(sandbox, "installations2.json", {"installations": second["installations"][1:]})
+    r = run(sandbox)
+    assert r.returncode == 0, r.stderr
+    assert "ok: derio-fr-automation installed" in r.stdout
+
+
+def test_a_user_owned_repo_is_refused_with_the_reason(sandbox: Path) -> None:
+    (sandbox / "stub" / "installations.404").write_text("")
+    r = run(sandbox)
+    assert r.returncode != 0
+    assert "organisation-owned repos only" in r.stderr
+    assert writes(sandbox) == []
+
+
+def test_closed_stdin_at_a_step_write_says_nothing_was_asked(sandbox: Path) -> None:
+    _j(sandbox, "variables.json", [])
+    r = run(sandbox)  # the variable step needs a write; stdin is empty
+    assert r.returncode != 0
+    assert "no answer (stdin closed)" in r.stderr
+    assert writes(sandbox) == []
+
+
+def test_a_failing_confirmed_write_names_the_write_and_the_rerun(sandbox: Path) -> None:
+    _rm(sandbox, "environment.json")
+    _rm(sandbox, "policies.json")
+    _j(sandbox, "variables.json", [])  # no half-done offer
+    stub = sandbox / "bin" / "gh"
+    stub.write_text(
+        stub.read_text().replace(
+            '"api -X PUT repos/o/r/environments/release --input -")',
+            '"api -X PUT repos/o/r/environments/release --input -")\n'
+            '    echo "HTTP 422: Validation Failed" >&2; exit 1 ;;\n'
+            '  "never-matches")',
+        )
+    )
+    r = run(sandbox, stdin=answers("y"))
+    assert r.returncode != 0
+    assert "failed: PUT repos/o/r/environments/release" in r.stderr
+    assert "rerun" in r.stderr
+
+
+def test_a_kept_repository_secret_leaves_the_setup_incomplete(sandbox: Path) -> None:
+    _j(sandbox, "secrets_repo.json", [{"name": "FR_AUTOMATION_APP_KEY"}])
+    r = run(sandbox, stdin=answers("n"))
+    assert r.returncode != 0
+    assert "incomplete: the repository-level secret FR_AUTOMATION_APP_KEY was kept" in r.stderr
+    assert "done." not in r.stdout
+
+
+def test_a_run_without_the_key_says_the_repository_list_was_not_proven(sandbox: Path) -> None:
+    r = run(sandbox)
+    assert r.returncode == 0, r.stderr
+    assert "did not prove the installation's repository list" in r.stdout
+
+
+def test_a_failing_tags_read_stops_and_is_never_read_as_no_release(sandbox: Path) -> None:
+    _j(sandbox, "rulesets.json", [protect_main(), tag_ruleset()])
+    (sandbox / "stub" / "tags.fail").write_text("")
+    r = run(sandbox)
+    assert r.returncode != 0
+    assert "error: reading the tags of o/r failed" in r.stderr
+    assert "waits:" not in r.stdout.split("== 7 require ==")[1]
+
+
+def test_the_newest_release_tag_ignores_other_tags_and_ranks_a_final_above_its_rcs(
+    sandbox: Path,
+) -> None:
+    _j(sandbox, "rulesets.json", [protect_main(), tag_ruleset()])
+    _j(
+        sandbox,
+        "tags.json",
+        [
+            {"name": "v5.22.0-rc.2", "commit": {"sha": "c" * 40}},
+            {"name": "v5.22.0", "commit": {"sha": SHA}},
+            {"name": "v5.21.0", "commit": {"sha": "b" * 40}},
+            {"name": "vendor-snapshot", "commit": {"sha": "d" * 40}},
+        ],
+    )
+    r = run(sandbox, stdin=answers("y"))
+    assert r.returncode == 0, r.stderr
+    assert any(c.startswith(f"api repos/o/r/actions/runs?head_sha={SHA}") for c in calls(sandbox))
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        {"protection_rules": [{"type": "branch_policy"}, {"type": "wait_timer", "wait_timer": 5}]},
+        {"deployment_branch_policy": {"protected_branches": True, "custom_branch_policies": False}},
+    ],
+    ids=["wait-timer", "protected-branches-policy"],
+)
+def test_other_environment_drift_is_corrected(sandbox: Path, drift: dict[str, Any]) -> None:
+    env = good_env()
+    env.update(drift)
+    _j(sandbox, "environment.json", env)
+    r = run(sandbox, stdin=answers("y", "y", "y"))
+    assert r.returncode == 0, r.stderr
+    assert "api -X PUT repos/o/r/environments/release --input -" in calls(sandbox)
+    assert _read(sandbox, "environment.json") == good_env()
+
+
+def test_a_wrong_tag_ruleset_is_repaired_in_place(sandbox: Path) -> None:
+    bad = tag_ruleset()
+    bad["rules"] = [{"type": "deletion"}]
+    bad["bypass_actors"] = [
+        {"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
+    ]
+    _j(sandbox, "rulesets.json", [protect_main(), bad, require_ruleset()])
+    r = run(sandbox, stdin=answers("y"))
+    assert r.returncode == 0, r.stderr
+    ((method, path, body),) = [x for x in _puts_and_posts(sandbox)]
+    assert (method, path) == ("PUT", f"ruleset/{bad['id']}")
+    assert {x["type"] for x in body["rules"]} == {"deletion", "update"}
+    assert body["bypass_actors"] == []
+
+
+@pytest.mark.parametrize(
+    "breakage",
+    ["not-strict", "pull-request-bypass", "second-actor", "no-ci-ok"],
+)
+def test_a_wrong_require_ruleset_is_repaired_in_place(sandbox: Path, breakage: str) -> None:
+    bad = require_ruleset()
+    params = bad["rules"][0]["parameters"]
+    if breakage == "not-strict":
+        params["strict_required_status_checks_policy"] = False
+    elif breakage == "pull-request-bypass":
+        bad["bypass_actors"][0]["bypass_mode"] = "pull_request"
+    elif breakage == "second-actor":
+        bad["bypass_actors"].append({"actor_id": 5, "actor_type": "Team", "bypass_mode": "always"})
+    else:
+        params["required_status_checks"] = [{"context": "lint"}]
+    _j(sandbox, "rulesets.json", [protect_main(), tag_ruleset(), bad])
+    r = run(sandbox, stdin=answers("y"))
+    assert r.returncode == 0, r.stderr
+    ((method, path, body),) = _puts_and_posts(sandbox)
+    assert (method, path) == ("PUT", f"ruleset/{bad['id']}")
+    assert body["bypass_actors"] == [
+        {"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
+    ]
+    rule = body["rules"][0]["parameters"]
+    assert rule["strict_required_status_checks_policy"] is True
+    assert [c["context"] for c in rule["required_status_checks"]] == ["ci-ok"]
+
+
+def test_a_signal_mid_run_revokes_the_token_and_removes_the_temp_dir(
+    sandbox: Path, key_pem: Path
+) -> None:
+    import signal
+    import time
+
+    _no_secret_state(sandbox)
+    (sandbox / "stub" / "repos_slow").write_text("")
+    env = {
+        "PATH": f"{sandbox / 'bin'}:{os.environ['PATH']}",
+        "STUB_DIR": str(sandbox / "stub"),
+        "STUB_SHA": SHA,
+        "HOME": str(sandbox),
+        "TMPDIR": str(sandbox / "tmp"),
+    }
+    p = subprocess.Popen(
+        ["bash", str(SCRIPT), "--repo", "o/r"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        env=env,
+        text=True,
+        start_new_session=True,
+    )
+    assert p.stdin is not None
+    p.stdin.write(f"{key_pem}\n")
+    p.stdin.flush()
+    log = sandbox / "stub" / "curl_calls.log"
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if log.exists() and "installation/repositories" in log.read_text():
+            break
+        time.sleep(0.1)
+    else:
+        p.kill()
+        pytest.fail("the script never reached the repository-list read")
+    time.sleep(0.3)
+    os.kill(p.pid, signal.SIGTERM)
+    try:
+        p.wait(timeout=30)
+    finally:
+        if p.poll() is None:
+            os.killpg(p.pid, signal.SIGKILL)
+    assert p.returncode != 0
+    assert (sandbox / "stub" / "revoked.log").exists()
+    assert list((sandbox / "tmp").iterdir()) == []
+    assert not any(c.startswith("secret set") for c in calls(sandbox))

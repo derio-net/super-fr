@@ -57,6 +57,7 @@ owner="${repo%%/*}"
 
 TMPD="$(mktemp -d)"
 TOKEN=""
+LEAK_KEPT=0 REPOS_PROVEN=0 OFFER_TAKEN=0
 JWT=""
 HTTP=""
 READ_OUT=""
@@ -78,6 +79,15 @@ revoke_token() {
   api DELETE "$API/installation/token" "$TOKEN"
   TOKEN=""
   rm -f "$TMPD/body"
+  if [ "$HTTP" != "204" ]; then
+    echo "warning: revoking the installation token answered HTTP $HTTP; it stays valid until it expires (at most 1 hour)." >&2
+  fi
+}
+
+# gh_message: GitHub's `message` from an error body, one line, at most 200 bytes.
+# Only called on an error answer: a success body may hold a token.
+gh_message() {
+  jq -r '.message // empty' "$TMPD/body" 2>/dev/null | head -n 1 | head -c 200
 }
 
 cleanup() {
@@ -102,7 +112,7 @@ make_jwt() { # make_jwt KEYPATH
   # Called under `||`, where set -e is off: every failure returns explicitly.
   h="$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)" || return 1
   p="$(printf '{"iat":%s,"exp":%s,"iss":%s}' $((now - 60)) $((now + 540)) "$APP_ID" | b64url)" || return 1
-  s="$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -sign "$1" 2>/dev/null | b64url)" || return 1
+  s="$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -sign "$1" 2>"$TMPD/sign.err" | b64url)" || return 1
   [ -n "$h" ] && [ -n "$p" ] && [ -n "$s" ] || return 1
   printf '%s.%s.%s' "$h" "$p" "$s"
 }
@@ -139,7 +149,11 @@ act() {
   fi
   echo "write: $desc"
   printf 'apply? [y/N] '
-  read -r ans || ans=""
+  if ! read -r ans; then
+    echo
+    echo "no answer (stdin closed): stopping before this write; no later step ran" >&2
+    exit 1
+  fi
   case "$ans" in
     y | Y | yes | YES) ;;
     *)
@@ -147,7 +161,11 @@ act() {
       echo "declined: stopping, no later step ran" >&2
       exit 1 ;;
   esac
-  "$@"
+  if ! "$@"; then
+    echo "failed: $desc" >&2
+    echo "Writes confirmed before this one stay applied. Fix the cause and rerun: each step reads the state first." >&2
+    exit 1
+  fi
 }
 
 # offer <description> <command...>: optional cleanup. Declining continues.
@@ -158,11 +176,17 @@ offer() {
     echo "would offer: $desc"
     return 0
   fi
+  OFFER_TAKEN=0
   echo "offer: $desc"
   printf 'delete? [y/N] '
   read -r ans || ans=""
   case "$ans" in
-    y | Y | yes | YES) "$@" ;;
+    y | Y | yes | YES)
+      if ! "$@"; then
+        echo "failed: $desc" >&2
+        exit 1
+      fi
+      OFFER_TAKEN=1 ;;
     *) echo; echo "kept" ;;
   esac
 }
@@ -220,8 +244,15 @@ preflight() {
 step_app() {
   echo "== 1 app =="
   local installs inst sel perms want
-  installs="$(gh api "orgs/$owner/installations" </dev/null)"
-  inst="$(jq -c --arg s "$APP_SLUG" '[.installations[] | select(.app_slug == $s)][0] // empty' <<<"$installs")"
+  if ! installs="$(gh api --paginate "orgs/$owner/installations?per_page=100" </dev/null 2>"$TMPD/err")"; then
+    if grep -q 'HTTP 404' "$TMPD/err"; then
+      echo "refusing: $owner is not an organisation this account can administer; the script supports organisation-owned repos only." >&2
+    else
+      echo "error: gh api orgs/$owner/installations failed: $(head -c 300 "$TMPD/err")" >&2
+    fi
+    exit 1
+  fi
+  inst="$(jq -cs --arg s "$APP_SLUG" '[.[].installations[] | select(.app_slug == $s)][0] // empty' <<<"$installs")"
   if [ -z "$inst" ]; then
     echo "refusing: the $APP_SLUG app is not installed on $owner." >&2
     echo "Install it in the web UI (docs/merge-protection.md), on selected repositories only." >&2
@@ -292,11 +323,16 @@ remove_key_file() { rm -f "$KEYPATH"; }
 
 prove_key() { # prove_key KEYPATH: the key is the app's, and the app sees only this repo
   local got names
-  JWT="$(make_jwt "$1")" || { echo "refusing: could not sign with that key; nothing stored" >&2; return 1; }
+  JWT="$(make_jwt "$1")" || {
+    echo "refusing: could not sign with that key ($(head -n 1 "$TMPD/sign.err" 2>/dev/null | head -c 200)); nothing stored" >&2
+    echo "A passphrase-protected key is not supported: GitHub's downloaded key has none." >&2
+    return 1
+  }
   api GET "$API/app" "$JWT"
   if [ "$HTTP" != "200" ]; then
     JWT=""
-    echo "refusing: GET /app answered HTTP $HTTP; nothing stored" >&2
+    echo "refusing: GET /app answered HTTP $HTTP ($(gh_message)); nothing stored" >&2
+    echo "A 401 means GitHub did not accept the JWT: a key of another app, a revoked key, or a clock off by minutes." >&2
     return 1
   fi
   got="$(jq -r '.id // empty' "$TMPD/body")"
@@ -309,7 +345,7 @@ prove_key() { # prove_key KEYPATH: the key is the app's, and the app sees only t
   api POST "$API/app/installations/$INST_ID/access_tokens" "$JWT"
   JWT=""
   if [ "$HTTP" != "201" ]; then
-    echo "refusing: minting an installation token answered HTTP $HTTP; nothing stored" >&2
+    echo "refusing: minting an installation token answered HTTP $HTTP ($(gh_message)); nothing stored" >&2
     return 1
   fi
   TOKEN="$(jq -r '.token // empty' "$TMPD/body")"
@@ -320,8 +356,10 @@ prove_key() { # prove_key KEYPATH: the key is the app's, and the app sees only t
   fi
   api GET "$API/installation/repositories" "$TOKEN"
   if [ "$HTTP" != "200" ]; then
+    local msg
+    msg="$(gh_message)"
     revoke_token
-    echo "refusing: reading the installation's repositories answered HTTP $HTTP; nothing stored" >&2
+    echo "refusing: reading the installation's repositories answered HTTP $HTTP ($msg); nothing stored" >&2
     return 1
   fi
   names="$(jq -r '[.repositories[].full_name] | sort | join(",")' "$TMPD/body")"
@@ -332,6 +370,7 @@ prove_key() { # prove_key KEYPATH: the key is the app's, and the app sees only t
     echo "Fix it in the web UI: https://github.com/organizations/$owner/settings/installations/$INST_ID" >&2
     return 1
   fi
+  REPOS_PROVEN=1
   return 0
 }
 
@@ -369,6 +408,7 @@ step_key() {
   if [ "$PRESENT" -eq 1 ]; then
     note "leak path: a repository-level secret $SECRET_NAME exists; any branch workflow can read it."
     offer "delete the repository-level secret $SECRET_NAME" gh secret delete "$SECRET_NAME" --repo "$repo"
+    if [ "$dry" -eq 0 ] && [ "$OFFER_TAKEN" -eq 0 ]; then LEAK_KEPT=1; fi
   fi
 }
 
@@ -496,15 +536,26 @@ step_tags() {
 # ---- 7 require (R14) ----------------------------------------------------------------------------------
 
 release_pushed_by_app() { # the newest v* tag's commit has a push run triggered by the app
+  # Called from an `&&` list, where set -e is off: every failure exits explicitly,
+  # so a gh error is never read as "no release yet".
   local tags tag sha runs
-  tags="$(gh api --paginate "repos/$repo/tags?per_page=100" </dev/null | jq -s 'add // []')"
-  tag="$(jq -r '.[].name | select(test("^v[0-9]"))' <<<"$tags" | sort -V | tail -1)"
+  if ! tags="$(gh api --paginate "repos/$repo/tags?per_page=100" </dev/null 2>"$TMPD/err" | jq -s 'add // []')"; then
+    echo "error: reading the tags of $repo failed: $(head -c 300 "$TMPD/err")" >&2
+    exit 1
+  fi
+  # The newest vX.Y.Z or vX.Y.Z-rc.N: a final sorts above its own release candidates.
+  tag="$(jq -r '.[].name | select(test("^v[0-9]+[.][0-9]+[.][0-9]+(-rc[.][0-9]+)?$"))' <<<"$tags" \
+    | awk '{ b = $0; r = 999999; if (match($0, /-rc[.][0-9]+$/)) { b = substr($0, 1, RSTART - 1); r = substr($0, RSTART + 4) } print b " " r " " $0 }' \
+    | sort -t ' ' -k1,1V -k2,2n | tail -1 | cut -d ' ' -f 3)"
   sha="$(jq -r --arg t "$tag" '.[] | select(.name == $t) | .commit.sha' <<<"$tags")"
   if [ -z "$tag" ] || [ -z "$sha" ]; then
     note "waits: no v* tag exists to prove a release was pushed by the app."
     return 1
   fi
-  runs="$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=push" </dev/null)"
+  if ! runs="$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=push" </dev/null 2>"$TMPD/err")"; then
+    echo "error: reading the Actions runs of $tag failed: $(head -c 300 "$TMPD/err")" >&2
+    exit 1
+  fi
   if jq -e --arg l "${APP_SLUG}[bot]" 'any(.workflow_runs[]; .triggering_actor.login == $l)' <<<"$runs" >/dev/null; then
     return 0
   fi
@@ -586,4 +637,11 @@ step_variable
 step_history
 step_tags
 step_require
+if [ "$REPOS_PROVEN" -eq 0 ] && [ "$dry" -eq 0 ]; then
+  note "note: this run did not prove the installation's repository list (no key at hand); --rotate-key proves it."
+fi
+if [ "$LEAK_KEPT" -eq 1 ]; then
+  echo "incomplete: the repository-level secret $SECRET_NAME was kept; any branch workflow can read it. Rerun and delete it." >&2
+  exit 1
+fi
 echo "done."

@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-21 the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
+reviewed: 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
 ---
 
 # Merge protection for `main`
@@ -53,7 +53,14 @@ run that finds the other's tag on the same commit, or its Release, is done.
 
 `release.yml` chooses the mode by the repo variable `FR_AUTOMATION_APP_ID`.
 When the variable is not set, it falls back to `GITHUB_TOKEN`. That is why a repo that
-has not adopted any of this continues to work.
+has not adopted the app continues to work.
+
+The `prepare` and `publish` jobs declare `environment: release` in both modes. Only the
+app-token step depends on the variable. So when a repo has a `release` environment
+that allows only `main`, these jobs run only on `main`, in `GITHUB_TOKEN` mode too. A
+`workflow_dispatch` from another branch fails at job start. When a repo has no `release`
+environment, GitHub creates one on the first run, with no branch policy. Run the setup
+script to give it the policy.
 
 ## Security model
 
@@ -107,7 +114,7 @@ If you decline an optional cleanup, the script goes on.
     - Set every other permission to No access.
     - Choose "Only on this account".
 2. **In the web UI, install the app** on the org. Choose "Only select repositories". Select this repo only.
-3. **In the web UI, generate a private key.** Download the `.pem` file. Write down the App ID.
+3. **In the web UI, generate a private key.** Download the `.pem` file. You do not need to copy the App ID: the script reads it from the installation.
 4. **Run the script before the PR that adds `environment: release` merges.**
 
         scripts/setup-release-app.sh --repo OWNER/REPO --dry-run
@@ -119,9 +126,9 @@ If you decline an optional cleanup, the script goes on.
     The script then does these steps:
     - It checks the app installation and its permissions.
     - It creates the `release` environment with a main-only branch policy.
-    - It asks for the `.pem` path. It proves the key belongs to the app, and that the app reaches only this repo. It stores the key as the environment secret.
+    - When no environment secret exists (or with `--rotate-key`), it asks for the `.pem` path. It proves the key belongs to the app, and that the app reaches only this repo. It stores the key as the environment secret.
     - It waits to set the variable until main's `release.yml` declares the environment.
-    - It removes the app's bypass from `protect main`.
+    - It removes the app's bypass from `protect main`. When `protect main` still holds the old `ci-ok` rule, it keeps the bypass there and leaves the move to the require step (step 6).
     - It creates `protect release tags`.
     - It says that the require step waits for a release that the app pushed.
 5. **Merge the PR.** The Release run passes `publish`. Confirm the new `v*` tag's commit has a push-event CI run that `derio-fr-automation[bot]` triggered. If you unset the variable in step 4, run the script again first. It sets the variable. The next release goes out as the app.
