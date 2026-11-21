@@ -639,3 +639,15 @@ amendments:
     ref: super-fr:tests/unit/test_wave_queue_phase5_fixes.py#test_p5_r1_an_approved_green_draft_batch_pr_is_readied_when_the_queue_builds_it
     why: an approved green draft batch PR is readied when the queue builds it, for both
       land methods (phase 5 fix p5-r1)
+  - row: wave-queue-approval-content
+    op: reword
+    base: 10
+    acceptance: An approved-fr approval survives any push that leaves the PR's own diff
+      unchanged and follows the approved head only by diff-neutral moves (a merge of
+      main with no resolution, an empty commit, fr's own update and a clean merge of
+      main after it, the queue's own landing rewrite), on every host whatever its diff
+      configuration. It is voided by a change to that diff, a moved hunk, a hand-edited
+      merge resolution or a rewritten branch. A diff git cannot read holds the approval
+      for the pass and never voids it.
+    why: 'l-security-r1: patch-ids are position-blind, so the succession is checked
+      too; l-errors-r4: unreadable holds'
