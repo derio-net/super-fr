@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-21-feat-release-app-hardening
+captures:
+- host: h-60ae1913
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-21T11:34:24+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: c6bcbca3-71d0-4772-a47f-f06b39dd9406
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 46
+        cache_write: 163723
+        cache_read: 2977342
+        output: 33542
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 3
+      other:
+        usd: null
+        turns: 10
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 101917
+        cache_read: 137464
+        output: 1730
+      brainstorm:
+        usd: null
+        turns: 18
+        input: 40
+        cache_write: 61806
+        cache_read: 2839878
+        output: 31812
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 101917
+          cache_read: 137464
+          output: 1730
+        brainstorm:
+          usd: null
+          turns: 18
+          input: 40
+          cache_write: 61806
+          cache_read: 2839878
+          output: 31812

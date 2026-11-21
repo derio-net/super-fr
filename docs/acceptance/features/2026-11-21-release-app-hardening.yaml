@@ -1,0 +1,115 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-21-release-app-hardening
+repo: derio-net/super-fr
+rows:
+  - id: release-key-environment-scoped
+    capability: release
+    acceptance: The release workflow reads the app key only in the two app-token jobs,
+      which declare the release environment; no other job declares it or reads the key
+    origin:
+    - spec:2026-11-21-release-app-hardening#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: setup-script-app-check
+    capability: release
+    acceptance: The setup script refuses an app installation with any permission beyond
+      contents write, issues write and metadata read, or with repositories other than
+      this repo
+    origin:
+    - spec:2026-11-21-release-app-hardening#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: setup-script-environment
+    capability: release
+    acceptance: The setup script creates or corrects the release environment so that
+      only main can deploy to it, with no admin bypass
+    origin:
+    - spec:2026-11-21-release-app-hardening#R2
+    - spec:2026-11-21-release-app-hardening#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: setup-script-key-never-printed
+    capability: release
+    acceptance: The setup script stores the app key as the release environment secret
+      only after proving it belongs to the app, and never shows the key or its JWT in
+      any output, log or argument
+    origin:
+    - spec:2026-11-21-release-app-hardening#R8
+    - spec:2026-11-21-release-app-hardening#R9
+    - spec:2026-11-21-release-app-hardening#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: setup-script-variable-last
+    capability: release
+    acceptance: The setup script sets the app id variable only once the environment
+      secret exists, and offers to undo a variable set without one
+    origin:
+    - spec:2026-11-21-release-app-hardening#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: setup-script-rulesets
+    capability: release
+    acceptance: The setup script leaves main's deletion and force-push rules with no
+      bypass actor, protects v* tags from update and deletion, and grants the app a
+      bypass only on the ci-ok rule, after an app-pushed release
+    origin:
+    - spec:2026-11-21-release-app-hardening#R12
+    - spec:2026-11-21-release-app-hardening#R13
+    - spec:2026-11-21-release-app-hardening#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: setup-script-idempotent-confirmed
+    capability: release
+    acceptance: The setup script confirms every write, stops on a declined one, writes
+      nothing under --dry-run, and a rerun over a finished setup writes nothing
+    origin:
+    - spec:2026-11-21-release-app-hardening#R4
+    - spec:2026-11-21-release-app-hardening#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: release-app-setup-live
+    capability: release
+    acceptance: On the live repo a release is pushed as the app from the release environment,
+      a branch run is refused the key, and main requires ci-ok
+    origin:
+    - spec:2026-11-21-release-app-hardening#R2
+    - spec:2026-11-21-release-app-hardening#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+amendments:
+  - row: main-protection-script
+    op: retire
+    base: 0
+    notes: superseded by scripts/setup-release-app.sh (spec 2026-11-21-release-app-hardening)
+    why: configure-main-protection.sh is deleted; spec 2026-11-21-release-app-hardening
+      R3 replaces it with setup-release-app.sh, covered by the setup-script-* rows
+  - row: ci-ok-required-on-main
+    op: set-status
+    base: 0
+    status: not-implemented
+    notes: 'Operator: scripts/setup-release-app.sh from the PR branch before merge (app,
+      environment, key, variable, rulesets), an app-pushed release, then the script
+      again for require ci-ok; tracked by derio-net/super-fr#1580, verified live post-merge.'
+    why: 'The operator steps changed: spec 2026-11-21-release-app-hardening replaces
+      bypass/require with setup-release-app.sh'

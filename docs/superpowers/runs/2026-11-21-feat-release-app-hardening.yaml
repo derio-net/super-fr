@@ -1,16 +1,19 @@
 schema_version: 12
 run: 2026-11-21-feat-release-app-hardening
-workflow: fr-goal@1
+workflow: fr-goal-light@1
 branch: feat/release-app-hardening
 started: '2026-11-21T11:00:48+00:00'
-cursor: brainstorm
+cursor: plan
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-21T11:00:59+00:00'
-  spec-review:
-    state: pending
+    state: done
+    at: '2026-11-21T11:34:23+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-21-release-app-hardening-design.md
   plan:
+    state: pending
+  spec-plan-review:
     state: pending
   plan-review:
     state: pending
