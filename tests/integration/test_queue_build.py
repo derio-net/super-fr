@@ -106,6 +106,19 @@ def test_a_stale_slot_lease_fails_the_push(tmp_path: Path) -> None:
         _build(w, "squash", leases={1: w.main(), 2: None})
 
 
+def test_a_stale_lease_fails_even_when_the_rebuild_lands_in_the_same_second(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Both builds at one committer time: without the remote's own sha in `avoid`, the
+    # rebuild IS the commit the slot holds, and git pushes nothing and checks no lease.
+    w = _two(tmp_path)
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "@1700000000 +0000")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "@1700000000 +0000")
+    _build(w, "squash")
+    with pytest.raises(LeaseLostError):
+        _build(w, "squash", leases={1: w.main(), 2: None})
+
+
 def _versioned(tmp_path: Path, b_files: dict[str, str]) -> World:
     w = world(tmp_path)
     w.pr(1, {"b.txt": "bravo\n"}, version="1.0.1")

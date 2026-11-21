@@ -306,7 +306,12 @@ def build(
         for entry, slot in zip(entries, slots, strict=False):
             wt.reset_hard(prev)
             tree, tip = _combine(checkout, wt, prev, entry, method, version)
-            avoid = {s for s in held.values() if s}
+            ref = slot_ref(scope, slot)
+            # R13: never the sha the slot holds on the remote either. A rebuild in the
+            # same second as a build the leases do not name would otherwise be that very
+            # commit, its push a no-op that checks no lease and starts no CI.
+            remote_now = checkout.remote_sha(ref)
+            avoid = {s for s in (*held.values(), remote_now) if s}
             if tip:  # rebase: replayed already
                 sha = tip if tip not in avoid else _fresh_commit(
                     wt, checkout.tree_of(tip), checkout.parents(tip), checkout.message(tip),
@@ -321,7 +326,6 @@ def build(
             )  # fmt: skip
             if record is not None:  # recorded BEFORE the push: `resume` re-pushes it
                 record(built_event(built, clock()))
-            ref = slot_ref(scope, slot)
             try:
                 checkout.push_leased([(sha, ref)], {ref: held.get(slot)}, atomic=False)
             except LeaseLostError as exc:
