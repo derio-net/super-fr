@@ -502,7 +502,7 @@ _SEAM = "fr.triage.gitseam"
 # without `--atomic` and a protection refusal apart (spec 2026-11-19-wave-merge-queue R10).
 _SEAM_ALLOWED = frozenset(
     {"Checkout", "Worktree", "GitError", "LeaseLostError", "AtomicUnsupportedError",
-     "PushRefusedError"}
+     "PushRefusedError", "TransientPushError"}
 )  # fmt: skip
 _SEAM_RUNNERS = frozenset({"_run", "git", "git_ok", "run_declared"})
 

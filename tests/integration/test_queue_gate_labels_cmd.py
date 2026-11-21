@@ -76,6 +76,12 @@ def test_a_released_devops_pr_lands_last_and_the_wave_drains_after_its_post_merg
 
     qw.prs[101]["labels"] = ["approved-fr", "gate:devops", "fr-queue:release",
                              "fr-queue:postmerge-done"]  # fmt: skip
+    _passes(tmp_path, 2)
+    assert _events(tmp_path, QueuePostmergeDoneEvent) == [], "the label alone lifts nothing"
+    from fr.triage.approval import postmerge_marker
+
+    qw.comments[101] = [*qw.comments[101], {"association": "OWNER", "id": 2,
+                                            "body": postmerge_marker("a" * 40)}]  # fmt: skip
     _passes(tmp_path, 3)
     (done,) = _events(tmp_path, QueuePostmergeDoneEvent)
     assert done.entry.batch == "b1"
