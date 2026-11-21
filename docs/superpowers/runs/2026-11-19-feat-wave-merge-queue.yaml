@@ -305,6 +305,14 @@ steps:
           findings: l-security-r1,l-security-r2,l-security-r3,l-security-r4,l-security-r5,l-security-r6,l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-errors-r7,l-errors-r8,l-errors-r9,l-errors-r10,l-errors-r11,l-errors-r12,l-errors-r13,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-docs-accuracy-r4,l-docs-accuracy-r5,l-docs-accuracy-r6,l-docs-accuracy-r7
           lenses: docs-accuracy=11:l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-docs-accuracy-r4,l-docs-accuracy-r5,l-docs-accuracy-r6,l-docs-accuracy-r7;errors=14:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-errors-r7,l-errors-r8,l-errors-r9,l-errors-r10,l-errors-r11,l-errors-r12,l-errors-r13;security=15:l-security-r1,l-security-r2,l-security-r3,l-security-r4,l-security-r5,l-security-r6;tests=26:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-21T05:47:19+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-21T05:47:19+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: a675f8da-621c-489c-90c0-07d7c601e9f7
 driver: standalone
 fr_version: 8.3.0rc6
