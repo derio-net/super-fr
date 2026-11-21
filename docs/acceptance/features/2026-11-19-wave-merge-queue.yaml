@@ -71,14 +71,12 @@ rows:
       - super-fr:tests/unit/test_wave_queue_planner.py#test_between_waves_entries_open_a_one_entry_queue_once_every_wave_is_done
       - super-fr:tests/unit/test_wave_queue_planner.py#test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry
       - super-fr:tests/unit/test_wave_closeout.py#test_a_waves_close_out_waits_for_every_batch_of_the_wave_to_land
-      - super-fr:tests/unit/test_wave_closeout.py#test_the_close_out_starts_only_after_the_last_landings_post_merge
       - super-fr:tests/unit/test_wave_closeout.py#test_a_tester_gated_batch_is_left_out_and_its_own_close_out_follows_its_gate
       - super-fr:tests/unit/test_wave_closeout.py#test_under_quiet_or_stealth_the_queue_holds_batch_prs_only
+      - super-fr:tests/unit/test_wave_closeout.py#test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out
     status: ci
-    notes: 'phase 6: the wave close-out (R15) takes the wave''s ungated landed batches,
-      starts after the last landing''s post_merge and is the queue''s last entry; a
-      gated batch''s close-out queues between waves; quiet and stealth hold batch PRs
-      only; with the planner''s wave rules from phase 2'
+    notes: 'phase 6: the wave close-out (R15) takes the wave''s ungated landed batches;
+      phase 7: its test was renamed (test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out)'
   - id: wave-queue-eject
     capability: wave merge queue
     acceptance: A combination that fails twice or conflicts takes only its own PR out
