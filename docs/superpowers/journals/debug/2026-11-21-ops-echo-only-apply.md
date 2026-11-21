@@ -5,3 +5,8 @@
 ### repro-1 · repro · mutating op with echo-only apply passes self-review; apply_ops records it applied
 
 frank#1007 (run 2026-11-16-feat-gpu-speech-service-1006): ops premerge-gpu-switcher-image and premerge-speech-image are mutating: true with apply: echo '…docker buildx build --push…'. fr plan self-review passed both. fr ops apply would run the echo (exit 0) and treat the op as applied; deliver's last lines told the operator 'fr pickup --run' rather than 'fr ops gate --run'.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-1 created=2026-11-21T16:24:00+00:00 -->
+### rc-1 · root-cause · no layer asks whether an apply acts
+
+plan_ops._ops_gap_issues (plan_ops.py:1967) refuses only check == TODO; apply_ops (ops/apply.py:316) runs op.apply and trusts exit 0; run_cmd._closeout_handoff_lines (run_cmd.py:408) always names fr pickup --run, never consulting fr.run.closeout.devops_gated, which fr pickup itself uses to pick the DevOps brief.
