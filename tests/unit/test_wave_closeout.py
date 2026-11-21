@@ -59,9 +59,7 @@ def test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out()
     snap = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=frozenset({REPO}),
                  a_events=[POST_MERGE])  # fmt: skip
     kinds = [(a.kind, a.batch) for a in drive_pass(snap).actions]
-    # R15: b's landing has none yet, so the wave's close-out waits for it (never starts
-    # with a alone)
-    assert kinds == [("post-merge", "b"), ("held", "b")]
+    assert kinds == [("post-merge", "b"), ("closeout", "a")]  # b's landing has none yet
     done = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=frozenset({REPO}),
                  a_events=[POST_MERGE], b_events=[POST_MERGE])  # fmt: skip
     assert [a.kind for a in drive_pass(done).actions] == ["closeout"]
@@ -109,14 +107,20 @@ def _config() -> Any:
     return QueueConfig()
 
 
-def test_p6_r6_one_member_without_its_post_merge_holds_the_whole_close_out() -> None:
-    """Wave {a, b}: b's post_merge has not succeeded, so no close-out starts, not even for a;
-    once it has, exactly one close-out takes both."""
+def test_p6_r6_a_member_no_action_runs_post_merge_for_holds_the_whole_wave() -> None:
+    """Wave {a, b}: b is owed a post_merge but is not due (no post-merge action is planned
+    for it), so no close-out starts, not even for a; once it has one, one close-out takes
+    both."""
     repos = frozenset({REPO})
-    held = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=repos,
-                 a_events=[POST_MERGE])  # fmt: skip
-    assert _closeouts(held) == []
-    assert [a.kind for a in drive_pass(held).actions if a.kind == "held"] == ["held"]
+    made = [_dispatched("a", 1, wave=1, events=[POST_MERGE]), _dispatched("b", 2, wave=1)]
+    held_up = _snap(
+        made,
+        {"a": "merged", "b": "merged"},
+        post_merge_repos=repos,
+        merged_at={"a": NOW - timedelta(hours=1)},
+    )  # b's merge time is unknown
+    assert _closeouts(held_up) == []
+    assert [a.kind for a in drive_pass(held_up).actions if a.kind == "held"] == ["held"]
     done = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=repos,
                  a_events=[POST_MERGE], b_events=[POST_MERGE])  # fmt: skip
     assert _closeouts(done) == [("a", "b")]

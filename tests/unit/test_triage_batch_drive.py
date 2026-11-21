@@ -382,8 +382,7 @@ def test_post_merge_is_owed_only_until_its_event_exists() -> None:
     event = {"kind": "post_merge", "at": "2026-10-02T11:00:00Z"}
     owed = drive_pass(_snap([_merged("x", 1)], {"x": "merged"}, released=frozenset({"x"}),
                             post_merge_repos=frozenset({REPO})))  # fmt: skip
-    # R15: the close-out starts only after the landing's post_merge, in a later pass
-    assert _kinds(owed.actions) == [("post-merge", "x"), ("held", "x")]
+    assert _kinds(owed.actions) == [("post-merge", "x"), ("closeout", "x")]
     b = _merged("x", 1, events=[event])
     done = drive_pass(_snap([b], {"x": "merged"}, released=frozenset({"x"}),
                             post_merge_repos=frozenset({REPO})))  # fmt: skip

@@ -1803,6 +1803,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     # (gh#990); starting one, or recording one under way, follows the selection.
     closing = gated = closeouts_held = 0
     post_owed: dict[tuple[str, int | None], list[str]] = {}
+    post_planned: set[str] = set()
     # (repo, wave) -> the batches its collected close-out takes (R15: one per wave)
     collecting: dict[tuple[str, int | None], list[str]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
@@ -1845,6 +1846,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             # p4-r2: at merge (once its release commit landed, or the fallback), gated or
             # not, and always ahead of the batch's close-out, which never runs it itself.
             actions.append(Action("post-merge", batch.id, "run the repo's post_merge"))
+            post_planned.add(batch.id)
         if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
             closing += 1
             actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
@@ -1856,8 +1858,16 @@ def drive_pass(snap: Snapshot) -> Pass:
             actions.extend(_gate_actions(batch, snap, labelled))
             continue
         closing += 1
-        if owed and snap.repos.get(batch.id) in snap.post_merge_repos and hand is None:
-            # R15: the wave's one close-out starts only after every landing's post_merge
+        if (
+            owed
+            and snap.repos.get(batch.id) in snap.post_merge_repos
+            and hand is None
+            and batch.id not in post_planned
+        ):
+            # R15: the wave's one close-out starts only after every landing's post_merge. A
+            # member whose post_merge is planned in this pass runs it first, and the start
+            # re-checks every member's (`_collected_close_out`), holding the whole close-out
+            # when one failed; this holds the wave for a member no action will run it for.
             post_owed.setdefault((snap.repos.get(batch.id, ""), _wave_of(batch)), []).append(
                 batch.id
             )

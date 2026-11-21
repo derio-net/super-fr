@@ -6899,8 +6899,9 @@ class _Driver:
     ) -> tuple[str, bool]:
         """R15: start ONE close-out session for *action*'s batches, briefed to run `fr
         triage batch closeout`. It starts only once EVERY landed member's `post_merge` has
-        succeeded (any adapter): a member without one holds the whole close-out, never starts
-        with the rest. Each member's close-out event (`archive` the shared branch) is recorded
+        succeeded (where this driver runs it: the host's; the cloud driver never does): a
+        member without one holds the whole close-out, never starts with the rest. Each member's
+        close-out event (`archive` the shared branch) is recorded
         before the tab starts (gh#883) and taken back if it cannot start."""
         members: list[Batch] = []
         skipped: list[
@@ -6911,8 +6912,10 @@ class _Driver:
             b = _find(judgements.batches, bid)
             if self.adapter.refusal(b) is not None:
                 foreign.append(f"left to the driver of runner {b.launch.runner} ({bid})")
-            elif facts.config_for(repo).post_merge and not any(
-                e.kind == "post_merge" for e in b.events
+            elif (
+                self.adapter.kind == "host"  # the cloud driver never runs post_merge (R20)
+                and facts.config_for(repo).post_merge
+                and not any(e.kind == "post_merge" for e in b.events)
             ):
                 skipped.append(f"{bid} (its post_merge has not succeeded)")
             else:

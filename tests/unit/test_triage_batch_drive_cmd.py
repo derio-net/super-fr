@@ -1029,12 +1029,8 @@ def test_post_merge_then_one_closeout_through_the_runner(
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    # R15: the close-out starts only after the last landing's post_merge, so a later pass
-    assert checkout.forwarded == 1 and runner.dispatched == []
-    assert checkout.commands == [["./scripts/install.sh"]]
-    code, out = _drive(tmp_path, "--once", "--yes")
-    assert code == 0, out
     assert checkout.forwarded == 2  # post_merge's (p4-r2), then the close-out's
+    assert checkout.commands == [["./scripts/install.sh"]]
     (item,) = runner.dispatched
     assert item.id == COLLECTED
     assert item.unit == "run" and item.payload["kind"] == "closeout"
@@ -1268,9 +1264,8 @@ def test_a_failing_post_merge_holds_the_closeout_every_pass(
         assert _lines(out, "post-merge") == [
             "post-merge b1: post_merge failed, close-out held: install.sh: exit 1"
         ]
-        assert _lines(out, "held") == [
-            "held b1: the wave's close-out waits: post_merge has not succeeded for b1 "
-            "(its `post-merge` Need names it)"
+        assert _lines(out, "closeout") == [
+            "closeout b1: close-out held: b1 (its post_merge has not succeeded)"
         ]
     assert runner.dispatched == []
     assert _events(tmp_path, "b1") == ["dispatch"]
@@ -5294,8 +5289,6 @@ def test_p6_r6_a_wave_close_out_waits_for_every_members_post_merge_then_starts_o
         _drive(tmp_path, "--once", "--yes")
         assert runner.dispatched == []
     checkout.command_fails = None
-    _drive(tmp_path, "--once", "--yes")  # b2's post_merge succeeds
-    assert runner.dispatched == []  # the close-out starts on the next pass
-    _drive(tmp_path, "--once", "--yes")
+    _drive(tmp_path, "--once", "--yes")  # b2's post_merge succeeds, then the close-out starts
     (item,) = runner.dispatched
     assert item.payload["kind"] == "closeout" and "b1 b2" in item.payload["brief"]

@@ -38,6 +38,7 @@ forge: {type: github}
 tracking: {type: none}
 YAML
 printf 'env_passthrough: [MARKS]\n' > .fr/ops.yaml
+printf 'queue: {ci: none}\n' > .fr/triage.yaml  # the wave merge queue serves this repo
 matrix_fragment <<'YAML'
 org: derio-net
 repo: fixture
@@ -152,13 +153,24 @@ class Forge:
         save()
 
     def list_issue_comments(self, repo, n):
-        return []
+        return list(self._pr(n).get("comments", []))
+
+    def edit_issue_comment(self, repo, comment_id, body):
+        for p in prs.values():
+            for c in p.get("comments", []) if isinstance(p, dict) else []:
+                if c["id"] == comment_id:
+                    c["body"] = body
+        save()
 
     def ensure_labels(self, repo, labels):
         pass
 
     def comment_pr(self, repo, n, body):
         print(f"FAKE-FORGE comment #{n}: {body}")
+        p = self._pr(n)
+        comments = p.setdefault("comments", [])
+        comments.append({"association": "OWNER", "id": len(comments) + 1, "body": body})
+        save()
 
 
 class Prompt:
