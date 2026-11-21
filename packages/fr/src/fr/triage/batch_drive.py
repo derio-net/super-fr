@@ -1732,15 +1732,20 @@ def _queue_plans(
             for repo in sorted(snap.wave_queues)]  # fmt: skip
 
 
+QUEUE_REPORT_KEY = "queue"
+"""The `key` of an `Action` the merge queue reported (R28): `needs_you` reads it as a
+`queue-need`, not as a blocked batch."""
+
+
 def _queue_reports(plan: QueuePlan) -> list[Action]:
     """The queue's report actions, as the pass's own: a held repo is `held` (R31), a Need is
     `blocked` (the operator's, R28, R30), a report said once is a `warn` keyed in `warned`."""
     out: list[Action] = []
     for a in plan.actions:
         if a.kind == "queue-held":
-            out.append(Action("held", plan.repo, a.detail))
+            out.append(Action("held", plan.repo, a.detail, key=QUEUE_REPORT_KEY))
         elif a.kind == "queue-need":
-            out.append(Action("blocked", a.batch or plan.repo, a.detail))
+            out.append(Action("blocked", a.batch or plan.repo, a.detail, key=QUEUE_REPORT_KEY))
         elif a.kind == "queue-warn":
             out.append(Action("warn", plan.repo, a.detail, head=a.key))
     return out

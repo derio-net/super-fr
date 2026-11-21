@@ -1229,6 +1229,17 @@ class QueueClearedEvent(_Strict):
     detail: str = ""
 
 
+class QueueRetryEvent(_Strict):
+    """The operator asked a halted queue to go on (`fr triage batch queue-retry`): every
+    `queue_halt` before it no longer stops the queue, so the planner rebuilds and tries the
+    landing again; a new refusal is a new halt (spec 2026-11-19-wave-merge-queue R24, R28).
+    Needs judgements schema 13. Written by the verb only."""
+
+    kind: Literal["queue_retry"]
+    at: AwareDatetime
+    detail: str = ""
+
+
 class QueueReleaseEvent(_Strict):
     """The DevOps stage released `gate:devops`-held *entry* (its `fr-queue:release` label)
     at *head* and *patch_id* (spec 2026-11-19-wave-merge-queue R24, R26). *voided* records
@@ -1276,6 +1287,7 @@ QueueEvent = Annotated[
     | QueueHaltEvent
     | QueueSlotLostEvent
     | QueueClearedEvent
+    | QueueRetryEvent
     | QueueReleaseEvent
     | QueuePostmergeDoneEvent
     | QueueApprovalEvent,
@@ -1321,6 +1333,7 @@ SCHEMA_13_EVENTS = frozenset(
         "queue_halt",
         "queue_slot_lost",
         "queue_cleared",
+        "queue_retry",
         "queue_release",
         "queue_postmerge_done",
         "deferred",

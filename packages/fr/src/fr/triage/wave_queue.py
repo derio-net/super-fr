@@ -48,6 +48,7 @@ from fr.triage.model import (
     QueuePostmergeDoneEvent,
     QueueRecord,
     QueueReleaseEvent,
+    QueueRetryEvent,
     QueueSlotLostEvent,
     RedHandbackEvent,
     RequeuedEvent,
@@ -272,6 +273,7 @@ class QueuePlan:
     actions: tuple[QueueAction, ...]
     entries: tuple[str, ...] = ()  # the queue's entries in order, after this plan
     waiting: tuple[str, ...] = ()  # ready entries that wait on a later queue
+    view: QueueView | None = None  # the queue as R25 reads it, set by `plan_queue`
 
 
 # ------------------------------------------------------------------ reading
@@ -315,6 +317,25 @@ def queue_phase(records: Sequence[QueueRecord], hold: Hold | None) -> QueuePhase
         if opened and not drained:
             return "open"
     return "idle"
+
+
+def wave_queue_open(records: Sequence[QueueRecord], repo: str, wave: int | None) -> bool:
+    """*repo*'s queue for *wave* (None: between waves) is open: its latest record, in any
+    scope, was opened and not drained (R29: `requeue --wave N` is refused while it is)."""
+    mine = [r for r in records if r.repo == repo and r.wave == wave]
+    if not mine:
+        return False
+    events = mine[-1].events
+    return (any(isinstance(e, QueueOpenEvent) for e in events)
+            and not any(isinstance(e, QueueDrainEvent) for e in events))  # fmt: skip
+
+
+def halted_queue(record: QueueRecord | None) -> QueueHaltEvent | None:
+    """The `queue_halt` *record*'s queue was last stopped by and the operator has not retried
+    (`queue_retry`, R28): what `fr triage batch queue-retry` lifts."""
+    if record is None:
+        return None
+    return _last_halt(record, hold=False) or _last_halt(record, hold=True)
 
 
 def _ready_at(batch: Batch, pr: LivePr) -> datetime | None:
@@ -683,13 +704,26 @@ def is_hold_halt(event: QueueHaltEvent) -> bool:
     return event.detail.startswith(HOLD_HALT)
 
 
+def _last_halt(record: QueueRecord, *, hold: bool) -> QueueHaltEvent | None:
+    """The last `queue_halt` of *record* of the hold-write kind (*hold*) or the other, unless
+    the operator's `queue_retry` came after it (R28): a retry lifts every halt before it."""
+    for event in reversed(record.events):
+        if isinstance(event, QueueRetryEvent):
+            return None
+        if isinstance(event, QueueHaltEvent) and is_hold_halt(event) is hold:
+            return event
+    return None
+
+
+def retry_command(qs: QueueSnapshot) -> str:
+    """What the operator pastes to make a halted queue try again (R28)."""
+    return f"fr triage batch queue-retry {qs.repo}" + "".join(f" {a}" for a in qs.scope_args)
+
+
 def hold_halt_live(record: QueueRecord, hold: Hold | None) -> QueueHaltEvent | None:
     """The last hold-write halt of *record*, while no hold write has succeeded after it (the
     hold reads a `refreshed` at or after the halt: the hold's stamps have whole seconds)."""
-    halt = next(
-        (e for e in reversed(record.events) if isinstance(e, QueueHaltEvent) and is_hold_halt(e)),
-        None,
-    )
+    halt = _last_halt(record, hold=True)
     if halt is None:
         return None
     if hold is not None and hold.refreshed is not None:
@@ -709,11 +743,7 @@ def live_halt(record: QueueRecord, qs: QueueSnapshot) -> QueueHaltEvent | None:
     moved from where it stood (an unread base keeps it). None when there is none, or the
     operator has acted on it. A hold-write halt (`hold_halt`) is lifted by a hold write
     instead, and is the one that shows when no other halt does."""
-    halt = next(
-        (e for e in reversed(record.events)
-         if isinstance(e, QueueHaltEvent) and not is_hold_halt(e)),
-        None,
-    )  # fmt: skip
+    halt = _last_halt(record, hold=False)
     if (
         halt is not None
         and halt.land == qs.config.land
@@ -731,7 +761,8 @@ def _halted(record: QueueRecord, qs: QueueSnapshot, halt: QueueHaltEvent) -> Que
         detail = (
             f"{qs.repo}'s merge queue is {halt.state} and lands nothing: {halt.detail}. It "
             "goes on once you change `queue.land` in .fr/triage.yaml or move the default "
-            "branch (a fix by hand); every combination is then rebuilt"
+            f"branch (a fix by hand), or once you fix the cause and run `{retry_command(qs)}"
+            " --yes`; every combination is then rebuilt"
         )
     rep = replay(record)
     need = QueueAction("queue-need", qs.repo, detail, wave=record.wave)
@@ -742,7 +773,8 @@ def _hold_halt_need(qs: QueueSnapshot, halt: QueueHaltEvent) -> str:
     return (
         f"{qs.repo}'s merge queue lands nothing: {halt.detail}. The driver tries the hold "
         "write again each pass and the queue goes on once one succeeds; if the remote will "
-        "never accept it, fix the push permission or the branch rule for `fr-hold/**`"
+        "never accept it, fix the push permission or the branch rule for `fr-hold/**`, then "
+        f"`{retry_command(qs)} --yes` makes the driver try at once"
     )
 
 
@@ -1113,7 +1145,8 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
     """One pass of one repo's queue (§A)."""
     plan = _plan_queue(qs)
     needs = () if any(a.kind == "queue-held" for a in plan.actions) else _base_needs(qs)
-    return replace(plan, actions=(*plan.actions, *needs)) if needs else plan
+    plan = replace(plan, actions=(*plan.actions, *needs)) if needs else plan
+    return replace(plan, view=queue_view(plan, qs=qs))
 
 
 def _plan_queue(qs: QueueSnapshot) -> QueuePlan:
@@ -1185,7 +1218,8 @@ def _hold_actions(record: QueueRecord, qs: QueueSnapshot) -> tuple[QueueAction, 
     cut = (f"; a release was cut from the partly landed wave: {', '.join(qs.releases)}"
            if qs.releases else "; no release was cut from it")  # fmt: skip
     which = "between waves" if wave is None else f"wave {wave}"
-    detail = f"{qs.repo}'s hold for {which} was {why}: re-armed{cut}"
+    detail = (f"{qs.repo}'s hold for {which} was {why}: re-armed{cut}; see it with "
+              f"`git ls-remote origin {HOLD_REF}`")  # fmt: skip
     return (
         QueueAction("queue-hold", qs.repo, f"re-arm {qs.repo}'s hold ({why})", wave=wave,
                     reason="rearm"),
@@ -1196,16 +1230,96 @@ def _hold_actions(record: QueueRecord, qs: QueueSnapshot) -> tuple[QueueAction, 
 # ------------------------------------------------------------------ lines
 
 
-def queue_line(plan: QueuePlan) -> str:
-    """One repo's queue in one line: `queue <repo>: open wave 3 · entries a, b · waiting c`.
-    The full line of R25 (each entry's state, what landed, the hold) is the operator view's."""
-    wave = "between waves" if plan.wave is None else f"wave {plan.wave}"
-    parts = [plan.phase if plan.phase != "open" else f"open {wave}"]
-    if plan.entries:
-        parts.append("entries " + ", ".join(plan.entries))
-    if plan.waiting:
-        parts.append("waiting " + ", ".join(plan.waiting))
-    return f"queue {plan.repo}: " + " · ".join(parts)
+EntryState = Literal["building", "testing", "green", "ejected", "waiting", "barrier"]
+
+
+@dataclass(frozen=True)
+class QueueView:
+    """One repo's queue as the operator reads it (R25): the wave, the base, each entry with
+    its state, what landed and the hold's state. Built by `queue_view`, rendered by
+    `queue_line`; the Batches page, the pass and the PR comment read the same one."""
+
+    repo: str
+    phase: QueuePhase
+    wave: int | None
+    base: str
+    entries: tuple[tuple[str, EntryState], ...] = ()
+    landed: tuple[str, ...] = ()
+    hold: str = "none"
+    halted: str = ""  # "": the queue is not halted; else `held` or `stopped`
+
+
+def _hold_state(record: QueueRecord | None, hold: Hold | None) -> str:
+    if hold is not None:
+        return hold.state
+    state = "none"
+    for event in record.events if record is not None else ():
+        if isinstance(event, QueueOpenEvent):
+            state = "open"
+        elif isinstance(event, QueueDrainEvent):
+            state = "drained"
+        elif isinstance(event, QueueClearedEvent):
+            state = "cleared"
+    return state
+
+
+def queue_view(
+    plan: QueuePlan, record: QueueRecord | None = None, qs: QueueSnapshot | None = None
+) -> QueueView:
+    """*plan*'s queue read as R25 says. With *qs* (the driver's pass) the entries' checks and
+    the live hold are known; without it (the Batches page) the state comes from *record*, the
+    repo's queue record, alone: a built combination reads `testing`."""
+    if record is None and qs is not None:
+        mine = [r for r in qs.records if r.scope == qs.scope]
+        record = mine[-1] if mine else None
+    rep = replay(record) if record is not None else None
+    states: list[tuple[str, EntryState]] = []
+    for key in plan.entries:
+        state: EntryState = "building"
+        if qs is not None and _is_barrier(key, qs):
+            state = "barrier"
+        elif rep is not None:
+            combo = next((c for c in rep.combos.values() if key in c.chain), None)
+            if combo is not None:
+                check = qs.slots.get(combo.sha) if qs is not None else None
+                state = ("green" if check is not None and check.verdict == "green"
+                         else "ejected" if check is not None and check.verdict == "failing"
+                         else "testing")  # fmt: skip
+        states.append((key, state))
+    if rep is not None:
+        states += [(k, "ejected") for k in rep.ejected if k not in plan.entries
+                   and k not in rep.landed]  # fmt: skip
+    states += [(k, "waiting") for k in plan.waiting if k not in plan.entries]
+    landed: list[str] = []
+    for event in record.events if record is not None else ():
+        if isinstance(event, QueueLandEvent):
+            landed += [entry_key(e) for e in event.entries]
+    halt = live_halt(record, qs) if record is not None and qs is not None else None
+    return QueueView(plan.repo, plan.phase, plan.wave, (rep.base if rep else "") or
+                     (qs.base if qs else ""), tuple(states), tuple(landed),
+                     _hold_state(record, qs.hold if qs is not None else None),
+                     halt.state if halt is not None else "")  # fmt: skip
+
+
+def queue_line(
+    plan: QueuePlan, record: QueueRecord | None = None, qs: QueueSnapshot | None = None
+) -> str:
+    """One repo's queue in one line (R25): `queue <repo>: open wave 3 on abc123 · a building,
+    b testing, c waiting · landed x · hold open`."""
+    view = (
+        plan.view if plan.view and record is None and qs is None else queue_view(plan, record, qs)
+    )
+    wave = "between waves" if view.wave is None else f"wave {view.wave}"
+    head = view.phase if view.phase != "open" else f"open {wave}"
+    parts = [head + (f" on {view.base[:12]}" if view.base else "")]
+    if view.halted:
+        parts.append(f"halted ({view.halted})")
+    if view.entries:
+        parts.append(", ".join(f"{k} {state}" for k, state in view.entries))
+    if view.landed:
+        parts.append("landed " + ", ".join(view.landed))
+    parts.append(f"hold {view.hold}")
+    return f"queue {view.repo}: " + " · ".join(parts)
 
 
 def queue_action_line(action: QueueAction) -> str:

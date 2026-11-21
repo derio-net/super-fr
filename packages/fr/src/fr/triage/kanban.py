@@ -65,6 +65,8 @@ from fr.triage.model import (
 )
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot, queue_unconfigured
+from fr.triage.wave_queue import queue_line
+from fr.triage.wave_report import WaveReport, wave_report
 
 BoardStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
 """One session's live state as the board shows it; `absent` when the runner holds none."""
@@ -399,6 +401,9 @@ class Board:
     collected_at: str
     columns: tuple[ColumnView, ...]
     held: tuple[HeldIssue, ...] = ()
+    # R25, R28: each queue repo's line, and the report of every wave its queue ran
+    queue_lines: tuple[str, ...] = ()
+    wave_reports: tuple[WaveReport, ...] = ()
 
     def column(self, key: Column) -> ColumnView:
         return next(c for c in self.columns if c.key == key)
@@ -839,4 +844,9 @@ def build_board(
         for key in COLUMNS
     )
     held = _held_issues(facts, me, now) if me and now else ()
-    return Board(scope=facts.scope, collected_at=facts.collected_at, columns=columns, held=held)
+    mine = [q for q in judgements.queues if not snapshot.scope_id or q.scope == snapshot.scope_id]
+    return Board(
+        scope=facts.scope, collected_at=facts.collected_at, columns=columns, held=held,
+        queue_lines=tuple(queue_line(q) for q in plan.queues),
+        wave_reports=wave_report(mine, batches),
+    )  # fmt: skip

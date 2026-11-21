@@ -31,6 +31,7 @@ QUEUE_KINDS = (
     "queue_land",
     "queue_drain",
     "queue_cleared",
+    "queue_retry",
     "queue_release",
     "queue_postmerge_done",
     "queue_halt",
@@ -82,6 +83,7 @@ def _queue_events() -> list[dict[str, Any]]:
         },  # fmt: skip
         {"kind": "queue_drain", "at": at.format(7), "main": MAIN},
         {"kind": "queue_cleared", "at": at.format(8)},
+        {"kind": "queue_retry", "at": at.format(9), "detail": "operator"},
     ]
 
 

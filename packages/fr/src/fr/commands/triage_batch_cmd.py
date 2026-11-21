@@ -284,6 +284,7 @@ from fr.triage.model import (
     ConflictEvent,
     CursorPosition,
     CursorReader,
+    DeferredEvent,
     DispatchEvent,
     Export,
     Facts,
@@ -297,8 +298,10 @@ from fr.triage.model import (
     QueueOpenEvent,
     QueueRecord,
     QueueReleaseEvent,
+    QueueRetryEvent,
     RedHandbackEvent,
     ReplacementEvent,
+    RequeuedEvent,
     Scope,
     load_judgements,
     load_scope_facts,
@@ -332,10 +335,16 @@ from fr.triage.wave_queue import (
     QueueAction,
     QueuePlan,
     barrier_open,
+    effective_wave,
+    halted_queue,
+    is_deferred,
     queue_action_line,
     queue_landed,
     queue_line,
+    wave_queue_open,
 )
+from fr.triage.wave_report import render_markdown as render_wave_report
+from fr.triage.wave_report import wave_report
 from fr.verification.labels import GATE_PASS_MARKER, close_gate_trackers, pass_gate
 
 if TYPE_CHECKING:
@@ -1134,6 +1143,136 @@ def batch_cancel_command(
     cancelled = batch.model_copy(update={"events": events})
     _write(target, _replace(judgements.batches, cancelled), facts, read=judgements.batches)
     console.print(f"cancelled batch {batch.id}", markup=False)
+
+
+def _leavable(batch: Batch, facts: Facts, verb: str) -> str:
+    """The stage of *batch*, refused (exit 2) once it is closed out: a landed, cancelled or
+    abandoned batch is in no queue to leave or join (R29)."""
+    stage = derive_batch_stage(batch, facts)
+    if stage in CLOSED_OUT:
+        _fail(f"batch {batch.id!r} is {stage}; there is nothing to {verb}")
+    return stage
+
+
+def _wave_name(wave: int | None) -> str:
+    return "the next queue to open (between waves)" if wave is None else f"wave {wave}'s queue"
+
+
+@batch_app.command("defer")
+def batch_defer_command(
+    batch_id: Annotated[str, typer.Argument(help="The batch to take out of its wave.")],
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Take a batch out of its wave's queue and drain; its PR stays open (R29).
+
+    Writes a `deferred` event naming the wave. The wave then drains without it and its
+    close-out leaves it out; the batch's own close-out is owed after it lands. Join a later
+    queue again with `requeue`. The driver proposes this; it never does it by itself."""
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
+    batch = _find(judgements.batches, batch_id)
+    stage = _leavable(batch, facts, "defer")
+    if is_deferred(batch):
+        _fail(f"batch {batch.id!r} is already deferred; `requeue` asks for a later queue")
+    wave = effective_wave(batch)
+    event = DeferredEvent(kind="deferred", at=_now_after(batch), wave=wave)
+    new = batch.model_copy(update={"events": [*batch.events, event]})
+    _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
+    where = "no wave" if wave is None else f"wave {wave}"
+    console.print(
+        f"deferred batch {batch.id} ({stage}) out of {where}: it no longer holds the wave's "
+        "queue or drain, and its PR stays open",
+        markup=False,
+    )
+
+
+@batch_app.command("requeue")
+def batch_requeue_command(
+    batch_id: Annotated[str, typer.Argument(help="The batch to put in a later queue.")],
+    wave: Annotated[
+        int | None,
+        typer.Option(
+            "--wave", help="Wave N's queue (it must not be open yet); default: the next queue."
+        ),
+    ] = None,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Ask a batch to join a later queue: wave N's, or by default the next queue to open,
+    as a between-waves entry (R2, R29). Writes a `requeued` event."""
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
+    batch = _find(judgements.batches, batch_id)
+    stage = _leavable(batch, facts, "requeue")
+    owner_repo = batch_repo(batch, facts)
+    if (
+        wave is not None
+        and owner_repo is not None
+        and wave_queue_open(judgements.queues, owner_repo, wave)
+    ):
+        _fail(
+            f"{owner_repo}'s queue for wave {wave} is open; a batch joins a wave's queue "
+            "only before it opens (`requeue` without --wave joins the next one to open)"
+        )
+    if effective_wave(batch) == wave and not is_deferred(batch):
+        _fail(f"batch {batch.id!r} is already in {_wave_name(wave)}")
+    event = RequeuedEvent(kind="requeued", at=_now_after(batch), wave=wave)
+    new = batch.model_copy(update={"events": [*batch.events, event]})
+    _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
+    console.print(
+        f"requeued batch {batch.id} ({stage}) into {_wave_name(wave)}"
+        + (" (it was deferred)" if is_deferred(batch) else ""),
+        markup=False,
+    )
+
+
+@batch_app.command("queue-retry")
+def batch_queue_retry_command(
+    queue_repo: Annotated[
+        str | None,
+        typer.Argument(help="OWNER/REPO whose halted merge queue to retry (default: every one)."),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Let a halted merge queue try again (R28): writes a `queue_retry` event, so the next pass
+    rebuilds every combination and lands again. A refusal that persists halts it anew."""
+    scope = _scope(repo, org)
+    target, _, judgements = _load_state(scope, dir_override, workspace)
+    sid = scope_id(scope)
+    latest: dict[str, QueueRecord] = {}
+    for record in judgements.queues:
+        if record.scope == sid and (queue_repo is None or record.repo == queue_repo):
+            latest[record.repo] = record
+    halted = {r: halted_queue(q) for r, q in sorted(latest.items())}
+    halted = {r: h for r, h in halted.items() if h is not None}
+    if not halted:
+        _fail(
+            f"no halted merge queue in scope {sid}"
+            + (f" for {queue_repo}" if queue_repo else "")
+            + "; nothing to retry",
+            code=1,
+        )
+    for name, halt in halted.items():
+        console.print(
+            f"retry {name}'s merge queue ({halt.state}: {halt.detail}): append a queue_retry "
+            "event; the next pass rebuilds and lands again",
+            markup=False,
+        )
+    if not yes:
+        console.print("nothing written; re-run with --yes to act", markup=False)
+        return
+    for name in halted:
+        queue_writer(target, name, sid)(
+            QueueRetryEvent(kind="queue_retry", at=_now(), detail="operator")
+        )
+    console.print(f"retried {len(halted)} halted queue(s)", markup=False)
 
 
 def _host_of(facts: Facts, owner_repo: str) -> str:
@@ -3133,6 +3272,15 @@ def _collected_member(
     )  # fmt: skip
 
 
+def _wave_report_text(judgements: Judgements, repo: str, members: Sequence[Any]) -> str:
+    """The merge queue's report of the waves *members* were in (R28), as the close-out PR's
+    body section; "" when none of their queues recorded anything."""
+    by_id = {b.id: b for b in judgements.batches}
+    waves = {by_id[m.batch].wave for m in members if m.batch in by_id}
+    records = [q for q in judgements.queues if q.repo == repo and q.wave in waves]
+    return render_wave_report(wave_report(records, judgements.batches))
+
+
 def _closeout_branch(
     repo: str, judgements: Judgements, checkout: Checkout, day: date, given: str | None
 ) -> str:
@@ -3354,6 +3502,7 @@ def batch_closeout_command(
                 branch=branch, record=lambda bid, br: None,
                 hold=lambda bid, why: _record_hold(target, facts, bid, item, why),
                 say=_say, unreadable=unreadable, transient=transient,
+                report=_wave_report_text(judgements, owner_repo, members),
             )  # fmt: skip
             if result.pr is not None and result.head:
                 carried = [m for m in members if m.batch in result.done]

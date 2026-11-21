@@ -1,0 +1,253 @@
+"""The operator's view of the wave merge queue (spec 2026-11-19-wave-merge-queue R25, R28, R29):
+the queue line, the halt's explicit retry, and the Needs.
+
+Pure: every test builds a `QueueSnapshot` by hand, as `test_wave_queue_planner.py` does.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from typing import Any
+
+from fr.triage.approval import First
+from fr.triage.batch_drive import LivePr
+from fr.triage.kanban import build_board
+from fr.triage.model import Batch, QueueRecord
+from fr.triage.scope_config import scope_id
+from fr.triage.views import NEED_LABELS, needs_you
+from fr.triage.wave_queue import (
+    Hold,
+    QueueConfig,
+    QueuePlan,
+    QueueSnapshot,
+    SlotCheck,
+    plan_queue,
+    queue_line,
+    queue_view,
+)
+
+from tests.unit.triage_board_fixtures import REPO as REPO_B
+from tests.unit.triage_board_fixtures import batch as mk
+from tests.unit.triage_board_fixtures import dispatch, facts, issue, j, judgements, pr
+
+REPO = "derio-net/super-fr"
+ME = "s-11111111"
+NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+AT = "2026-11-20T10:00:00Z"
+MAIN = "m0" * 20
+
+
+def _batch(bid: str, n: int, *, wave: int | None = 1) -> Batch:
+    return Batch.model_validate({
+        "id": bid, "title": bid, "ids": [f"super-fr#{n}"], "wave": wave,
+        "events": [{"kind": "dispatch", "at": "2026-11-20T09:00:00Z", "runner": "fake",
+                    "handle": "h", "branch": f"feat/batch-{bid}"}],
+    })  # fmt: skip
+
+
+def _record(*events: dict[str, Any], wave: int | None = 1) -> QueueRecord:
+    return QueueRecord.model_validate(
+        {"repo": REPO, "wave": wave, "scope": ME, "base": MAIN, "events": list(events)}
+    )
+
+
+def _built(slot: int, sha: str, bid: str, parent: str = MAIN) -> dict[str, Any]:
+    return {
+        "kind": "queue_built", "at": AT, "slot": slot, "sha": sha, "entry": {"batch": bid},
+        "head": f"head-{bid}", "patch_id": f"pid-{bid}", "base": MAIN, "parent": parent,
+    }  # fmt: skip
+
+
+def _qs(batches: Sequence[Batch], record: QueueRecord, **kw: Any) -> QueueSnapshot:
+    stages = {b.id: "pr-open" for b in batches}
+    live = {b.id: LivePr(number=100 + i, state="OPEN", draft=False, head=f"head-{b.id}",
+                         checks="green") for i, b in enumerate(batches)}  # fmt: skip
+    return QueueSnapshot(
+        repo=REPO, scope=ME, config=QueueConfig(), now=NOW, batches=tuple(batches),
+        stages=stages,  # type: ignore[arg-type]
+        live=live, approvals={bid: First(p.head) for bid, p in live.items()},
+        records=(record,), base=MAIN, hold_read=True, **kw,
+    )  # fmt: skip
+
+
+def _hold(state: str = "open") -> Hold:
+    return Hold(state=state, scope=ME, wave=1, parent=MAIN, opened=NOW, refreshed=NOW)  # type: ignore[arg-type]
+
+
+HALT = {"kind": "queue_halt", "at": AT, "state": "held", "detail": "GH013 push refused",
+        "land": "push", "main": MAIN}  # fmt: skip
+RETRY = {"kind": "queue_retry", "at": "2026-11-20T11:00:00Z", "detail": "operator"}
+
+
+def _kinds(plan: QueuePlan) -> list[str]:
+    return [a.kind for a in plan.actions]
+
+
+# ------------------------------------------------------------ the halt's retry (R28)
+
+
+def test_a_halted_queue_stays_halted_every_pass_and_names_the_retry_verb() -> None:
+    batches = [_batch("a", 1)]
+    qs = _qs(batches, _record({"kind": "queue_open", "at": AT}, HALT), hold=_hold())
+    for _ in range(3):  # nothing the passes do lifts it
+        plan = plan_queue(qs)
+        assert _kinds(plan) == ["queue-need"]
+        assert f"`fr triage batch queue-retry {REPO} --yes`" in plan.actions[0].detail
+
+
+def test_the_retry_event_lifts_the_halt_and_the_next_pass_builds() -> None:
+    batches = [_batch("a", 1)]
+    qs = _qs(batches, _record({"kind": "queue_open", "at": AT}, HALT, RETRY), hold=_hold())
+    assert "queue-build" in _kinds(plan_queue(qs))
+
+
+def test_a_halt_after_the_retry_stops_the_queue_again() -> None:
+    again = {**HALT, "at": "2026-11-20T11:30:00Z"}
+    batches = [_batch("a", 1)]
+    qs = _qs(batches, _record({"kind": "queue_open", "at": AT}, HALT, RETRY, again),
+             hold=_hold())  # fmt: skip
+    assert _kinds(plan_queue(qs)) == ["queue-need"]
+
+
+# ------------------------------------------------------------ the queue line (R25)
+
+
+def test_the_queue_line_names_the_wave_the_base_each_entry_what_landed_and_the_hold() -> None:
+    batches = [_batch("a", 1), _batch("b", 2), _batch("c", 3, wave=2), _batch("z", 9)]
+    stages = {"a": "pr-open", "b": "pr-open", "c": "pr-open", "z": "merged"}
+    record = _record(
+        {"kind": "queue_open", "at": AT},
+        {"kind": "queue_land", "at": AT, "main": MAIN, "entries": [{"batch": "z"}]},
+        _built(1, "s1" * 20, "a"),
+        _built(2, "s2" * 20, "b", parent="s1" * 20),
+    )
+    slots = {"s1" * 20: SlotCheck("pending"), "s2" * 20: SlotCheck("green")}
+    qs = _qs(batches, record, hold=_hold("open"), slots=slots)
+    qs = QueueSnapshot(**{**qs.__dict__, "stages": stages})
+    plan = plan_queue(qs)
+    line = queue_line(plan)
+    assert line.startswith(f"queue {REPO}: open wave 1 on {MAIN[:12]}")
+    assert "a testing" in line and "b green" in line and "c waiting" in line
+    assert "landed z" in line and line.endswith("hold open")
+    assert queue_view(plan, qs=qs).entries[1] == ("b", "green")
+
+
+def test_the_line_marks_an_ejected_entry_a_barrier_and_a_halt() -> None:
+    batches = [_batch("a", 1)]
+    record = _record({"kind": "queue_open", "at": AT},
+                     {"kind": "queue_eject", "at": AT, "entry": {"batch": "a"}, "reason": "red",
+                      "head": "head-a"}, HALT)  # fmt: skip
+    qs = _qs(batches, record, hold=_hold())
+    line = queue_line(plan_queue(qs))
+    assert "halted (held)" in line and "a ejected" in line
+
+
+# ------------------------------------------------------------ Needs you (R28)
+
+
+def _board(*record_events: dict[str, Any]) -> tuple[Any, Any]:
+    """A repo with one approved open PR whose queue record holds *record_events*."""
+    p = pr(11, "feat/batch-a", labels=["approved-fr"])
+    f = facts([issue(1, prs=[p])], schema=12, config={REPO_B: {"queue": {"ci": "push"}}})
+    jd = judgements({"widgets#1": j(1)}, [mk("a", [1], events=[dispatch("a")])])
+    record = QueueRecord.model_validate({
+        "repo": REPO_B, "wave": None, "scope": scope_id(f.scope), "base": MAIN,
+        "events": list(record_events),
+    })  # fmt: skip
+    return f, jd.model_copy(update={"queues": [record]})
+
+
+def test_the_boards_needs_list_a_halted_queue_with_the_command_to_paste() -> None:
+    """The Needs read the queue offline, from the judgements' own records and the config the
+    facts carry: a halt is a `queue-need` that names the retry verb."""
+    f, jd = _board({"kind": "queue_open", "at": AT}, HALT)
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "queue-need"]
+    assert f"queue-retry {REPO_B} --yes" in need.text and "GH013 push refused" in need.text
+    assert "queue-need" in NEED_LABELS
+    f, jd = _board({"kind": "queue_open", "at": AT}, HALT, RETRY)
+    assert not [n for n in needs_you(f, jd) if n.kind == "queue-need"]
+
+
+def test_the_board_card_of_a_queued_approved_pr_never_reads_awaiting_approval() -> None:
+    f, jd = _board({"kind": "queue_open", "at": AT})
+    assert build_board(f, jd, {}).card("a").hint == "in merge queue"
+
+
+# ------------------------------------------------------------ the wave report (R28)
+
+
+def test_the_wave_report_lists_landed_ejected_and_deferred_with_cycles_time_and_approvals() -> None:
+    from fr.triage.wave_report import render_markdown, wave_report
+
+    def at(minute: int) -> str:
+        return f"2026-11-20T10:{minute:02d}:00Z"
+
+    record = _record(
+        {"kind": "queue_open", "at": at(0)},
+        {**_built(1, "s1" * 20, "a"), "at": at(1)},
+        {**_built(2, "s2" * 20, "b", parent="s1" * 20), "at": at(2)},
+        {"kind": "queue_eject", "at": at(5), "entry": {"batch": "b"}, "reason": "red",
+         "head": "head-b"},
+        {**_built(1, "s3" * 20, "a"), "at": at(6)},  # a rebuilt once: two cycles
+        {"kind": "queue_land", "at": at(30), "main": "s3" * 20, "entries": [{"batch": "a"}]},
+        {"kind": "queue_drain", "at": at(31), "main": "s3" * 20},
+        {"kind": "queue_cleared", "at": at(40), "detail": "released v1.2.3"},
+    )  # fmt: skip
+    batch_a = Batch.model_validate({
+        "id": "a", "title": "a", "ids": ["super-fr#1"], "wave": 1,
+        "events": [{"kind": "approval", "at": at(1), "pr": 100, "head": "h1"}],
+    })  # fmt: skip
+    deferred = Batch.model_validate({
+        "id": "d", "title": "d", "ids": ["super-fr#4"], "wave": 1,
+        "events": [{"kind": "deferred", "at": at(3), "wave": 1}],
+    })  # fmt: skip
+    (report,) = wave_report([record], [batch_a, deferred])
+    by_key = {p.key: p for p in report.prs}
+    assert (by_key["a"].outcome, by_key["a"].cycles, by_key["a"].approvals) == ("landed", 2, 1)
+    assert by_key["a"].wall is not None and by_key["a"].wall.total_seconds() == 29 * 60
+    assert (by_key["b"].outcome, by_key["b"].detail) == ("ejected", "red")
+    assert by_key["d"].outcome == "deferred"
+    assert report.release.startswith("asked at ") and "released v1.2.3" in report.release
+    text = render_markdown([report])
+    assert text.startswith("## Wave merge queue report")
+    assert "| a | landed | 2 | 29m | 1 |" in text
+    assert "Closes" not in text  # `review_reasons` reads only the body's `Closes` lines
+
+
+def test_an_empty_report_renders_nothing() -> None:
+    from fr.triage.wave_report import render_markdown, wave_report
+
+    assert render_markdown(wave_report([_record({"kind": "queue_open", "at": AT})])) == ""
+
+
+def test_the_closeout_pr_body_carries_the_report_in_a_section_the_close_reader_skips() -> None:
+    from fr.triage import batch_closeout as bc
+
+    report = "## Wave merge queue report\n\n| a | landed |\n"
+    member = bc.Member(batch="a", branch="feat/batch-a", closes=("o/r#1",), passed=True)
+    plain = bc.pr_body([member], [], "o/r")
+    body = bc.pr_body([member], [], "o/r", report)
+    assert body.startswith(plain) and body.endswith("| a | landed |")
+    assert bc.closes_from_body(body) == bc.closes_from_body(plain) == ("o/r#1",)
+    assert bc.members_from_body(body) == ("a",)
+
+
+def test_the_batches_page_shows_the_queue_line_and_the_wave_report() -> None:
+    from datetime import UTC, datetime
+
+    from fr.triage.kanban_render import render_board
+
+    f, jd = _board(
+        {"kind": "queue_open", "at": AT},
+        {"kind": "queue_land", "at": "2026-11-20T10:30:00Z", "main": "a1" * 20,
+         "entries": [{"batch": "a"}]},
+        {"kind": "queue_drain", "at": "2026-11-20T10:31:00Z", "main": "a1" * 20},
+    )  # fmt: skip
+    board = build_board(f, jd, {})
+    assert board.queue_lines and board.queue_lines[0].startswith(f"queue {REPO_B}:")
+    assert "landed a" in board.queue_lines[0]
+    html = render_board(board, scope_args=[], rendered_at=datetime(2026, 11, 20, tzinfo=UTC),
+                        refresh=0, notes=[])  # fmt: skip
+    assert '<section class="queue"><h2>Merge queue</h2>' in html and "landed a" in html
+    assert "<th>CI cycles</th>" in html and "Release: asked at " in html

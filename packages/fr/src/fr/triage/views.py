@@ -41,6 +41,7 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
+    QUEUE_REPORT_KEY,
     LivePr,
     Snapshot,
     checks_verdict,
@@ -57,6 +58,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.errors import TriageError
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
@@ -71,6 +73,8 @@ from fr.triage.model import (
     RedHandbackEvent,
     Severity,
 )
+from fr.triage.queue_exec import queue_config
+from fr.triage.scope_config import scope_id
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -159,12 +163,26 @@ def drive_snapshot(
             when = _parse(pr.merged_at if pr else None)
             if when is not None:
                 merged_at[b.id] = when
+    # The wave merge queue plans offline too, from the judgements' own queue records and the
+    # config the facts carry (R25, R28): no hold, base or check is read, so what it says is
+    # what the events say, and the board shows the queue's line and its Needs.
+    queue_cfg = {
+        r: queue_config(block) for r in sorted(set(repos.values()))
+        if (block := facts.config_for(r).queue) is not None and block.ci is not None
+    }  # fmt: skip
+    try:
+        driven_by = scope_id(facts.scope)
+    except TriageError:
+        driven_by = ""
     return Snapshot(
         batches=tuple(batches),
         stages=stages,
         queue=queue,
         live=live,
         repos=repos,
+        wave_queues=queue_cfg,
+        queue_records=tuple(judgements.queues),
+        scope_id=driven_by,
         now=collected(facts),
         max_inflight=max_inflight,
         merged_at=merged_at,
@@ -207,6 +225,7 @@ class Need:
     # | unplaced | merge-conflict | session-blocked | red-pr
     # | archive-conflict
     # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
+    # | queue-need (the wave merge queue's own: a halt, a hold, a stall, a barrier, R28)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -214,6 +233,7 @@ class Need:
 
 
 NEED_LABELS = {
+    "queue-need": "Merge queue needs you",
     "approve-pr": "Label a green PR approved-fr",
     "queue-unconfigured": "Repo has no merge queue config",
     "red-pr": "Red PR its session cannot fix",
@@ -365,7 +385,11 @@ def needs_you(
                             f"session to take it: fix it on {event.archive}")  # fmt: skip
                     out.append(Need("closeout-stuck", b.id, text, f"#batch-{b.id}"))
     for action in plan.actions:
-        if action.kind == "blocked":
+        if action.kind in ("blocked", "held") and action.key == QUEUE_REPORT_KEY:
+            # R28: the merge queue's own Needs, each with the command to paste in its text
+            href = f"#batch-{action.batch}" if action.batch in by_id else None
+            out.append(Need("queue-need", action.batch, action.detail, href))
+        elif action.kind == "blocked":
             out.append(
                 Need("blocked-batch", action.batch, f"{action.batch} {action.detail}",
                      f"#batch-{action.batch}")

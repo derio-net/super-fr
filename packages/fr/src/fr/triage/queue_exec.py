@@ -636,7 +636,7 @@ def queue_refusal(block: QueueBlock, *, ci_none: bool, versioned: bool = False) 
 def held_plan(plan: QueuePlan, reason: str) -> QueuePlan:
     """*plan* replaced by one `queue-held` that says *reason* (R7, R22, R34, R35)."""
     action = QueueAction("queue-held", plan.repo, f"{plan.repo}'s merge queue is held: {reason}")
-    return QueuePlan(plan.repo, plan.phase, plan.wave, (action,), plan.entries, plan.waiting)
+    return replace(plan, actions=(action,))
 
 
 def pause_landings(plan: QueuePlan, reason: str | None) -> QueuePlan:
