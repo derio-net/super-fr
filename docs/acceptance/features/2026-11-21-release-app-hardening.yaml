@@ -44,9 +44,13 @@ rows:
     origin:
     - spec:2026-11-21-release-app-hardening#R2
     - spec:2026-11-21-release-app-hardening#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_absent_environment_is_created_then_given_the_main_policy
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_environment_with_admin_bypass_and_reviewers_is_corrected
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_extra_policy_is_deleted
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
     verify: none
   - id: setup-script-key-never-printed
     capability: release
