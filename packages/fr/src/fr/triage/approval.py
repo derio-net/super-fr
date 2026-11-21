@@ -11,16 +11,21 @@ The verdict rule (spec 2026-11-19-wave-merge-queue R12, §E): approval is pinned
 content. With no `approved-fr` label the PR is `Unlabelled`; with the label and no live
 approval it is `First`. A live approval is `Approved` while the PR's live patch-id equals
 one fr recorded since it (`approved_patch_ids`: the approval's own, and each of fr's own
-updates' after it), at any head (a merge of `main` with no conflict resolution, an empty
-commit). Otherwise, and for an approval recorded before schema 13 (no patch-id) or a live
+updates' after it), at a head that follows the approved one only by moves that cannot change
+the diff (`Checkout.clean_succession`: the approved head is an ancestor and every commit
+between is an empty non-merge commit or a merge whose tree is the automatic merge of its
+parents, so a conflict-free merge of `main` and an empty commit keep it; l-security-r1).
+`git patch-id` drops hunk line numbers, so it alone would pass a push that moves an
+otherwise identical hunk; the succession check is what refuses that. Otherwise, and for an approval recorded before schema 13 (no patch-id) or a live
 patch-id that cannot be read, it is `Approved` only while fr's own recorded updates lead
 from the approved head to the live one (`reaches`): the approved head itself, or an update
 the retired merge train recorded. Nothing writes an `update` event any more (the queue never
 touches a PR branch, R22): `reaches` and the pinned ids of `UpdateEvent` stay only so that a
 `judgements.yaml` written before that still judges its open PRs as it did. Anything else is `Void`:
 a push fr did not make that changes the PR's own diff, whitespace and binary edits
-included. `git patch-id` drops hunk line numbers, so a push that moves an otherwise
-identical hunk within a file keeps the id, and the approval: R12 states that limit.
+included, a moved hunk, a hand-edited merge resolution, a rewrite of the branch. A live
+patch-id or succession that git cannot read is `Held`, never `Void` (l-errors-r4): the
+label stays, nothing is recorded, and the entry waits for a pass that can read.
 
 `judge_approval` is the one reading every call site makes: it reads the live patch-id
 only for a labelled PR, and reads it once more against a refetched default branch before
@@ -78,7 +83,17 @@ class Void:
     approved_head: str
 
 
-ApprovalVerdict = Approved | Unlabelled | First | Void
+@dataclass(frozen=True)
+class Held:
+    """The label is on and an approval is live, but git could not say whether the head is
+    still the approved diff (*why*), and `reaches` does not prove it: neither approved nor
+    voided this pass (l-errors-r4)."""
+
+    approved_head: str
+    why: str
+
+
+ApprovalVerdict = Approved | Unlabelled | First | Void | Held
 
 
 def approval_verdict(
@@ -88,9 +103,12 @@ def approval_verdict(
     labels: Sequence[str] | None,
     *,
     patch_id: str | None = None,
+    clean_since: Callable[[str], bool | None] | None = None,
 ) -> ApprovalVerdict:
     """Whether PR #*pr* at *head*, whose live patch-id is *patch_id* (None when unread),
-    carries a valid approval: the rule in this module's docstring."""
+    carries a valid approval: the rule in this module's docstring. *clean_since* answers,
+    for an approved head, whether the live head follows it by diff-neutral moves only
+    (None when git cannot say); without it a patch-id match stands alone."""
     if labels is None or APPROVED_FR.name not in labels:
         return Unlabelled()
     live = _live_index(events, pr)
@@ -98,10 +116,14 @@ def approval_verdict(
         return First(head)
     approved = events[live]
     assert isinstance(approved, ApprovalEvent)
-    if patch_id is not None and patch_id in _pinned_ids(events[live:], pr):
-        return Approved(approved.head)
     if reaches(events[live + 1 :], pr, approved.head, head):
         return Approved(approved.head)
+    if patch_id is not None and patch_id in _pinned_ids(events[live:], pr):
+        clean = True if clean_since is None else clean_since(approved.head)
+        if clean:
+            return Approved(approved.head)
+        if clean is None:
+            return Held(approved.head, f"could not read how {head[:12]} follows the approved head")
     return Void(approved.head)
 
 
@@ -183,11 +205,26 @@ def judge_approval(
     a patch-id mismatch voids (p1-r3: a stale `origin/<default>` moves the merge base)."""
     if patch_id_of is None or labels is None or APPROVED_FR.name not in labels:
         return approval_verdict(events, pr, head, labels), None
+    since = getattr(patch_id_of, "clean_since", None)
+
+    def verdict_of(patch_id: str | None) -> ApprovalVerdict:
+        def clean(approved: str) -> bool | None:
+            return None if since is None else since(pr, approved, head)
+
+        verdict = approval_verdict(
+            events, pr, head, labels, patch_id=patch_id,
+            clean_since=None if since is None else clean,
+        )  # fmt: skip
+        if isinstance(verdict, Void) and patch_id is None:
+            # l-errors-r4: an unreadable patch-id is no change; never void on it
+            return Held(verdict.approved_head, f"could not read the patch-id of {head[:12]}")
+        return verdict
+
     patch_id = patch_id_of(pr, head)
-    verdict = approval_verdict(events, pr, head, labels, patch_id=patch_id)
+    verdict = verdict_of(patch_id)
     if isinstance(verdict, Void) and patch_id is not None and approved_patch_ids(events, pr):
         patch_id = patch_id_of(pr, head, fresh=True)
-        verdict = approval_verdict(events, pr, head, labels, patch_id=patch_id)
+        verdict = verdict_of(patch_id)
     return verdict, patch_id
 
 
@@ -247,6 +284,9 @@ def settle_approvals(
                 )
                 say(f"approval of PR #{number} recorded at {head[:12]}")
                 verdict = Approved(head)
+        elif isinstance(verdict, Held):
+            say(f"warning: approval of PR #{number} at {verdict.approved_head[:12]} held this "
+                f"pass, label kept: {verdict.why}")  # fmt: skip
         elif isinstance(verdict, Void):
             was = verdict.approved_head
             if dry_run:
@@ -311,6 +351,9 @@ def settle_entry_approval(
                                   patch_id=patch_id))  # fmt: skip
         say(f"approval of {entry.kind} PR #{number} recorded at {head[:12]}")
         return Approved(head), now
+    if isinstance(verdict, Held):
+        say(f"warning: approval of PR #{number} at {verdict.approved_head[:12]} held this "
+            f"pass, label kept: {verdict.why}")  # fmt: skip
     if isinstance(verdict, Void):
         was = verdict.approved_head
         why = void_reason(as_batch, number, head, patch_id)

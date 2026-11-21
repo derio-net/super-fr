@@ -445,3 +445,31 @@ def test_a_dry_run_records_and_removes_nothing() -> None:
         QueueEntryRef(pr=41, kind="housekeeping"), [], _entry_view("h1"), said.append,
         now=datetime(2026, 11, 20, tzinfo=UTC), dry_run=True)  # fmt: skip
     assert isinstance(verdict, First) and at is None and "would record" in said[0]
+
+
+def test_an_unreadable_patch_id_keeps_the_label_and_records_nothing() -> None:
+    """l-errors-r4: git that cannot say is no change; the approval is held, not voided."""
+    forge = _Forge({"state": "OPEN", "head_oid": "h2", "labels": [LABEL]})
+    said: list[str] = []
+
+    got, written, _ = _settle(forge, _batch(_approval("h1", "p1")), {}, said=said)
+
+    assert forge.label_edits == [] and written == []
+    assert got["a"].__class__.__name__ == "Held"
+    assert any("held this pass" in s and "patch-id" in s for s in said)
+
+
+def test_a_clean_since_that_says_no_voids_a_matching_patch_id() -> None:
+    from fr.triage.approval import judge_approval
+
+    def reader(pr: int, head: str, *, fresh: bool = False) -> str | None:
+        return "p1"
+
+    reader.clean_since = lambda pr, approved, head: False  # type: ignore[attr-defined]
+    events = [_approval("h1", "p1")]
+
+    assert judge_approval(events, 7, "h2", [LABEL], reader)[0] == Void("h1")
+    reader.clean_since = lambda pr, approved, head: True  # type: ignore[attr-defined]
+    assert judge_approval(events, 7, "h2", [LABEL], reader)[0] == Approved("h1")
+    reader.clean_since = lambda pr, approved, head: None  # type: ignore[attr-defined]
+    assert judge_approval(events, 7, "h2", [LABEL], reader)[0].__class__.__name__ == "Held"

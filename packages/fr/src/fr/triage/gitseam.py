@@ -679,6 +679,45 @@ class Checkout:
         fields = out.decode("ascii", "replace").split()
         return fields[0] if fields else ""
 
+    def clean_succession(self, approved: str, head: str) -> bool:
+        """Whether *head* follows *approved* only by moves that cannot change the PR's diff
+        (spec 2026-11-19-wave-merge-queue R12, l-security-r1): *approved* is an ancestor of
+        *head*, and every commit on the first-parent chain between them is either an empty
+        non-merge commit or a two-parent merge whose tree equals the automatic merge of its
+        parents (`git merge-tree --write-tree`, clean). A hand-edited merge resolution, a
+        commit that changes a tree, or a head that does not descend from *approved* is not.
+        `git patch-id` ignores hunk positions, so this is what keeps a moved hunk from
+        passing for the approved one. Raises `GitError` when git cannot run."""
+        if approved == head:
+            return True
+        if not git_ok(["merge-base", "--is-ancestor", approved, head], self.path):
+            return False
+        chain = git(
+            ["rev-list", "--first-parent", "--parents", "--topo-order", f"{approved}..{head}"],
+            self.path,
+        ).splitlines()
+        if not chain:
+            return False
+        oldest = chain[-1].split()
+        if len(oldest) < 2 or oldest[1] != approved:
+            return False  # approved is reached only through a merge's second parent
+        for line in chain:
+            commit, *parents = line.split()
+            tree = git(["rev-parse", f"{commit}^{{tree}}"], self.path).strip()
+            if len(parents) == 1:
+                if tree != git(["rev-parse", f"{parents[0]}^{{tree}}"], self.path).strip():
+                    return False
+            elif len(parents) == 2:
+                code, out = _run(
+                    ["git", "merge-tree", "--write-tree", "--no-messages", *parents],
+                    self.path, coded=True, timeout=GIT_TIMEOUT_SECONDS,
+                )  # fmt: skip
+                if code != 0 or out.split() == [] or out.split()[0] != tree:
+                    return False
+            else:
+                return False
+        return True
+
     def refresh_remote_branch(self, branch: str) -> None:
         """Fetch origin's *branch* into `origin/<branch>` now (forced: the remote is the
         truth), for a read that must not use a stale copy (wave-merge-queue R12)."""

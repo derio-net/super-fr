@@ -586,8 +586,8 @@ def patch_id_reader(checkout: Checkout, branches: Mapping[int, str]) -> PatchIdO
     """The `patch_id_of` the approval gate reads (spec 2026-11-19-wave-merge-queue R12,
     §E): PR *pr*'s patch-id at *head* against `origin/<default>` in *checkout*, as last
     fetched, fetching the PR's branch (*branches*) once when the clone lacks *head*. None
-    when git cannot say (no such commit, no default branch), which the verdict reads by
-    `reaches`. *fresh* fetches the default branch first, once per reader, and reads again
+    when git cannot say (no such commit, no default branch), which holds the approval this
+    pass. Its `clean_since` attribute is the succession check (l-security-r1). *fresh* fetches the default branch first, once per reader, and reads again
     (p1-r3: a PR that merged a newer default branch reads a merge base the stale copy does
     not know). Memoised per reader: build one per pass."""
     seen: dict[tuple[int, str], str | None] = {}
@@ -600,11 +600,22 @@ def patch_id_reader(checkout: Checkout, branches: Mapping[int, str]) -> PatchIdO
             try:
                 checkout.refresh_remote_branch(checkout.default_branch())
             except GitError:
-                return None  # cannot refetch: the verdict falls back to `reaches`
+                return None  # cannot refetch: the verdict holds the approval, never voids
         if (pr, head) not in seen:
             seen[pr, head] = _read_patch_id(checkout, branches.get(pr, ""), head)
         return seen[pr, head]
 
+    def clean_since(pr: int, approved: str, head: str) -> bool | None:
+        """Whether *head* follows *approved* by diff-neutral moves only
+        (`Checkout.clean_succession`); None when git cannot say."""
+        try:
+            if not checkout.reach_commit(head, branches.get(pr, "")):
+                return None
+            return checkout.clean_succession(approved, head)
+        except GitError:
+            return None
+
+    of.clean_since = clean_since  # type: ignore[attr-defined]
     return of
 
 
