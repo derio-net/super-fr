@@ -1205,12 +1205,12 @@ class Worktree:
         carrying the cause (l-errors-r11)."""
         from fr.closeout import branch_artifacts
         from fr.isolation.local import (
-            IsolationError,
             branch_changed_paths,
             recorded_start,
             resolve_branch_refs,
             subprocess_runner,
         )
+        from fr.isolation.types import IsolationError
 
         remote = default_ref.split("/", 1)[0]
         try:
