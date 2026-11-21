@@ -10,3 +10,8 @@ frank#1007 (run 2026-11-16-feat-gpu-speech-service-1006): ops premerge-gpu-switc
 ### rc-1 · root-cause · no layer asks whether an apply acts
 
 plan_ops._ops_gap_issues (plan_ops.py:1967) refuses only check == TODO; apply_ops (ops/apply.py:316) runs op.apply and trusts exit 0; run_cmd._closeout_handoff_lines (run_cmd.py:408) always names fr pickup --run, never consulting fr.run.closeout.devops_gated, which fr pickup itself uses to pick the DevOps brief.
+
+<!-- fr:journal kind=ruled-out scope=debug id=ro-1 created=2026-11-21T16:24:02+00:00 -->
+### ro-1 · ruled-out · defect 2 (tool absent from ops profile) is already fail-closed at runtime
+
+A check whose tool is missing exits 127 under bash -c; engine._check maps NOT_FOUND to CANNOT-VERIFY, never DONE (tests/unit/test_ops_engine.py::test_cannot_verify_on_exit_127), and apply_ops stops on CANNOT-VERIFY. The frank case hid docker behind echo, so it is closed by the print-only fix. An authoring-time capability check needs the profile's tool set declared (#1489 'declared needs'); left to that issue.
