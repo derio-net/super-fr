@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 # fr ops — manual operations you can check and run
@@ -56,7 +56,7 @@ ops:
 | `needs` | Op ids that must be done first. A cycle or an unknown id is refused before anything runs. |
 | `check` | A probe: exit 0 is DONE; any other exit is OPEN, its last stdout line the reason. The reserved value `proof` means "done only once a recorded proof says so". |
 | `na_if` | A probe: exit 0 means the op does not apply here (N/A). |
-| `apply` | Idempotent automation. Absent for an op only a human can do in a UI. |
+| `apply` | Idempotent automation that performs the action. Absent for an op only a human can do in a UI. An `apply` that only prints (`echo`, `printf`, a `cat` heredoc) changes nothing: `fr plan self-review` refuses it, and `apply` treats the op as a manual step. Put instructions for a person in `commands`. |
 | `undo` | A command, or the mapping `{none: <reason>}`. Shown when a mutating op is confirmed or fails. |
 | `mutating` | Default `false`. A mutating op's confirmation names its side effects and undo, and needs `--yes-mutating` as well as `--yes` without a terminal. |
 | `interactive` | Default `false`. `true` runs the apply with your terminal attached (an authorisation prompt). |
@@ -151,6 +151,8 @@ runs only the `ready:` probes and exits 0 once every one passes.
 `apply` runs in `needs` order and checks each op first. It skips a DONE or N/A op, and
 records its closure once. It confirms each op. It stops at the first failure, and names the
 op and its undo. It checks again after the apply. A second run over a done phase writes nothing.
+An op whose `apply` only prints is not run and not recorded. `apply` stops there and shows
+the text, so you do the step by hand.
 
 `attest` closes an UNVERIFIABLE op at a terminal. An op that has a check cannot be
 attested. `apply`, `attest` and `seal` run only in an ops profile.
@@ -159,7 +161,9 @@ attested. `apply`, `attest` and `seal` run only in an ops profile.
 
 Every apply result, recorded check, proof and attestation is an `op` entry in the plan's
 journal. The entry has `key: value` lines (`op`, `result`, `identity`, `reason`, `phase`,
-`attested_by`), never secret material. The latest entry per op wins. `deliver` renders
+`attested_by`), never secret material. The latest entry per op wins. A `done` entry from
+`apply` gives its `reason`: the check passed after fr ran the apply, or the check already
+passed and the apply did not run. `deliver` renders
 a `## Manual operations` PR-body section from the recorded evidence (no live probe). It
 never stops on an OPEN op, because the DevOps stage owns them.
 

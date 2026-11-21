@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr ops: an `apply` that only prints is refused by `fr plan self-review` and is never counted applied; a `done` entry says whether the apply ran; a devops-gated `deliver` hands off to `fr ops gate --run <id>`"
