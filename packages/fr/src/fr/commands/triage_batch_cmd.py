@@ -587,7 +587,8 @@ def patch_id_reader(checkout: Checkout, branches: Mapping[int, str]) -> PatchIdO
     §E): PR *pr*'s patch-id at *head* against `origin/<default>` in *checkout*, as last
     fetched, fetching the PR's branch (*branches*) once when the clone lacks *head*. None
     when git cannot say (no such commit, no default branch), which holds the approval this
-    pass. Its `clean_since` attribute is the succession check (l-security-r1). *fresh* fetches the default branch first, once per reader, and reads again
+    pass. Its `clean_since` attribute is the succession check (l-security-r1).
+    *fresh* fetches the default branch first, once per reader, and reads again
     (p1-r3: a PR that merged a newer default branch reads a merge base the stale copy does
     not know). Memoised per reader: build one per pass."""
     seen: dict[tuple[int, str], str | None] = {}

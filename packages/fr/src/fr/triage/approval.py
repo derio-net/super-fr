@@ -16,8 +16,9 @@ the diff (`Checkout.clean_succession`: the approved head is an ancestor and ever
 between is an empty non-merge commit or a merge whose tree is the automatic merge of its
 parents, so a conflict-free merge of `main` and an empty commit keep it; l-security-r1).
 `git patch-id` drops hunk line numbers, so it alone would pass a push that moves an
-otherwise identical hunk; the succession check is what refuses that. Otherwise, and for an approval recorded before schema 13 (no patch-id) or a live
-patch-id that cannot be read, it is `Approved` only while fr's own recorded updates lead
+otherwise identical hunk; the succession check is what refuses that.
+Otherwise, and for an approval recorded before schema 13 (no patch-id), it is `Approved`
+only while fr's own recorded updates lead
 from the approved head to the live one (`reaches`): the approved head itself, or an update
 the retired merge train recorded. Nothing writes an `update` event any more (the queue never
 touches a PR branch, R22): `reaches` and the pinned ids of `UpdateEvent` stay only so that a
