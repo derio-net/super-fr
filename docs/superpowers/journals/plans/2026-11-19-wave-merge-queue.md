@@ -1387,3 +1387,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1605.
 ### l-security-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1606] · resolves l-security-r5: a push to fr-hold/** can run release.yml with the app key
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1606.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6-resolved-2 created=2026-11-21T06:32:54+00:00 state=open resolves=l-security-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1607 -->
+### l-security-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1607] · resolves l-security-r6: the version and relock commands run in a worktree holding PR code
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1607.
