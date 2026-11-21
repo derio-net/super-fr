@@ -318,9 +318,17 @@ rows:
       as awaiting approval.
     origin:
     - spec:2026-11-19-wave-merge-queue#R25
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_queue_line_names_the_wave_the_base_each_entry_what_landed_and_the_hold
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_line_marks_an_ejected_entry_a_barrier_and_a_halt
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_batches_page_shows_the_queue_line_and_the_wave_report
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_board_card_of_a_queued_approved_pr_never_reads_awaiting_approval
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_block_without_queue_ci_holds_the_repo_and_walks_no_train
+    status: ci
+    notes: 'phase 7: the queue line (wave, base, each entry''s state, what landed, the
+      hold) is built once by queue_view and printed by the pass and the Batches page;
+      a queued approved PR reads ''in merge queue'' on the board'
 amendments:
   - row: wave-queue-release-hold
     op: reword
