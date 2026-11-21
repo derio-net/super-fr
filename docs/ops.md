@@ -216,7 +216,7 @@ fr ops gate --run <run-id> --yes    # act
 fr ops gate --run <run-id> --yes --profile <ops-profile>
 ```
 
-`--profile` names the ops profile when the repo declares more than one (`ops: true`);
+`--profile` names the ops profile when the repo declares more than one (`ops: true`).
 The stage never merges: the merge queue lands the PR (stage 2 below).
 
 It runs on the harness host at a terminal. It does not run in a non-interactive context (no

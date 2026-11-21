@@ -61,8 +61,8 @@ rules. It is scoped to this repo with contents and issues write only. It is mint
 per job and revoked when the job ends, and never persisted in the checkout's git
 config. It is kept from the staged test run (`release.py` strips every forge
 token from that subprocess). The token authenticates the two `git push` calls (the release
-commit and the tag), a third push that clears a drained merge queue hold, and the
-`gh release` and `gh issue` writes. Every other git command runs credential-free, and
+commit and the tag) and the `gh release` and `gh issue` writes. It also authenticates
+a third push, which clears a drained merge queue hold. Every other git command runs credential-free, and
 that includes the fetch of the hold.
 
 Anything else that can run in the release job could still read it, so the job
@@ -106,8 +106,8 @@ release fails with a protection refusal (`release.py` reports it by name).
 
 Copy the pieces that the repo needs:
 
-- a `ci-ok` aggregate job in its CI (run it on pushes to `fr-queue/**` too, because the
-  wave driver tests each combination there; a forge `merge_group` is not used);
+- a `ci-ok` aggregate job in its CI. Run it on pushes to `fr-queue/**` too: the wave
+  driver tests each combination there. A forge `merge_group` is not used;
 - the `app-token` step and the `steps.app-token.outputs.token || github.token` expression
   from `release.yml`;
 - the script, whose ruleset name (`protect main`), app slug and variable name are
@@ -123,8 +123,8 @@ whose base branch rules include a forge merge queue is held, and the driver says
 With `queue.land: push` (the default), the driver lands each tested combination with one
 atomic `git push` straight to the default branch. A ruleset that requires pull requests or
 checks refuses that push. So the identity that pushes must be a bypass actor of the
-ruleset, or the repo must use `queue.land: merge`, where the driver merges each pull
-request through the forge's merge API. The operator's own credential is never a bypass actor.
+ruleset. Otherwise, the repo must use `queue.land: merge`. With it, the driver merges
+each pull request through the forge's merge API. The operator's own credential is never a bypass actor.
 The checks must also run on pushes to `fr-queue/**`, where the driver tests each combination.
 See spec `2026-11-19-wave-merge-queue-design.md` §D and R22.
 
