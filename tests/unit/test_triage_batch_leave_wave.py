@@ -114,25 +114,50 @@ def test_requeue_into_a_wave_writes_requeued_and_moves_the_effective_wave(tmp_pa
     assert effective_wave(batch) == 3 and not is_deferred(batch)
 
 
-def test_plain_requeue_is_a_between_waves_entry(tmp_path: Path) -> None:
-    _state(tmp_path)
+def _opened(wave: int, *, drained: bool = False) -> dict[str, Any]:
+    events = [{"kind": "queue_open", "at": "2026-11-20T10:00:00Z"}]
+    if drained:
+        events.append({"kind": "queue_drain", "at": "2026-11-20T11:00:00Z"})
+    return {**QUEUE_OPEN, "wave": wave, "events": events}
+
+
+def test_plain_requeue_joins_the_lowest_wave_whose_queue_has_not_opened(tmp_path: Path) -> None:
+    _state(tmp_path, [_opened(1, drained=True)])  # wave 1 opened and drained; wave 2 has not
+    assert _run(tmp_path, "defer", "a")[0] == 0
     code, out = _run(tmp_path, "requeue", "a")
     assert code == 0, out
-    assert "next queue to open" in out
+    assert "wave 2's queue" in out and "next queue to open" in out
+    assert effective_wave(_batch(tmp_path, "a")) == 2
+
+
+def test_plain_requeue_with_every_wave_opened_is_a_between_waves_entry(tmp_path: Path) -> None:
+    _state(tmp_path, [_opened(1, drained=True), _opened(2)])
+    assert _run(tmp_path, "defer", "a")[0] == 0
+    code, out = _run(tmp_path, "requeue", "a")
+    assert code == 0, out
+    assert "between-waves queue" in out and "next queue to open" in out
     assert effective_wave(_batch(tmp_path, "a")) is None
 
 
-def test_requeue_is_refused_while_the_named_waves_queue_is_open(tmp_path: Path) -> None:
-    _state(tmp_path, [QUEUE_OPEN])
-    code, out = _run(tmp_path, "requeue", "a", "--wave", "2")
-    assert code == 2 and "queue for wave 2 is open" in out
-    assert _batch(tmp_path, "a").events[-1].kind == "dispatch"  # nothing written
-    drained = {
-        **QUEUE_OPEN,
-        "events": [*QUEUE_OPEN["events"], {"kind": "queue_drain", "at": "2026-11-20T11:00:00Z"}],
-    }
-    _state(tmp_path, [drained])
+def test_requeue_to_a_wave_is_refused_once_its_queue_has_opened_even_if_drained(
+    tmp_path: Path,
+) -> None:
+    for drained in (False, True):
+        _state(tmp_path, [_opened(2, drained=drained)])
+        code, out = _run(tmp_path, "requeue", "a", "--wave", "2")
+        assert code == 2 and "queue for wave 2 has opened" in out
+        assert _batch(tmp_path, "a").events[-1].kind == "dispatch"  # nothing written
+    _state(tmp_path, [_opened(1, drained=True)])  # an unopened wave above the batch's own
     assert _run(tmp_path, "requeue", "a", "--wave", "2")[0] == 0
+
+
+def test_requeue_to_a_wave_not_above_the_batchs_effective_wave_is_refused(tmp_path: Path) -> None:
+    _state(tmp_path)
+    assert _run(tmp_path, "defer", "a")[0] == 0
+    for n in ("1", "0"):
+        code, out = _run(tmp_path, "requeue", "a", "--wave", n)
+        assert code == 2 and "above its wave 1" in out
+    assert _batch(tmp_path, "a").events[-1].kind == "deferred"  # nothing written
 
 
 # ------------------------------------------------------------------ queue-retry

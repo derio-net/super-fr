@@ -341,10 +341,11 @@ from fr.triage.wave_queue import (
     effective_wave,
     halted_queue,
     is_deferred,
+    next_queue_wave,
     queue_action_line,
     queue_landed,
     queue_line,
-    wave_queue_open,
+    wave_queue_opened,
 )
 from fr.triage.wave_report import render_markdown as render_wave_report
 from fr.triage.wave_report import wave_report
@@ -1158,7 +1159,7 @@ def _leavable(batch: Batch, facts: Facts, verb: str) -> str:
 
 
 def _wave_name(wave: int | None) -> str:
-    return "the next queue to open (between waves)" if wave is None else f"wave {wave}'s queue"
+    return "the between-waves queue" if wave is None else f"wave {wave}'s queue"
 
 
 @batch_app.command("defer")
@@ -1197,7 +1198,8 @@ def batch_requeue_command(
     wave: Annotated[
         int | None,
         typer.Option(
-            "--wave", help="Wave N's queue (it must not be open yet); default: the next queue."
+            "--wave",
+            help="Wave N's queue (above the batch's, never opened); default: the next to open.",
         ),
     ] = None,
     repo: RepoOpt = None,
@@ -1207,21 +1209,33 @@ def batch_requeue_command(
 ) -> None:
     """Put a batch in a later queue: wave N's, or the next one to open.
 
-    Wave N's queue must not be open yet. Without --wave the batch is a between-waves entry
-    of the next queue to open (R2, R29). Writes a `requeued` event."""
+    N must be above the batch's wave, and its queue must never have opened. Without --wave
+    the batch goes to the lowest wave whose queue has not opened yet, else to the
+    between-waves queue (R2, R29). Writes a `requeued` event."""
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = _leavable(batch, facts, "requeue")
     owner_repo = batch_repo(batch, facts)
-    if (
-        wave is not None
-        and owner_repo is not None
-        and wave_queue_open(judgements.queues, owner_repo, wave)
-    ):
-        _fail(
-            f"{owner_repo}'s queue for wave {wave} is open; a batch joins a wave's queue "
-            "only before it opens (`requeue` without --wave joins the next one to open)"
-        )
+    plain = wave is None
+    here = effective_wave(batch)
+    if owner_repo is not None and plain:
+        waves = [
+            w
+            for b in judgements.batches
+            if batch_repo(b, facts) == owner_repo and (w := effective_wave(b)) is not None
+        ]
+        wave = next_queue_wave(judgements.queues, owner_repo, waves)
+    elif wave is not None:
+        if here is not None and wave <= here:
+            _fail(
+                f"wave {wave} is not above its wave {here}; a batch is requeued only into a "
+                "later wave's queue"
+            )
+        if owner_repo is not None and wave_queue_opened(judgements.queues, owner_repo, wave):
+            _fail(
+                f"{owner_repo}'s queue for wave {wave} has opened; a batch joins a wave's queue "
+                "only before it opens (`requeue` without --wave joins the next one to open)"
+            )
     if effective_wave(batch) == wave and not is_deferred(batch):
         _fail(f"batch {batch.id!r} is already in {_wave_name(wave)}")
     event = RequeuedEvent(kind="requeued", at=_now_after(batch), wave=wave)
@@ -1229,6 +1243,7 @@ def batch_requeue_command(
     _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
     console.print(
         f"requeued batch {batch.id} ({stage}) into {_wave_name(wave)}"
+        + (" (the next queue to open)" if plain else "")
         + (" (it was deferred)" if is_deferred(batch) else ""),
         markup=False,
     )

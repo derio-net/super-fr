@@ -14,7 +14,7 @@ is `QueueSnapshot.now`. `tests/unit/test_wave_queue_planner.py` pins that.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -319,15 +319,20 @@ def queue_phase(records: Sequence[QueueRecord], hold: Hold | None) -> QueuePhase
     return "idle"
 
 
-def wave_queue_open(records: Sequence[QueueRecord], repo: str, wave: int | None) -> bool:
-    """*repo*'s queue for *wave* (None: between waves) is open: its latest record, in any
-    scope, was opened and not drained (R29: `requeue --wave N` is refused while it is)."""
-    mine = [r for r in records if r.repo == repo and r.wave == wave]
-    if not mine:
-        return False
-    events = mine[-1].events
-    return (any(isinstance(e, QueueOpenEvent) for e in events)
-            and not any(isinstance(e, QueueDrainEvent) for e in events))  # fmt: skip
+def wave_queue_opened(records: Sequence[QueueRecord], repo: str, wave: int) -> bool:
+    """*repo*'s queue for *wave* has opened: some record of it, in any scope, holds a
+    `queue_open`, drained since or not (R29: `requeue --wave N` is refused once it has)."""
+    return any(
+        r.repo == repo and r.wave == wave and any(isinstance(e, QueueOpenEvent) for e in r.events)
+        for r in records
+    )
+
+
+def next_queue_wave(records: Sequence[QueueRecord], repo: str, waves: Iterable[int]) -> int | None:
+    """What `requeue` without --wave means (R29): the lowest of *waves* (the waves *repo*'s
+    batches name) whose queue has not opened yet; None, the between-waves queue, when every
+    one has."""
+    return next((w for w in sorted(set(waves)) if not wave_queue_opened(records, repo, w)), None)
 
 
 def halted_queue(record: QueueRecord | None) -> QueueHaltEvent | None:
