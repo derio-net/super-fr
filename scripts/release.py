@@ -108,7 +108,7 @@ EXIT_REFUSED = 1  # a refusal: invalid input, stale lock, stray diff, protection
 EXIT_SUPERSEDED = 2  # main moved under a run carrying --version: re-dispatch it
 EXIT_FLOOR = 3  # tagged and released, but a floor names another release
 
-# GH006 is classic branch protection, GH013 a ruleset (what `protect main` is);
+# GH006 is classic branch protection, GH013 a ruleset (what `require ci-ok` is);
 # `[remote rejected]` is any server-side decline, which a lost race never is — a
 # non-fast-forward is refused client-side as a plain `[rejected]`.
 _PROTECTED_MARKERS = (
@@ -894,10 +894,10 @@ def push(repo: Path) -> str:
     if any(m.lower() in reply.lower() for m in _PROTECTED_MARKERS):
         raise ReleaseError(
             "the push to main was refused by branch protection, not lost to a race: "
-            "the release bot needs a bypass actor on main's rules "
-            "(Settings > Rules > protect main > Bypass list): the derio-fr-automation "
-            "app, which pushes when the repo variable FR_AUTOMATION_APP_ID is set "
-            "(scripts/configure-main-protection.sh --stage bypass does both).\n" + reply.strip()
+            "the release bot needs a bypass actor on the 'require ci-ok' ruleset "
+            "(never on 'protect main'): the derio-fr-automation app, which pushes "
+            "when the repo variable FR_AUTOMATION_APP_ID is set "
+            "(scripts/setup-release-app.sh sets both).\n" + reply.strip()
         )
     if any(m in reply for m in _RACE_MARKERS):
         return "race"

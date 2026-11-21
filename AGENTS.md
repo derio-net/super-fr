@@ -669,14 +669,18 @@ name the predicted one: the base version plus this PR's highest fragment bump.
 
 **Release identity.** `release.yml` pushes as the `derio-fr-automation` GitHub
 App when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
-secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
+the `release` environment secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
 step, scoped to this repo with contents and issues write only, never persisted by
 checkout and stripped from the staged test run), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
 way: a `GITHUB_TOKEN` push runs no CI on the release commit, an app push does,
-and `release.yml` then runs once more as a no-op. The app is the ruleset's bypass
-actor once `scripts/configure-main-protection.sh --stage bypass` has run; `--stage
-require` then adds the required `ci-ok` check and refuses until a release was
-pushed by the app. Order and consumer adoption: `docs/merge-protection.md`.
+and `release.yml` then runs once more as a no-op. Only `prepare` and `publish` name
+the `release` environment, whose branch policy allows `main` alone (spec
+`2026-11-21-release-app-hardening`; `test_release_workflow.py` pins it). One script,
+`scripts/setup-release-app.sh`, makes the app check, the environment, the key, the
+variable and three rulesets: `protect main` and `protect release tags` hold no bypass
+actor, and the app is the only bypass actor of `require ci-ok`, which the script
+creates only after a release was pushed by the app. Order, security model and
+consumer adoption: `docs/merge-protection.md`.
 
 On every push to `main`, `.github/workflows/release.yml` runs
 `scripts/release.py` as a **job graph** (spec `2026-11-01-ci-speed` §3.D):
@@ -707,7 +711,7 @@ the push and only tags. To release a specific number, run the workflow by hand
 exits non-zero and prints the `gh workflow run release.yml -f version=<X>` that
 re-dispatches it, since no later run carries the override. `main`'s ruleset
 forbids only force-push and deletion today; **once
-a required-PR or required-checks rule is added (`--stage require`), the app must
+a required-PR or required-checks rule is added (the script's require step), the app must
 be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting the
 variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
 every release fails (release.py reports that refusal

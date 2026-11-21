@@ -291,3 +291,39 @@ def test_p3_r8_no_comment_claims_the_suite_jobs_run_with_no_token_at_all() -> No
     text = " ".join(WORKFLOW.read_text().replace("#", " ").split())
     assert "no token at all" not in text
     assert "read-only GITHUB_TOKEN" in text
+
+
+# --- release app hardening (spec 2026-11-21-release-app-hardening R1, R2) ---------
+
+WORKFLOWS = REPO / ".github" / "workflows"
+
+
+def _declares_release_environment(job: dict[str, Any]) -> bool:
+    env = job.get("environment")
+    name = env.get("name") if isinstance(env, dict) else env
+    return name == "release"
+
+
+def test_r1_exactly_prepare_and_publish_declare_the_release_environment() -> None:
+    declaring = {name for name, job in _jobs().items() if _declares_release_environment(job)}
+    assert declaring == {"prepare", "publish"}
+
+
+def test_r1_no_other_workflow_job_declares_the_environment_or_names_the_key() -> None:
+    offenders: list[str] = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        data = yaml.safe_load(path.read_text())
+        for name, job in (data.get("jobs") or {}).items():
+            allowed = path.name == "release.yml" and name in {"prepare", "publish"}
+            if allowed:
+                continue
+            if _declares_release_environment(job) or "FR_AUTOMATION_APP_KEY" in yaml.safe_dump(job):
+                offenders.append(f"{path.name}:{name}")
+    assert offenders == []
+
+
+def test_r2_header_names_the_environment_secret_and_the_setup_script() -> None:
+    header = " ".join(WORKFLOW.read_text().split("\non:", 1)[0].replace("#", " ").split())
+    assert "release environment" in header
+    assert "scripts/setup-release-app.sh" in header
+    assert "configure-main-protection" not in header
