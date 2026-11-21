@@ -870,3 +870,102 @@ the per-wave grouping replaced the per-repo one in the same loop and the migrati
 ### p6-release-void-explicit · decision · A voided release is its own flag (voided: bool), superseding p6-release-void-is-an-empty-patch-id (phase 6)
 
 QueueReleaseEvent gains an optional voided flag (schema 13 is unreleased, so no migration); an empty patch_id is a real release at an empty diff, and barrier_keys counts only an entry's last release when it is not voided. Chosen over a distinct event kind because the void already pins the same entry and head fields and needs no new schema-13 event registration.
+
+<!-- fr:journal kind=review scope=plan id=p6-review-1 created=2026-11-21T00:59:28+00:00 phase=6 -->
+### p6-review-1 · review · Phase 6 review — ten in-scope findings and one out-of-scope, the ten fixed (phase 6)
+
+An independent reviewer read the gates and close-out diff against R1–R36. It confirmed the planner's
+barrier (no admission without a release, nothing lands behind an open barrier, no drain while one is
+open), the DevOps stage's rerun and resume, --path's refusals before any write, and the workflow
+triggers. It raised p6-r1..p6-r9 and p6-r11 (in) and p6-r10 (out). Fixes are d2c45a1a8..78e3dc52d;
+full suite after them: 17032 passed, 122 skipped, exit 0. Two deviations: the strict post_merge
+gate is host-only (the cloud driver runs no post_merge, R20), and the --allow-migratable trial copies
+the artifacts' own root rather than reproducing the placement.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · a release with an unreadable patch-id stayed valid at any head (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · the release bound to the head the driver read, not the head stage 2 checked (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r3 · finding [open] (reviewer: in scope) · stage 4 never finished under forge labels off, even with the label added by hand (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r4 · finding [open] (reviewer: in scope) · stage 2 stopped merging in repos no wave driver serves, with no hand-merge instruction (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r5 · finding [open] (reviewer: in scope) · the change summary did not name the fr ops gate --method removal or that the DevOps stage no longer merges (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r6 · finding [open] (reviewer: in scope) · a wave close-out could start before its last landing's post_merge, giving two close-outs (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r7 · finding [open] (reviewer: in scope) · the close-out chose files to migrate by name, catching the acceptance fragment and missing the spec (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r8 · finding [open] (reviewer: in scope) · --allow-migratable passed untried refusals under quiet and crashed under stealth (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r9 · finding [open] (reviewer: in scope) · an empty patch-id meant both a voided release and a release at an empty diff (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r10 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=out -->
+### p6-r10 · finding [open] (reviewer: out of scope) · anyone with triage permission can add the two fr-queue labels (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r11 created=2026-11-21T00:59:28+00:00 phase=6 state=open review_scope=in -->
+### p6-r11 · finding [open] (reviewer: in scope) · three texts said the barrier lands alone, and a docstring misnamed the commits past the base (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: a release with an unreadable patch-id stayed valid at any head (phase 6)
+
+settle_release keeps an unreadable-patch-id release only at its recorded head (test_queue_gate_labels.py).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: the release bound to the head the driver read, not the head stage 2 checked (phase 6)
+
+stage 2 writes the fr-queue:release marker naming head and patch-id; the driver releases only at that patch-id, from a trusted commenter.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r3 -->
+### p6-r3-resolved · finding [fixed] · resolves p6-r3: stage 4 never finished under forge labels off, even with the label added by hand (phase 6)
+
+stage 4 adds the label only when it is absent, then finishes.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r4 -->
+### p6-r4-resolved · finding [fixed] · resolves p6-r4: stage 2 stopped merging in repos no wave driver serves, with no hand-merge instruction (phase 6)
+
+with no queue config stage 2 tells the operator to merge by hand and a hand merge completes it; the gate never merges.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r5 -->
+### p6-r5-resolved · finding [fixed] · resolves p6-r5: the change summary did not name the fr ops gate --method removal or that the DevOps stage no longer merges (phase 6)
+
+the fragment summary names both removals; check-change-fragment passes.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r6 -->
+### p6-r6-resolved · finding [fixed] · resolves p6-r6: a wave close-out could start before its last landing's post_merge, giving two close-outs (phase 6)
+
+the strict gate is restored: the close-out waits for every host-run member's post_merge and starts once.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r7 -->
+### p6-r7-resolved · finding [fixed] · resolves p6-r7: the close-out chose files to migrate by name, catching the acceptance fragment and missing the spec (phase 6)
+
+owned_stale takes the archive's own move set (Worktree.archive_moves); real-git test added.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r8 -->
+### p6-r8-resolved · finding [fixed] · resolves p6-r8: --allow-migratable passed untried refusals under quiet and crashed under stealth (phase 6)
+
+the trial copies artifact_root, excludes .fr-isolation, and any trial error fails the stale artifact.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r9 -->
+### p6-r9-resolved · finding [fixed] · resolves p6-r9: an empty patch-id meant both a voided release and a release at an empty diff (phase 6)
+
+QueueReleaseEvent.voided is explicit (decision p6-release-void-explicit); barrier_keys counts only live releases.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r10-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=open resolves=p6-r10 out_of_scope=true -->
+### p6-r10-resolved · finding [out-of-scope] · resolves p6-r10: anyone with triage permission can add the two fr-queue labels (phase 6)
+
+copies the approved-fr trust model the spec chose; not caused by this phase's shape beyond what the spec decided.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r11-resolved created=2026-11-21T00:59:28+00:00 phase=6 state=fixed resolves=p6-r11 -->
+### p6-r11-resolved · finding [fixed] · resolves p6-r11: three texts said the barrier lands alone, and a docstring misnamed the commits past the base (phase 6)
+
+the docstring and the three texts now say the barrier lands as the last entry of its push.

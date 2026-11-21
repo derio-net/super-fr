@@ -232,12 +232,19 @@ steps:
           tests: wave-p6-suite.log@f494b8f8fa41;tree=3cd697c6ee330884defc1d7fcdea61d9e324d9fda9f0fa6017f6175d6267a6b6
           visual: none
       phase/6/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-20T23:02:15+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: a675f8da-621c-489c-90c0-07d7c601e9f7
+          returned: '2026-11-21T00:59:29+00:00'
+          outcome: done
+        evidence:
+          review: p6-review-1
+          reviewer: ae59d35487cf796ca
+          visual: none
+          findings: p6-r1,p6-r2,p6-r3,p6-r4,p6-r5,p6-r6,p6-r7,p6-r8,p6-r9,p6-r10,p6-r11
   journal-check:
     state: pending
   lens-review:
