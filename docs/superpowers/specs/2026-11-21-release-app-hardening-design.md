@@ -210,3 +210,9 @@ merge; the rest after it.
 5. Run the script again: the `require` step creates "require ci-ok". Record the
    walk on `release-app-setup-live`, and then on `ci-ok-required-on-main`
    (feature `2026-11-19-local-suite-cost`).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-21-release-app-hardening | `derio-net/super-fr` | `2026-11-21-release-app-hardening` | — |

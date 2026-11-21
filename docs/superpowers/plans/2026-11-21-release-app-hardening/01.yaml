@@ -1,0 +1,203 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Release environment, the setup script and its runbook (R1-R15)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - release-key-environment-scoped
+  - setup-script-app-check
+  - setup-script-environment
+  - setup-script-key-never-printed
+  - setup-script-variable-last
+  - setup-script-rulesets
+  - setup-script-idempotent-confirmed
+  tier: standard
+  files:
+  - .github/workflows/release.yml
+  - scripts/setup-release-app.sh
+  - scripts/configure-main-protection.sh
+  - scripts/release.py
+  - tests/unit/test_setup_release_app.py
+  - tests/unit/test_configure_main_protection.py
+  - tests/unit/test_release_workflow.py
+  - tests/unit/test_release_script.py
+  - docs/merge-protection.md
+  - AGENTS.md
+  - docs/acceptance/features/*.yaml
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: Scope the key to the release environment (spec Design, Workflow; R1, R2)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: tests/unit/test_release_workflow.py — a test that the set of jobs declaring `environment: release` is exactly {prepare, publish}, and that the set of jobs whose steps' `with`/`env` text contains `FR_AUTOMATION_APP_KEY` is exactly {prepare, publish}. Run `uv run pytest tests/unit/test_release_workflow.py -q --no-cov`: the new test fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: .github/workflows/release.yml — add `environment: release` to `prepare` and `publish`. Rewrite the header comment's mode paragraph and the ruleset paragraph: the key is the `release` environment secret, readable only on `main`; the app's bypass sits only on the "require ci-ok" ruleset; the setup is `scripts/setup-release-app.sh`. Same test file passes.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: scripts/release.py's GH006 hint (line ~900) names `scripts/setup-release-app.sh` instead of the old script; update any assertion on that text in tests/unit/test_release_script.py. Run both test files.
+- number: 2
+  title: Script frame — arguments, preflight read, confirm and dry-run (R3, R4, R5)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_setup_release_app.py — a stateful stub `gh` on PATH (pattern from tests/unit/test_configure_main_protection.py) that serves rulesets, ruleset bodies, the org installations, the installation repo list, the environment and its branch policies, repo and env secret lists, variables, tags and Actions runs from JSON files in a sandbox, applies every write (PUT/POST/DELETE, `secret set|delete`, `variable set|delete`) to those files, and logs each call's argv to calls.log; a stub `curl` that logs argv and answers `{"id": <app id>}`. Tests: bad arguments exit 2 with usage; `bash -n` and `shellcheck` (skip when absent) pass; a declined write (`n` on stdin) stops the script non-zero with no later write in calls.log; `--dry-run` from the live half-done state (variable set, no secret, combined "protect main" with the app bypass) prints `would:` lines for every pending step and makes no write call.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: scripts/setup-release-app.sh (executable, `set -euo pipefail`, never `set -x`) — flags `--repo`, `--dry-run`, `--force`, `--rotate-key`; constants APP_SLUG=derio-fr-automation, VAR_NAME=FR_AUTOMATION_APP_ID, SECRET_NAME=FR_AUTOMATION_APP_KEY, ENV_NAME=release, rulesets "protect main", "protect release tags", "require ci-ok"; helpers `ok`, `would`, `confirm` (prints the write, reads `apply? [y/N]` from stdin, default no, stops on anything but y/yes) and `write` (no-op printing `would:` under --dry-run). Steps run in the spec's fixed order. Delete scripts/configure-main-protection.sh and tests/unit/test_configure_main_protection.py.
+- number: 3
+  title: App installation check (R6)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests — the app step passes on `repository_selection: selected`, permissions exactly {contents: write, issues: write, metadata: read} and a repo list of exactly this repo; refuses (non-zero, names the web UI fix) on an extra permission, a read-only contents permission, `all` repositories, another repo in the list, or a missing installation; when the repo-list read fails, prints the installation settings URL and proceeds only on a `y` confirm.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: the app step — `gh api orgs/<owner>/installations` (installation by app_slug: id, app_id, repository_selection, permissions), `gh api user/installations/<id>/repositories` for the list, fallback URL `https://github.com/organizations/<owner>/settings/installations/<id>`.
+- number: 4
+  title: Release environment (R2, R7)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests — absent environment → one confirmed `PUT repos/<repo>/environments/release` whose body has `deployment_branch_policy: {protected_branches: false, custom_branch_policies: true}`, `can_admins_bypass: false`, `reviewers: []`, `wait_timer: 0`, then one `POST …/deployment-branch-policies` `{name: main, type: branch}`; an environment with admin bypass on or reviewers is corrected; an extra policy (another branch, or a tag) is deleted; a correct environment prints `ok` and writes nothing.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: the environment step — read `gh api repos/<repo>/environments/release` (absent on a non-zero exit with 404) and `…/deployment-branch-policies`, compare, write only the difference.
+- number: 5
+  title: Key — PEM check, JWT proof, environment secret, never printed (R8, R9, R10)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests with a key made by `openssl genrsa` in tmp_path — the path prompt reads stdin; a non-PEM file is refused before any curl call; the stub curl receives no JWT in argv (its Authorization header arrives through `-H @<fd>`; the stub reads the fd and checks the JWT's payload `iss` equals the app id and `exp - iat` is at most 600); a curl answer with another id, or HTTP 401, refuses and stores nothing, printing the status only; success runs `gh secret set FR_AUTOMATION_APP_KEY --env release --repo <repo>` with the key on stdin (the stub stores a digest, never the bytes) and offers to delete the file (`y` deletes it, `n` keeps it); an existing env secret is `ok` unless `--rotate-key`; a repo-level `FR_AUTOMATION_APP_KEY` is reported and offered for deletion once the env secret exists. A leak test: across stdout, stderr, calls.log and every stub's argv log, no line of the PEM body and no `eyJ` JWT segment appears.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: the key step — `read -r` the path; check the first line is `-----BEGIN (RSA )?PRIVATE KEY-----` without printing it; build header/payload with `printf` and `openssl base64 -A | tr '+/' '-_' | tr -d '='`, sign with `openssl dgst -sha256 -sign "$path"`; `curl -sS -o <tmp> -w '%{http_code}' -H @<(printf 'Authorization: Bearer %s\n' "$jwt") -H 'Accept: application/vnd.github+json' https://api.github.com/app`; compare `.id`; remove the tmp file on every exit path (trap); `gh secret set … < "$path"`.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: confirm the JWT lives only in a local variable unset after use, and that no `echo`/`printf` of `$jwt` or the file reaches stdout; the leak test stays green.
+- number: 6
+  title: Variable last and the half-done state (R11)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests — preflight on variable set + no env secret prints that releases are failing and offers to unset the variable (`y` → `variable delete`); the variable step refuses to set the variable while no env secret exists; with the env secret present it sets the variable to the installation's app id, and a matching value is `ok`; a full run from the half-done state with `y` everywhere ends with the variable set and the env secret present.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: preflight and the variable step (`gh variable list --json name,value`, `gh variable set|delete`).
+- number: 7
+  title: History, tag and require rulesets (R12, R13, R14)
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      RED: tests — history: the combined "protect main" gets one PUT that keeps its id, its deletion and non_fast_forward rules and every other field, with `bypass_actors: []`; a missing "protect main" is created with both rules; an org ruleset of the same name is ignored; no PUT in any test drops either rule. Tags: "protect release tags" is created with target tag, `refs/tags/v*`, rules deletion + update, no bypass; present and equal → `ok`. Require: refuses while "protect main" has a bypass actor, the env secret or variable is missing; with no app-pushed newest `v*` tag it prints what it waits for and exits 0 without a write (the tag is found across pages); `--force` skips only that check; otherwise one POST creates "require ci-ok" with the strict ci-ok rule and the app as its only bypass actor (`always`); when "protect main" still has a `required_status_checks` rule, the POST happens before the PUT that removes it (call order in calls.log); a rerun is `ok`.
+  - id: P1.T7.S2
+    text: |-
+      GREEN: the three ruleset steps, with jq bodies built from `{name, target, enforcement, conditions, rules, bypass_actors}` as the old script did.
+  - id: P1.T7.S3
+    text: |-
+      REFACTOR: an end-to-end test — from the half-done state, `y` to every prompt, then a second run with no stdin: the second run's calls.log holds no write. Run `uv run pytest tests/unit/test_setup_release_app.py tests/unit/test_release_workflow.py tests/unit/test_release_script.py -q --no-cov`.
+- number: 8
+  title: Runbook and security model (R15)
+  steps:
+  - id: P1.T8.S1
+    text: |-
+      docs/merge-protection.md — `covers:` names scripts/setup-release-app.sh instead of the old script, `reviewed:` stamped 2026-11-21 with a note. Rewrite "Residual risk" as "Security model" (what the app can do, where the key lives, who can read it, what a leak allows, from the spec's Design). Replace "Operator steps" with: web UI steps (create the app if missing: name, no webhook, Repository permissions Contents read and write, Issues read and write, Metadata read-only, every other permission No access, "Only on this account"; install it with "Only select repositories" = this repo; generate and download a private key; record the App ID), the script run before this PR merges, the app-pushed release, the require run; then "Verify each step" (the `gh api` read that shows each state) and "Roll back" (per step: unset the variable, delete the env secret, delete "require ci-ok", restore a bypass only by hand), and "Revoke or rotate a leaked key" (delete the key in the app's settings, generate a new one, `scripts/setup-release-app.sh --rotate-key`, check the audit log). Update "Adopt this in another repo". Keep the guide within the `ste` writing standard (short sentences, one instruction each).
+  - id: P1.T8.S2
+    text: |-
+      AGENTS.md's "Release identity" paragraph names `scripts/setup-release-app.sh` and the split rulesets instead of `--stage bypass`/`--stage require`. Run `uv run fr docs check` and fix any finding.
+- number: 9
+  title: Acceptance rows to ci
+  steps:
+  - id: P1.T9.S1
+    text: |-
+      Move the seven rows in this phase's `acceptance:` to `ci` with `--level unit=super-fr:tests/unit/<file>#<test>` refs to the tests that prove each (through the step record's `acceptance:` entries or `fr acceptance set-status`), and run `uv run fr acceptance check --no-fetch`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T9.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
