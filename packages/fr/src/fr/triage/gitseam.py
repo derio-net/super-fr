@@ -368,6 +368,25 @@ class LeaseLostError(GitError):  # noqa: N818 - a lost race, beside PushRefusedE
     (git's `(stale info)`): another writer moved it. With `--atomic` no ref moved."""
 
 
+class TransientPushError(GitError):  # noqa: N818 - beside PushRefusedError, a non-refusal
+    """A push that failed in transport (a timeout, a hang-up, DNS, a server 5xx) and whose
+    refs the remote does not hold: nobody refused it, so nothing is held for it; the
+    caller tries again next pass (l-errors-r1)."""
+
+
+_TRANSPORT = re.compile(
+    r"timed out|hung up|could not resolve host|could not read from remote|failed to connect|"
+    r"connection (?:reset|refused|timed out|closed)|network is unreachable|early eof|"
+    r"temporary failure|ssl|HTTP 5\d\d|unexpected disconnect|broken pipe",
+    re.I,
+)
+
+
+def is_transport_failure(words: str) -> bool:
+    """Whether git's words read as a failed connection rather than a remote's refusal."""
+    return "remote rejected" not in words and _TRANSPORT.search(words) is not None
+
+
 class AtomicUnsupportedError(GitError):  # noqa: N818 - a refusal of the server's
     """The remote does not support `git push --atomic` (spec 2026-11-19-wave-merge-queue
     R10, R22): nothing was pushed, and there is no non-atomic fallback."""
@@ -865,7 +884,9 @@ class Checkout:
         A lease the remote's ref no longer matches raises `LeaseLostError`; a remote that
         cannot push atomically `AtomicUnsupportedError`; any other refusal (a protection
         rule, a hook, a permission) `PushRefusedError` with git's own words, which carry
-        the remote's (a GitHub `GH006` or `GH013`, say)."""
+        the remote's (a GitHub `GH006` or `GH013`, say). Any other failure reads the remote's
+        refs again: they hold exactly the pushed shas, the push landed (no error); they do
+        not and git's words read as a failed connection, `TransientPushError`."""
         if not refspecs:
             return
         argv = ["push", "--quiet", "--no-verify", *(["--atomic"] if atomic else [])]
@@ -880,6 +901,17 @@ class Checkout:
                 raise AtomicUnsupportedError(words) from exc
             if _STALE_LEASE in words:
                 raise LeaseLostError(words) from exc
+            # l-errors-r1: a refusal is told from a transport failure by the remote's refs
+            try:
+                held = {ref: remote_ref(self.path, "origin", ref) for _sha, ref in refspecs}
+            except GitError:
+                if is_transport_failure(words):
+                    raise TransientPushError(words) from exc
+                raise PushRefusedError(words) from exc
+            if all(held[ref] == sha for sha, ref in refspecs):
+                return  # the push landed and the connection died on the way back
+            if is_transport_failure(words):
+                raise TransientPushError(words) from exc
             raise PushRefusedError(words) from exc
 
     def remote_sha(self, ref: str) -> str | None:

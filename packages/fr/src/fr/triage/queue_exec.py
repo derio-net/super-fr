@@ -36,6 +36,7 @@ from fr.triage.gitseam import (
     GitError,
     LeaseLostError,
     PushRefusedError,
+    TransientPushError,
     Worktree,
 )
 from fr.triage.model import (
@@ -375,9 +376,10 @@ class Landing:
 class LandResult:
     """What a landing did: `landed` (main is *main*), `lease` (a lease failed, nothing
     moved: rebuilt next pass), `held` (the repo cannot land this way, R22, R34) or
-    `stopped` (a forge merge refused or left an untested tree, R11)."""
+    `stopped` (a forge merge refused or left an untested tree, R11) or `transient` (the push
+    failed in transport and the remote holds none of it: a skipped pass, no halt)."""
 
-    outcome: Literal["landed", "lease", "held", "stopped"]
+    outcome: Literal["landed", "lease", "held", "stopped", "transient"]
     main: str = ""
     detail: str = ""
 
@@ -508,6 +510,8 @@ def land_push(
         checkout.push_leased(refspecs, leases, atomic=True)
     except LeaseLostError as exc:
         return LandResult("lease", detail=f"a lease failed, nothing landed: {exc}")
+    except TransientPushError as exc:
+        return LandResult("transient", detail=f"the landing push did not complete: {exc}")
     except (AtomicUnsupportedError, PushRefusedError) as exc:
         return LandResult("held", detail=refusal_reason(exc))
     if record is not None:
@@ -1013,7 +1017,8 @@ class QueueExecutor:
         words. The new commit is a merge whose second parent is the hold it replaces, so
         every write is a fast-forward (R17). Another writer's hold, or a lease that lost its
         race, is reported and never forced (R27, R31); a push the remote refuses is
-        recorded as a halt (`_hold_refused`), and the queue lands nothing until a hold write
+        recorded as a halt (`_hold_refused`; a fetch or transport failure is a warning, not a
+        refusal), and the queue lands nothing until a hold write
         succeeds."""
         p = self.ports
         try:
@@ -1040,9 +1045,11 @@ class QueueExecutor:
             push_hold(p.checkout, sha, current.sha if current is not None else None)
         except LeaseLostError:
             return False, "another writer moved the hold: not written, never forced"
-        except GitError as exc:
+        except PushRefusedError as exc:
             self._hold_refused(f"{state} hold: {exc}", record, current)
             return False, f"the hold was not written: {exc}"
+        except GitError as exc:  # l-errors-r2: a fetch or transport failure refused nothing
+            return False, f"warning: the hold was not written, tried again next pass: {exc}"
         return True, f"hold {state}"
 
     def _hold_refused(self, words: str, record: QueueRecord | None, current: Hold | None) -> None:
@@ -1257,6 +1264,8 @@ class QueueExecutor:
             )
         if result.outcome == "lease":
             return result, "a lease failed: nothing landed, the queue is rebuilt next pass"
+        if result.outcome == "transient":  # l-errors-r1: no halt, the next pass tries again
+            return result, f"warning: {result.detail}; nothing recorded, tried again next pass"
         if result.outcome == "held" or result.outcome == "stopped":
             # R11, R22, R34: recorded, so the next pass lands nothing and says so as a Need
             self._halt(result.outcome, result.detail, result.main)
