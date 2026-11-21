@@ -25,3 +25,8 @@ fr.ops.lint.print_only (one predicate; heredoc bodies, comments and command subs
 ### f-2 · finding [fixed] · a done entry did not say whether the apply ran
 
 Found by the read-only audit: apply_ops wrote the same 'result: done' for an op already DONE before its apply (nothing ran) and one fr applied, so no journal could show that an apply acted. It now records reason FOUND_DONE or APPLIED_DONE (reason is an existing op body key: no journal shape change). Test: tests/unit/test_ops_lint.py::test_a_done_entry_says_whether_the_apply_ran.
+
+<!-- fr:journal kind=finding scope=debug id=f-3 created=2026-11-21T16:30:10+00:00 state=fixed -->
+### f-3 · finding [fixed] · devops-gated deliver hand-off named the post-merge pickup
+
+run_cmd._closeout_handoff_lines now asks fr.run.closeout.devops_gated (the same decision fr pickup makes) and names 'fr ops gate --run <id>'; an error in that read keeps the pickup line, which fr pickup routes to the DevOps brief anyway. Tests: tests/unit/test_ops_devops_brief.py::test_deliver_handoff_names_the_devops_stage_for_a_devops_gated_run and its negative twin. fr-goal SKILL.md sentence updated; mirrors synced.
