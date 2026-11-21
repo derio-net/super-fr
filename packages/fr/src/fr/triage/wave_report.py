@@ -26,7 +26,7 @@ from fr.triage.model import (
     RequeuedEvent,
 )
 
-Outcome = Literal["landed", "ejected", "deferred"]
+Outcome = Literal["landed", "ejected", "deferred", "queued"]
 
 REPORT_TITLE = "## Wave merge queue report"
 """The PR body section's heading. `review_reasons` reads only the body's `Closes` lines, so a
@@ -101,6 +101,16 @@ def _wave_report(record: QueueRecord, batches: Sequence[Batch]) -> WaveReport:
         approvals[key] = approvals.get(key, 0) + sum(
             1 for e in batch.events if isinstance(e, ApprovalEvent)
         )
+    deferred: dict[str, datetime] = {}  # out of this wave by the operator, not undone
+    for batch in batches:
+        when = _deferred_from(batch, record.wave)
+        if when is not None and batch.id not in landed:
+            deferred[batch.id] = when
+    for key, when in list(deferred.items()):  # a PR is listed once, in the state it ended in
+        if key in ejected and last.get(key, when) > when:
+            del deferred[key]
+        else:
+            ejected.pop(key, None)
     prs: list[PrReport] = []
     for key in landed:
         prs.append(PrReport(key, "landed", cycles.get(key, 0), _wall(first, last, key),
@@ -108,10 +118,9 @@ def _wave_report(record: QueueRecord, batches: Sequence[Batch]) -> WaveReport:
     for key, reason in ejected.items():
         prs.append(PrReport(key, "ejected", cycles.get(key, 0), _wall(first, last, key),
                             approvals.get(key, 0), reason))  # fmt: skip
-    for batch in batches:  # deferred out of this wave: a `deferred` naming it, not undone
-        if _deferred_from(batch, record.wave):
-            prs.append(PrReport(batch.id, "deferred", cycles.get(batch.id, 0), None,
-                                approvals.get(batch.id, 0), "left the wave"))  # fmt: skip
+    for key in deferred:
+        prs.append(PrReport(key, "deferred", cycles.get(key, 0), None,
+                            approvals.get(key, 0), "left the wave"))  # fmt: skip
     release = ""
     if drained:
         release = f"asked at {drained[:12]}" + (f", {cleared}" if cleared else ", not cleared yet")
@@ -122,28 +131,40 @@ def _wall(first: dict[str, datetime], last: dict[str, datetime], key: str) -> ti
     return last[key] - first[key] if key in first and key in last else None
 
 
-def _deferred_from(batch: Batch, wave: int | None) -> bool:
-    """*batch* has a `deferred` event naming *wave* that no later `requeued` undoes."""
-    state = False
+def _deferred_from(batch: Batch, wave: int | None) -> datetime | None:
+    """When *batch* was deferred out of *wave*, if a `deferred` event names it and no later
+    `requeued` undoes it."""
+    when: datetime | None = None
     for event in batch.events:
         if isinstance(event, DeferredEvent) and event.wave == wave:
-            state = True
+            when = event.at
         elif isinstance(event, RequeuedEvent):
-            state = False
-    return state
+            when = None
+    return when
 
 
 def wave_report(
-    records: Sequence[QueueRecord], batches: Sequence[Batch] = (), *, repo: str | None = None
+    records: Sequence[QueueRecord],
+    batches: Sequence[Batch] = (),
+    *,
+    repo: str | None = None,
+    closeout: str = "",
 ) -> tuple[WaveReport, ...]:
     """One report per queue record of *records* (of *repo* when given), oldest first, with the
-    deferred PRs read from *batches*. A record with nothing to report is left out."""
+    deferred PRs read from *batches*. A record with nothing to report is left out. *closeout*
+    names the close-out entry whose PR body this report becomes: that body is written before
+    the drain, so the entry is not queued yet, and the last report lists it as `queued`."""
     out = [
         _wave_report(r, [b for b in batches if _in_wave(b, r.wave)])
         for r in records
         if repo is None or r.repo == repo
     ]
-    return tuple(r for r in out if r.prs or r.release)
+    kept = [r for r in out if r.prs or r.release]
+    if closeout and kept:
+        last = kept[-1]
+        entry = PrReport(closeout, "queued", detail="this close-out: the queue lands it next")
+        kept[-1] = WaveReport(last.repo, last.wave, (*last.prs, entry), last.release)
+    return tuple(kept)
 
 
 def _in_wave(batch: Batch, wave: int | None) -> bool:

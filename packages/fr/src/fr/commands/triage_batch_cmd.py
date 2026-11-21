@@ -339,6 +339,7 @@ from fr.triage.wave_queue import (
     QueuePlan,
     barrier_open,
     effective_wave,
+    entry_key,
     halted_queue,
     is_deferred,
     next_queue_wave,
@@ -3293,13 +3294,39 @@ def _collected_member(
     )  # fmt: skip
 
 
-def _wave_report_text(judgements: Judgements, repo: str, members: Sequence[Any]) -> str:
+def _wave_report_text(
+    judgements: Judgements, repo: str, members: Sequence[Any], *, scope: str
+) -> str:
     """The merge queue's report of the waves *members* were in (R28), as the close-out PR's
-    body section; "" when none of their queues recorded anything."""
+    body section; "" when none of their queues recorded anything. It reads the scope's own
+    records of the wave each member queues in now (a requeued one, its new wave); a member
+    between waves selects only the between-waves records that name it. The body is written
+    before the drain and never again, so the close-out itself is listed, as queued."""
     by_id = {b.id: b for b in judgements.batches}
-    waves = {by_id[m.batch].wave for m in members if m.batch in by_id}
-    records = [q for q in judgements.queues if q.repo == repo and q.wave in waves]
-    return render_wave_report(wave_report(records, judgements.batches))
+    mine = [q for q in judgements.queues if q.repo == repo and q.scope == scope]
+    chosen: list[QueueRecord] = []
+    for m in members:
+        batch = by_id.get(m.batch)
+        if batch is None:
+            continue
+        wave = effective_wave(batch)
+        for q in mine:
+            if q in chosen or q.wave != wave:
+                continue
+            if wave is None and not _names(q, batch.id):
+                continue
+            chosen.append(q)
+    chosen = [q for q in mine if q in chosen]  # oldest first
+    return render_wave_report(wave_report(chosen, judgements.batches, closeout="closeout"))
+
+
+def _names(record: QueueRecord, key: str) -> bool:
+    """*record* has an event about the entry *key*."""
+    return any(
+        entry_key(ref) == key
+        for e in record.events
+        for ref in ([e.entry] if hasattr(e, "entry") else list(getattr(e, "entries", ())))
+    )
 
 
 def _closeout_branch(
@@ -3523,7 +3550,9 @@ def batch_closeout_command(
                 branch=branch, record=lambda bid, br: None,
                 hold=lambda bid, why: _record_hold(target, facts, bid, item, why),
                 say=_say, unreadable=unreadable, transient=transient,
-                report=_wave_report_text(judgements, owner_repo, members),
+                report=_wave_report_text(
+                    judgements, owner_repo, members, scope=scope_id(_scope(repo, org))
+                ),
             )  # fmt: skip
             if result.pr is not None and result.head:
                 carried = [m for m in members if m.batch in result.done]
