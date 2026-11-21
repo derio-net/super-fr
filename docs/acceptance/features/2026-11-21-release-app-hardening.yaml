@@ -93,9 +93,14 @@ rows:
     - spec:2026-11-21-release-app-hardening#R12
     - spec:2026-11-21-release-app-hardening#R13
     - spec:2026-11-21-release-app-hardening#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_history_step_strips_the_bypass_in_place_and_keeps_every_rule
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_tag_ruleset_is_created_without_a_bypass
+      - super-fr:tests/unit/test_setup_release_app.py#test_require_creates_the_ruleset_with_the_app_as_its_only_bypass
+      - super-fr:tests/unit/test_setup_release_app.py#test_in_the_deferred_state_require_comes_first_then_one_put_removes_both
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
     verify: none
   - id: setup-script-idempotent-confirmed
     capability: release
