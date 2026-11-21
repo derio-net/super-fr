@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1236,8 +1236,9 @@ operations belong to the DevOps stage described next.
 ### 9. How does the run confirm the merge and close out?
 
 A run whose plan carries manual operations, or whose specification declares
-`gate: devops`, closes out differently. Its `fr pickup --run <run-id>` brief
-is a **DevOps brief** with one command, `fr ops gate --run <run-id>`. You run
+`gate: devops`, closes out differently. Resolving `deliver` ends with
+`fr ops gate --run <run-id>` instead of the close-out line below, and its
+`fr pickup --run <run-id>` brief is a **DevOps brief** with that one command. You run
 it yourself at a terminal. It refuses anywhere else, so an agent cannot run it
 for you. It works through eight recorded stages:
 
