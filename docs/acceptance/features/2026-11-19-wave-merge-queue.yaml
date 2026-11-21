@@ -220,15 +220,14 @@ rows:
       - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_defer_writes_a_deferred_event_naming_the_wave_and_says_what_it_changed
       - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_defer_refuses_a_deferred_batch_and_a_closed_out_one
       - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_requeue_into_a_wave_writes_requeued_and_moves_the_effective_wave
-      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_plain_requeue_is_a_between_waves_entry
-      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_requeue_is_refused_while_the_named_waves_queue_is_open
       - super-fr:tests/unit/test_wave_queue_planner.py#test_terminal_means_landed_cancelled_abandoned_or_deferred
       - super-fr:tests/unit/test_wave_queue_planner.py#test_one_batch_with_a_spent_budget_blocking_the_drain_is_proposed_for_deferral
       - super-fr:tests/unit/test_wave_queue_planner.py#test_a_batch_with_no_progress_for_stall_hours_is_proposed_and_a_recent_one_is_not
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_plain_requeue_with_every_wave_opened_is_a_between_waves_entry
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_requeue_to_a_wave_is_refused_once_its_queue_has_opened_even_if_drained
     status: ci
-    notes: 'phase 7: defer and requeue write deferred and requeued events through the
-      one writer (requeue --wave refused while that queue is open); the planner reads
-      a deferred batch as terminal and proposes, never runs, the verbs'
+    notes: Defer, requeue and queue-retry are unit-pinned; refs re-pointed to the tests
+      the phase 7 fix round renamed (p7-r2, p7-r4).
   - id: wave-queue-post-merge
     capability: wave merge queue
     acceptance: post_merge runs once per landing at the landed main and gates the next
