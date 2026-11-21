@@ -27,9 +27,15 @@ rows:
       this repo
     origin:
     - spec:2026-11-21-release-app-hardening#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_app_step_passes_on_selected_and_exact_permissions
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_app_step_refuses_a_wrong_installation_and_names_the_web_ui
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_key_is_proved_then_stored_from_stdin_and_never_leaks
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_wrong_repository_list_refuses_stores_nothing_and_revokes
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_existing_environment_secret_is_ok_and_asks_to_confirm_the_installation
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
     verify: none
   - id: setup-script-environment
     capability: release
