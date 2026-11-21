@@ -1,0 +1,264 @@
+schema_version: 12
+run: 2026-11-19-feat-wave-merge-queue
+step: lens-review
+outcome: done
+journal:
+- kind: review
+  id: lens-review-1
+  global: true
+  title: 'Lens review — security, errors, tests, docs-accuracy: 27 in-scope findings fixed, 3 pre-existing'
+  body: 'Four lens reviewers read the whole feature diff against origin/main, one per lens in the run''s lens set.
+    They raised 30 findings: 27 in scope, all fixed in b7b622cac..558b129c3, and 3 security findings that predate
+    this change. Spec R12 and §E (approval succession), R26 and §J (postmerge marker) and Test Plan 5 were amended.
+    Full suite after the fixes (-m ""): 17355 passed, 122 skipped, exit 0; ruff, mypy, fr docs check, fr validate
+    artifacts, fr acceptance check and the sync checks pass.
+
+    '
+- kind: finding
+  id: l-security-r1
+  global: true
+  review_scope: in
+  title: 'patch-id approval was position-blind: a moved hunk kept approved-fr'
+- kind: finding
+  id: l-security-r2
+  global: true
+  review_scope: in
+  title: a bare fr-queue:postmerge-done label lifted the DevOps barrier
+- kind: finding
+  id: l-security-r3
+  global: true
+  review_scope: in
+  title: the release marker matched anywhere in a body and used its own trusted-author list
+- kind: finding
+  id: l-security-r4
+  global: true
+  review_scope: out
+  title: ci.yml declares no token permissions
+- kind: finding
+  id: l-security-r5
+  global: true
+  review_scope: out
+  title: a push to fr-hold/** can run release.yml with the app key
+- kind: finding
+  id: l-security-r6
+  global: true
+  review_scope: out
+  title: the version and relock commands run in a worktree holding PR code
+- kind: finding
+  id: l-errors-r1
+  global: true
+  review_scope: in
+  title: a transport failure on the landing push read as a refusal and halted the queue
+- kind: finding
+  id: l-errors-r2
+  global: true
+  review_scope: in
+  title: a hold write that failed in transport halted the queue
+- kind: finding
+  id: l-errors-r3
+  global: true
+  review_scope: in
+  title: a GitError mid-execute ended the drive and could lose the halt or slot-lost record
+- kind: finding
+  id: l-errors-r4
+  global: true
+  review_scope: in
+  title: an unreadable patch-id voided the approval
+- kind: finding
+  id: l-errors-r5
+  global: true
+  review_scope: in
+  title: an unreadable queue config told the DevOps stage to merge by hand
+- kind: finding
+  id: l-errors-r6
+  global: true
+  review_scope: in
+  title: an unreadable comment list read as no markers
+- kind: finding
+  id: l-errors-r7
+  global: true
+  review_scope: in
+  title: an unreadable PR read back as unmerged
+- kind: finding
+  id: l-errors-r8
+  global: true
+  review_scope: in
+  title: resume read a failed merge check as not merged
+- kind: finding
+  id: l-errors-r9
+  global: true
+  review_scope: in
+  title: resume failed on a recorded combination this clone never had
+- kind: finding
+  id: l-errors-r10
+  global: true
+  review_scope: in
+  title: a failed queue entry write lost its cause
+- kind: finding
+  id: l-errors-r11
+  global: true
+  review_scope: in
+  title: archive_moves raised without its cause
+- kind: finding
+  id: l-errors-r12
+  global: true
+  review_scope: in
+  title: a queue repo whose base could not be read was skipped silently
+- kind: finding
+  id: l-errors-r13
+  global: true
+  review_scope: in
+  title: clear_hold's failure did not say the release had published
+- kind: finding
+  id: l-tests-r1
+  global: true
+  review_scope: in
+  title: removing the train dropped the version-conflict, relock and build-output tests
+- kind: finding
+  id: l-tests-r2
+  global: true
+  review_scope: in
+  title: no real-git test of the leased push failing after main moved
+- kind: finding
+  id: l-tests-r3
+  global: true
+  review_scope: in
+  title: no drive-level test of a session push voiding an approval
+- kind: finding
+  id: l-tests-r4
+  global: true
+  review_scope: in
+  title: the smoke test did not pin judgements schema 13
+- kind: finding
+  id: l-docs-accuracy-r1
+  global: true
+  review_scope: in
+  title: fr-wave-driver.md said a waiting pr-open batch takes a slot
+- kind: finding
+  id: l-docs-accuracy-r2
+  global: true
+  review_scope: in
+  title: fr-wave-driver.md said a landing frees its slots in the same pass
+- kind: finding
+  id: l-docs-accuracy-r3
+  global: true
+  review_scope: in
+  title: fr-wave-driver.md's 'head it has only just pushed' was false
+- kind: finding
+  id: l-docs-accuracy-r4
+  global: true
+  review_scope: in
+  title: 'merge-protection.md still described the forge-queue mode and omitted the land: push bypass need'
+- kind: finding
+  id: l-docs-accuracy-r5
+  global: true
+  review_scope: in
+  title: fr-exit-gates.md said the DevOps stage merges
+- kind: finding
+  id: l-docs-accuracy-r6
+  global: true
+  review_scope: in
+  title: fr-triage.md's verb list lacked defer, requeue and queue-retry
+- kind: finding
+  id: l-docs-accuracy-r7
+  global: true
+  review_scope: in
+  title: code strings in labels.py, queue_comment.py and drive_pass still said the DevOps stage merges
+resolves:
+- id: l-security-r1
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-security-r2
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-security-r3
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-security-r4
+  state: out-of-scope
+  body: 'Pre-existing: ci.yml had no permissions block before this change; the queue adds a trigger, not the token
+    scope.'
+- id: l-security-r5
+  state: out-of-scope
+  body: 'Pre-existing exposure class: release.yml already minted the app token on push; tracked as a hardening follow-up
+    outside this feature.'
+- id: l-security-r6
+  state: out-of-scope
+  body: 'Pre-existing: the old train ran the same version and relock commands in the PR checkout; this change keeps
+    that behaviour.'
+- id: l-errors-r1
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r2
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r3
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r4
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r5
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r6
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r7
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r8
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r9
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r10
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r11
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r12
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-errors-r13
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-tests-r1
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-tests-r2
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-tests-r3
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-tests-r4
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-docs-accuracy-r2
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-docs-accuracy-r3
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-docs-accuracy-r4
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-docs-accuracy-r5
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-docs-accuracy-r6
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+- id: l-docs-accuracy-r7
+  state: fixed
+  body: Fixed in b7b622cac..558b129c3 with tests; full suite green after.
+evidence:
+  review: lens-review-1
+  reviewer: security=aa45d4e129119faff,errors=ae9605109e1024754,tests=af0ab6b68ce6479ca,docs-accuracy=aea762c3a59a55ea1
+  model: claude-opus-5-5
