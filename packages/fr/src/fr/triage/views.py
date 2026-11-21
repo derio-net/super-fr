@@ -125,12 +125,23 @@ def queue_unconfigured(snap: Snapshot, facts: Facts) -> dict[str, tuple[str, str
     return out
 
 
+def facts_scope_args(facts: Facts) -> tuple[str, ...]:
+    """The options a pasted command carries to read this scope, as the driver's own do: `--repo`
+    for a one-repo scope, `--org` for an owner's. A group has no option of its own."""
+    if facts.kind == "org":
+        return ("--org", facts.scope)
+    if facts.kind == "repo" and len(facts.repos) == 1:
+        return ("--repo", facts.repos[0])
+    return ()
+
+
 def drive_snapshot(
     facts: Facts,
     judgements: Judgements,
     *,
     max_inflight: int = DEFAULT_MAX_INFLIGHT,
     ci_none: Collection[str] = (),
+    scope_args: Sequence[str] | None = None,
 ) -> Snapshot:
     """The snapshot the driver would decide from, built from the facts alone: each
     open batch PR as the facts show it (no forge read), every stage derived, the
@@ -182,6 +193,7 @@ def drive_snapshot(
         repos=repos,
         wave_queues=queue_cfg,
         queue_records=tuple(judgements.queues),
+        scope_args=tuple(facts_scope_args(facts) if scope_args is None else scope_args),
         scope_id=driven_by,
         now=collected(facts),
         max_inflight=max_inflight,

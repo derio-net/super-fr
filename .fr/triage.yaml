@@ -33,4 +33,4 @@ queue:
   depth: 2
   land: push
   release: workflow
-  release_workflow: release.yml
+  # No `release_workflow:` on purpose: release.yml already runs on the drained `fr-hold/**` push.

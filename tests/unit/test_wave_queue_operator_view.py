@@ -170,10 +170,26 @@ def test_the_boards_needs_list_a_halted_queue_with_the_command_to_paste() -> Non
     facts carry: a halt is a `queue-need` that names the retry verb."""
     f, jd = _board({"kind": "queue_open", "at": AT}, HALT)
     (need,) = [n for n in needs_you(f, jd) if n.kind == "queue-need"]
-    assert f"queue-retry {REPO_B} --yes" in need.text and "GH013 push refused" in need.text
+    assert (
+        f"queue-retry {REPO_B} --repo {REPO_B} --yes" in need.text
+        and "GH013 push refused" in need.text
+    )
     assert "queue-need" in NEED_LABELS
     f, jd = _board({"kind": "queue_open", "at": AT}, HALT, RETRY)
     assert not [n for n in needs_you(f, jd) if n.kind == "queue-need"]
+
+
+def test_the_boards_pasted_queue_commands_carry_the_scope_like_the_drivers_do() -> None:
+    for kind, scope, flags in (
+        ("org", "example-org", "--org example-org"),
+        ("repo", "example-org--widgets", f"--repo {REPO_B}"),
+    ):
+        f, jd = _board({"kind": "queue_open", "at": AT}, HALT)
+        f = f.model_copy(update={"kind": kind, "scope": scope})
+        jd = jd.model_copy(update={"queues": [jd.queues[0].model_copy(
+            update={"scope": scope_id(f.scope)})]})  # fmt: skip
+        (need,) = [n for n in needs_you(f, jd) if n.kind == "queue-need"]
+        assert f"queue-retry {REPO_B} {flags}" in need.text, need.text
 
 
 def test_the_board_card_of_a_queued_approved_pr_never_reads_awaiting_approval() -> None:

@@ -425,6 +425,7 @@ def write_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,
         ci_none=local_ci_none(facts) if ci_none is None else ci_none,
+        scope_args=scope_args,
     )  # fmt: skip
     html = render_board(
         board,

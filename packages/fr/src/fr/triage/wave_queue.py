@@ -1307,11 +1307,20 @@ def queue_view(
         if isinstance(event, QueueLandEvent):
             landed += [entry_key(e) for e in event.entries]
     halt = live_halt(record, qs) if record is not None and qs is not None else None
-    return QueueView(plan.repo, plan.phase, plan.wave, (rep.base if rep else "") or
-                     (qs.base if qs else ""), tuple(states), tuple(landed),
-                     _hold_state(record, qs.hold if qs is not None else None, read=qs is not None and qs.hold_read,
-                     idle=plan.phase == "idle"),
-                     halt.state if halt is not None else "")  # fmt: skip
+    read = qs is not None and qs.hold_read
+    hold = _hold_state(record, qs.hold if qs is not None else None, read=read,
+                       idle=plan.phase == "idle")  # fmt: skip
+    base = (rep.base if rep else "") or (qs.base if qs else "")
+    return QueueView(
+        plan.repo,
+        plan.phase,
+        plan.wave,
+        base,
+        tuple(states),
+        tuple(landed),
+        hold,
+        halt.state if halt is not None else "",
+    )
 
 
 def queue_line(

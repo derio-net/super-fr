@@ -452,11 +452,14 @@ def pill_of(batch: Batch, facts: Facts) -> str | None:
 
 
 def _default_plan(
-    facts: Facts, judgements: Judgements, ci_none: Collection[str] = ()
+    facts: Facts,
+    judgements: Judgements,
+    ci_none: Collection[str] = (),
+    scope_args: Sequence[str] | None = None,
 ) -> tuple[Snapshot, Pass]:
     """The snapshot and the pass the drive would make on these facts, selecting what it
     selects by default, at its default in-flight cap (R6): built once per board."""
-    snapshot = drive_snapshot(facts, judgements, ci_none=ci_none)
+    snapshot = drive_snapshot(facts, judgements, ci_none=ci_none, scope_args=scope_args)
     chosen = replace(snapshot, selected=default_selection(judgements.batches))
     return chosen, drive_pass(chosen)
 
@@ -787,6 +790,7 @@ def build_board(
     now: datetime | None = None,
     notes: Mapping[str, str] | None = None,
     ci_none: Collection[str] = (),
+    scope_args: Sequence[str] | None = None,
 ) -> Board:
     """One card per batch in eleven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
@@ -801,7 +805,9 @@ def build_board(
         raise ValueError("build_board needs `now` (the clock is passed in) when given `me`")
     expiries = _own_expiries(facts, me, now) if me and now else {}
     batches = judgements.batches
-    snapshot, plan = _default_plan(facts, judgements, ci_none)  # one plan per board (p1-r8)
+    snapshot, plan = _default_plan(
+        facts, judgements, ci_none, scope_args
+    )  # one plan per board (p1-r8)
     actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
     queued = _in_merge_queue(plan)
     queue_held = queue_unconfigured(snapshot, facts)
