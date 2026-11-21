@@ -663,3 +663,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_moved_identical_hunk_keeps_the_patch_id_but_not_the_succession
     why: evidence for the succession check
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 13
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_after_labelling_voids_the_approval
+    why: 'l-tests-r3: the drive-level void'
