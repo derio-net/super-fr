@@ -1377,3 +1377,8 @@ Fixed in b7b622cac..558b129c3 with tests; full suite green after.
 ### p6-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1604] · resolves p6-r10: anyone with triage permission can add the two fr-queue labels (phase 6)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1604.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved-2 created=2026-11-21T06:32:40+00:00 state=open resolves=l-security-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1605 -->
+### l-security-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1605] · resolves l-security-r4: ci.yml declares no token permissions
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1605.
