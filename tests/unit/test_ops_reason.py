@@ -53,7 +53,7 @@ def test_a_passthrough_value_on_stderr_never_reaches_the_journal(
         record_op(tmp_path, "p", **kw)  # type: ignore[arg-type]
 
     res = apply_ops(
-        [op("a", apply='echo "denied in $FR_TEST_PASS" >&2; exit 3')],
+        [op("a", apply='echo "denied in $FR_TEST_PASS" >&2; bash -c "exit 3"')],
         runner=w.runner, applier=applier, identities=Idents(), journal=NoJournal(),
         prompt=FakePrompt(), record=record, yes=True,
     )  # fmt: skip
