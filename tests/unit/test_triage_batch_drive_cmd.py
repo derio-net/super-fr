@@ -484,6 +484,7 @@ class RecordingQueue:
 
     world: World
     script: dict[int, Any] = {}
+    fail_once: list[Exception] = []  # noqa: RUF012 - GitErrors the next executes raise
     ports: Any = None  # the driver's ports, as the last pass built them: `entry_of` is a build's
 
     def __init__(self, ports: Any) -> None:
@@ -502,6 +503,8 @@ class RecordingQueue:
     def execute(self, plan: Any, record: Any, history: Any = ()) -> list[str]:
         from fr.triage.wave_queue import QueueAction
 
+        if type(self).fail_once:
+            raise type(self).fail_once.pop()
         type(self).world.queue_plans.extend(plan.actions)
         type(self).ports = self.ports
         # a planned write is an act, as the real executor's lines are (a pass that opened or
@@ -537,6 +540,7 @@ class RecordingQueue:
 def _recording_queue(monkeypatch: pytest.MonkeyPatch, world: World) -> None:
     """Every pass of these tests plans the queue and a `RecordingQueue` records it."""
     RecordingQueue.world, RecordingQueue.script, RecordingQueue.ports = world, {}, None
+    RecordingQueue.fail_once = []
     monkeypatch.setattr(triage_batch_cmd, "QueueExecutor", RecordingQueue)
     # a repo's queue config is the queue's own tests' subject: here every repo declares
     # `queue.ci: push`, so the queue is not refused and the pass plans it
@@ -2229,6 +2233,24 @@ def test_a_failed_snapshot_read_does_not_end_the_loop(
     assert isinstance(result.exception, _StopError), result.output
     assert result.output.count("unexpected EOF") == 1
     assert _opened(world)
+
+
+def test_a_failing_git_command_mid_execute_does_not_end_the_loop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """l-errors-r3: a `git ls-remote` that fails while the queue executes skips the pass,
+    naming the command, as a failed forge read does (gh#921); the next pass runs."""
+    from fr.triage.gitseam import GitError
+
+    _pr_open(world, tmp_path)
+    RecordingQueue.fail_once = [GitError("`git ls-remote --refs origin` failed in /clone: boom")]
+    _naps_until(monkeypatch, 2)
+    result = _drive_named(tmp_path, "--yes")
+    assert isinstance(result.exception, _StopError), result.output
+    assert result.output.count("`git ls-remote --refs origin` failed") == 1
+    assert "merge queue stopped this pass" in result.output
+    assert _opened(world)  # the second pass executed
 
 
 def test_once_still_exits_non_zero_on_a_failed_forge_read(

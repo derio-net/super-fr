@@ -570,18 +570,30 @@ class ViewingForge(Protocol):
     def pr_view(self, repo: str, number: int) -> dict[str, Any]: ...
 
 
-def read_back(client: ViewingForge, repo: str, prs: Iterable[int]) -> tuple[int, ...]:
-    """R35: the landed PRs the forge does not read `MERGED` yet (an unreadable one
-    included: unknown is not merged)."""
-    out: list[int] = []
+def read_back_split(
+    client: ViewingForge, repo: str, prs: Iterable[int]
+) -> tuple[tuple[int, ...], dict[int, str]]:
+    """R35: of the landed PRs, those the forge reads and does not mark `MERGED`, and, apart,
+    those it could not be read for at all (number -> why): an unreadable PR is not an
+    unmerged one (l-errors-r7), and the first has no forge-side remedy to advise."""
+    unmerged: list[int] = []
+    unread: dict[int, str] = {}
     for number in prs:
         try:
             state = client.pr_view(repo, number).get("state")
-        except FORGE_ERRORS:
-            state = None
+        except FORGE_ERRORS as exc:
+            unread[number] = str(exc)
+            continue
         if state != "MERGED":
-            out.append(number)
-    return tuple(out)
+            unmerged.append(number)
+    return tuple(unmerged), unread
+
+
+def read_back(client: ViewingForge, repo: str, prs: Iterable[int]) -> tuple[int, ...]:
+    """R35: the landed PRs the forge does not read `MERGED` yet (an unreadable one
+    included: unknown is not merged)."""
+    unmerged, unread = read_back_split(client, repo, prs)
+    return tuple(sorted({*unmerged, *unread}))
 
 
 def forge_refusal(client: object) -> str | None:
@@ -884,11 +896,28 @@ class QueueExecutor:
             return lines
         p, rep = self.ports, replay(record)
         records = list(history) or [record]
-        for c in rep.combos.values():
+        for c in list(rep.combos.values()):
             ref = slot_ref(p.scope, c.slot)
             held = p.checkout.remote_sha(ref)
-            if held == c.sha or not p.checkout.has_commit(c.sha):
+            if held == c.sha:
                 continue
+            if not p.checkout.has_commit(c.sha):
+                # l-errors-r9: a combination this clone never had (another host built it):
+                # fetch the slot; still missing, it is built again, with no check read on it
+                try:
+                    p.checkout.fetch_remote_ref(ref)
+                except GitError:
+                    pass
+                if not p.checkout.has_commit(c.sha):
+                    p.record(QueueSlotLostEvent(kind="queue_slot_lost", at=p.now(), slot=c.slot,
+                                                sha=c.sha, found=held))  # fmt: skip
+                    self._leases[c.slot] = held
+                    lines.append(
+                        f"queue-build {p.repo}: slot {c.slot}'s recorded combination "
+                        f"{c.sha[:12]} is not in this clone or on the remote: the slot is "
+                        "built again"
+                    )
+                    continue
             try:
                 p.checkout.push_leased([(c.sha, ref)], {ref: _lease_before(records, c)},
                                        atomic=False)  # fmt: skip
@@ -936,8 +965,11 @@ class QueueExecutor:
             known = p.pr_of(key)
             try:
                 state = p.client.pr_view(p.repo, known[0]).get("state") if known else None
-            except FORGE_ERRORS:
-                state = None
+            except FORGE_ERRORS as exc:
+                # l-errors-r8: unread is no "not merged": nothing is recorded on a shorter
+                # prefix; resume stops this pass and reads again
+                return [f"queue-land {p.repo}: could not read whether {key} merged ({exc}); "
+                        "resume waits for the next pass"]  # fmt: skip
             if state != "MERGED":
                 break
             merged.append(key)
@@ -970,7 +1002,10 @@ class QueueExecutor:
         """R11, R22, R34: the queue lands nothing more until the operator acts
         (`fr.triage.wave_queue.live_halt` reads it back)."""
         p = self.ports
-        at = main or self.main_now() or None
+        try:
+            at = main or self.main_now() or None
+        except GitError:  # l-errors-r3: the halt is recorded all the same, without a main
+            at = None
         p.record(QueueHaltEvent(kind="queue_halt", at=p.now(), state=state, detail=detail,
                                 land=p.config.land, main=at))  # fmt: skip
 
@@ -978,10 +1013,15 @@ class QueueExecutor:
         """R4: another writer moved slot *slot*: recorded with what it holds now, so the
         combination is built again leased on it and never re-pushed over it."""
         p = self.ports
-        found = p.checkout.remote_sha(slot_ref(p.scope, slot))
+        unread = False
+        try:
+            found = p.checkout.remote_sha(slot_ref(p.scope, slot))
+        except GitError:  # l-errors-r3: recorded all the same; the lease is not guessed
+            found, unread = None, True
         p.record(QueueSlotLostEvent(kind="queue_slot_lost", at=p.now(), slot=slot, sha=sha,
                                     found=found))  # fmt: skip
-        self._leases[slot] = found
+        if not unread:
+            self._leases[slot] = found
         return (
             f"queue-build {p.repo}: slot {slot} was moved by another writer {when} (it holds "
             f"{(found or 'nothing')[:12]}, not {sha[:12]}): not overwritten; its combination "
@@ -1138,7 +1178,11 @@ class QueueExecutor:
         if land is None:
             return plan
         numbers = [known[0] for ref in land.entries if (known := p.pr_of(entry_key(ref)))]
-        unmerged = read_back(p.client, p.repo, numbers)
+        unmerged, unread = read_back_split(p.client, p.repo, numbers)
+        if unread:  # l-errors-r7: a failed read is no verdict on the merge
+            why = "; ".join(f"#{n}: {w}" for n, w in sorted(unread.items()))
+            return pause_landings(plan, f"cannot read whether the queue's last landing merged "
+                                  f"({why}); read again next pass")  # fmt: skip
         if unmerged:
             prs = ", ".join(f"#{n}" for n in unmerged)
             return pause_landings(plan, f"the forge did not mark {prs} merged after the "
@@ -1277,9 +1321,14 @@ class QueueExecutor:
         if p.post_merge is not None and keys:  # R33: once per landing, right after it
             failed = p.post_merge(keys)
             said += "; post_merge ran" if failed is None else f"; post_merge failed: {failed}"
-        unmerged = read_back(p.client, p.repo, [x.pr for x in landings])
+        unmerged, unread = read_back_split(p.client, p.repo, [x.pr for x in landings])
         if unmerged:
             said += "; the forge did not mark " + ", ".join(f"#{n}" for n in unmerged) + " merged"
+        if unread:
+            said += (
+                "; could not read " + ", ".join(f"#{n}" for n in sorted(unread)) + " (read "
+                "again next pass)"
+            )
         return result, said
 
     def _eject(self, action: QueueAction, record: QueueRecord) -> str:

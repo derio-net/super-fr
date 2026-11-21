@@ -148,3 +148,119 @@ def test_a_hold_write_the_remote_rejects_is_still_a_halt(tmp_path: Path) -> None
     hook.chmod(0o755)
     d.one_pass()
     assert [e.state for e in d.events(QueueHaltEvent)] == ["held"]
+
+
+# ------------------------------------------------------------------ reads and resume
+
+
+def test_a_failing_ls_remote_does_not_lose_the_halt_or_the_slot_lost_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-errors-r3: `_halt` and `_slot_lost` record their event though `main_now()` or the
+    slot's read fails."""
+    from fr.triage.model import QueueHaltEvent, QueueSlotLostEvent
+
+    from tests.integration.test_queue_resume import _driver
+
+    d = _driver(tmp_path)
+    d.one_pass()  # open
+    real = gitseam.git
+
+    def no_ls_remote(args: list[str], cwd: Path) -> str:
+        if args[:1] == ["ls-remote"]:
+            raise GitError("`git ls-remote` timed out")
+        return real(args, cwd)
+
+    monkeypatch.setattr(gitseam, "git", no_ls_remote)
+    d.executor._halt("held", "refused")
+    line = d.executor._slot_lost(1, "a" * 40, "since the queue last pushed it")
+    (halt,) = d.events(QueueHaltEvent)
+    (lost,) = d.events(QueueSlotLostEvent)
+    assert halt.main is None and halt.detail == "refused"
+    assert lost.found is None and "slot 1 was moved" in line
+
+
+def _unreadable(repo: str, number: int) -> dict:  # type: ignore[type-arg]
+    from fr.gh import GhError
+
+    raise GhError("HTTP 502")
+
+
+def test_an_unreadable_pr_is_a_read_failure_not_an_unmerged_one(tmp_path: Path) -> None:
+    """l-errors-r7: no "autodetect manual merge" advice for a PR that could not be read."""
+    from fr.triage.queue_exec import read_back, read_back_split
+
+    from tests.integration.test_queue_resume import _driver
+
+    d = _driver(tmp_path)
+    d.f.pr_view = _unreadable  # type: ignore[method-assign]
+    assert read_back_split(d.f, "r", [1, 2]) == ((), {1: "HTTP 502", 2: "HTTP 502"})
+    assert read_back(d.f, "r", [1, 2]) == (1, 2)  # unknown is not merged, as before
+
+
+def test_the_gate_names_an_unreadable_landing_instead_of_advising_autodetect(
+    tmp_path: Path,
+) -> None:
+    from fr.triage.model import QueueLandEvent
+    from fr.triage.wave_queue import plan_queue
+
+    from tests.integration.test_queue_resume import _driver
+
+    d = _driver(tmp_path)
+    for _ in range(3):
+        d.one_pass()
+    assert d.events(QueueLandEvent)
+    plan = plan_queue(d.snapshot())
+    d.f.pr_view = _unreadable  # type: ignore[method-assign]
+    gated = d.executor.gate(plan, d.records[-1], d.batches.values())
+    texts = [a.detail for a in gated.actions if a.kind == "queue-need"]
+    assert not any("autodetect" in t for t in texts)
+    assert gated is plan or any("cannot read whether" in t for t in texts)
+
+
+def test_resume_reads_a_failed_merge_check_as_unknown_and_records_nothing(
+    tmp_path: Path,
+) -> None:
+    """l-errors-r8: `land: merge`, a driver killed after its first merge, and the forge
+    unreadable on resume: no shorter landing is recorded."""
+    from fr.triage.model import QueueLandEvent
+    from fr.triage.wave_queue import QueueConfig
+
+    from tests.integration.test_queue_resume import KilledError, _driver, _kill_after_merge
+
+    d = _driver(tmp_path, QueueConfig(ci="none", land="merge"))
+    d.one_pass()
+    d.one_pass()
+    _kill_after_merge(d, 1)
+    with pytest.raises(KilledError):
+        d.one_pass()
+    real = d.f.pr_view
+    d.f.pr_view = _unreadable  # type: ignore[method-assign]
+    lines = d.executor.resume(d.records[-1], d.records)
+    assert any("could not read whether b1 merged" in line for line in lines)
+    assert d.events(QueueLandEvent) == []
+    d.f.pr_view = real  # type: ignore[method-assign]
+    assert any("had merged through the forge" in line for line in d.executor.resume(d.records[-1]))
+
+
+def test_a_recorded_combination_this_clone_never_had_is_built_again(tmp_path: Path) -> None:
+    """l-errors-r9: another host's record names a combination in no object store reachable
+    from this clone: the slot is fetched, and when still missing it is rebuilt (a slot-lost
+    record), never given a check read."""
+    from fr.triage.model import QueueBuiltEvent, QueueSlotLostEvent
+
+    from tests.integration.test_queue_resume import KilledError, _driver
+
+    d = _driver(tmp_path)
+    d.one_pass()  # open
+    d.kill_on = lambda e: isinstance(e, QueueBuiltEvent)
+    with pytest.raises(KilledError):
+        d.one_pass()  # slot 1 recorded, never pushed
+    d.kill_on = lambda e: False
+    fresh = tmp_path / "fresh-clone"
+    git(tmp_path, "clone", "--quiet", str(d.w.origin), str(fresh))
+    d.w.clone = fresh
+    d.executor.ports = d.ports()  # the driver now works from the other host's clone
+    lines = d.executor.resume(d.records[-1], d.records)
+    assert any("not in this clone or on the remote" in line for line in lines)
+    assert len(d.events(QueueSlotLostEvent)) == 1

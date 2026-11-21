@@ -5626,9 +5626,16 @@ class _Driver:
                         current = load_judgements(self.target / "judgements.yaml")
                         record = self._queue_record(current, qplan.repo)
                         history = self._queue_records(current, qplan.repo)
-                        for line in executor.execute(qplan, record, history):
-                            _say(line)
-                            acted = True
+                        try:
+                            for line in executor.execute(qplan, record, history):
+                                _say(line)
+                                acted = True
+                        except GitError as exc:  # l-errors-r3: a skipped pass, as gh#921
+                            raise ForgeReadError(
+                                f"{qplan.repo}'s merge queue stopped this pass on a failed "
+                                f"git command: {exc}; the pass is skipped and read again",
+                                code=2,
+                            ) from exc
                         for line in self._queue_comments(facts, qplan):
                             _say(line)
             for action in plan.actions:
