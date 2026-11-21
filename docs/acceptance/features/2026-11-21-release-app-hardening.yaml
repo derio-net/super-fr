@@ -61,9 +61,13 @@ rows:
     - spec:2026-11-21-release-app-hardening#R8
     - spec:2026-11-21-release-app-hardening#R9
     - spec:2026-11-21-release-app-hardening#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_key_is_proved_then_stored_from_stdin_and_never_leaks
+      - super-fr:tests/unit/test_setup_release_app.py#test_no_curl_argv_holds_a_credential
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_repository_level_secret_is_reported_and_offered_for_deletion
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
     verify: none
   - id: setup-script-variable-last
     capability: release
