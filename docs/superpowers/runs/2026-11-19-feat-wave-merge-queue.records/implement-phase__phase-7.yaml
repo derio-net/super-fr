@@ -42,4 +42,4 @@ journal:
       `git-answers-cached-per-invocation` refs it also lists belong to main's own row and
       resolve once the branch is rebased on main.
 resolves: []
-evidence: {}
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/wave-p7-suite.log}
