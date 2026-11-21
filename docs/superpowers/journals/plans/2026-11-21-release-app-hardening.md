@@ -325,3 +325,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1610.
 ### l-errors-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1611] · resolves l-errors-r6: environment: release fails generically on another ref or auto-creates an unprotected environment
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1611.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved-2 created=2026-11-21T13:00:50+00:00 state=open resolves=l-security-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1612 -->
+### l-security-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1612] · resolves l-security-r3: prove_key mints an installation token before any confirm
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1612.
