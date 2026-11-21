@@ -5359,3 +5359,21 @@ def test_p6_r6_a_wave_close_out_waits_for_every_members_post_merge_then_starts_o
     _drive(tmp_path, "--once", "--yes")  # b2's post_merge succeeds, then the close-out starts
     (item,) = runner.dispatched
     assert item.payload["kind"] == "closeout" and "b1 b2" in item.payload["brief"]
+
+
+def test_a_queue_repo_whose_base_cannot_be_read_says_why_it_was_skipped(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """l-errors-r12: the queue's read of `origin/<default>` failed: the pass names the cause."""
+    from fr.triage.gitseam import GitError
+
+    _pr_open(world, tmp_path)
+
+    def broken(ref: str) -> str:
+        raise GitError("`git rev-parse origin/main` failed: unknown revision")
+
+    monkeypatch.setattr(checkout, "rev_parse", broken, raising=False)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "its merge queue was not read this pass" in out
+    assert "unknown revision" in out
