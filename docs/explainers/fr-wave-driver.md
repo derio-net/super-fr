@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-21 wave-merge-queue phase 7, the queue line, the marker comment, the wave report, defer, requeue and queue-retry; 2026-11-20 wave-merge-queue phase 6, one close-out per wave that migrates what it archives and a DevOps barrier through labels; wave-merge-queue phase 5, every merge is a queue entry and the train is gone; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-21 wave-merge-queue phase 7 fixes, requeue targets, the marker comment's trust and scope, the close-out body written once; 2026-11-21 wave-merge-queue phase 7, the queue line, the marker comment, the wave report, defer, requeue and queue-retry; 2026-11-20 wave-merge-queue phase 6, one close-out per wave that migrates what it archives and a DevOps barrier through labels; wave-merge-queue phase 5, every merge is a queue entry and the train is gone; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -103,11 +103,16 @@ is true now, not from what it remembers. In order, a pass:
     landed and the state of the hold. The Batches page shows the same lines. Each queued pull
     request also carries one comment that starts with `<!-- fr-queue -->`. The driver edits it
     as the pull request moves: queued at a place, testing in a combination, ejected (with
-    why, and what to do), or landed in a wave. No comment is written where `forge.comments` is
-    `off`. Problems go to **Needs you now**, each with a command to paste. When a wave drains,
+    why, and what to do), landed in a wave, or left the queue (deferred or requeued). Only a
+    pull request in the open queue has one: a pull request that waits for a later wave has
+    none, and the place counts entries that are in testing. The driver trusts only a comment
+    that a trusted author wrote. No comment is written where `forge.comments` is `off`. Problems go to **Needs you now**, each with a command to paste. When a wave drains,
     a report lists the pull requests that landed, were ejected or were deferred. It shows the
     CI cycles, the wall time and the approvals of each, and the release the drain asked for.
-    The report goes on the Batches page and into the close-out pull request's body.
+    The report goes on the Batches page. The close-out pull request's body is written when
+    the close-out is built, before the drain, and the driver does not write it again. It
+    carries the report as it stands then, with the close-out itself listed. What the drain
+    asked of the release shows on the Batches page.
 
     **When the queue halts.** A push the remote refuses, or a merge the forge refuses, halts
     the queue. It then builds and lands nothing, and **Needs you now** says why. Fix the
@@ -118,8 +123,10 @@ is true now, not from what it remembers. In order, a pass:
     **Leaving a wave.** A batch that cannot merge need not hold its wave. `fr triage batch
     defer <id>` takes it out of the wave's queue and drain. Its pull request stays open, and
     the wave's close-out leaves it out. `fr triage batch requeue <id> --wave N` puts it in
-    wave N's queue, which must not be open yet. `fr triage batch requeue <id>` alone puts it
-    in the next queue to open. The driver proposes these when one batch is all that holds a
+    wave N's queue. N must be above the batch's wave, and that queue must never have opened
+    (a queue that has drained has opened). `fr triage batch requeue <id>` alone puts it in
+    the lowest wave whose queue has not opened yet. If every wave's queue has opened, it
+    goes to the between-waves queue. The driver proposes these when one batch is all that holds a
     drain, because its hand-backs are spent or it made no progress for `queue.stall_hours`.
     It never runs them itself.
 
