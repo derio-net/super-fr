@@ -30,3 +30,8 @@ Found by the read-only audit: apply_ops wrote the same 'result: done' for an op 
 ### f-3 · finding [fixed] · devops-gated deliver hand-off named the post-merge pickup
 
 run_cmd._closeout_handoff_lines now asks fr.run.closeout.devops_gated (the same decision fr pickup makes) and names 'fr ops gate --run <id>'; an error in that read keeps the pickup line, which fr pickup routes to the DevOps brief anyway. Tests: tests/unit/test_ops_devops_brief.py::test_deliver_handoff_names_the_devops_stage_for_a_devops_gated_run and its negative twin. fr-goal SKILL.md sentence updated; mirrors synced.
+
+<!-- fr:journal kind=discovery scope=debug id=d-audit created=2026-11-21T16:30:39+00:00 -->
+### d-audit · discovery · audit of recent devops close-outs (read-only): no false DONE from a print-only apply
+
+super-fr: no real ops.yaml, no ops profile; clean. agent-images, kid-laptops: no ops; clean. No cnc-* repos found. frank#1007 (run 2026-11-16-feat-gpu-speech-service-1006): the two print-only ops never reached the stage (no op entries) and their images do not exist on GHCR; the branch head has since rewritten them as real post-merge ops. frank root-agents run 2026-11-14-feat-scope-root-agents-912 (#985/#1004): ops are not print-only and their checks are real, but cutover-move-membership and premerge-namespaces got their done entries at stage 6, after stages 4-5 closed, through the found-done path, so no entry shows the gate applied them (f-2 makes that visible from now on); live state not verifiable from here. frank#992: app-webhooks-permission-revoke has no entry and the live installation still holds repository_hooks: write. frank#949/#955 merged with gate:devops unpassed and no op entries.
