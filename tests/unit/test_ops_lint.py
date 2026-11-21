@@ -25,6 +25,13 @@ from tests.unit.test_ops_apply import FakePrompt, World, op, run
         "echo hi > /dev/stderr",
         ":",
         "# only a comment\necho note",
+        # review: unquoted substitutions beside a separator, nested ones, value-only bodies
+        'TAG=$(git rev-parse --short HEAD); echo "docker push img:$TAG"',
+        'echo "tag: $(git describe --tags $(git rev-list -n1 HEAD))"',
+        'for f in a b; do echo "$f"; done',
+        "command echo hi",
+        "/bin/echo hi",
+        'echo "$((1 << 2))"',
     ],
 )
 def test_a_command_that_only_prints_is_print_only(command: str) -> None:
@@ -47,6 +54,27 @@ def test_a_command_that_only_prints_is_print_only(command: str) -> None:
         "if true; then gh api -X PUT repos/x; fi",
         "sudo systemctl restart x",
         "echo a # a trailing comment\ndocker push img",  # the comment must not eat the newline
+        # review (gh#1614): a substitution's body runs, so it is judged too
+        "TAG=$(git rev-parse HEAD); docker push img:$TAG",
+        "echo $(date); rm x",
+        "echo $(date)|tee f",
+        "echo $(date)>f",
+        'OUT="$(kubectl apply -f m.yaml)"',
+        "echo $(docker push x)",
+        "echo `rm x`",
+        "cat <(rm x)",
+        ": ${X:=$(rm y)}",
+        'echo "$(a $(rm b))"',
+        "cat <<EOF\n$(docker push img)\nEOF",  # an unquoted heredoc body expands
+        "git push origin HEAD",
+        # review: a `<<` that opens no heredoc must not hide the next lines
+        'echo "x <<EOF"\nrm x',
+        "cat <<<EOF\nrm x",
+        "# see <<EOF\nrm x",
+        "echo $((1 << 2))\nrm x",
+        # review: digits are a file after a plain `>`; `<>` opens a file for writing
+        "echo x > 1",
+        "cat <>f",
         "",
         "echo 'unterminated",  # unparseable: not judged, so never flagged
     ],
