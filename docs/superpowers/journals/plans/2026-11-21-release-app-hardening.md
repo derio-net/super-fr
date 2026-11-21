@@ -310,3 +310,8 @@ Step 5 (and the spec's Test Plan step 3) now say to rerun the script after the m
 ### l-docs-accuracy-r5-resolved · finding [fixed] · resolves l-docs-accuracy-r5: 'Revoking the key ends all of it at once' ignored already-minted installation tokens
 
 The security model and the revoke steps (page and spec) now say deleting the key stops new tokens at once, and a minted token stays valid for at most 1 hour.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved-2 created=2026-11-21T13:00:30+00:00 phase=1 state=open resolves=p1-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1609 -->
+### p1-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1609] · resolves p1-r7: Earlier features' acceptance notes still name configure-main-protection (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1609.
