@@ -1,0 +1,48 @@
+schema_version: 12
+run: 2026-11-19-feat-wave-merge-queue
+step: review-phase
+item: phase/7
+outcome: done
+journal:
+  - kind: review
+    id: p7-review-1
+    phase: 7
+    title: Phase 7 review — thirteen in-scope findings, all fixed
+    body: |
+      An independent reviewer read the operator-view diff (2a6df2e05..e6b9d4d5b) against R1–R36. It confirmed
+      forge writes stay inside --yes and the GhClient, defer/requeue write through the read-compare writer,
+      halts are read in one place and a retry lifts only earlier halts, queue_retry is a schema 13 event, and
+      this repo's queue block matches the fr-queue/** and fr-hold/** triggers. It raised p7-r1..p7-r13 (all in).
+      Fixes are 8ba2527e5..e8450c0be; full suite after them: 17069 passed, 122 skipped, exit 0. Spec R24, R28,
+      R29 and §L were amended for queue_retry, plain requeue's target and the close-out report.
+  - {kind: finding, id: p7-r1, phase: 7, review_scope: in, title: "the queue marker comment trusted any author"}
+  - {kind: finding, id: p7-r2, phase: 7, review_scope: in, title: "requeue --wave N accepted a wave whose queue had already opened and drained"}
+  - {kind: finding, id: p7-r3, phase: 7, review_scope: in, title: "queue_retry contradicted R24 and the spec was not amended"}
+  - {kind: finding, id: p7-r4, phase: 7, review_scope: in, title: "a plain requeue did not join the next queue to open, as the CLI and docs claimed"}
+  - {kind: finding, id: p7-r5, phase: 7, review_scope: in, title: "the wave report text selected records by the original wave and across scopes"}
+  - {kind: finding, id: p7-r6, phase: 7, review_scope: in, title: "the close-out PR body report predated the drain and omitted the close-out"}
+  - {kind: finding, id: p7-r7, phase: 7, review_scope: in, title: "marker comments went on waiting PRs outside the queue and never said a PR left it"}
+  - {kind: finding, id: p7-r8, phase: 7, review_scope: in, title: "the comment rebuilt its own view and could disagree with the pass line"}
+  - {kind: finding, id: p7-r9, phase: 7, review_scope: in, title: "a PR ejected then deferred was listed twice in the wave report"}
+  - {kind: finding, id: p7-r10, phase: 7, review_scope: in, title: "the queue line printed hold open for a hold read as absent"}
+  - {kind: finding, id: p7-r11, phase: 7, review_scope: in, title: "this repo's release_workflow key started two release runs per drain"}
+  - {kind: finding, id: p7-r12, phase: 7, review_scope: in, title: "board-pasted queue commands carried no --repo or --org"}
+  - {kind: finding, id: p7-r13, phase: 7, review_scope: in, title: "a failed landed comment was never retried"}
+resolves:
+  - {id: p7-r1, state: fixed, body: "the marker is taken only from a trusted author (claims.trusted_author)."}
+  - {id: p7-r2, state: fixed, body: "requeue --wave N needs N above the effective wave and a queue never opened (wave_queue_opened)."}
+  - {id: p7-r3, state: fixed, body: "spec R24, R28 and R29 state queue_retry and queue-retry --yes."}
+  - {id: p7-r4, state: fixed, body: "plain requeue joins the lowest wave whose queue has not opened, else between waves; CLI, spec, explainer and skill say so."}
+  - {id: p7-r5, state: fixed, body: "_wave_report_text reads the scope's records for each member's effective wave; tested over real records."}
+  - {id: p7-r6, state: fixed, body: "the report lists the close-out itself; the body is not rewritten and spec and explainer say the release shows on the Batches page."}
+  - {id: p7-r7, state: fixed, body: "comments only on queue entries, positions count testing entries, a leaving PR is told once."}
+  - {id: p7-r8, state: fixed, body: "entry_comments reads plan.view."}
+  - {id: p7-r9, state: fixed, body: "each PR is listed once, last state wins."}
+  - {id: p7-r10, state: fixed, body: "a hold read as absent is reported missing."}
+  - {id: p7-r11, state: fixed, body: "release_workflow removed from .fr/triage.yaml with a comment."}
+  - {id: p7-r12, state: fixed, body: "the board snapshot carries scope_args like the driver."}
+  - {id: p7-r13, state: fixed, body: "CommentBook retries a failed landed comment until it lands."}
+evidence:
+  review: p7-review-1
+  reviewer: ad94a5c0fd9b53005
+  model: claude-opus-5-5
