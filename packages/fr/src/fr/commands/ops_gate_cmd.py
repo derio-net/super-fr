@@ -193,15 +193,26 @@ class HostCheckout:
             return None
 
     def queue_configured(self, default: str) -> bool:
+        """Three answers (l-errors-r5): True (`queue:` declared), False (`.fr/triage.yaml` is
+        absent from the freshly fetched default branch, or has no block), and a read that
+        failed, which stops the stage with the error: an unreadable config is never "merge
+        by hand"."""
         import yaml
 
-        from fr.triage.gitseam import GitError, git
+        from fr.ops.gate import StageFailed
+        from fr.triage.gitseam import Checkout, GitError, git, git_ok
 
+        at = f"origin/{default}"
         try:
-            text = git(["show", f"origin/{default}:.fr/triage.yaml"], self.primary)
-            data = yaml.safe_load(text)
-        except (GitError, yaml.YAMLError):
-            return False
+            Checkout.at(self.primary).refresh_remote_branch(default)
+            if not git_ok(["cat-file", "-e", f"{at}:.fr/triage.yaml"], self.primary):
+                return False
+            data = yaml.safe_load(git(["show", f"{at}:.fr/triage.yaml"], self.primary))
+        except (GitError, yaml.YAMLError) as exc:
+            raise StageFailed(
+                f"cannot read .fr/triage.yaml at {at} to tell whether the merge queue serves "
+                f"this repo: {exc}; nothing released"
+            ) from exc
         return isinstance(data, dict) and isinstance(data.get("queue"), dict)
 
     def workspace(self, branch: str) -> OpsWorkspace | None:

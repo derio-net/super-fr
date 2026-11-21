@@ -116,8 +116,9 @@ class GateHost(Protocol):
         ...
 
     def queue_configured(self, default: str) -> bool:
-        """Whether `.fr/triage.yaml` at `origin/<default>` declares a `queue:` block, so
-        the wave merge queue serves this repo."""
+        """Whether `.fr/triage.yaml` at the freshly fetched `origin/<default>` declares a
+        `queue:` block, so the wave merge queue serves this repo. A read that fails raises
+        `StageFailed` with the error: unreadable is not "not configured"."""
         ...
 
 
