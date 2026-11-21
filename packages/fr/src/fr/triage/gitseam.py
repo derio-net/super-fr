@@ -1200,10 +1200,12 @@ class Worktree:
         """The live artifact paths `fr archive --branch <branch>` moves in this worktree: the
         archive's own classification (`fr.closeout.branch_artifacts`) of the paths *branch*
         changed against *default_ref*, over the same refs and recorded start the archive
-        reads. A plan is its folder. None when the branch's refs or changes cannot be read
-        (the archive then holds the batch on its own)."""
+        reads. A plan is its folder. None when the branch has no refs this clone can fetch
+        (the archive then holds the batch on its own); a read that fails raises `GitError`
+        carrying the cause (l-errors-r11)."""
         from fr.closeout import branch_artifacts
         from fr.isolation.local import (
+            IsolationError,
             branch_changed_paths,
             recorded_start,
             resolve_branch_refs,
@@ -1218,8 +1220,8 @@ class Worktree:
             start = recorded_start(self.path, branch)
             changed = sorted({p for ref in refs for p in branch_changed_paths(
                 subprocess_runner, self.path, ref, default_ref, start)})  # fmt: skip
-        except Exception:  # noqa: BLE001 — unreadable: the caller migrates nothing of it
-            return None
+        except (IsolationError, GitError, OSError) as exc:
+            raise GitError(f"cannot read what {branch}'s archive moves: {exc}") from exc
         return [a.path.as_posix() for a in branch_artifacts(self.path, changed)]
 
     def reset_hard(self, sha: str) -> None:

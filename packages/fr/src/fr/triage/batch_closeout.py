@@ -46,6 +46,7 @@ from fr.triage.batch_drive import (
     fact_ledgers,
     next_collected,
 )
+from fr.triage.gitseam import GitError
 from fr.triage.model import Batch, CollectedCloseout, Facts
 
 __all__ = [
@@ -345,7 +346,12 @@ def _migrate_first(
         return base
     moves: list[str] = []
     for m in members:
-        found = tree.archive_moves(m.branch, f"origin/{default}")
+        try:
+            found = tree.archive_moves(m.branch, f"origin/{default}")
+        except GitError as exc:  # l-errors-r11: the cause is said, not swallowed
+            say(f"{m.batch}: what its archive moves could not be read ({exc}); "
+                "nothing of it migrated")  # fmt: skip
+            continue
         if found is None:
             say(f"{m.batch}: what its archive moves could not be read; nothing of it migrated")
         else:

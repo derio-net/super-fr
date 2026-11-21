@@ -2852,6 +2852,22 @@ def test_a_failed_run_clears_nothing(world: World) -> None:
     assert held is not None and held[0] == drained
 
 
+def test_a_hold_unreadable_after_the_release_says_the_release_published(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-errors-r13: `clear_hold` does not borrow `fetch_hold`'s "refusing to release"."""
+
+    def unreadable(repo: Path) -> None:
+        raise release.HoldReadError("cannot read the merge queue hold: refusing to release", "boom")
+
+    monkeypatch.setattr(release, "fetch_hold", unreadable)
+    with pytest.raises(release.ReleaseError) as raised:
+        release.clear_hold(world.clone)
+    text = str(raised.value)
+    assert "release published; could not read the hold to clear it: boom" in text
+    assert "clear it" in text and "refusing to release" not in text
+
+
 def test_the_clear_is_leased_on_the_drained_sha_so_a_newer_queue_is_never_cleared(
     world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

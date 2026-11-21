@@ -6678,7 +6678,8 @@ class _Driver:
                 if live.draft:  # a close-out's draft is readied once admitted (R15)
                     client.pr_ready(repo, live.number)
                 title = str(view.get("title") or f"{kind} {key}")
-            except _GATE_WRITE_FAILURES:
+            except _GATE_WRITE_FAILURES as exc:
+                self._queue_entry_failed(repo, key, live.number, "read or ready", exc)
                 return None
             return EntryInput(key=key, ref=QueueEntryRef(pr=live.number, kind=kind),  # type: ignore[arg-type]
                               pr=live.number, title=title, head=live.head,
@@ -6689,11 +6690,23 @@ class _Driver:
         if live.draft:  # an approved, green draft is readied when the queue builds it (R1)
             try:
                 self.client(facts, repo).pr_ready(repo, live.number)
-            except _GATE_WRITE_FAILURES:
+            except _GATE_WRITE_FAILURES as exc:
+                self._queue_entry_failed(repo, key, live.number, "ready", exc)
                 return None
         return EntryInput(key=key, ref=QueueEntryRef(batch=key), pr=pr.number, title=pr.title,
                           head=live.head, head_ref=live.head_ref or pr.head_ref,
                           bump=batch.bump)  # fmt: skip
+
+    def _queue_entry_failed(
+        self, repo: str, key: str, number: int, what: str, exc: Exception
+    ) -> None:
+        """l-errors-r10: the entry the queue could not build, and the read or write that
+        failed, said once per cause (the executor's own line only says "not readable")."""
+        self._report_once(
+            f"queue-entry\0{repo}\0{key}\0{exc}",
+            f"{repo}: queue entry {key} (PR #{number}) not built this pass: could not {what} "
+            f"it: {exc}",
+        )
 
     def _queue_pr(self, facts: Facts, key: str, repo: str = "") -> tuple[int, str] | None:
         batch = self._queue_batch(key)
@@ -6706,7 +6719,8 @@ class _Driver:
                 return None
             try:
                 view = self.client(facts, repo).pr_view(repo, int(number))
-            except _GATE_WRITE_FAILURES:
+            except _GATE_WRITE_FAILURES as exc:
+                self._queue_entry_failed(repo, key, int(number), "read", exc)
                 return None
             head_ref = str(view.get("head_ref") or "")
             return (int(number), head_ref) if head_ref else None
@@ -6888,7 +6902,12 @@ class _Driver:
                 default = checkout.default_branch()
                 bases[repo] = checkout.rev_parse(f"origin/{default}")
                 defaults[repo] = default
-            except (GitError, TriageError):
+            except (GitError, TriageError) as exc:  # l-errors-r12: said, not silently skipped
+                self._report_once(
+                    f"queue-unread\0{repo}\0{exc}",
+                    f"{repo}: its merge queue was not read this pass: the default branch or "
+                    f"its base could not be read: {exc}",
+                )  # fmt: skip
                 continue
             record = self._queue_record(judgements, repo)
             try:  # §G: the repo's hold, and the releases cut since the open queue's base

@@ -538,6 +538,15 @@ def parse_hold(sha: str, parent: str, message: str) -> Hold:
     return Hold(sha, parent, state, scope, None if wave == "-" else int(wave), opened, refreshed)
 
 
+class HoldReadError(ReleaseError):
+    """The hold ref could not be read; *reason* is git's own words. `fetch_hold` words the
+    refusal for a release that has not cut; `clear_hold` words its own, for one that has."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 def fetch_hold(repo: Path) -> Hold | None:
     """The hold ref, fetched with plain git and no credential (a public repo needs none),
     and its commit message read: `git ls-remote` gives only the sha. None when the remote
@@ -549,9 +558,10 @@ def fetch_hold(repo: Path) -> Hold | None:
         if "couldn't find remote ref" in r.stderr:
             _git(repo, "update-ref", "-d", HOLD_LOCAL, check=False)
             return None
-        raise ReleaseError(
+        raise HoldReadError(
             f"cannot read the merge queue hold {HOLD_REF}: {r.stderr.strip()}; refusing to "
-            "release over a hold that may be open"
+            "release over a hold that may be open",
+            r.stderr.strip(),
         )
     sha = _rev(repo, HOLD_LOCAL)
     # the FIRST parent only: a write after the first is a merge whose second parent is the
@@ -601,7 +611,14 @@ def clear_hold(repo: Path) -> None:
     push a `cleared` commit leased on the drained sha, so a newer queue's hold is never
     cleared. A hold whose parent this run did not see is left to the run its push starts.
     A superseded or failed run never reaches here."""
-    hold = fetch_hold(repo)
+    try:
+        hold = fetch_hold(repo)
+    except HoldReadError as exc:  # l-errors-r13: the release already published: say so
+        raise ReleaseError(
+            f"release published; could not read the hold to clear it: {exc.reason}; clear it "
+            "by re-running the release workflow (it clears a drained hold), or with "
+            "`fr triage batch queue-retry`"
+        ) from exc
     if hold is None or hold.state != "drained" or not hold.parent:
         return
     contained = _git(repo, "merge-base", "--is-ancestor", hold.parent, "HEAD", check=False)
