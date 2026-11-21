@@ -193,9 +193,22 @@ rows:
       at drain (landed, ejected and deferred PRs, cycles, approvals, the release).
     origin:
     - spec:2026-11-19-wave-merge-queue#R28
-    levels: {}
-    status: not-implemented
-    notes: born at brainstorm
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_boards_needs_list_a_halted_queue_with_the_command_to_paste
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_a_halted_queue_stays_halted_every_pass_and_names_the_retry_verb
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_retry_event_lifts_the_halt_and_the_next_pass_builds
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_marker_comment_is_created_once_and_edited_in_place_through_every_state
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_driver_posts_one_marker_comment_a_queued_pr_and_edits_it_on_the_next_pass
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_forge_comments_off_posts_no_queue_comment
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_wave_report_lists_landed_ejected_and_deferred_with_cycles_time_and_approvals
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_closeout_pr_body_carries_the_report_in_a_section_the_close_reader_skips
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_queue_retry_prints_the_plan_and_writes_only_with_yes
+    status: ci
+    notes: 'phase 7: every queue Need is a queue-need with its command (halt: queue-retry,
+      stall: defer and requeue); one fr-queue marker comment per queued PR, edited in
+      place, none under forge.comments off; the wave report on the Batches page and
+      in the close-out PR body'
   - id: wave-queue-leave-wave
     capability: wave merge queue
     acceptance: A batch that cannot merge can leave its wave (defer), so the wave drains
