@@ -384,3 +384,8 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-wave-merge-queue-p3 created=2026-11-19T22:28:08+00:00 decided_by=agent -->
 ### tier-2026-11-19-wave-merge-queue-p3 · decision · hard: leased atomic pushes to main and PR heads, and crash-window resumption
+
+<!-- fr:journal kind=finding scope=spec id=sr-r21-resolved-2 created=2026-11-21T06:32:26+00:00 state=open resolves=sr-r21 tracked_by=https://github.com/derio-net/super-fr/issues/1603 -->
+### sr-r21-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1603] · resolves sr-r21: Rebase method breaks release.py's first-parent PR cross-check
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1603.
