@@ -1254,9 +1254,16 @@ class QueueView:
     halted: str = ""  # "": the queue is not halted; else `held` or `stopped`
 
 
-def _hold_state(record: QueueRecord | None, hold: Hold | None) -> str:
+def _hold_state(
+    record: QueueRecord | None, hold: Hold | None, *, read: bool = False, idle: bool = False
+) -> str:
+    """The hold as the view names it: its own state; when the pass read the ref and it is
+    absent, `missing` (R27: the state a re-arm answers) while a queue is open or releasing,
+    `none` while idle. Only an unread ref falls back to what the record's events say."""
     if hold is not None:
         return hold.state
+    if read:
+        return "none" if idle else "missing"
     state = "none"
     for event in record.events if record is not None else ():
         if isinstance(event, QueueOpenEvent):
@@ -1302,7 +1309,8 @@ def queue_view(
     halt = live_halt(record, qs) if record is not None and qs is not None else None
     return QueueView(plan.repo, plan.phase, plan.wave, (rep.base if rep else "") or
                      (qs.base if qs else ""), tuple(states), tuple(landed),
-                     _hold_state(record, qs.hold if qs is not None else None),
+                     _hold_state(record, qs.hold if qs is not None else None, read=qs is not None and qs.hold_read,
+                     idle=plan.phase == "idle"),
                      halt.state if halt is not None else "")  # fmt: skip
 
 

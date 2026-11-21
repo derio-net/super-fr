@@ -492,3 +492,12 @@ def test_forge_comments_off_posts_no_queue_comment(
     world.files[".fr/settings.yaml"] = "forge:\n  comments: 'off'\n"
     _drive_twice(world, tmp_path)
     assert _marker_bodies(world) == [] and "comment_pr 101" not in world.calls
+
+
+def test_a_hold_the_pass_read_as_absent_is_reported_missing_never_from_the_events() -> None:
+    batches = [_batch("a", 1)]
+    rec = _record({"kind": "queue_open", "at": AT})  # its events say `open`
+    plan = plan_queue(_qs(batches, rec, hold=None))  # read, and gone (R27)
+    assert plan.view is not None and plan.view.hold == "missing"
+    assert "hold missing" in queue_line(plan, rec, _qs(batches, rec, hold=None))
+    assert queue_view(plan, rec).hold == "open"  # the page, which never read the ref
