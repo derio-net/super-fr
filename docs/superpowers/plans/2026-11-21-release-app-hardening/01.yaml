@@ -121,7 +121,7 @@ tasks:
   steps:
   - id: P1.T8.S1
     text: |-
-      docs/merge-protection.md — `covers:` names scripts/setup-release-app.sh instead of the old script, `reviewed:` stamped 2026-11-21 with a note. Rewrite "Residual risk" as "Security model" (what the app can do, where the key lives, who can read it — every user with write access, since no rule requires a PR — and what a leak allows, from the spec's Design). Replace "Operator steps" with: web UI steps (create the app if missing: name, no webhook, Repository permissions Contents read and write, Issues read and write, Metadata read-only, every other permission No access, "Only on this account"; install it with "Only select repositories" = this repo; generate and download a private key; record the App ID), the script run before this PR merges (decline the unset offer), the app-pushed release, the require run; then "Verify each step" (the `gh api` read that shows each state) and "Roll back" (per step: unset the variable, delete the env secret, delete "require ci-ok", restore a bypass only by hand), and "Revoke or rotate a leaked key" (delete the key in the app's settings, generate a new one, `scripts/setup-release-app.sh --rotate-key`, check the audit log). Update "Adopt this in another repo". Keep the guide within the `ste` writing standard (short sentences, one instruction each).
+      docs/merge-protection.md — `covers:` names scripts/setup-release-app.sh instead of the old script, `reviewed:` stamped 2026-11-21 with a note. Rewrite "Residual risk" as "Security model" (what the app can do, where the key lives, who can read it — every user with write access, since no rule requires a PR — and what a leak allows, from the spec's Design). Replace "Operator steps" with: web UI steps (create the app if missing: name, no webhook, Repository permissions Contents read and write, Issues read and write, Metadata read-only, every other permission No access, "Only on this account"; install it with "Only select repositories" = this repo; generate and download a private key; record the App ID), the script run before this PR merges (decline the unset offer), the app-pushed release, the require run; then "Verify each step" (the `gh api` read that shows each state) and "Roll back" (per step: unset the variable, delete the env secret, delete "require ci-ok", restore a bypass only through the web UI), and "Revoke or rotate a leaked key" (delete the key in the app's settings, generate a new one, `scripts/setup-release-app.sh --rotate-key`, check the audit log). Update "Adopt this in another repo". Keep the guide within the `ste` writing standard (short sentences, one instruction each).
   - id: P1.T8.S2
     text: |-
       AGENTS.md's "Release identity" paragraph names `scripts/setup-release-app.sh` and the split rulesets instead of `--stage bypass`/`--stage require`. docs/superpowers/plans/2026-11-19-local-suite-cost/04.yaml: rewrite the unticked manual steps P4.T1.S1/S2 to point at `scripts/setup-release-app.sh` and the new order in docs/merge-protection.md. The scripts/release.py edit makes docs/exit-gates-release-walk.md, docs/explainers/fr-exit-gates.md and docs/explainers/index.md stale: stamp their `reviewed:` with a note (or edit them if they name the old hint). Run `uv run fr docs check` until it is clean.
@@ -131,3 +131,105 @@ tasks:
   - id: P1.T9.S1
     text: |-
       Move the seven rows in this phase's `acceptance:` to `ci` with `--level unit=super-fr:tests/unit/<file>#<test>` refs to the tests that prove each (through the step record's `acceptance:` entries or `fr acceptance set-status`), and run `uv run fr acceptance check --no-fetch`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T8.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T9.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
