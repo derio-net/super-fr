@@ -969,3 +969,47 @@ copies the approved-fr trust model the spec chose; not caused by this phase's sh
 ### p6-r11-resolved · finding [fixed] · resolves p6-r11: three texts said the barrier lands alone, and a docstring misnamed the commits past the base (phase 6)
 
 the docstring and the three texts now say the barrier lands as the last entry of its push.
+
+<!-- fr:journal kind=decision scope=plan id=p7-queue-retry-verb created=2026-11-21T02:50:37+00:00 phase=7 -->
+### p7-queue-retry-verb · decision · `fr triage batch queue-retry [OWNER/REPO] [--yes]` clears a halted queue through a queue_retry event (phase 7) (phase 7)
+
+p3-halt-needs-operator-retry: nothing cleared a `queue_halt`. The verb sits in the
+defer/requeue family, prints the plan and writes only with `--yes`, and appends
+`queue_retry` (a new kind in the unreleased schema 13, so no stamp moved) to the repo's
+current record in the scope. Every halt before the event stops halting the queue, so the
+next pass builds; a refusal that persists writes a new halt. `_last_halt` is the one
+reader, so the hold-write halt is lifted by it too. The halt's Need text names the exact
+command (`wave_queue.retry_command`, with the pass's scope arguments).
+
+<!-- fr:journal kind=decision scope=plan id=p7-board-plans-the-queue-offline created=2026-11-21T02:50:37+00:00 phase=7 -->
+### p7-board-plans-the-queue-offline · decision · The facts-only board now plans the wave queue from the judgements' records and the facts' config (phase 7) (phase 7)
+
+`views.drive_snapshot` now sets `wave_queues`, `queue_records` and `scope_id`, so the
+board and the Needs list see the queue's line (R25) and its Needs (R28) without a live
+read: no hold, base or check is read, so a built combination reads `testing`. In a repo
+with a `queue:` block an approved PR's card reads "in merge queue" where it read "merge
+ready" (three board tests follow). The queue's Needs reach `needs_you` as `queue-need`
+(an `Action` carrying `QUEUE_REPORT_KEY`), no longer as `blocked-batch` rows.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-acceptance-ref-renamed-in-phase-6 created=2026-11-21T02:50:37+00:00 phase=7 -->
+### p7-acceptance-ref-renamed-in-phase-6 · discovery · wave-queue-wave-exclusive cited a close-out test phase 6 renamed (phase 7) (phase 7)
+
+`fr acceptance check` failed that row's ref; it now cites
+`test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out`. The
+`git-answers-cached-per-invocation` refs it also lists belong to main's own row and
+resolve once the branch is rebased on main.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t1 created=2026-11-21T02:50:37+00:00 phase=7 -->
+### no-refactor-p7-t1 · discovery · no-refactor-because P7.T1 (phase 7)
+
+defer, requeue and queue-retry share one find, one write and one wording helper (_leavable, _wave_name); nothing was duplicated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t2 created=2026-11-21T02:50:37+00:00 phase=7 -->
+### no-refactor-p7-t2 · discovery · no-refactor-because P7.T2 (phase 7)
+
+the queue line, the board section and the pass all read one QueueView (queue_view), so the first cut had no second copy to merge
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t3 created=2026-11-21T02:50:37+00:00 phase=7 -->
+### no-refactor-p7-t3 · discovery · no-refactor-because P7.T3 (phase 7)
+
+the comment bodies and the report are pure functions beside one thin sync; the driver call is one method, so there was nothing to clean
