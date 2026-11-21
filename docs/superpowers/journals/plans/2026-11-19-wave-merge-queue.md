@@ -1382,3 +1382,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1604.
 ### l-security-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1605] · resolves l-security-r4: ci.yml declares no token permissions
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1605.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved-2 created=2026-11-21T06:32:47+00:00 state=open resolves=l-security-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1606 -->
+### l-security-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1606] · resolves l-security-r5: a push to fr-hold/** can run release.yml with the app key
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1606.
