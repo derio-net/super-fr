@@ -1013,3 +1013,117 @@ the queue line, the board section and the pass all read one QueueView (queue_vie
 ### no-refactor-p7-t3 · discovery · no-refactor-because P7.T3 (phase 7)
 
 the comment bodies and the report are pure functions beside one thin sync; the driver call is one method, so there was nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p7-review-1 created=2026-11-21T03:51:21+00:00 phase=7 -->
+### p7-review-1 · review · Phase 7 review — thirteen in-scope findings, all fixed (phase 7)
+
+An independent reviewer read the operator-view diff (2a6df2e05..e6b9d4d5b) against R1–R36. It confirmed
+forge writes stay inside --yes and the GhClient, defer/requeue write through the read-compare writer,
+halts are read in one place and a retry lifts only earlier halts, queue_retry is a schema 13 event, and
+this repo's queue block matches the fr-queue/** and fr-hold/** triggers. It raised p7-r1..p7-r13 (all in).
+Fixes are 8ba2527e5..e8450c0be; full suite after them: 17069 passed, 122 skipped, exit 0. Spec R24, R28,
+R29 and §L were amended for queue_retry, plain requeue's target and the close-out report.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r1 · finding [open] (reviewer: in scope) · the queue marker comment trusted any author (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r2 · finding [open] (reviewer: in scope) · requeue --wave N accepted a wave whose queue had already opened and drained (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r3 · finding [open] (reviewer: in scope) · queue_retry contradicted R24 and the spec was not amended (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r4 · finding [open] (reviewer: in scope) · a plain requeue did not join the next queue to open, as the CLI and docs claimed (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r5 · finding [open] (reviewer: in scope) · the wave report text selected records by the original wave and across scopes (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r6 · finding [open] (reviewer: in scope) · the close-out PR body report predated the drain and omitted the close-out (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r7 · finding [open] (reviewer: in scope) · marker comments went on waiting PRs outside the queue and never said a PR left it (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r8 · finding [open] (reviewer: in scope) · the comment rebuilt its own view and could disagree with the pass line (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r9 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r9 · finding [open] (reviewer: in scope) · a PR ejected then deferred was listed twice in the wave report (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r10 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r10 · finding [open] (reviewer: in scope) · the queue line printed hold open for a hold read as absent (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r11 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r11 · finding [open] (reviewer: in scope) · this repo's release_workflow key started two release runs per drain (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r12 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r12 · finding [open] (reviewer: in scope) · board-pasted queue commands carried no --repo or --org (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r13 created=2026-11-21T03:51:21+00:00 phase=7 state=open review_scope=in -->
+### p7-r13 · finding [open] (reviewer: in scope) · a failed landed comment was never retried (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r1 -->
+### p7-r1-resolved · finding [fixed] · resolves p7-r1: the queue marker comment trusted any author (phase 7)
+
+the marker is taken only from a trusted author (claims.trusted_author).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r2 -->
+### p7-r2-resolved · finding [fixed] · resolves p7-r2: requeue --wave N accepted a wave whose queue had already opened and drained (phase 7)
+
+requeue --wave N needs N above the effective wave and a queue never opened (wave_queue_opened).
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r3 -->
+### p7-r3-resolved · finding [fixed] · resolves p7-r3: queue_retry contradicted R24 and the spec was not amended (phase 7)
+
+spec R24, R28 and R29 state queue_retry and queue-retry --yes.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r4 -->
+### p7-r4-resolved · finding [fixed] · resolves p7-r4: a plain requeue did not join the next queue to open, as the CLI and docs claimed (phase 7)
+
+plain requeue joins the lowest wave whose queue has not opened, else between waves; CLI, spec, explainer and skill say so.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r5 -->
+### p7-r5-resolved · finding [fixed] · resolves p7-r5: the wave report text selected records by the original wave and across scopes (phase 7)
+
+_wave_report_text reads the scope's records for each member's effective wave; tested over real records.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r6 -->
+### p7-r6-resolved · finding [fixed] · resolves p7-r6: the close-out PR body report predated the drain and omitted the close-out (phase 7)
+
+the report lists the close-out itself; the body is not rewritten and spec and explainer say the release shows on the Batches page.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r7 -->
+### p7-r7-resolved · finding [fixed] · resolves p7-r7: marker comments went on waiting PRs outside the queue and never said a PR left it (phase 7)
+
+comments only on queue entries, positions count testing entries, a leaving PR is told once.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r8 -->
+### p7-r8-resolved · finding [fixed] · resolves p7-r8: the comment rebuilt its own view and could disagree with the pass line (phase 7)
+
+entry_comments reads plan.view.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r9-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r9 -->
+### p7-r9-resolved · finding [fixed] · resolves p7-r9: a PR ejected then deferred was listed twice in the wave report (phase 7)
+
+each PR is listed once, last state wins.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r10-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r10 -->
+### p7-r10-resolved · finding [fixed] · resolves p7-r10: the queue line printed hold open for a hold read as absent (phase 7)
+
+a hold read as absent is reported missing.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r11-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r11 -->
+### p7-r11-resolved · finding [fixed] · resolves p7-r11: this repo's release_workflow key started two release runs per drain (phase 7)
+
+release_workflow removed from .fr/triage.yaml with a comment.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r12-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r12 -->
+### p7-r12-resolved · finding [fixed] · resolves p7-r12: board-pasted queue commands carried no --repo or --org (phase 7)
+
+the board snapshot carries scope_args like the driver.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r13-resolved created=2026-11-21T03:51:21+00:00 phase=7 state=fixed resolves=p7-r13 -->
+### p7-r13-resolved · finding [fixed] · resolves p7-r13: a failed landed comment was never retried (phase 7)
+
+CommentBook retries a failed landed comment until it lands.

@@ -3,7 +3,7 @@ run: 2026-11-19-feat-wave-merge-queue
 workflow: fr-goal@1
 branch: feat/wave-merge-queue
 started: '2026-11-19T20:59:27+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-21T02:50:39+00:00'
+    state: done
+    at: '2026-11-21T03:51:22+00:00'
     members:
     - implement-phase
     - review-phase
@@ -262,12 +262,19 @@ steps:
           tests: wave-p7-suite.log@39db78b19d24;tree=bfb48f5ce6761b886469e9206f7cb1cd386032c99440c7cb47bda3bff2b7dc62
           visual: none
       phase/7/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-21T02:50:39+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: a675f8da-621c-489c-90c0-07d7c601e9f7
+          returned: '2026-11-21T03:51:22+00:00'
+          outcome: done
+        evidence:
+          review: p7-review-1
+          reviewer: ad94a5c0fd9b53005
+          visual: none
+          findings: p7-r1,p7-r2,p7-r3,p7-r4,p7-r5,p7-r6,p7-r7,p7-r8,p7-r9,p7-r10,p7-r11,p7-r12,p7-r13
   journal-check:
     state: pending
   lens-review:
