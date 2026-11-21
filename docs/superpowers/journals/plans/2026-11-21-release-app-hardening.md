@@ -315,3 +315,8 @@ The security model and the revoke steps (page and spec) now say deleting the key
 ### p1-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1609] · resolves p1-r7: Earlier features' acceptance notes still name configure-main-protection (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1609.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved-2 created=2026-11-21T13:00:37+00:00 state=open resolves=l-tests-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1610 -->
+### l-tests-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1610] · resolves l-tests-r5: release.yml header test is substring-only
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1610.
