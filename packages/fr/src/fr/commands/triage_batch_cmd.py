@@ -311,6 +311,8 @@ from fr.triage.operation_lock import replacement_scope_lock
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
+from fr.triage.queue_comment import entry_comments
+from fr.triage.queue_comment import sync as queue_comments_sync
 from fr.triage.queue_exec import (
     EntryInput,
     Landing,
@@ -1202,8 +1204,10 @@ def batch_requeue_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Ask a batch to join a later queue: wave N's, or by default the next queue to open,
-    as a between-waves entry (R2, R29). Writes a `requeued` event."""
+    """Put a batch in a later queue: wave N's, or the next one to open.
+
+    Wave N's queue must not be open yet. Without --wave the batch is a between-waves entry
+    of the next queue to open (R2, R29). Writes a `requeued` event."""
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = _leavable(batch, facts, "requeue")
@@ -1241,8 +1245,10 @@ def batch_queue_retry_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Let a halted merge queue try again (R28): writes a `queue_retry` event, so the next pass
-    rebuilds every combination and lands again. A refusal that persists halts it anew."""
+    """Let a halted merge queue try again.
+
+    Writes a `queue_retry` event (R28), so the next pass rebuilds every combination and lands
+    again. A refusal that persists halts the queue anew."""
     scope = _scope(repo, org)
     target, _, judgements = _load_state(scope, dir_override, workspace)
     sid = scope_id(scope)
@@ -1250,8 +1256,7 @@ def batch_queue_retry_command(
     for record in judgements.queues:
         if record.scope == sid and (queue_repo is None or record.repo == queue_repo):
             latest[record.repo] = record
-    halted = {r: halted_queue(q) for r, q in sorted(latest.items())}
-    halted = {r: h for r, h in halted.items() if h is not None}
+    halted = {r: halt for r, q in sorted(latest.items()) if (halt := halted_queue(q)) is not None}
     if not halted:
         _fail(
             f"no halted merge queue in scope {sid}"
@@ -4101,6 +4106,7 @@ class _Driver:
         self.last_queues: list[QueuePlan] = []
         self.last_pass: Pass | None = None
         self._queue_live: Mapping[str, LivePr] = {}
+        self._comment_seen: dict[str, str] = {}  # PR ref -> the marker body last written
         self._queue_needs: dict[str, list[str]] = {}
         self._allowed: dict[str, dict[str, Any]] = {}  # repo -> its merge methods, read at build
         # per pass (triage-intake R9): repos whose origin this pass checked, and those held
@@ -5555,6 +5561,8 @@ class _Driver:
                         for line in executor.execute(qplan, record, history):
                             _say(line)
                             acted = True
+                        for line in self._queue_comments(facts, qplan):
+                            _say(line)
             for action in plan.actions:
                 if not self.yes:
                     _say(action_line(action))
@@ -6524,6 +6532,23 @@ class _Driver:
             executor = self._queue_execs[repo] = QueueExecutor(ports)
         executor.ports = ports
         return executor
+
+    def _say_queue_comment(self, line: str) -> None:
+        self._report_once(f"queue-comment\0{line}", line)
+
+    def _queue_comments(self, facts: Facts, qplan: QueuePlan) -> list[str]:
+        """R28: each queued PR's one marker comment, created once and edited in place as it
+        moves; none under `forge.comments: off`. A failure is said once, never raised."""
+        repo = qplan.repo
+        if self.forge_off(facts, repo, "comments") is not None:
+            return []  # `forge.comments: off`, or a policy that could not be read
+        current = load_judgements(self.target / "judgements.yaml")
+        numbers = {k: lv.number for k, lv in self._queue_live.items()}
+        comments = entry_comments(qplan, self._queue_record(current, repo), numbers)
+        return queue_comments_sync(
+            self.client(facts, repo), repo, comments, allowed=True, seen=self._comment_seen,
+            say=self._say_queue_comment,
+        )  # fmt: skip
 
     def _queue_batch(self, key: str) -> Batch | None:
         judgements = load_judgements(self.target / "judgements.yaml")

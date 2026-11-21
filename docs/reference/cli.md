@@ -177,6 +177,9 @@ one artifact kind.
     - `fr triage batch create`: Add a proposed batch of judged issues.
     - `fr triage batch edit`: Change a proposed batch; past `proposed`, only --order (and, until it merges, --wave and --after) may change.
     - `fr triage batch cancel`: Withdraw a batch: unlabel and comment on each member, append a cancel event.
+    - `fr triage batch defer`: Take a batch out of its wave's queue and drain; its PR stays open.
+    - `fr triage batch requeue`: Put a batch in a later queue: wave N's, or the next one to open.
+    - `fr triage batch queue-retry`: Let a halted merge queue try again.
     - `fr triage batch suggest`: Print candidate groupings (shared file, theme, pattern).
     - `fr triage batch replace`: Replace a managed batch harness/model in place, or reconcile without replay.
     - `fr triage batch dispatch`: Hand a batch to a runner as one fr-goal run, and mark its issues taken.

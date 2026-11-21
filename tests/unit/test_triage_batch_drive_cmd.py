@@ -266,6 +266,10 @@ class World:
             {"author": "operator", "body": body, "created_at": NOW.isoformat(), "id": cid}
         )
 
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self.calls.append(f"comment_pr {pr}")
+        self.comment_issue(repo, pr, body)
+
     def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
         for comments in self.comments.values():
             for c in comments:

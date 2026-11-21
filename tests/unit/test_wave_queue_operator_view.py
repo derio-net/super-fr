@@ -27,6 +27,12 @@ from fr.triage.wave_queue import (
     queue_view,
 )
 
+from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - the drive tests' fixtures
+    _sandbox,
+    checkout_fixture,
+    runner_fixture,
+    world_fixture,
+)
 from tests.unit.triage_board_fixtures import REPO as REPO_B
 from tests.unit.triage_board_fixtures import batch as mk
 from tests.unit.triage_board_fixtures import dispatch, facts, issue, j, judgements, pr
@@ -251,3 +257,144 @@ def test_the_batches_page_shows_the_queue_line_and_the_wave_report() -> None:
                         refresh=0, notes=[])  # fmt: skip
     assert '<section class="queue"><h2>Merge queue</h2>' in html and "landed a" in html
     assert "<th>CI cycles</th>" in html and "Release: asked at " in html
+
+
+# ------------------------------------------------------------ the PR marker comment (R28)
+
+
+class _FakeForge:
+    """Just the comment surface of `GhClient`, over an in-memory PR thread."""
+
+    def __init__(self) -> None:
+        self.comments: dict[int, list[dict[str, Any]]] = {}
+        self.calls: list[str] = []
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        self.calls.append(f"list {number}")
+        return [dict(c) for c in self.comments.get(number, [])]
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self.calls.append(f"create {pr}")
+        thread = self.comments.setdefault(pr, [])
+        thread.append({"id": 1000 + len(thread), "body": body})
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        self.calls.append(f"edit {comment_id}")
+        for thread in self.comments.values():
+            for c in thread:
+                if c["id"] == comment_id:
+                    c["body"] = body
+
+
+def _states(record: QueueRecord, batches: Sequence[Batch], **kw: Any) -> list[Any]:
+    from fr.triage.queue_comment import entry_comments
+
+    qs = _qs(batches, record, hold=_hold(), **kw)
+    return entry_comments(plan_queue(qs), record, {b.id: 100 + i for i, b in enumerate(batches)})
+
+
+def test_the_marker_comment_is_created_once_and_edited_in_place_through_every_state() -> None:
+    from fr.triage.queue_comment import MARKER, sync
+
+    forge = _FakeForge()
+    batches = [_batch("a", 1), _batch("b", 2)]
+    queued = _record({"kind": "queue_open", "at": AT})
+    testing = _record({"kind": "queue_open", "at": AT}, _built(1, "s1" * 20, "a"))
+    ejected = _record(
+        {"kind": "queue_open", "at": AT}, _built(1, "s1" * 20, "a"),
+        {"kind": "queue_eject", "at": AT, "entry": {"batch": "a"}, "reason": "red",
+         "head": "head-a"},
+    )  # fmt: skip
+    landed = _record(
+        {"kind": "queue_open", "at": AT}, _built(1, "s1" * 20, "a"),
+        {"kind": "queue_land", "at": AT, "main": "s1" * 20, "entries": [{"batch": "a"}]},
+    )  # fmt: skip
+    seen: list[str] = []
+    for record in (queued, testing, ejected, landed):
+        cs = [c for c in _states(record, batches) if c.key == "a"]
+        assert len(cs) == 1 and cs[0].body.startswith(MARKER)
+        seen.append(cs[0].body)
+        sync(forge, REPO, cs, allowed=True)
+    assert "queued at position 1" in seen[0]
+    assert "testing in combination s1s1s1s1s1s1" in seen[1]
+    assert "ejected (red)" in seen[2] and "re-enters the queue" in seen[2]
+    assert "landed at s1s1s1s1s1s1 (wave 1)" in seen[3]
+    # one comment on PR 100, created once and edited three times, never a second one
+    assert (
+        forge.calls.count("create 100") == 1 and sum(c.startswith("edit") for c in forge.calls) == 3
+    )
+    assert len(forge.comments[100]) == 1 and "landed at" in forge.comments[100][0]["body"]
+
+
+def test_an_unchanged_comment_costs_no_write_and_forge_comments_off_writes_nothing() -> None:
+    from fr.triage.queue_comment import sync
+
+    forge = _FakeForge()
+    cs = [c for c in _states(_record({"kind": "queue_open", "at": AT}), [_batch("a", 1)])]
+    assert len(sync(forge, REPO, cs, allowed=True)) == 1
+    assert sync(forge, REPO, cs, allowed=True) == []  # reads, finds the same body, writes none
+    assert forge.calls == ["list 100", "create 100", "list 100"]
+    off = _FakeForge()
+    assert sync(off, REPO, cs, allowed=False) == [] and off.calls == [] and off.comments == {}
+
+
+def test_a_comment_that_fails_to_write_is_said_and_never_stops_the_pass() -> None:
+    from fr.triage.queue_comment import sync
+
+    class Refusing(_FakeForge):
+        def comment_pr(self, repo: str, pr: int, body: str) -> None:
+            raise RuntimeError("HTTP 403")
+
+    said: list[str] = []
+    cs = _states(_record({"kind": "queue_open", "at": AT}), [_batch("a", 1), _batch("b", 2)])
+    assert sync(Refusing(), REPO, cs, allowed=True, say=said.append) == []
+    assert len(said) == 2 and "HTTP 403" in said[0]
+
+
+# ------------------------------------------------------------ the driver writes it (R28)
+
+
+def _drive_twice(world: Any, tmp_path: Any) -> tuple[int, str]:
+    """Two passes over one approved PR: the first opens the queue (the test's executor runs
+    none of it, so the record is written by hand), the second has the PR as an entry."""
+    from fr.commands.triage_batch_cmd import queue_writer
+    from fr.commands.triage_cmd import _scope
+    from fr.triage.model import QueueOpenEvent
+
+    from tests.unit.test_triage_batch_drive_cmd import REPO as DRIVE_REPO
+    from tests.unit.test_triage_batch_drive_cmd import _drive, _pr_open
+
+    world.config = {"queue": {"ci": "push"}}
+    _pr_open(world, tmp_path)
+    assert _drive(tmp_path, "--once", "--yes")[0] in (0, 1, 3)
+    sid = scope_id(_scope(DRIVE_REPO, None))
+    queue_writer(tmp_path, DRIVE_REPO, sid)(
+        QueueOpenEvent(kind="queue_open", at=NOW), wave=1, base=MAIN
+    )
+    return _drive(tmp_path, "--once", "--yes")
+
+
+def _marker_bodies(world: Any) -> list[str]:
+    return [c["body"] for c in world.comments.get(101, []) if c["body"].startswith("<!-- fr-queue")]
+
+
+def test_the_driver_posts_one_marker_comment_a_queued_pr_and_edits_it_on_the_next_pass(
+    tmp_path: Any, world: Any, checkout: Any, runner: Any
+) -> None:
+    from tests.unit.test_triage_batch_drive_cmd import _drive
+
+    code, out = _drive_twice(world, tmp_path)
+    assert code in (0, 3), out
+    bodies = _marker_bodies(world)
+    assert len(bodies) == 1 and "queued at position 1" in bodies[0]
+    code, out = _drive(tmp_path, "--once", "--yes")  # nothing moved: no second comment
+    assert code in (0, 3), out
+    assert world.calls.count("comment_pr 101") == 1 and len(_marker_bodies(world)) == 1
+
+
+def test_forge_comments_off_posts_no_queue_comment(
+    tmp_path: Any, world: Any, checkout: Any, runner: Any
+) -> None:
+    world.files[".fr/settings.yaml"] = "forge:\n  comments: 'off'\n"
+    _drive_twice(world, tmp_path)
+    assert _marker_bodies(world) == [] and "comment_pr 101" not in world.calls
