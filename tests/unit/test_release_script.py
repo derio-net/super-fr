@@ -487,6 +487,12 @@ def test_a_protection_refusal_fails_at_once_naming_the_bypass_actor(
     assert "FR_AUTOMATION_APP_ID" in err
     assert "protection" in err
     assert "lost the push race" not in err
+    # The split protection (spec 2026-11-21-release-app-hardening R12, R14): the
+    # bypass belongs on "require ci-ok", and the setup script is the new one.
+    assert "'require ci-ok' ruleset" in err
+    assert "never on 'protect main'" in err
+    assert "scripts/setup-release-app.sh" in err
+    assert "configure-main-protection" not in err
 
 
 # -- refusals ----------------------------------------------------------------

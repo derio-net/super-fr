@@ -30,7 +30,8 @@ name: Release
 # 2026-10-11-merge-train-safety §F). Unset: the push uses the GITHUB_TOKEN, and
 # a push made with the GITHUB_TOKEN triggers no workflow, so no CI runs on the
 # release commit. Set: the app-token step mints a token for the
-# derio-fr-automation GitHub App from secret FR_AUTOMATION_APP_KEY and the
+# derio-fr-automation GitHub App from the FR_AUTOMATION_APP_KEY secret of the
+# release environment and the
 # release commit and tag are pushed as the app, so CI runs on the release
 # commit and release.yml runs once more on it, as a no-op. The token is scoped to
 # this repo with contents and issues write only, checkout persists none, and
@@ -47,11 +48,15 @@ name: Release
 # publishes nothing. The suite makes this workflow long; .github/ci-budget.yaml
 # gives it its own budget.
 #
-# Pushing to main works today because main's ruleset forbids only force-push
-# and deletion. If a required-PR or required-checks rule is ever added, the
-# release bot needs a bypass actor on that rule (the app, once
-# scripts/configure-main-protection.sh --stage bypass has run); release.py reports a
-# protection refusal (GH006) as exactly that, never as a lost race.
+# The key is a secret of the `release` environment, not of the repository. Only
+# `prepare` and `publish` name that environment, and its deployment branch
+# policy allows `main` alone, so a run on any other ref gets no key
+# (spec 2026-11-21-release-app-hardening R1, R2). The app's bypass sits only on
+# the "require ci-ok" ruleset (the app is its only bypass actor), never on "protect main", so the key cannot
+# force-push or delete main. `scripts/setup-release-app.sh` makes all of this
+# (environment, key, variable, rulesets); runbook: docs/merge-protection.md.
+# release.py reports a protection refusal (GH006/GH013) as a missing bypass,
+# never as a lost race.
 
 on:
   push:
@@ -99,6 +104,7 @@ concurrency:
 # release commit already landed skips the push and only tags.
 jobs:
   prepare:
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -291,6 +297,7 @@ jobs:
   publish:
     needs: [prepare, split-check]
     if: needs.prepare.outputs.cut == 'true'
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -1,0 +1,151 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-21-release-app-hardening
+repo: derio-net/super-fr
+rows:
+  - id: release-key-environment-scoped
+    capability: release
+    acceptance: The release workflow reads the app key only in the two app-token jobs,
+      which declare the release environment; no other job declares it or reads the key
+    origin:
+    - spec:2026-11-21-release-app-hardening#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_workflow.py#test_r1_exactly_prepare_and_publish_declare_the_release_environment
+      - super-fr:tests/unit/test_release_workflow.py#test_r1_no_other_workflow_job_declares_the_environment_or_names_the_key
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
+    verify: none
+  - id: setup-script-app-check
+    capability: release
+    acceptance: The setup script refuses an app installation with any permission beyond
+      contents write, issues write and metadata read, or with repositories other than
+      this repo
+    origin:
+    - spec:2026-11-21-release-app-hardening#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_app_step_passes_on_selected_and_exact_permissions
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_app_step_refuses_a_wrong_installation_and_names_the_web_ui
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_key_is_proved_then_stored_from_stdin_and_never_leaks
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_wrong_repository_list_refuses_stores_nothing_and_revokes
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_existing_environment_secret_is_ok_and_points_at_the_installation_to_confirm
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
+    verify: none
+  - id: setup-script-environment
+    capability: release
+    acceptance: The setup script creates or corrects the release environment so that
+      only main can deploy to it, with no admin bypass
+    origin:
+    - spec:2026-11-21-release-app-hardening#R2
+    - spec:2026-11-21-release-app-hardening#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_absent_environment_is_created_then_given_the_main_policy
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_environment_with_admin_bypass_and_reviewers_is_corrected
+      - super-fr:tests/unit/test_setup_release_app.py#test_an_extra_policy_is_deleted
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
+    verify: none
+  - id: setup-script-key-never-printed
+    capability: release
+    acceptance: The setup script stores the app key as the release environment secret
+      only after proving it belongs to the app, and never shows the key or its JWT in
+      any output, log or argument
+    origin:
+    - spec:2026-11-21-release-app-hardening#R8
+    - spec:2026-11-21-release-app-hardening#R9
+    - spec:2026-11-21-release-app-hardening#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_key_is_proved_then_stored_from_stdin_and_never_leaks
+      - super-fr:tests/unit/test_setup_release_app.py#test_no_curl_argv_holds_a_credential
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_repository_level_secret_is_reported_and_offered_for_deletion
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
+    verify: none
+  - id: setup-script-variable-last
+    capability: release
+    acceptance: The setup script sets the app id variable only once the environment
+      secret exists, and offers to undo a variable set without one
+    origin:
+    - spec:2026-11-21-release-app-hardening#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_half_done_state_is_named_and_the_unset_is_offered
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_waits_while_mains_release_yml_lacks_the_environment
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_is_set_to_the_installations_app_id_once_both_hold
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_is_never_set_without_the_environment_secret
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_declined_key_store_never_sets_the_variable
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_waits_while_only_one_app_token_job_declares_the_environment
+    status: ci
+    notes: 'variable never set without the env secret: declined key store and failed
+      key step both proven; R11 main release.yml check covers both app-token jobs and
+      every form'
+    verify: none
+  - id: setup-script-rulesets
+    capability: release
+    acceptance: The setup script leaves main's deletion and force-push rules with no
+      bypass actor, protects v* tags from update and deletion, and grants the app a
+      bypass only on the ci-ok rule, after an app-pushed release
+    origin:
+    - spec:2026-11-21-release-app-hardening#R12
+    - spec:2026-11-21-release-app-hardening#R13
+    - spec:2026-11-21-release-app-hardening#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_history_step_strips_the_bypass_in_place_and_keeps_every_rule
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_tag_ruleset_is_created_without_a_bypass
+      - super-fr:tests/unit/test_setup_release_app.py#test_require_creates_the_ruleset_with_the_app_as_its_only_bypass
+      - super-fr:tests/unit/test_setup_release_app.py#test_in_the_deferred_state_require_comes_first_then_one_put_removes_both
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
+    verify: none
+  - id: setup-script-idempotent-confirmed
+    capability: release
+    acceptance: The setup script confirms every write, stops on a declined one, writes
+      nothing under --dry-run, and a rerun over a finished setup writes nothing
+    origin:
+    - spec:2026-11-21-release-app-hardening#R4
+    - spec:2026-11-21-release-app-hardening#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_finished_setup_prints_ok_for_every_step_and_writes_nothing
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_declined_step_write_stops_the_script_with_no_later_write
+      - super-fr:tests/unit/test_setup_release_app.py#test_dry_run_from_the_half_done_state_prints_every_pending_step_in_order
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_end_to_end_order_and_an_idempotent_rerun
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
+    verify: none
+  - id: release-app-setup-live
+    capability: release
+    acceptance: On the live repo a release is pushed as the app from the release environment,
+      a branch run is refused the key, and main requires ci-ok
+    origin:
+    - spec:2026-11-21-release-app-hardening#R2
+    - spec:2026-11-21-release-app-hardening#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+amendments:
+  - row: main-protection-script
+    op: retire
+    base: 0
+    notes: superseded by scripts/setup-release-app.sh (spec 2026-11-21-release-app-hardening)
+    why: configure-main-protection.sh is deleted; spec 2026-11-21-release-app-hardening
+      R3 replaces it with setup-release-app.sh, covered by the setup-script-* rows
+  - row: ci-ok-required-on-main
+    op: set-status
+    base: 0
+    status: not-implemented
+    notes: 'Operator: scripts/setup-release-app.sh from the PR branch before merge (app,
+      environment, key, variable, rulesets), an app-pushed release, then the script
+      again for require ci-ok; tracked by derio-net/super-fr#1580, verified live post-merge.'
+    why: 'The operator steps changed: spec 2026-11-21-release-app-hardening replaces
+      bypass/require with setup-release-app.sh'
