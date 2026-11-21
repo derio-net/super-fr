@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-19 cli.py only opens the git-answer cache scope; no command changed. 2026-11-19 batch docs-wording rewrites help first lines to pass STE (shorter, same meaning), escapes bracketed help so it renders, and checks this page under ste (no writing_standard exemption). 2026-11-18 the owed-followups batch changes no command or help text; fr triage backlog and fr triage batches replace render and board, which stay as hidden aliases (triage-pages-ux phase 1); the consumer-delivery phase 2 changes no command or help text. 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
+reviewed: 2026-11-20 wave-merge-queue phase 1 adds no command or help line (the approval gate reads a patch-id); still true; 2026-11-19 cli.py only opens the git-answer cache scope; no command changed; 2026-11-19 batch docs-wording rewrites help first lines to pass STE (shorter, same meaning), escapes bracketed help so it renders, and checks this page under ste (no writing_standard exemption). 2026-11-18 the owed-followups batch changes no command or help text; fr triage backlog and fr triage batches replace render and board, which stay as hidden aliases (triage-pages-ux phase 1); the consumer-delivery phase 2 changes no command or help text. 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
 ---
 
 # The fr command line
@@ -177,11 +177,14 @@ one artifact kind.
     - `fr triage batch create`: Add a proposed batch of judged issues.
     - `fr triage batch edit`: Change a proposed batch; past `proposed`, only --order (and, until it merges, --wave and --after) may change.
     - `fr triage batch cancel`: Withdraw a batch: unlabel and comment on each member, append a cancel event.
+    - `fr triage batch defer`: Take a batch out of its wave's queue and drain; its PR stays open.
+    - `fr triage batch requeue`: Put a batch in a later queue: wave N's, or the next one to open.
+    - `fr triage batch queue-retry`: Let a halted merge queue try again.
     - `fr triage batch suggest`: Print candidate groupings (shared file, theme, pattern).
     - `fr triage batch replace`: Replace a managed batch harness/model in place, or reconcile without replay.
     - `fr triage batch dispatch`: Hand a batch to a runner as one fr-goal run, and mark its issues taken.
     - `fr triage batch adopt`: Put a running session under the wave driver as an existing batch; launches nothing.
-    - `fr triage batch merge`: Merge pr-open batch PRs in the computed order, re-slotting versions.
+    - `fr triage batch merge`: Merge pr-open batch PRs through the wave merge queue, in the foreground.
     - `fr triage batch closeout`: Close out every landed, ungated batch in ONE housekeeping PR.
     - `fr triage batch drive`: Drive batches to completion: merge what is ready, close out what merged, dispatch what may start (wave order, then merge order, then id).
   - `fr triage architecture`: The architecture page: measured sections plus authored fragments.

@@ -15,12 +15,13 @@ name: acceptance-report
 # path the matrix references — `fr acceptance check` warns when one falls outside them.
 
 # push is scoped to main: `["**"]` overlapped pull_request and ran the gate
-# twice on every PR push (#941).
+# twice on every PR push (#941). `fr-queue/**` are the wave merge queue's slot branches
+# (wave-merge-queue R7): it lands only a combination whose checks passed there.
 on:
   pull_request: {}
   merge_group: {}  # a merge queue's group branch (merge-train-safety R15)
   push:
-    branches: [main]
+    branches: [main, 'fr-queue/**']
   schedule:
     - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
   workflow_dispatch:

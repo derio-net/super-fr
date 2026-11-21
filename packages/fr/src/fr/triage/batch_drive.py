@@ -21,10 +21,9 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fr.artifacts.paths import KIND_DIRS
-from fr.ghclient import QueueState
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
@@ -49,12 +48,21 @@ from fr.triage.model import (
     CollectedCloseout,
     ConflictEvent,
     DispatchEvent,
-    EnqueueEvent,
     Export,
     Facts,
+    QueueRecord,
     RedHandbackEvent,
-    UpdateEvent,
 )
+
+if TYPE_CHECKING:  # `fr.triage.wave_queue` imports this module: read at run time lazily
+    from fr.triage.wave_queue import (
+        BuildConflict,
+        Hold,
+        QueueConfig,
+        QueuePlan,
+        QueueSnapshot,
+        SlotCheck,
+    )
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -74,6 +82,9 @@ AWAITING_LIVE_HOLD = "its members await a live walk: no work to dispatch"
 IN_FLIGHT: frozenset[BatchStage] = frozenset({"dispatched", "pr-open"})
 LANDED: frozenset[BatchStage] = frozenset({"merged", "partial"})
 ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
+HOUSEKEEPING_PREFIX = "chore/ops-"  # + the plan's slug: the DevOps stage's ops branch (stage 8)
+"""The head of a DevOps stage's housekeeping PR (fr-ops stage 8). It is a queue entry (R32)
+only with `approved-fr` recorded on the queue's events; no other rule admits it."""
 EXPORT_PREFIX = "chore/triage-state-"  # + `<scope id>-wave-<N>` (gh#1101)
 """The head of a wave's state-export PR (pages-goal R13). Not in `ARCHIVE_PREFIXES`, so
 archive attribution can never claim an export PR."""
@@ -92,10 +103,8 @@ RUN_ARTIFACT_DIRS = tuple(f"{d}/" for d in ARCHIVE_DIRS)
 
 ChecksVerdict = Literal["green", "pending", "failing"]
 ActionKind = Literal[
-    "merge",
     "closeout",
     "adopt",
-    "archive",
     "dispatch",
     "blocked",
     "held",
@@ -108,10 +117,8 @@ ActionKind = Literal[
     "release",
     "settle",
     "export",
-    "export-merge",
     "export-reconcile",
     "export-closed",
-    "enqueue",
     "archive-conflict",
     "export-conflict",
     "awaiting-live",
@@ -128,9 +135,7 @@ ActionKind = Literal[
     "closeout-needs-review",
     "closeout-abandoned",
 ]
-EXPORT_KINDS: frozenset[str] = frozenset(
-    {"export", "export-merge", "export-reconcile", "export-closed"}
-)
+EXPORT_KINDS: frozenset[str] = frozenset({"export", "export-reconcile", "export-closed"})
 
 ARCHIVE_WAIT = "archive PR"
 """How an archive PR's waiting line starts (merge-truth R9): `views.needs_you` reads a warn
@@ -366,20 +371,7 @@ class Snapshot:
     # live labels in the driver, from facts on the board and `drive --plan`. A batch
     # with no verdict here is never approved.
     approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
-    # Merge queues (merge-train-safety §D "Queue mode", R13), from the driver's reads: the
-    # repos whose base requires one (their train picks no head), those of them with a
-    # `version:` block, whether `forge.api` is `rest` (which cannot enqueue), each queued
-    # batch's `QueueState`, and each such repo's base sha now. The board and `drive --plan`
-    # read no forge, so they leave all of these empty and show the ordinary train.
-    queue_repos: frozenset[str] = frozenset()
-    queue_versioned: frozenset[str] = frozenset()
-    queue_rest: bool = False
-    # Repos whose default branch could not be told: queue mode is unknown, so they are held.
-    queue_unknown: frozenset[str] = frozenset()
-    # Facts-only views (the board, `drive --plan`) read no queue state: a PR whose last
-    # event is an `enqueued` one at its current head is then shown in the merge queue.
-    queue_inferred: bool = False
-    queue_states: Mapping[str, QueueState] = field(default_factory=dict)
+    # Each repo's default branch sha now, for the queue's foreign-move check (R14).
     bases: Mapping[str, str] = field(default_factory=dict)
     # Why this pass dispatches nothing at all (spec 2026-10-12-quota-pacing R7: "quota below
     # floor"); None dispatches as usual. Each dispatch it stops is a `held` action counted
@@ -396,6 +388,10 @@ class Snapshot:
     # The repos whose `post_merge` this driver runs (p4-r2): a landed batch of one gets a
     # `post-merge` action at merge, gated or not, before any close-out of it.
     post_merge_repos: frozenset[str] = frozenset()
+    # Where each repo keeps fr's artifacts (`repo` | `quiet` | `stealth`), as the driver read it;
+    # a repo with no entry is `repo`. Under quiet or stealth the merge queue holds batch PRs
+    # only and owes no collected close-out (R15).
+    placements: Mapping[str, str] = field(default_factory=dict)
     # Collected close-outs (exit-gates R15, §D): the start markers from the judgements,
     # and, driver only, what the driver itself reads for each unfinished one, by item:
     # its PR on its branch; its own git diff (`<status>\t<path>`) and commits from the
@@ -406,10 +402,62 @@ class Snapshot:
     collected_prs: Mapping[str, LivePr] = field(default_factory=dict)
     collected_diff: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_commits: Mapping[str, tuple[str, ...] | None] = field(default_factory=dict)
+    # R16: what the close-out's migration commit (the one before the recorded head) changed,
+    # as `<status>\t<path>`; None when it could not be read. Present only when there is one.
+    collected_migration: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_body_closes: Mapping[str, frozenset[str]] = field(default_factory=dict)
     collected_narrowed: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_pushed: frozenset[str] = frozenset()
     collected_reopened: Mapping[str, LivePr] = field(default_factory=dict)
+    # The wave merge queue (spec 2026-11-19-wave-merge-queue §A): repo -> its `queue:`
+    # config for every repo the queue drives (all of them: the one merge path, R22), the
+    # queue records,
+    # each repo's hold, each combination's checks by sha, the conflicts the executor met
+    # building an entry, each open wave's close-out (repo -> landed; absent: none), each
+    # batch's last head change and its session's status. `bases` gives `main` now. The
+    # board and `drive --plan` read none of these, so they leave them empty.
+    wave_queues: Mapping[str, QueueConfig] = field(default_factory=dict)
+    queue_records: tuple[QueueRecord, ...] = ()
+    # a repo with a key had its hold read: None is then absent, not unread (R27)
+    queue_holds: Mapping[str, Hold | None] = field(default_factory=dict)
+    queue_releases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    queue_slots: Mapping[str, SlotCheck] = field(default_factory=dict)
+    # Each queue repo's default branch name: an entry based on any other is refused.
+    queue_defaults: Mapping[str, str] = field(default_factory=dict)
+    queue_conflicts: Mapping[str, BuildConflict] = field(default_factory=dict)
+    queue_closeouts: Mapping[str, bool] = field(default_factory=dict)
+    # repo -> its open housekeeping PRs (a DevOps stage's ops branch) whose `approved-fr` is
+    # recorded and valid on the queue's events, with the time it was recorded (R32).
+    queue_housekeeping: Mapping[str, tuple[tuple[LivePr, datetime | None], ...]] = field(
+        default_factory=dict
+    )
+    # R26: the batches whose DevOps `fr-queue:release` is settled at the patch-id they have
+    # now, and the run id of each landed barrier still open (for its Need)
+    queue_released: frozenset[str] = frozenset()
+    queue_runs: Mapping[str, str] = field(default_factory=dict)
+    head_changed: Mapping[str, datetime] = field(default_factory=dict)
+    session_status: Mapping[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Admitted:
+    """A non-batch PR its own trust rule admitted to its repo's queue (R32): a collected
+    close-out (`review_reasons` empty), an attributed archive PR (`archive_allowed`), a
+    wave's state-export PR (`_export_row`'s checks) or a housekeeping PR with `approved-fr`
+    recorded on the queue's events. *pr* is the PR at the head the rule judged, which is the
+    head the queue builds; *batch* is the batch it is about, *wave* the wave whose queue it
+    joins (None: between waves) and *at* when it was admitted, which orders it."""
+
+    kind: Literal["closeout", "archive", "export", "housekeeping"]
+    repo: str
+    pr: LivePr
+    batch: str = ""
+    wave: int | None = None
+    at: datetime | None = None
+
+    @property
+    def key(self) -> str:
+        return f"{self.kind}#{self.pr.number}"
 
 
 @dataclass(frozen=True)
@@ -420,9 +468,8 @@ class Action:
     pr: int | None = None
     head: str = ""
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
-    train: str = ""  # merge: the repo whose train this candidate belongs to
     archived: int | None = None  # adopt: the close-out event's `archived`
-    # close: the item ids whose sessions to close; closeout, archive, closeout-handback,
+    # close: the item ids whose sessions to close; closeout, closeout-handback,
     # closeout-stuck of a collected close-out: its member batch ids
     items: tuple[str, ...] = ()
     # export*, and a warn about one: the wave key (`batch` is then the repo); the
@@ -434,11 +481,7 @@ class Action:
     key: str = ""
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
-    ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
     gate: str = ""  # gate-pass: the post-merge gate whose rows all read walked
-    # archive: the PR is a draft, marked ready first (merge-truth R11; a collected
-    # close-out's PR the same way)
-    draft: bool = False
     branch: str = ""  # archive-conflict: the archive PR's head branch (merge-truth R12)
 
 
@@ -451,7 +494,7 @@ class Summary:
     pending: int
     closing: int
     blocked: int = 0
-    queued: int = 0  # merge-train members not attempted this pass (the head excluded)
+    queued: int = 0  # ready entries waiting on a later queue than the open one
     held: int = 0  # batches another scope's claim holds: waiting on that scope, not the operator
     # Landed batches a post-merge gate holds (R13): waiting on a person's walk or pass, so,
     # like a batch awaiting its live walk, never work that keeps a drive alive.
@@ -494,32 +537,23 @@ def settle(summary: Summary, *, unlanded: int = 0, held: int = 0, queued: int = 
 
 
 @dataclass(frozen=True)
-class Train:
-    """One repo's merge train for a pass (drive-merge-train spec §A)."""
-
-    repo: str
-    head: str | None  # the first candidate, or the waiting head; None: all stepped over
-    candidates: tuple[str, ...]  # batches with a merge action, in order
-    queued: tuple[str, ...]  # the member that stopped the walk (not the head), then the rest
-    stepped: tuple[str, ...]  # batches stepped over (failing)
-    numbers: Mapping[str, int]  # batch id -> PR number, for train_line
-    # Members with no valid `approved-fr` approval: held, never the head, never a stop
-    # (merge-train-safety §A "The walk").
-    awaiting: tuple[str, ...] = ()
-    # Queue mode (§D): the members enqueued this pass and those already in the queue. A
-    # queue-mode train has no head and no candidates.
-    enqueue: tuple[str, ...] = ()
-    in_merge_queue: tuple[str, ...] = ()
-    queue_mode: bool = False
-
-
-@dataclass(frozen=True)
 class Pass:
     actions: tuple[Action, ...]
     summary: Summary
-    trains: tuple[Train, ...] = ()
+    # The pr-open batches with no valid `approved-fr` approval: held, never a queue entry
+    # (merge-train-safety §A); the board reads them for its "label it approved" lane.
+    awaiting: frozenset[str] = frozenset()
+    # The pr-open batches ready for the queue: open, green, approved and held by no gate. The
+    # board says "merge ready" for them, with no queue plan of its own to read.
+    ready: frozenset[str] = frozenset()
+    # The non-batch PRs this pass admitted to a repo's queue (R32), by `entry_key`, with the
+    # PR as read: the command's executor builds them like any entry.
+    admitted: Mapping[str, Admitted] = field(default_factory=dict)
     # (batch id, the scope ids holding its members): the batches waiting on another scope
     held_by: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # One plan per repo the wave merge queue drives (spec 2026-11-19-wave-merge-queue §A):
+    # its report actions are in `actions`, the rest are the queue executor's.
+    queues: tuple[QueuePlan, ...] = ()
 
 
 # ------------------------------------------------------- idle sessions (R7, R8)
@@ -893,7 +927,7 @@ def conflict_decision(
 RED_HANDBACKS_PER_DISPATCH = 2
 """R10: red hand-backs a batch gets per dispatch, counted apart from conflict ones."""
 
-RedDecisionKind = Literal["reupdate", "handback", "wait", "needs_you", "skip"]
+RedDecisionKind = Literal["handback", "wait", "needs_you", "skip"]
 
 
 def red_decision(
@@ -901,35 +935,23 @@ def red_decision(
     pr: int,
     head: str,
     failing: Sequence[str],
-    base_now: str,
     status: str,
-    *,
-    queue: bool = False,
 ) -> RedDecisionKind:
     """What the driver does with PR *pr* red at *head* (*failing* names the checks), by the
-    first rule that applies (R9-R11):
+    first rule that applies (R10, R11):
 
     1. a `red_handback` event exists for (pr, head): `skip`;
-    2. *head* is an `update` event's `head_after`, the base moved past that event's base,
-       and no later `update` starts from *head*: `reupdate`;
-    3. `RED_HANDBACKS_PER_DISPATCH` delivered hand-backs have gone out since the latest
+    2. `RED_HANDBACKS_PER_DISPATCH` delivered hand-backs have gone out since the latest
        dispatch: `needs_you`;
-    4. the session's *status*: `idle` is a `handback`, `absent` or `done` a `needs_you`,
+    3. the session's *status*: `idle` is a `handback`, `absent` or `done` a `needs_you`,
        anything else `wait`.
+
+    The rule that updated a red head fr itself made (R9's `reupdate`) is gone: the wave
+    merge queue never updates a PR branch (spec 2026-11-19-wave-merge-queue R13, R22).
     """
     red = [e for e in events if isinstance(e, RedHandbackEvent)]
     if any(e.pr == pr and e.head == head for e in red):
         return "skip"
-    updates = [e for e in events if isinstance(e, UpdateEvent) and e.pr == pr]
-    made = [e for e in updates if e.head_after == head]
-    # In a merge-queue repo fr never pushes an update (R13): rule 2 does not apply.
-    if (
-        not queue
-        and made
-        and made[-1].base != base_now
-        and not any(e.head_before == head for e in updates)
-    ):
-        return "reupdate"
     handed = handbacks_since(
         events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
     )
@@ -1058,7 +1080,8 @@ def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> lis
     """Why the driver may NOT merge *marker*'s PR without `approved-fr` (R15's trust
     anchor); [] only when every condition holds: the PR head is the head the verb
     recorded; the driver's own diff to it is exactly the recorded file set and every
-    path is an archive's; the only commit past the base is that head; the PR is the
+    path is an archive's; the commits past the base are that head alone, or the verb's own
+    migration commit and then that head (R16); the PR is the
     repo's own by an allowed author; and its body closes exactly the recorded issues,
     less any a narrowing decision names now. Each unknown is a reason."""
     why: list[str] = []
@@ -1077,7 +1100,11 @@ def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> lis
         if outside := sorted(e.partition("\t")[2] for e in diff if not archive_allowed(e)):
             why.append(f"it changes {', '.join(outside[:5])}, which no archive changes")
     commits = snap.collected_commits.get(marker.item)
-    if commits is None or tuple(commits) != (marker.head,):
+    if commits is not None and len(commits) == 2 and commits[0] == marker.head:
+        # R16: the verb's own migration commit, then the recorded head (newest first). It may
+        # change only files the archive then moves, and only by modifying them.
+        why.extend(_migration_reasons(marker, snap))
+    elif commits is None or tuple(commits) != (marker.head,):
         why.append("its commits past the base are not the one the verb pushed")
     narrowed = snap.collected_narrowed.get(marker.item)
     if narrowed is None:
@@ -1091,12 +1118,32 @@ def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> lis
     return why
 
 
-def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action | None, str]:
+def _migration_reasons(marker: CollectedCloseout, snap: Snapshot) -> list[str]:
+    """Why the close-out's commit before its recorded head is no migration of what the archive
+    moves (R16): it must be read, and modify only paths the recorded file set deletes."""
+    changed = snap.collected_migration.get(marker.item)
+    if changed is None:
+        return ["its migration commit's changes could not be read"]
+    moved = {e.partition("\t")[2] for e in marker.files if e.startswith("D\t")}
+    stray = sorted(
+        path for status, _, path in (e.partition("\t") for e in changed)
+        if status != "M" or path not in moved
+    )  # fmt: skip
+    if stray:
+        return [f"its migration commit changes {', '.join(stray[:5])}, which the archive does "
+                "not move"]  # fmt: skip
+    return []
+
+
+def _collected_step(
+    marker: CollectedCloseout, snap: Snapshot
+) -> tuple[Action | Admitted | None, str]:
     """§D step 3 for one unfinished collected close-out, keyed on its start marker, and how
     the summary counts it (`closing` | `blocked` | ""). Membership is what the verb
-    recorded on the marker, never a PR body. Its PR is merged with no approval only when
-    `review_reasons` is empty, at the recorded head; a conflict or failing checks go back
-    ONCE to its session (R27); a PR closed unmerged ends the close-out (p6-r5)."""
+    recorded on the marker, never a PR body. Its PR is admitted to the repo's queue with no
+    approval only when `review_reasons` is empty, at the recorded head (R32); a conflict or
+    failing checks go back ONCE to its session (R27); a PR closed unmerged ends the
+    close-out (p6-r5)."""
     repo = marker.repo
     known = {b.id for b in snap.batches}
     members = tuple(b for b in marker.members if b in known)
@@ -1160,10 +1207,11 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
                       f"merged without approved-fr: {'; '.join(why)}", pr=pr.number,
                       items=members, key=marker.item), "blocked"  # fmt: skip
     if pr.checks == "green" and pr.mergeable == "MERGEABLE":
-        return Action("archive", first, f"PR #{pr.number} ({pr.head_ref}) for "
-                      f"{', '.join(members)} at {marker.head[:12]}", pr=pr.number,
-                      head=marker.head, items=members, draft=pr.draft,
-                      key=marker.item), "closing"  # fmt: skip
+        from fr.triage.wave_queue import effective_wave
+
+        lead = next((b for b in snap.batches if b.id == first), None)
+        wave = effective_wave(lead) if lead is not None else None
+        return Admitted("closeout", repo, pr, batch=first, wave=wave, at=marker.at), "closing"
     return None, "closing"
 
 
@@ -1336,7 +1384,7 @@ def _export_row(
     default: str = "",
     *,
     scope: str,
-) -> tuple[Action | None, ExportCount]:
+) -> tuple[Action | Admitted | None, ExportCount]:
     """One row of §I's table: the action for *repo*'s finished *wave*, given its
     recorded export (*done*), the live PR and the export directory *root*
     (`<path>/<scope>`), and how the summary counts it. The driver auto-merges this
@@ -1390,22 +1438,22 @@ def _export_row(
                       pr=live.number, wave=wave), "blocked"  # fmt: skip
     if live.checks != "green":
         return None, "closing"  # checks pending: wait
-    pinned = done.head or ""  # set: a head that differs was refused above
-    # Pinned to the RECORDED head, never the live one (they are equal here).
-    return Action("export-merge", repo, f"PR #{live.number} at {pinned[:12]}",
-                  pr=live.number, head=pinned, wave=wave), "closing"  # fmt: skip
+    # Admitted at the RECORDED head, never a later one: they are equal here, and the queue
+    # builds exactly this head (p4-sec-unpinned-merge, R32).
+    return Admitted("export", repo, live, wave=None, at=done.at), "closing"
 
 
-def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
+def _export_actions(snap: Snapshot) -> tuple[list[Action], list[Admitted], int, int]:
     """§I step 3b: a group or org scope that opts in is warned once; then, for each
     opted-in repo, `_export_row` on its `export_target`: one PR per repo, never one per
-    wave. Returns the actions and how many owed export PRs are closing (acting or
-    waiting) and blocked (warned)."""
+    wave. Returns the actions, the export PRs admitted to a queue (R32), and how many owed
+    export PRs are closing (acting or waiting) and blocked (warned)."""
     actions = [
         Action("warn", repo, f"export is per repo scope; run drive with --repo {repo}")
         for repo in sorted(snap.export_refused)
     ]
     counts = {"closing": 0, "blocked": 0}
+    admitted: list[Admitted] = []
     for repo in sorted(snap.export_path):
         target = export_target(
             repo, snap.batches, snap.repos, snap.finished, snap.exports,
@@ -1420,7 +1468,9 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
             repo, target.wave, target.recorded, live, snap.export_path[repo],
             snap.default_branch.get(repo, ""), scope=snap.scope_id,
         )  # fmt: skip
-        if action is not None:
+        if isinstance(action, Admitted):
+            admitted.append(action)
+        elif action is not None:
             if action.kind == "export":
                 action = replace(action, covers=target.covers)
                 if len(target.covers) > 1:
@@ -1429,9 +1479,9 @@ def _export_actions(snap: Snapshot) -> tuple[list[Action], int, int]:
             actions.append(action)
         if count is not None:
             counts[count] += 1
-        if action is not None and action.kind == "export" and target.orphan is not None:
+        if isinstance(action, Action) and action.kind == "export" and target.orphan is not None:
             actions.extend(_stale_orphans(repo, snap, target.orphan))
-    return actions, counts["closing"], counts["blocked"]
+    return actions, admitted, counts["closing"], counts["blocked"]
 
 
 def _stale_orphans(repo: str, snap: Snapshot, reused: LivePr) -> list[Action]:
@@ -1476,84 +1526,28 @@ def _dispatch_key(batch: Batch) -> tuple[int, int, int, int, str]:
     return (wave is None, wave or 0, order is None, order or 0, batch.id)
 
 
-def _queue_hold(repo: str, snap: Snapshot) -> str | None:
-    """Why a merge-queue repo is held, or None (§D "Holds")."""
-    if repo in snap.queue_unknown:
-        return f"cannot tell {repo}'s default branch: queue mode unknown"
-    if repo in snap.queue_versioned:
-        return f"{repo} requires a merge queue, and fr does not reserve versions through one"
-    if snap.queue_rest:
-        return f"{repo} requires a merge queue, and forge.api rest cannot enqueue"
-    return None
-
-
-def last_enqueue(batch: Batch, pr: int) -> EnqueueEvent | None:
-    """The batch's latest `enqueue` event for PR *pr*, whatever it records."""
-    for event in reversed(batch.events):
-        if isinstance(event, EnqueueEvent) and event.pr == pr:
-            return event
-    return None
-
-
-REFUSALS_BEFORE_NEED = 2
-"""Enqueue refusals at one head before the driver stops retrying and asks the operator."""
-
-
-def enqueue_refusals(batch: Batch, pr: int, head: str) -> list[EnqueueEvent]:
-    return [
-        e for e in batch.events
-        if isinstance(e, EnqueueEvent) and e.pr == pr and e.head == head and e.outcome == "refused"
-    ]  # fmt: skip
-
-
-def _walk_queue(
-    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
-) -> tuple[Train | None, list[Action]]:
-    """§D "Queue mode": the walk of a repo whose base requires a merge queue. It picks no
-    head: every approved, green member not already queued is enqueued, a queued one is in
-    the merge queue, an ejected one (its last event an `enqueued` one at the current head,
-    open, out of the queue with auto-merge cleared) is enqueued again when the base moved,
-    a recorded need when it did not, and red when its checks failed. A held repo (*hold*)
-    enqueues nothing but still reports its red members. `--max-inflight` is untouched: a
-    queued batch is still `pr-open`. `_walk_train` branches here at its entry, so the merge
-    train's loop is untouched."""
+def _member_reports(
+    entries: Sequence[QueueEntry], snap: Snapshot
+) -> tuple[list[Action], list[str], list[str]]:
+    """What the pass says about a repo's pr-open batches before the queue takes them (the
+    reports the retired merge train made, R22): a failing PR is a red `warn` for the red
+    recovery, wherever it sits; one with no valid approval is *awaiting* it, said by the
+    board; one a pre-merge gate holds is `held` (fr-ops R14: the DevOps stage owns it). A
+    draft is a member only with a valid approval (merge-train-safety §A). The queue itself
+    takes the rest: it plans no merge here."""
     actions: list[Action] = []
-    enqueue: list[str] = []
-    queued: list[str] = []
-    in_queue: list[str] = []
-    stepped: list[str] = []
     awaiting: list[str] = []
-    numbers: dict[str, int] = {}
-    hold = _queue_hold(repo, snap)
-    members: list[QueueEntry] = []
+    ready: list[str] = []
     for entry in entries:
-        pr = snap.live.get(entry.batch.id)
-        verdict = snap.approvals.get(entry.batch.id)
+        bid = entry.batch.id
+        pr = snap.live.get(bid)
+        verdict = snap.approvals.get(bid)
         approved = verdict is not None and is_approved(verdict)
         if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
             continue  # not a member
-        members.append(entry)
-        numbers[entry.batch.id] = pr.number
-    if not members:
-        return None, actions
-    if hold is not None:
-        actions.append(Action("held", members[0].batch.id, hold))
-    for entry in members:
-        bid = entry.batch.id
-        pr = snap.live[bid]
-        verdict = snap.approvals.get(bid)
-        approved = verdict is not None and is_approved(verdict)
-        state = snap.queue_states.get(bid)
-        event = last_enqueue(entry.batch, pr.number)
-        at_head = event is not None and event.head == pr.head
-        mine = at_head and event is not None and event.outcome == "enqueued"
-        if mine and state is not None and (state.in_queue or state.auto_merge):
-            in_queue.append(bid)  # in the queue, or waiting to enter it: never ejected
-            continue
-        if state is not None and not state.open:
-            continue  # merged or closed since it was read: it never left a queue unmerged
-        if pr.checks == "failing":
-            stepped.append(bid)
+        if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
+            # Said on every pass: the command's recovery (§C) decides whether this pass
+            # has anything new to report, from the recorded events, not from memory.
             actions.append(
                 Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
                        f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
@@ -1563,120 +1557,13 @@ def _walk_queue(
         if not approved:
             awaiting.append(bid)
             continue
-        if pre_merge_held(pr.labels):  # fr-ops R14: the DevOps stage merges it
+        if pre_merge_held(pr.labels):  # fr-ops R14: held until the DevOps stage released it
             awaiting.append(bid)
             actions.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
             continue
-        if hold is not None:
-            queued.append(bid)
-            continue
-        if mine and state is None:
-            in_queue.append(bid)  # the state was not read: nothing to decide from
-            continue
-        if pr.head != entry.pr.head_oid or pr.checks == "pending":
-            queued.append(bid)
-            continue
-        base_moved = event is not None and snap.bases.get(repo, event.base) != event.base
-        why = f"at {pr.head[:12]}"
-        if mine or (at_head and event is not None and event.outcome == "ejected"):
-            if not base_moved:
-                if mine:  # the driver records it once; the recorded event is the need
-                    actions.append(
-                        Action("warn", bid, f"PR #{pr.number} left the merge queue unmerged",
-                               pr=pr.number, head=pr.head, ejected=True)
-                    )  # fmt: skip
-                continue
-            why = "the base moved since it was enqueued"
-        elif len(enqueue_refusals(entry.batch, pr.number, pr.head)) >= REFUSALS_BEFORE_NEED:
-            continue  # refused twice at this head: a recorded need, no third try
-        enqueue.append(bid)
-        actions.append(
-            Action("enqueue", bid, f"PR #{pr.number} {why}", pr=pr.number, head=pr.head,
-                   train=repo)
-        )  # fmt: skip
-    train = Train(repo, None, (), tuple(queued), tuple(stepped), numbers, tuple(awaiting),
-                  tuple(enqueue), tuple(in_queue), True)  # fmt: skip
-    return train, actions
-
-
-def _walk_train(
-    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
-) -> tuple[Train | None, list[Action]]:
-    if repo in snap.queue_repos:
-        return _walk_queue(repo, entries, snap)
-    return _walk_merge_train(repo, entries, snap)
-
-
-def _walk_merge_train(
-    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
-) -> tuple[Train | None, list[Action]]:
-    """§A: walk one repo's *entries* (already in train order). A green member becomes
-    a merge candidate and the walk goes on; a failing one is stepped over, wherever it
-    sits; one without a valid approval awaits it, wherever it sits; a moved head or a
-    pending one stops it, and every other member after the stop is queued. A draft is
-    a member only with a valid approval (merge-train-safety §A)."""
-    merges: list[Action] = []
-    candidates: list[str] = []
-    stepped: list[str] = []
-    awaiting: list[str] = []
-    numbers: dict[str, int] = {}
-    waiting: str | None = None
-    queued: list[str] = []
-    in_queue: list[str] = []
-    members = 0
-    for entry in entries:
-        bid = entry.batch.id
-        pr = snap.live.get(bid)
-        verdict = snap.approvals.get(bid)
-        approved = verdict is not None and is_approved(verdict)
-        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
-            continue  # not a member
-        members += 1
-        numbers[bid] = pr.number
-        if snap.queue_inferred:  # facts only: what the events say fr did (§D, R13)
-            seen = last_enqueue(entry.batch, pr.number)
-            if seen is not None and seen.head == pr.head and seen.outcome == "enqueued":
-                in_queue.append(bid)
-                continue
-        if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
-            stepped.append(bid)
-            # Said on every pass: the command's recovery (§C) decides whether this pass
-            # has anything new to report, from the recorded events, not from memory.
-            merges.append(
-                Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
-                       f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
-                       checks=pr.failing)
-            )  # fmt: skip
-            continue
-        if not approved:  # never the head, never a stop
-            awaiting.append(bid)
-            continue
-        if pre_merge_held(pr.labels):  # fr-ops R14: the DevOps stage merges it
-            awaiting.append(bid)
-            merges.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
-            continue
-        if waiting is not None or queued:
-            queued.append(bid)
-            continue
-        if pr.head != entry.pr.head_oid or pr.checks == "pending":
-            if candidates:
-                queued.append(bid)
-            else:
-                waiting = bid
-            continue
-        candidates.append(bid)
-        merges.append(
-            Action("merge", bid, f"PR #{pr.number} at {pr.head[:12]}", pr=pr.number,
-                   head=pr.head, train=repo)
-        )  # fmt: skip
-    if not members:
-        return None, merges
-    head = candidates[0] if candidates else waiting
-    train = Train(
-        repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers, tuple(awaiting),
-        in_merge_queue=tuple(in_queue),
-    )  # fmt: skip
-    return train, merges
+        if pr.checks == "green":
+            ready.append(bid)
+    return actions, awaiting, ready
 
 
 def _claim_actions(snap: Snapshot) -> list[Action]:
@@ -1735,13 +1622,142 @@ def _gate_actions(batch: Batch, snap: Snapshot, labelled: set[str]) -> list[Acti
     return out
 
 
+def wave_closeout_landed(
+    snap: Snapshot, repo: str, wave: int | None, landed: frozenset[str]
+) -> bool | None:
+    """R15: the wave's one collected close-out, as its queue's drain reads it. True once
+    every ungated landed batch of *wave* is closed out (None: none landed, or none owed one);
+    False while one is not: its close-out is owed, started, or waiting in the queue. A batch
+    a post-merge gate holds is left out (its close-out is owed once the gate passes and
+    queues between waves); so is one the close-out verb held (the operator's), and one with
+    no ledger yet is owed (unknown is not ungated). *landed*: `landed_keys`."""
+    from fr.triage.wave_queue import effective_wave
+
+    seen = False
+    for batch in snap.batches:
+        if snap.repos.get(batch.id) != repo or effective_wave(batch) != wave:
+            continue
+        stage = snap.stages.get(batch.id)
+        if stage not in LANDED or is_gated(batch, snap) or batch.id in snap.archived:
+            continue
+        if closeout_hold(batch) is not None:
+            continue
+        seen = True
+        event = closeout_event(batch)
+        if event is not None:
+            marker = marker_of(event.archive or "", snap.closeouts)
+            if marker is not None and marker.pr is not None and f"closeout#{marker.pr}" in landed:
+                continue
+        if not is_finished(batch, stage, snap.archives.get(repo, ())):
+            return False
+    return True if seen else None
+
+
+def _wave_of(batch: Batch) -> int | None:
+    from fr.triage.wave_queue import effective_wave
+
+    return effective_wave(batch)
+
+
+def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
+    """R15: whether *wave*'s collected close-out may start: every batch of it is terminal (the
+    wave's landings are over: landed, cancelled, abandoned or deferred), so one close-out takes
+    all of its ungated landed batches. The repo's `post_merge` for the last landing is planned
+    before it in the same pass (`post-merge` actions come first), and the close-out itself is
+    held while a landed batch has none recorded (`_Driver._close_out`). A batch with no wave
+    stands alone: always."""
+    from fr.triage.wave_queue import is_terminal
+
+    if wave is None:
+        return True
+    return all(
+        is_terminal(batch, snap.stages.get(batch.id))
+        for batch in snap.batches
+        if snap.repos.get(batch.id) == repo and _wave_of(batch) == wave
+    )
+
+
+def queue_snapshot(
+    snap: Snapshot, repo: str, held: Iterable[str] = (), admitted: Iterable[Admitted] = ()
+) -> QueueSnapshot:
+    """*repo*'s slice of the pass's snapshot, for `fr.triage.wave_queue.plan_queue`: every
+    batch of it (the wave choice reads them all), as entries only the selected ones that no
+    other scope's claim holds (*held*), and the non-batch PRs its own trust rules *admitted*
+    (R32), none of them one a queue already landed."""
+    from fr.triage.wave_queue import OtherEntry, QueueSnapshot, landed_keys
+
+    batches = tuple(b for b in snap.batches if snap.repos.get(b.id) == repo)
+    skip = set(held)
+    eligible = frozenset(
+        b.id for b in batches
+        if (snap.selected is None or b.id in snap.selected) and b.id not in skip
+    )  # fmt: skip
+    records = tuple(r for r in snap.queue_records if r.repo == repo)
+    landed = landed_keys(records)
+    mine = [a for a in admitted if a.repo == repo and a.key not in landed]
+    open_wave = next((r.wave for r in reversed(records)
+                      if r.scope == (snap.scope_id or snap.me)), None)  # fmt: skip
+    closeout = snap.queue_closeouts.get(repo)
+    if closeout is None:
+        closeout = wave_closeout_landed(snap, repo, open_wave, landed)
+    if snap.placements.get(repo, "repo") != "repo":
+        # R15: the repo keeps no fr artifacts on its default branch, so the queue holds batch
+        # PRs only: no close-out, archive, export or housekeeping entry, and no wave waits on one
+        closeout, mine = None, []
+    return QueueSnapshot(
+        repo=repo, scope=snap.scope_id or snap.me, config=snap.wave_queues[repo], now=snap.now,
+        batches=batches, stages=snap.stages, live={**snap.live, **{a.key: a.pr for a in mine}},
+        approvals=snap.approvals, records=records,
+        hold=snap.queue_holds.get(repo), hold_read=repo in snap.queue_holds,
+        releases=snap.queue_releases.get(repo, ()), base=snap.bases.get(repo, ""),
+        slots=snap.queue_slots, default=snap.queue_defaults.get(repo, ""),
+        conflicts=snap.queue_conflicts, eligible=eligible, sessions=snap.session_status,
+        head_changed=snap.head_changed, closeout_landed=closeout,
+        others=tuple(OtherEntry(a.key, a.kind, a.pr.number, a.wave, a.at, a.batch) for a in mine),
+        warned=snap.warned, scope_args=snap.scope_args,
+        released=snap.queue_released, runs=snap.queue_runs,
+    )  # fmt: skip
+
+
+def _queue_plans(
+    snap: Snapshot, held: Iterable[str], admitted: Sequence[Admitted] = ()
+) -> list[QueuePlan]:
+    """One wave-queue plan per repo the queue drives, in repo order."""
+    if not snap.wave_queues:
+        return []
+    from fr.triage.wave_queue import plan_queue
+
+    held = tuple(held)
+    return [plan_queue(queue_snapshot(snap, repo, held, admitted))
+            for repo in sorted(snap.wave_queues)]  # fmt: skip
+
+
+QUEUE_REPORT_KEY = "queue"
+"""The `key` of an `Action` the merge queue reported (R28): `needs_you` reads it as a
+`queue-need`, not as a blocked batch."""
+
+
+def _queue_reports(plan: QueuePlan) -> list[Action]:
+    """The queue's report actions, as the pass's own: a held repo is `held` (R31), a Need is
+    `blocked` (the operator's, R28, R30), a report said once is a `warn` keyed in `warned`."""
+    out: list[Action] = []
+    for a in plan.actions:
+        if a.kind == "queue-held":
+            out.append(Action("held", plan.repo, a.detail, key=QUEUE_REPORT_KEY))
+        elif a.kind == "queue-need":
+            out.append(Action("blocked", a.batch or plan.repo, a.detail, key=QUEUE_REPORT_KEY))
+        elif a.kind == "queue-warn":
+            out.append(Action("warn", plan.repo, a.detail, head=a.key))
+    return out
+
+
 def drive_pass(snap: Snapshot) -> Pass:
-    """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
-    then report duplicate candidates of newly finished waves — in that order, so a slot a
-    merge frees is used in the same pass."""
+    """One pass: report foreign PRs, plan the queue and the close-outs, archive, dispatch,
+    close sessions, then report duplicate candidates of newly finished waves — in that
+    order. A landing the queue makes frees its slots on a LATER pass (the executor runs
+    after the plan), never the pass that made it."""
     actions: list[Action] = _claim_actions(snap)
     stages = dict(snap.stages)
-    merging: set[str] = set()
     chosen = tuple(b for b in snap.batches if snap.selected is None or b.id in snap.selected)
 
     # -1. A batch with a member another scope holds is left alone this pass (R6): one
@@ -1770,29 +1786,35 @@ def drive_pass(snap: Snapshot) -> Pass:
                            head=found.key)
                 )  # fmt: skip
 
-    # 1. Merge: one train per repo, walked in the stable dispatch order.
+    # 1. Report the pr-open batches the queue will not take yet (failing, unapproved, held
+    # by a gate), in the stable dispatch order. The merge itself is the queue's, below,
+    # once step 3 has said which non-batch PRs its trust rules admit (R22, R32).
     by_repo: dict[str, list[QueueEntry]] = {}
     for entry in sorted(snap.queue, key=lambda e: _dispatch_key(e.batch)):
         bid = entry.batch.id
         if (snap.selected is not None and bid not in snap.selected) or bid in held_ids:
             continue
         by_repo.setdefault(snap.repos.get(bid, ""), []).append(entry)
-    trains: list[Train] = []
+    awaiting: list[str] = []
+    ready_members: list[str] = []
     for repo in sorted(by_repo):
-        train, merges = _walk_train(repo, by_repo[repo], snap)
-        actions.extend(merges)
-        merging.update(a.batch for a in merges if a.kind == "merge")
-        if train is not None:
-            trains.append(train)
+        reports, waits, ok = _member_reports(by_repo[repo], snap)
+        actions.extend(reports)
+        awaiting.extend(waits)
+        ready_members.extend(ok)
+    admitted: list[Admitted] = []
 
     # 2. Close out. Recording a close-out that has already finished starts nothing and
     # writes nothing to the forge, so it reads every landed batch, selected or not
     # (gh#990); starting one, or recording one under way, follows the selection.
     closing = gated = closeouts_held = 0
-    collecting: dict[str, list[str]] = {}  # repo -> the batches its collected close-out takes
+    post_owed: dict[tuple[str, int | None], list[str]] = {}
+    post_planned: set[str] = set()
+    # (repo, wave) -> the batches its collected close-out takes (R15: one per wave)
+    collecting: dict[tuple[str, int | None], list[str]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
     for batch in snap.batches:
-        if stages.get(batch.id) not in LANDED or batch.id in merging or batch.id in held_ids:
+        if stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
         if closeout_of(batch, snap.closeouts) is not None:
             continue
@@ -1830,6 +1852,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             # p4-r2: at merge (once its release commit landed, or the fallback), gated or
             # not, and always ahead of the batch's close-out, which never runs it itself.
             actions.append(Action("post-merge", batch.id, "run the repo's post_merge"))
+            post_planned.add(batch.id)
         if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
             closing += 1
             actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
@@ -1841,6 +1864,19 @@ def drive_pass(snap: Snapshot) -> Pass:
             actions.extend(_gate_actions(batch, snap, labelled))
             continue
         closing += 1
+        if (
+            owed
+            and snap.repos.get(batch.id) in snap.post_merge_repos
+            and hand is None
+            and batch.id not in post_planned
+        ):
+            # R15: the wave's one close-out starts only after every landing's post_merge. A
+            # member whose post_merge is planned in this pass runs it first, and the start
+            # re-checks every member's (`_collected_close_out`), holding the whole close-out
+            # when one failed; this holds the wave for a member no action will run it for.
+            post_owed.setdefault((snap.repos.get(batch.id, ""), _wave_of(batch)), []).append(
+                batch.id
+            )
         if hand is not None:
             actions.append(Action("adopt", batch.id,
                                   f"close-out PR #{hand.number} ({hand.head_ref}) is open",
@@ -1858,13 +1894,25 @@ def drive_pass(snap: Snapshot) -> Pass:
                                   f"retry: fr triage batch closeout {batch.id} --yes",
                                   key=hold.item))  # fmt: skip
             continue
-        collecting.setdefault(snap.repos.get(batch.id, ""), []).append(batch.id)
-    # R15: at most one collected close-out per repo, and none while one is under way.
-    for repo in sorted(collecting):
+        group = _wave_of(batch)
+        if not wave_landings_done(snap, snap.repos.get(batch.id, ""), group):
+            continue  # R15: the wave's one close-out starts after its last landing's post_merge
+        collecting.setdefault((snap.repos.get(batch.id, ""), group), []).append(batch.id)
+    # R15: one collected close-out per wave, at most one per repo, none while one is under way.
+    started: set[str] = set()
+    for repo, group in sorted(collecting, key=lambda k: (k[0], k[1] is None, k[1] or 0)):
+        if waiting := post_owed.get((repo, group)):
+            # R15: held until every landed member's post_merge succeeded, never started
+            # with the rest; the post-merge action retries it every pass
+            actions.append(Action("held", waiting[0], "the wave's close-out waits: post_merge "
+                                  f"has not succeeded for {', '.join(waiting)} (its `post-merge` "
+                                  "Need names it)"))  # fmt: skip
+            continue
         name, item_id = next_collected_item(repo, snap)
-        if _collected_under_way(repo, snap) or item_id in snap.existing:
+        if repo in started or _collected_under_way(repo, snap) or item_id in snap.existing:
             continue  # one at a time; a live session of this item is not started twice
-        taking = tuple(collecting[repo])
+        started.add(repo)
+        taking = tuple(collecting[(repo, group)])
         actions.append(
             Action("closeout", taking[0], f"start {collected_item_id(repo, name)} for "
                    f"{', '.join(taking)}", items=taking, key=name)
@@ -1885,7 +1933,9 @@ def drive_pass(snap: Snapshot) -> Pass:
         if marker.merged or marker.closed:
             continue
         step, count = _collected_step(marker, snap)
-        if step is not None:
+        if isinstance(step, Admitted):
+            admitted.append(step)
+        elif step is not None:
             actions.append(step)
         if count == "blocked":
             archives_blocked += 1
@@ -1941,11 +1991,9 @@ def drive_pass(snap: Snapshot) -> Pass:
             )  # fmt: skip
             continue
         closing += 1
-        if good is not None:
-            actions.append(
-                Action("archive", batch.id, f"PR #{good.number} ({good.head_ref})",
-                       pr=good.number, head=good.head, draft=good.draft)
-            )  # fmt: skip
+        if good is not None:  # R32: admitted to the repo's queue, never merged here
+            admitted.append(Admitted("archive", snap.repos.get(batch.id, ""), good,
+                                     batch=batch.id, at=event.at))  # fmt: skip
         for p in conflicting:
             actions.append(
                 Action("archive-conflict", batch.id, f"{ARCHIVE_WAIT} #{p.number} "
@@ -1965,22 +2013,39 @@ def drive_pass(snap: Snapshot) -> Pass:
     actions.extend(_idle_actions(snap, chosen))
 
     # 3b. Export each finished wave's state (pages-goal R13).
-    exporting, exports_closing, exports_blocked = _export_actions(snap)
+    exporting, exported, exports_closing, exports_blocked = _export_actions(snap)
     actions.extend(exporting)
+    admitted.extend(exported)
     closing += exports_closing
+
+    # 3c. A housekeeping PR with `approved-fr` recorded on the queue's events (R32).
+    for repo in sorted(snap.queue_housekeeping):
+        admitted.extend(Admitted("housekeeping", repo, pr, at=at)
+                        for pr, at in snap.queue_housekeeping[repo])  # fmt: skip
+
+    # 3d. The wave merge queue: every merge the driver makes is an entry of it (R22, R32).
+    queues = _queue_plans(snap, held_ids, admitted)
+    for qplan in queues:
+        actions.extend(_queue_reports(qplan))
+    open_waves = {q.repo: q.wave for q in queues if q.phase == "open"}
 
     # 4. Dispatch.
     # The cap counts every batch in flight, selected or not (review rg-3); the
     # summary's own figure is the selection's, which is what this drive waits on.
+    from fr.triage.wave_queue import waits_on_queue
+
     occupants = {
-        b.id for b in snap.batches if stages.get(b.id) in IN_FLIGHT and b.id not in merging
-    }
+        b.id for b in snap.batches
+        if stages.get(b.id) in IN_FLIGHT
+        # R36: a delivered PR waiting on a later queue than the open one takes no slot
+        and not ((repo := snap.repos.get(b.id, "")) in open_waves
+                 and waits_on_queue(b, stages.get(b.id), open_wave=open_waves[repo]))
+    }  # fmt: skip
     driven = {b.id for b in chosen}
-    in_flight = sum(1 for b in driven if stages.get(b) in IN_FLIGHT) - len(merging)
-    for bid in merging:
-        stages[bid] = "merged"
+    in_flight = sum(1 for b in driven if stages.get(b) in IN_FLIGHT)
     by_id = {b.id: b for b in snap.batches}
-    pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held
+    queue_needs = sum(a.kind == "queue-need" for q in queues for a in q.actions)
+    pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held + queue_needs
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue
@@ -2054,7 +2119,6 @@ def drive_pass(snap: Snapshot) -> Pass:
             )  # fmt: skip
 
     merged = sum(1 for b in driven if stages.get(b) in LANDED)
-    closing += len(merging)
     return Pass(
         actions=tuple(actions),
         summary=Summary(
@@ -2063,12 +2127,15 @@ def drive_pass(snap: Snapshot) -> Pass:
             pending=pending,
             closing=closing,
             blocked=blocked,
-            queued=sum(len(t.queued) for t in trains),
+            queued=sum(len(q.waiting) for q in queues),
             held=len(held_by),
             gated=gated,
         ),
-        trains=tuple(trains),
+        awaiting=frozenset(awaiting),
+        ready=frozenset(ready_members),
+        admitted={a.key: a for a in admitted},
         held_by=tuple(held_by),
+        queues=tuple(queues),
     )
 
 
@@ -2099,43 +2166,3 @@ def summary_line(summary: Summary) -> str:
         line += f", blocked {summary.blocked}"
     line += f", held {summary.held}" if summary.held else ""
     return line + (f", gated {summary.gated}" if summary.gated else "")
-
-
-def train_line(train: Train) -> str:
-    """R6: `train <repo>: head a (PR #12) · then b (#13) · queued c (#14) · stepped over d`."""
-
-    def ref(bid: str) -> str:
-        return f"{bid} (#{train.numbers[bid]})" if bid in train.numbers else bid
-
-    if train.queue_mode:
-        parts = ["merge queue"]
-        if train.enqueue:
-            parts.append("enqueue " + ", ".join(ref(b) for b in train.enqueue))
-        if train.in_merge_queue:
-            parts.append("in merge queue " + ", ".join(ref(b) for b in train.in_merge_queue))
-        if train.queued:
-            parts.append("queued " + ", ".join(ref(b) for b in train.queued))
-        if train.stepped:
-            parts.append("stepped over " + ", ".join(ref(b) for b in train.stepped))
-        if train.awaiting:
-            parts.append("awaiting approval " + ", ".join(ref(b) for b in train.awaiting))
-        return f"train {train.repo}: " + " · ".join(parts)
-    head = train.head
-    parts = []
-    if head is None:
-        parts.append("no head")
-    else:
-        parts.append(f"head {head} (PR #{train.numbers[head]})" if head in train.numbers
-                     else f"head {head}")  # fmt: skip
-    then = train.candidates[1:]
-    if then:
-        parts.append("then " + ", ".join(ref(b) for b in then))
-    if train.queued:
-        parts.append("queued " + ", ".join(ref(b) for b in train.queued))
-    if train.stepped:
-        parts.append("stepped over " + ", ".join(ref(b) for b in train.stepped))
-    if train.awaiting:
-        parts.append("awaiting approval " + ", ".join(ref(b) for b in train.awaiting))
-    if train.in_merge_queue:
-        parts.append("in merge queue " + ", ".join(ref(b) for b in train.in_merge_queue))
-    return f"train {train.repo}: " + " · ".join(parts)

@@ -41,23 +41,6 @@ def _repo(tmp_path: Path) -> Checkout:
     return Checkout(clone)
 
 
-def test_commit_all_stages_tracked_changes_and_version_files_only(tmp_path: Path) -> None:
-    checkout = _repo(tmp_path)
-    wt = checkout.add_worktree(tmp_path / "scratch", "HEAD")
-    (wt.path / "pyproject.toml").write_text('[project]\nversion = "1.0.1"\n')
-    (wt.path / "packages").mkdir()
-    (wt.path / "packages" / "new.json").write_text('{"version": "1.0.1"}\n')
-    (wt.path / "build").mkdir()
-    (wt.path / "build" / "artifact.bin").write_text("built by set\n")
-
-    head = wt.commit_all("chore: re-slot", ["pyproject.toml", "packages/*.json"])
-
-    assert head is not None
-    committed = _git(wt.path, "show", "--name-only", "--format=", "HEAD").split()
-    assert sorted(committed) == ["packages/new.json", "pyproject.toml"]
-    assert "build/artifact.bin" in _git(wt.path, "status", "--porcelain", "--untracked-files=all")
-
-
 def test_a_kept_worktree_with_local_changes_is_refused_by_name(tmp_path: Path) -> None:
     checkout = _repo(tmp_path)
     where = tmp_path / "state" / "merge" / "feat" / "batch-x"

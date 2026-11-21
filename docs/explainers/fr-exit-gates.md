@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost); 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake)
+reviewed: 2026-11-21 the queue lands a gate:devops pull request after the stage released it and holds later entries until post-merge is done; 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
 ---
 
 ## What work cannot finish in the pull request?
@@ -41,14 +41,17 @@ A gate names a role. There are six: `developer`, `reviewer`, `tester`, `devops`,
 | Gate | What it holds |
 |---|---|
 | `tester` | the merge's close-out, and the final release |
-| `devops` | the same, and the merge itself when it goes through the triage merge path |
+| `devops` | the same, and the merge itself: the queue lands the pull request only after the DevOps stage released it, and holds later entries until its post-merge work is done |
 | the other four | nothing: they are recorded, never enforced |
 
 `devops` is the stricter of the two, because of the work it guards: a key that must exist,
 or a service to restart. That work often has to happen before or around the merge, not only
-after it. The triage merge path refuses a pull request that holds `gate:devops` without
-`gate:devops-passed`. Nothing blocks a merge you make by hand in the forge's own UI, which
-is why the label is the ledger and not a lock.
+after it. The triage merge queue lands a pull request that holds `gate:devops` only after
+the DevOps stage released it (the label `fr-queue:release`, with a marker comment from the
+stage). It then holds every later entry until the stage has finished the post-merge work
+(`fr-queue:postmerge-done`, with its own marker comment). `gate:devops-passed` still holds
+the close-out. Nothing blocks a merge you make by hand in the forge's own UI, which is why
+the label is the ledger and not a lock.
 
 ## Which gate does a run get?
 
@@ -124,7 +127,11 @@ labels therefore means candidates only, until someone fixes it. An explicit `--v
 releases a final without asking the ledger: it is the operator's override, not a way around
 a hold.
 
-`fr release status` lists what is waiting.
+A merge queue can hold a release too. While a repository's queue lands a wave, it keeps a
+hold on the release. The script then cuts nothing, candidate or final, so a half-landed wave
+is never released. When the queue is done, the release clears the hold. A hold that nobody
+refreshed for a day is ignored. `fr release status` lists what is waiting, and says when a
+hold is the reason that nothing is cut.
 
 ## What about old work, and the DevOps stage?
 

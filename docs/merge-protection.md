@@ -7,7 +7,7 @@ covers:
   - scripts/configure-main-protection.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-17 added the Issue intake section (batch triage-intake); dispatched runs have their own concurrency group; a missing GitHub Release is created on the next run (batch release-truth)
+reviewed: 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
 ---
 
 # Merge protection for `main`
@@ -60,8 +60,10 @@ The release token is a ruleset bypass actor, so it can push to `main` past the
 rules. It is scoped to this repo with contents and issues write only. It is minted
 per job and revoked when the job ends, and never persisted in the checkout's git
 config. It is kept from the staged test run (`release.py` strips every forge
-token from that subprocess). The token authenticates the two `git push` calls and the
-`gh release` and `gh issue` writes. Every other git command runs credential-free.
+token from that subprocess). The token authenticates the two `git push` calls (the release
+commit and the tag) and the `gh release` and `gh issue` writes. It also authenticates
+a third push, which clears a drained merge queue hold. Every other git command runs credential-free, and
+that includes the fetch of the hold.
 
 Anything else that can run in the release job could still read it, so the job
 runs only trusted code from `main`.
@@ -104,7 +106,8 @@ release fails with a protection refusal (`release.py` reports it by name).
 
 Copy the pieces that the repo needs:
 
-- a `ci-ok` aggregate job in its CI (run on `merge_group` too if it uses a merge queue);
+- a `ci-ok` aggregate job in its CI. Run it on pushes to `fr-queue/**` too: the wave
+  driver tests each combination there. A forge `merge_group` is not used;
 - the `app-token` step and the `steps.app-token.outputs.token || github.token` expression
   from `release.yml`;
 - the script, whose ruleset name (`protect main`), app slug and variable name are
@@ -114,11 +117,16 @@ Install the app on the repo, then follow the steps above with `--repo`.
 
 ## What the wave driver does with it
 
-Nothing to configure. If the base branch's rules include a merge queue, the
-driver puts an approved batch in the queue and does not merge it directly. It reads the
-queue's state each pass, and raises a `queue-ejected` need if the queue drops
-it. If the rules need up-to-date branches, the driver updates the PR branch
-before it merges. See spec §D and §E.
+The wave driver has its own merge queue, and it does not use a forge merge queue. A repo
+whose base branch rules include a forge merge queue is held, and the driver says so.
+
+With `queue.land: push` (the default), the driver lands each tested combination with one
+atomic `git push` straight to the default branch. A ruleset that requires pull requests or
+checks refuses that push. So the identity that pushes must be a bypass actor of the
+ruleset. Otherwise, the repo must use `queue.land: merge`. With it, the driver merges
+each pull request through the forge's merge API. The operator's own credential is never a bypass actor.
+The checks must also run on pushes to `fr-queue/**`, where the driver tests each combination.
+See spec `2026-11-19-wave-merge-queue-design.md` §D and R22.
 
 ## Issue intake
 

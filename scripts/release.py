@@ -21,6 +21,24 @@ with no RC above it, the last final (spec 2026-11-08-sweep-fixes R16); once noth
 waits, the final `X.Y.Z` consumes the fragments. Versions parse through
 `versions.Version`: an RC is `X.Y.ZrcN` on the Python surfaces, `X.Y.Z-rc.N` elsewhere.
 
+0. The merge queue's hold (spec 2026-11-19-wave-merge-queue R17-R19). After the sync, the
+   hold ref `refs/heads/fr-hold/queue` is fetched with plain git (no credential) and its
+   commit message read (`fetch_hold`); `fr release status --from-json` judges it
+   (`check_hold`, credential-free like the gate decision). While it is `open` and was
+   refreshed within 24 hours the run cuts nothing, RC or final: a `--version` run is held
+   too and prints how to clear the hold by hand. An older `open` hold is ignored with a
+   warning; `drained`, `cleared` and no hold never hold. The LAST step of a run that
+   finished, a release published or nothing to cut (`_finish_and_clear`), clears a
+   `drained` hold whose parent, the drained `main`, this run's base contains: a leased push
+   of a `cleared` commit, with the token the job already holds (`clear_hold`): the THIRD
+   authenticated push beside the release commit's and the tag's (the hold's fetch stays
+   credential-free). Every hold commit after the first is a merge whose first parent keeps
+   its meaning and whose second is the hold it replaces, so each write is a fast-forward
+   (the first parent is the one read). Only a run that finished (`EXIT_OK`) clears; a
+   superseded run, a held one and a failed one (`EXIT_FLOOR`) clear nothing, and a clear
+   that loses its lease leaves the newer queue's hold alone. `publish` reads the hold again
+   before its push: one opened since `prepare` read it holds the release (nothing is pushed).
+
 1. Fetch and reset to the **tip** of `origin/main`, so a run sees every
    fragment merged before it started.
 2. Read `.changes/*.yaml` (`changes.load_pending`; an invalid one refuses the
@@ -85,6 +103,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -353,15 +372,14 @@ def _run_gh_read(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["gh", *args], capture_output=True, text=True, env=env)
 
 
-def _run_release_decide(
-    repo: Path, facts: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
-) -> list[dict[str, object]]:
-    """`fr release status --from-json FACTS --json`'s `waiting` (exit-gates R21).
+def _fr_status(
+    repo: Path, facts: Path, run: Callable[..., subprocess.CompletedProcess[str]]
+) -> tuple[dict[str, object] | None, str | None]:
+    """`fr release status --from-json FACTS --json`: the schema-1 document, or why not.
 
     fr only decides here: release.py already read the forge, so fr runs with no forge
     credential at all (`_credential_free_env`, plus an empty gh config dir so no stored
-    login is readable either), the same rule as the staged suite. Any failure refuses:
-    an empty answer would cut a final."""
+    login is readable either), the same rule as the staged suite."""
     with tempfile.TemporaryDirectory(prefix="fr-release-gh-") as gh_config:
         env = {**_credential_free_env(), "GH_CONFIG_DIR": gh_config}
         r = run(
@@ -381,19 +399,26 @@ def _run_release_decide(
             text=True,
             env=env,
         )
-    why = None
-    waiting: object = None
     if r.returncode != 0:
-        why = (r.stderr or r.stdout).strip() or f"exit {r.returncode}"
-    else:
-        try:
-            doc = json.loads(r.stdout)
-        except json.JSONDecodeError as exc:
-            doc, why = None, f"not JSON: {exc}"
-        if isinstance(doc, dict) and doc.get("schema") == STATUS_SCHEMA:
-            waiting = doc.get("waiting")
-        if why is None and not isinstance(waiting, list):
-            why = f"no schema-{STATUS_SCHEMA} `waiting` list in {r.stdout.strip()[:200]!r}"
+        return None, (r.stderr or r.stdout).strip() or f"exit {r.returncode}"
+    try:
+        doc = json.loads(r.stdout)
+    except json.JSONDecodeError as exc:
+        return None, f"not JSON: {exc}"
+    if not isinstance(doc, dict) or doc.get("schema") != STATUS_SCHEMA:
+        return None, f"no schema-{STATUS_SCHEMA} document in {r.stdout.strip()[:200]!r}"
+    return doc, None
+
+
+def _run_release_decide(
+    repo: Path, facts: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+) -> list[dict[str, object]]:
+    """`fr release status --from-json FACTS --json`'s `waiting` (exit-gates R21). Any
+    failure refuses: an empty answer would cut a final."""
+    doc, why = _fr_status(repo, facts, run)
+    waiting = doc.get("waiting") if doc is not None else None
+    if why is None and not isinstance(waiting, list):
+        why = f"no schema-{STATUS_SCHEMA} `waiting` list in {json.dumps(doc)[:200]!r}"
     if why is not None:
         raise ReleaseError(
             "`fr release status --from-json` failed, so what still waits on a post-merge "
@@ -401,6 +426,23 @@ def _run_release_decide(
         )
     assert isinstance(waiting, list)
     return waiting
+
+
+def _run_hold_decide(
+    repo: Path, facts: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+) -> dict[str, object]:
+    """The merge queue hold's verdict (R18): `fr release status --from-json`'s `held` (None
+    or the scope and wave holding) and `warnings`. A failure refuses, never reads as free:
+    a release that ran over an open hold would cut a half-landed wave."""
+    doc, why = _fr_status(repo, facts, run)
+    if doc is not None and ("held" not in doc or not isinstance(doc.get("warnings"), list)):
+        why = f"no `held` verdict in {json.dumps(doc)[:200]!r}"
+    if why is not None or doc is None:
+        raise ReleaseError(
+            "`fr release status --from-json` failed, so whether a merge queue holds the "
+            f"release is unknown; refusing to release over it:\n{why}"
+        )
+    return {"held": doc["held"], "warnings": doc["warnings"]}
 
 
 @dataclass
@@ -414,6 +456,7 @@ class Commands:
     migrate: Callable[[Path], str | None] = _run_migrate
     gh_read: Callable[[list[str]], subprocess.CompletedProcess[str]] = _run_gh_read
     decide: Callable[[Path, Path], list[dict[str, object]]] = _run_release_decide
+    hold_decide: Callable[[Path, Path], dict[str, object]] = _run_hold_decide
     shard: Callable[..., str | None] = _run_shard_tests
     collect: Callable[[Path, Path], str | None] = _run_collect
 
@@ -446,6 +489,171 @@ def _out(repo: Path, *args: str) -> str:
 
 def _bot(*args: str) -> list[str]:
     return ["-c", f"user.name={BOT_NAME}", "-c", f"user.email={BOT_EMAIL}", *args]
+
+
+# -- the merge queue's hold ------------------------------------------------------
+# Spec 2026-11-19-wave-merge-queue R17-R19, §G. A repo whose merge queue is landing a wave
+# keeps `refs/heads/fr-hold/queue`: a commit whose message reads `fr-hold: <state> scope
+# <scope-id> wave <N|-> opened <ISO> refreshed <ISO>`. While it is `open` (and fresh) this
+# script cuts nothing; after a finished run whose base contains a `drained` hold's parent
+# it clears the hold with a leased push.
+
+HOLD_REF = "refs/heads/fr-hold/queue"
+HOLD_LOCAL = "refs/fr-hold/queue"
+CLEAR_COMMAND = "git push origin --delete fr-hold/queue"
+_HOLD_RE = re.compile(
+    r"^fr-hold: (open|drained|cleared) scope (\S+) wave (\d+|-) opened (\S+) refreshed (\S+)\s*$"
+)
+
+
+class ReleaseHeldError(Exception):
+    """A merge queue's `open` hold holds the release: nothing is cut (R18)."""
+
+
+@dataclass
+class Hold:
+    """The hold commit as read: *state* `open`, `drained` or `cleared`, the scope and wave
+    that wrote it, its *parent* (the queue's base, or the drained `main`) and its sha."""
+
+    sha: str
+    parent: str
+    state: str
+    scope: str
+    wave: int | None
+    opened: str | None
+    refreshed: str | None
+
+    def facts(self) -> dict[str, object]:
+        return asdict(self)
+
+
+def parse_hold(sha: str, parent: str, message: str) -> Hold:
+    """A hold from its commit message. A ref that is no hold message reads as an `open`
+    hold of scope `unreadable`: it holds, until someone clears it."""
+    first = message.strip().splitlines()[0] if message.strip() else ""
+    m = _HOLD_RE.match(first)
+    if m is None:
+        return Hold(sha, parent, "open", "unreadable", None, None, None)
+    state, scope, wave, opened, refreshed = m.groups()
+    return Hold(sha, parent, state, scope, None if wave == "-" else int(wave), opened, refreshed)
+
+
+class HoldReadError(ReleaseError):
+    """The hold ref could not be read; *reason* is git's own words. `fetch_hold` words the
+    refusal for a release that has not cut; `clear_hold` words its own, for one that has."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+def fetch_hold(repo: Path) -> Hold | None:
+    """The hold ref, fetched with plain git and no credential (a public repo needs none),
+    and its commit message read: `git ls-remote` gives only the sha. None when the remote
+    has no such ref; any other failure refuses, because an unread hold may be open."""
+    r = _git(
+        repo, "fetch", "--quiet", "--no-tags", REMOTE, f"+{HOLD_REF}:{HOLD_LOCAL}", check=False
+    )
+    if r.returncode != 0:
+        if "couldn't find remote ref" in r.stderr:
+            _git(repo, "update-ref", "-d", HOLD_LOCAL, check=False)
+            return None
+        raise HoldReadError(
+            f"cannot read the merge queue hold {HOLD_REF}: {r.stderr.strip()}; refusing to "
+            "release over a hold that may be open",
+            r.stderr.strip(),
+        )
+    sha = _rev(repo, HOLD_LOCAL)
+    # the FIRST parent only: a write after the first is a merge whose second parent is the
+    # hold it replaced (R17), and only the first has the meaning the checks read
+    first = _git(repo, "rev-parse", "--verify", "--quiet", f"{sha}^1", check=False)
+    parents = [first.stdout.strip()] if first.returncode == 0 else []
+    message = _out(repo, "log", "-1", "--format=%B", sha)
+    return parse_hold(sha, parents[0] if parents else "", message)
+
+
+def check_hold(repo: Path, cmds: Commands) -> dict[str, object] | None:
+    """R18: the hold's verdict, from `fr release status --from-json`: the `held` record
+    (scope, wave, refreshed) when an `open`, fresh hold holds the release, else None. Its
+    warnings are printed. Without a hold fr is not asked."""
+    hold = fetch_hold(repo)
+    if hold is None:
+        return None
+    with tempfile.TemporaryDirectory(prefix="fr-release-hold-") as tmp:
+        path = Path(tmp) / "facts.json"
+        path.write_text(json.dumps({"prs": [], "hold": hold.facts()}))
+        verdict = cmds.hold_decide(repo, path)
+    for warning in verdict.get("warnings") or []:  # type: ignore[attr-defined]
+        print(f"warning: {warning}")
+    held = verdict.get("held")
+    return held if isinstance(held, dict) else None
+
+
+def held_message(held: dict[str, object], override: str | None) -> str:
+    wave = "between waves" if held.get("wave") is None else f"wave {held['wave']}"
+    text = (
+        f"held: the merge queue of scope {held.get('scope')} ({wave}) holds the release "
+        f"(hold open, refreshed {held.get('refreshed') or 'at an unknown time'}); nothing is "
+        "cut, RC or final. The drain of the queue releases it"
+    )
+    if override is not None:
+        text += (
+            f"\n  --version {override} is held too, and no later run carries it. To release "
+            f"it anyway, clear the hold by hand ({CLEAR_COMMAND}) and re-dispatch: "
+            f"gh workflow run release.yml -f version={override}"
+        )
+    return text
+
+
+def clear_hold(repo: Path) -> None:
+    """R17, R18: the last step of a FINISHED run (a release cut, or nothing to cut). When the
+    hold reads `drained` and this run's base (HEAD) contains its parent, the drained `main`,
+    push a `cleared` commit leased on the drained sha, so a newer queue's hold is never
+    cleared. A hold whose parent this run did not see is left to the run its push starts.
+    A superseded or failed run never reaches here."""
+    try:
+        hold = fetch_hold(repo)
+    except HoldReadError as exc:  # l-errors-r13: the release already published: say so
+        raise ReleaseError(
+            f"release published; could not read the hold to clear it: {exc.reason}; clear it "
+            "by re-running the release workflow (it clears a drained hold), or with "
+            "`fr triage batch queue-retry`"
+        ) from exc
+    if hold is None or hold.state != "drained" or not hold.parent:
+        return
+    contained = _git(repo, "merge-base", "--is-ancestor", hold.parent, "HEAD", check=False)
+    if contained.returncode != 0:
+        print(
+            f"the hold was drained at {hold.parent[:12]}, which this run's base does not "
+            "contain: left for the run its push starts"
+        )
+        return
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    wave = "-" if hold.wave is None else str(hold.wave)
+    message = (
+        f"fr-hold: cleared scope {hold.scope} wave {wave} opened {hold.opened or now} "
+        f"refreshed {now}"
+    )
+    tree = f"{hold.parent}^{{tree}}"
+    # a merge: the first parent is the drained main, the second the hold it replaces, so the
+    # push is a fast-forward and a remote that forbids non-fast-forward pushes takes it
+    commit = _out(
+        repo, *_bot("commit-tree", tree, "-p", hold.parent, "-p", hold.sha, "-m", message)
+    ).strip()
+    pushed = _git(
+        repo, "push", "--quiet", f"--force-with-lease={HOLD_REF}:{hold.sha}", REMOTE,
+        f"{commit}:{HOLD_REF}", check=False, auth=True,
+    )  # fmt: skip
+    if pushed.returncode == 0:
+        print(f"cleared the merge queue hold (drained at {hold.parent[:12]})")
+        return
+    if "stale info" in pushed.stderr:
+        print("the hold moved since it was read: not cleared (a newer queue owns it)")
+        return
+    raise ReleaseError(
+        f"git push of the cleared hold failed: {pushed.stderr.strip()}; the release is done, "
+        f"and the hold stays drained until a run clears it or you do ({CLEAR_COMMAND})"
+    )
 
 
 def sync_to_tip(repo: Path) -> None:
@@ -950,6 +1158,12 @@ def prepare(
     is nothing to release. With `out`, writes the plan and the bundle the other jobs
     materialise (spec 2026-11-01-ci-speed §3.D)."""
     sync_to_tip(repo)
+    held = check_hold(repo, cmds)
+    if held is not None:  # R18: nothing is cut while a queue's hold is open
+        if override is not None:
+            raise ReleaseError(held_message(held, override))
+        print(held_message(held, None))
+        raise ReleaseHeldError
     base = _rev(repo, "HEAD")
     plan = compute(repo, override, cmds)
     if plan.new is None:
@@ -1034,21 +1248,41 @@ def publish(repo: Path, staged: Staged, cmds: Commands) -> int:
     if tip == staged.staged_sha:
         # A rerun after a push that landed and a `finish` that failed: tag it.
         print(f"{RELEASE_PREFIX}{staged.version} is already on main; finishing it")
-        return finish(repo, cmds)
+        return _finish_and_clear(repo, cmds)
     if tip != staged.base_sha:
-        return _superseded(staged, tip)
+        return _superseded(staged, tip)  # a superseded run clears nothing (R18)
+    held = check_hold(repo, cmds)  # a hold opened during the suite holds the release too
+    if held is not None:
+        print(held_message(held, None))
+        print(f"{RELEASE_PREFIX}{staged.version} was staged before the hold opened: "
+              "nothing is pushed")  # fmt: skip
+        return EXIT_OK
     if push(repo) == "race":
         return _superseded(staged, fetch_origin(repo))
     kind = "an RC, no fragment consumed" if staged.rc else f"{len(staged.fragments)} fragment(s)"
     print(f"pushed {RELEASE_PREFIX}{staged.version} ({kind})")
-    return finish(repo, cmds)
+    return _finish_and_clear(repo, cmds)
+
+
+def _finish_and_clear(repo: Path, cmds: Commands) -> int:
+    """`finish`, then, as the last step of a run that FINISHED (`EXIT_OK`: a release published,
+    or nothing to cut), clear a drained hold its base covers (R17, R18). A run `finish`
+    reports as failed (`EXIT_FLOOR`: tagged and released, but a floor names another release)
+    clears nothing, and a failure in `finish` raises past the clear."""
+    code = finish(repo, cmds)
+    if code == EXIT_OK:
+        clear_hold(repo)
+    return code
 
 
 def release_to_main(repo: Path, override: str | None, cmds: Commands) -> int:
     """Steps 1-6 in one process: prepare, one unsharded suite, publish."""
-    staged = prepare(repo, override, cmds)
+    try:
+        staged = prepare(repo, override, cmds)
+    except ReleaseHeldError:
+        return EXIT_OK
     if staged is None:
-        return finish(repo, cmds)
+        return _finish_and_clear(repo, cmds)
     check_staged_suite(repo, staged.version, cmds)
     return publish(repo, staged, cmds)
 
@@ -1200,6 +1434,10 @@ def finish(repo: Path, cmds: Commands) -> int:
 
 
 def dry_run(repo: Path, override: str | None, cmds: Commands) -> int:
+    held = check_hold(repo, cmds)
+    if held is not None:
+        print(held_message(held, override))
+        return EXIT_OK
     plan = compute(repo, override, cmds)
     if plan.new is None:
         tagged = "tagged" if tag_exists(repo, plan.current) else "untagged — would tag it"
@@ -1237,10 +1475,14 @@ def _github_output(path: Path | None, **values: str) -> None:
 def _run_subcommand(args: argparse.Namespace, repo: Path, cmds: Commands) -> int:
     if args.cmd == "prepare":
         out = Path(args.out)
-        staged = prepare(repo, args.version or None, cmds, out)
+        try:
+            staged = prepare(repo, args.version or None, cmds, out)
+        except ReleaseHeldError:
+            _github_output(args.github_output, cut="false")
+            return EXIT_OK
         if staged is None:
             _github_output(args.github_output, cut="false")
-            return finish(repo, cmds)  # an untagged RC at HEAD is tagged here
+            return _finish_and_clear(repo, cmds)  # an untagged RC at HEAD is tagged here
         _github_output(
             args.github_output,
             cut="true",

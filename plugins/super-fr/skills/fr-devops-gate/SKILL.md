@@ -4,7 +4,7 @@ description: >
   Use when a delivered run's effective gates include devops (its plan carries manual
   operations, or its spec declares `gate: devops`), when `fr pickup --run` prints a DevOps
   brief, or when the operator asks to run the DevOps stage, apply a PR's manual operations,
-  or merge a PR that gate:devops holds.
+  or release to the merge queue a PR that gate:devops holds.
 ---
 
 # fr-devops-gate
@@ -18,7 +18,7 @@ label alone and closes no tracker (a close is a comment), so record what passed 
 in the run's journal instead. Under `forge.labels: off` there is no gate label to pass.
 
 A run whose plan carries ops does not end at `deliver`. Its DevOps stage applies the
-pre-merge ops, merges the PR, applies the post-merge ops, records the devops Test Plan
+pre-merge ops, releases the PR to the merge queue (which lands it), applies the post-merge ops, records the devops Test Plan
 steps, passes `gate:devops`, hands the tester steps to the Tester gate and archives. One
 command drives all of it; this skill holds only the judgement the command cannot.
 
@@ -39,9 +39,9 @@ and land it by its own pull request, not on the feature branch.
 | Stage | What it does |
 |---|---|
 | 1 | Refuses an ops gap (a devops-gated run with command steps and no op, no `none:`), reading the PR head, or the default branch's tip once merged; then brings up the ops workspace `chore/ops-<slug>` from the PR head (from the default branch once the PR merged) on the ops profile, asks you to trust the op set when it changed (`fr ops trust`, on the host), then runs pre-merge status and applies each open op after its own confirmation |
-| 2 | Merges the PR, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state |
+| 2 | Posts a marker comment naming the head and diff it verified, then adds the label `fr-queue:release`, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state. It merges nothing: the wave merge queue lands the PR as the last entry of its push (a repo with no `queue:` in `.fr/triage.yaml` has none: merge the PR by hand), and the run stops until the forge reads it merged; the driver then names `fr ops gate --run <id>` under Needs you, which resumes at stage 3 |
 | 3 | `fr isolation verify-merge`, rebases the ops branch onto the default branch, runs every `ready:` |
-| 4 | Post-merge status and apply |
+| 4 | Post-merge status and apply, then a marker comment and the label `fr-queue:postmerge-done`, which together lift the queue's barrier (nothing lands behind the PR until then) |
 | 5 | Probes each `(op: <id>)` step, asks for the others' outcome, and records it (`fr closeout outcome`) |
 | 6 | `fr gate pass --gate devops --run <id>` from the ops workspace |
 | 7 | Keeps `gate:tester` and lists the steps the Tester gate owns |
@@ -59,8 +59,9 @@ already carries. A PR whose own diff changes the ops profile is refused before a
 comes up (it merges in its own PR first), and so is a cut whose profile is not the
 default branch's (rebase an open PR onto it). So stopping is always safe: re-run
 the same command. Pre-merge evidence never lands on the PR head, so
-the reviewed head and its checks stay valid. A PR merged by hand in the forge counts as
-stage 2 done.
+the reviewed head and its checks stay valid. Stage 2 is done only when the forge reads the
+PR merged, which the queue brings about (or you, by hand, in a repo with no queue); fr never records it. A push to the PR after the
+release changes its diff, and the driver then removes the label: run the command again.
 
 ## Reading an OPEN reason
 
@@ -86,14 +87,14 @@ command could read the result (an API, a CLI, a file the op wrote), write that `
 instead: a check runs every time and catches drift; an attestation is a statement about
 one moment. An op that has a `check:` cannot be attested.
 
-## Confirming the merge
+## Confirming the release
 
-The merge asks its own question even under `--yes`. Before answering yes, read it:
+The release asks its own question even under `--yes`. Before answering yes, read it:
 the PR number and head must be the ones you reviewed, and the pre-merge state must list
 every pre-merge op as closed. If the head moved since stage 1, the stage refuses and
 names the way back (take the ops workspace down and re-run, which re-cuts it from the
-new head and re-checks trust). On a forge fr cannot merge through, the stage stops
-naming the manual merge; merge in the forge at that head, then re-run.
+new head and re-checks trust). On a forge fr cannot label through, the stage stops
+naming the label; add it by hand, then re-run.
 
 ## Devops steps and the tester hand-off
 
@@ -115,5 +116,5 @@ never pass it by hand with a note you made up.
 ## What the stage never does
 
 - It never runs a probe of an untrusted op set, and trust is granted only on the host.
-- It never pushes to the PR head, and never merges a head it did not verify.
+- It never pushes to the PR head, releases a head it did not verify, or calls a merge.
 - It never skips a failed stage: the first failure stops the run, naming the stage.

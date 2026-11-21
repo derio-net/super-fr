@@ -212,6 +212,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "walk-recording-prints-close",
         "awaiting-live-triage",
         "matrix-status-split",
+        "wave-queue-migratable-validation",
+        "wave-queue-closeout-migrates",
         "debt-report",
         "repo-settings-file",
         "repo-settings-policy-off",
@@ -282,6 +284,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "owed-close-at-merge",
         "archive-refusal-writes-nothing",
         "archive-dry-run",
+        "wave-queue-release-hold",
     }
     assert on_disk == here
 
@@ -320,6 +323,18 @@ def test_awaiting_live_triage(installed: Path, tmp_path: Path) -> None:
 
 def test_matrix_status_split(installed: Path, tmp_path: Path) -> None:
     _scenario("matrix-status-split", installed, tmp_path)
+
+
+def test_wave_queue_release_hold(installed: Path, tmp_path: Path) -> None:
+    _scenario("wave-queue-release-hold", installed, tmp_path)
+
+
+def test_wave_queue_migratable_validation(installed: Path, tmp_path: Path) -> None:
+    _scenario("wave-queue-migratable-validation", installed, tmp_path)
+
+
+def test_wave_queue_closeout_migrates(installed: Path, tmp_path: Path) -> None:
+    _scenario("wave-queue-closeout-migrates", installed, tmp_path)
 
 
 def test_debt_report(installed: Path, tmp_path: Path) -> None:

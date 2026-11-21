@@ -8,12 +8,10 @@ import pytest
 from fr.gates import POST_MERGE_GATES, PRE_MERGE_HOLD_GATES
 from fr.ops.load import plan_has_ops
 from fr.run.model import RunState, StepRecord
-from fr.triage.batch_merge import merge_ready
 from fr.verification.exit import exit_for_spec, run_exit
 from fr.verification.labels import desired_labels
 
 from tests.unit.requirements_support import row, write_matrix
-from tests.unit.test_triage_batch_merge_ready import _ctx, _solo
 
 SPEC = "docs/superpowers/specs/s.md"
 PLAN = "docs/superpowers/plans/p"
@@ -108,35 +106,50 @@ def test_the_gate_constants() -> None:
     assert POST_MERGE_GATES == frozenset({"tester", "devops"})
 
 
-def test_the_merge_path_holds_a_pr_labelled_gate_devops(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _solo(tmp_path, monkeypatch)
-    forge.prs[1001]["labels"] = [*forge.prs[1001]["labels"], "gate:devops"]
-    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
-    attempt = merge_ready(ctx, slot, None)
-    assert attempt.outcome == "unapproved" and "gate:devops" in attempt.reason
-    assert "fr ops gate" in attempt.reason
-    assert forge.merged == []
+def _queue_view(labels: tuple[str, ...]) -> tuple[list[str], list[str]]:
+    """What the pass does with a green, approved batch PR carrying *labels*: the queue's
+    entries and the held reports (the retired train's `held` lines, kept: R22)."""
+    from datetime import UTC, datetime
+
+    from fr.triage.approval import Approved
+    from fr.triage.batch import QueueEntry
+    from fr.triage.batch_drive import LivePr, Snapshot, drive_pass
+    from fr.triage.model import Batch, PullRequest
+    from fr.triage.wave_queue import QueueConfig
+
+    batch = Batch.model_validate({
+        "id": "b1", "title": "b1", "ids": ["super-fr#1"], "wave": 1,
+        "events": [{"kind": "dispatch", "at": "2026-11-20T09:00:00Z", "runner": "fake",
+                    "handle": "h", "branch": "feat/batch-b1"}],
+    })  # fmt: skip
+    pr = PullRequest(repo="o/r", number=1001, title="t", state="OPEN", is_draft=False,
+                     merged_at=None, created_at="2026-11-20T09:30:00+00:00", url="u",
+                     head_ref="feat/batch-b1", head_oid="h1", labels=list(labels))  # fmt: skip
+    live = LivePr(number=1001, state="OPEN", draft=False, head="h1", labels=labels)
+    snap = Snapshot(
+        batches=(batch,), stages={"b1": "pr-open"}, queue=(QueueEntry(batch, pr),),
+        live={"b1": live}, repos={"b1": "o/r"}, now=datetime(2026, 11, 20, 12, tzinfo=UTC),
+        approvals={"b1": Approved("h1")}, wave_queues={"o/r": QueueConfig()},
+    )  # fmt: skip
+    plan = drive_pass(snap)
+    opened = [a.kind for q in plan.queues for a in q.actions if a.kind == "queue-open"]
+    return opened, [a.detail for a in plan.actions if a.kind == "held"]
 
 
-def test_the_merge_path_lets_a_passed_devops_gate_through(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _solo(tmp_path, monkeypatch)
-    labels = forge.prs[1001]["labels"]
-    forge.prs[1001]["labels"] = [*labels, "gate:devops", "gate:devops-passed"]
-    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
-    assert merge_ready(ctx, slot, None).outcome == "merged"
+def test_the_merge_path_holds_a_pr_labelled_gate_devops() -> None:
+    entries, held = _queue_view(("approved-fr", "gate:devops"))
+    assert entries == []  # the DevOps stage owns that merge, not the queue
+    assert any("gate:devops" in h and "fr ops gate" in h for h in held)
 
 
-def test_a_gate_tester_label_does_not_hold_the_merge(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _solo(tmp_path, monkeypatch)
-    forge.prs[1001]["labels"] = [*forge.prs[1001]["labels"], "gate:tester"]
-    ctx, (slot,) = _ctx(tmp_path, forge, checkout)
-    assert merge_ready(ctx, slot, None).outcome == "merged"
+def test_the_merge_path_lets_a_passed_devops_gate_through() -> None:
+    entries, held = _queue_view(("approved-fr", "gate:devops", "gate:devops-passed"))
+    assert entries == ["queue-open"] and held == []
+
+
+def test_a_gate_tester_label_does_not_hold_the_merge() -> None:
+    entries, held = _queue_view(("approved-fr", "gate:tester"))
+    assert entries == ["queue-open"] and held == []
 
 
 def test_p2_r5_gates_off_promotes_no_devops_gate(tmp_path: Path) -> None:

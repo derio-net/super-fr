@@ -17,12 +17,14 @@ from typing import Any
 
 import pytest
 from fr.triage.batch_closeout import (
+    MIGRATION_SUBJECT,
     Member,
     closeout_title,
     collected_branch,
     execute,
     member_steps,
     next_collected,
+    owned_stale,
     plan_lines,
     step_ranges,
 )
@@ -46,6 +48,21 @@ class FakeTree:
     squashed: list[tuple[str, str]] = field(default_factory=list)
     pushed: list[str] = field(default_factory=list)
     changed: bool = True
+    stale: list[str] = field(default_factory=list)  # live artifacts a migration would move
+    moves: dict[str, list[str] | None] = field(default_factory=dict)  # branch -> archive's moves
+    committed: list[tuple[list[str], str]] = field(default_factory=list)
+
+    def stale_artifacts(self) -> list[str]:
+        return list(self.stale)
+
+    def archive_moves(self, branch: str, default_ref: str) -> list[str] | None:
+        assert default_ref == "origin/main"
+        return self.moves.get(branch, [])
+
+    def commit_paths(self, paths: list[str], message: str) -> str | None:
+        self.committed.append((list(paths), message))
+        self.sha += 1
+        return f"sha{self.sha}"
 
     def head(self) -> str:
         return f"sha{self.sha}"
@@ -331,3 +348,68 @@ def test_a_branch_no_run_names_reads_no_run(tmp_path: Any) -> None:
     from fr.triage.ledger import closeout_read
 
     assert closeout_read(_closeout_repo(tmp_path), "origin/main", "fix/x", REPO).run is None
+
+
+# ----------------------------------------- R16: the migration commit before the archive
+
+
+def _member(batch: str) -> Member:
+    return Member(batch=batch, branch=f"feat/batch-{batch}", run=f"r-{batch}")
+
+
+RUN_A = "docs/superpowers/runs/r-a.yaml"
+PLAN_A = "docs/superpowers/plans/plan-a/_meta.yaml"
+JOURNAL_A = "docs/superpowers/journals/plans/plan-a.md"
+OTHER = "docs/superpowers/runs/r-other.yaml"
+SPEC_A = "docs/superpowers/specs/2026-10-01-spec-a-design.md"  # stem `<slug>-design`
+FRAGMENT = "docs/acceptance/features/2026-10-01-spec-a-design.yaml"  # the archive never moves it
+MOVES_A = [RUN_A, "docs/superpowers/plans/plan-a", JOURNAL_A, SPEC_A]
+
+
+def test_the_stale_artifacts_the_archive_moves_are_migrated_as_their_own_commit_first() -> None:
+    member = _member("a")
+    tree = FakeTree(stale=[RUN_A, PLAN_A, JOURNAL_A, SPEC_A, FRAGMENT, OTHER],
+                    moves={"feat/batch-a": MOVES_A})  # fmt: skip
+    result, _ = _run([member], tree, FakeForge())
+    migrate = tree.calls[0]
+    # the spec file (stem `<slug>-design`) is migrated; the acceptance fragment, which the
+    # archive never moves, and OTHER, which no member archives, are not
+    assert migrate == ["migrate", "artifacts", "--yes", "--path", RUN_A, "--path", PLAN_A,
+                       "--path", JOURNAL_A, "--path", SPEC_A]  # fmt: skip
+    assert tree.committed == [([RUN_A, PLAN_A, JOURNAL_A, SPEC_A], MIGRATION_SUBJECT)]
+    assert tree.calls[1][:2] == ["isolation", "verify-merge"]  # the archive steps come after
+    # the archive is squashed onto the migration commit, which therefore stays a commit
+    assert tree.squashed[0][0] == "sha2" and result.pr == 900
+
+
+def test_nothing_stale_runs_no_migration_and_no_extra_commit() -> None:
+    tree = FakeTree(stale=[OTHER], moves={"feat/batch-a": MOVES_A})
+    _run([_member("a")], tree, FakeForge())
+    assert not any(c[0] == "migrate" for c in tree.calls) and tree.committed == []
+    assert tree.squashed[0][0] == "sha0"
+
+
+def test_a_member_whose_archive_moves_cannot_be_read_migrates_nothing_of_it() -> None:
+    tree = FakeTree(stale=[RUN_A], moves={"feat/batch-a": None})
+    _run([_member("a")], tree, FakeForge())
+    assert not any(c[0] == "migrate" for c in tree.calls)
+
+
+def test_a_refused_migration_is_undone_and_the_archive_goes_on_as_it_would() -> None:
+    tree = FakeTree(stale=[RUN_A], codes={("migrate", ""): 2}, moves={"feat/batch-a": MOVES_A})
+    said: list[str] = []
+    result = execute(
+        [_member("a")], tree=tree, forge=FakeForge(), repo=REPO, default="main",
+        branch=BRANCH, record=lambda b, br: None, hold=lambda b, w: None, say=said.append,
+    )  # fmt: skip
+    assert tree.resets[0] == "sha0" and tree.committed == []
+    assert any("not migrated before the archive" in line for line in said)
+    assert result.pr == 900  # the archive still ran; if it needs the migration it holds
+
+
+def test_owned_stale_is_the_archives_move_set_exactly_and_a_plan_folder_covers_its_files() -> None:
+    assert owned_stale(
+        [RUN_A, PLAN_A, JOURNAL_A, SPEC_A, FRAGMENT, "docs/superpowers/runs/r-ab.yaml",
+         "docs/superpowers/runs/r-a.records/x.yaml", "docs/superpowers/plans/plan-ab/_meta.yaml"],
+        MOVES_A,
+    ) == [RUN_A, PLAN_A, JOURNAL_A, SPEC_A]  # fmt: skip

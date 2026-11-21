@@ -31,6 +31,7 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
     World,
     _batch,
     _dispatch_event,
+    _opened,
     _sandbox,
     _state,
     checkout_fixture,
@@ -189,7 +190,7 @@ def test_a_changed_repo_is_collected_and_acted_on(
     code, out = rig.drive(tmp_path)
 
     assert rig.collects == [None], "the scope's one repo changed: it is read"
-    assert world.merged == [(101, "sha-101", "squash")], out
+    assert _opened(world), out
     stored = pacing_state.load(tmp_path)[0]
     assert stored.etags[REPO][issues_probe(REPO)] == "E-new", "promoted after the facts"
 
@@ -297,7 +298,7 @@ def test_the_cloud_pass_below_the_floor_is_the_same_essential_only_pass(
     result = _pass(state, tmp_path / "outbox.json")
     flat = " ".join(result.output.split())
 
-    assert world.merged and world.merged[0][0] == 103, result.output
+    assert _opened(world), result.output  # the PR is the queue's: nothing merges here
     assert f"held b1: {QUOTA_HOLD}" in result.output and f"held b2: {QUOTA_HOLD}" in result.output
     assert "essential-only pass, dispatch held" in flat
     assert pacing_state.load(state)[0].next_pass_at is not None
@@ -321,7 +322,7 @@ def test_a_pass_that_fails_after_writing_its_facts_is_never_followed_by_a_quiet_
     assert "quiet:" not in out, out
     assert len(rig.collects) == 2, "the pass after the failed one collects and plans"
     assert rig.collects[1] is None, "and carries nothing: its merges are not deferred"
-    assert "merge b1: merged PR #101" in out, "and plans the merge the failed pass owed"
+    assert "queue-open" in out, "and plans the merge the failed pass owed"
 
 
 def test_a_paced_drive_with_no_previous_facts_below_the_floor_reads_and_merges(
@@ -337,7 +338,7 @@ def test_a_paced_drive_with_no_previous_facts_below_the_floor_reads_and_merges(
     code, out = rig.drive(tmp_path)
 
     assert rig.collects == [None], out
-    assert world.merged == [(101, "sha-101", "squash")], out
+    assert _opened(world), out
     assert pacing_state.load(tmp_path)[0].etags[REPO] == {issues_probe(REPO): "E-0"}
 
 

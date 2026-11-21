@@ -41,25 +41,24 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
-    REFUSALS_BEFORE_NEED,
+    QUEUE_REPORT_KEY,
     LivePr,
     Snapshot,
     checks_verdict,
     closeout_event,
     closeout_item_id,
     drive_pass,
-    enqueue_refusals,
     fact_ledger_unknown,
     fact_ledgers,
     held_archive_conflict,
     held_conflict,
-    last_enqueue,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.errors import TriageError
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
@@ -74,6 +73,8 @@ from fr.triage.model import (
     RedHandbackEvent,
     Severity,
 )
+from fr.triage.queue_exec import queue_config
+from fr.triage.scope_config import scope_id
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -102,12 +103,45 @@ def collected(facts: Facts) -> datetime:
 # ------------------------------------------------------------- the driver's view
 
 
+QUEUE_CONFIG_NEED = (
+    "{repo} has open batch PRs and no `queue:` block in .fr/triage.yaml, so the driver merges "
+    "none of them: add `queue: {{ci: push}}` (and run the CI workflows that report required "
+    "checks on pushes to `fr-queue/**`), or `queue: {{ci: none}}` in a repo with no CI"
+)
+
+
+def queue_unconfigured(snap: Snapshot, facts: Facts) -> dict[str, tuple[str, str]]:
+    """Each repo with a `pr-open` batch whose `.fr/triage.yaml` names no `queue.ci`: the
+    driver's queue refuses it and merges nothing (wave-merge-queue R7, R22), so the board
+    says so from the facts alone. Repo -> (its first such batch, the one line to act on)."""
+    out: dict[str, tuple[str, str]] = {}
+    for b in snap.batches:
+        repo = snap.repos.get(b.id)
+        if repo is None or repo in out or snap.stages.get(b.id) != "pr-open":
+            continue
+        block = facts.config_for(repo).queue
+        if block is None or block.ci is None:
+            out[repo] = (b.id, QUEUE_CONFIG_NEED.format(repo=repo))
+    return out
+
+
+def facts_scope_args(facts: Facts) -> tuple[str, ...]:
+    """The options a pasted command carries to read this scope, as the driver's own do: `--repo`
+    for a one-repo scope, `--org` for an owner's. A group has no option of its own."""
+    if facts.kind == "org":
+        return ("--org", facts.scope)
+    if facts.kind == "repo" and len(facts.repos) == 1:
+        return ("--repo", facts.repos[0])
+    return ()
+
+
 def drive_snapshot(
     facts: Facts,
     judgements: Judgements,
     *,
     max_inflight: int = DEFAULT_MAX_INFLIGHT,
     ci_none: Collection[str] = (),
+    scope_args: Sequence[str] | None = None,
 ) -> Snapshot:
     """The snapshot the driver would decide from, built from the facts alone: each
     open batch PR as the facts show it (no forge read), every stage derived, the
@@ -140,12 +174,27 @@ def drive_snapshot(
             when = _parse(pr.merged_at if pr else None)
             if when is not None:
                 merged_at[b.id] = when
+    # The wave merge queue plans offline too, from the judgements' own queue records and the
+    # config the facts carry (R25, R28): no hold, base or check is read, so what it says is
+    # what the events say, and the board shows the queue's line and its Needs.
+    queue_cfg = {
+        r: queue_config(block) for r in sorted(set(repos.values()))
+        if (block := facts.config_for(r).queue) is not None and block.ci is not None
+    }  # fmt: skip
+    try:
+        driven_by = scope_id(facts.scope)
+    except TriageError:
+        driven_by = ""
     return Snapshot(
         batches=tuple(batches),
         stages=stages,
         queue=queue,
         live=live,
         repos=repos,
+        wave_queues=queue_cfg,
+        queue_records=tuple(judgements.queues),
+        scope_args=tuple(facts_scope_args(facts) if scope_args is None else scope_args),
+        scope_id=driven_by,
         now=collected(facts),
         max_inflight=max_inflight,
         merged_at=merged_at,
@@ -153,7 +202,6 @@ def drive_snapshot(
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
         rejected=rejected_by_batch(batches, facts),
         approvals=fact_approvals(queue),
-        queue_inferred=True,
         ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)
         ledger_unknown=fact_ledger_unknown(batches, facts, stages),
         post_merge_repos=frozenset(
@@ -186,8 +234,10 @@ class Need:
     # | closeout-pr-closed | closeout-needs-review | closeout-unrecorded | closeout-reopened
     #   (a collected close-out PR the driver will not merge unasked, R15)
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
-    # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
+    # | unplaced | merge-conflict | session-blocked | red-pr
     # | archive-conflict
+    # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
+    # | queue-need (the wave merge queue's own: a halt, a hold, a stall, a barrier, R28)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -195,10 +245,10 @@ class Need:
 
 
 NEED_LABELS = {
+    "queue-need": "Merge queue needs you",
     "approve-pr": "Label a green PR approved-fr",
+    "queue-unconfigured": "Repo has no merge queue config",
     "red-pr": "Red PR its session cannot fix",
-    "queue-ejected": "PR ejected from the merge queue",
-    "enqueue-refused": "PR the merge queue refuses",
     "failing-ci": "Failing CI",
     "foreign-pr": "Foreign PR on a batch branch",
     "blocked-batch": "Blocked batch",
@@ -221,35 +271,6 @@ NEED_LABELS = {
     "needs-tester": "Needs you · Tester",
     "needs-devops": "Needs you · DevOps",
 }
-
-
-def queue_needs(snap: Snapshot) -> list[Need]:
-    """What the driver recorded about a PR it enqueued, as needs (merge-train-safety §D):
-    one that left the merge queue unmerged with the base unmoved (`ejected`), and one the
-    forge refused to enqueue twice at its current head (`refused`). Read from the events,
-    like `red-pr`, so the facts-only board shows them too."""
-    out: list[Need] = []
-    for entry in snap.queue:
-        live = snap.live.get(entry.batch.id)
-        if live is None or live.state != "OPEN":
-            continue
-        event = last_enqueue(entry.batch, live.number)
-        if event is None or event.head != live.head:
-            continue
-        if event.outcome == "ejected":
-            out.append(
-                Need("queue-ejected", entry.batch.id,
-                     f"PR #{live.number} left the merge queue unmerged", entry.pr.url)
-            )  # fmt: skip
-        elif event.outcome == "refused":
-            refused = enqueue_refusals(entry.batch, live.number, live.head)
-            if len(refused) >= REFUSALS_BEFORE_NEED:
-                why = f": {event.detail}" if event.detail else ""
-                out.append(
-                    Need("enqueue-refused", entry.batch.id,
-                         f"PR #{live.number} cannot be put in the merge queue{why}", entry.pr.url)
-                )  # fmt: skip
-    return out
 
 
 def gated_unread_needs(facts: Facts) -> list[Need]:
@@ -319,9 +340,11 @@ def needs_you(
         )
         out.append(Need("approve-pr", entry.batch.id, text, pr.url))
 
-    out.extend(queue_needs(snap))
+    for held_repo, (first, why) in sorted(queue_unconfigured(snap, facts).items()):
+        out.append(Need("queue-unconfigured", held_repo, why, f"#batch-{first}"))
+
     for action in plan.actions:
-        if action.kind == "warn" and not action.ejected:
+        if action.kind == "warn":
             if action.detail.startswith(ARCHIVE_WAIT):
                 continue  # an archive PR's waiting line (merge-truth R9), never a Need
             failing_pr = batch_pr(by_id[action.batch], facts)
@@ -374,7 +397,11 @@ def needs_you(
                             f"session to take it: fix it on {event.archive}")  # fmt: skip
                     out.append(Need("closeout-stuck", b.id, text, f"#batch-{b.id}"))
     for action in plan.actions:
-        if action.kind == "blocked":
+        if action.kind in ("blocked", "held") and action.key == QUEUE_REPORT_KEY:
+            # R28: the merge queue's own Needs, each with the command to paste in its text
+            href = f"#batch-{action.batch}" if action.batch in by_id else None
+            out.append(Need("queue-need", action.batch, action.detail, href))
+        elif action.kind == "blocked":
             out.append(
                 Need("blocked-batch", action.batch, f"{action.batch} {action.detail}",
                      f"#batch-{action.batch}")

@@ -34,7 +34,8 @@ def test_the_workflow_triggers_on_merge_group(name: str) -> None:
 @pytest.mark.parametrize("name", ["ci.yml", "acceptance-report.yml"])
 def test_the_pull_request_and_push_triggers_are_kept(name: str) -> None:
     on = _on(_load(name))
-    assert "pull_request" in on and on["push"]["branches"] == ["main"]
+    # `fr-queue/**` are the wave merge queue's slot branches (wave-merge-queue R7)
+    assert "pull_request" in on and on["push"]["branches"] == ["main", "fr-queue/**"]
 
 
 def test_change_fragment_stays_pull_request_only() -> None:

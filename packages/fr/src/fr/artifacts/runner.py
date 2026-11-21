@@ -52,7 +52,7 @@ Three invariants the rest of the framework leans on:
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -609,8 +609,9 @@ def run_migrations(
     dry_run: bool = True,
     registry: MigrationRegistry | None = None,
     veto: Callable[[Path], str | None] | None = None,
+    only: Collection[Path] | None = None,
 ) -> MigrationReport:
-    """Migrate every stale artifact under `repo_root`.
+    """Migrate every stale artifact under `repo_root`, or only the files in *only*.
 
     Dry-run by default, like every other fr mutation: the report says what
     *would* happen and not one byte is written.
@@ -626,15 +627,27 @@ def run_migrations(
     back an artifact the operator has uncommitted edits in — and the runner
     stays git-agnostic. A vetoed artifact becomes a `FailedAction`, not a
     silent skip, so the gate refuses instead of continuing.
+
+    *only* (wave-merge-queue R16) restricts the run to those files: nothing else is read for
+    migration, the archive's repairs included. It refuses, before one byte is written, a file
+    that is no live artifact, and a file whose chain holds a retiring step: a retiring hop
+    rewrites the repository's layout, so it is not per-file and is never run partly
+    (`PartialMigrationError`).
     """
     reg = registry if registry is not None else MIGRATIONS
     planned: list[tuple[str, ArtifactKind, Path, list[PlannedAction]]] = []
     failed: list[FailedAction] = []
     elsewhere: list[Path] = []
     owned = own_feature(repo_root)
+    wanted = {p.resolve() for p in only} if only is not None else None
+    found: set[Path] = set()
 
     for name, kind in _ordered_kinds(reg):
         for path in iter_paths_of(repo_root, kind):
+            if wanted is not None:
+                if path.resolve() not in wanted:
+                    continue
+                found.add(path.resolve())
             if not owned(path):
                 if _actions_for(reg, name, kind, path)[0]:
                     elsewhere.append(path)
@@ -649,9 +662,13 @@ def run_migrations(
                 continue
             planned.append((name, kind, path, actions))
 
+    if wanted is not None:
+        _refuse_a_partial_run(reg, planned, wanted - found)
+
     # Extra-locator paths (the archive): repair-only, held by the veto like any
-    # path, and an unrepairable one reported apart from `failed` (R12).
-    scan = _scan_extra(repo_root, reg)
+    # path, and an unrepairable one reported apart from `failed` (R12). A `--path` run
+    # reads none of it.
+    scan = _scan_extra(repo_root, reg) if wanted is None else _ExtraScan((), ())
     unrepairable: list[FailedAction] = list(scan.unrepairable)
     extra: list[_ExtraTarget] = []
     for target in scan.repairable:
@@ -719,6 +736,34 @@ def run_migrations(
         elsewhere=tuple(dict.fromkeys(elsewhere)),
         unrepairable=tuple(unrepairable),
     )
+
+
+class PartialMigrationError(MigrationChainError):
+    """A `--path` run that cannot be run per file: a named file is no live artifact, or its
+    chain holds a retiring step. Raised before anything is written."""
+
+
+def _refuse_a_partial_run(
+    reg: MigrationRegistry,
+    planned: Sequence[tuple[str, ArtifactKind, Path, list[PlannedAction]]],
+    missing: Collection[Path],
+) -> None:
+    if missing:
+        raise PartialMigrationError(
+            "not a live artifact of any kind (archived, retired or not an fr artifact), so "
+            "nothing was migrated: " + ", ".join(sorted(str(p) for p in missing))
+        )
+    for name, _kind, path, actions in planned:
+        steps = {(m.from_version, m.to_version): m for m in reg.schema_migrations(name)}
+        for action in actions:
+            step = steps.get((action.from_version, action.to_version))  # type: ignore[arg-type]
+            if step is not None and step.retires:
+                raise PartialMigrationError(
+                    f"{path.name}: the {name} migration {action.from_version} -> "
+                    f"{action.to_version} retires the kind, so it rewrites the whole repository "
+                    "and is not per file; nothing was migrated. Run `fr migrate artifacts "
+                    "--yes` for the whole repository"
+                )
 
 
 def _repair_extra(target: _ExtraTarget) -> PlannedAction | FailedAction | None:

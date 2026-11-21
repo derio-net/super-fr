@@ -115,14 +115,18 @@ def test_a_loop_skips_a_pass_whose_lease_push_cannot_read_the_visibility(
         state,
         monkeypatch,
         seen,
-        lambda: {"merged": list(world.merged), "ref": _ref(remote), "passes": len(world.passes)},  # type: ignore[attr-defined]
+        lambda: {
+            "queued": len(world.queue_plans),
+            "ref": _ref(remote),
+            "passes": len(world.passes),
+        },  # type: ignore[attr-defined]
     )
 
     flat = " ".join(result.output.split())
     assert flat.count("pass skipped, retrying every") == 1, result.output
     assert "cannot read the visibility" in flat
-    assert seen[0] == {"merged": [], "ref": "", "passes": 0}, "nothing acted, nothing pushed"
-    assert seen[1]["merged"] and seen[1]["ref"], "the second pass ran and pushed"
+    assert seen[0] == {"queued": 0, "ref": "", "passes": 0}, "nothing acted, nothing pushed"
+    assert seen[1]["queued"] and seen[1]["ref"], "the second pass ran and pushed"
 
 
 def test_a_loop_pushes_next_pass_the_state_a_skipped_save_left(
@@ -294,15 +298,15 @@ def test_a_loop_skips_a_pass_whose_member_repo_visibility_cannot_be_read(
         state,
         monkeypatch,
         seen,
-        lambda: {"merged": list(world.merged), "passes": len(world.passes)},  # type: ignore[attr-defined]
+        lambda: {"queued": len(world.queue_plans), "passes": len(world.passes)},  # type: ignore[attr-defined]
     )
 
     flat = " ".join(result.output.split())
     assert REPO in client.asked, "the member repo was read live"
     assert "which is not public" not in flat, result.output
     assert flat.count("pass skipped, retrying every") == 1, result.output
-    assert seen[0] == {"merged": [], "passes": 0}, "nothing acted"
-    assert seen[1]["merged"], "the second pass ran"
+    assert seen[0] == {"queued": 0, "passes": 0}, "nothing acted"
+    assert seen[1]["queued"], "the second pass ran"
 
 
 def test_a_loop_skips_a_pass_whose_judgements_write_cannot_read_the_visibility(

@@ -146,6 +146,14 @@ def artifacts_cmd(
             "each named after its plan folder."
         ),
     ),
+    path: list[Path] | None = typer.Option(
+        None,
+        "--path",
+        help=(
+            "Migrate only this file (repeatable); refuses a retiring migration, which is "
+            "not per file."
+        ),
+    ),
 ) -> None:
     """Bring every live artifact up to the version this fr writes.
 
@@ -166,6 +174,11 @@ def artifacts_cmd(
     It does take the same advisory lock the gate does (review r5-e7): an
     operator running this while an agent's `fr` is mid-migration would
     otherwise both rewrite the same files.
+
+    `--path <file>` (repeatable) migrates only the named files, as the wave close-out does
+    for the artifacts it archives. A named file that is no live artifact, or whose
+    migration retires its kind (a retiring step rewrites the whole repository), is refused
+    before anything is written; `--adopt` is not offered.
     """
     from fr.artifacts.atomic import migration_lock
     from fr.artifacts.commit import lock_path
@@ -174,6 +187,9 @@ def artifacts_cmd(
 
     repo_root = resolve_repo_root()
     require_migrated_layout(repo_root)
+    if path and adopt:
+        err_console.print("[red]--path and --adopt do not combine:[/red] adoption is per plan.")
+        raise typer.Exit(2)
     try:
         with migration_lock(lock_path(repo_root)) as acquired:
             if not acquired:
@@ -182,7 +198,9 @@ def artifacts_cmd(
                     "Re-run once it finishes; nothing was written."
                 )
                 raise typer.Exit(2)
-            report = run_migrations(repo_root, dry_run=not yes)
+            report = run_migrations(
+                repo_root, dry_run=not yes, only=[_resolve(p) for p in path] if path else None
+            )
     except MigrationChainError as e:
         err_console.print(f"[red]migration error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
@@ -214,6 +232,10 @@ def artifacts_cmd(
             err=True,
         )
 
+    if path:  # a per-file run offers nothing else
+        if not report.applied and not report.failed:
+            typer.echo("the named files are already current.")
+            return
     if not report.applied and not report.failed:
         if report.unrepairable:
             n = len(report.unrepairable)
@@ -238,7 +260,8 @@ def artifacts_cmd(
                 f"  git commit -m {shlex.quote(_migrate_subject(repo_root))}"
                 f" -m {shlex.quote(f'{FR_COMMIT_TRAILER}: migrate')}"
             )
-    _offer_adoption(repo_root, adopt=adopt, yes=yes)
+    if not path:
+        _offer_adoption(repo_root, adopt=adopt, yes=yes)
 
     if report.failed:
         typer.echo(
@@ -289,6 +312,11 @@ def _offer_adoption(repo_root: Path, *, adopt: bool, yes: bool) -> None:
         typer.echo(f"  adopted {state.run} — cursor: {state.cursor} ({plan_dir.name})")
         for note in notes:
             typer.echo(f"    {note}")
+
+
+def _resolve(path: Path) -> Path:
+    """A `--path` argument as an absolute path: relative ones are the caller's cwd's."""
+    return path if path.is_absolute() else Path.cwd() / path
 
 
 def _rel(path: Path, repo_root: Path) -> str:

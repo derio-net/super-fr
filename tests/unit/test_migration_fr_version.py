@@ -312,6 +312,36 @@ def test_fr_migrate_artifacts_yes_applies(tmp_path: Path, monkeypatch) -> None:
     assert "dry-run" not in result.output
 
 
+def test_fr_migrate_artifacts_path_migrates_only_the_named_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Wave-merge-queue R16: `--path` is repeatable and per file."""
+    named = _plan(tmp_path, "one", fr_version=">=3.0.0,<4.0.0")
+    other = _plan(tmp_path, "two", fr_version=">=3.0.0,<4.0.0")
+    before = _freeze(other)
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
+
+    result = runner_cli.invoke(app, ["migrate", "artifacts", "--yes", "--path", str(named)])
+
+    assert result.exit_code == 0, result.output
+    assert yaml.safe_load(named.read_text())["fr_version"] == f">=3.0.0,<{CEILING_VERSION}"
+    assert _unchanged(other, before), "a second stale file is left as it was"
+    assert "in-flight plan" not in result.output, "a per-file run offers no adoption"
+
+
+def test_fr_migrate_artifacts_path_refuses_a_file_that_is_no_artifact(
+    tmp_path: Path, monkeypatch
+) -> None:
+    stray = tmp_path / "notes.txt"
+    stray.write_text("x")
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
+
+    result = runner_cli.invoke(app, ["migrate", "artifacts", "--yes", "--path", str(stray)])
+
+    assert result.exit_code == 2
+    assert "not a live artifact" in result.output
+
+
 def test_fr_migrate_artifacts_reports_nothing_to_do(tmp_path: Path, monkeypatch) -> None:
     _plan(tmp_path, "current", fr_version=f">=4.0.0,<{CEILING_VERSION}")
     monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))

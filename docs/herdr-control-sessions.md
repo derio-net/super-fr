@@ -7,7 +7,7 @@ covers:
   - packages/fr-herdr/src/**
   - packages/fr/src/fr/triage/batch*.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 still true after batch triage-intake (the launch brief now quotes issue text; the session control it describes is unchanged); 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged; 2026-11-19 triage-pages-ux, the driver also re-renders the triage pages (R6, R7); session control unchanged. 2026-11-18 still true; triage-pages-ux phase 1 rewords one docstring in triage_batch_cmd.py and changes no session control. 2026-11-17 still true after batch triage-intake (the launch brief now quotes issue text; the session control it describes is unchanged); 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged
+reviewed: 2026-11-20 still true after wave-merge-queue phase 5 fixes (the merge queue replaces the train; session control, hand-backs of an ejected entry go to the same session as before); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 still true after batch triage-intake (the launch brief now quotes issue text; the session control it describes is unchanged); 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged; 2026-11-19 triage-pages-ux, the driver also re-renders the triage pages (R6, R7); session control unchanged. 2026-11-18 still true; triage-pages-ux phase 1 rewords one docstring in triage_batch_cmd.py and changes no session control. 2026-11-17 still true after batch triage-intake (the launch brief now quotes issue text; the session control it describes is unchanged); 2026-11-15 guard-trust phase 3, the pane-lock probe now runs python -P; the behaviour this page describes is unchanged
 ---
 
 # Herdr control sessions
@@ -53,7 +53,7 @@ reconstructs durable state, never the source transcript or initial goal.
 Scope ownership comes before shared server/pane ownership. On contention, the command
 stops without input. Both OS locks are independently verified. Use reliable local
 `FR_TRIAGE_LOCK_DIR` and `FR_HERDR_CACHE_DIR` when shared storage cannot enforce locks.
-Judgements writers stamp schema 12 (read 1–12); engine-owned replacement
+Judgements writers stamp schema 13 (read 1–13); engine-owned replacement
 attempt/success/failure events are audit only, not dispatch/cancel transitions.
 
 Partial failures return nonzero with a pending descriptor/attempt and inspection

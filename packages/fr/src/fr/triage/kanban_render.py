@@ -40,6 +40,7 @@ from fr.triage.kanban import (
     cutoff_hidden_waves,
 )
 from fr.triage.render import FONTS, _safe_url, esc, noun
+from fr.triage.wave_report import span
 
 if TYPE_CHECKING:
     from fr.triage.quota import Budget
@@ -460,6 +461,32 @@ def _held(held: Sequence[HeldIssue]) -> str:
     )
 
 
+def _queue_section(board: Board) -> str:
+    """The merge queue's line per repo (R25) and the report of each wave it ran (R28)."""
+    if not board.queue_lines and not board.wave_reports:
+        return ""
+    lines = "".join(f'<li class="queue-line mono">{esc(line)}</li>' for line in board.queue_lines)
+    reports = ""
+    for report in board.wave_reports:
+        which = "between waves" if report.wave is None else f"wave {report.wave}"
+        rows = "".join(
+            f'<tr><td class="mono">{esc(p.key)}</td><td>{esc(p.outcome)}</td>'
+            f"<td>{p.cycles}</td><td>{esc(span(p.wall))}</td><td>{p.approvals}</td>"
+            f"<td>{esc(p.detail)}</td></tr>"
+            for p in report.prs
+        )
+        reports += (
+            f'<div class="wave-report"><h3>{esc(report.repo)}, {which}</h3>'
+            "<table><thead><tr><th>PR</th><th>outcome</th><th>CI cycles</th><th>wall time</th>"
+            f"<th>approvals</th><th>detail</th></tr></thead><tbody>{rows}</tbody></table>"
+            f'<p class="meta">Release: {esc(report.release or "none asked yet")}</p></div>'
+        )
+    return (
+        '<section class="queue"><h2>Merge queue</h2>'
+        f"{'<ul>' + lines + '</ul>' if lines else ''}{reports}</section>"
+    )
+
+
 def _gated_card(g: GatedCard) -> str:
     return (
         f'<div class="card needs-you" data-gated-pr="{esc(g.repo)}#{g.number}">'
@@ -545,6 +572,7 @@ def render_board(
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
         f"{page_header('batches', present)}\n{banner}\n"
         f"{_held(board.held)}\n"
+        f"{_queue_section(board)}\n"
         f"{body}\n"
         f'<footer class="meta">{quota}Rendered by <code>fr triage batches</code> from facts.json '
         "and judgements.yaml.</footer>\n"

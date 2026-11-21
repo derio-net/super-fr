@@ -1,0 +1,676 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-wave-merge-queue
+repo: derio-net/super-fr
+rows:
+  - id: wave-queue-speculative-land
+    capability: wave merge queue
+    acceptance: The wave driver merges a wave's approved green PRs by testing speculative
+      combinations (main + PRs ahead + this PR) on fr-owned branches and moving main
+      to exactly the tested commit; no PR branch is ever updated because main moved
+      and no forge merge queue is used.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R1
+    - spec:2026-11-19-wave-merge-queue#R3
+    - spec:2026-11-19-wave-merge-queue#R4
+    - spec:2026-11-19-wave-merge-queue#R8
+    - spec:2026-11-19-wave-merge-queue#R9
+    - spec:2026-11-19-wave-merge-queue#R14
+    - spec:2026-11-19-wave-merge-queue#R36
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_open_queue_builds_its_first_depth_entries_into_slots_on_the_base
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_green_first_slot_lands_alone_and_the_second_keeps_testing_on_the_landed_main
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_foreign_base_move_rebuilds_every_slot_on_the_new_base_and_says_so_once
+      - super-fr:tests/unit/test_wave_queue_drive.py#test_later_waves_waiting_prs_take_no_in_flight_slot_while_the_queue_is_open
+      - super-fr:tests/unit/test_wave_queue_drive.py#test_a_queue_repo_plans_no_merge_action_only_the_queues_own
+      int:
+      - super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+      - super-fr:tests/integration/test_queue_errors.py#test_main_moving_after_the_base_was_read_fails_the_lease_and_the_next_pass_rebuilds
+    status: ci
+    notes: 'Planner (phase 2) and executor (phase 3) are CI-tested: slots, longest green
+      prefix landed at the tested sha by one atomic leased push over real bare git,
+      a foreign move of main rebuilds; no merge action in drive_pass. The live wave
+      walk is wave-queue-live-wave''s.'
+  - id: wave-queue-land-methods
+    capability: wave merge queue
+    acceptance: Landing by atomic push leaves every landed PR reading MERGED on the
+      forge, with history in the repo's merge method (merge commits, or one squashed
+      commit per PR); landing by forge merge refuses rather than land an untested tree.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R5
+    - spec:2026-11-19-wave-merge-queue#R10
+    - spec:2026-11-19-wave-merge-queue#R11
+    levels:
+      unit:
+      - super-fr:tests/integration/test_queue_build.py#test_squash_builds_one_commit_per_entry_into_slots_and_moves_no_pr_branch
+      - super-fr:tests/integration/test_queue_build.py#test_merge_builds_no_ff_merge_commits_with_the_forge_subject
+      - super-fr:tests/integration/test_queue_build.py#test_rebase_replays_the_prs_commits
+      - super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+      - super-fr:tests/integration/test_queue_land.py#test_under_merge_the_heads_are_pushed_unchanged
+      - super-fr:tests/integration/test_queue_land.py#test_a_session_push_since_the_build_fails_the_whole_push
+      - super-fr:tests/integration/test_queue_land.py#test_land_merge_stops_on_a_tree_mismatch
+    status: ci
+    notes: 'phase 3: queue_exec builds each method''s history (squash, merge, rebase)
+      into slots and lands by one atomic leased push or by forge merge with a tree check,
+      over real bare remotes and a fake forge'
+  - id: wave-queue-wave-exclusive
+    capability: wave merge queue
+    acceptance: While a wave's queue is open only that wave's PRs and its one close-out
+      enter it; later waves and no-wave batches wait until it drains.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R2
+    - spec:2026-11-19-wave-merge-queue#R15
+    - spec:2026-11-19-wave-merge-queue#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_later_waves_ready_entry_never_joins_the_open_queue
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_another_scopes_hold_is_held_naming_it_and_nothing_else
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_wave_whose_batches_are_all_terminal_drains_at_the_landed_main
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_between_waves_entries_open_a_one_entry_queue_once_every_wave_is_done
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_idle_repo_opens_the_lowest_unfinished_wave_on_its_first_ready_entry
+      - super-fr:tests/unit/test_wave_closeout.py#test_a_waves_close_out_waits_for_every_batch_of_the_wave_to_land
+      - super-fr:tests/unit/test_wave_closeout.py#test_a_tester_gated_batch_is_left_out_and_its_own_close_out_follows_its_gate
+      - super-fr:tests/unit/test_wave_closeout.py#test_under_quiet_or_stealth_the_queue_holds_batch_prs_only
+      - super-fr:tests/unit/test_wave_closeout.py#test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out
+    status: ci
+    notes: 'phase 6: the wave close-out (R15) takes the wave''s ungated landed batches;
+      phase 7: its test was renamed (test_the_post_merge_of_every_landing_is_planned_before_the_waves_close_out)'
+  - id: wave-queue-eject
+    capability: wave merge queue
+    acceptance: A combination that fails twice or conflicts takes only its own PR out
+      of the queue, hands it back to its session through the existing budgets, and rebuilds
+      only the combinations behind it.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R6
+    - spec:2026-11-19-wave-merge-queue#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_second_red_at_the_same_tree_ejects_it_and_rebuilds_what_was_behind
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_first_red_behind_a_green_slot_is_rebuilt_once_fresh_in_its_own_slot
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_conflict_met_at_build_ejects_the_entry_through_the_conflict_decision
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_ejected_entry_re_enters_only_when_its_head_moves
+      int:
+      - super-fr:tests/integration/test_queue_build.py#test_rebase_ejects_a_pr_whose_merge_commits_carry_content
+    status: ci
+    notes: Planner ejection (one fresh rebuild, then red_decision / conflict_decision,
+      rebuild only what was behind) is unit-tested; the executor's ejection at build
+      is CI-tested over real git.
+  - id: wave-queue-one-path
+    capability: wave merge queue
+    acceptance: 'The queue is the driver''s and batch merge''s only merge path: a repo
+      that requires a forge queue, refuses the push, or lacks queue CI is held with
+      what it needs, ci-none repos land without a CI wait, and a restarted driver never
+      lands twice.'
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R7
+    - spec:2026-11-19-wave-merge-queue#R20
+    - spec:2026-11-19-wave-merge-queue#R22
+    - spec:2026-11-19-wave-merge-queue#R23
+    - spec:2026-11-19-wave-merge-queue#R24
+    - spec:2026-11-19-wave-merge-queue#R31
+    - spec:2026-11-19-wave-merge-queue#R32
+    - spec:2026-11-19-wave-merge-queue#R34
+    - spec:2026-11-19-wave-merge-queue#R35
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_repo_whose_base_requires_a_forge_merge_queue_is_held_with_the_reason
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_batch_merge_drives_the_queue_in_the_foreground_until_the_batches_landed
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_a_repo_without_queue_ci_is_refused_with_what_to_add
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_an_other_entry_opens_a_one_entry_queue_between_waves
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_wave_does_not_drain_while_its_closeout_waits_and_drains_once_it_landed
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_an_attributed_ready_green_archive_pr_is_merged
+      - super-fr:tests/unit/test_triage_collected_closeout_drive.py#test_a_green_mergeable_recorded_pr_is_readied_and_merged_at_the_recorded_head
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_green_recorded_export_pr_is_merged_at_its_recorded_head_and_recorded
+      - super-fr:tests/unit/test_triage_approval.py#test_a_housekeeping_pr_with_the_label_is_recorded_as_a_queue_approval_then_holds
+      int:
+      - super-fr:tests/integration/test_queue_land.py#test_another_entry_lands_in_the_same_push_and_is_recorded_by_its_kind
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_queue
+    status: ci
+    notes: 'phase 5: every merge is a queue entry. drive_pass has no merge action; a
+      close-out, archive, export and housekeeping PR are entries under their own trust
+      rule; a base requiring a forge merge queue, a repo with no queue.ci or glab/tea
+      is queue-held; batch merge drives the same engine in the foreground; _archive
+      and _export_merge no longer merge. Earlier phases: R7, R20, R24, R31, R34, R35'
+  - id: wave-queue-live-wave
+    capability: wave merge queue
+    acceptance: A real wave on super-fr drains through the queue with no PR updates,
+      one approval per PR and one release for the wave.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R1
+    - spec:2026-11-19-wave-merge-queue#R9
+    - spec:2026-11-19-wave-merge-queue#R10
+    - spec:2026-11-19-wave-merge-queue#R17
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: wave-queue-devops-barrier
+    capability: wave merge queue
+    acceptance: A gate:devops PR enters the queue only when the DevOps stage releases
+      it after its pre-merge ops. It lands alone, and nothing lands behind it until
+      the stage records the post-merge ops done.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R26
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_2_never_merges_and_waits_for_the_queue
+      - super-fr:tests/unit/test_wave_queue_barrier.py#test_the_barrier_lands_as_the_last_entry_of_its_push_and_nothing_behind_it
+      - super-fr:tests/unit/test_wave_queue_barrier.py#test_nothing_lands_after_the_barrier_until_its_post_merge_ops_are_done
+      - super-fr:tests/unit/test_wave_queue_barrier.py#test_a_combination_behind_the_barrier_is_built_and_tested_meanwhile
+      - super-fr:tests/unit/test_queue_gate_labels.py#test_a_diff_that_moved_after_the_release_voids_it_and_removes_the_label
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_stage
+    status: ci
+    notes: 'phase 6: stage 2 adds fr-queue:release and calls no pr_merge, stage 4 adds
+      fr-queue:postmerge-done; the driver settles both into queue events; the planner
+      admits a gate:devops entry only when released, lands it as the last entry of its
+      push and nothing behind it until post-merge is done; unit tests and the ops-gate
+      scenarios'
+  - id: wave-queue-broken-hold
+    capability: wave merge queue
+    acceptance: A deleted or expired hold, a stray merge or a mid-queue release never
+      lands untested code or moves a PR branch. The hold is re-armed, and the operator
+      is told which release may have cut from a partly landed wave.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R27
+    - spec:2026-11-19-wave-merge-queue#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_foreign_base_move_rebuilds_every_slot_on_the_new_base_and_says_so_once
+      int:
+      - super-fr:tests/integration/test_queue_hold.py#test_a_vanished_hold_is_re_armed_with_one_need_naming_a_release
+      - super-fr:tests/integration/test_queue_hold.py#test_a_rearm_lands_nothing_untested_and_moves_no_pr_branch
+    status: ci
+    notes: 'phase 4: a vanished, cleared or expired open hold is re-armed with one Need
+      naming any release cut from the partly landed wave, and nothing lands or moves
+      a PR branch; the foreign move (R14) is phases 2 and 3''s'
+  - id: wave-queue-operator-loop
+    capability: wave merge queue
+    acceptance: The operator sees every queue problem as a Needs-you entry with a command
+      to paste, each queued PR's state in one comment edited in place, and a wave report
+      at drain (landed, ejected and deferred PRs, cycles, approvals, the release).
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R28
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_boards_needs_list_a_halted_queue_with_the_command_to_paste
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_a_halted_queue_stays_halted_every_pass_and_names_the_retry_verb
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_retry_event_lifts_the_halt_and_the_next_pass_builds
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_marker_comment_is_created_once_and_edited_in_place_through_every_state
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_driver_posts_one_marker_comment_a_queued_pr_and_edits_it_on_the_next_pass
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_forge_comments_off_posts_no_queue_comment
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_wave_report_lists_landed_ejected_and_deferred_with_cycles_time_and_approvals
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_closeout_pr_body_carries_the_report_in_a_section_the_close_reader_skips
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_queue_retry_prints_the_plan_and_writes_only_with_yes
+    status: ci
+    notes: 'phase 7: every queue Need is a queue-need with its command (halt: queue-retry,
+      stall: defer and requeue); one fr-queue marker comment per queued PR, edited in
+      place, none under forge.comments off; the wave report on the Batches page and
+      in the close-out PR body'
+  - id: wave-queue-leave-wave
+    capability: wave merge queue
+    acceptance: A batch that cannot merge can leave its wave (defer), so the wave drains
+      without it, and can later ask to join a named or the next queue (requeue). The
+      driver proposes this when the batch blocks the drain, and never decides it.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R29
+    - spec:2026-11-19-wave-merge-queue#R30
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_defer_writes_a_deferred_event_naming_the_wave_and_says_what_it_changed
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_defer_refuses_a_deferred_batch_and_a_closed_out_one
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_requeue_into_a_wave_writes_requeued_and_moves_the_effective_wave
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_terminal_means_landed_cancelled_abandoned_or_deferred
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_one_batch_with_a_spent_budget_blocking_the_drain_is_proposed_for_deferral
+      - super-fr:tests/unit/test_wave_queue_planner.py#test_a_batch_with_no_progress_for_stall_hours_is_proposed_and_a_recent_one_is_not
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_plain_requeue_with_every_wave_opened_is_a_between_waves_entry
+      - super-fr:tests/unit/test_triage_batch_leave_wave.py#test_requeue_to_a_wave_is_refused_once_its_queue_has_opened_even_if_drained
+    status: ci
+    notes: Defer, requeue and queue-retry are unit-pinned; refs re-pointed to the tests
+      the phase 7 fix round renamed (p7-r2, p7-r4).
+  - id: wave-queue-post-merge
+    capability: wave merge queue
+    acceptance: post_merge runs once per landing at the landed main and gates the next
+      landing, and a landed PR the forge still shows open pauses the queue with a Need.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R33
+    - spec:2026-11-19-wave-merge-queue#R35
+    levels:
+      unit:
+      - super-fr:tests/integration/test_queue_resume.py#test_a_wave_opens_builds_lands_once_runs_post_merge_once_and_drains
+      - super-fr:tests/integration/test_queue_resume.py#test_a_failed_post_merge_pauses_landings_with_a_need
+      - super-fr:tests/integration/test_queue_resume.py#test_a_landed_pr_the_forge_still_shows_open_pauses_the_queue
+      - super-fr:tests/unit/test_queue_exec.py#test_post_merge_is_owed_for_the_last_landing_until_every_batch_recorded_it
+    status: ci
+    notes: 'phase 3: post_merge runs once per landing and a failure pauses landings
+      with a Need; a landed PR the forge still shows open pauses the queue (executor
+      over real git and a fake forge)'
+  - id: wave-queue-approval-content
+    capability: approval gate
+    acceptance: An approved-fr approval survives any push that leaves the PR's own diff
+      unchanged (a merge of main, an empty commit, the queue's own landing rewrite)
+      and is voided only by a change to that diff.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_conflict_free_merge_of_main_keeps_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_an_empty_commit_keeps_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_code_edit_changes_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_whitespace_only_edit_changes_the_patch_id
+      - super-fr:tests/unit/test_gitseam_patch_id.py#test_a_binary_edit_changes_the_patch_id
+      - super-fr:tests/unit/test_triage_approval.py#test_the_same_patch_id_at_another_head_is_approved
+      - super-fr:tests/unit/test_triage_approval.py#test_another_patch_id_at_another_head_is_void
+      - super-fr:tests/unit/test_triage_approval.py#test_an_approval_with_no_patch_id_falls_back_to_reaches
+      - super-fr:tests/unit/test_triage_approval.py#test_settle_records_the_patch_id_it_is_given_for_a_first_verdict
+      - super-fr:tests/unit/test_triage_approval.py#test_settle_voids_on_a_patch_id_change_removing_the_label
+    status: ci
+    notes: 'phase 1: the verdict compares the recorded and live patch-ids; unit tests
+      on a real repo and over the pure verdict'
+  - id: wave-queue-release-hold
+    capability: release
+    acceptance: A repo cuts no release while a wave's queue drains and exactly one release
+      follows the drain (dispatched, or from the next push or the daily cron); a stale
+      hold older than a day is ignored with a warning.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R17
+    - spec:2026-11-19-wave-merge-queue#R18
+    - spec:2026-11-19-wave-merge-queue#R19
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_an_open_hold_cuts_nothing_and_release_py_passes_it_in_the_facts
+      - super-fr:tests/unit/test_release_script.py#test_a_finished_release_clears_a_drained_hold_its_base_contains
+      - super-fr:tests/unit/test_release_status.py#test_an_open_hold_refreshed_over_a_day_ago_warns_and_does_not_hold
+      - super-fr:tests/unit/test_release_workflow.py#test_a_deleted_hold_starts_no_release
+      int:
+      - super-fr:tests/integration/test_queue_hold.py#test_the_drain_pushes_drained_on_the_drained_main_and_dispatches_the_release
+      - super-fr:tests/integration/test_scenarios.py#test_wave_queue_release_hold
+    status: ci
+    notes: 'phase 4: the hold is pushed by the driver (open, refresh, drained, cleared
+      under release none), judged by fr release status, honoured and cleared by release.py;
+      real git over a bare origin, the release workflow pinned, and a scenario over
+      the facts'
+    scenario: tests/scenarios/wave-queue-release-hold.sh
+  - id: wave-queue-closeout-migrates
+    capability: collected close-out
+    acceptance: 'A wave''s close-out is never held by a stale artifact a registered
+      migration can move: it migrates what it archives on its own branch.'
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_runner.py#test_only_migrates_the_named_files_and_leaves_a_second_stale_one_as_it_was
+      - super-fr:tests/unit/test_migration_runner.py#test_only_refuses_a_retiring_hop_before_writing_anything
+      - super-fr:tests/unit/test_triage_batch_closeout.py#test_the_stale_artifacts_the_archive_moves_are_migrated_as_their_own_commit_first
+      - super-fr:tests/unit/test_triage_collected_closeout_drive.py#test_r16_a_migration_commit_of_files_the_archive_moves_is_admitted
+      - super-fr:tests/unit/test_wave_closeout.py#test_one_close_out_takes_the_whole_wave_and_another_wave_gets_its_own
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_wave_queue_closeout_migrates
+    status: ci
+    notes: 'phase 6: fr migrate artifacts --path migrates only the named files and refuses
+      a retiring hop; the close-out verb migrates the stale artifacts its archive moves
+      as its own commit; review_reasons admits that commit; unit tests and a scenario'
+    scenario: tests/scenarios/wave-queue-closeout-migrates.sh
+  - id: wave-queue-migratable-validation
+    capability: artifact validation
+    acceptance: fr validate artifacts --allow-migratable passes a stale artifact a registered
+      migration can move and fails one it cannot, so a PR is not failed by another run's
+      stale cursor.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R21
+    levels:
+      unit:
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_stale_stamp_a_migration_moves_passes_and_prints_stale_migratable
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_migration_that_refuses_the_file_still_fails
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_stamp_no_migration_reaches_still_fails
+      - super-fr:tests/unit/test_validate_allow_migratable.py#test_a_stamp_newer_than_this_fr_still_fails
+      - super-fr:tests/unit/test_queue_ci_triggers.py#test_allow_migratable_is_used_only_where_a_stale_artifact_is_expected
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_wave_queue_migratable_validation
+    status: ci
+    notes: 'phase 6: validate --allow-migratable tries each stale artifact''s migration
+      on a scratch copy; ci.yml uses it on pull requests and fr-queue pushes only; unit
+      tests, a workflow pin and a scenario'
+    scenario: tests/scenarios/wave-queue-migratable-validation.sh
+  - id: wave-queue-visible
+    capability: triage board
+    acceptance: The pass, the board and the Batches page show each repo's queue line
+      (wave, base, entries and their state, hold), and an approved queued PR never reads
+      as awaiting approval.
+    origin:
+    - spec:2026-11-19-wave-merge-queue#R25
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_queue_line_names_the_wave_the_base_each_entry_what_landed_and_the_hold
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_line_marks_an_ejected_entry_a_barrier_and_a_halt
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_batches_page_shows_the_queue_line_and_the_wave_report
+      - super-fr:tests/unit/test_wave_queue_operator_view.py#test_the_board_card_of_a_queued_approved_pr_never_reads_awaiting_approval
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_block_without_queue_ci_holds_the_repo_and_walks_no_train
+    status: ci
+    notes: 'phase 7: the queue line (wave, base, each entry''s state, what landed, the
+      hold) is built once by queue_view and printed by the pass and the Batches page;
+      a queued approved PR reads ''in merge queue'' on the board'
+amendments:
+  - row: wave-queue-release-hold
+    op: reword
+    base: 0
+    acceptance: A repo cuts no release while a wave's queue drains, and once it drains
+      exactly one release run follows. That run clears the hold whether it cut an RC,
+      a final or nothing installable, and only then does the next queue open. A stale
+      open hold older than a day is ignored with a warning, and an uncleared drained
+      hold becomes a Need.
+    why: 'hold became a handshake: the release clears it (operator, round 3)'
+  - row: wave-queue-wave-exclusive
+    op: reword
+    base: 0
+    acceptance: While a wave's queue is open or releasing, only that wave's PRs and
+      its one close-out (of its ungated batches) enter it. Later waves wait as PRs until
+      the previous wave's release is cut. No-wave batches, passed-gate close-outs and
+      DevOps housekeeping PRs queue alone between waves.
+    why: later waves wait for the previous wave's release; gated close-outs leave the
+      wave close-out (operator, round 3)
+  - row: wave-queue-approval-content
+    op: reword
+    base: 0
+    acceptance: 'An approved-fr approval survives any push that leaves the PR''s own
+      diff unchanged (a merge of main, an empty commit, fr''s own update and a clean
+      merge of main after it, the queue''s own landing rewrite), on every host whatever
+      its diff configuration, and is voided by a change to that diff, with one stated
+      limit: patch-ids ignore hunk line numbers, so moving an otherwise identical hunk
+      within a file keeps the approval.'
+    why: 'p1-r1 review: git patch-id is position-blind within a file, so the row no
+      longer claims every diff change voids; p1-r2/r7 widen what keeps it.'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_moved_identical_hunk_keeps_the_patch_id
+    why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_hostile_diff_configuration_does_not_change_the_patch_id
+    why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_textconv_attribute_does_not_hide_a_binary_edit
+    why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_pr_that_merged_a_newer_main_is_read_against_a_refetched_default
+    why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_that_keeps_the_patch_id_keeps_the_approval
+    why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_driver_update_records_its_patch_id_and_a_clean_merge_after_it_keeps_the_approval
+    why: 'p1 review fix: evidence for the reworded row'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_triage_approval.py#test_an_approval_with_no_patch_id_gains_one_while_it_still_holds
+    why: 'p1 review fix: evidence for the reworded row'
+  - row: merge-train-red-recovery
+    op: reword
+    base: 0
+    acceptance: A batch PR red at any head, the driver's own update included, is handed
+      back to an idle session once per head and never updated again; repeated passes
+      over the same red head send nothing new; an unreachable session puts it on Needs-you.
+    why: 'wave-merge-queue R13, R22: red_decision''s reupdate rule is gone; the queue
+      never updates a PR branch'
+  - row: merge-train-red-recovery
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_4_the_session_status_decides
+    why: the rule numbers moved when the reupdate rule went
+  - row: merge-train-red-recovery
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_3_the_session_status_decides
+    why: the rule numbers moved when the reupdate rule went
+  - row: merge-train-red-recovery
+    op: set-status
+    base: 3
+    status: ci
+    notes: red_decision, the driver recovery and the board changes; the scenario drives
+      an fr-made red head handed back (never re-updated), hand-back once, needs-you.
+    why: the scenario's phase A now proves the hand-back of an fr-made red head
+  - row: drive-merge-train-head-only
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: the per-merge train is
+      gone; the wave merge queue''s entry order and landing are the planner tests (tests/unit/test_wave_queue_planner.py)'
+    why: 'R22 removes the merge train: the queue plans every merge, and a head-only
+      walk no longer exists'
+  - row: drive-merge-train-step-over
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: a failing PR is reported
+      red and never an entry (tests/unit/test_merge_train_gate.py#test_a_failing_member_is_reported_red_and_is_no_entry);
+      a refused merge no longer exists'
+    why: R22 removes the merge train
+  - row: drive-merge-train-output
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: every pass prints a queue
+      line per repo instead (R25); the summary still counts queued entries (test_summary_line_adds_queued_between_closing_and_blocked)'
+    why: R22 removes the merge train and its line
+  - row: merge-train-queue
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: fr never enqueues; a base
+      requiring a forge merge queue is queue-held with the reason (tests/unit/test_triage_batch_drive_cmd.py#test_a_repo_whose_base_requires_a_forge_merge_queue_is_held_with_the_reason,
+      scenario merge-train-queue.sh)'
+    why: R22 removes the forge merge-queue mode
+  - row: merge-train-strict-up-to-date
+    op: retire
+    base: 0
+    notes: 'retired by spec 2026-11-19-wave-merge-queue R22: the queue never updates
+      a PR branch, so strict up-to-date status checks have nothing to hold'
+    why: R22 removes the update path and its strict-checks exemption
+  - row: merge-train-red-recovery
+    op: reword
+    base: 4
+    acceptance: A PR red at a session commit is handed back to an idle session once
+      per head; repeated passes over the same red head send nothing new; an unreachable
+      session puts it on Needs-you.
+    why: the reupdate rule and fr's own updates are gone (R22)
+  - row: triage-batch-version-reserve
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_triage_batch_merge_git.py
+    why: the retired merge loop's real-git test is gone with it (R22)
+  - row: triage-batch-version-reserve
+    op: add-level
+    base: 1
+    level: int
+    ref: super-fr:tests/integration/test_queue_build.py
+    why: the version slots are reserved and applied when the queue builds a combination
+      (R6)
+  - row: triage-batch-merge-queue
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_triage_batch_merge_git.py
+    why: the retired merge loop's real-git test is gone with it (R22, R23)
+  - row: triage-batch-merge-queue
+    op: add-level
+    base: 1
+    level: int
+    ref: super-fr:tests/integration/test_queue_drive_cmd.py
+    why: batch merge drives the wave merge queue, which this test runs over real git
+      (R23)
+  - row: merge-train-label-gate
+    op: reword
+    base: 0
+    acceptance: 'fr queues a batch PR only with a valid approved-fr label bound to its
+      diff: an unlabelled green PR is held naming the label, a session push that changes
+      the diff after labelling voids the approval and removes the label, and a merge
+      of the base or an empty commit keeps it.'
+    why: a labelled PR is a queue entry now, and fr no longer updates PR branches (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_walk
+    why: renamed for the queue (R22)
+  - row: merge-train-label-gate
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_queue
+    why: the queue's version of the unapproved member test (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_green_draft_is_readied_then_merged
+    why: a draft is readied when the queue builds it, not merged by a pass (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval
+    why: fr no longer updates PR branches (R22)
+  - row: merge-train-label-gate
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_or_first_draft_is_a_member_and_is_ready_when_green
+    why: an approved draft is a queue member (R22)
+  - row: merge-train-label-gate
+    op: drop-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_commands.py#test_a_default_merge_holds_an_unlabelled_batch_and_merges_the_rest
+    why: renamed for the queue (R23)
+  - row: merge-train-label-gate
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_merge_train_commands.py#test_a_default_merge_holds_an_unlabelled_batch_and_queues_the_rest
+    why: batch merge drives the queue (R23)
+  - row: batch-merge-skip-held
+    op: reword
+    base: 0
+    acceptance: fr triage batch merge with no ids skips batches another scope holds,
+      naming each, and queues the rest; naming a held batch still refuses.
+    why: batch merge drives the wave merge queue (R23)
+  - row: batch-merge-skip-held
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest
+    why: renamed for the queue (R23)
+  - row: batch-merge-skip-held
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_queues_the_rest
+    why: batch merge drives the queue (R23)
+  - row: triage-archive-pr-draft-merged
+    op: reword
+    base: 0
+    acceptance: Under --yes the drive admits a draft attributed archive PR to the wave
+      merge queue once green, with no approved-fr label; the queue readies and lands
+      it.
+    why: an attributed archive PR is a queue entry (R32)
+  - row: triage-archive-pr-draft-merged
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive.py#test_green_draft_archive_pr_gets_an_archive_action_flagged_draft
+    why: renamed for the queue (R32)
+  - row: triage-archive-pr-draft-merged
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive.py#test_green_draft_archive_pr_is_admitted_to_the_queue_as_a_draft
+    why: an attributed archive PR is a queue entry (R32)
+  - row: triage-archive-pr-draft-merged
+    op: drop-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_of_a_draft_calls_pr_ready_before_pr_merge_and_says_so
+    why: the archive step no longer merges (R32)
+  - row: triage-archive-pr-conflict-handed
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_merged_archive_pr_clears_its_stop
+    why: the archive step no longer merges; its landing hook clears the stop (R32)
+  - row: triage-archive-pr-conflict-handed
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_forge_refused_archive_merge_records_a_stop
+    why: the archive step no longer merges (R32)
+  - row: wave-queue-approval-content
+    op: drop-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_driver_update_records_its_patch_id_and_a_clean_merge_after_it_keeps_the_approval
+    why: 'fr''s own updates are gone (R22): an old update event is only read'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 9
+    level: unit
+    ref: super-fr:tests/unit/test_triage_approval.py#test_a_housekeeping_approval_is_voided_when_the_diff_changes_and_the_label_is_removed
+    why: a non-batch entry's approval is judged by the same rule (R12, R32)
+  - row: merge-train-label-gate
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_wave_queue_phase5_fixes.py#test_p5_r1_an_approved_green_draft_batch_pr_is_readied_when_the_queue_builds_it
+    why: an approved green draft batch PR is readied when the queue builds it, for both
+      land methods (phase 5 fix p5-r1)
+  - row: wave-queue-approval-content
+    op: reword
+    base: 10
+    acceptance: An approved-fr approval survives any push that leaves the PR's own diff
+      unchanged and follows the approved head only by diff-neutral moves (a merge of
+      main with no resolution, an empty commit, fr's own update and a clean merge of
+      main after it, the queue's own landing rewrite), on every host whatever its diff
+      configuration. It is voided by a change to that diff, a moved hunk, a hand-edited
+      merge resolution or a rewritten branch. A diff git cannot read holds the approval
+      for the pass and never voids it.
+    why: 'l-security-r1: patch-ids are position-blind, so the succession is checked
+      too; l-errors-r4: unreadable holds'
+  - row: wave-queue-approval-content
+    op: drop-level
+    base: 11
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_moved_identical_hunk_keeps_the_patch_id
+    why: 'the test is renamed: the limit it pinned is closed'
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 12
+    level: unit
+    ref: super-fr:tests/unit/test_gitseam_patch_id.py#test_a_moved_identical_hunk_keeps_the_patch_id_but_not_the_succession
+    why: evidence for the succession check
+  - row: wave-queue-approval-content
+    op: add-level
+    base: 13
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_after_labelling_voids_the_approval
+    why: 'l-tests-r3: the drive-level void'

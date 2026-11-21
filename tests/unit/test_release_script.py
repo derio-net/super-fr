@@ -14,9 +14,11 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from fr.release_status import hold_verdict
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "release.py"
@@ -155,6 +157,7 @@ class World:
         self.merged: list[dict[str, object]] = []  # what `gh pr list --state merged` reads
         self.read_calls: list[list[str]] = []
         self.decided: list[dict[str, object]] = []  # the JSON fr decided from
+        self.hold_facts: list[dict[str, object]] = []  # the facts the hold's verdict read
 
     # -- other people's pushes -------------------------------------------
     def land(self, rel: str, text: str, message: str = "a merged PR") -> None:
@@ -191,6 +194,38 @@ class World:
         """A PR landing code and its fragment: an installable path moves (R16)."""
         self.land(f"packages/demo/src/demo/{name.replace('-', '_')}.py", f"# {summary}\n")
         self.fragment(name, bump, summary)
+
+    def hold(
+        self,
+        state: str,
+        *,
+        ago: timedelta = timedelta(hours=1),
+        parent: str | None = None,
+        message: str | None = None,
+    ) -> str:
+        """Push the merge queue's hold ref to origin as another writer would, `state` with
+        its last refresh *ago*; the parent is origin's main unless given. Its sha."""
+        _git(self.other, "fetch", "-q", "origin")
+        parent = parent or _git(self.other, "rev-parse", "origin/main").strip()
+        seen = datetime.now(UTC) - ago
+        stamp = "%Y-%m-%dT%H:%M:%SZ"
+        text = message or (
+            f"fr-hold: {state} scope s-11111111 wave 3 opened "
+            f"{(seen - timedelta(hours=2)).strftime(stamp)} refreshed {seen.strftime(stamp)}"
+        )
+        sha = _git(self.other, "commit-tree", f"{parent}^{{tree}}", "-p", parent, "-m", text)
+        sha = sha.strip()
+        _git(self.other, "push", "-q", "--force", "origin", f"{sha}:refs/heads/fr-hold/queue")
+        return sha
+
+    def origin_hold(self) -> tuple[str, str] | None:
+        """(sha, message) of origin's hold ref, None when it has none."""
+        r = subprocess.run(["git", "rev-parse", "--verify", "-q", "refs/heads/fr-hold/queue"],
+                           cwd=self.origin, capture_output=True, text=True)  # fmt: skip
+        if r.returncode != 0:
+            return None
+        sha = r.stdout.strip()
+        return sha, _git(self.origin, "log", "-1", "--format=%B", sha).strip()
 
     # -- origin state ----------------------------------------------------
     def origin_show(self, path: str, ref: str = "main") -> str | None:
@@ -265,6 +300,14 @@ class World:
             self.decided.append(json.loads(facts.read_text()))
             return list(self.waiting)
 
+        def hold_decide(repo: Path, facts: Path) -> dict[str, object]:
+            # fr's own verdict over the facts release.py wrote (what `fr release status
+            # --from-json` runs), without the `uv run` process
+            doc = json.loads(facts.read_text())
+            self.hold_facts.append(doc)
+            held, warnings = hold_verdict(doc["hold"])
+            return {"held": None if held is None else held.to_json(), "warnings": list(warnings)}
+
         return release.Commands(
             bump=bump,
             lock_check=lock_check,
@@ -273,6 +316,7 @@ class World:
             migrate=migrate,
             gh_read=gh_read,
             decide=decide,
+            hold_decide=hold_decide,
         )
 
     def run(self, *argv: str) -> int:
@@ -2643,3 +2687,321 @@ def test_the_live_artifacts_are_the_fragments_not_the_retired_matrix() -> None:
     assert release.LIVE_ARTIFACT_RE.match(FRAGMENT)
     assert not release.LIVE_ARTIFACT_RE.match("docs/acceptance/matrix.yaml")
     assert not release.LIVE_ARTIFACT_RE.match("docs/acceptance/features/sub/x.yaml")
+
+
+# -- the merge queue's hold (spec 2026-11-19-wave-merge-queue R17-R19, §G) -------------------
+
+
+def test_with_no_hold_fr_is_never_asked_about_one(world: World) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    assert world.run() == 0
+    assert world.hold_facts == []  # no ref, no verdict to ask for
+
+
+def test_an_open_hold_cuts_nothing_and_release_py_passes_it_in_the_facts(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    sha = world.hold("open")
+    before = world.origin_log("%H")
+    assert world.run() == 0
+    assert world.origin_log("%H") == before and world.origin_tags() == [f"v{BASE}"]
+    assert world.bump_calls == [] and _gh_writes(world) == []
+    (facts,) = world.hold_facts
+    hold = facts["hold"]
+    assert isinstance(hold, dict)
+    assert (hold["state"], hold["scope"], hold["wave"], hold["sha"]) == (
+        "open", "s-11111111", 3, sha)  # fmt: skip
+    assert hold["parent"] == _tip(world) and hold["refreshed"]
+    out = capsys.readouterr().out
+    assert "held: the merge queue of scope s-11111111 (wave 3)" in out
+    assert world.origin_hold() == (sha, world.origin_hold()[1])  # type: ignore[index]  # untouched
+
+
+def test_an_open_hold_holds_an_rc_too(world: World) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.merged = [
+        {"number": 9, "title": "t", "url": "u", "mergedAt": "2030-01-01T00:00:00Z",
+         "headRefName": "feat/x", "labels": [{"name": "gate:tester"}]},
+    ]  # fmt: skip
+    world.waiting = list(WAITS)
+    world.hold("open")
+    assert world.run() == 0
+    assert world.bump_calls == [] and world.origin_tags() == [f"v{BASE}"]
+    assert world.read_calls == []  # held before the forge is read
+
+
+def test_a_version_run_is_held_too_and_prints_how_to_clear_the_hold(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.hold("open")
+    assert world.run("--version", "4.30.0") == release.EXIT_REFUSED
+    assert world.bump_calls == []
+    err = capsys.readouterr().err
+    assert "git push origin --delete fr-hold/queue" in err
+    assert "gh workflow run release.yml -f version=4.30.0" in err
+
+
+def test_an_open_hold_older_than_a_day_is_ignored_with_a_warning(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    world.hold("open", ago=timedelta(hours=25))
+    assert world.run() == 0
+    assert world.bump_calls == ["4.23.1"] and "v4.23.1" in world.origin_tags()
+    out = capsys.readouterr().out
+    assert "warning:" in out and "s-11111111" in out and "24 hours" in out
+
+
+def test_a_cleared_hold_and_no_hold_never_hold(world: World) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    world.hold("cleared")
+    assert world.run() == 0
+    assert world.bump_calls == ["4.23.1"]
+
+
+def test_a_ref_that_is_no_hold_message_holds_until_cleared(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    world.hold("open", message="somebody's branch")
+    assert world.run() == 0
+    assert world.bump_calls == []
+    assert "scope unreadable" in capsys.readouterr().out
+
+
+def _cleared(world: World) -> bool:
+    held = world.origin_hold()
+    assert held is not None
+    return held[1].startswith("fr-hold: cleared scope s-11111111 wave 3 opened ")
+
+
+def test_a_finished_release_clears_a_drained_hold_its_base_contains(world: World) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    drained = world.hold("drained")  # parent: the main this run's base contains
+    assert world.run() == 0
+    assert world.bump_calls == ["4.23.1"] and "v4.23.1" in world.origin_tags()
+    assert _cleared(world)
+    assert world.origin_hold()[0] != drained  # type: ignore[index]  # a new commit, leased
+
+
+def test_an_rc_counts_as_cut_and_clears_the_hold(world: World) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.merged = [
+        {"number": 9, "title": "t", "url": "u", "mergedAt": "2030-01-01T00:00:00Z",
+         "headRefName": "feat/x", "labels": [{"name": "gate:tester"}]},
+    ]  # fmt: skip
+    world.waiting = list(WAITS)
+    world.hold("drained")
+    assert world.run() == 0
+    assert any("-rc." in t for t in world.origin_tags())
+    assert _cleared(world)
+
+
+def test_a_run_that_cuts_nothing_clears_too(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.hold("drained")  # no fragment pending, the version already tagged
+    assert world.run() == 0
+    assert world.bump_calls == [] and _cleared(world)
+    assert "cleared the merge queue hold" in capsys.readouterr().out
+
+
+def test_nothing_installable_since_the_rc_clears_the_hold(world: World) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.merged = [
+        {"number": 9, "title": "t", "url": "u", "mergedAt": "2030-01-01T00:00:00Z",
+         "headRefName": "feat/x", "labels": [{"name": "gate:tester"}]},
+    ]  # fmt: skip
+    world.waiting = list(WAITS)
+    assert world.run() == 0  # the RC
+    world.land("docs/x.md", "docs only\n")
+    world.hold("drained")
+    assert world.run() == 0
+    assert _cleared(world)
+
+
+def test_a_drained_hold_the_run_s_base_does_not_contain_is_left_for_the_next_run(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _git(world.other, "fetch", "-q", "origin")
+    side = _git(world.other, "commit-tree", "origin/main^{tree}", "-p", "origin/main",
+                "-m", "a drain this run's base never saw").strip()  # fmt: skip
+    drained = world.hold("drained", parent=side)
+    assert world.run() == 0
+    assert world.origin_hold() == (drained, world.origin_hold()[1])  # type: ignore[index]
+    assert "left for the run its push starts" in capsys.readouterr().out
+
+
+def test_a_superseded_run_clears_nothing(world: World) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    drained = world.hold("drained")
+    world.before_push = lambda n: world.land("docs/late.md", "late\n")
+    assert world.run() == 0
+    assert not any(s.startswith("release:") for s in world.origin_log())
+    held = world.origin_hold()
+    assert held is not None and held[0] == drained  # the run that supersedes it clears
+
+
+def test_a_failed_run_clears_nothing(world: World) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    drained = world.hold("drained")
+    world.test_failure = "1 failed"
+    assert world.run() == release.EXIT_REFUSED
+    held = world.origin_hold()
+    assert held is not None and held[0] == drained
+
+
+def test_a_hold_unreadable_after_the_release_says_the_release_published(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-errors-r13: `clear_hold` does not borrow `fetch_hold`'s "refusing to release"."""
+
+    def unreadable(repo: Path) -> None:
+        raise release.HoldReadError("cannot read the merge queue hold: refusing to release", "boom")
+
+    monkeypatch.setattr(release, "fetch_hold", unreadable)
+    with pytest.raises(release.ReleaseError) as raised:
+        release.clear_hold(world.clone)
+    text = str(raised.value)
+    assert "release published; could not read the hold to clear it: boom" in text
+    assert "clear it" in text and "refusing to release" not in text
+
+
+def test_the_clear_is_leased_on_the_drained_sha_so_a_newer_queue_is_never_cleared(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.hold("drained")
+    stale = release.fetch_hold(world.clone)
+    newer = world.hold("open")  # a newer queue opened after the run read the drained hold
+    monkeypatch.setattr(release, "fetch_hold", lambda repo: stale)
+    release.clear_hold(world.clone)
+    held = world.origin_hold()
+    assert held is not None and held[0] == newer
+    assert "not cleared" in capsys.readouterr().out
+
+
+def test_a_hold_that_cannot_be_read_refuses_rather_than_releasing(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    _git(world.clone, "remote", "set-url", "origin", str(world.origin) + ".gone")
+    with pytest.raises(release.ReleaseError):
+        release.fetch_hold(world.clone)
+
+
+def test_a_dry_run_reports_the_hold_and_writes_nothing(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    world.hold("open")
+    assert world.run("--dry-run") == 0
+    assert "held: the merge queue of scope" in capsys.readouterr().out
+
+
+def test_the_default_hold_decide_asks_fr_for_the_verdict_credential_free(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "secret")
+    calls: list[tuple[list[str], object]] = []
+
+    def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        calls.append((cmd, kw.get("env")))
+        doc = {
+            "schema": 1,
+            "waiting": [],
+            "held": {"scope": "s", "wave": 1, "refreshed": None},
+            "warnings": ["w"],
+        }
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(doc), "")
+
+    verdict = release._run_hold_decide(tmp_path, tmp_path / "f.json", run=run)
+    assert verdict == {"held": {"scope": "s", "wave": 1, "refreshed": None}, "warnings": ["w"]}
+    ((cmd, env),) = calls
+    assert cmd[-5:] == ["release", "status", "--from-json", str(tmp_path / "f.json"), "--json"]
+    assert isinstance(env, dict) and "secret" not in env.values()
+
+
+@pytest.mark.parametrize(
+    "rc, out", [(1, ""), (0, "not json"), (0, json.dumps({"schema": 1, "waiting": []}))]
+)
+def test_the_default_hold_decide_fails_closed(tmp_path: Path, rc: int, out: str) -> None:
+    def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, rc, out, "boom")
+
+    with pytest.raises(release.ReleaseError):
+        release._run_hold_decide(tmp_path, tmp_path / "f.json", run=run)
+
+
+def test_the_prepare_job_with_a_held_hold_reports_no_cut_and_clears_nothing(
+    world: World,
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    sha = world.hold("open")
+    out = world.clone.parent / "out"
+    gh_out = world.clone.parent / "gh-output"
+    assert world.run("prepare", "--out", str(out), "--github-output", str(gh_out)) == 0
+    assert gh_out.read_text().strip() == "cut=false"
+    held = world.origin_hold()
+    assert held is not None and held[0] == sha
+
+
+def test_the_clearing_commit_is_a_merge_whose_second_parent_is_the_drained_hold(
+    world: World,
+) -> None:
+    """p4-r1: the push that clears is a fast-forward, so a remote that forbids non-fast-forward
+    updates takes it; the first parent keeps its meaning, the drained main."""
+    world.fragment("fix-a", "patch", "fix the thing")
+    main = _tip(world)
+    drained = world.hold("drained")
+    assert world.run() == 0
+    sha, _ = world.origin_hold()  # type: ignore[misc]
+    parents = _git(world.origin, "rev-list", "--parents", "-1", sha).split()[1:]
+    assert parents == [main, drained]
+    _git(world.origin, "merge-base", "--is-ancestor", drained, sha)
+
+
+def test_a_hold_with_two_parents_reads_its_first_parent(world: World) -> None:
+    drained = world.hold("drained")
+    _git(world.other, "fetch", "-q", "origin")
+    main = _git(world.other, "rev-parse", "origin/main").strip()
+    message = _git(world.other, "log", "-1", "--format=%B", drained).strip()
+    merge = _git(world.other, "commit-tree", f"{main}^{{tree}}", "-p", main, "-p", drained,
+                 "-m", message).strip()  # fmt: skip
+    _git(world.other, "push", "-q", "--force", "origin", f"{merge}:refs/heads/fr-hold/queue")
+    hold = release.fetch_hold(world.clone)
+    assert hold is not None and hold.parent == main and hold.sha == merge
+
+
+def test_a_run_the_floor_check_fails_clears_nothing(world: World) -> None:
+    """p4-r4: EXIT_FLOOR is a failed run; only EXIT_OK clears."""
+    world.land(
+        "packages/demo/src/demo/new.py", 'SCOPE_FR_VERSION = ">=4.24.0,<5.0.0"\n', "floor PR"
+    )
+    world.fragment("feat-b", "minor", "the floor's feature")
+    world.fragment("big", "major", "a breaking change")
+    drained = world.hold("drained")
+    assert world.run() == release.EXIT_FLOOR
+    held = world.origin_hold()
+    assert held is not None and held[0] == drained
+
+
+def test_publish_rereads_the_hold_and_pushes_nothing_when_one_opened_during_the_suite(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """p4-r3: prepare read no hold, the suite ran, a queue opened its hold on the staged base:
+    publish does not release over it."""
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    sha = world.hold("open")  # opened on the staged base, after prepare read the ref
+    tip = _tip(world)
+    capsys.readouterr()
+
+    assert _publish(world, out, plan) == 0
+
+    assert _tip(world) == tip and world.origin_tags() == [f"v{BASE}"]
+    assert _gh_writes(world) == []
+    said = capsys.readouterr().out
+    assert "held: the merge queue of scope" in said and "nothing is pushed" in said
+    held = world.origin_hold()
+    assert held is not None and held[0] == sha  # and it clears nothing

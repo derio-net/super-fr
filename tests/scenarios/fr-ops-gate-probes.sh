@@ -38,6 +38,7 @@ forge: {type: github}
 tracking: {type: none}
 YAML
 printf 'env_passthrough: [MARKS]\n' > .fr/ops.yaml
+printf 'queue: {ci: none}\n' > .fr/triage.yaml  # the wave merge queue serves this repo
 matrix_fragment <<'YAML'
 org: derio-net
 repo: fixture
@@ -119,17 +120,17 @@ class Forge:
     def pr_checks(self, repo, n):
         return [{"name": "ci", "bucket": "pass"}]
 
-    def repo_merge_methods(self, repo):
-        return {"default": "merge", "allowed": ["merge"]}
-
     def pr_merge(self, repo, n, *, head_sha, method):
+        raise AssertionError("the DevOps stage calls no pr_merge: the merge queue lands the PR")
+
+    def _queue_lands(self, n):
+        """What the wave merge queue does once the stage released the PR (R26)."""
         p = self._pr(n)
-        assert p["head_oid"] == head_sha, "merged a head the stage did not pin"
         subprocess.run(["git", "--git-dir", os.environ["ORIGIN"], "update-ref",
-                        "refs/heads/main", head_sha], check=True)
+                        "refs/heads/main", p["head_oid"]], check=True)
         p["state"] = "MERGED"
         p.setdefault("events", []).append("merged")
-        save()
+        print(f"FAKE-QUEUE landed #{n}")
 
     def open_pr_for_head(self, repo, branch):
         return prs.get("housekeeping", {}).get(branch)
@@ -147,16 +148,29 @@ class Forge:
     def edit_pr_labels(self, repo, n, *, add, remove):
         p = self._pr(n)
         p["labels"] = sorted((set(p["labels"]) | set(add)) - set(remove))
+        if "fr-queue:release" in add:
+            self._queue_lands(n)
         save()
 
     def list_issue_comments(self, repo, n):
-        return []
+        return list(self._pr(n).get("comments", []))
 
-    def ensure_labels(self, repo, names):
+    def edit_issue_comment(self, repo, comment_id, body):
+        for p in prs.values():
+            for c in p.get("comments", []) if isinstance(p, dict) else []:
+                if c["id"] == comment_id:
+                    c["body"] = body
+        save()
+
+    def ensure_labels(self, repo, labels):
         pass
 
     def comment_pr(self, repo, n, body):
         print(f"FAKE-FORGE comment #{n}: {body}")
+        p = self._pr(n)
+        comments = p.setdefault("comments", [])
+        comments.append({"association": "OWNER", "id": len(comments) + 1, "body": body})
+        save()
 
 
 class Prompt:

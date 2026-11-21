@@ -1,10 +1,11 @@
-"""`fr triage batch merge`: order, plan, reconcile and refusals
-(spec 2026-09-25-triage-batches §3.D Reconcile, §3.F; Test Plan 11, 12, 13).
+"""`fr triage batch merge` (spec 2026-11-19-wave-merge-queue R22, R23; the order and the method
+choice of 2026-09-25-triage-batches §3.F).
 
-The forge is `MergeForge` (through `triage_batch_cmd.make_client`) and the clone
-is `FakeCheckout` (through `triage_batch_cmd.make_checkout`), whose scratch
-worktrees record what merge asked git to do. Real git is exercised by
-`tests/integration/test_triage_batch_merge_git.py`.
+There is no second merge path: `batch merge` opens the wave merge queue for its named or
+approved batches and drives it in the foreground, as the driver does, until they landed or
+the queue stopped. The retired merge loop's own tests (updates, version re-slotting, the
+strict-checks exemption) are gone with it; the queue's equivalents are in
+`tests/unit/test_wave_queue_planner.py` and `tests/integration/`.
 """
 
 from __future__ import annotations
@@ -14,315 +15,37 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
-from fr.gh import GhError
 from fr.ghclient import BaseRules
 from fr.triage.batch import merge_order
-from fr.triage.model import Facts, Issue, PullRequest, TriageConfig
+from fr.triage.model import PullRequest, TriageConfig, load_judgements
 from typer.testing import CliRunner
 
-REPO = "derio-net/super-fr"
-
-
-def _toml(version: str) -> str:
-    return f'[project]\nname = "super-fr"\nversion = "{version}"\n'
-
-
-CONFIG = {
-    "version": {
-        "source": {"file": "pyproject.toml", "key": "project.version"},
-        "files": ["pyproject.toml", "uv.lock"],
-        "set": "python scripts/bump.py {version}",
-    }
-}
-
-
-# ------------------------------------------------------------------ fakes
-
-
-class MergeForge:
-    """The adapter's merge operations over an in-memory set of PRs."""
-
-    def __init__(self) -> None:
-        self.prs: dict[int, dict[str, Any]] = {}
-        self.checks: dict[int, list[dict[str, Any]]] = {}  # required ones
-        self.all_checks: dict[int, list[dict[str, Any]]] = {}  # default: the required
-        self.refuse: dict[int, str] = {}
-        self.merged: list[tuple[int, str, str]] = []
-        self.reads: list[int] = []  # each read of a PR's required checks
-        self.methods: dict[str, Any] = {"default": "squash", "allowed": ["merge", "squash"]}
-        self.method_reads = 0
-        self.readied: list[int] = []
-        self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
-        self.labels_defined: set[str] = {"approved-fr", "ready-fr"}
-        self.created_labels: list[str] = []
-        self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
-
-    def read_file(self, repo: str, path: str) -> str:
-        """The contents API at the default branch (R9): `files` serves `.fr/settings.yaml`."""
-        from fr.gh import GhError
-
-        if path not in self.files:
-            raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
-        return self.files[path]
-
-    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
-        self.method_reads += 1
-        return dict(self.methods)
-
-    def add(self, number: int, head: str, **kw: Any) -> None:
-        self.prs[number] = {
-            "state": "OPEN",
-            "draft": False,
-            "head_oid": head,
-            "head_ref": kw.pop("head_ref", f"feat/batch-{number}"),
-            "mergeable": "MERGEABLE",
-            "merge_state": "CLEAN",
-            # The operator's approval (merge-train-safety §A): on unless a test says not.
-            "labels": kw.pop("labels", ["approved-fr"]),
-            **kw,
-        }
-
-    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-        return {**self.prs[number], "labels": list(self.prs[number]["labels"])}
-
-    def pr_ready(self, repo: str, number: int) -> None:
-        self.readied.append(number)
-        self.prs[number]["draft"] = False
-
-    def edit_issue_labels(
-        self, repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]
-    ) -> None:
-        self.label_edits.append((number, add, remove))
-        pr = self.prs[number]
-        pr["labels"] = [x for x in pr["labels"] if x not in remove] + sorted(add)
-
-    def label_exists(self, repo: str, name: str) -> bool:
-        return name in self.labels_defined
-
-    def ensure_labels(self, repo: str, labels: list[Any]) -> None:
-        for label in labels:
-            name = getattr(label, "name", label)
-            self.created_labels.append(name)
-            self.labels_defined.add(name)
-
-    def base_rules(self, repo: str, branch: str) -> BaseRules:
-        if getattr(self, "rules_error", None):
-            raise GhError(self.rules_error, returncode=1)  # type: ignore[attr-defined]
-        return getattr(self, "rules", BaseRules())
-
-    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
-        self.reads.append(number)
-        return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
-
-    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
-        if number in self.all_checks:
-            return list(self.all_checks[number])
-        return self.pr_required_checks(repo, number)
-
-    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
-        if number in self.refuse:
-            raise GhError(self.refuse[number], returncode=1)
-        assert self.prs[number]["head_oid"] == head_sha
-        self.merged.append((number, head_sha, method))
-        self.prs[number]["state"] = "MERGED"
-
-    def closing_ref(self, repo: str, number: int) -> str:
-        return f"Closes {repo}#{number}"
-
-
-class FakeWorktree:
-    def __init__(self, checkout: FakeCheckout, path: Path, ref: str) -> None:
-        self.checkout, self.path, self.ref = checkout, path, ref
-        self.files = {f: t for (r, f), t in checkout.files.items() if r == ref}
-        self.log: list[str] = []
-
-    def merge(self, ref: str) -> list[str]:
-        self.log.append(f"merge {ref}")
-        return list(self.checkout.conflicts.get(self.ref, []))
-
-    def take_theirs(self, paths: list[str]) -> None:
-        self.log.append(f"theirs {' '.join(paths)}")
-
-    def merge_base(self, ref: str) -> str:
-        return "base"
-
-    def show(self, ref: str, file: str) -> str | None:
-        return self.checkout.files.get((self.ref if ref == "HEAD" else ref, file))
-
-    def abort_merge(self) -> None:
-        self.log.append("abort")
-
-    def read(self, file: str) -> str | None:
-        return self.files.get(file)
-
-    def run(self, command: str, **fields: str) -> None:
-        self.log.append(f"run {command.format(**fields)}")
-        if "version" in fields:
-            self.files["pyproject.toml"] = _toml(fields["version"])
-
-    def commit_all(self, message: str, version_files: list[str]) -> str | None:
-        self.log.append(f"commit {message}")
-        self.staged_globs = version_files
-        sha = f"new-{len(self.checkout.worktrees)}"
-        for f, t in self.files.items():
-            self.checkout.files[(sha, f)] = t
-        self.new = sha
-        return sha
-
-    def push(self, branch: str) -> None:
-        self.log.append(f"push {branch}")
-        self.checkout.up_to_date.add(self.new)
-        self.checkout.on_push(branch, self.new)
-
-
-class FakeCheckout:
-    def __init__(self, path: Path, forge: MergeForge) -> None:
-        self.path = path
-        self.files: dict[tuple[str, str], str] = {
-            ("origin/main", "pyproject.toml"): _toml("4.21.1"),
-            ("base", "pyproject.toml"): _toml("4.21.1"),
-        }
-        self.up_to_date: set[str] = set()
-        self.conflicts: dict[str, list[str]] = {}
-        self.worktrees: list[FakeWorktree] = []
-        self.removed: list[Path] = []
-        self.forge = forge
-        # head -> the first-parent commits main has that it lacks; unset is one code commit
-        self.base_commits: dict[str, tuple[tuple[str, tuple[tuple[str, str], ...]], ...]] = {}
-        self.pr_paths: dict[str, frozenset[str]] = {}  # head -> paths the PR changed
-
-    def origin_repo(self) -> str | None:
-        return REPO
-
-    def default_branch(self) -> str:
-        return "main"
-
-    def fetch(self) -> None:
-        pass
-
-    def show(self, ref: str, file: str) -> str | None:
-        return self.files.get((ref, file))
-
-    def is_ancestor(self, ancestor: str, descendant: str) -> bool:
-        return descendant in self.up_to_date
-
-    def commits_behind(
-        self, head: str, ref: str
-    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
-        return self.base_commits.get(head, (("code", (("M", "packages/x.py"),)),))
-
-    def changed_paths(self, ref: str, head: str) -> frozenset[str]:
-        return self.pr_paths.get(head, frozenset({"a.py"}))
-
-    def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
-        """origin/<default>'s CI: a workflow, so the repo is not `ci none` (R4)."""
-        (dest / ".github" / "workflows").mkdir(parents=True)
-        (dest / ".github" / "workflows" / "ci.yml").write_text("on: push\njobs: {}\n")
-
-    def add_worktree(self, where: Path, ref: str) -> FakeWorktree:
-        wt = FakeWorktree(self, where, ref)
-        self.worktrees.append(wt)
-        return wt
-
-    def remove_worktree(self, where: Path) -> None:
-        self.removed.append(where)
-
-    def rev_parse(self, ref: str) -> str:
-        return f"{ref}@fetched"
-
-    def on_push(self, branch: str, sha: str) -> None:
-        for pr in self.forge.prs.values():
-            if pr["head_ref"] == branch:
-                pr["head_oid"] = sha
-
-
-def _lock(version: str, *deps: str) -> str:
-    extra = "".join(f'[[package]]\nname = "{d}"\nversion = "0.1.0"\n\n' for d in deps)
-    return f'version = 1\n\n{extra}[[package]]\nname = "super-fr"\nversion = "{version}"\n'
-
-
-def _batch_yaml(bid: str, n: int, *, order: int | None = None, bump: str = "patch", v: str) -> str:
-    extra = f"    order: {order}\n" if order is not None else ""
-    return (
-        f'  - id: {bid}\n    title: {bid}\n    ids: ["super-fr#{n}"]\n    bump: {bump}\n{extra}'
-        f"    events:\n      - {{kind: dispatch, at: 2026-09-25T10:00:00Z, runner: herdr,"
-        f" handle: h, branch: feat/batch-{bid}, reserved_version: {v}}}\n"
-    )
+from tests.unit.test_triage_batch_dispatch import FakeRunner
+from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
+    NOW,
+    REPO,
+    DriveCheckout,
+    RecordingQueue,
+    World,
+    _batch,
+    _dispatch_event,
+    _queued,
+    _recording_queue,
+    _sandbox,
+    _state,
+    runner_fixture,
+    world_fixture,
+)
 
 
 def _pr(n: int, bid: str, head: str, files: list[str]) -> PullRequest:
     return PullRequest(
-        author="operator",
-        cross_repo=False,
-        repo=REPO,
-        number=n,
-        title=bid,
-        state="OPEN",
-        is_draft=False,
-        url=f"https://github.com/{REPO}/pull/{n}",
-        head_ref=f"feat/batch-{bid}",
-        head_oid=head,
-        files=files,
-        created_at="2026-09-25T11:00:00+00:00",
-    )
-
-
-def _setup(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    batches: list[tuple[str, int, int | None, str, str, list[str]]],
-    *,
-    tiers: dict[int, int] | None = None,
-    config: dict[str, Any] | None = CONFIG,
-) -> tuple[MergeForge, FakeCheckout]:
-    """*batches*: (id, issue/PR number, order, bump, reserved version, files)."""
-    tiers = tiers or {}
-    issues = "".join(f"  super-fr#{n}: {{tier: {tiers.get(n, 2)}}}\n" for _, n, *_ in batches)
-    judgements = (
-        "schema: 2\ntiers:\n  - {n: 1, title: Now}\n  - {n: 2, title: Next}\nissues:\n"
-        + issues
-        + "batches:\n"
-        + "".join(_batch_yaml(b, n, order=o, bump=bump, v=v) for b, n, o, bump, v, _ in batches)
-    )
-    forge = MergeForge()
-    checkout = FakeCheckout(tmp_path / "clone", forge)
-    prs = []
-    for bid, n, _, _, v, files in batches:
-        head = f"head-{bid}"
-        prs.append(_pr(n + 1000, bid, head, files))
-        forge.add(n + 1000, head, head_ref=f"feat/batch-{bid}")
-        checkout.files[(head, "pyproject.toml")] = _toml(v)
-        checkout.up_to_date.add(head)
-    facts = Facts(
-        viewer="operator",
-        schema=3,
-        scope="derio-net--super-fr",
-        kind="repo",
-        collected_at="2026-09-26T12:00:00+00:00",
-        repos=[REPO],
-        issues=[
-            Issue(
-                repo=REPO,
-                number=n,
-                title=f"issue {n}",
-                state="open",
-                url=f"https://github.com/{REPO}/issues/{n}",
-            )
-            for _, n, *_ in batches
-        ],
-        prs=prs,
-        config={REPO: TriageConfig.model_validate(config)} if config else {},
-    )
-    if config:  # the config on origin is the one collected: fresh (§3.I)
-        checkout.files[("origin/main", ".fr/triage.yaml")] = yaml.safe_dump(config)
-    (tmp_path / "judgements.yaml").write_text(judgements, encoding="utf-8")
-    (tmp_path / "facts.json").write_text(json.dumps(facts.to_json()), "utf-8")
-    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: forge)
-    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: checkout)
-    return forge, checkout
+        author="operator", cross_repo=False, repo=REPO, number=n, title=bid, state="OPEN",
+        is_draft=False, url=f"https://github.com/{REPO}/pull/{n}", head_ref=f"feat/batch-{bid}",
+        head_oid=head, files=files,
+    )  # fmt: skip
 
 
 def _merge(tmp_path: Path, *args: str) -> tuple[int, str]:
@@ -332,8 +55,236 @@ def _merge(tmp_path: Path, *args: str) -> tuple[int, str]:
     return result.exit_code, result.output
 
 
-def _order(out: str) -> list[str]:
-    return [line.split()[2] for line in out.splitlines() if line.lstrip()[:2].rstrip(".").isdigit()]
+@pytest.fixture(name="clone")
+def clone_fixture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: World, runner: FakeRunner
+) -> DriveCheckout:
+    """The drive tests' fake clone and forge, with the queue's executor recording what it
+    is asked to do; `queue.ci: push` is declared unless a test says it is not."""
+    fake = DriveCheckout(tmp_path / "clone", world)
+    fake.path.mkdir()
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    _recording_queue(monkeypatch, world)
+    return fake
+
+
+def _ready(world: World, tmp_path: Path, *ids: int) -> None:
+    for i in ids:
+        world.issues[i] = "open"
+        world.pr(100 + i, f"feat/batch-b{i}", [i])
+    _state(tmp_path, world, *(_batch(f"b{i}", i, events=_dispatch_event(f"b{i}")) for i in ids))
+
+
+def _land_on_the_second_nap(
+    monkeypatch: pytest.MonkeyPatch, world: World, *numbers: int
+) -> list[float]:
+    """The queue lands the PRs while `batch merge` waits: the forge reads them MERGED."""
+    naps: list[float] = []
+
+    def _nap(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == 2:
+            for n in numbers:
+                world.prs[n].update(state="MERGED", merged_at=NOW.isoformat())
+        assert len(naps) < 6, "batch merge did not end"
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _nap)
+    return naps
+
+
+# ------------------------------------------------------------------ the foreground queue (R23)
+
+
+def test_batch_merge_drives_the_queue_in_the_foreground_until_the_batches_landed(
+    tmp_path: Path, world: World, clone: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ready(world, tmp_path, 1, 2)
+    naps = _land_on_the_second_nap(monkeypatch, world, 101, 102)
+    code, out = _merge(tmp_path, "b1", "b2", "--yes")
+    assert code == 0, out
+    assert "queue-open" in out and "merged 2 batches" in out
+    assert len(naps) >= 2  # it waited while the combinations ran
+    assert not [c for c in world.calls if c.startswith("pr_merge")] and world.merged == []
+    batches = load_judgements(tmp_path / "judgements.yaml").batches
+    assert not [e for b in batches for e in b.events if e.kind in ("update", "enqueue")]
+
+
+def test_batch_merge_without_yes_prints_the_queues_plan_and_writes_nothing(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    _ready(world, tmp_path, 1)
+    code, out = _merge(tmp_path)
+    assert code == 0, out
+    assert "queue-open" in out and "nothing done" in out
+    assert world.queue_plans == [] and load_judgements(tmp_path / "judgements.yaml").queues == []
+
+
+def test_batch_merge_acts_on_the_queue_alone_it_dispatches_and_closes_nothing(
+    tmp_path: Path, world: World, clone: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _ready(world, tmp_path, 1)
+    world.issues[9] = "open"
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")), _batch("b9", 9))
+    _land_on_the_second_nap(monkeypatch, world, 101)
+    code, out = _merge(tmp_path, "b1", "--yes")
+    assert code == 0, out
+    assert runner.dispatched == [] and "dispatch b9" not in out
+
+
+def test_a_named_batch_without_the_approval_label_is_refused(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    _ready(world, tmp_path, 1)
+    world.prs[101]["labels"] = []
+    code, out = _merge(tmp_path, "b1", "--yes")
+    assert code == 2 and "not approved: b1" in out and "approved-fr" in out
+    assert world.queue_plans == []
+
+
+def test_a_named_batch_that_is_not_pr_open_is_refused(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    _ready(world, tmp_path, 1)
+    world.issues[2] = "open"
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")), _batch("b2", 2))
+    code, out = _merge(tmp_path, "b2", "--yes")
+    assert code == 2 and "not a pr-open batch here: b2" in out
+
+
+def test_a_repo_whose_queue_is_held_stops_batch_merge_with_the_reason(
+    tmp_path: Path, world: World, clone: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R22: a base that requires a forge merge queue holds the queue; there is no other way
+    to merge, so `batch merge` stops and says what to change."""
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _ready(world, tmp_path, 1)
+    code, out = _merge(tmp_path, "b1", "--yes")
+    assert code == 1, out
+    assert "requires a forge merge queue" in out
+    assert world.queue_plans == [] and world.merged == []
+
+
+def test_a_repo_without_queue_ci_is_refused_with_what_to_add(
+    tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = DriveCheckout(tmp_path / "clone", world)
+    fake.path.mkdir()
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    RecordingQueue.world, RecordingQueue.script = world, {}
+    monkeypatch.setattr(triage_batch_cmd, "QueueExecutor", RecordingQueue)
+    _ready(world, tmp_path, 1)
+    code, out = _merge(tmp_path, "b1", "--yes")
+    assert code == 1, out
+    assert "queue.ci" in out and "ci: push" in out
+    assert world.queue_plans == []
+
+
+def test_batch_merge_uses_the_method_it_is_given_or_the_repos_default(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    _ready(world, tmp_path, 1)
+    code, out = _merge(tmp_path, "b1", "--yes", "--method", "rebase")
+    assert code == 2
+    assert "rebase" in out and "squash" in out  # the repo allows squash only
+    assert world.queue_plans == []
+
+
+# ---------------------------------------- triage-claims: merge keeps hands off (R6, R7)
+
+
+def _hold(tmp_path: Path, *issue_indexes: int) -> None:
+    from fr.triage.model import load_facts
+
+    from tests.unit.triage_claim_fixtures import FAR, OTHER, held, marker
+
+    path = tmp_path / "facts.json"
+    facts = load_facts(path)
+    issues = [
+        i.model_copy(update=held(marker(OTHER, "theirs", expires=FAR))) if n in issue_indexes else i
+        for n, i in enumerate(facts.issues)
+    ]
+    path.write_text(json.dumps(facts.model_copy(update={"issues": issues}).to_json()), "utf-8")
+
+
+def _ready_held(world: World, tmp_path: Path, *ids: int) -> None:
+    _ready(world, tmp_path, *ids)
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+
+
+def test_merge_refuses_a_batch_held_elsewhere(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    from tests.unit.triage_claim_fixtures import OTHER
+
+    _ready_held(world, tmp_path, 1)
+    _hold(tmp_path, 0)
+    code, out = _merge(tmp_path, "b1", "--yes")  # naming it: still a refusal (R7)
+    assert code == 2 and "cannot be merged" in out and OTHER in out
+    assert world.queue_plans == []
+
+
+def test_merge_with_no_ids_skips_a_held_batch_and_queues_the_rest(
+    tmp_path: Path, world: World, clone: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.triage_claim_fixtures import OTHER
+
+    _ready_held(world, tmp_path, 1, 2)
+    _hold(tmp_path, 0)
+    _land_on_the_second_nap(monkeypatch, world, 102)
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert f"skipped b1: held by {OTHER}" in out
+    assert _queued(world) == [] or "b1" not in _queued(world)
+
+
+def test_merge_with_no_ids_says_nothing_to_merge_when_every_batch_is_held(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    _ready_held(world, tmp_path, 1, 2)
+    _hold(tmp_path, 0, 1)
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert "skipped b1: held by" in out and "skipped b2: held by" in out
+    assert "nothing to merge" in out and world.queue_plans == []
+
+
+# ------------------------------------------------------------------ one verdict rule
+
+
+@pytest.mark.parametrize(
+    ("required", "every", "ci_none"),
+    [
+        ([{"name": "test", "bucket": "pass"}], None, False),
+        ([{"name": "test", "bucket": "fail"}], None, False),
+        ([{"name": "test", "bucket": "pending"}], None, False),
+        ([], [{"name": "lint", "bucket": "fail"}, {"name": "x", "bucket": "pass"}], False),
+        ([], [], False),
+        ([{"name": "test", "bucket": "fail"}], None, True),
+    ],
+)
+def test_pr_checks_verdict_matches_live_checks(
+    tmp_path: Path, required: list[dict[str, Any]], every: Any, ci_none: bool
+) -> None:
+    """`pr_checks_verdict` holds the rule `live_checks` judges by: the driver reads a PR the
+    facts do not hold through it, with no MergeContext to hand."""
+    from fr.triage.batch_merge import MergeContext, live_checks, pr_checks_verdict
+
+    class Forge:
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return required
+
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return every or []
+
+    ctx = MergeContext(
+        client=Forge(),  # type: ignore[arg-type]
+        checkout=None,  # type: ignore[arg-type]
+        repo="derio-net/super-fr", version=None, method="squash",
+        ci_none=ci_none,
+    )  # fmt: skip
+    direct = pr_checks_verdict(Forge(), "derio-net/super-fr", 7, ci_none=ci_none)  # type: ignore[arg-type]
+    assert direct == live_checks(ctx, 7)
 
 
 # ------------------------------------------------------------------ order (§3.F)
@@ -380,431 +331,6 @@ def test_the_order_is_deterministic() -> None:
     assert once == [e.batch.id for e in merge_order(list(reversed(entries)))]
 
 
-# -------------------------------------------------------------- plan (§3.F)
-
-
-def test_the_printed_plan_names_shared_files_per_step_and_writes_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path,
-        monkeypatch,
-        [
-            ("one", 1, None, "patch", "4.21.2", ["shared.py", "a.py"]),
-            ("two", 2, None, "patch", "4.21.3", ["shared.py", "b.py"]),
-        ],
-    )
-    code, out = _merge(tmp_path)
-    assert code == 0, out
-    assert _order(out) == ["one", "two"]
-    first = next(line for line in out.splitlines() if " one " in line)
-    assert "shared.py" in first and "a.py" not in first
-    assert "re-run with --yes" in out
-    assert forge.merged == [] and checkout.worktrees == []
-
-
-def test_reconcile_re_slots_after_a_reorder(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """`late` was dispatched second (4.21.3) but must merge first (order 1): the
-    slots follow merge order, so each PR is re-versioned to its slot."""
-    forge, checkout = _setup(
-        tmp_path,
-        monkeypatch,
-        [
-            ("early", 1, None, "patch", "4.21.2", ["a.py"]),
-            ("late", 2, 1, "patch", "4.21.3", ["b.py"]),
-        ],
-    )
-    code, out = _merge(tmp_path)
-    assert code == 0, out
-    assert _order(out) == ["late", "early"]
-    late = next(line for line in out.splitlines() if " late " in line)
-    assert "4.21.3 -> slot 4.21.2" in late
-    early = next(line for line in out.splitlines() if " early " in line)
-    assert "4.21.2 -> slot 4.21.3" in early
-
-
-def test_an_up_to_date_pr_holding_the_wrong_slot_is_re_versioned(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Step 3b: up to date with main but carrying the wrong number."""
-    forge, checkout = _setup(
-        tmp_path, monkeypatch, [("solo", 1, None, "patch", "4.21.5", ["a.py"])]
-    )
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 0, out
-    (wt,) = checkout.worktrees
-    assert wt.log == [
-        "run python scripts/bump.py 4.21.2",
-        "commit chore: re-slot version to 4.21.2",
-        "push feat/batch-solo",
-    ]
-    # checked before the push, after it, and before merging the pushed head
-    assert forge.reads == [1001, 1001, 1001]
-    assert forge.merged == [(1001, "new-1", "squash")]
-    assert checkout.removed == [wt.path]  # step 4: removed after the merge
-
-
-def test_an_up_to_date_pr_at_its_slot_merges_with_its_head(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
-    )
-    code, out = _merge(tmp_path, "--yes", "--method", "merge")
-    assert code == 0, out
-    assert checkout.worktrees == []
-    assert forge.merged == [(1001, "head-solo", "merge")]
-
-
-def test_nothing_merges_at_a_version_not_above_mains(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path, monkeypatch, [("solo", 1, None, "patch", "4.21.2", ["a.py"])]
-    )
-    real_fetch = checkout.fetch
-    fetches = []
-
-    def _main_moves() -> None:  # an outside release lands after the plan is printed
-        fetches.append(1)
-        if len(fetches) > 2:  # after the config check's and the plan's fetches
-            checkout.files[("origin/main", "pyproject.toml")] = _toml("4.21.2")
-        real_fetch()
-
-    checkout.fetch = _main_moves  # type: ignore[method-assign]
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 1
-    assert "not above" in out and "4.21.2" in out
-    assert forge.merged == []
-
-
-def test_a_merged_pr_is_skipped_so_a_re_run_resumes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path,
-        monkeypatch,
-        [
-            ("one", 1, None, "patch", "4.21.2", ["a.py"]),
-            ("two", 2, None, "patch", "4.21.2", ["b.py"]),
-        ],
-    )
-    forge.prs[1001]["state"] = "MERGED"
-    checkout.files[("origin/main", "pyproject.toml")] = _toml("4.21.2")
-    code, out = _merge(tmp_path)
-    assert code == 0, out
-    assert _order(out) == ["two"]
-    assert "one: already merged" in out
-    two = next(line for line in out.splitlines() if " two " in line)
-    assert "slot 4.21.3" in two
-
-
-def test_a_named_batch_that_is_not_pr_open_is_refused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])])
-    code, out = _merge(tmp_path, "nope")
-    assert code == 2
-
-
-# ----------------------------------------------------------- refusals (§3.F)
-
-
-@pytest.mark.parametrize(
-    ("mutate", "words"),
-    [
-        # An approved draft is readied and merged now (merge-train-safety R3); a label
-        # removed under the run stops it instead.
-        (lambda f: f.prs[1001].update(labels=[]), "approved-fr"),
-        (
-            lambda f: f.checks.__setitem__(1001, [{"name": "lint", "bucket": "fail"}]),
-            "lint",
-        ),
-        # a push fr did not make voids the approval: that is the stop's real cause
-        (lambda f: f.prs[1001].update(head_oid="someone-pushed"), "approved-fr label is void"),
-    ],
-    ids=["label-removed", "failing-check", "moved-head"],
-)
-def test_each_refusal_stops_the_queue_with_its_message(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutate: Any, words: str
-) -> None:
-    forge, checkout = _setup(
-        tmp_path,
-        monkeypatch,
-        [
-            ("one", 1, None, "patch", "4.21.2", ["a.py"]),
-            ("two", 2, None, "patch", "4.21.3", ["b.py"]),
-        ],
-    )
-    real_view = forge.pr_view
-    views: list[int] = []
-
-    def _changes_after_plan(repo: str, number: int) -> dict[str, Any]:
-        views.append(number)
-        # the step-1 re-read, after the approval settle and the plan read it
-        if views.count(1001) == 3:
-            mutate(forge)
-        return real_view(repo, number)
-
-    forge.pr_view = _changes_after_plan  # type: ignore[method-assign]
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 1
-    assert words in out
-    assert forge.merged == []  # the queue stopped: `two` never merged either
-
-
-def test_a_protection_refusal_is_reported_verbatim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])])
-    words = "X Pull request #1001 is not mergeable: At least 1 approving review is required."
-    forge.refuse[1001] = words
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 1
-    assert words in " ".join(out.split())
-
-
-def test_an_unsupported_backend_stops_with_its_declared_refusal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from fr.real_glabclient import RealGlabClient
-
-    _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])])
-    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: RealGlabClient())
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 2
-    assert "gh#611" in out and "repo_merge_methods" in out  # the first forge read
-
-
-def test_a_conflict_outside_the_version_files_stops_and_keeps_the_worktree(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])])
-    checkout.up_to_date.clear()  # behind main
-    checkout.conflicts["head-one"] = ["uv.lock", "src/a.py"]
-    checkout.files[("base", "uv.lock")] = _lock("4.21.1")  # a version-only change
-    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2")
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 1
-    assert "src/a.py" in out and "uv.lock" not in out.split("src/a.py")[0].split("\n")[-1]
-    (wt,) = checkout.worktrees
-    assert wt.log == ["merge origin/main", "abort"]
-    assert checkout.removed == []
-    assert f"The scratch worktree is kept for inspection at {wt.path}" in out
-
-
-def test_a_version_only_conflict_takes_mains_side_then_sets_the_slot(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path,
-        monkeypatch,
-        [
-            ("one", 1, None, "patch", "4.21.2", ["a.py"]),
-        ],
-    )
-    checkout.up_to_date.clear()
-    checkout.conflicts["head-one"] = ["pyproject.toml", "uv.lock"]
-    checkout.files[("base", "uv.lock")] = _lock("4.21.1")
-    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2")
-    real_add = checkout.add_worktree
-
-    def _add(where: Path, ref: str) -> FakeWorktree:
-        wt = real_add(where, ref)
-        wt.files["pyproject.toml"] = _toml("4.21.1")  # main's side after --theirs
-        return wt
-
-    checkout.add_worktree = _add  # type: ignore[method-assign]
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 0, out
-    (wt,) = checkout.worktrees
-    assert wt.log == [
-        "merge origin/main",
-        "theirs pyproject.toml uv.lock",
-        "run python scripts/bump.py 4.21.2",
-        "commit chore: take reserved version 4.21.2 after main",
-        "push feat/batch-one",
-    ]
-    assert forge.merged == [(1001, "new-1", "squash")]
-
-
-def test_declared_version_files_are_not_overlaps(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Every batch PR bumps the version files, and merge resolves those itself;
-    counting them would make every pair overlap and the order meaningless."""
-    _, _ = _setup(
-        tmp_path,
-        monkeypatch,
-        [
-            ("a", 1, None, "patch", "4.21.2", ["x.py", "pyproject.toml", "uv.lock"]),
-            ("b", 2, None, "patch", "4.21.3", ["x.py", "pyproject.toml", "uv.lock"]),
-            ("c", 3, None, "patch", "4.21.4", ["y.py", "pyproject.toml", "uv.lock"]),
-        ],
-    )
-    code, out = _merge(tmp_path)
-    assert code == 0, out
-    assert _order(out) == ["a", "c", "b"]
-    first = next(line for line in out.splitlines() if " a " in line)
-    assert "x.py" in first and "pyproject.toml" not in first
-
-
-# ------------------------------------------- version-file conflicts (r3-f2)
-
-
-def _behind_with_conflicts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: dict[str, Any] = CONFIG
-) -> tuple[MergeForge, FakeCheckout]:
-    forge, checkout = _setup(
-        tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])], config=config
-    )
-    checkout.up_to_date.clear()
-    checkout.conflicts["head-one"] = ["pyproject.toml", "uv.lock"]
-    checkout.files[("base", "uv.lock")] = _lock("4.21.1")
-    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2")
-    return forge, checkout
-
-
-def test_a_version_file_the_pr_changed_beyond_the_version_is_a_real_conflict(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Review r3-f2: `--theirs` takes main's WHOLE file, so a PR that bumped the
-    version AND added a dependency there would silently lose the dependency."""
-    forge, checkout = _behind_with_conflicts(tmp_path, monkeypatch)
-    checkout.files[("head-one", "pyproject.toml")] = (
-        _toml("4.21.2") + 'dependencies = ["requests"]\n'
-    )
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 1
-    assert "pyproject.toml" in out
-    (wt,) = checkout.worktrees
-    assert wt.log == ["merge origin/main", "abort"]
-    assert forge.merged == [] and checkout.removed == []
-
-
-def test_a_lockfile_changed_beyond_the_version_is_taken_and_relocked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A lockfile is derived: with a declared `relock`, main's side plus a
-    relock regenerates it from the PR's (version-only) manifests."""
-    relock = {"version": {**CONFIG["version"], "relock": "uv lock"}}
-    forge, checkout = _behind_with_conflicts(tmp_path, monkeypatch, relock)
-    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2", "requests")
-    real_add = checkout.add_worktree
-
-    def _add(where: Path, ref: str) -> FakeWorktree:
-        wt = real_add(where, ref)
-        wt.files["pyproject.toml"] = _toml("4.21.1")  # main's side after --theirs
-        return wt
-
-    checkout.add_worktree = _add  # type: ignore[method-assign]
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 0, out
-    (wt,) = checkout.worktrees
-    assert wt.log[:4] == [
-        "merge origin/main",
-        "theirs pyproject.toml uv.lock",
-        "run python scripts/bump.py 4.21.2",
-        "run uv lock",
-    ]
-    assert wt.staged_globs == ["pyproject.toml", "uv.lock"]
-
-
-def test_a_lockfile_changed_beyond_the_version_without_relock_stops(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _behind_with_conflicts(tmp_path, monkeypatch)
-    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2", "requests")
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 1
-    assert "uv.lock" in out
-    assert forge.merged == []
-
-
-# ------------------------------------------------------ config freshness (r3-f3)
-
-
-def test_merge_refuses_a_collected_config_that_differs_from_origin(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Spec §3.I: merge runs the collected `version.files` / `set` / `relock`,
-    so it holds the same freshness rule as dispatch."""
-    forge, checkout = _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.5", ["a.py"])])
-    changed = {"version": {**CONFIG["version"], "set": "python scripts/other.py {version}"}}
-    checkout.files[("origin/main", ".fr/triage.yaml")] = yaml.safe_dump(changed)
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 2
-    assert "re-collect" in out
-    assert forge.merged == [] and checkout.worktrees == []
-
-
-# ------------------------------------------------------------ merge method (r3-f4)
-
-
-def test_the_merge_method_defaults_to_the_repos_default(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
-    )
-    forge.methods = {"default": "merge", "allowed": ["merge"]}
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 0, out
-    assert "(merge)" in out
-    assert forge.merged == [(1001, "head-solo", "merge")]
-
-
-def test_an_explicit_method_the_repo_disallows_is_refused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
-    )
-    code, out = _merge(tmp_path, "--yes", "--method", "rebase")
-    assert code == 2
-    assert "rebase" in out and "merge, squash" in out
-    assert forge.merged == []
-
-
-def test_no_repo_default_among_several_allowed_methods_asks_for_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
-    )
-    forge.methods = {"default": None, "allowed": ["merge", "squash"]}
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 2
-    assert "--method" in out
-    assert forge.merged == []
-
-
-# ------------------------------------------- triage-claims: merge keeps hands off (R6)
-
-
-def test_merge_refuses_a_batch_held_elsewhere(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from fr.triage.model import load_facts
-
-    from tests.unit.triage_claim_fixtures import FAR, OTHER, held, marker
-
-    forge, checkout = _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])])
-    path = tmp_path / "facts.json"
-    facts = load_facts(path)
-    claimed = facts.issues[0].model_copy(update=held(marker(OTHER, "theirs", expires=FAR)))
-    path.write_text(json.dumps(facts.model_copy(update={"issues": [claimed]}).to_json()), "utf-8")
-    code, out = _merge(tmp_path, "one", "--yes")  # naming it: still a refusal (R7)
-    assert code == 2
-    assert OTHER in out and "super-fr#1" in out
-    assert forge.merged == [] and checkout.worktrees == []
-
-
-# ------------------------------- merge_method in .fr/triage.yaml (cloud-triage §A, p1-r5)
-
-
 def test_the_config_takes_an_optional_merge_method() -> None:
     assert TriageConfig().merge_method is None
     assert TriageConfig.model_validate({"merge_method": "rebase"}).merge_method == "rebase"
@@ -847,143 +373,3 @@ def test_several_allowed_and_no_default_names_the_config_key_and_the_flag() -> N
         choose_method(None, {"default": None, "allowed": ["merge", "squash"]})
     assert "--method" in str(exc.value)
     assert "merge_method" in str(exc.value) and ".fr/triage.yaml" in str(exc.value)
-
-
-def test_merge_uses_the_repos_configured_merge_method(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(
-        tmp_path,
-        monkeypatch,
-        [("solo", 1, None, "minor", "4.22.0", ["a.py"])],
-        config={**CONFIG, "merge_method": "squash"},
-    )
-    forge.methods = {"default": None, "allowed": ["merge", "squash"]}
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 0, out
-    assert forge.merged == [(1001, "head-solo", "squash")]
-
-
-# ------------------------- batch merge skips held batches (merge-train-safety §E, R7)
-
-
-def _hold(tmp_path: Path, *issue_indexes: int) -> None:
-    from fr.triage.model import load_facts
-
-    from tests.unit.triage_claim_fixtures import FAR, OTHER, held, marker
-
-    path = tmp_path / "facts.json"
-    facts = load_facts(path)
-    issues = [
-        i.model_copy(update=held(marker(OTHER, "theirs", expires=FAR))) if n in issue_indexes else i
-        for n, i in enumerate(facts.issues)
-    ]
-    path.write_text(json.dumps(facts.model_copy(update={"issues": issues}).to_json()), "utf-8")
-
-
-_TWO = [
-    ("one", 1, None, "patch", "4.21.2", ["a.py"]),
-    ("two", 2, None, "patch", "4.21.3", ["b.py"]),
-]
-
-
-def test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from tests.unit.triage_claim_fixtures import OTHER
-
-    forge, _ = _setup(tmp_path, monkeypatch, _TWO, config=None)
-    _hold(tmp_path, 0)
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 0, out
-    assert f"skipped one: held by {OTHER}" in out
-    assert [n for n, *_ in forge.merged] == [1002]
-
-
-def test_merge_with_no_ids_says_nothing_to_merge_when_every_batch_is_held(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, checkout = _setup(tmp_path, monkeypatch, _TWO, config=None)
-    _hold(tmp_path, 0, 1)
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 0, out
-    assert "skipped one: held by" in out and "skipped two: held by" in out
-    assert "nothing to merge" in out
-    assert forge.merged == [] and checkout.worktrees == []
-
-
-def test_merge_naming_a_held_batch_still_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, _ = _setup(tmp_path, monkeypatch, _TWO, config=None)
-    _hold(tmp_path, 0)
-    code, out = _merge(tmp_path, "one", "--yes")
-    assert code == 2 and "cannot be merged" in out
-    assert forge.merged == []
-
-
-# ------------------------- the base rules reach batch merge's context (§D, R12, R14)
-
-
-def test_batch_merge_reads_the_base_rules_once_and_strict_checks_update_a_routinely_behind_pr(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from fr.ghclient import BaseRules
-
-    forge, checkout = _setup(tmp_path, monkeypatch, _TWO[:1], config=None)
-    forge.rules = BaseRules(merge_queue=False, strict_checks=True)  # type: ignore[attr-defined]
-    reads: list[str] = []
-    real = forge.base_rules
-    forge.base_rules = lambda repo, branch: (reads.append(branch), real(repo, branch))[1]  # type: ignore[method-assign]
-    checkout.up_to_date.discard("head-one")
-    checkout.base_commits["head-one"] = (("arc", (("A", "docs/superpowers/implemented/x.md"),)),)
-    code, out = _merge(tmp_path, "--yes")
-    assert reads == ["main"], out
-    assert "pushed new-1" in out, out  # updated first, then merged at the new head
-    assert checkout.worktrees, "strict checks must start an update, not merge as it is"
-
-
-def test_a_forge_error_reading_the_base_rules_ends_batch_merge_cleanly(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    forge, _ = _setup(tmp_path, monkeypatch, _TWO[:1], config=None)
-    forge.rules_error = "connection reset"  # type: ignore[attr-defined]
-    code, out = _merge(tmp_path, "--yes")
-    assert code == 1 and "a forge read failed" in out and "connection reset" in out
-    assert forge.merged == []
-
-
-# ------------------------------------------- one verdict rule, two callers (merge-truth R7)
-
-
-@pytest.mark.parametrize(
-    ("required", "every", "ci_none"),
-    [
-        ([{"name": "test", "bucket": "pass"}], None, False),
-        ([{"name": "test", "bucket": "fail"}], None, False),
-        ([{"name": "test", "bucket": "pending"}], None, False),
-        ([], [{"name": "lint", "bucket": "fail"}, {"name": "x", "bucket": "pass"}], False),
-        ([], [], False),
-        ([{"name": "test", "bucket": "fail"}], None, True),
-    ],
-)
-def test_pr_checks_verdict_matches_live_checks(
-    tmp_path: Path, required: list[dict[str, Any]], every: Any, ci_none: bool
-) -> None:
-    """`pr_checks_verdict` holds the rule `live_checks` merges by: the archive step
-    reads a PR the facts do not hold through it, with no MergeContext to hand."""
-    from fr.triage.batch_merge import MergeContext, live_checks, pr_checks_verdict
-
-    forge = MergeForge()
-    forge.add(7, "head-7")
-    forge.checks[7] = required
-    if every is not None:
-        forge.all_checks[7] = every
-    ctx = MergeContext(
-        client=forge,  # type: ignore[arg-type]
-        checkout=FakeCheckout(tmp_path, forge),  # type: ignore[arg-type]
-        repo="derio-net/super-fr", version=None, scratch_root=tmp_path, method="squash",
-        say=lambda line: None, ci_none=ci_none,
-    )  # fmt: skip
-    direct = pr_checks_verdict(forge, "derio-net/super-fr", 7, ci_none=ci_none)  # type: ignore[arg-type]
-    assert direct == live_checks(ctx, 7)

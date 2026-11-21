@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import permutations
@@ -38,6 +38,7 @@ from fr.triage.model import (
     Judgements,
     Launch,
     PullRequest,
+    QueueRecord,
     ReplacementEvent,
     TriageConfig,
     _check_schema,
@@ -612,6 +613,16 @@ def save_closeouts(
     )
 
 
+def save_queues(
+    path: Path, queues: Sequence[QueueRecord], *, read: Sequence[QueueRecord]
+) -> Judgements:
+    """Write *queues* as `path`'s `queues:` section (spec 2026-11-19-wave-merge-queue R24):
+    the sibling of `save_closeouts`, under the same refuse-or-write discipline."""
+    docs = [q.model_dump(mode="json", exclude_defaults=True) for q in queues]
+    block = yaml.safe_dump({"queues": docs}, sort_keys=False, allow_unicode=True, width=100)
+    return _rewrite(path, "queues", block, unchanged=lambda now: list(now.queues) == list(read))
+
+
 # ------------------------------------------------------------------ launch
 
 HARNESS_ALIASES: dict[str, str] = {"claude": "claude-code"}
@@ -886,9 +897,15 @@ def lowest_tier(batch: Batch, issues: Mapping[str, Judgement]) -> int:
 
 
 def pr_open_queue(
-    batches: Sequence[Batch], facts: Facts, issues: Mapping[str, Judgement]
+    batches: Sequence[Batch],
+    facts: Facts,
+    issues: Mapping[str, Judgement],
+    *,
+    landed: Collection[str] = frozenset(),
 ) -> list[QueueEntry]:
-    """Every `pr-open` batch with its PR, in batch-file order.
+    """Every `pr-open` batch with its PR, in batch-file order, but those the wave merge
+    queue landed (*landed*): a PR the forge has not marked merged yet is no open PR to
+    judge, approve or merge (wave-merge-queue R12, R35).
 
     Files matching the repo's declared `version.files` are left out of the
     overlap and the forecast: every batch PR bumps them, and merge resolves
@@ -896,6 +913,8 @@ def pr_open_queue(
     """
     out: list[QueueEntry] = []
     for b in batches:
+        if b.id in landed:
+            continue
         if derive_batch_stage(b, facts) != "pr-open" or (pr := batch_pr(b, facts)) is None:
             continue
         version = facts.config_for(pr.repo).version

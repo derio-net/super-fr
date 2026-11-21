@@ -25,3 +25,12 @@ merge_method: squash
 # Triage state export to docs/triage on every finished wave (spec R13).
 export:
   path: docs/triage
+# The wave merge queue (spec 2026-11-19-wave-merge-queue): this repo's workflows that report a
+# required check run on pushes to `fr-queue/**`; the driver lands by a direct push (the ruleset
+# forbids only force-push and deletion), and the release workflow cuts the wave's release.
+queue:
+  ci: push
+  depth: 2
+  land: push
+  release: workflow
+  # No `release_workflow:` on purpose: release.yml already runs on the drained `fr-hold/**` push.

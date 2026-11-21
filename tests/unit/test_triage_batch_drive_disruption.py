@@ -41,6 +41,7 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 — fixtures
     _lines,
     _merged,
     _naps_until,
+    _opened,
     _pr_open,
     _proposed,
     _sandbox,
@@ -305,26 +306,6 @@ def test_a_failed_fetch_does_not_end_the_loop(
     assert len(runner.dispatched) == 1
 
 
-def test_a_failed_fetch_for_a_merge_does_not_end_the_loop(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:  # fmt: skip
-    _pr_open(world, tmp_path)
-    fetches: list[int] = []
-
-    def _fetch() -> None:
-        fetches.append(1)
-        if len(fetches) == 2:  # `_ci_none` reads first and holds on its own; the merge's fails
-            raise GitError("`git fetch` failed: Connection reset by peer")
-
-    monkeypatch.setattr(checkout, "fetch", _fetch)
-    _naps_until(monkeypatch, 2)
-    result = _drive_named(tmp_path, "--yes")
-    assert isinstance(result.exception, _StopError), result.output
-    assert result.output.count("Connection reset by peer") == 1
-    assert world.merged == [(101, "sha-101", "squash")]
-
-
 def test_once_still_exits_non_zero_on_a_failed_fetch(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,
@@ -386,83 +367,6 @@ def _closing(world: World, tmp_path: Path) -> None:
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
 
 
-def test_a_refused_archive_merge_does_not_end_the_loop_and_is_reported_once(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:  # fmt: skip
-    """As a refused batch-PR merge (rg-4): reported once, merged on a later pass."""
-    _closing(world, tmp_path)
-    real = world.pr_merge
-    tries: list[int] = []
-
-    def _merge(repo: str, number: int, **kw: Any) -> None:
-        tries.append(number)
-        if len(tries) <= 2:
-            raise GhError("HTTP 502: Bad Gateway", returncode=1)
-        real(repo, number, **kw)
-
-    monkeypatch.setattr(world, "pr_merge", _merge)
-    _naps_until(monkeypatch, 3)
-    result = _drive_named(tmp_path, "--yes")
-    assert isinstance(result.exception, _StopError), result.output
-    assert result.output.count("Bad Gateway") == 1
-    assert [m[0] for m in world.merged] == [201]
-
-
-def test_once_exits_1_on_a_refused_archive_merge(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
-) -> None:
-    _closing(world, tmp_path)
-    world.refuse_merge = "HTTP 502: Bad Gateway"
-    code, out = _drive(tmp_path, "--once", "--yes")
-    assert code == 1, out
-    assert _lines(out, "archive")[0].startswith("archive b1: stopped:")
-
-
-def test_a_rejected_update_push_steps_over_the_pr_and_does_not_end_the_loop(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:  # fmt: skip
-    """gh#921 (comment): `! [remote rejected] HEAD -> <branch> (failed)` on a PR's
-    update push ended the driver with exit 2; it is a failed write of that PR only."""
-    _pr_open(world, tmp_path)
-    checkout.behind.add("sha-101")
-    from tests.unit.test_triage_batch_drive_cmd import _Worktree
-
-    real = _Worktree.push
-    pushes: list[str] = []
-
-    def _push(self: Any, branch: str) -> None:
-        pushes.append(branch)
-        if len(pushes) == 1:
-            raise GitError(f"`git push` failed: ! [remote rejected] HEAD -> {branch} (failed)")
-        real(self, branch)
-
-    monkeypatch.setattr(_Worktree, "push", _push)
-    _naps_until(monkeypatch, 3)
-    result = _drive_named(tmp_path, "--yes")
-    assert isinstance(result.exception, _StopError), result.output
-    assert result.output.count("remote rejected") == 1
-    assert world.merged == [(101, "sha-updated", "squash")]
-
-
-def test_once_exits_1_on_a_rejected_update_push(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:  # fmt: skip
-    _pr_open(world, tmp_path)
-    checkout.behind.add("sha-101")
-    from tests.unit.test_triage_batch_drive_cmd import _Worktree
-
-    def _push(self: Any, branch: str) -> None:
-        raise GitError("`git push` failed: ! [remote rejected]")
-
-    monkeypatch.setattr(_Worktree, "push", _push)
-    code, out = _drive(tmp_path, "--once", "--yes")
-    assert code == 1, out
-    assert _lines(out, "merge")[0].startswith("merge b1: stopped:")
-
-
 # -------------------------------------- gh#998: a config key from main
 
 
@@ -483,7 +387,7 @@ def test_a_config_key_this_fr_does_not_know_does_not_stop_a_merge(
     )  # fmt: skip
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert world.merged == [(101, "sha-101", "squash")]
+    assert _opened(world)
 
 
 def test_a_config_key_this_fr_does_not_know_does_not_stop_a_closeout(
@@ -699,7 +603,7 @@ def test_a_failed_fetch_for_a_dispatch_does_not_end_the_loop(
 
     def _fetch() -> None:
         fetches.append(1)
-        if len(fetches) == 1:
+        if len(fetches) == 2:  # the first is a reader's, which holds on its own
             raise GitError("`git fetch` failed: Could not resolve host: github.com")
 
     monkeypatch.setattr(checkout, "fetch", _fetch)
@@ -736,30 +640,6 @@ def test_batch_dispatch_by_hand_still_exits_2_on_a_failed_fetch(
 # ------------------------- gh#1025 (2): a failed export write skips, never ends
 
 
-def test_a_refused_export_merge_does_not_end_the_loop_and_is_reported_once(
-    tmp_path: Path, world: World, git_checkout: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from tests.unit.test_triage_batch_drive_cmd import _export_pr, _finished_wave, _recorded
-
-    sha = _export_pr(world, git_checkout.path)
-    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
-    real = world.pr_merge
-    tries: list[int] = []
-
-    def _merge(repo: str, number: int, **kw: Any) -> None:
-        tries.append(number)
-        if len(tries) <= 2:
-            raise GhError("HTTP 502: Bad Gateway", returncode=1)
-        real(repo, number, **kw)
-
-    monkeypatch.setattr(world, "pr_merge", _merge)
-    _naps_until(monkeypatch, 3)
-    result = _drive_named(state, "--yes", "--keep-sessions")
-    assert isinstance(result.exception, _StopError), result.output
-    assert result.output.count("Bad Gateway") == 1
-    assert world.merged == [(40, sha, "squash")]
-
-
 def test_a_refused_export_pr_does_not_end_the_loop(
     tmp_path: Path, world: World, git_checkout: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -781,24 +661,6 @@ def test_a_refused_export_pr_does_not_end_the_loop(
     assert isinstance(result.exception, _StopError), result.output
     assert result.output.count("Bad Gateway") == 1
     assert len(tries) == 2  # retried on the next pass, and opened
-
-
-def test_once_exits_1_on_a_refused_export_merge(
-    tmp_path: Path, world: World, git_checkout: Any
-) -> None:
-    from tests.unit.test_triage_batch_drive_cmd import (
-        _export_drive,
-        _export_pr,
-        _finished_wave,
-        _recorded,
-    )
-
-    sha = _export_pr(world, git_checkout.path)
-    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
-    world.refuse_merge = "HTTP 502: Bad Gateway"
-    code, out = _export_drive(state, "--once", "--yes")
-    assert code == 1, out
-    assert "Bad Gateway" in out
 
 
 # --------------------- gh#1025 (3): a close-out recorded but never started

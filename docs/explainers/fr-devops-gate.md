@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?
@@ -36,7 +36,7 @@ You reach for it in these cases:
 
 - `fr pickup --run <id>` prints a DevOps brief.
 - The pull request carries the label `gate:devops`.
-- You want to apply a PR's operations and merge it.
+- You want to apply a PR's operations and release it to the merge queue.
 
 ## A worked example
 
@@ -54,9 +54,10 @@ fr ops gate --run 2026-11-11-add-webhook-limiter --yes
 
 It works through the stages below. At the first failure it stops and names the stage. It
 is always safe to stop: run the same command again, and it resumes at the first stage
-with no record. Even with `--yes`, the merge asks its own question. Read it. The PR number
+with no record. Even with `--yes`, the release asks its own question. Read it. The PR number
 and head must be the ones you reviewed, and the pre-merge state must list every pre-merge
-op as closed.
+op as closed. The stage does not merge. It adds a label, and the merge queue lands the PR
+(next section).
 
 The command runs on your machine, at a terminal, from a checkout that holds the run. It
 refuses non-interactive contexts, so a delivering agent cannot run it. You type it, or you
@@ -70,9 +71,9 @@ Land it by its own pull request, so it does not ride the feature pull request
 | Stage | What happens |
 |---|---|
 | 1 | Refuses an ops gap. Brings up the ops workspace `chore/ops-<slug>` on the ops profile. Asks you to trust the op set if it changed. Then runs pre-merge status and applies each open op after its own confirmation |
-| 2 | Merges the PR, only with no open pre-merge op, green required checks and the head stage 1 verified |
+| 2 | Adds the label `fr-queue:release` to the PR, only with no open pre-merge op, green required checks and the head stage 1 verified. It merges nothing. The run stops until the forge reads the PR as merged |
 | 3 | Verifies the merge, rebases the ops branch onto the default branch, and runs every op's `ready:` probe |
-| 4 | Post-merge status and apply. An op whose check already passes is still recorded, so stage 6 can count it |
+| 4 | Post-merge status and apply. An op whose check already passes is still recorded, so stage 6 can count it. Then it adds the label `fr-queue:postmerge-done` |
 | 5 | Probes each Test Plan step that points at an op, asks you about the rest, and records the outcomes |
 | 6 | `fr gate pass --gate devops --run <id>`, from the ops workspace |
 | 7 | Keeps `gate:tester` and lists what the Tester gate owns, or passes `gate:tester` when it owns nothing |
@@ -80,8 +81,23 @@ Land it by its own pull request, so it does not ride the feature pull request
 
 fr records each stage's completion in a state directory outside every checkout. By
 default that is `~/.local/state/fr/ops-gate/`. fr commits pre-merge evidence only to the
-ops branch, never to the PR head, so the reviewed head and its checks stay valid. A PR you
-merged by hand in the forge counts as stage 2 done.
+ops branch, never to the PR head, so the reviewed head and its checks stay valid. Stage 2
+is done only when the forge reads the PR as merged. fr never records it. A repo with no
+`queue:` in `.fr/triage.yaml` has no merge queue: stage 2 says so, and you merge the PR by
+hand. A PR you merged by hand counts as stage 2 done.
+
+## How does the merge queue land the PR?
+
+The wave merge queue owns every merge of the repo. When stage 2 adds `fr-queue:release`, the
+driver records the release at the diff that stage 2 verified, which stage 2 names in a marker
+comment. A push after stage 2 is no release. Then it lands the PR as the last entry of its
+push, after the entries ahead of it. It builds and tests the entries
+behind it meanwhile, but lands nothing behind it. It waits until stage 4 adds
+`fr-queue:postmerge-done` and a marker comment that a trusted author wrote; the label alone
+lifts nothing. After the PR lands, the driver adds a Needs-you entry that names
+`fr ops gate --run <id>`. Run it again: it resumes at stage 3. If someone pushes to the PR
+after the release, the diff changes, so fr removes the label. Run the command again to
+release the new diff.
 
 ## Why must you trust the probes?
 
@@ -132,7 +148,8 @@ stage is complete and does not print the DevOps brief again.
 ## What does the stage never do?
 
 - It never runs a probe of an untrusted op set.
-- It never pushes to the PR head, and never merges a head it did not verify.
+- It never pushes to the PR head, and never releases a head it did not verify. It never
+  calls a merge: the queue lands the PR.
 - It never skips a failed stage.
 - It refuses a PR based on a branch other than the forge's default, or one that touches
   the archived journals.
@@ -141,8 +158,8 @@ stage is complete and does not print the DevOps brief again.
 
 - It cannot make an op safe. It shows `undo:` and `side_effects:` at confirmation. A
   mutating op also needs `--yes-mutating` when there is no terminal.
-- On a forge fr cannot merge through, stage 2 stops and names the manual merge. Do it at
-  that head, then run the command again.
+- On a forge fr cannot label through, stage 2 stops and names the label to add by hand.
+  Add it, then run the command again.
 - `gate:tester` and `gate:devops` are separate. Passing one does not pass the other.
 - The repo's settings (`fr settings show`) can remove the stage entirely. Under
   `artifacts.gates: off`, fr computes, labels and holds no gate, so there is no DevOps

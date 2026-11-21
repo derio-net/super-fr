@@ -182,6 +182,39 @@ class HostCheckout:
         name = out.strip()
         return name.removeprefix("origin/") or None
 
+    def patch_id(self, head: str, default: str) -> str | None:
+        from fr.triage.gitseam import Checkout, GitError
+
+        try:
+            checkout = Checkout.at(self.primary)
+            checkout.refresh_remote_branch(default)
+            return checkout.patch_id(head, f"origin/{default}")
+        except GitError:
+            return None
+
+    def queue_configured(self, default: str) -> bool:
+        """Three answers (l-errors-r5): True (`queue:` declared), False (`.fr/triage.yaml` is
+        absent from the freshly fetched default branch, or has no block), and a read that
+        failed, which stops the stage with the error: an unreadable config is never "merge
+        by hand"."""
+        import yaml
+
+        from fr.ops.gate import StageFailed
+        from fr.triage.gitseam import Checkout, GitError, git, git_ok
+
+        at = f"origin/{default}"
+        try:
+            Checkout.at(self.primary).refresh_remote_branch(default)
+            if not git_ok(["cat-file", "-e", f"{at}:.fr/triage.yaml"], self.primary):
+                return False
+            data = yaml.safe_load(git(["show", f"{at}:.fr/triage.yaml"], self.primary))
+        except (GitError, yaml.YAMLError) as exc:
+            raise StageFailed(
+                f"cannot read .fr/triage.yaml at {at} to tell whether the merge queue serves "
+                f"this repo: {exc}; nothing released"
+            ) from exc
+        return isinstance(data, dict) and isinstance(data.get("queue"), dict)
+
     def workspace(self, branch: str) -> OpsWorkspace | None:
         from fr.isolation.types import load_state
 
@@ -220,18 +253,15 @@ def gate(
     profile: Annotated[
         str | None, typer.Option("--profile", help="The ops profile (default: the only one).")
     ] = None,
-    method: Annotated[
-        str | None,
-        typer.Option("--method", help="Merge method (default: the repo's): merge|squash|rebase."),
-    ] = None,
 ) -> None:
     """The DevOps stage, in 8 recorded stages.
 
-    The stages are pre-merge ops, the merge, post-merge ops, the devops Test Plan steps,
-    the gate pass, the tester hand-off and the archive.
+    The stages are pre-merge ops, the release to the merge queue, post-merge ops, the devops
+    Test Plan steps, the gate pass, the tester hand-off and the archive.
 
-    Runs on the harness host at a terminal; previews without --yes. The merge asks its
-    own confirmation even with --yes. A rerun resumes at the first unrecorded stage."""
+    Runs on the harness host at a terminal; previews without --yes. The release asks its
+    own confirmation even with --yes, and the merge queue lands the PR: re-run once it has.
+    A rerun resumes at the first unrecorded stage."""
     from fr.commands.gate_cmd import RunLookupError, find_run, resolve_target
     from fr.git import repo_root as git_repo_root
     from fr.ops import gate as engine
@@ -273,7 +303,6 @@ def gate(
         plan_rel=plan_rel,
         profile=_profile(root, profile),
         primary=primary_checkout(root),
-        method=method,
     )
     g = engine.Gate(
         target,

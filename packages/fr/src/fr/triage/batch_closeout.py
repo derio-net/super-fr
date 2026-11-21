@@ -46,6 +46,7 @@ from fr.triage.batch_drive import (
     fact_ledgers,
     next_collected,
 )
+from fr.triage.gitseam import GitError
 from fr.triage.model import Batch, CollectedCloseout, Facts
 
 __all__ = [
@@ -64,8 +65,10 @@ __all__ = [
     "handback_brief",
     "issues_to_close",
     "member_steps",
+    "migrate_args",
     "members_from_body",
     "next_collected",
+    "owned_stale",
     "plan_lines",
     "recorded_closes",
     "step_ranges",
@@ -94,6 +97,15 @@ class CloseoutTree(Protocol):
     def reset_hard(self, sha: str) -> None: ...
 
     def squash_all(self, base: str, message: str) -> str | None: ...
+
+    def stale_artifacts(self) -> list[str]: ...
+
+    def archive_moves(self, branch: str, default_ref: str) -> list[str] | None:
+        """The live artifact paths `fr archive --branch <branch>` would move (its own
+        classification of what the branch changed), or None when they cannot be read."""
+        ...
+
+    def commit_paths(self, paths: list[str], message: str) -> str | None: ...
 
     def push(self, branch: str, *, force: bool = False) -> None: ...
 
@@ -251,9 +263,13 @@ def recorded_closes(done: Sequence[Member], repo: str) -> tuple[str, ...]:
     ))  # fmt: skip
 
 
-def pr_body(done: Sequence[Member], held: Sequence[tuple[str, str]], repo: str = "") -> str:
+def pr_body(
+    done: Sequence[Member], held: Sequence[tuple[str, str]], repo: str = "", report: str = ""
+) -> str:
     """The housekeeping PR's body: its members (informational, never read back for
-    membership); one `Closes` line per recorded issue."""
+    membership); one `Closes` line per recorded issue. *report* is the wave's merge queue report
+    (R28), a section after the rest that holds no `Closes` line, so `review_reasons` (which
+    reads those alone) ignores it."""
     ids = [m.batch for m in done]
     closes = (
         list(recorded_closes(done, repo))
@@ -267,6 +283,8 @@ def pr_body(done: Sequence[Member], held: Sequence[tuple[str, str]], repo: str =
         lines += ["", *(f"Closes {ref}" for ref in closes)]
     if held:
         lines += ["", "Held, not in this PR:", *(f"- {b}: {w}" for b, w in held)]
+    if report:
+        lines += ["", report.rstrip()]
     return "\n".join(lines)
 
 
@@ -291,6 +309,70 @@ def closeout_title(branch: str, batches: Sequence[str]) -> str:
     return f"chore: collected close-out {branch.removeprefix('chore/')} ({', '.join(batches)})"
 
 
+MIGRATION_SUBJECT = "chore(fr): migrate the artifacts this close-out archives"
+
+
+def owned_stale(stale: Iterable[str], moves: Iterable[str]) -> list[str]:
+    """The stale artifacts (repo-relative paths) the archive moves (R16): those that are
+    one of *moves* (what `fr archive --branch <b>` will move for the members, derived from
+    the archive's own classification) or sit under one that is a directory (a plan folder).
+    Anything the archive leaves alone (an acceptance fragment) or no member moves is left
+    for its own migration."""
+    wanted = {m.rstrip("/") for m in moves}
+    return [
+        rel for rel in stale
+        if rel in wanted or any(rel.startswith(w + "/") for w in wanted)
+    ]  # fmt: skip
+
+
+def migrate_args(paths: Sequence[str]) -> list[str]:
+    """`fr migrate artifacts --yes --path <p>…` over exactly *paths* (R16)."""
+    out = ["migrate", "artifacts", "--yes"]
+    for p in paths:
+        out += ["--path", p]
+    return out
+
+
+def _migrate_first(
+    members: Sequence[Member], tree: CloseoutTree, say: Callable[[str], None], default: str
+) -> str:
+    """R16: migrate the stale artifacts the *members*' archives move, as the close-out
+    branch's first commit, so no stale artifact holds the close-out. Returns the commit the
+    archive then builds on (the tree's head when nothing was stale or the migration was
+    refused: a retiring hop is not per file, and the archive then holds as it always did)."""
+    base = tree.head()
+    stale = tree.stale_artifacts()
+    if not stale:
+        return base
+    moves: list[str] = []
+    for m in members:
+        try:
+            found = tree.archive_moves(m.branch, f"origin/{default}")
+        except GitError as exc:  # l-errors-r11: the cause is said, not swallowed
+            say(f"{m.batch}: what its archive moves could not be read ({exc}); "
+                "nothing of it migrated")  # fmt: skip
+            continue
+        if found is None:
+            say(f"{m.batch}: what its archive moves could not be read; nothing of it migrated")
+        else:
+            moves += found
+    paths = owned_stale(stale, moves)
+    if not paths:
+        return base
+    code, out = tree.run_fr(migrate_args(paths))
+    if code != 0:
+        tree.reset_hard(base)
+        last = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip()), "")
+        say(f"not migrated before the archive: `fr {shlex.join(migrate_args(paths))}` "
+            f"exited {code}" + (f": {last}" if last else ""))  # fmt: skip
+        return base
+    head = tree.commit_paths(paths, MIGRATION_SUBJECT)
+    if head is None:
+        return base
+    say(f"migrated {len(paths)} stale artifact(s) the archive moves, as {head[:12]}")
+    return head
+
+
 def _why(step: Step, code: int, out: str) -> str:
     last = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip()), "")
     return f"`{step.line}` exited {code}" + (f": {last}" if last else "")
@@ -309,12 +391,15 @@ def execute(
     say: Callable[[str], None],
     unreadable: Sequence[tuple[str, str]] = (),
     transient: Sequence[tuple[str, str]] = (),
+    report: str = "",
 ) -> CloseoutResult:
     """Run every batch's steps in *tree* (on *branch*, cut from *default*), then one
     commit, one push and one PR. *hold*(batch id, why) each batch held (the *unreadable*
     ones first); *record*(batch id, branch) each batch the PR carries, only once it is
     open."""
-    base = tree.head()
+    base = _migrate_first(
+        members, tree, say, default
+    )  # R16: its own commit; the archive builds on it
     done: list[Member] = []
     held: list[tuple[str, str]] = list(unreadable)
     skipped: list[tuple[str, str]] = list(transient)
@@ -354,7 +439,7 @@ def execute(
         return CloseoutResult(branch, (), tuple(held), skipped=tuple(skipped))
     tree.push(branch)
     pr = forge.pr_create(repo, head=branch, base=default, title=title,
-                         body=pr_body(done, [*held, *skipped], repo))  # fmt: skip
+                         body=pr_body(done, [*held, *skipped], repo, report))  # fmt: skip
     for m in done:
         record(m.batch, branch)
     return CloseoutResult(branch, tuple(ids), tuple(held), pr, head, tuple(skipped))

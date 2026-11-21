@@ -181,7 +181,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-     engine-appended `events` (fr reads schemas 1–12 and writes 12, see
+     engine-appended `events` (fr reads schemas 1–13 and writes 13, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -209,19 +209,35 @@ uv workspace monorepo, version lockstepped across every manifest (see
     events; schema 7 adds audited `replacement` attempt/success/failure events
     that never change dispatch age or lifecycle; 8 adds `claim_taken`, which makes a
     taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
-    (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); current writers
-     stamp 12 (read 1–12), adding recovery ownership/session audit metadata;
-     11 added `archive_conflict` (merge-truth R12).
+    (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); 11 added
+     `archive_conflict` (merge-truth R12); 12 recovery ownership/session audit metadata;
+     current writers stamp 13 (read 1–13), adding the wave merge queue's `queues:` list,
+     the batch `deferred`/`requeued` events and the `patch_id` of an approval and an update
+     (wave-merge-queue R12, R24).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
-    `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
-    `closeout`, `archive`, `dispatch`, `blocked`, `warn` actions out; no
+    `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,
+    `dispatch`, `blocked`, `warn` actions and one `QueuePlan` per repo out; no
     `fr_dispatch`, no git, no process, the clock passed in); the command
-    re-collects facts each pass (`triage_cmd.collect_into`), executes through
-    `dispatch_batch`/`merge_ready`, fast-forwards and runs the repo's
-    `post_merge` argument list through `gitseam.Checkout`, and starts each
-    close-out as a `unit="run"` item with `payload.kind: closeout`. A
-    `drive.lock` (pid, start time) refuses a second driver.
+    re-collects facts each pass (`triage_cmd.collect_into`), executes the queue
+    through `fr.triage.queue_exec`, dispatches through `dispatch_batch`,
+    fast-forwards and runs the repo's `post_merge` argument list through
+    `gitseam.Checkout`, and starts each close-out as a `unit="run"` item with
+    `payload.kind: closeout`. A `drive.lock` (pid, start time) refuses a second driver.
+    **One merge path** (2026-11-19 spec `wave-merge-queue`, R22, R23, R32): the per-merge
+    train, the forge merge-queue mode, the `enqueue` executor and the update path are
+    gone, and `batch_merge.py` keeps only what the queue shares (the merge method choice,
+    the required-checks rule, `unresolvable`). Every merge is an entry of
+    `fr.triage.wave_queue`: a batch PR, or an `OtherEntry` (a collected close-out, an
+    attributed archive PR, the per-wave export PR, a DevOps housekeeping PR) that the
+    pure pass admits under its own trust rule (`Admitted`: `review_reasons`,
+    `attributed` plus `archive_allowed`, `_export_row`'s checks, or `approved-fr` recorded
+    as a queue `approval`, settled by `approval.settle_entry_approval`); `_archive` and
+    `_export_merge` are gone. A repo with no `queue.ci`, a forge merge queue on its base,
+    or a forge that is glab or tea is `queue-held` with the reason. `fr triage batch merge`
+    drives the same engine in the foreground (`_Driver.queue_only`). Old `update` and
+    `enqueue` events are still read (the approval verdict's `reaches` keeps judging an
+    approval recorded before schema 13); nothing writes them.
   - **`fr/usage`** (2026-09-25 spec, `lean-cost-aware-process` §5.A) — what a
     session or run cost, and on what, reconstructed from the harness's own
     records: `readers/` (one per harness — Claude Code transcripts, OpenCode and
@@ -748,11 +764,31 @@ untagged RC at HEAD (a failed tag push) is tagged on the next run.
 `FR_RELEASE_STATUS_TOKEN` is the workflow's `github.token`, so it also carries
 the `prepare` job's contents and issues write; it reaches only the `gh` read,
 never `fr` or repo code, and `publish` holds only `GH_TOKEN`. Exactly these calls
-authenticate: the `gh` read, the `gh release` and `gh issue` writes, and the two
-pushes. The bump, `uv lock --check`, the migration, `fr`'s decision and every
+authenticate: the `gh` read, the `gh release` and `gh issue` writes, the two pushes
+(the release commit and the tag) and the leased push of a `cleared` merge-queue hold (see
+below; the hold's fetch stays credential-free). The bump, `uv lock --check`, the migration, `fr`'s decision and every
 other git command run credential-free; the suite jobs get a read-only
 `GITHUB_TOKEN`, used only by checkout and never persisted, and no forge token in
 the suite's env.
+**The merge queue's hold** (spec `2026-11-19-wave-merge-queue` R17-R19, R27). A repo whose
+wave queue is landing keeps one ref, `refs/heads/fr-hold/queue`, a commit whose message is
+`fr-hold: <open|drained|cleared> scope <id> wave <N|-> opened <ISO> refreshed <ISO>`
+(`fr.triage.wave_queue.parse_hold`). The driver pushes it (`queue_exec`'s `push_hold`, the one
+leased hold writer): `open` at queue open and refreshed once an hour, `drained` after the last
+landing, `cleared` itself under `queue.release: none`. Every write after the first is a merge
+commit (first parent: the base, or the drained `main`; second: the hold it replaces), so each push
+is a fast-forward; readers read the first parent only. A write the remote refuses is a
+`queue_halt` whose detail starts `hold write refused` (`wave_queue.hold_halt`): the queue lands
+nothing and shows a Need until a hold write succeeds. While it is `open` and was refreshed
+within 24 hours, `release.py` cuts nothing (RC or final; `--version` too) and `fr release
+status` reports the repo held (`fr.release_status.hold_verdict`, from the `hold` key of its
+facts). The run that finishes, `prepare` when it cuts nothing or `publish` after its push,
+clears a `drained` hold its base contains with a leased push of a `cleared` commit (the third
+authenticated push); only a run that finished (`EXIT_OK`) clears, and a superseded, held or
+failed (`EXIT_FLOOR`) one does not. `publish` reads the hold again before its push. `release.yml`
+also runs on pushes to `fr-hold/**`, but `prepare` runs only for a `drained` hold's commit message
+and never for a deletion, so every drain starts a release and no other hold write does.
+
 An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
 `X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one
 parser every script reads both spellings through. `fr_version` floors admit an RC of the

@@ -1,0 +1,101 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Gates and the wave close-out (R15, R16, R21, R26)
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - wave-queue-devops-barrier
+  - wave-queue-closeout-migrates
+  - wave-queue-migratable-validation
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/batch_closeout.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/ops/gate.py
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/commands/migrate_cmd.py
+  - packages/fr/src/fr/artifacts/**/*.py
+  - packages/fr/src/fr/commands/validate_cmd.py
+  - .github/workflows/ci.yml
+  - .github/workflows/acceptance-report.yml
+  - tests/**/*.py
+  - docs/acceptance/features/2026-11-19-wave-merge-queue.yaml
+  estimate_lines: 1000
+tasks:
+- number: 1
+  title: The DevOps barrier
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED:
+      - DevOps stage 2 adds `fr-queue:release`; it calls no `pr_merge` and records no stage 2. For a queue repo, `_merged` reads only the forge's MERGED. Stage 4 adds `fr-queue:postmerge-done`.
+      - The driver settles each label into `queue_release` (at the head and patch-id) and `queue_postmerge_done`.
+      - The planner admits a `gate:devops` entry only with a `queue_release` at its current patch-id, and lands it as the last entry of its push. It lands nothing behind it until `queue_postmerge_done`, but builds behind it meanwhile. After the entry lands, it adds a Need naming `fr ops gate --run <id>` (R26).
+  - id: P6.T1.S2
+    text: |-
+      GREEN: add the two labels to `fr/labels.py`; change `ops/gate.py`'s stage 2, `_merged` and stage 4; settle the labels in the driver beside `_settle_approvals`; implement the barrier in `wave_queue.py`.
+- number: 2
+  title: One close-out per wave, migrating what it archives
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      RED:
+      - The wave close-out takes only the wave's landed batches that `is_gated` reads false for. A gated batch's close-out is owed after `fr gate pass` and queues between waves. The close-out starts only after the last landing's `post_merge`.
+      - `fr migrate artifacts --yes --path <p>` migrates only the named files and refuses a retiring hop.
+      - The close-out verb runs it over the files it archives, as its own commit before `fr archive`. `review_reasons` admits that commit when it changes only files the archive moves (R15, R16).
+  - id: P6.T2.S2
+    text: |-
+      GREEN: add a repeatable `--path` to `migrate_cmd.artifacts_cmd`, with the per-file filter in the migration runner; change the close-out selection and the verb; extend `review_reasons` and `_collected_reads` for the migration commit.
+- number: 3
+  title: Migratable artifacts and queue CI on this repo
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED:
+      - `fr validate artifacts --allow-migratable` passes a stale stamp that a registered migration moves, printing `stale, migratable`. It fails a migration that refuses, a version no migration reaches, and a stamp newer than this fr.
+      - A workflow test pins `push: branches: ['fr-queue/**']` in `ci.yml` and `acceptance-report.yml`, and the flag used only on PRs and `fr-queue/**` (R21, R7).
+  - id: P6.T3.S2
+    text: |-
+      GREEN: implement the flag in `validate_cmd.py` and edit the two workflows.
+  - id: P6.T3.S3
+    text: |-
+      REFACTOR: docstrings. Write `tests/scenarios/wave-queue-migratable-validation.sh` (a fixture with a stale-but-migratable plan stamp: `fr validate artifacts` fails, `--allow-migratable` passes and prints `stale, migratable`) and `tests/scenarios/wave-queue-closeout-migrates.sh` (`fr migrate artifacts --yes --path <one stale file>` migrates that file only and leaves a second stale file as it was), both sourcing `_common.sh`. Record the three rows' level refs; full suite (incl. `tests/integration/test_scenarios.py`), ruff and mypy green.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-11-20T23:02:13+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-11-20T23:02:13+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-11-20T23:02:13+00:00'
+      note: null
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-11-20T23:02:13+00:00'
+      note: null
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-11-20T23:02:13+00:00'
+      note: null
+    P6.T3.S2:
+      state: x
+      ticked_at: '2026-11-20T23:02:13+00:00'
+      note: null
+    P6.T3.S3:
+      state: x
+      ticked_at: '2026-11-20T23:02:13+00:00'
+      note: null
+  completion:
+    at: '2026-11-20T23:02:13+00:00'
+    note: null
+    observed_prs: []

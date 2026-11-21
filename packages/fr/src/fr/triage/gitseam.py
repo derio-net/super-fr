@@ -24,9 +24,10 @@ import re
 import shlex
 import stat
 import subprocess
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from fr.safe_spawn import fr_argv, safe_fr_env
 from fr.triage.errors import TriageError
@@ -52,7 +53,7 @@ def _run(
     ok: tuple[int, ...] = (0,),
     timeout: float | None = None,
     env: dict[str, str] | None = None,
-    stdin: str | None = None,
+    stdin: str | bytes | None = None,
     coded: bool = False,
     passthrough: Literal["none", "stderr", "all"] = "none",
     exact_env: bool = False,
@@ -60,12 +61,13 @@ def _run(
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
     `GitError` with the command's own words. *env* is laid over the process environment;
-    *stdin* is fed to the command (text mode only). *coded*: any return code is an answer,
-    `(code, stdout + stderr)`, never a raise (text mode only). *passthrough* leaves streams
-    with the operator instead of capturing them: `stderr` (stdout is still captured), or
-    `all` (nothing is, for a command that asks on the terminal). *exact_env*: *env* is
-    the child's WHOLE environment, not laid over this one, so a variable can be removed
-    (`fr.safe_spawn.safe_fr_env` drops a relative `PYTHONPATH`)."""
+    *stdin* is fed to the command (text in text mode, bytes with `text=False`). *coded*:
+    any return code is an answer, `(code, stdout + stderr)`, never a raise (text mode
+    only). *passthrough* leaves streams with the operator instead of capturing them:
+    `stderr` (stdout is still captured), or `all` (nothing is, for a command that asks on
+    the terminal). *exact_env*: *env* is the child's WHOLE environment, not laid over this
+    one, so a variable can be removed (`fr.safe_spawn.safe_fr_env` drops a relative
+    `PYTHONPATH`)."""
     full_env = dict(env or {}) if exact_env else ({**os.environ, **env} if env else None)
     pipe = subprocess.PIPE
     try:
@@ -95,6 +97,28 @@ def _run(
             f"`{shlex.join(argv)}` failed in {cwd}: {words or f'exit {result.returncode}'}"
         )
     return result.stdout
+
+
+# The patch-id an approval is pinned to (spec 2026-11-19-wave-merge-queue R12, §E): porcelain
+# `git diff` with every setting that shapes its output pinned on the command line, so the id
+# is the same on every host. `-c` pins what has no flag; the flags override the rest.
+PATCH_ID_DIFF: Final[tuple[str, ...]] = (
+    "git",
+    "-c", "diff.noprefix=false",
+    "-c", "diff.mnemonicPrefix=false",
+    "-c", "diff.relative=false",
+    "-c", "diff.suppressBlankEmpty=false",
+    "-c", "core.quotePath=true",
+    "diff", "--binary", "--full-index", "--no-color", "--no-ext-diff", "--no-textconv",
+    "--no-renames", "--diff-algorithm=myers", "--unified=3", "--inter-hunk-context=0",
+    "--indent-heuristic", "--src-prefix=a/", "--dst-prefix=b/", "--no-relative",
+    "--ignore-submodules=none", "--submodule=short", "-O/dev/null",
+)  # fmt: skip
+PATCH_ID: Final[tuple[str, ...]] = (
+    "git", "-c", "patchid.stable=false", "-c", "patchid.verbatim=true", "patch-id", "--verbatim",
+)  # fmt: skip
+# `GIT_DIFF_OPTS` may set the context width; this pins it to the flag's own value.
+PATCH_ID_ENV: Final[dict[str, str]] = {"GIT_DIFF_OPTS": "--unified=3"}
 
 
 def git_bytes(args: list[str], cwd: Path, *, ok: tuple[int, ...] = (0,)) -> bytes:
@@ -337,6 +361,39 @@ def push_ref_cas(cwd: Path, remote: str, sha: str, ref: str, *, expected_old: st
             return False
         raise PushRefusedError(str(exc)) from exc
     return True
+
+
+class LeaseLostError(GitError):  # noqa: N818 - a lost race, beside PushRefusedError
+    """A leased push found a ref the remote holds at another sha than the lease named
+    (git's `(stale info)`): another writer moved it. With `--atomic` no ref moved."""
+
+
+class TransientPushError(GitError):  # noqa: N818 - beside PushRefusedError, a non-refusal
+    """A push that failed in transport (a timeout, a hang-up, DNS, a server 5xx) and whose
+    refs the remote does not hold: nobody refused it, so nothing is held for it; the
+    caller tries again next pass (l-errors-r1)."""
+
+
+_TRANSPORT = re.compile(
+    r"timed out|hung up|could not resolve host|could not read from remote|failed to connect|"
+    r"connection (?:reset|refused|timed out|closed)|network is unreachable|early eof|"
+    r"temporary failure|ssl|HTTP 5\d\d|unexpected disconnect|broken pipe",
+    re.I,
+)
+
+
+def is_transport_failure(words: str) -> bool:
+    """Whether git's words read as a failed connection rather than a remote's refusal."""
+    return "remote rejected" not in words and _TRANSPORT.search(words) is not None
+
+
+class AtomicUnsupportedError(GitError):  # noqa: N818 - a refusal of the server's
+    """The remote does not support `git push --atomic` (spec 2026-11-19-wave-merge-queue
+    R10, R22): nothing was pushed, and there is no non-atomic fallback."""
+
+
+_NO_ATOMIC = "does not support --atomic"
+"""git's own words when the receiving end advertises no `atomic` capability."""
 
 
 def tree_files(cwd: Path, sha: str) -> list[tuple[str, str, str]]:
@@ -609,23 +666,6 @@ class Checkout:
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)
 
-    def commits_behind(
-        self, head: str, ref: str
-    ) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
-        """The first-parent commits of *ref* that *head* lacks, each with its
-        (status, path) changes against its first parent, renames split into a
-        delete and an add (gh#927). Together they are everything *ref* changed
-        since *head* forked from it."""
-        shas = git(["rev-list", "--first-parent", f"{head}..{ref}"], self.path).split()
-        out = []
-        for sha in shas:
-            raw = git(
-                ["diff", "--name-status", "--no-renames", "-z", f"{sha}^1", sha], self.path
-            ).split("\0")
-            pairs = zip(raw[0::2], raw[1::2], strict=False)
-            out.append((sha, tuple((s, p) for s, p in pairs if s and p)))
-        return tuple(out)
-
     def changed_paths(self, ref: str, head: str) -> frozenset[str]:
         """The paths *head* changed since it forked from *ref* (`ref...head`)."""
         out = git(["diff", "--name-only", "--no-renames", "-z", f"{ref}...{head}"], self.path)
@@ -637,6 +677,71 @@ class Checkout:
         out = git(["diff", "--name-status", "--no-renames", "-z", f"{ref}...{head}"], self.path)
         parts = [p for p in out.split("\0") if p]
         return frozenset(f"{parts[i][0]}\t{parts[i + 1]}" for i in range(0, len(parts) - 1, 2))
+
+    def patch_id(self, head: str, ref: str) -> str:
+        """*head*'s patch-id against its merge base with *ref* (spec 2026-11-19-wave-merge-queue
+        R12): `PATCH_ID_DIFF` from the merge base to *head*, piped to `PATCH_ID`, so
+        whitespace and binary content count and no host configuration (prefixes, renames,
+        context, algorithm, order, textconv, an external diff) moves it. The first field of
+        the output; "" for an empty diff, which `git patch-id` answers with nothing."""
+        base = git(["merge-base", head, ref], self.path).strip()
+        diff: bytes = _run(
+            [*PATCH_ID_DIFF, base, head], self.path, text=False, timeout=GIT_TIMEOUT_SECONDS,
+            env=PATCH_ID_ENV,
+        )  # fmt: skip
+        if not diff:
+            return ""
+        out: bytes = _run(
+            list(PATCH_ID), self.path, text=False, stdin=diff, timeout=GIT_TIMEOUT_SECONDS,
+            env=PATCH_ID_ENV,
+        )  # fmt: skip
+        fields = out.decode("ascii", "replace").split()
+        return fields[0] if fields else ""
+
+    def clean_succession(self, approved: str, head: str) -> bool:
+        """Whether *head* follows *approved* only by moves that cannot change the PR's diff
+        (spec 2026-11-19-wave-merge-queue R12, l-security-r1): *approved* is an ancestor of
+        *head*, and every commit on the first-parent chain between them is either an empty
+        non-merge commit or a two-parent merge whose tree equals the automatic merge of its
+        parents (`git merge-tree --write-tree`, clean). A hand-edited merge resolution, a
+        commit that changes a tree, or a head that does not descend from *approved* is not.
+        `git patch-id` ignores hunk positions, so this is what keeps a moved hunk from
+        passing for the approved one. Raises `GitError` when git cannot run."""
+        if approved == head:
+            return True
+        if not git_ok(["merge-base", "--is-ancestor", approved, head], self.path):
+            return False
+        chain = git(
+            ["rev-list", "--first-parent", "--parents", "--topo-order", f"{approved}..{head}"],
+            self.path,
+        ).splitlines()
+        if not chain:
+            return False
+        oldest = chain[-1].split()
+        if len(oldest) < 2 or oldest[1] != approved:
+            return False  # approved is reached only through a merge's second parent
+        for line in chain:
+            commit, *parents = line.split()
+            tree = git(["rev-parse", f"{commit}^{{tree}}"], self.path).strip()
+            if len(parents) == 1:
+                if tree != git(["rev-parse", f"{parents[0]}^{{tree}}"], self.path).strip():
+                    return False
+            elif len(parents) == 2:
+                code, out = _run(
+                    ["git", "merge-tree", "--write-tree", "--no-messages", *parents],
+                    self.path, coded=True, timeout=GIT_TIMEOUT_SECONDS,
+                )  # fmt: skip
+                if code != 0 or out.split() == [] or out.split()[0] != tree:
+                    return False
+            else:
+                return False
+        return True
+
+    def refresh_remote_branch(self, branch: str) -> None:
+        """Fetch origin's *branch* into `origin/<branch>` now (forced: the remote is the
+        truth), for a read that must not use a stale copy (wave-merge-queue R12)."""
+        git(["fetch", "--quiet", "--no-tags", "origin",
+             f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], self.path)  # fmt: skip
 
     def commits_since(self, ref: str, head: str) -> tuple[str, ...]:
         """The commits on *ref*..*head*, newest first."""
@@ -763,6 +868,114 @@ class Checkout:
         git(["update-ref", "refs/remotes/origin/main", "HEAD"], dest)
         git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], dest)
 
+    # ------------------------------------------------ the wave merge queue
+
+    def push_leased(
+        self,
+        refspecs: Sequence[tuple[str, str]],
+        leases: Mapping[str, str | None],
+        *,
+        atomic: bool,
+    ) -> None:
+        """Push each `(sha, ref)` of *refspecs* to origin, every ref leased on the sha
+        *leases* names for it (None: the ref must not exist yet), as ONE push; *atomic*
+        makes it all or nothing (spec 2026-11-19-wave-merge-queue R4, R10).
+
+        A lease the remote's ref no longer matches raises `LeaseLostError`; a remote that
+        cannot push atomically `AtomicUnsupportedError`; any other refusal (a protection
+        rule, a hook, a permission) `PushRefusedError` with git's own words, which carry
+        the remote's (a GitHub `GH006` or `GH013`, say). Any other failure reads the remote's
+        refs again: they hold exactly the pushed shas, the push landed (no error); they do
+        not and git's words read as a failed connection, `TransientPushError`."""
+        if not refspecs:
+            return
+        argv = ["push", "--quiet", "--no-verify", *(["--atomic"] if atomic else [])]
+        for _sha, ref in refspecs:
+            argv.append(f"--force-with-lease={ref}:{leases.get(ref) or ''}")
+        argv += ["origin", *(f"{sha}:{ref}" for sha, ref in refspecs)]
+        try:
+            git(argv, self.path)
+        except GitError as exc:
+            words = str(exc)
+            if _NO_ATOMIC in words:
+                raise AtomicUnsupportedError(words) from exc
+            if _STALE_LEASE in words:
+                raise LeaseLostError(words) from exc
+            # l-errors-r1: a refusal is told from a transport failure by the remote's refs
+            try:
+                held = {ref: remote_ref(self.path, "origin", ref) for _sha, ref in refspecs}
+            except GitError:
+                if is_transport_failure(words):
+                    raise TransientPushError(words) from exc
+                raise PushRefusedError(words) from exc
+            if all(held[ref] == sha for sha, ref in refspecs):
+                return  # the push landed and the connection died on the way back
+            if is_transport_failure(words):
+                raise TransientPushError(words) from exc
+            raise PushRefusedError(words) from exc
+
+    def remote_sha(self, ref: str) -> str | None:
+        """The sha origin holds at the fully qualified *ref* now, None when none."""
+        return remote_ref(self.path, "origin", ref)
+
+    def fetch_remote_ref(self, ref: str) -> str | None:
+        """Fetch origin's fully qualified *ref* (forced: the remote is the truth) and return
+        the sha it holds, None when origin has none: the hold's read (R17)."""
+        return fetch_ref(self.path, "origin", ref)
+
+    def ref_commit(self, parent: str, message: str, *, previous: str | None = None) -> str:
+        """A commit of *parent*'s tree on *parent* with *message* and fr's fixed identity,
+        written without touching HEAD or any ref: a hold (R17). With *previous* (the hold
+        commit the ref holds now) it is a merge commit whose SECOND parent is *previous*, so
+        the push that replaces the hold is a fast-forward and a remote that refuses
+        non-fast-forward pushes accepts it; the first parent keeps its meaning."""
+        argv = ["git", "commit-tree", f"{parent}^{{tree}}", "-p", parent]
+        if previous is not None and previous != parent:
+            argv += ["-p", previous]
+        out: str = _run(argv + ["-m", message], self.path, env=_REF_IDENTITY,
+                        timeout=GIT_TIMEOUT_SECONDS)  # fmt: skip
+        return out.strip()
+
+    def release_commits(self, base: str, head: str) -> tuple[tuple[str, str], ...]:
+        """`(sha, subject)` of every `release: v...` commit in *base*..*head*, oldest first:
+        the releases cut while a queue was open (R27)."""
+        out = git(["log", "--reverse", "--format=%H\t%s", "--grep=^release: v", f"{base}..{head}"],
+                  self.path)  # fmt: skip
+        rows = (line.partition("\t") for line in out.splitlines() if line)
+        return tuple((sha, subject) for sha, _, subject in rows)
+
+    def tree_of(self, rev: str) -> str:
+        """The tree *rev* holds (`<rev>^{tree}`)."""
+        return git(["rev-parse", f"{rev}^{{tree}}"], self.path).strip()
+
+    def has_commit(self, sha: str) -> bool:
+        return has_commit(self.path, sha)
+
+    def merge_base(self, one: str, two: str) -> str:
+        return git(["merge-base", one, two], self.path).strip()
+
+    def parents(self, sha: str) -> tuple[str, ...]:
+        """*sha*'s parents, first parent first."""
+        return tuple(git(["rev-list", "--parents", "-1", sha], self.path).split()[1:])
+
+    def message(self, sha: str) -> str:
+        """*sha*'s full commit message."""
+        return git(["log", "-1", "--format=%B", sha], self.path).rstrip("\n")
+
+    def replayed(self, base: str, head: str) -> tuple[str, ...]:
+        """The non-merge commits of *base*..*head*, oldest first: what a rebase replays."""
+        return tuple(git(["rev-list", "--reverse", "--no-merges", f"{base}..{head}"],
+                         self.path).split())  # fmt: skip
+
+    def has_merges(self, base: str, head: str) -> bool:
+        """*base*..*head* holds a merge commit: what `rebase` would not replay (p3-r9)."""
+        return bool(git(["rev-list", "--merges", "-1", f"{base}..{head}"], self.path).strip())
+
+    def diff_paths(self, one: str, two: str) -> tuple[str, ...]:
+        """The paths whose content differs between commits (or trees) *one* and *two*."""
+        out = git(["diff", "--name-only", "--no-renames", "-z", one, two], self.path)
+        return tuple(p for p in out.split("\0") if p)
+
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).
 
@@ -848,11 +1061,6 @@ class Worktree:
         """*file*'s UTF-8 text at *ref*, or None when it does not exist there (`show_text`)."""
         return show_text(self.path, ref, file)
 
-    def take_theirs(self, paths: list[str]) -> None:
-        """Resolve *paths* to main's side, so no file keeps conflict markers."""
-        git(["checkout", "--theirs", "--", *paths], self.path)
-        git(["add", "--", *paths], self.path)
-
     def abort_merge(self) -> None:
         git(["merge", "--abort"], self.path)
 
@@ -863,13 +1071,9 @@ class Worktree:
     def run(self, command: str, **fields: str) -> None:
         run_declared(command, self.path, **fields)
 
-    def commit_all(self, message: str, version_files: list[str]) -> str | None:
-        """Stage tracked changes plus the declared *version_files* globs, and
-        commit; the new head, or None when nothing changed.
-
-        Never `git add --all`: `set` / `relock` may leave build output behind,
-        and anything untracked would ride into another run's PR (review r3-f7).
-        """
+    def stage(self, version_files: Sequence[str]) -> None:
+        """Stage tracked changes plus untracked files matching the declared
+        *version_files* globs, never anything else (review r3-f7)."""
         git(["add", "--update"], self.path)
         untracked = git(["ls-files", "-z", "--others", "--exclude-standard"], self.path)
         declared = [
@@ -879,11 +1083,60 @@ class Worktree:
         ]
         if declared:
             git(["add", "--", *declared], self.path)
-        merging = git_ok(["rev-parse", "-q", "--verify", "MERGE_HEAD"], self.path)
-        if not merging and git_ok(["diff", "--cached", "--quiet"], self.path):
-            return None
-        git(["commit", "--no-verify", "-m", message], self.path)
-        return git(["rev-parse", "HEAD"], self.path).strip()
+
+    # ------------------------------------ the wave merge queue's combinations
+
+    def take_ours(self, paths: list[str]) -> None:
+        """Resolve *paths* to the side being built on (HEAD), so no file keeps conflict
+        markers: the combination's, when a queue entry is merged into it."""
+        git(["checkout", "--ours", "--", *paths], self.path)
+        git(["add", "--", *paths], self.path)
+
+    def write_tree(self) -> str:
+        """The tree the index holds now."""
+        return git(["write-tree"], self.path).strip()
+
+    def commit_tree(
+        self, tree: str, parents: Sequence[str], message: str, *, date: str | None = None
+    ) -> str:
+        """A commit of *tree* on *parents* with *message* (the clone's identity), written
+        without touching HEAD; *date* (`@<epoch> +0000`) pins both its dates."""
+        argv = ["commit-tree", tree, "-m", message]
+        for parent in parents:
+            argv += ["-p", parent]
+        env = {"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date} if date else None
+        out: str = _run(["git", *argv], self.path, env=env, timeout=GIT_TIMEOUT_SECONDS)
+        return out.strip()
+
+    def commit_date(self, sha: str) -> int:
+        """*sha*'s committer time, in seconds since the epoch."""
+        return int(git(["log", "-1", "--format=%ct", sha], self.path).strip())
+
+    def cherry_pick(self, sha: str) -> list[str]:
+        """Replay *sha* onto HEAD, committing it; the conflicted paths ([] if none), with
+        the pick left in progress for `continue_pick` or `abort_pick`. rerere is off, as
+        for `merge`."""
+        argv = ["-c", "rerere.enabled=false", "-c", "merge.directoryRenames=false",
+                "cherry-pick", "--allow-empty", "--keep-redundant-commits", sha]  # fmt: skip
+        clean = git_ok(argv, self.path)
+        conflicted = git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
+        if not clean and not conflicted:
+            raise GitError(f"`git cherry-pick {sha}` failed in {self.path} without a conflict")
+        return conflicted
+
+    def continue_pick(self) -> None:
+        git(["-c", "core.editor=true", "cherry-pick", "--continue"], self.path)
+
+    def abort_pick(self) -> None:
+        git_ok(["cherry-pick", "--abort"], self.path)
+
+    def amend(self, version_files: Sequence[str]) -> str:
+        """Fold the staged and tracked changes (and *version_files*) into HEAD, keeping its
+        message; the new HEAD."""
+        self.stage(version_files)
+        git(["commit", "--no-verify", "--quiet", "--amend", "--no-edit", "--allow-empty"],
+            self.path)  # fmt: skip
+        return self.head()
 
     def commit_paths(self, paths: list[str], message: str) -> str | None:
         """Stage exactly *paths* (directories included, untracked files under them too)
@@ -931,6 +1184,46 @@ class Worktree:
         code, out = _run(fr_argv(*args), self.path, coded=True, env=safe_fr_env(), exact_env=True)
         return int(code), str(out)
 
+    def stale_artifacts(self) -> list[str]:
+        """The live artifacts of this worktree a registered migration would move, as
+        repo-relative paths (`fr.artifacts.runner.plan_migrations`, read-only): what the
+        collected close-out's `fr migrate artifacts --path` then migrates (R16)."""
+        from fr.artifacts.runner import plan_migrations
+
+        seen: dict[str, None] = {}
+        for action in plan_migrations(self.path):
+            if not action.is_repair:
+                seen[action.path.relative_to(self.path).as_posix()] = None
+        return list(seen)
+
+    def archive_moves(self, branch: str, default_ref: str) -> list[str] | None:
+        """The live artifact paths `fr archive --branch <branch>` moves in this worktree: the
+        archive's own classification (`fr.closeout.branch_artifacts`) of the paths *branch*
+        changed against *default_ref*, over the same refs and recorded start the archive
+        reads. A plan is its folder. None when the branch has no refs this clone can fetch
+        (the archive then holds the batch on its own); a read that fails raises `GitError`
+        carrying the cause (l-errors-r11)."""
+        from fr.closeout import branch_artifacts
+        from fr.isolation.local import (
+            branch_changed_paths,
+            recorded_start,
+            resolve_branch_refs,
+            subprocess_runner,
+        )
+        from fr.isolation.types import IsolationError
+
+        remote = default_ref.split("/", 1)[0]
+        try:
+            refs, fetched = resolve_branch_refs(subprocess_runner, self.path, branch, remote)
+            if not refs or not fetched:
+                return None
+            start = recorded_start(self.path, branch)
+            changed = sorted({p for ref in refs for p in branch_changed_paths(
+                subprocess_runner, self.path, ref, default_ref, start)})  # fmt: skip
+        except (IsolationError, GitError, OSError) as exc:
+            raise GitError(f"cannot read what {branch}'s archive moves: {exc}") from exc
+        return [a.path.as_posix() for a in branch_artifacts(self.path, changed)]
+
     def reset_hard(self, sha: str) -> None:
         """Back to *sha*, every change and untracked file since gone: a held batch moves
         nothing (R15)."""
@@ -941,7 +1234,8 @@ class Worktree:
         """Everything since *base* (commits, staged and unstaged changes, new files) as ONE
         commit on *base*; the new head, or None when nothing changed. `--all` is right
         here, unlike `commit_all`: the worktree is fresh and only fr's own verbs wrote in
-        it, and an archive's moves are new files."""
+        it, and an archive's moves are new files. With the close-out's migration commit
+        (R16) as *base*, only the archive is squashed and the migration commit stays."""
         git(["add", "--all"], self.path)
         git(["reset", "--soft", "--quiet", base], self.path)
         if git_ok(["diff", "--cached", "--quiet"], self.path):

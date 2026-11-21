@@ -62,13 +62,24 @@ GATED: dict[str, str] = {
         "callers dispatch_batch / adopt_batch run _tracking_gate (labels, comments) first",
     "fr/src/fr/commands/triage_batch_cmd.py::adopt_batch._comment":
         "adopt_batch runs _tracking_gate (labels, comments) before any forge call",
+    "fr/src/fr/triage/queue_comment.py::upsert":
+        "queue_comment.sync(allowed=...): the driver's _queue_comments returns before any "
+        "write unless _Driver.forge_off(comments) is None",
     "fr/src/fr/commands/triage_batch_cmd.py::_Driver._label_awaiting":
         "_Driver.forge_off(labels): the checkout's policy, else the forge-read policy",
     "fr/src/fr/commands/triage_batch_cmd.py::_Driver._collected_merged":
         "_Driver.forge_off(labels) on the marker's repo",
     "fr/src/fr/triage/approval.py::settle_approvals":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
+    "fr/src/fr/triage/approval.py::settle_entry_approval":
+        "_labels_off: client_policy(labels) (a dry run writes nothing)",
+    "fr/src/fr/triage/approval.py::settle_release":
+        "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::ensure_approval_label": "_labels_off: client_policy(labels)",
+    "fr/src/fr/ops/gate.py::_write_marker":
+        "ledger_block(primary, comments): forge.comments off refuses with the marker to post",
+    "fr/src/fr/ops/gate.py::add_queue_label":
+        "ledger_block(primary, labels): forge.labels off refuses with the label to add by hand",
     "fr/src/fr/triage/claim_writes.py::_add_label":
         "reached only from claim/refresh, after _gate (quiet_block: labels, comments)",
     "fr/src/fr/triage/claim_writes.py::_remove_label":

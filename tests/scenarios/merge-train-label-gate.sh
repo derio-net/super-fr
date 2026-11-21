@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 # Rows merge-train-label-gate, approval-label-created, approval-board-and-briefs (spec
-# 2026-10-11-merge-train-safety R1-R5, R8). The host driver (`fr triage batch drive
-# --once --yes`) against a fake REST forge (fixtures/merge-train-label-gate/bin/gh, its
-# world in $FAKE_FORGE) and a real bare remote, where the driver's update pushes land. The
-# clone reaches it by a `file://localhost/.../derio-net/super-fr.git` URL rather than
+# 2026-10-11-merge-train-safety R1-R5, R8; 2026-11-19-wave-merge-queue R12, R22). The host
+# driver (`fr triage batch drive --once --yes`) against a fake REST forge
+# (fixtures/merge-train-label-gate/bin/gh, its world in $FAKE_FORGE) and a real bare remote.
+# The clone reaches it by a `file://localhost/.../derio-net/super-fr.git` URL rather than
 # `url.<base>.insteadOf`: `git remote get-url` expands insteadOf, and the driver reads the
-# batch's repo from that URL. Five passes:
+# batch's repo from that URL. The repo declares no `queue.ci`, so its queue is held and no
+# PR lands: what is proved is the approval, which is the queue's entry rule. Four passes:
 #   1. the label is missing: the pass creates it and says so; the PR is green and
 #      unlabelled, so it is held as awaiting approval, the board asks for the label and
-#      its card awaits approval; `batch merge` holds it, and refuses it by name (exit 2);
-#   2. the operator labels it while main moved ahead: a `batch merge` preview only says
-#      what it would record; the pass records the approval at the head and updates the PR
-#      (an `update` event with the fetched base);
-#   3. the driver's own update keeps the approval (its CI is still running);
-#   4. a session pushes: the approval is void, the label removed (logged), and the board
-#      asks for a re-label;
-#   5. the operator re-labels a draft: the pass marks it ready, then merges it.
+#      its card awaits approval; `batch merge` refuses it by name (exit 2);
+#   2. the operator labels it: the pass records the approval at the head and its patch-id;
+#   3. a session pushes a change: the approval is void, the label removed (logged), and the
+#      board asks for a re-label;
+#   4. the operator re-labels: the approval is recorded again, and fr merges nothing by the
+#      forge's API (the queue lands by push).
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export FR_HOST_ID=0123456789abcdef FR_FORGE_API=rest
@@ -94,7 +93,6 @@ R="repos/$repo"
 # 1. The label is created; an unlabelled green PR is held and the board asks for it.
 drive
 expect_grep "created label approved-fr on $repo" "$out" "the first pass creates the missing label"
-expect_grep "awaiting approval b1 \(#1080\)" "$out" "the unlabelled green PR awaits approval"
 refuse_grep "merged PR" "$out" "an unlabelled PR is never merged"
 refuse_grep "pulls/1080/merge" "$(log)" "no merge call for an unlabelled PR"
 page="$(board)"
@@ -102,66 +100,45 @@ expect_grep "label it approved-fr to merge" "$page" "the board's Needs you asks 
 expect_grep 'data-need="approve-pr"' "$page" "the ask is an approve-pr Need"
 expect_grep "awaiting approval" "$(cat "$state/batches.html")" "the kanban card awaits approval"
 
-# `batch merge` holds the unapproved batch; naming it is refused; nothing is written.
+# `batch merge` names the label when a named batch lacks it; nothing is written.
 merge() { run_fr out triage batch merge "$@" --repo "$repo" --dir "$state" --checkout "$PWD"; }
 before="$(cat "$state/judgements.yaml")"
-merge
-require_exit 0 "$out"
-expect_grep "held b1: PR #1080 awaits the approved-fr label" "$out" "a default merge holds it"
-expect_grep "nothing to merge" "$out" "with every batch held there is nothing to merge"
 merge b1 --yes
 require_exit 2 "$out"
 expect_grep "approved-fr" "$out" "naming an unapproved batch is refused naming the label"
 refuse_grep "pulls/1080/merge" "$(log)" "batch merge never merges an unlabelled PR"
 [ "$(cat "$state/judgements.yaml")" = "$before" ] || fail "an unapproved batch merge wrote state"
 
-# 2. The operator labels it; main has moved: the approval is recorded and fr updates it.
+# 2. The operator labels it: the approval is recorded at the head, pinned to its patch-id.
 forge 'w["pr"]["labels"] = ["approved-fr"]'
-git -C "$seed" checkout -q main && printf 'more code\n' >> "$seed/code.py" \
-  && git -C "$seed" commit -qam "main moves" && git -C "$seed" push -q origin main || fail "move main"
 labelled="$(git -C "$bare" rev-parse feat/batch-b1)"
-merge  # a preview says what --yes would record, and records nothing
-expect_grep "would record approval of PR #1080 at ${labelled:0:12}" "$out" "the preview names it"
-refuse_grep "kind: approval" "$(cat "$state/judgements.yaml")" "a preview settles nothing"
 drive
 expect_grep "approval of PR #1080 recorded at ${labelled:0:12}" "$out" "the approval is recorded at the head"
-expect_grep "updated PR #1080" "$out" "the PR behind main is updated"
-updated="$(git -C "$bare" rev-parse feat/batch-b1)"
-[ "$updated" != "$labelled" ] || fail "the update pushed nothing"
-expect_grep "head_before: $labelled" "$(cat "$state/judgements.yaml")" "the update is recorded"
-expect_grep "head_after: $updated" "$(cat "$state/judgements.yaml")" "the update names its new head"
+expect_grep "patch_id:" "$(cat "$state/judgements.yaml")" "the approval is pinned to the PR's diff"
+refuse_grep "pulls/1080/merge" "$(log)" "fr merges nothing by the forge's API"
+refuse_grep "kind: update|kind: enqueue" "$(cat "$state/judgements.yaml")" "no update or enqueue event is written"
 
-# 3. fr's own update keeps the approval while its CI runs.
-forge "w['pending'] = ['$updated']"
-drive
-refuse_grep "voided" "$out" "the driver's own update does not void the approval"
-refuse_grep "issues/1080/labels" "$(log)" "the label stays on after fr's own update"
-refuse_grep "merged PR" "$out" "a pending PR waits"
-
-# 4. A session pushes: the approval is void, the label removed, the board asks again.
+# 3. A session pushes: the approval is void, the label removed, the board asks again.
 git -C "$seed" fetch -q origin && git -C "$seed" checkout -q -B feat/batch-b1 origin/feat/batch-b1 \
   && printf 'session\n' >> "$seed/a.txt" && git -C "$seed" commit -qam "session push" \
   && git -C "$seed" push -q origin feat/batch-b1 || fail "the session push"
 pushed="$(git -C "$bare" rev-parse feat/batch-b1)"
-forge 'w["pending"] = []'
 drive
-expect_grep "approval of PR #1080 at ${labelled:0:12} voided: head moved to ${pushed:0:12}" \
+# The approval recorded its patch-id (wave-merge-queue R12), and the push changed the
+# PR's diff: the void says so.
+expect_grep "approval of PR #1080 at ${labelled:0:12} voided: its diff changed at ${pushed:0:12}" \
   "$out" "a push fr did not make voids the approval"
 expect_grep "^-X DELETE $R/issues/1080/labels/approved-fr" "$(log)" "the void removes the label"
 refuse_grep "merged PR" "$out" "a void PR is never merged"
 drive  # the next pass collects the PR without its label: still held, never voided twice
 refuse_grep "voided|merged PR" "$out" "an unlabelled PR after a void is held, nothing more"
-expect_grep "awaiting approval b1 \(#1080\)" "$out" "the unlabelled PR awaits approval again"
 expect_grep "changed since you approved it at ${labelled:0:12}: re-label to merge" "$(board)" \
   "the board asks for a re-label"
 
-# 5. The operator re-labels a draft: fr marks it ready and merges it.
+# 4. The operator re-labels a draft: the approval is recorded again; nothing is merged.
 forge 'w["pr"]["labels"] = ["approved-fr"]; w["pr"]["draft"] = True'
 drive
-expect_grep "^-X POST $R/pulls/1080/ccr/ready_for_review" "$(log)" "the approved draft is marked ready"
-expect_grep "^-X PUT $R/pulls/1080/merge" "$(log)" "the approved PR is merged"
-ready_at="$(grep -n "^-X POST $R/pulls/1080/ccr/ready_for_review" "$FAKE_GH_LOG" | head -1 | cut -d: -f1)"
-merge_at="$(grep -n "^-X PUT $R/pulls/1080/merge" "$FAKE_GH_LOG" | head -1 | cut -d: -f1)"
-[ "$ready_at" -lt "$merge_at" ] || fail "the draft was merged before it was marked ready"
-expect_grep "merged PR #1080 at ${pushed:0:12}" "$out" "the merge names the approved head"
+expect_grep "approval of PR #1080 recorded at ${pushed:0:12}" "$out" "the new head is approved"
+refuse_grep "pulls/1080/merge" "$(log)" "the approved PR is not merged by the forge's API"
+refuse_grep "ready_for_review" "$(log)" "a draft is readied when the queue builds it, never by a pass"
 echo "ok: merge-train-label-gate"
