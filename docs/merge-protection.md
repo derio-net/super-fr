@@ -132,7 +132,7 @@ If you decline an optional cleanup, the script goes on.
     - It removes the app's bypass from `protect main`. When `protect main` still holds the old `ci-ok` rule, it keeps the bypass there and leaves the move to the require step (step 6).
     - It creates `protect release tags`.
     - It says that the require step waits for a release that the app pushed.
-5. **Merge the PR.** The Release run passes `publish`. Confirm the new `v*` tag's commit has a push-event CI run that `derio-fr-automation[bot]` triggered. If the variable is not set (you unset it in step 4, or the repo never had it), run the script again first. It sets the variable now that `main` declares the environment. The next release goes out as the app.
+5. **Merge the PR.** The Release run passes `publish`. Confirm the new `v*` tag's commit has a push-event CI run that `derio-fr-automation[bot]` triggered. Is the variable not set? Then run the script again first. This applies if you unset it in step 4, or if the repo never had it. The script sets it now that `main` declares the environment. The next release goes out as the app.
 6. **Run the script again.** The require step creates `require ci-ok`.
     It holds the `ci-ok` check with "require branches to be up to date".
     The app is its only bypass actor.
