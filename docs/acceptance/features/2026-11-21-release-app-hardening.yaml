@@ -109,9 +109,14 @@ rows:
     origin:
     - spec:2026-11-21-release-app-hardening#R4
     - spec:2026-11-21-release-app-hardening#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_finished_setup_prints_ok_for_every_step_and_writes_nothing
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_declined_step_write_stops_the_script_with_no_later_write
+      - super-fr:tests/unit/test_setup_release_app.py#test_dry_run_from_the_half_done_state_prints_every_pending_step_in_order
+      - super-fr:tests/unit/test_setup_release_app.py#test_the_end_to_end_order_and_an_idempotent_rerun
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
     verify: none
   - id: release-app-setup-live
     capability: release
