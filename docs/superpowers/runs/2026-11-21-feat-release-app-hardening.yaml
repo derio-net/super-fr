@@ -3,7 +3,7 @@ run: 2026-11-21-feat-release-app-hardening
 workflow: fr-goal-light@1
 branch: feat/release-app-hardening
 started: '2026-11-21T11:00:48+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -91,7 +91,11 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-21T12:24:11+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-r7
   lens-review:
     state: pending
   deliver:
