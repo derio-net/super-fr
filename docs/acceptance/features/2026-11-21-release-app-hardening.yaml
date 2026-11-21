@@ -13,9 +13,12 @@ rows:
       which declare the release environment; no other job declares it or reads the key
     origin:
     - spec:2026-11-21-release-app-hardening#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_workflow.py#test_r1_exactly_prepare_and_publish_declare_the_release_environment
+      - super-fr:tests/unit/test_release_workflow.py#test_r1_no_other_workflow_job_declares_the_environment_or_names_the_key
+    status: ci
+    notes: proved by CI unit tests (release-app-hardening phase 1)
     verify: none
   - id: setup-script-app-check
     capability: release
