@@ -129,11 +129,16 @@ If you decline an optional cleanup, the script goes on.
     - It creates the `release` environment with a main-only branch policy.
     - When no environment secret exists (or with `--rotate-key`), it asks for the `.pem` path. It proves the key belongs to the app, and that the app reaches only this repo. It stores the key as the environment secret.
     - It waits to set the variable until main's `release.yml` declares the environment.
-    - It removes the app's bypass from `protect main`. When `protect main` still holds the old `ci-ok` rule, it keeps the bypass there and leaves the move to the require step (step 6).
+    - It removes the app's bypass from `protect main`. When `protect main` still holds the old `ci-ok` rule, it keeps the bypass there and leaves the move to the require step (step 7).
     - It creates `protect release tags`.
     - It says that the require step waits for a release that the app pushed.
-5. **Merge the PR.** The Release run passes `publish`. Confirm the new `v*` tag's commit has a push-event CI run that `derio-fr-automation[bot]` triggered. Is the variable not set? Then run the script again first. This applies if you unset it in step 4, or if the repo never had it. The script sets it now that `main` declares the environment. The next release goes out as the app.
-6. **Run the script again.** The require step creates `require ci-ok`.
+5. **Merge the PR.** The Release run then passes `publish`.
+    With the variable set, the app pushes the release.
+    The new `v*` tag's commit then has a push-event CI run that `derio-fr-automation[bot]` triggered.
+6. **Run the script again if the variable is not set.** The variable is not set when you unset it in step 4, or when the repo never had it.
+    The script sets it now, because `main` declares the environment.
+    The next release goes out as the app.
+7. **Run the script again.** The require step creates `require ci-ok`.
     It holds the `ci-ok` check with "require branches to be up to date".
     The app is its only bypass actor.
     `--force` skips only the release check.
