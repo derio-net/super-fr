@@ -48,7 +48,10 @@ steps:
           reviewer: a7db9872dc2758d9a
           findings: spr-r1,spr-r2,spr-r3,spr-r4,spr-r5,spr-r6,spr-r7,spr-r8,spr-r9,spr-r10,spr-r11
   plan-review:
-    state: pending
+    state: failed
+    at: '2026-11-21T11:42:28+00:00'
+    exit: 2
+    stdout: ''
   implement:
     state: pending
     members:
