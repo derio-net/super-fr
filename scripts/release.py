@@ -237,7 +237,9 @@ def _run_staged_tests(
     The full suite, not a curated "version-sensitive" subset: that list is
     the kind of literal that goes stale, which is how 5.0.0 broke.
     """
-    return _probe_then_pytest(repo, new, [], run)
+    # `-m ""`: this path keeps pyproject's addopts, whose `-m "not scenario"` would
+    # leave the scenario tier out (spec 2026-11-19-local-suite-cost R5).
+    return _probe_then_pytest(repo, new, ["-m", ""], run)
 
 
 _UV_LOCKED = ["uv", "run", "--locked"]

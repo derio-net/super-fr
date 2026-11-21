@@ -24,6 +24,7 @@ from fr.journal.model import journal_path, parse_journal
 from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
 
+from tests.unit import fixture_templates
 from tests.unit.record_support import (
     RUN,
     commit_all,
@@ -50,15 +51,16 @@ ANNOUNCED = "(Round 1 · questions 1–1 of 1 · a 2nd round may follow) Which s
 ROUND_TWO = {"rounds": 2, "trigger": "design-risk", "reason": "B vs C changes the store"}
 
 
-def _blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
-    """An fr-goal run blocked on its brainstorm operator gate, in a Claude Code
-    session whose transcript lives under `tmp_path/projects`. Returns the
-    workspace and a transcript stamp at/after the moment the gate blocked."""
+def _build_blocked(tmp_path: Path, driver: str | None = None) -> str:
+    """The template `_blocked` copies (spec 2026-11-19-local-suite-cost §3.B): the run,
+    blocked on its brainstorm gate, with the spec on disk. Returns the transcript stamp."""
     from tests.integration.test_fr_goal_shape import _workspace
 
     root = _workspace(tmp_path, "feat/x")
     start = ["run", "start", "fr-goal", "--branch", "feat/x", "--run-id", RUN]
-    assert fr(root, start).exit_code == 0
+    assert fr(root, [*start, *(["--driver", driver] if driver else [])]).exit_code == 0
+    if driver:
+        assert load_run_state(root, RUN).driver == driver
     assert "blocked on operator gate" in fr(root, ["run", "advance", RUN]).output
     spec = root / SPEC
     spec.parent.mkdir(parents=True, exist_ok=True)
@@ -66,10 +68,26 @@ def _blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str
     seed_requirements(root, SPEC)
     blocked_at = parse_timestamp(load_run_state(root, RUN).steps["brainstorm"].at)
     assert blocked_at is not None
+    return blocked_at.strftime("%Y-%m-%dT%H:%M:%S.999Z")
+
+
+def _copy_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver: str | None
+) -> tuple[Path, str]:
+    stamp = fixture_templates.current().copy(
+        f"question_rounds:{driver}", lambda directory: _build_blocked(directory, driver), tmp_path
+    )
     monkeypatch.setenv("FR_HARNESS", "claude-code")
     monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", SESSION)
-    return root, blocked_at.strftime("%Y-%m-%dT%H:%M:%S.999Z")
+    return tmp_path / "workspace", stamp
+
+
+def _blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
+    """An fr-goal run blocked on its brainstorm operator gate, in a Claude Code
+    session whose transcript lives under `tmp_path/projects`. Returns the
+    workspace and a transcript stamp at/after the moment the gate blocked."""
+    return _copy_blocked(tmp_path, monkeypatch, None)
 
 
 def _transcript(tmp_path: Path, at: str, rounds: list[str | None]) -> None:
@@ -612,23 +630,7 @@ def test_the_verdict_table(
 def _blocked_standalone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
     """`_blocked`, but the run was started by standalone fr-brainstorming
     (`--driver standalone`), which advances before its first question."""
-    from tests.integration.test_fr_goal_shape import _workspace
-
-    root = _workspace(tmp_path, "feat/x")
-    start = ["run", "start", "fr-goal", "--branch", "feat/x", "--run-id", RUN]
-    assert fr(root, [*start, "--driver", "standalone"]).exit_code == 0
-    assert load_run_state(root, RUN).driver == "standalone"
-    assert "blocked on operator gate" in fr(root, ["run", "advance", RUN]).output
-    spec = root / SPEC
-    spec.parent.mkdir(parents=True, exist_ok=True)
-    spec.write_text("# x design\n")
-    seed_requirements(root, SPEC)
-    blocked_at = parse_timestamp(load_run_state(root, RUN).steps["brainstorm"].at)
-    assert blocked_at is not None
-    monkeypatch.setenv("FR_HARNESS", "claude-code")
-    monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
-    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", SESSION)
-    return root, blocked_at.strftime("%Y-%m-%dT%H:%M:%S.999Z")
+    return _copy_blocked(tmp_path, monkeypatch, "standalone")
 
 
 @pytest.mark.parametrize("path", PATHS)

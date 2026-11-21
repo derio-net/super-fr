@@ -3320,6 +3320,25 @@ def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    from fr.run.ci_evidence import ADVISORY_LINE, is_advisory_log
+
+    if is_advisory_log(data):
+        # Spec 2026-11-19-local-suite-cost R7: a narrowed pytest session (the fast
+        # tier, `-m`/`-k`, explicit paths, --lf/--sw) marks itself advisory. It is
+        # not the whole suite, so it is no `tests` evidence, and a phase log refused
+        # here is never a witness `tests: reuse` could carry into `deliver`.
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} holds the line `{ADVISORY_LINE}`: it is "
+            "not the whole suite. A session prints it when it ran with --fr-scope, a "
+            "non-empty -m or -k (the default local run's -m 'not scenario' included), "
+            "explicit paths or from a subdirectory, --lf, --sw, --ignore/--ignore-glob/"
+            "--deselect, -x/--maxfail, -o testpaths= or --collect-only; the line before "
+            "it in the log, `fr-scope: advisory because ...`, names which. Run the full "
+            'suite with `pytest -m ""` into a log and name that file, or offer '
+            "`tests: ci`.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     return path, data
 
 
@@ -4019,6 +4038,7 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "unbound_tiers": _unbound_tiers(resolve_repo_root()),
         **_gated_binding_keys(step),
         **_lens_review_brief(step, state),
+        **_tests_brief(resolve_repo_root(), step),
     }
 
 
@@ -4824,7 +4844,50 @@ def _build_member_brief(
         "dead_bindings": None,
         "binding_offers": None,
         **_review_findings_brief(member, item),
+        **_tests_brief(resolve_repo_root(), member),
     }
+
+
+def _tests_brief(repo_root: Path, step: Step) -> dict[str, Any]:
+    """`tests: {mode: ci[, fast_tier: ...]}` for `deliver` (a step that declares
+    `tests` evidence) and for a phase executor's unit, when the repo's
+    `.fr/ci.yaml` at HEAD declares `tests: ci` (spec 2026-11-19-local-suite-cost
+    R8, §3.F) — else nothing, so every other brief is unchanged. `fast_tier` is
+    the repo's own command (`.fr/ci.yaml`'s `fast_tier`, `{base}` made the run's
+    default ref), present only when the repo names one: fr ships none. A value
+    fr refuses refuses the brief (exit 2), never read as "not declared", and so
+    does a `fast_tier` whose default ref git cannot name: never a blank base."""
+    from fr.git import GitRefusal, remote_default_ref
+    from fr.run.ci_evidence import CiEvidenceRefused, declared_fast_tier, declared_tests_mode
+
+    if "tests" not in step.evidence and step.agent != PHASE_EXECUTOR_AGENT:
+        return {}
+    try:
+        mode = declared_tests_mode(repo_root)
+        template = declared_fast_tier(repo_root) if mode is not None else None
+    except CiEvidenceRefused as e:
+        err_console.print(f"[red]{step.id}: refused — {escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    if mode is None:
+        return {}
+    tests: dict[str, Any] = {"mode": mode}
+    if template is not None:
+        base = remote_default_ref(repo_root)
+        if not isinstance(base, str) or not base:
+            # Never a blank `{base}` (l-errors-r1): the executor would run the
+            # tier against nothing and read its silence as green.
+            why = base.reason if isinstance(base, GitRefusal) else "no remote default ref"
+            err_console.print(
+                f"[red]{step.id}: refused — .fr/ci.yaml's fast_tier needs {{base}}, the "
+                f"run's default ref, and git cannot name it: {escape(why)}. Fix: "
+                "`git remote set-head <remote> --auto` (a remote with no HEAD), or "
+                "`git config checkout.defaultRemote <remote>` (several remotes).[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        command = template.format(base=base)
+        tests["fast_tier"] = " ".join(command.split())
+    return {"tests": tests}
 
 
 def _review_findings_brief(member: Step, item: str) -> dict[str, str]:

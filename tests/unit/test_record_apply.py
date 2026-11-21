@@ -14,6 +14,7 @@ from fr.parser import parse
 from fr.run import units
 from fr.run.model import load_run_state
 
+from tests.unit import fixture_templates
 from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.record_support import (
     PLAN_REL,
@@ -477,13 +478,8 @@ def test_a_drop_on_a_row_the_record_names_twice_is_refused(tmp_path: Path) -> No
 _REVIEW_BODY = "no findings"
 
 
-def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path:
-    """A run whose `spec-review` step is open, optionally with an open spec
-    finding `f1` the reviewer tagged `finding_scope`."""
-    from datetime import datetime
-
-    from fr.journal.model import JournalEntry, append_journal_entry
-
+def _build_at_spec_review(tmp_path: Path) -> None:
+    """The template `_at_spec_review` copies (spec 2026-11-19-local-suite-cost §3.B)."""
     from tests.integration.test_fr_goal_shape import _workspace
 
     root = _workspace(tmp_path, "feat/rec")
@@ -500,6 +496,27 @@ def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path
     ):  # fmt: skip
         out = fr(root, argv)
         assert out.exit_code == 0, (argv, out.output)
+    commit_all(root, "at spec-review")
+    # the self-check: a template built wrong fails here, naming itself (review p2-r1)
+    assert load_run_state(root, RUN).steps["spec-review"].state == "running", "no spec-review"
+
+
+def _at_spec_review(
+    tmp_path: Path, *, finding_scope: str | None = None, fresh: bool = False
+) -> Path:
+    """A run whose `spec-review` step is open, optionally with an open spec
+    finding `f1` the reviewer tagged `finding_scope`. An independent copy of the
+    worker's template (`fixture_templates`); `fresh` builds it in place instead, for a test
+    that observes the setup's own calls (`test_exit_label_sync_points`)."""
+    from datetime import datetime
+
+    from fr.journal.model import JournalEntry, append_journal_entry
+
+    if fresh:
+        _build_at_spec_review(tmp_path)
+    else:
+        fixture_templates.current().copy("at_spec_review", _build_at_spec_review, tmp_path)
+    root = tmp_path / "workspace"
     if finding_scope is not None:
         append_journal_entry(
             journal_path(root, "spec", "spec"),

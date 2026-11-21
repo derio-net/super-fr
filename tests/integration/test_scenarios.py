@@ -603,3 +603,15 @@ def test_acceptance_local_status(installed: Path, tmp_path: Path) -> None:
 
 def test_acceptance_reports_derived_published(installed: Path, tmp_path: Path) -> None:
     _scenario("acceptance-reports-derived-published", installed, tmp_path)
+
+
+# The scenario tier (spec 2026-11-19-local-suite-cost R5): every test above drives
+# the installed fr or a scenario script, and a plain local run deselects them.
+# `test_every_scenario_script_has_a_test_here` is the one exemption: it is cheap and
+# it is the guard that every script has a test, so it runs everywhere. A module
+# `pytestmark` cannot be lifted from one test, so the mark is applied here instead.
+_UNMARKED = {"test_every_scenario_script_has_a_test_here"}
+for _name, _fn in list(globals().items()):
+    if _name.startswith("test_") and callable(_fn) and _name not in _UNMARKED:
+        globals()[_name] = pytest.mark.scenario(_fn)
+del _name, _fn

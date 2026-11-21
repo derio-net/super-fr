@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - scripts/release.py
   - packages/fr/src/fr/release_status.py
-reviewed: 2026-11-20 still true after the wave merge queue hold (a hold only delays a cut; the walk's stages are unchanged); 2026-11-17 still true after batch release-truth; the walk's stages and evidence are unchanged; release.py now compares with an RC main contains and retries a missing GitHub Release
+reviewed: 2026-11-20 still true after the wave merge queue hold (a hold only delays a cut; the walk's stages are unchanged); 2026-11-19 still true; the staged suite now passes -m "" so it keeps the scenario tier (local-suite-cost), the walk is unchanged; 2026-11-17 still true after batch release-truth; the walk's stages and evidence are unchanged; release.py now compares with an RC main contains and retries a missing GitHub Release
 ---
 
 # Exit-gates release verification

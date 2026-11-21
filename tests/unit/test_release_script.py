@@ -97,23 +97,50 @@ def _seed(repo: Path, version: str = BASE) -> None:
         path.write_text(text)
 
 
-class World:
-    """A bare origin, the release clone, and a second clone for 'other people'."""
+def _build_world(tmp: Path) -> None:
+    """The template: a bare `origin` holding the seeded base release, and two clones of it,
+    built with no global git identity, as the `world` fixture runs its tests."""
+    import os
 
-    def __init__(self, tmp: Path) -> None:
-        self.origin = tmp / "origin.git"
-        seed = tmp / "seed"
-        seed.mkdir()
+    seed = tmp / "seed"
+    seed.mkdir()
+    keep = {k: os.environ.get(k) for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
+    os.environ["GIT_CONFIG_GLOBAL"] = str(tmp / "gitconfig")
+    os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
+    try:
         _git(seed, "init", "-q", "-b", "main")
         _seed(seed)
         _git(seed, "add", "-A")
         _git(seed, "commit", "-q", "-m", "base")
         _git(seed, "tag", "-a", f"v{BASE}", "-m", f"v{BASE}")
-        _git(tmp, "clone", "-q", "--bare", str(seed), str(self.origin))
+        _git(tmp, "clone", "-q", "--bare", str(seed), str(tmp / "origin.git"))
+        _git(tmp, "clone", "-q", str(tmp / "origin.git"), str(tmp / "clone"))
+        _git(tmp, "clone", "-q", str(tmp / "origin.git"), str(tmp / "other"))
+    finally:
+        for key, value in keep.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _relink_world(dest: Path) -> None:
+    for name in ("clone", "other"):
+        _git(dest / name, "remote", "set-url", "origin", str(dest / "origin.git"))
+
+
+class World:
+    """A bare origin, the release clone, and a second clone for 'other people'."""
+
+    def __init__(self, tmp: Path) -> None:
+        """The three repositories are an independent copy of the worker's template
+        (`tests/unit/fixture_templates.py`, spec 2026-11-19-local-suite-cost §3.B)."""
+        from tests.unit import fixture_templates
+
+        fixture_templates.current().copy("release_world", _build_world, tmp, relink=_relink_world)
+        self.origin = tmp / "origin.git"
         self.clone = tmp / "clone"
-        _git(tmp, "clone", "-q", str(self.origin), str(self.clone))
         self.other = tmp / "other"
-        _git(tmp, "clone", "-q", str(self.origin), str(self.other))
         self.gh_calls: list[list[str]] = []
         self.missing_releases: set[str] = set()  # tags `gh release view` reports not found
         self.release_view_error: str | None = None  # any other `gh release view` failure

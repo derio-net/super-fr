@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-20 added the merge queue's hold on a release (wave merge queue)
+reviewed: 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
 ---
 
 ## What work cannot finish in the pull request?

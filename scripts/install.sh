@@ -863,6 +863,30 @@ if command -v uv &>/dev/null; then
       atomic_symlink "$1/fr-herdr" "$fr_herdr_link"
     fi
   }
+  # The dependency set this release was tested with is the workspace's uv.lock, so
+  # every `uv tool install` below is constrained to it (super-fr#1508): without that,
+  # fr's lower-bound requirements resolve afresh on each install, and one release
+  # could install a different set on a later day. The exported file stays behind as
+  # the record of what was asked for. An uv whose `tool install` takes no
+  # `--constraints`, or a lock that will not export, installs unconstrained and says so.
+  FR_CONSTRAINTS=()
+  fr_constraints="$HOME/.local/share/fr/install-constraints.txt"
+  case "$fr_uv_install_help" in
+    *--constraints*)
+      mkdir -p "$(dirname "$fr_constraints")"
+      if (cd "$PLUGIN_ROOT" && uv export --frozen --all-packages --no-dev --no-emit-workspace \
+            --no-hashes --format requirements-txt -o "$fr_constraints.tmp") >/dev/null 2>&1 \
+         && grep -q '==' "$fr_constraints.tmp"; then
+        mv "$fr_constraints.tmp" "$fr_constraints"
+        FR_CONSTRAINTS=(--constraints "$fr_constraints")
+        echo "  fr's dependencies constrained to the release's uv.lock ($(grep -c '==' "$fr_constraints") pins, recorded in $fr_constraints)"
+      fi
+      rm -f "$fr_constraints.tmp"
+      ;;
+  esac
+  if [ "${#FR_CONSTRAINTS[@]}" -eq 0 ]; then
+    echo "  WARNING: fr's dependencies are not constrained to the release's uv.lock (uv could not export it, or its \`tool install\` takes no --constraints)" >&2
+  fi
   fr_uv_bin="$HOME/.local/share/fr/uv-bin"
   fr_stage_root="$HOME/.cache/fr/install-stage"
   fr_stage=""
@@ -877,7 +901,7 @@ if command -v uv &>/dev/null; then
     mkdir -p "$fr_stage"
     if UV_TOOL_DIR="$fr_stage/tools" UV_TOOL_BIN_DIR="$fr_stage/bin" \
          uv tool install --force "${FR_RUNNER_WITH[@]}" ${FR_EXECUTABLES_FROM[@]+"${FR_EXECUTABLES_FROM[@]}"} \
-         "$PLUGIN_ROOT/packages/fr" >/dev/null 2>&1 \
+         ${FR_CONSTRAINTS[@]+"${FR_CONSTRAINTS[@]}"} "$PLUGIN_ROOT/packages/fr" >/dev/null 2>&1 \
        && { "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1 \
             || { sleep "$fr_install_retry_sleep"; "$fr_stage/tools/fr/bin/fr" --version >/dev/null 2>&1; }; }; then
       atomic_symlink "$fr_stage/tools/fr/bin/fr" "$fr_path_link"
@@ -900,7 +924,7 @@ if command -v uv &>/dev/null; then
     # `pipefail` through `sed`) is caught here instead of tripping `set -e`.
     if UV_TOOL_BIN_DIR="$fr_install_bin" uv tool install --force \
       "${FR_RUNNER_WITH[@]}" ${FR_EXECUTABLES_FROM[@]+"${FR_EXECUTABLES_FROM[@]}"} \
-      "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'; then
+      ${FR_CONSTRAINTS[@]+"${FR_CONSTRAINTS[@]}"} "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'; then
       fr_installed=1
       break
     fi
@@ -1076,12 +1100,15 @@ if command -v devcontainer &>/dev/null; then
   echo ""
   echo "  OK: devcontainer CLI already installed ($(devcontainer --version 2>/dev/null || echo present))"
 elif command -v npm &>/dev/null; then
+  # A pinned version, not whatever npm calls latest today (super-fr#1508). Move it
+  # deliberately, after `fr isolation up` has run on the new one.
+  fr_devcontainer_cli="@devcontainers/cli@${FR_DEVCONTAINER_CLI_VERSION:-0.87.0}"
   echo ""
-  echo "Installing devcontainer CLI (npm -g @devcontainers/cli, needed by fr isolation up)..."
-  if npm install -g @devcontainers/cli >/dev/null 2>&1; then
+  echo "Installing devcontainer CLI (npm -g $fr_devcontainer_cli, needed by fr isolation up)..."
+  if npm install -g "$fr_devcontainer_cli" >/dev/null 2>&1; then
     echo "  Installed devcontainer CLI"
   else
-    echo "  WARNING: npm install -g @devcontainers/cli failed — install manually if you plan to use fr isolation" >&2
+    echo "  WARNING: npm install -g $fr_devcontainer_cli failed — install manually if you plan to use fr isolation" >&2
   fi
 else
   echo ""
