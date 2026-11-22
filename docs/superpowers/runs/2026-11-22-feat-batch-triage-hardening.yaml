@@ -3,7 +3,7 @@ run: 2026-11-22-feat-batch-triage-hardening
 workflow: fr-goal@1
 branch: feat/batch-triage-hardening
 started: '2026-11-22T21:14:29+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-22T21:38:20+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-22T21:38:24+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
