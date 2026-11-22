@@ -68,9 +68,14 @@ journal:
     title: "the admit preview printed hidden characters that could hide what the operator admits"
     body: >-
       quote_untrusted did not neutralise them. A new pure helper,
-      fr.triage.batch_dispatch.visible, beside quote_untrusted, replaces C0/C1 controls (ESC
-      included), DEL, bidi embeddings, overrides and isolates and zero-width characters with
-      visible escapes (\x1b, ‮), keeping newline and tab. The admit preview applies it to the
+      fr.triage.batch_dispatch.visible, beside quote_untrusted, replaces with a visible escape
+      (backslash-x or backslash-u hex) every character whose unicodedata category is Cc, Cf, Co,
+      Cn, Zl or Zp (newline and tab kept), plus the variation selectors (U+FE00-FE0F,
+      U+E0100-E01EF) and the Hangul fillers (U+115F, U+1160, U+3164, U+FFA0). A first denylist
+      regex missed tag characters, U+2060, U+200E and variation selectors (a follow-up review),
+      so the rule is by category; letters, CJK and emoji bases stay unescaped
+      (test_visible_keeps_letters_cjk_and_emoji_bases).
+      The admit preview applies it to the
       title and body lines only and prints one warning when anything was escaped; the digest stays
       over the raw text. Tests: test_the_preview_shows_hidden_characters_as_visible_escapes and
       test_visible_keeps_newlines_and_tabs_and_escapes_the_rest (red first, 2 failed).

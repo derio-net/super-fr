@@ -251,13 +251,13 @@ def test_an_edit_between_the_preview_and_the_write_is_refused(monkeypatch: Any) 
 def test_the_preview_shows_hidden_characters_as_visible_escapes(monkeypatch: Any) -> None:
     """p1-sec-admit-escapes: controls, bidi overrides and zero-width characters cannot hide
     what the operator admits; the digest stays over the raw text."""
-    raw = "line one\x1b[2Kgone\n‮evil​joined\tTab"
+    raw = "line one\x1b[2Kgone\n\u202eevil\u200bjoined\tTab"
     client = FakeClient(bodies=[raw])
     out = _admit(monkeypatch, client, "derio-net/x#5")
     assert out.exit_code == 0, out.output
     for shown in ("\\x1b[2K", "\\u202e", "\\u200b"):
         assert shown in out.output
-    assert "\x1b" not in out.output and "‮" not in out.output and "​" not in out.output
+    assert "\x1b" not in out.output and "\u202e" not in out.output and "\u200b" not in out.output
     assert "Tab" in out.output  # the tab is kept, not escaped
     assert "hidden characters" in out.output
     assert content_digest(TITLE, raw) in out.output
@@ -267,10 +267,12 @@ def test_visible_keeps_newlines_and_tabs_and_escapes_the_rest() -> None:
     from fr.triage.batch_dispatch import visible
 
     assert visible("a\nb\tc") == "a\nb\tc"
-    assert visible("\x00\x7f\x85⁦﻿") == "\\x00\\x7f\\x85\\u2066\\ufeff"
-    assert visible("\U000e0041⁠‎️") == "\\U000e0041\\u2060\\u200e\\ufe0f"
-    assert visible("ㅤﾠᅟᅠ\U000e0100") == ("\\u3164\\uffa0\\u115f\\u1160\\U000e0100")
-    assert visible("  ") == "\\u2028\\u2029\\ue000"
+    assert visible("\x00\x7f\x85\u2066\ufeff") == "\\x00\\x7f\\x85\\u2066\\ufeff"
+    assert visible("\U000e0041\u2060\u200e\ufe0f") == "\\U000e0041\\u2060\\u200e\\ufe0f"
+    assert visible("\u3164\uffa0\u115f\u1160\U000e0100") == (
+        "\\u3164\\uffa0\\u115f\\u1160\\U000e0100"
+    )
+    assert visible("\u2028\u2029\ue000") == "\\u2028\\u2029\\ue000"
 
 
 def test_visible_keeps_letters_cjk_and_emoji_bases() -> None:
