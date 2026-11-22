@@ -8830,6 +8830,8 @@ batches:
     - super-fr#1540
     - super-fr#1541
     - super-fr#1543
+  - kind: post_merge
+    at: '2026-11-22T21:21:06.650426Z'
 - id: run-durability
   title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
   ids:
@@ -9966,3 +9968,11 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-19-batch-hook-hardening.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-19-batch-hook-hardening.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-22-1
+  branch: chore/closeout-2026-11-22-1
+  at: '2026-11-22T21:21:15.384218Z'
+  runner: herdr
+  handle: w3P:pA
+  planned:
+  - train-truth
