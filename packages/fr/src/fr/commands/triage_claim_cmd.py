@@ -33,7 +33,7 @@ from fr.commands.triage_cmd import (
     resolve_state_dir,
     triage_app,
 )
-from fr.commands.triage_kanban_cmd import _fail
+from fr.commands.triage_cmd import fail as _fail
 from fr.ghclient import UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.triage import claim_writes as cw
