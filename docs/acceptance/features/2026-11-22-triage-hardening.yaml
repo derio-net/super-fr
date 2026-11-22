@@ -90,9 +90,17 @@ rows:
     - spec:2026-11-22-triage-hardening#R8
     - spec:2026-11-22-triage-hardening#R9
     - spec:2026-11-22-triage-hardening#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_obsolete.py#test_a_never_dispatched_batch_of_closed_members_is_obsolete
+      - super-fr:tests/unit/test_triage_obsolete.py#test_the_drive_dispatches_a_batch_after_an_obsolete_one_and_never_the_obsolete_one
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_cancel_accepts_an_obsolete_batch_and_touches_no_member
+      - super-fr:tests/unit/test_triage_obsolete_surfaces.py#test_check_lists_the_obsolete_batch_with_its_cancel_command
+      - super-fr:tests/unit/test_triage_obsolete_surfaces.py#test_the_batches_page_shows_an_obsolete_batch_under_its_own_heading
+    status: ci
+    notes: 'CI unit tests: derive_batch_stage incl. an awaiting-live member, dependencies,
+      waves, drive selection, batch cancel of an obsolete batch, check and the Batches
+      page'
     verify: none
   - id: collect-past-limit-pr
     capability: triage-collect
