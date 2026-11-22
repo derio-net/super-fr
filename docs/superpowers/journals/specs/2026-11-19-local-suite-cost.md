@@ -329,3 +329,10 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-19-local-suite-cost-p3 created=2026-11-19T09:19:55+00:00 -->
 ### tier-2026-11-19-local-suite-cost-p3 · decision · hard: changes what deliver accepts as tests evidence (a gate) and the agents artifact kind
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-22T18:32:46+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: post-merge — operator-driven: after the manual phase, `gh api repos/derio-net/super-fr/rulesets/<id>` lists a `required_status_checks` rule naming `ci-ok`, and a test PR with a red `ci-ok` cannot merge (row `ci-ok-required-on-main`).
+
+Evidence: Ruleset "require ci-ok" (id 27838472) is active with a required_status_checks rule naming ci-ok, and it is the only such rule on main. A throwaway PR (#1622, one deliberately failing test) turned ci-ok red (test shards failed) and gh reported mergeStateStatus BLOCKED while not a draft. Merge was not attempted. PR closed unmerged, branch deleted.
