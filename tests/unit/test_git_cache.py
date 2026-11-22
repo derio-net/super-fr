@@ -486,7 +486,7 @@ def test_the_system_config_path_is_asked_once_per_process(
     assert len(probes) == 1, probes
 
 
-def test_a_failed_system_config_probe_is_remembered_for_the_process() -> None:
+def test_a_test_may_leave_a_failed_system_config_probe_behind() -> None:
     """The memo keeps `_UNKNOWN` on purpose (l-errors-r2): a test that fakes git away
     leaves exactly this behind. It is the next test's problem, below."""
     key = (os.path.realpath(shutil.which("git") or "git"), None, None)
