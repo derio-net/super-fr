@@ -575,3 +575,16 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1579.
 ### p3-r3-resolved-2 · finding [deferred → derio-net/super-fr#1574] · resolves p3-r3: _read_suite_log never checks that a tests log shows a passing, complete run
 
 Filed as derio-net/super-fr#1574 at the phase-3 review; predates this change.
+
+<!-- fr:journal kind=owed scope=plan id=manual-phase-4 created=2026-11-22T11:20:32+00:00 phase=4 -->
+### manual-phase-4 · owed · 2026-11-19-local-suite-cost: manual phase 4 is not ticked (phase 4)
+
+what: do manual phase 4 of 2026-11-19-local-suite-cost and tick its steps
+why: fr archive holds the plan until its manual phases are ticked
+how: tick phase 4 (fr plan edit --tick), then fr archive docs/superpowers/plans/2026-11-19-local-suite-cost
+owed_key: plan:2026-11-19-local-suite-cost#p4
+
+<!-- fr:journal kind=finding scope=plan id=manual-phase-4-resolved created=2026-11-22T11:20:36+00:00 phase=4 state=open resolves=manual-phase-4 filed_as=derio-net/super-fr#1619 -->
+### manual-phase-4-resolved · finding [filed → derio-net/super-fr#1619] · resolves manual-phase-4: 2026-11-19-local-suite-cost: manual phase 4 is not ticked (phase 4)
+
+Filed at archive as derio-net/super-fr#1619; still owed until discharged.

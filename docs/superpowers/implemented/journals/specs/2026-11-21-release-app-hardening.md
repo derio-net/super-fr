@@ -1,0 +1,262 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-21-release-app-hardening
+
+<!-- fr:journal kind=discovery scope=spec id=operator-brief created=2026-11-21T11:34:23+00:00 input=true -->
+### operator-brief · discovery · Operator brief, verbatim
+
+Harden the release app's credential and ruleset bypass before its private key is stored, and automate the operator setup. Add a `security` lens.
+
+Current state, checked 2026-11-20 in derio-net/super-fr:
+- The operator ran `scripts/configure-main-protection.sh --stage bypass`. Repo variable FR_AUTOMATION_APP_ID=3994132 is set. Ruleset "protect main" (id 17365086) has rules [deletion, non_fast_forward] and bypass actor Integration 3994132 with bypass_mode "always".
+- Secret FR_AUTOMATION_APP_KEY does not exist (`gh secret list` is empty). Because the variable is set, every release now fails at `publish` (`create-github-app-token`: "The 'private-key' input must be set to a non-empty string"; run 44683248617). Releases are blocked until this lands and the key is stored.
+- `.github/workflows/release.yml:109-113` and `:298-302` mint the app token with `secrets.FR_AUTOMATION_APP_KEY` and use no `environment:`. A repo-level secret can be read by a workflow on any branch that anyone with push access pushes, so the key is not limited to code from `main`, despite what `docs/merge-protection.md` says.
+- With bypass_mode "always" on the ruleset that holds deletion and non_fast_forward, a leaked key can force-push or delete `main`.
+- `configure-main-protection.sh --stage bypass` sets the variable without checking that the secret exists. That is how releases got blocked.
+- PR #1559 and issue #1580 listed only bypass → app release → require. They left out the runbook's steps 1–2 (install the app and generate the key; `gh secret set FR_AUTOMATION_APP_KEY`).
+
+Asks:
+1. Scope the key to a `release` environment whose deployment branch policy allows only `main`. Add `environment: release` to the two app-token jobs. A branch workflow must get no key.
+2. Split the protection: one ruleset holds deletion + non_fast_forward with no bypass actors. A separate ruleset holds the required `ci-ok` check (the `require` stage), with the app as its only bypass actor. Migrate the existing "protect main" safely: never leave main unprotected between steps.
+3. Write an idempotent, interactive operator script, run from the operator's own shell with their `gh`, that automates every step `gh` can do. Each step checks state first and is a no-op when already done. Every write is confirmed first. It has `--dry-run`. Steps: check the app installation and its permissions (contents and issues write only, this repo only); create or verify the environment and its branch policy; read the .pem path at a prompt, store it as the environment secret, and offer to delete the file; set FR_AUTOMATION_APP_ID last, only once the secret exists; then the ruleset stages. It must also handle the current half-done state (variable set, no secret, old combined ruleset). It must never print or log the key. Fold `configure-main-protection.sh` into it, or have it call that script, whichever is cleaner.
+4. Detailed docs (`docs/merge-protection.md`) for the steps only the GitHub web UI can do: create the app if it is missing (exact permission settings), install it on the repo only, generate and download the private key, and revoke or rotate a leaked key. Also how to verify each step and how to roll back. Explain the security model: what the app can do, where the key lives, who can read it, and what a leak allows after this change.
+5. Update #1580's steps in the PR body so the operator follows the new order.
+
+Constraints: never change live repo settings, rulesets, variables or secrets yourself — the script is for the operator to run. Do not run the full suite on this host (it is loaded): run single test files only; CI is the suite evidence. Deliver a draft PR; never mark it ready or merge. Redact third-party identities.
+
+<!-- fr:journal kind=decision scope=spec id=d-migration created=2026-11-21T11:34:23+00:00 decided_by=operator -->
+### d-migration · decision · Keep "protect main", strip its bypass; the require step creates a new "require ci-ok" ruleset with check and app bypass in one write
+
+Operator, round 1 question 1 (recommended option). Main's history rules are never touched, so main is never unprotected.
+
+<!-- fr:journal kind=decision scope=spec id=d-tag-ruleset created=2026-11-21T11:34:23+00:00 decided_by=operator -->
+### d-tag-ruleset · decision · Add a "protect release tags" ruleset on refs/tags/v* (deletion + update, no bypass)
+
+Operator, round 1 question 2 (recommended option). A leaked key cannot move or delete a release tag; creation stays allowed.
+
+<!-- fr:journal kind=decision scope=spec id=d-jwt-check created=2026-11-21T11:34:23+00:00 decided_by=operator -->
+### d-jwt-check · decision · Prove the key belongs to the app with a locally signed JWT and GET /app before storing it
+
+Operator, round 1 question 3 (recommended option). openssl is the only new dependency.
+
+<!-- fr:journal kind=decision scope=spec id=d-environment created=2026-11-21T11:34:23+00:00 decided_by=operator -->
+### d-environment · decision · release environment: main-only custom branch policy, can_admins_bypass false, no reviewers
+
+Operator, round 1 question 4 (recommended option). Releases run unattended (push and daily cron).
+
+<!-- fr:journal kind=decision scope=spec id=d-gate created=2026-11-21T11:34:23+00:00 decided_by=operator -->
+### d-gate · decision · Gate tester, CI unit tests with a stub gh, one post-merge live row
+
+Operator answered round 1 question 5 with gate devops. I then showed that fr ops apply runs only inside an ops-profile container (fr/ops/profile.py), which cannot see a host .pem or use the operator's own gh, and that adding an ops profile needs its own PR first. The operator chose option A in prose: gate tester, the script run from the operator's shell.
+
+<!-- fr:journal kind=decision scope=spec id=d-merge-order created=2026-11-21T11:34:23+00:00 decided_by=operator -->
+### d-merge-order · decision · Run the script from the PR branch before merging
+
+Operator, round 1 question 6 (recommended option). The merge's own Release run then goes out as the app; require follows.
+
+<!-- fr:journal kind=decision scope=spec id=d-fold-script created=2026-11-21T11:34:23+00:00 decided_by=operator -->
+### d-fold-script · decision · Fold configure-main-protection.sh into one new bash script, scripts/setup-release-app.sh, and delete the old one
+
+The operator delegated the choice. The stage semantics change (no bypass stage), so calling the old script would keep a shape that is now wrong. bash + jq + gh keeps the stub-gh test pattern.
+
+<!-- fr:journal kind=lens scope=spec id=lens-security-1 created=2026-11-21T11:34:23+00:00 lens=security step=brainstorm -->
+### lens-security-1 · lens · Operator asked for it: the change handles a GitHub App private key, a JWT, environment secrets and ruleset bypasses
+
+<!-- fr:journal kind=finding scope=spec id=spr-r1 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r1 · finding [open] (reviewer: in scope) · R6's repo-list read through gh's OAuth token always fails, so the manual confirm becomes the only path
+
+target: spec
+GET /user/installations/{id}/repositories needs a GitHub App user access token; gh holds an OAuth app token.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r2 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r2 · finding [open] (reviewer: in scope) · Security model claims code reaches main only through a reviewed PR, but no ruleset requires a PR
+
+target: spec
+Anyone with write access can push a job naming the environment to main.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r3 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r3 · finding [open] (reviewer: in scope) · Running the script before merge leaves releases failing until the merge and undoes the preflight unset in the same run
+
+target: spec
+main's release.yml reads no environment secret until this PR merges.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r4 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r4 · finding [open] (reviewer: in scope) · R5's 'a declined write stops the script' conflicts with the optional offers
+
+target: spec
+Declining the .pem delete would stop the run.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r5 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r5 · finding [open] (reviewer: in scope) · With the old script's required check on 'protect main', stripping the bypass first blocks the release require waits for
+
+target: spec
+The app's release push would be refused.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r6 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r6 · finding [open] (reviewer: in scope) · The environment pin covers only release.yml; any other workflow on main could name environment: release
+
+target: spec
+pull_request_target/workflow_run/issue_comment jobs run main's code on outsider input.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r7 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r7 · finding [open] (reviewer: in scope) · release.py's protection hint still names the protect main bypass list after the split
+
+target: plan
+The hint would tell the operator to undo R12.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r8 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r8 · finding [open] (reviewer: in scope) · Phase files omit three pages fr docs check flags once scripts/release.py changes
+
+target: plan
+docs/exit-gates-release-walk.md, docs/explainers/fr-exit-gates.md, docs/explainers/index.md cover scripts/release.py.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r9 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r9 · finding [open] (reviewer: in scope) · A live plan's manual phase still tells the operator to run the deleted script
+
+target: plan
+local-suite-cost 04.yaml P4.T1.S1/S2.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r10 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r10 · finding [open] (reviewer: in scope) · Tasks 2, 3, 4 and 6 had no REFACTOR step or reason
+
+target: plan
+TDD shape.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r11 created=2026-11-21T11:42:24+00:00 state=open review_scope=in -->
+### spr-r11 · finding [open] (reviewer: in scope) · No test pins R4's fixed step order
+
+target: plan
+Row setup-script-idempotent-confirmed cites R4.
+
+<!-- fr:journal kind=review scope=spec id=spec-plan-review-1 created=2026-11-21T11:42:24+00:00 -->
+### spec-plan-review-1 · review · independent spec+plan review: 11 findings, all in scope
+
+findings: spr-r1 to spr-r6 (spec), spr-r7 to spr-r11 (plan); all fixed in the spec and plan. Decisions d-* each followed.
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-21T11:42:24+00:00 lens=tests step=spec-plan-review -->
+### lens-tests-1 · lens · The script's safety claims (no key in argv or logs, dry-run and declined prompts write nothing, write order) rest on stub gh/curl tests, so their fidelity matters
+
+<!-- fr:journal kind=lens scope=spec id=lens-errors-1 created=2026-11-21T11:42:24+00:00 lens=errors step=spec-plan-review -->
+### lens-errors-1 · lens · The script runs under set -euo pipefail against gh calls that answer 404/403 by design; a misread exit could skip or half-run a step
+
+<!-- fr:journal kind=finding scope=spec id=spr-r1-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r1 -->
+### spr-r1-resolved · finding [fixed] · resolves spr-r1: R6's repo-list read through gh's OAuth token always fails, so the manual confirm becomes the only path
+
+R8 now checks the repo list with the app's own installation token (minted from the JWT, revoked on every exit path); R6 drops the list read; R9 covers the token; with no key at hand the confirm prompt stays.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r2-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r2 -->
+### spr-r2-resolved · finding [fixed] · resolves spr-r2: Security model claims code reaches main only through a reviewed PR, but no ruleset requires a PR
+
+Security model's 'who can read it' now says every user with write access and admins; a PR rule is named as a separate decision.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r3-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r3 -->
+### spr-r3-resolved · finding [fixed] · resolves spr-r3: Running the script before merge leaves releases failing until the merge and undoes the preflight unset in the same run
+
+R11: the variable step also waits until main's release.yml declares environment: release (read via gh api contents?ref=main); the unset offer now states the window; Test Plan says to decline it so the merge's release goes as the app.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r4-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r4 -->
+### spr-r4-resolved · finding [fixed] · resolves spr-r4: R5's 'a declined write stops the script' conflicts with the optional offers
+
+R5 now separates step writes (declined stops) from offers (preflight unset, .pem delete, repo-secret delete; declined continues); plan T2 tests pin both.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r5-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r5 -->
+### spr-r5-resolved · finding [fixed] · resolves spr-r5: With the old script's required check on 'protect main', stripping the bypass first blocks the release require waits for
+
+R12 defers the history step while protect main holds required_status_checks; R14 creates require ci-ok first, then removes the check and the bypass from protect main in one write; T7 tests it.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r6-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r6 -->
+### spr-r6-resolved · finding [fixed] · resolves spr-r6: The environment pin covers only release.yml; any other workflow on main could name environment: release
+
+R1 now covers every file under .github/workflows/; T1.S1 adds the tripwire.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r7-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r7 -->
+### spr-r7-resolved · finding [fixed] · resolves spr-r7: release.py's protection hint still names the protect main bypass list after the split
+
+T1.S3 rewords the hint to the require ci-ok ruleset and fixes the comment near line 111.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r8-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r8 -->
+### spr-r8-resolved · finding [fixed] · resolves spr-r8: Phase files omit three pages fr docs check flags once scripts/release.py changes
+
+Added to files:, and T8.S2 stamps or edits them and runs fr docs check.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r9-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r9 -->
+### spr-r9-resolved · finding [fixed] · resolves spr-r9: A live plan's manual phase still tells the operator to run the deleted script
+
+04.yaml added to files:; T8.S2 rewrites those steps.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r10-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r10 -->
+### spr-r10-resolved · finding [fixed] · resolves spr-r10: Tasks 2, 3, 4 and 6 had no REFACTOR step or reason
+
+Each now has an S3 REFACTOR step (or a recorded refactor: reason).
+
+<!-- fr:journal kind=finding scope=spec id=spr-r11-resolved created=2026-11-21T11:42:24+00:00 state=fixed resolves=spr-r11 -->
+### spr-r11-resolved · finding [fixed] · resolves spr-r11: No test pins R4's fixed step order
+
+T2.S1's dry-run test asserts the step order; T7.S3's end-to-end test asserts the write order.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-21T11:42:25+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  release-app-setup-live: tester
+  release-key-environment-scoped: none
+  setup-script-app-check: none
+  setup-script-environment: none
+  setup-script-idempotent-confirmed: none
+  setup-script-key-never-printed: none
+  setup-script-rulesets: none
+  setup-script-variable-last: none
+row_kinds:
+  release-app-setup-live: live
+  release-key-environment-scoped: none
+  setup-script-app-check: none
+  setup-script-environment: none
+  setup-script-idempotent-confirmed: none
+  setup-script-key-never-printed: none
+  setup-script-rulesets: none
+  setup-script-variable-last: none
+run_gate: tester
+run_kind: candidate
+```
+
+<!-- fr:journal kind=decision scope=spec id=dedicated-release-app created=2026-11-22T06:17:39+00:00 -->
+### dedicated-release-app · decision · The release app is a dedicated super-fr-release app, not frank's derio-fr-automation
+
+decider: operator (2026-11-22). The dry run refused derio-fr-automation (installed on all repos, ten permissions). Reading frank showed it is frank's app: its token generators, gitops push, staging gate and CI-budget jobs use those permissions, and its key is on frank's cluster. Narrowing it would break frank; a bypass for it would reach every holder of that key. The operator chose a new app named super-fr-release. The script's refusals now say to create a dedicated app, never to narrow a shared one, and the variable step replaces a variable that holds another app's id once the environment secret exists.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-22T11:19:25+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Before merge, from the PR branch: `scripts/setup-release-app.sh --dry-run`, then `scripts/setup-release-app.sh`. It finds the half-done state; decline the unset offer. It checks the app, creates `release`, stores the key and checks the repo list with the app's own token. It says the variable waits for the merge, strips the bypass and adds the tag ruleset. It says that `require` waits for an app-pushed release.
+
+Evidence: Operator ran scripts/setup-release-app.sh on the live repo: release environment exists (can_admins_bypass false, one branch policy), key stored as an environment secret, no repo-level FR_* secret, FR_AUTOMATION_APP_ID=5872677; read back on GitHub 2026-11-22. Not independently shown to be pre-merge: the PR comment is the record of that run.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-22T11:19:26+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: Rerun it: every step prints `ok` or the same wait, and nothing is written.
+
+Evidence: Reruns of the script wrote nothing further (PR #1608 comment: later reruns had no key, so no installation recheck); state read back unchanged: rulesets 17365086, 27836375, 27838472 active.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-22T11:19:28+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: Merge the PR. The merge's Release run passes `publish`, and the new `v*` tag's commit has a push-event CI run triggered by `super-fr-release[bot]`. (If the variable is not set, because you unset it in step 1 or the repo never had it, rerun the script first. It sets the variable, and the next release goes out as the app.)
+
+Evidence: PR merged 2026-11-22T10:22:35Z. v8.3.0-rc.7 published 10:47:11Z by super-fr-release[bot]; tag commit 06a75f5fc has CI, acceptance-report and Release runs triggered by super-fr-release[bot], all success. Release run 45012140561 passed on attempt 2 (attempt 1 failed only on flaky test_hooks_worktree.py, #1463).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-22T11:19:29+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: Push a throwaway branch with a workflow that declares `environment: release` and prints whether the secret is empty. The job is refused by the branch policy. Delete the branch.
+
+Evidence: Run 45016349866 on throwaway branch env-check/throwaway-2026-11-22 (event push) concluded failure: job declaring environment: release refused by branch policy before any step ran. Branch deleted.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-22T11:19:31+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: Run the script again: the `require` step creates "require ci-ok". Record the walk on `release-app-setup-live`, and then on `ci-ok-required-on-main` (feature `2026-11-19-local-suite-cost`).
+
+Evidence: Ruleset require ci-ok (27838472) active: required check ci-ok, strict up-to-date, only bypass actor Integration 5872677 (super-fr-release); protect main and protect release tags carry no bypass. Read back via the rulesets API 2026-11-22. No refused merge observed yet.
