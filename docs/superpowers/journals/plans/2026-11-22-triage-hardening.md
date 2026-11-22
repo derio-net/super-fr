@@ -45,3 +45,38 @@ the check output shares one _withheld_line helper and the pages one issue_title 
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 docs, skill prose, generated mirrors and acceptance rows only: no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-22T22:52:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · StaleInProgress titles (closed fr:in-progress/fr:claimed issues) skip intake withholding and reach facts, check, clean-labels and the Backlog page (phase 1)
+
+collect.py _closed_in_progress stored the raw title; an outside author's edited title reached check (triage_cmd.py:830), clean-labels and render.py's closed-in-progress group.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-22T22:52:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · ignored_claims built from every comment_facts entry, including a repo skipped mid-loop (phase 1)
+
+comment_facts was filled per issue inside the per-repo try; a later claim-read failure skipped the repo but left its entries.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-22T22:52:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · No test covers admission on the viewed (judged, no longer open) path (phase 1)
+
+Matching marker admits, failed admit read stays local, ineligible viewed title blanked: untested.
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-11-22T22:52:46+00:00 phase=1 -->
+### p1-review · review · Phase 1 review: 3 findings, all in scope, all fixed (phase 1)
+
+Dispatched reviewer (separate context) reviewed R1-R5, R7 against spec and plan: digest over the untruncated body, fail-closed ready-fr path, shared comment read, admit --digest re-read, visible() by category, conditional pr_authors advice all verified. Raised p1-r1..p1-r3, fixed in c2e91280c. Notes not raised as findings: the glab/tea admit refusal is defence in depth (triage is GitHub-only); an authorless claim marker prints 'unknown author' (cosmetic).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-22T22:52:46+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: StaleInProgress titles (closed fr:in-progress/fr:claimed issues) skip intake withholding and reach facts, check, clean-labels and the Backlog page (phase 1)
+
+c2e91280c: a stale entry keeps its title only when a trusted login wrote it (the closed list reads no association; fail closed); check, clean-labels and the page show key/URL and 'title withheld'. Test test_a_stale_in_progress_entry_by_an_outside_author_keeps_no_title, red before the fix.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-22T22:52:46+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: ignored_claims built from every comment_facts entry, including a repo skipped mid-loop (phase 1)
+
+c2e91280c: per-repo comment facts merge only after the repo succeeds. Test test_a_repo_skipped_mid_loop_leaves_no_ignored_claims, red before the fix.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-22T22:52:46+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: No test covers admission on the viewed (judged, no longer open) path (phase 1)
+
+c2e91280c: three viewed-path tests (admitted with matching marker; failed admit read local; ineligible viewed title blanked).
