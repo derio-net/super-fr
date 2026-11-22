@@ -68,9 +68,13 @@ rows:
       fix
     origin:
     - spec:2026-11-22-triage-hardening#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py#test_a_claim_marker_by_an_untrusted_author_is_recorded_by_login
+      - super-fr:tests/unit/test_triage_check.py#test_ignored_claim_markers_print_in_their_own_block_with_the_fix
+    status: ci
+    notes: 'CI unit tests: collect records untrusted claim markers by login, check prints
+      them with conditional pr_authors advice'
     verify: none
   - id: batch-obsolete-stage
     capability: triage-batches
