@@ -21,14 +21,17 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-11-22T18:54:05+00:00'
+      note: Done by the operator (confirmed by them); FR_AUTOMATION_APP_ID set 2026-11-22T10:24Z
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-11-22T18:54:07+00:00'
+      note: Done by the operator (confirmed by them); require ci-ok ruleset 27838472
+        created 2026-11-22T11:12Z
   completion:
-    at: null
-    note: null
+    at: '2026-11-22T18:54:13+00:00'
+    note: 'Manual phase done by the operator (confirmed by them): app variable set,
+      require-ci-ok ruleset 27838472 active; red-ci-ok block proven by probe PR #1622
+      (closed unmerged).'
     observed_prs: []
