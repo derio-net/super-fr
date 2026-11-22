@@ -405,7 +405,7 @@ def _note_loaded(state: RunState) -> None:
         writes.loaded_cursor = state.cursor
 
 
-def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) -> list[str]:
+def _closeout_handoff_lines(repo_root: Path, state: RunState, *, committed: bool) -> list[str]:
     """The handoff toward `fr pickup --run` (spec 2026-09-25-fr-goal-closeout-
     defects §3.D.2) — printed once `deliver` resolves `done`, and again on
     every `advance` of an already-finished run.
@@ -423,14 +423,30 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
     The closeout pair comes LAST (#814): the push line is an instruction the
     orchestrator acts on, and printed after the closeout it became the last
     thing acted on while the closeout line went unrelayed.
+
+    gh#1614: for a run whose effective gates include devops, the DevOps stage owns the
+    pre-merge ops and the merge, so the pair names `fr ops gate --run` instead — the
+    same decision (`devops_gated`) `fr pickup --run` makes when it picks its brief.
     """
-    from fr.run.closeout import closeout_checkout
+    from fr.run.closeout import closeout_checkout, devops_gated
 
     base = closeout_checkout(repo_root)
-    closeout = [
-        f"closeout: after the PR merges, start a NEW session in {base} and run",
-        f"  fr pickup --run {run_id}",
-    ]
+    run_id = state.run
+    try:
+        devops = devops_gated(repo_root, state)
+    except Exception:  # noqa: BLE001 — a hand-off line never fails `deliver`; the
+        devops = False  # pickup line stays right: `fr pickup` routes to the DevOps brief
+    if devops:
+        closeout = [
+            "closeout: this run is devops-gated — the DevOps stage owns its pre-merge ops "
+            f"and the merge; at a terminal on the harness host, in {base}, run",
+            f"  fr ops gate --run {run_id}",
+        ]
+    else:
+        closeout = [
+            f"closeout: after the PR merges, start a NEW session in {base} and run",
+            f"  fr pickup --run {run_id}",
+        ]
     if not committed:
         return [
             "cursor NOT committed (see the `fr: not committed` line above) — "
@@ -6507,7 +6523,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         outcome = _commit_run_writes_now()
         for line in _closeout_handoff_lines(
             repo_root,
-            state.run,
+            state,
             committed=outcome is None or outcome.committed or outcome.unchanged,
         ):
             console.print(line, soft_wrap=True)
@@ -8096,7 +8112,9 @@ def _resolve_body(
         # "push it" line that assumes the commit landed.
         outcome = _commit_run_writes_now()
         for line in _closeout_handoff_lines(
-            repo_root, run_id, committed=outcome is None or outcome.committed or outcome.unchanged
+            repo_root,
+            new_state,
+            committed=outcome is None or outcome.committed or outcome.unchanged,
         ):
             console.print(line, soft_wrap=True)
 

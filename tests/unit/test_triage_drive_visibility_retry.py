@@ -119,7 +119,7 @@ def test_a_loop_skips_a_pass_whose_lease_push_cannot_read_the_visibility(
     )
 
     flat = " ".join(result.output.split())
-    assert flat.count("pass skipped, retrying every") == 1, result.output
+    assert flat.count("the pass ended, its state kept") == 1, result.output
     assert "cannot read the visibility" in flat
     assert seen[0] == {"merged": [], "ref": "", "passes": 0}, "nothing acted, nothing pushed"
     assert seen[1]["merged"] and seen[1]["ref"], "the second pass ran and pushed"
@@ -160,7 +160,7 @@ def test_a_loop_pushes_next_pass_the_state_a_skipped_save_left(
     )
 
     flat = " ".join(result.output.split())
-    assert flat.count("pass skipped, retrying every") == 1, result.output
+    assert flat.count("the pass ended, its state kept") == 1, result.output
     assert seen[0] == {"dispatched": True, "tip": False}, "pass 1 acted; its state was not pushed"
     assert seen[1]["tip"] is True, "pass 2 pushed what pass 1 left"
 
@@ -204,12 +204,13 @@ def test_the_cloud_pass_with_an_unreadable_visibility_exits_2(
 
 
 def test_a_skipped_save_that_installed_a_newer_fr_restarts_instead_of_sleeping(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class Stub:
         yes = True
         restart_to = "9.9.9"
         read_failures: set[str] = set()
+        target = tmp_path
 
     def one_pass(driver: Any) -> Any:
         raise triage_batch_cmd.ForgeReadError("cannot read the visibility", code=2)
@@ -220,7 +221,8 @@ def test_a_skipped_save_that_installed_a_newer_fr_restarts_instead_of_sleeping(
     monkeypatch.setattr(triage_batch_cmd, "one_pass", one_pass)
     monkeypatch.setattr(triage_batch_cmd, "_sleep", sleep)
 
-    assert triage_batch_cmd._host_loop(Stub(), once=False, interval=5) == "9.9.9"  # type: ignore[arg-type]
+    end = triage_batch_cmd._host_loop(Stub(), once=False, interval=5)  # type: ignore[arg-type]
+    assert end == triage_batch_cmd.LoopEnd(0, "9.9.9")
 
 
 def test_a_leak_still_ends_a_looping_driver(
@@ -300,7 +302,7 @@ def test_a_loop_skips_a_pass_whose_member_repo_visibility_cannot_be_read(
     flat = " ".join(result.output.split())
     assert REPO in client.asked, "the member repo was read live"
     assert "which is not public" not in flat, result.output
-    assert flat.count("pass skipped, retrying every") == 1, result.output
+    assert flat.count("the pass ended, its state kept") == 1, result.output
     assert seen[0] == {"merged": [], "passes": 0}, "nothing acted"
     assert seen[1]["merged"], "the second pass ran"
 
@@ -339,6 +341,6 @@ def test_a_loop_skips_a_pass_whose_judgements_write_cannot_read_the_visibility(
 
     flat = " ".join(result.output.split())
     assert calls, "the dispatch's write check ran"
-    assert flat.count("pass skipped, retrying every") == 1, result.output
+    assert flat.count("the pass ended, its state kept") == 1, result.output
     assert seen[0] == {"dispatched": False}, "nothing launched on the skipped pass"
     assert seen[1] == {"dispatched": True}, "the next pass dispatched"

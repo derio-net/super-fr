@@ -121,3 +121,27 @@ def test_gh1275_a_partly_run_stage_still_gets_the_brief(tmp_path: Path, monkeypa
     result = _invoke(tmp_path, ["pickup", "--run", "r1"])
 
     assert "fr ops gate --run r1" in result.output, result.output
+
+
+# --- gh#1614: `deliver`'s own hand-off line names the DevOps stage ----------------------
+
+
+def test_deliver_handoff_names_the_devops_stage_for_a_devops_gated_run(tmp_path: Path) -> None:
+    """For a run whose gates include devops the stage owns the merge, so the line
+    `deliver` ends with is `fr ops gate --run <id>`, never the post-merge pickup."""
+    from fr.commands.run_cmd import _closeout_handoff_lines
+
+    state = _run(tmp_path, ops=True)
+    lines = _closeout_handoff_lines(tmp_path, state, committed=False)
+    assert lines[-1].strip() == "fr ops gate --run r1"
+    assert lines[-2].startswith("closeout: ") and "DevOps stage" in lines[-2]
+    assert not any("fr pickup --run" in line for line in lines)
+
+
+def test_deliver_handoff_stays_the_pickup_for_a_run_without_devops(tmp_path: Path) -> None:
+    from fr.commands.run_cmd import _closeout_handoff_lines
+
+    state = _run(tmp_path)
+    lines = _closeout_handoff_lines(tmp_path, state, committed=False)
+    assert lines[-1].strip() == "fr pickup --run r1"
+    assert lines[-2].startswith("closeout: after the PR merges, start a NEW session in")
