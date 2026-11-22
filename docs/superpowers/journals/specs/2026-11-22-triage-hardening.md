@@ -214,3 +214,6 @@ run_kind: none
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-22-triage-hardening-p2 created=2026-11-22T21:38:03+00:00 -->
 ### phase-split-2026-11-22-triage-hardening-p2 · decision · ask: batches and dedupe (R6, R8-R10) are an ask of their own, reviewable apart from intake
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-22-triage-hardening-p3 created=2026-11-22T21:38:05+00:00 -->
+### phase-split-2026-11-22-triage-hardening-p3 · decision · ask: collect PRs past the limit, snapshot privacy keys and the filter-script guard (R11-R13) are an ask of their own
