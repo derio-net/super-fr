@@ -34,9 +34,23 @@ rows:
     - spec:2026-11-22-triage-hardening#R3
     - spec:2026-11-22-triage-hardening#R4
     - spec:2026-11-22-triage-hardening#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_admit.py#test_the_digest_reads_crlf_as_lf_and_starts_sha256
+      - super-fr:tests/unit/test_triage_admit.py#test_latest_admit_ignores_an_untrusted_authors_newer_marker
+      - super-fr:tests/unit/test_triage_admit.py#test_admit_with_yes_labels_and_posts_one_marker_over_the_live_content
+      - super-fr:tests/unit/test_triage_admit.py#test_an_edit_between_the_preview_and_the_write_is_refused
+      - super-fr:tests/unit/test_triage_admit.py#test_admit_refuses_a_forge_that_cannot_list_comments_before_any_read
+      - super-fr:tests/unit/test_triage_collect.py#test_a_ready_fr_issue_with_a_trusted_marker_over_its_full_content_is_eligible
+      - super-fr:tests/unit/test_triage_collect.py#test_a_ready_fr_issue_edited_after_its_marker_is_ineligible
+      - super-fr:tests/unit/test_triage_collect.py#test_a_member_authored_ready_fr_issue_reads_its_association_and_no_comments
+      - super-fr:tests/unit/test_triage_collect.py#test_a_failed_admit_read_leaves_only_that_issue_ineligible
+      - super-fr:tests/unit/test_triage_intake.py#test_the_ready_fr_label_admits_only_with_a_marker_matching_the_content
+    status: ci
+    notes: 'CI unit tests: digest over a body past BODY_LIMIT, marker parser and trust,
+      intake reasons (edited, no marker, unread, unsupported forge), a MEMBER-authored
+      labelled issue, and fr triage admit against a fake GhClient incl. the confirmed-digest
+      re-read'
     verify: none
   - id: dedupe-set-apart
     capability: triage-dedupe
