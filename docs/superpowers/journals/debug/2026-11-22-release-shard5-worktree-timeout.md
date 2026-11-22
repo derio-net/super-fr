@@ -50,3 +50,8 @@ Hypothesis: procs[1] wins the lock and blocks writing its unread xtrace (64 KiB 
 ### rc-race-drain · root-cause · run_twice drains the two hooks one at a time, so a lock holder whose unread stderr pipe fills deadlocks the race
 
 Evidence (diag run 45069567075, the release's exact shard 5/6, 3/3 hung): in every run procs[1] held the lock (lock pid == procs[1]), its stub had finished (stub trace 'exit rmdir=0'), and it was alive in state S with no child, its stderr at 62,875-63,023 bytes: the next xtrace line does not fit the 64 KiB Linux pipe, so bash blocks on write(2) while holding the lock. procs[0] loops on the lock; Python sits in procs[0].communicate() and never reads procs[1]. The 'refutation' above was wrong: it measured a 35-entry macOS PATH (187 KB before the lock); the trace scales with PATH and tmp-path length, and under release.py's nested uv run the whole trace lands just past 64 KiB. Not a hook bug: the hook serialises correctly; the harness couples the test to pipe capacity.
+
+<!-- fr:journal kind=finding scope=debug id=f-race-drain created=2026-11-22T21:08:43+00:00 state=fixed -->
+### f-race-drain · finding [fixed] · run_twice drains both copies to files instead of pipes
+
+Failing test first: test_the_race_drains_both_hooks_at_once (two copies each write 200 KB to stderr, then wait for both): hung at its 15 s deadline under the one-at-a-time pipe drain, on macOS too; passes in 0.5 s with stdout/stderr redirected to per-copy files. A hang now fails with the lock holder, the ps table and both full traces (kept from the diagnosis). The hook is unchanged: it serialised correctly in every captured run.
