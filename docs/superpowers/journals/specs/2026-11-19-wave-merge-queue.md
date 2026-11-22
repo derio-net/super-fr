@@ -480,3 +480,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-8 created=2026-11-22T21:26:07+00:00 -->
+### exit-change-8 · decision · exit change: row wave-queue-broken-hold -> strategy live
+
+needs the real remote's hold ref and release.yml; CI proves it over real bare git remotes (Test Plan 20), walked on the next wave after merge
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
