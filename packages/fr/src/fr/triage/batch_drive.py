@@ -1213,7 +1213,8 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
         )  # fmt: skip
         # what it closes stays the verb's record even when approved: a body edited after
         # the approval would otherwise close any issue at merge
-        if any(w.startswith("its body's Closes lines") for w in why):
+        unchecked = ("its body's Closes lines", "its members' narrowing decisions")
+        if any(w.startswith(unchecked) for w in why):  # a Closes set not proven the record
             approved = False
         if not approved:
             moved = pr.head != marker.head  # gh#1496: its session can re-record the head
