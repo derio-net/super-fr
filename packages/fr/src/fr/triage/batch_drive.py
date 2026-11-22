@@ -26,7 +26,7 @@ from typing import Any, Literal
 from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import QueueState
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
-from fr.triage.approval import Approved, ApprovalVerdict, is_approved
+from fr.triage.approval import ApprovalVerdict, Approved, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,

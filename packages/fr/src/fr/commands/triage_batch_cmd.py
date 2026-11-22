@@ -3183,10 +3183,19 @@ def batch_closeout_command(
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     wanted = {b.lower() for b in batch_ids or ()}
     open_markers = [c for c in judgements.closeouts if not (c.merged or c.closed)]
+    if (
+        branch_opt is not None
+        and (ended := marker_of(branch_opt, judgements.closeouts))
+        and (ended.merged or ended.closed)
+    ):  # gh#1569: a new PR on an ended marker reads as closed-and-reopened
+        retry = shlex.join(["fr", "triage", "batch", "closeout", *(batch_ids or ()), "--yes"])
+        _fail(f"{branch_opt} is a close-out that already ended; retry with `{retry}` "
+              "(no --branch: it takes the next branch)")  # fmt: skip
     mine = next((c for c in open_markers if c.branch == branch_opt), None)
     reserved = {b for c in open_markers if c is not mine for b in c.planned}
     owed = collected.closeout_owed(judgements.batches, facts, judgements.closeouts,
-                                   named=wanted, reserved=reserved)  # fmt: skip
+                                   named=wanted, reserved=reserved,
+                                   resuming=mine.branch if mine else None)  # fmt: skip
     if mine is not None:  # the marker's own session: its planned batches still owed
         owed = [b for b in owed if b.id in mine.planned]
     if wanted:

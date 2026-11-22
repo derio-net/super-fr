@@ -347,3 +347,85 @@ def test_p6b_r9_a_transient_git_failure_never_becomes_a_durable_hold(
     assert _holds(tmp_path)["b2"] == []  # still owed: the next run takes it
     code, out = _closeout(tmp_path)
     assert "nothing to close out" in out or "b2: fr archive" in out
+
+
+def test_gh1496_the_markers_own_session_re_records_a_handed_back_head(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """The close-out recorded at head A, was handed back, and its session pushed head B:
+    `--branch <its branch> --yes` records B (members, diff, closes), never 'nothing to
+    close out'."""
+    _reads(monkeypatch, {})
+    _landed(world, tmp_path, "b1", "b2")
+    world.pr(300, BRANCH, [])
+    archive = frozenset({"D\tdocs/superpowers/runs/r.yaml"})
+    checkout.status["sha-300"] = archive
+    code, out = _closeout(tmp_path, "--yes", "--branch", BRANCH)
+    assert code == 0 and "resumed PR #300" in out, out
+    assert {b: len(e) for b, e in _closeouts(tmp_path).items()} == {"b1": 1, "b2": 1}
+    world.prs[300]["head_oid"] = "sha-301"  # the session's rebased fix
+    checkout.status["sha-301"] = archive | {"A\tdocs/superpowers/implemented/runs/r.yaml"}
+
+    code, out = _closeout(tmp_path, "--yes", "--branch", BRANCH)
+
+    assert code == 0, out
+    assert "nothing to close out" not in out and "at sha-301" in out
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert (marker.head, marker.members) == ("sha-301", ["b1", "b2"])
+    assert "A\tdocs/superpowers/implemented/runs/r.yaml" in marker.files
+    assert {b: len(e) for b, e in _closeouts(tmp_path).items()} == {"b1": 1, "b2": 1}
+
+
+def test_gh1496_another_markers_batches_stay_closed_out(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Only the resuming marker's OWN planned batches are re-recorded."""
+    _reads(monkeypatch, {})
+    _landed(world, tmp_path, "b1")
+    world.pr(300, BRANCH, [])
+    checkout.status["sha-300"] = frozenset({"D\tdocs/superpowers/runs/r.yaml"})
+    assert _closeout(tmp_path, "--yes", "--branch", BRANCH)[0] == 0
+
+    code, out = _closeout(tmp_path, "--yes")  # no --branch: not that marker's session
+
+    assert code == 0 and "nothing to close out" in out, out
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert marker.head == "sha-300"
+
+
+def test_gh1569_a_branch_retry_on_an_ended_closeout_is_refused_with_the_retry_command(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """A held close-out's marker is closed: reusing its branch would put a new PR on a
+    closed marker, which the driver reads as closed and reopened (and collects again)."""
+    from fr.triage.batch import save_closeouts
+    from fr.triage.model import CollectedCloseout
+
+    _reads(monkeypatch, {})
+    _landed(world, tmp_path, "b1")
+    item = f"{REPO}/run/closeout-2026-10-02-1"
+    ended = CollectedCloseout(repo=REPO, item=item, branch=BRANCH, at=NOW, runner="fake",
+                              planned=["b1"], closed=True)  # fmt: skip
+    save_closeouts(tmp_path / "judgements.yaml", [ended], read=[])
+
+    code, out = _closeout(tmp_path, "b1", "--branch", BRANCH, "--yes")
+
+    assert code == 2, out
+    assert "fr triage batch closeout b1 --yes" in " ".join(out.split())
+    assert load_judgements(tmp_path / "judgements.yaml").closeouts == [ended]
+    assert tree.calls == [] and 300 not in world.prs
+
+
+def test_gh1496_the_hand_back_brief_asks_for_a_rebase_never_a_merge() -> None:
+    """A merged-in base puts a second commit past the base, which the trust anchor
+    (exit-gates R15 (3)) never merges unapproved: the brief asks for what can merge."""
+    from fr.triage.batch_closeout import handback_brief
+
+    brief = handback_brief(pr=900, branch=BRANCH, base="main", checks=("lint",))
+    flat = " ".join(brief.split())
+    assert "rebase its one commit onto origin/main" in flat and "--force-with-lease" in flat
+    assert "merge origin/main in," not in flat
+    assert f"fr triage batch closeout --branch {BRANCH} --yes" in flat

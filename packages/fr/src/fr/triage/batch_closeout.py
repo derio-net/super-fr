@@ -150,11 +150,14 @@ def closeout_owed(
     *,
     named: Collection[str] = (),
     reserved: Collection[str] = (),
+    resuming: str | None = None,
 ) -> list[Batch]:
     """R15's batches: landed, not gated, and not closed out (no close-out event, or one
     whose collected PR was closed unmerged). A batch held by an earlier close-out is owed
     only when *named* (the explicit retry). A landed batch whose merged PR's labels could
-    not be read is not known ungated (p4-r1), so it waits."""
+    not be read is not known ungated (p4-r1), so it waits. A batch whose close-out is the
+    one on branch *resuming* is still that close-out's own work (gh#1496: its session
+    re-records the head)."""
     stages = {b.id: derive_batch_stage(b, facts) for b in batches}
     ledgers = fact_ledgers(batches, facts, stages)
     unknown = fact_ledger_unknown(batches, facts, stages)
@@ -163,7 +166,8 @@ def closeout_owed(
     for b in batches:
         if stages[b.id] not in LANDED or b.id in unknown:
             continue
-        if closeout_of(b, markers) is not None:
+        event = closeout_of(b, markers)
+        if event is not None and (resuming is None or event.archive != resuming):
             continue
         if closeout_hold(b) is not None and b.id not in named:
             continue
@@ -280,9 +284,11 @@ def handback_brief(*, pr: int, branch: str, base: str, checks: Sequence[str]) ->
     )
     return (
         f"The collected close-out PR #{pr} on {branch} {what}.\n"
-        f"Fix it on {branch}: merge origin/{base} in, resolve, run the failing checks "
-        f"locally, and push; then run `fr triage batch closeout --branch {branch} --yes`, "
-        f"which records the new head (the driver merges only a head the verb recorded). "
+        f"Fix it on {branch}: rebase its one commit onto origin/{base} (never merge it in: "
+        f"the driver merges a close-out unapproved only with its head alone past the base), "
+        f"resolve, run the failing checks locally, and push with --force-with-lease; then "
+        f"run `fr triage batch closeout --branch {branch} --yes`, which records the new "
+        f"head (the driver merges only a head the verb recorded). "
         f"This is its one hand-back: a second failure goes to the operator."
     )
 
