@@ -15,3 +15,9 @@ class TriageError(Exception):
 
 class ForgeError(TriageError):
     """A forge call failed — no access, issues disabled, no forge CLI."""
+
+
+class ConfigError(TriageError):
+    """A repo's or the scope's triage config that fr refuses strictly (a merge method the
+    repo does not allow, a bad known key): only its owner can fix it, so a looping driver
+    stops on it as a refusal (spec 2026-11-19-batch-train-truth R2)."""

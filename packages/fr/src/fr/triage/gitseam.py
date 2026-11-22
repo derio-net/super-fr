@@ -802,6 +802,10 @@ class Checkout:
 
     def remove_worktree(self, where: Path) -> None:
         git(["worktree", "remove", "--force", str(where)], self.path)
+        self.prune_worktrees()
+
+    def prune_worktrees(self) -> None:
+        """Forget every worktree whose directory is gone (`git worktree prune`)."""
         git(["worktree", "prune"], self.path)
 
 
