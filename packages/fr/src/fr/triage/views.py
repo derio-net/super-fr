@@ -61,7 +61,7 @@ from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
-from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.check import batch_awaits_live, classify, stale_dispatches
 from fr.triage.driver_record import DriverRecord, stopped, stopped_line
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
@@ -77,6 +77,7 @@ from fr.triage.model import (
     RedHandbackEvent,
     Severity,
 )
+from fr.triage.sets import is_set_apart
 from fr.triage.timestamps import parse_aware
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}

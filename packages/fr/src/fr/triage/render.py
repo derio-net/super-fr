@@ -28,7 +28,7 @@ from fr.acceptance.model import DEBT_STATUSES, LISTED_STATUSES
 from fr.triage.batch import BATCH_STAGES, derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.batch import batch_pr as find_batch_pr
 from fr.triage.batch_drive import finished_waves
-from fr.triage.check import CLEARING_RULE, CheckResult, classify, is_set_apart
+from fr.triage.check import CLEARING_RULE, CheckResult, classify
 from fr.triage.components import (
     CHROME_CSS,
     GRID_CSS,
@@ -54,6 +54,7 @@ from fr.triage.fragments import Entry, Resolved, moved_notes, splice
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
 from fr.triage.model import issue_key
+from fr.triage.sets import is_set_apart
 from fr.triage.stage import IN_FLIGHT
 from fr.triage.views import (
     CX_RANK,
