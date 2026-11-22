@@ -1,5 +1,7 @@
-# TEMPORARY (gh#1586 diagnosis): reruns the Release's shard 5/6 on a runner with this
-# branch's self-diagnosing test. Removed before the fix PR is marked ready.
+# TEMPORARY (gh#1586 diagnosis): reruns the Release's shard 5/6 exactly as release.yml
+# does (staged commit, origin/main pinned, release.py test-shard), with only this
+# branch's self-diagnosing tests/unit/test_hooks_worktree.py laid over it. Removed
+# before the fix PR is marked ready.
 name: diag shard5
 on:
   push:
@@ -7,6 +9,8 @@ on:
 permissions:
   contents: read
   actions: read
+env:
+  UV_PYTHON: "3.11"
 jobs:
   shard5:
     runs-on: ubuntu-latest
@@ -20,6 +24,10 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Keep this branch's diagnostic test aside
+        run: cp tests/unit/test_hooks_worktree.py "${RUNNER_TEMP}/test_hooks_worktree.py"
+      - name: Check out the release's base, as release.yml does
+        run: git checkout -q ffb03a74f9f0ab42d0219ca108066392b3da6bcf
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -27,13 +35,29 @@ jobs:
           path: ${{ runner.temp }}/release-out
           run-id: 45063126264
           github-token: ${{ github.token }}
-      - name: The release's shard 5/6 arguments, this branch's tests
+      - name: Check out the staged commit, origin/main pinned to its base
         env:
-          UV_PYTHON: "3.11"
-        run: |
-          cp "${RUNNER_TEMP}/release-out/durations-plan.json" "${RUNNER_TEMP}/d.json"
-          uv run --locked pytest -q --no-cov -n auto -p no:cacheprovider \
-            -o addopts=--strict-markers --rootdir="$PWD" --splits 6 --group 5 \
-            --splitting-algorithm least_duration --durations-path="${RUNNER_TEMP}/d.json" \
-            > "${RUNNER_TEMP}/pytest.log" 2>&1 || { rc=$?; grep -n -A400 "race did not finish" "${RUNNER_TEMP}/pytest.log" | head -600; tail -30 "${RUNNER_TEMP}/pytest.log"; exit $rc; }
-          tail -3 "${RUNNER_TEMP}/pytest.log"
+          RELEASE_OUT: ${{ runner.temp }}/release-out
+        run: >-
+          uv run --no-project python scripts/release.py materialise
+          --plan "${RELEASE_OUT}/release-plan.json"
+          --bundle "${RELEASE_OUT}/staged.bundle" --pin-base
+      - name: Lay the diagnostic test over it
+        run: cp "${RUNNER_TEMP}/test_hooks_worktree.py" tests/unit/test_hooks_worktree.py
+      - name: Test shard 5 at the new version, as release.yml does
+        env:
+          RELEASE_OUT: ${{ runner.temp }}/release-out
+          FR_RACE_EVIDENCE_DIR: ${{ runner.temp }}/race-evidence
+        run: >-
+          uv run --no-project python scripts/release.py test-shard
+          --plan "${RELEASE_OUT}/release-plan.json"
+          --group 5 --splits 6
+          --durations "${RELEASE_OUT}/durations-plan.json"
+          --out "${RUNNER_TEMP}/shard-durations.json"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: race-evidence-${{ matrix.attempt }}
+          path: ${{ runner.temp }}/race-evidence
+          if-no-files-found: ignore
+          retention-days: 3

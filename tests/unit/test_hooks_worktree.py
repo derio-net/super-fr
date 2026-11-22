@@ -497,7 +497,12 @@ def run_twice(script: Path, payload: Path, env: dict[str, str]) -> list[RaceRun]
         try:
             out, err = p.communicate(timeout=max(1.0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
-            pytest.fail(_hung_race_evidence(procs, env), pytrace=False)
+            evidence = _hung_race_evidence(procs, env)
+            keep = os.environ.get("FR_RACE_EVIDENCE_DIR")
+            if keep:
+                Path(keep).mkdir(parents=True, exist_ok=True)
+                (Path(keep) / f"race-{os.getpid()}-{time.time_ns()}.txt").write_text(evidence)
+            pytest.fail(evidence, pytrace=False)
         runs.append(RaceRun(p.pid, out, err, p.returncode))
     return runs
 
