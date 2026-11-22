@@ -941,7 +941,9 @@ def batch_cancel_command(
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = derive_batch_stage(batch, facts)
-    if stage in CLOSED_OUT:
+    # An obsolete batch (never dispatched, every member closed) is cancelled to retire it:
+    # it withdraws nothing, so only the cancel event is appended (2026-11-22-triage-hardening R9).
+    if stage in CLOSED_OUT and stage != "obsolete":
         _fail(f"batch {batch.id!r} is {stage}; there is nothing to cancel")
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
@@ -961,7 +963,7 @@ def batch_cancel_command(
     # a proposed batch reached the forge only when its claims were written; a wave owes
     # claims from the moment it is set, so ones written since the last collect may
     # exist whatever facts say (p1-r8)
-    touches_forge = stage != "proposed" or claimed or batch.wave is not None
+    touches_forge = stage not in {"proposed", "obsolete"} or claimed or batch.wave is not None
     if dispatched:
         # gh#803: withdrawing writes labels and comments to the tracker, so it
         # is gated as dispatch is; a never-dispatched batch withdraws nothing.

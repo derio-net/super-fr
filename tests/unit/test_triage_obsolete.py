@@ -1,0 +1,153 @@
+"""The `obsolete` batch stage and what reads it (2026-11-22-triage-hardening R8, spec §E).
+
+A batch with no lifecycle event whose members are all in the facts and all closed (or
+awaiting their live walk) has nothing left to dispatch: it derives `obsolete`.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fr.triage.batch import (
+    CLOSED_OUT,
+    dependency_state,
+    derive_batch_stage,
+    is_open,
+    meets_dependency,
+)
+from fr.triage.batch_drive import drive_pass, finished_waves
+from fr.triage.model import Batch, Facts, Issue, Judgements
+from fr.triage.views import cancelled_waves, drive_snapshot, next_up, preselected_wave
+
+REPO = "derio-net/example-repo"
+DISPATCH = {
+    "kind": "dispatch",
+    "at": "2026-09-25T10:00:00Z",
+    "runner": "herdr",
+    "handle": "w1:p0",
+    "branch": "feat/batch-a",
+}
+
+
+def _issue(n: int, *, state: str = "open", labels: tuple[str, ...] = ()) -> Issue:
+    return Issue(
+        repo=REPO,
+        number=n,
+        title=f"issue {n}",
+        state=state,  # type: ignore[arg-type]
+        labels=list(labels),
+        url=f"https://github.com/{REPO}/issues/{n}",
+        author_association="OWNER",
+    )
+
+
+def _facts(*issues: Issue) -> Facts:
+    return Facts(
+        viewer="operator",
+        schema=3,
+        scope="derio-net--example-repo",
+        kind="repo",
+        collected_at="2026-09-26T12:00:00+00:00",
+        repos=[REPO],
+        issues=list(issues),
+        config={},
+    )
+
+
+def _batch(bid: str, ids: list[int], **kw: Any) -> Batch:
+    doc = {"id": bid, "title": bid, "ids": [f"example-repo#{n}" for n in ids], **kw}
+    return Batch.model_validate(doc)
+
+
+def _judgements(*batches: Batch) -> Judgements:
+    return Judgements.model_validate(
+        {
+            "schema": 3,
+            "tiers": [{"n": 1, "title": "Now"}],
+            "issues": {k: {"tier": 1} for b in batches for k in b.ids},
+            "batches": [b.model_dump(mode="json") for b in batches],
+        }
+    )
+
+
+def _closed(*ns: int) -> list[Issue]:
+    return [_issue(n, state="closed") for n in ns]
+
+
+# ------------------------------------------------------------------ the stage
+
+
+def test_a_never_dispatched_batch_of_closed_members_is_obsolete() -> None:
+    assert derive_batch_stage(_batch("a", [1, 2]), _facts(*_closed(1, 2))) == "obsolete"
+
+
+def test_closed_members_and_one_awaiting_live_is_obsolete() -> None:
+    facts = _facts(*_closed(1), _issue(2, labels=("fr:awaiting-live",)))
+    assert derive_batch_stage(_batch("a", [1, 2]), facts) == "obsolete"
+
+
+def test_a_member_missing_from_the_facts_keeps_it_proposed() -> None:
+    assert derive_batch_stage(_batch("a", [1, 2]), _facts(*_closed(1))) == "proposed"
+
+
+def test_an_open_member_keeps_it_proposed() -> None:
+    assert derive_batch_stage(_batch("a", [1, 2]), _facts(*_closed(1), _issue(2))) == "proposed"
+
+
+def test_a_dispatched_batch_keeps_the_existing_table() -> None:
+    facts = _facts(*_closed(1, 2))
+    assert derive_batch_stage(_batch("a", [1, 2], events=[DISPATCH]), facts) == "dispatched"
+
+
+def test_obsolete_is_closed_out_and_not_open() -> None:
+    facts = _facts(*_closed(1))
+    assert "obsolete" in CLOSED_OUT
+    assert not is_open(_batch("a", [1]), facts)
+
+
+# --------------------------------------------------------------- dependencies
+
+
+def test_obsolete_and_merged_meet_a_dependency() -> None:
+    assert meets_dependency("obsolete") and meets_dependency("merged")
+    assert not meets_dependency("proposed") and not meets_dependency("cancelled")
+
+
+def test_a_batch_after_an_obsolete_one_is_satisfied() -> None:
+    batches = [_batch("a", [1]), _batch("b", [2], after=["a"])]
+    assert dependency_state("a", batches, _facts(*_closed(1), _issue(2))) == "satisfied"
+
+
+def test_the_drive_dispatches_a_batch_after_an_obsolete_one_and_never_the_obsolete_one() -> None:
+    batches = [_batch("a", [1], wave=1), _batch("b", [2], wave=1, after=["a"])]
+    facts = _facts(*_closed(1), _issue(2))
+    plan = drive_pass(drive_snapshot(facts, _judgements(*batches)))
+    assert [a.batch for a in plan.actions if a.kind == "dispatch"] == ["b"]
+
+
+# ---------------------------------------------------------------------- waves
+
+
+def test_a_wave_of_obsolete_and_cancelled_batches_is_finished() -> None:
+    batches = [_batch("a", [1], wave=1), _batch("b", [2], wave=1)]
+    stages = {"a": "obsolete", "b": "cancelled"}
+    assert finished_waves(batches, stages) == frozenset({"1"})
+
+
+def test_an_all_obsolete_wave_delivered_nothing() -> None:
+    batches = [_batch("a", [1], wave=1)]
+    assert cancelled_waves(batches, {"a": "obsolete"}) == frozenset({"1"})
+
+
+def test_preselected_wave_skips_an_obsolete_batch() -> None:
+    batches = [_batch("a", [1], wave=2), _batch("b", [2], wave=1)]
+    facts = _facts(*_closed(1), _issue(2))
+    assert preselected_wave(facts, _judgements(*batches)) == 1
+
+
+def test_the_waiting_view_does_not_list_a_batch_waiting_on_an_obsolete_one() -> None:
+    batches = [_batch("a", [1]), _batch("b", [2], after=["a"])]
+    facts = _facts(*_closed(1), _issue(2))
+    rows = next_up(facts, _judgements(*batches))
+    assert not [r for r in rows if r.waiting and r.ref == "b"]
+    assert not [r for r in rows if r.ref == "a"]

@@ -19,6 +19,7 @@ from fr.ghclient import UnsupportedForgeOperation
 from fr.triage.batch import (
     ResolvedLaunch,
     Suggestion,
+    derive_batch_stage,
     fr_harness,
     mixed_themes,
     resolve_launch,
@@ -556,6 +557,43 @@ def test_cancel_with_yes_removes_the_label_posts_the_withdrawal_and_appends_the_
     (batch,) = _batches(tmp_path)
     assert batch.events[-1].kind == "cancel"
     assert batch.events[-1].reason == "split"  # type: ignore[union-attr]
+
+
+def _obsolete_state(tmp_path: Path) -> None:
+    closed = _facts(*[_issue(n, state="closed") for n in (577, 575, 471, 438, 420)])
+    _with(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"]}, facts=closed)
+
+
+def test_cancel_accepts_an_obsolete_batch_and_touches_no_member(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _obsolete_state(tmp_path)
+
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+
+    assert code == 0, out
+    assert gh.calls == []
+    (batch,) = _batches(tmp_path)
+    assert batch.events[-1].kind == "cancel"
+    facts = _facts(*[_issue(n, state="closed") for n in (577,)])
+    assert derive_batch_stage(batch, facts) == "cancelled"
+
+
+def test_cancel_still_refuses_a_merged_batch(tmp_path: Path, gh: FakeGhClient) -> None:
+    pr = {"kind": "dispatch", **{k: v for k, v in _DISPATCH.items() if k != "kind"}}
+    merged_pr = PullRequest(
+        author="operator", cross_repo=False, repo=REPO, number=9, title="b", state="MERGED",
+        is_draft=False, url=f"https://github.com/{REPO}/pull/9", head_ref="feat/batch-lifecycle",
+        created_at="2026-09-25T10:30:00+00:00",
+    )  # fmt: skip
+    closed = _facts(_issue(577, state="closed"), prs=[merged_pr])
+    _with(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "events": [pr]},
+          facts=closed)  # fmt: skip
+
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+
+    assert code != 0
+    assert "nothing to cancel" in out
 
 
 def test_cancel_posts_no_second_withdrawal(tmp_path: Path, gh: FakeGhClient) -> None:

@@ -294,9 +294,9 @@ def needs_refresh(claim: Claim, now: datetime, expiry: timedelta) -> bool:
 
 
 def releasing(batch: Batch, stage: BatchStage, archived: bool) -> bool:
-    """No driver acts on the batch again: cancelled, abandoned, or finished (its run
-    archived). `merged` and `partial` are not: the close-out still runs under the claim."""
-    return stage in ("cancelled", "abandoned") or archived
+    """No driver acts on the batch again: cancelled, abandoned, obsolete, or finished (its
+    run archived). `merged` and `partial` are not: the close-out still runs under the claim."""
+    return stage in ("cancelled", "abandoned", "obsolete") or archived
 
 
 def _owes(batch: Batch, stage: BatchStage) -> bool:
