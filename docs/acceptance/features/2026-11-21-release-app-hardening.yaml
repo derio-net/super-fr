@@ -84,10 +84,13 @@ rows:
       - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_is_never_set_without_the_environment_secret
       - super-fr:tests/unit/test_setup_release_app.py#test_a_declined_key_store_never_sets_the_variable
       - super-fr:tests/unit/test_setup_release_app.py#test_the_variable_waits_while_only_one_app_token_job_declares_the_environment
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_variable_naming_another_app_is_replaced_once_the_secret_exists
+      - super-fr:tests/unit/test_setup_release_app.py#test_a_variable_naming_another_app_waits_for_the_secret
     status: ci
     notes: 'variable never set without the env secret: declined key store and failed
       key step both proven; R11 main release.yml check covers both app-token jobs and
-      every form'
+      every form; a variable holding another app''s id is replaced once the secret exists
+      (2026-11-22)'
     verify: none
   - id: setup-script-rulesets
     capability: release
