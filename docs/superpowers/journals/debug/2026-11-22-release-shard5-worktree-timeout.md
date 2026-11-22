@@ -10,3 +10,8 @@ Release run 45063126264 (8.3.0-rc.8, staged 331227f, base ffb03a7) and its two r
 ### c7a9b9372ba1 · ruled-out · Not slowness: the test alone takes ~2.5s (macOS) and ~3.5s (Linux docker)
 
 A 60s timeout is a hang, not an overrun.
+
+<!-- fr:journal kind=ruled-out scope=debug id=d8f7ca8f9f39 created=2026-11-22T20:36:56+00:00 -->
+### d8f7ca8f9f39 · ruled-out · Not a leaked FR_HARNESS_FR pin
+
+Running the test with FR_HARNESS_FR set to the real venv fr still passes (conftest drops the pin).
