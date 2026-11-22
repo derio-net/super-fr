@@ -467,3 +467,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-7 created=2026-11-22T21:25:58+00:00 -->
+### exit-change-7 · decision · exit change: row wave-queue-devops-barrier -> strategy live
+
+needs real PR labels and the DevOps stage's forge reads; CI proves it with the fake forge (Test Plan 19), walked on the next wave after merge
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
