@@ -15,3 +15,8 @@ A 60s timeout is a hang, not an overrun.
 ### d8f7ca8f9f39 · ruled-out · Not a leaked FR_HARNESS_FR pin
 
 Running the test with FR_HARNESS_FR set to the real venv fr still passes (conftest drops the pin).
+
+<!-- fr:journal kind=ruled-out scope=debug id=d982011bfda9 created=2026-11-22T20:36:58+00:00 -->
+### d982011bfda9 · ruled-out · Not reproduced by release shard 5 on macOS
+
+The same shard (durations-plan.json, --splits 6 --group 5, -n 4, -m '') passes locally on macOS: 2881 passed. Linux-specific or runner-specific.
