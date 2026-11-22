@@ -211,3 +211,6 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-22-triage-hardening-p2 created=2026-11-22T21:38:03+00:00 -->
+### phase-split-2026-11-22-triage-hardening-p2 · decision · ask: batches and dedupe (R6, R8-R10) are an ask of their own, reviewable apart from intake
