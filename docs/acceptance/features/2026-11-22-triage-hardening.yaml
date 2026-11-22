@@ -94,3 +94,10 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: intake-trust-eligibility
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_every_issue_is_admitted_by_login_or_label
+    why: 'split: the label no longer skips the association read (triage-hardening R5)'
