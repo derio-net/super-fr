@@ -40,3 +40,8 @@ fr.git_cache._SYSTEM_MEMO is the one process-global fr cache with no autouse res
 ### f-git-memo · finding [fixed] · conftest empties _SYSTEM_MEMO before every test
 
 Failing test first: test_a_test_never_meets_a_previous_tests_system_config_answer (red, and with it test_a_decline_is_named_on_stderr_under_the_debug_variable and, under -n 4, four hit tests, exactly PR #1625's shape), seeded by test_a_failed_system_config_probe_is_remembered_for_the_process. Fix: autouse _fresh_git_system_config_memo in tests/conftest.py. 49/49 serially and on three -n 4 runs.
+
+<!-- fr:journal kind=ruled-out scope=debug id=336fa4e7cb4f created=2026-11-22T20:59:03+00:00 -->
+### 336fa4e7cb4f · ruled-out · Not (likely) a pipe-buffer deadlock in run_twice's one-at-a-time drain
+
+Hypothesis: procs[1] wins the lock and blocks writing its unread xtrace (64 KiB Linux pipe) while procs[0] waits on the lock. Measured: the xtrace is ~187 KB BEFORE the lock (PATH walks, ~10 KB per PATH entry) and only ~10 KB under it, so an undrained hook blocks before it can take the lock and holds nothing. A forced 'second-drained wins the lock' run passes on macOS and on Linux (docker). It would need a pre-lock trace in a ~10 KB window below 64 KiB: too narrow for 3/3. Also: the diag-shard5 workflow (this branch's tests, release shard 5/6 args, durations-plan.json, 3 attempts on ubuntu-latest) passed all three, so what remains is what release.py itself adds: the staged commit, the nested uv run, its env.
