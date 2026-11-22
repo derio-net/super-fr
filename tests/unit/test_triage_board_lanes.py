@@ -86,7 +86,7 @@ def test_the_merge_train_still_plans_the_merge_for_a_conflicting_pr() -> None:
 def test_the_columns_are_r17s_in_order() -> None:
     assert COLUMNS == (
         "proposed", "waiting", "running", "needs-developer", "pr-open", "needs-reviewer",
-        "needs-tester", "needs-devops", "closing-out", "partial", "done",
+        "needs-tester", "needs-devops", "closing-out", "partial", "obsolete", "done",
     )  # fmt: skip
     assert COLUMN_TITLES["needs-developer"] == "Needs you · Developer"
     assert COLUMN_TITLES["needs-devops"] == "Needs you · DevOps"
