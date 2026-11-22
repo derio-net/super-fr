@@ -25,3 +25,8 @@ The same shard (durations-plan.json, --splits 6 --group 5, -n 4, -m '') passes l
 ### 276e24ae2bdc · ruled-out · Not reproduced on Linux either: the staged release commit's shard 5/6 in Docker passes the test
 
 Cloned staged.bundle (331227f), origin/main pinned to ffb03a7, python 3.11 bookworm, 2 CPUs, -n 4, durations-plan.json: the target test passed (34 other failures are container gaps: no rsync, root user). So the hang needs something about the GitHub runner itself, not only Linux + test order. Also read: release.py strips only forge credentials from the env; the hook's EXIT trap is never replaced and nothing exec's past it.
+
+<!-- fr:journal kind=hypothesis scope=debug id=1d695ea79a55 created=2026-11-22T20:48:04+00:00 -->
+### 1d695ea79a55 · hypothesis · PR #1625 test_git_cache misses: a process-wide _UNKNOWN system-config memo poisons every later cached question on that worker
+
+CI run 45065556107, py3.14 shard 4/7: three include tests on worker gw3 fail in _hit (the cached re-ask starts git config + git remote). fr.git_cache._SYSTEM_MEMO is process-global and memoises _UNKNOWN on purpose (l-errors-r2); with _UNKNOWN every scope declines ('git would not name its system config path'). Confirmed: seeding the memo with _UNKNOWN reproduces the exact failure shape on test_an_onbranch_include_flips_with_a_checkout. Open: which earlier test on the worker made the probe fail.
