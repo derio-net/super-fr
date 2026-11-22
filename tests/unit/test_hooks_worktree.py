@@ -491,7 +491,48 @@ def run_twice(script: Path, payload: Path, env: dict[str, str]) -> list[RaceRun]
                     env={**env, "PS4": TRACE_PS4},
                 )
             )
-    return [RaceRun(p.pid, *p.communicate(timeout=60), p.returncode) for p in procs]
+    deadline = time.monotonic() + 60
+    runs: list[RaceRun] = []
+    for p in procs:
+        try:
+            out, err = p.communicate(timeout=max(1.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            pytest.fail(_hung_race_evidence(procs, env), pytrace=False)
+        runs.append(RaceRun(p.pid, out, err, p.returncode))
+    return runs
+
+
+def _hung_race_evidence(procs: list[subprocess.Popen[str]], env: dict[str, str]) -> str:
+    """What a race that never finished leaves behind, taken BEFORE anything is killed:
+    which hook is still running (or is a zombie no one reaped), the process tree under
+    it, the lock directory and its pid file. Then both are killed and their whole
+    xtrace kept, so a hang names the step it hung on (gh#1586)."""
+    parts = [f"--- the race did not finish in 60s; hooks: {[(p.pid, p.poll()) for p in procs]}"]
+    ps = subprocess.run(
+        ["ps", "-eo", "pid,ppid,pgid,stat,etime,args"], capture_output=True, text=True
+    )
+    parts.append("--- ps:\n" + ps.stdout)
+    locks = Path(env["HOME"]) / ".cache" / "fr" / "locks"
+    for lock in sorted(locks.glob("*")) if locks.is_dir() else []:
+        pid = lock / "pid"
+        parts.append(
+            f"--- lock {lock.name}: pid={pid.read_text().strip() if pid.exists() else '(none)'}"
+        )
+    for i, p in enumerate(procs):
+        if p.poll() is None:
+            p.kill()
+        try:
+            out, err = p.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            out, err = "(pipe still held open)", "(pipe still held open)"
+        parts.append(
+            f"--- hook {i}: pid {p.pid}, exit {p.returncode}\n"
+            f"--- stdout:\n{out}\n--- stderr:\n{err}"
+        )
+    for suffix in ("", ".trace"):
+        log = Path(env["FR_STUB_LOG"] + suffix)
+        parts.append(f"--- stub log{suffix}:\n{log.read_text() if log.exists() else '(none)'}")
+    return "\n".join(parts)
 
 
 # The traced steps worth reading, matched on the command an xtrace line

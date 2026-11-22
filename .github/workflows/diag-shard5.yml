@@ -1,0 +1,39 @@
+# TEMPORARY (gh#1586 diagnosis): reruns the Release's shard 5/6 on a runner with this
+# branch's self-diagnosing test. Removed before the fix PR is marked ready.
+name: diag shard5
+on:
+  push:
+    branches: [fix/release-shard5-worktree-timeout]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  shard5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-plan
+          path: ${{ runner.temp }}/release-out
+          run-id: 45063126264
+          github-token: ${{ github.token }}
+      - name: The release's shard 5/6 arguments, this branch's tests
+        env:
+          UV_PYTHON: "3.11"
+        run: |
+          cp "${RUNNER_TEMP}/release-out/durations-plan.json" "${RUNNER_TEMP}/d.json"
+          uv run --locked pytest -q --no-cov -n auto -p no:cacheprovider \
+            -o addopts=--strict-markers --rootdir="$PWD" --splits 6 --group 5 \
+            --splitting-algorithm least_duration --durations-path="${RUNNER_TEMP}/d.json" \
+            > "${RUNNER_TEMP}/pytest.log" 2>&1 || { rc=$?; grep -n -A400 "race did not finish" "${RUNNER_TEMP}/pytest.log" | head -600; tail -30 "${RUNNER_TEMP}/pytest.log"; exit $rc; }
+          tail -3 "${RUNNER_TEMP}/pytest.log"
