@@ -268,7 +268,7 @@ def test_a_cli_step_that_outlives_its_timeout_fails_and_is_killed(
 
 
 def test_a_cli_step_keeps_only_a_bounded_tail_of_its_stdout(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import CLI_STEP_STDOUT_MAX_CHARS
+    from fr.run.cli_step import CLI_STEP_STDOUT_MAX_CHARS
 
     result, state = _cli_run(
         tmp_path, "python3 -c \"print('x' * 1000000); print('the last line')\""
@@ -323,7 +323,7 @@ def test_an_interrupted_advance_kills_the_step_it_started(
 ) -> None:
     """Ctrl-C (or a harness killing fr) must not leave the step running in
     its own session, as `subprocess.run` never did."""
-    from fr.commands import run_cmd
+    from fr.run import cli_step
 
     started: list[subprocess.Popen[str]] = []
     real_popen = subprocess.Popen
@@ -336,10 +336,10 @@ def test_an_interrupted_advance_kills_the_step_it_started(
     def interrupted(self, timeout=None):  # type: ignore[no-untyped-def]
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(run_cmd.subprocess, "Popen", popen)
+    monkeypatch.setattr(cli_step.subprocess, "Popen", popen)
     monkeypatch.setattr(real_popen, "communicate", interrupted)
     with pytest.raises(KeyboardInterrupt):
-        run_cmd._run_cli_command("sleep 30", tmp_path, 60.0)
+        cli_step.run_cli_command("sleep 30", tmp_path, 60.0)
     monkeypatch.undo()
 
     (proc,) = started
