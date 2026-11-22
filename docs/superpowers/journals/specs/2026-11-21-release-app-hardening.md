@@ -220,3 +220,8 @@ row_kinds:
 run_gate: tester
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=dedicated-release-app created=2026-11-22T06:17:39+00:00 -->
+### dedicated-release-app · decision · The release app is a dedicated super-fr-release app, not frank's derio-fr-automation
+
+decider: operator (2026-11-22). The dry run refused derio-fr-automation (installed on all repos, ten permissions). Reading frank showed it is frank's app: its token generators, gitops push, staging gate and CI-budget jobs use those permissions, and its key is on frank's cluster. Narrowing it would break frank; a bypass for it would reach every holder of that key. The operator chose a new app named super-fr-release. The script's refusals now say to create a dedicated app, never to narrow a shared one, and the variable step replaces a variable that holds another app's id once the environment secret exists.
