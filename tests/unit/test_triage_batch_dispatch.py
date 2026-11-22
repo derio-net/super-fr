@@ -266,7 +266,7 @@ def test_dispatch_refuses_a_rejected_member_before_any_forge_write_or_runner_cal
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     flat = " ".join(out.split())
     assert code == 2, out
-    assert "super-fr#577" in flat and "author eve is NONE" in flat and "ready-fr" in flat
+    assert "super-fr#577" in flat and "author eve is NONE" in flat and "fr triage admit" in flat
     assert gh.calls == before and runner.calls == []
 
 
@@ -279,10 +279,19 @@ def test_dispatch_refuses_an_uncollected_member(
     assert runner.calls == []
 
 
-def test_dispatch_goes_ahead_once_the_member_carries_ready_fr(
+def test_dispatch_goes_ahead_once_the_member_is_admitted(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
-    outside = _issue(577, author="eve", author_association="NONE", labels=["ready-fr"])
+    digest = "sha256:" + "5" * 64  # ready-fr with a trusted admit marker over this content
+    outside = _issue(
+        577,
+        author="eve",
+        author_association="NONE",
+        labels=["ready-fr"],
+        content_digest=digest,
+        admit_digest=digest,
+        admit_read=True,
+    )
     _state(tmp_path, _facts(issues=[outside, _issue(575), _issue(420)]))
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out

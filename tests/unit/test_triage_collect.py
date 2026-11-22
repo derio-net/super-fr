@@ -1094,7 +1094,7 @@ def _assoc_forge(issues: list[dict[str, Any]], **kw: Any) -> FakeForge:
 _ASSOC_SCOPE = Scope(kind="repo", target=_OUTSIDE)
 
 
-def test_facts_are_schema_15_and_every_issue_has_an_author_association_key() -> None:
+def test_facts_carry_the_current_schema_and_every_issue_has_an_author_association_key() -> None:
     facts = collect_facts(_assoc_forge([_by(1, "eve")]), _ASSOC_SCOPE, now=NOW)
     doc = facts.to_json()
     assert doc["schema"] == FACTS_SCHEMA
@@ -1124,13 +1124,21 @@ def test_the_association_is_read_once_per_repo_and_stored() -> None:
     assert {i.number: i.author_association for i in facts.issues} == {1: "NONE", 2: "MEMBER"}
 
 
-def test_no_association_read_when_every_issue_is_admitted_by_login_or_label() -> None:
-    forge = _assoc_forge(
-        [_by(1, "operator"), _by(2, "eve", labels=["ready-fr"])],
-    )
+def test_no_association_read_when_every_issue_is_admitted_by_login() -> None:
+    forge = _assoc_forge([_by(1, "operator"), _by(2, "Operator")])
     facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
     assert forge.association_calls == []
     assert [i.author_association for i in facts.issues] == [None, None]
+
+
+def test_the_ready_fr_label_no_longer_skips_the_association_read() -> None:
+    forge = _assoc_forge(
+        [_by(1, "operator"), _by(2, "eve", labels=["ready-fr"])],
+        associations={_OUTSIDE: {2: "NONE"}},
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert forge.association_calls == [_OUTSIDE]
+    assert [i.author_association for i in facts.issues] == [None, "NONE"]
 
 
 def test_a_pr_authors_login_admits_without_a_read() -> None:
@@ -1267,3 +1275,140 @@ def test_a_bot_issue_keeps_its_body_only_with_the_digest_marker() -> None:
     )
     facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
     assert {i.number: i.body for i in facts.issues} == {1: f"{MARKER}\ndigest", 2: ""}
+
+
+# ------------------------------- withheld titles, pinned admission (2026-11-22 R1, R4, R5, R7)
+
+
+def _admit_comment(title: str, body: str, *, author: str = "operator", at: str) -> dict[str, Any]:
+    from fr.triage.admit import admit_marker, content_digest
+
+    return {"author": author, "body": admit_marker(content_digest(title, body)), "created_at": at, "id": 7}
+
+
+def test_an_outside_authors_issue_is_stored_with_no_title_and_no_body() -> None:
+    forge = _assoc_forge([_by(1, "eve", body="inject", authorAssociation="CONTRIBUTOR")])
+    (issue,) = collect_facts(forge, _ASSOC_SCOPE, now=NOW).issues
+    assert (issue.title, issue.body) == ("", "")
+    assert issue.url and issue.author == "eve"
+
+
+def test_a_ready_fr_issue_with_a_trusted_marker_over_its_full_content_is_eligible() -> None:
+    from fr.triage.admit import content_digest
+    from fr.triage.collect import BODY_LIMIT
+    from fr.triage.intake import issue_reason
+
+    long_body = "x" * (BODY_LIMIT + 50)
+    raw = _by(1, "eve", labels=["ready-fr"], body=long_body, authorAssociation="CONTRIBUTOR")
+    marker = _admit_comment(raw["title"], long_body, at="2026-09-20T00:00:00Z")
+    forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [marker]})
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    (issue,) = facts.issues
+    assert issue.content_digest == content_digest(raw["title"], long_body)
+    assert issue.admit_digest == issue.content_digest and issue.admit_read
+    assert issue_reason(issue, facts) is None
+    assert issue.title == raw["title"] and len(issue.body) == BODY_LIMIT
+
+
+def test_a_ready_fr_issue_edited_after_its_marker_is_ineligible() -> None:
+    from fr.triage.intake import issue_reason
+
+    raw = _by(1, "eve", labels=["ready-fr"], body="edited", authorAssociation="CONTRIBUTOR")
+    marker = _admit_comment(raw["title"], "original", at="2026-09-20T00:00:00Z")
+    forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [marker]})
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    (issue,) = facts.issues
+    reason = issue_reason(issue, facts) or ""
+    assert "edited after admission" in reason and "fr triage admit" in reason
+    assert (issue.title, issue.body) == ("", "")
+
+
+def test_a_member_authored_ready_fr_issue_reads_its_association_and_no_comments() -> None:
+    from fr.triage.intake import issue_reason
+
+    forge = _assoc_forge(
+        [_by(1, "bob", labels=["ready-fr"], body="text")],
+        associations={_OUTSIDE: {1: "MEMBER"}},
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    (issue,) = facts.issues
+    assert forge.association_calls == [_OUTSIDE]
+    assert issue.author_association == "MEMBER" and issue_reason(issue, facts) is None
+    assert forge.called("list_issue_comments") == []
+    assert issue.body == "text"
+
+
+def test_a_failed_admit_read_leaves_only_that_issue_ineligible() -> None:
+    from fr.triage.intake import issue_reason
+
+    forge = _assoc_forge(
+        [
+            _by(1, "eve", labels=["ready-fr"], authorAssociation="CONTRIBUTOR"),
+            _by(2, "bob", authorAssociation="MEMBER"),
+        ],
+        comments={(_OUTSIDE, 1): ForgeError("HTTP 502")},
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)  # repo scope: a skip would raise
+    assert facts.skipped == []
+    by = {i.number: i for i in facts.issues}
+    assert by[1].admit_read is False and "HTTP 502" in (by[1].admit_unread or "")
+    assert "comments not read" in (issue_reason(by[1], facts) or "")
+    assert issue_reason(by[2], facts) is None
+
+
+def test_a_forge_that_cannot_list_comments_says_so() -> None:
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.triage.intake import issue_reason
+
+    unsupported = ForgeError("no comments")
+    unsupported.__cause__ = UnsupportedForgeOperation("list_issue_comments", "gitlab")
+    forge = _assoc_forge(
+        [_by(1, "eve", labels=["ready-fr"], authorAssociation="CONTRIBUTOR")],
+        comments={(_OUTSIDE, 1): unsupported},
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert "this forge cannot list comments" in (issue_reason(facts.issues[0], facts) or "")
+
+
+def test_a_claim_marker_by_an_untrusted_author_is_recorded_by_login() -> None:
+    forged = {"author": "stranger", "body": _CLAIM, "created_at": "2026-10-01T00:00:00Z", "id": 3}
+    forge = _claim_forge({("derio-net/super-fr", 1): [forged]})
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    (entry,) = facts.ignored_claims
+    assert (entry.repo, entry.number, entry.authors) == ("derio-net/super-fr", 1, ["stranger"])
+
+
+def test_a_claimed_ready_fr_issue_reads_its_comments_once() -> None:
+    from fr.triage.intake import issue_reason
+
+    raw = _by(1, "eve", labels=["ready-fr", "fr:claimed"], body="b", authorAssociation="NONE")
+    marker = _admit_comment(raw["title"], "b", at="2026-09-20T00:00:00Z")
+    forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [marker]})
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert len(forge.called("list_issue_comments")) == 1
+    assert issue_reason(facts.issues[0], facts) is None
+
+
+def test_a_schema_15_facts_file_loads_with_titles_and_label_only_text_withheld(
+    tmp_path: Path,
+) -> None:
+    from fr.triage.model import load_facts
+
+    forge = _assoc_forge(
+        [
+            _by(1, "eve", body="outside text", authorAssociation="NONE"),
+            _by(2, "bob", labels=["ready-fr"], body="label only", authorAssociation="NONE"),
+        ]
+    )
+    doc = collect_facts(forge, _ASSOC_SCOPE, now=NOW).to_json()
+    doc["schema"] = 15
+    doc.pop("ignored_claims")
+    for issue, (title, body) in zip(
+        doc["issues"], [("titled one", "outside text"), ("titled two", "label only")], strict=True
+    ):
+        for key in ("content_digest", "admit_digest", "admit_read", "admit_unread"):
+            issue.pop(key)
+        issue["title"], issue["body"] = title, body  # what a schema-15 writer kept
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert [(i.title, i.body) for i in load_facts(path).issues] == [("", ""), ("", "")]

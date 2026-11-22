@@ -96,7 +96,7 @@ class FakeForge:
         failing: dict[str, str] | None = None,
         closed: dict[tuple[str, int], dict[str, Any]] | None = None,
         file_bodies: dict[tuple[str, str, str], str | Exception] | None = None,
-        comments: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
+        comments: dict[tuple[str, int], list[dict[str, Any]] | Exception] | None = None,
         head_prs: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
         viewer: str = "operator",
         visibility: dict[str, str] | None = None,
@@ -215,7 +215,10 @@ class FakeForge:
 
     def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]:
         self.calls.append(("list_issue_comments", {"repo": repo, "number": number}))
-        return self.comments.get((repo, number), [])
+        got = self.comments.get((repo, number), [])
+        if isinstance(got, Exception):
+            raise got
+        return got
 
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))

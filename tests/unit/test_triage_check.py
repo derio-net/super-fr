@@ -631,9 +631,18 @@ def test_an_outside_open_issue_is_untrusted_with_its_reason_and_in_no_other_set(
     assert [i.key for i in result.unplaced] == ["super-fr#2"]
 
 
-def test_a_ready_fr_label_admits_an_outside_issue() -> None:
-    result = classify(_facts([_outside(1, labels=["ready-fr"])]), Judgements())
+def test_a_ready_fr_label_with_a_matching_admit_marker_admits_an_outside_issue() -> None:
+    digest = "sha256:" + "1" * 64
+    admitted = _outside(
+        1, labels=["ready-fr"], content_digest=digest, admit_digest=digest, admit_read=True
+    )
+    result = classify(_facts([admitted]), Judgements())
     assert result.untrusted == [] and [i.key for i in result.unranked] == ["super-fr#1"]
+
+
+def test_a_ready_fr_label_alone_admits_nothing() -> None:
+    result = classify(_facts([_outside(1, labels=["ready-fr"])]), Judgements())
+    assert [i.key for i, _ in result.untrusted] == ["super-fr#1"]
 
 
 def test_check_prints_and_emits_the_untrusted_set(tmp_path: Path) -> None:

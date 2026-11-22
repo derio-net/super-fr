@@ -370,12 +370,12 @@ def test_the_facts_schema_is_pinned_here_once_and_read_back_to_3() -> None:
     a bump edits this line, the constant and its comment in `model.py`, nothing else."""
     from fr.triage.model import FACTS_READS, FACTS_SCHEMA, Facts
 
-    assert FACTS_SCHEMA == 15
+    assert FACTS_SCHEMA == 16
     assert FACTS_READS == tuple(range(3, FACTS_SCHEMA + 1))
     assert Facts.model_fields["schema_"].default == FACTS_SCHEMA
 
 
-@pytest.mark.parametrize("schema", [2, 16])
+@pytest.mark.parametrize("schema", [2, 17])
 def test_a_facts_stamp_outside_the_reads_is_refused(schema: int) -> None:
     from fr.triage.model import Facts
 

@@ -161,11 +161,14 @@ def parse_marker(body: str) -> Marker | None:
 @dataclass(frozen=True)
 class ClaimRead:
     """The un-released claims on one issue, and how many claim markers were ignored:
-    malformed, or posted by an author not trusted (R17)."""
+    malformed, or posted by an author not trusted (R17). `untrusted_authors` are the
+    logins of those untrusted markers, each once, in reading order
+    (2026-11-22-triage-hardening R7)."""
 
     claims: list[Claim] = field(default_factory=list)
     malformed: int = 0
     untrusted: int = 0
+    untrusted_authors: list[str] = field(default_factory=list)
 
 
 def _created(comment: Mapping[str, object]) -> datetime | None:
@@ -195,6 +198,7 @@ def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[st
     allowed = {t.lower() for t in trusted}
     latest: dict[str, tuple[Marker, int, datetime]] = {}
     malformed = untrusted = 0
+    authors: list[str] = []
     for comment in comments:
         try:
             marker = parse_marker(str(comment.get("body") or ""))
@@ -203,6 +207,9 @@ def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[st
             continue
         if marker is not None and not trusted_author(comment, allowed):
             untrusted += 1
+            login = str(comment.get("author") or "") or "unknown author"
+            if login not in authors:
+                authors.append(login)
             continue
         cid, created = comment.get("id"), _created(comment)
         if marker is None or not isinstance(cid, int) or created is None:
@@ -223,7 +230,7 @@ def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[st
         for m, cid, created in latest.values()
         if m.released is None
     ]
-    return ClaimRead(sorted(claims, key=_order), malformed, untrusted)
+    return ClaimRead(sorted(claims, key=_order), malformed, untrusted, authors)
 
 
 def to_issue_claim(c: Claim) -> IssueClaim:

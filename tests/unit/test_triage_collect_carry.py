@@ -29,6 +29,7 @@ def _carried(number: int, *, repo: str = REPO, state: str = "closed") -> Issue:
         title="old",
         state=state,  # type: ignore[arg-type]
         url=f"https://github.com/{repo}/issues/{number}",
+        author="operator",  # the viewer: intake admits it, so its title is kept (R1)
     )
 
 
@@ -36,6 +37,7 @@ def _view(number: int, *, repo: str = REPO) -> dict[str, Any]:
     return {
         "number": number,
         "title": f"fresh #{number}",
+        "author": {"login": "operator"},
         "body": "",
         "labels": [],
         "state": "CLOSED",

@@ -177,7 +177,7 @@ def _outside_state(tmp_path: Path, *numbers: int) -> Path:
     return tmp_path
 
 
-def test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_nothing(
+def test_create_refuses_an_untrusted_member_naming_it_and_the_admit_verb_and_writes_nothing(
     tmp_path: Path, gh: FakeGhClient
 ) -> None:
     _state(tmp_path)
@@ -190,7 +190,7 @@ def test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_no
     )  # fmt: skip
     flat = " ".join(out.split())
     assert code == 2, out
-    assert "super-fr#577: author eve is NONE" in flat and "ready-fr" in flat
+    assert "super-fr#577: author eve is NONE" in flat and "fr triage admit" in flat
     assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
     assert gh.calls == calls  # no claim op
 

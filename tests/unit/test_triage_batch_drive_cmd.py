@@ -2076,7 +2076,7 @@ def test_a_preflight_refusal_does_not_stop_a_merge_when_no_closeout_is_due(
 def test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
-    """Triage-intake R6: blocked (counted), never dispatched, until `ready-fr` admits it."""
+    """Triage-intake R6: blocked (counted), never dispatched, until an operator admits it."""
     world.issues[1] = "open"
     world.outside = {1}
     _state(tmp_path, world, _batch("b1", 1))
@@ -2085,7 +2085,7 @@ def test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted(
         assert code == 3, out
         (line,) = _lines(out, "blocked")
         assert line.startswith("blocked b1: members intake does not admit: super-fr#1: author eve")
-        assert "ready-fr" in line
+        assert "fr triage admit" in line
         assert runner.dispatched == []
     world.outside = set()
     _state(tmp_path, world, _batch("b1", 1))
@@ -2097,7 +2097,8 @@ def test_a_batch_with_an_untrusted_member_is_blocked_every_pass_until_admitted(
 def test_the_driver_and_the_board_fill_rejected_alike(tmp_path: Path, world: World) -> None:
     from fr.triage.views import drive_snapshot
 
-    # 1 outside author (rejected) · 2 a pr_authors login (trusted) · 3 `ready-fr` (admitted)
+    # 1 outside author (rejected) · 2 a pr_authors login (trusted) · 3 `ready-fr` with a
+    # matching admit marker (admitted)
     # · 4 no longer collected (rejected) · 5 a maintainer's (admitted)
     world.issues.update({1: "open", 2: "open", 3: "open", 4: "open", 5: "open"})
     world.outside = {1, 2, 3}
@@ -2106,7 +2107,12 @@ def test_the_driver_and_the_board_fill_rejected_alike(tmp_path: Path, world: Wor
     facts = world.facts()
     by = {
         2: {"author": "release-bot"},
-        3: {"labels": ["ready-fr"]},
+        3: {
+            "labels": ["ready-fr"],
+            "content_digest": "sha256:" + "3" * 64,
+            "admit_digest": "sha256:" + "3" * 64,
+            "admit_read": True,
+        },
     }
     facts = facts.model_copy(
         update={
