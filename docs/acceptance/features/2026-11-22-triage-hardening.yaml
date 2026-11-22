@@ -107,3 +107,10 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_every_issue_is_admitted_by_login
     why: the login half of the split test
+  - row: intake-batch-refuses-untrusted
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_verbs.py#test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_nothing
+    why: 'renamed: the refusal names fr triage admit, not the label (triage-hardening
+      R4)'
