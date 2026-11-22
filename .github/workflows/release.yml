@@ -30,7 +30,7 @@ name: Release
 # 2026-10-11-merge-train-safety §F). Unset: the push uses the GITHUB_TOKEN, and
 # a push made with the GITHUB_TOKEN triggers no workflow, so no CI runs on the
 # release commit. Set: the app-token step mints a token for the
-# derio-fr-automation GitHub App from the FR_AUTOMATION_APP_KEY secret of the
+# super-fr-release GitHub App (this repo's alone) from the FR_AUTOMATION_APP_KEY secret of the
 # release environment and the
 # release commit and tag are pushed as the app, so CI runs on the release
 # commit and release.yml runs once more on it, as a no-op. The token is scoped to

@@ -2,7 +2,7 @@
 
 ## Background
 
-The release workflow can push as the `derio-fr-automation` GitHub App (spec
+The release workflow can push as a GitHub App (spec
 `2026-10-11-merge-train-safety` §F), so a ruleset that requires the `ci-ok`
 check can let the release commit through. The state of `derio-net/super-fr` on
 2026-11-20:
@@ -11,6 +11,13 @@ check can let the release commit through. The state of `derio-net/super-fr` on
   variable `FR_AUTOMATION_APP_ID` is set, and the ruleset "protect main"
   (`deletion`, `non_fast_forward`) lists the app as a bypass actor with
   `bypass_mode: always`.
+- The variable holds 3994132, the id of `derio-fr-automation`. That app is
+  frank's: it is installed on every repository of the org, holds ten
+  permissions that frank's token generators, gitops push and CI-budget jobs use,
+  and its key is on frank's cluster (found 2026-11-22, by the script's own dry
+  run). Narrowing it would break frank, and granting it a bypass here would
+  reach every holder of that key. So the release gets its own app,
+  `super-fr-release` (operator decision, 2026-11-22).
 - No secret `FR_AUTOMATION_APP_KEY` exists. Because the variable is set, every
   release fails at `publish` (`create-github-app-token`: the private-key input
   is empty). Releases are blocked.
@@ -56,10 +63,13 @@ state. An **offer** is optional cleanup: the preflight unset (R11), deleting the
 continues the script. `--dry-run` reads the state, prints each write that it
 would make, and writes nothing.
 
-R6. The app step checks that `derio-fr-automation` is installed on the owner,
+R6. The release app is `super-fr-release`, a GitHub App that serves this repo
+alone; no app another system uses is ever this repo's release app. The app step
+checks that `super-fr-release` is installed on the owner,
 that its `repository_selection` is `selected`, and that its permissions are
 exactly contents write, issues write and metadata read. Any other permission,
-or `all` repositories, stops the script and names the web UI fix. `gh`'s
+or `all` repositories, stops the script. Its message says to give the repo its
+own app, and never to narrow an app that something else uses. `gh`'s
 OAuth token cannot read an installation's repository list, so that check is
 the key step's (R8).
 
@@ -95,7 +105,10 @@ R11. The variable step sets `FR_AUTOMATION_APP_ID` to the installation's app id
 only when both hold: the `release` environment secret exists, and `main`'s
 `release.yml` declares `environment: release` (read with
 `gh api repos/<repo>/contents/.github/workflows/release.yml?ref=main`). Until
-then it says what it waits for and leaves the variable as it is. The script
+then it says what it waits for and leaves the variable as it is. A variable
+that holds another app's id is replaced once the environment secret exists,
+without the wait on `main`'s `release.yml`: a set variable has already chosen
+app mode, so a new value changes no mode. The script
 finds the half-done state, where the variable is set and no environment secret
 exists, before any other step. It says that releases fail until both hold. It
 then offers to unset the variable, which brings releases back to
@@ -239,7 +252,7 @@ merge; the rest after it.
    `require` waits for an app-pushed release.
 2. Rerun it: every step prints `ok` or the same wait, and nothing is written.
 3. Merge the PR. The merge's Release run passes `publish`, and the new `v*`
-   tag's commit has a push-event CI run triggered by `derio-fr-automation[bot]`.
+   tag's commit has a push-event CI run triggered by `super-fr-release[bot]`.
    (If the variable is not set, because you unset it in step 1 or the repo never
    had it, rerun the script first. It sets the
    variable, and the next release goes out as the app.)

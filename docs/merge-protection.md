@@ -7,14 +7,14 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
+reviewed: 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
 ---
 
 # Merge protection for `main`
 
 A ruleset can make the `ci-ok` check and an up-to-date branch mandatory for this repo's `main`. The
 release workflow still has to push the release commit. So it does that as a
-GitHub App, `derio-fr-automation`, which only the `require ci-ok` ruleset lets bypass. Specs:
+GitHub App, `super-fr-release`, which only the `require ci-ok` ruleset lets bypass. Specs:
 `docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md` §F and
 `docs/superpowers/specs/2026-11-21-release-app-hardening-design.md`.
 
@@ -64,8 +64,17 @@ script to give it the policy.
 
 ## Security model
 
-The app is `derio-fr-automation`. This is what it can do, and where its key lives.
+The app is `super-fr-release`. This is what it can do, and where its key lives.
 
+- **Why its own app.** An app's key works on every repo the app is installed on.
+  It also works with every permission the app has.
+  The environment and the rulesets protect this repo only.
+  So the app serves this repo alone, with the release permissions alone.
+  Its key is stored nowhere but the `release` environment.
+  Do not use an app that another system uses.
+  For example, `derio-fr-automation` is frank's app. Its key is on frank's cluster.
+  The script does not accept an app with more repos or more permissions.
+  Do not narrow a shared app to make the script pass. That breaks its other users.
 - **What the app can do.** It has contents write and issues write on this repo only.
   It can push commits, create tags and releases, and write issues.
   It bypasses only the `ci-ok` check.
@@ -109,7 +118,7 @@ If you decline an optional cleanup, the script goes on.
 `--dry-run` prints every write and makes none.
 
 1. **In the web UI, create the app** if it does not exist.
-    - Name it `derio-fr-automation`.
+    - Name it `super-fr-release`. Do not reuse an app that another system uses.
     - Turn the webhook off.
     - Set Repository permissions: Contents read and write, Issues read and write, Metadata read-only.
     - Set every other permission to No access.
@@ -124,17 +133,18 @@ If you decline an optional cleanup, the script goes on.
     If the variable `FR_AUTOMATION_APP_ID` is set and no environment secret exists, releases fail.
     The script says so and offers to unset the variable.
     Decline the offer if the PR that adds the environment merges next.
+    If the variable holds another app's ID, the script replaces it after it stores the key.
     The script then does these steps:
     - It checks the app installation and its permissions.
     - It creates the `release` environment with a main-only branch policy.
     - When no environment secret exists (or with `--rotate-key`), it asks for the `.pem` path. It proves the key belongs to the app, and that the app reaches only this repo. It stores the key as the environment secret.
-    - It waits to set the variable until main's `release.yml` declares the environment.
+    - When the variable is not set, it waits to set it until main's `release.yml` declares the environment.
     - It removes the app's bypass from `protect main`. When `protect main` still holds the old `ci-ok` rule, it keeps the bypass there and leaves the move to the require step (step 7).
     - It creates `protect release tags`.
     - It says that the require step waits for a release that the app pushed.
 5. **Merge the PR.** The Release run then passes `publish`.
     With the variable set, the app pushes the release.
-    The new `v*` tag's commit then has a push-event CI run that `derio-fr-automation[bot]` triggered.
+    The new `v*` tag's commit then has a push-event CI run that `super-fr-release[bot]` triggered.
 6. **Run the script again if the variable is not set.** The variable is not set when you unset it in step 4, or when the repo never had it.
     The script sets it now, because `main` declares the environment.
     The next release goes out as the app.
@@ -158,7 +168,7 @@ Use `gh` for each check.
 - **Key.** `gh secret list --env release --repo OWNER/REPO` lists `FR_AUTOMATION_APP_KEY`. `gh secret list --repo OWNER/REPO` does not list it.
 - **Variable.** `gh variable list --repo OWNER/REPO` shows `FR_AUTOMATION_APP_ID`, set to the App ID.
 - **Rulesets.** `gh api repos/OWNER/REPO/rulesets` lists `protect main`, `protect release tags` and `require ci-ok`. Read each one by id. `protect main` and `protect release tags` have no bypass actor.
-- **Release.** The new `v*` tag's commit has a push-event Actions run with `derio-fr-automation[bot]` as the triggering actor.
+- **Release.** The new `v*` tag's commit has a push-event Actions run with `super-fr-release[bot]` as the triggering actor.
 
 ## Roll back
 
@@ -189,7 +199,8 @@ Copy the pieces that the repo needs:
 - the script, whose app slug, variable name, secret name and ruleset names are
   constants at the top.
 
-Create and install the app as in the steps above. Then run the script with `--repo`.
+Create a separate app for that repo, as in steps 1 to 3. Never reuse this repo's app.
+Set the app slug in the script to the new app's name. Then run the script with `--repo`.
 
 ## What the wave driver does with it
 

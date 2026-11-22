@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set a repo up to release as the derio-fr-automation GitHub App, safely
+# Set a repo up to release as its own GitHub App (super-fr-release), safely
 # (spec 2026-11-21-release-app-hardening, R3-R14). Runbook: docs/merge-protection.md.
 #
 # Run it from your own shell with your own `gh`. Steps run in a fixed order:
@@ -23,7 +23,9 @@
 set -euo pipefail
 umask 077
 
-APP_SLUG="derio-fr-automation"
+# The app is this repo's alone: installed on this repo only, with exactly the release
+# permissions. Never point this at an app another system uses; create one per repo.
+APP_SLUG="super-fr-release"
 VAR_NAME="FR_AUTOMATION_APP_ID"
 SECRET_NAME="FR_AUTOMATION_APP_KEY"
 ENV_NAME="release"
@@ -239,6 +241,11 @@ preflight() {
   fi
 }
 
+shared_app_hint() { # the fix for a wider app is a dedicated one, never a narrowed one
+  echo "Give $repo its own GitHub App, named $APP_SLUG, installed on $repo only (docs/merge-protection.md)." >&2
+  echo "If anything else uses this app, never narrow it: that breaks those users." >&2
+}
+
 # ---- 1 app (R6) -------------------------------------------------------------------
 
 step_app() {
@@ -255,7 +262,7 @@ step_app() {
   inst="$(jq -cs --arg s "$APP_SLUG" '[.[].installations[] | select(.app_slug == $s)][0] // empty' <<<"$installs")"
   if [ -z "$inst" ]; then
     echo "refusing: the $APP_SLUG app is not installed on $owner." >&2
-    echo "Install it in the web UI (docs/merge-protection.md), on selected repositories only." >&2
+    echo "Create and install it in the web UI (docs/merge-protection.md), on this repo only." >&2
     exit 1
   fi
   INST_ID="$(jq -r .id <<<"$inst")"
@@ -265,12 +272,12 @@ step_app() {
   want='{"contents":"write","issues":"write","metadata":"read"}'
   if [ "$sel" != "selected" ]; then
     echo "refusing: $APP_SLUG is installed on '$sel' repositories; it must be 'selected'." >&2
-    echo "Fix it in the web UI: https://github.com/organizations/$owner/settings/installations/$INST_ID" >&2
+    shared_app_hint
     exit 1
   fi
   if [ "$perms" != "$want" ]; then
     echo "refusing: $APP_SLUG permissions are $perms; they must be exactly $want." >&2
-    echo "Fix it in the web UI: the app's settings (Permissions & events), then accept the change on the installation." >&2
+    shared_app_hint
     exit 1
   fi
   ok "$APP_SLUG installed on selected repositories with contents write, issues write, metadata read"
@@ -367,7 +374,7 @@ prove_key() { # prove_key KEYPATH: the key is the app's, and the app sees only t
   revoke_token
   if [ "$names" != "$repo" ]; then
     echo "refusing: the installation reaches [$names], not only $repo; nothing stored." >&2
-    echo "Fix it in the web UI: https://github.com/organizations/$owner/settings/installations/$INST_ID" >&2
+    shared_app_hint
     return 1
   fi
   REPOS_PROVEN=1
@@ -439,12 +446,17 @@ step_variable() {
     ok "$VAR_NAME is $APP_ID"
     return 0
   fi
+  if [ -n "$VAR_VAL" ] && [ "$VAR_VAL" != "$APP_ID" ]; then
+    note "$VAR_NAME is $VAR_VAL, another app's id; $APP_SLUG is $APP_ID."
+  fi
   if [ "$ENV_SECRET" -eq 0 ]; then
     VAR_WAIT=1
     note "waits: $VAR_NAME is set only once the $ENV_NAME environment secret exists."
     return 0
   fi
-  if ! main_release_declares_env; then
+  # A variable that is already set has already chosen app mode, so giving it the right
+  # id changes no mode; only a first set waits for main's release.yml.
+  if [ -z "$VAR_VAL" ] && ! main_release_declares_env; then
     VAR_WAIT=1
     note "waits: main's release.yml does not declare 'environment: $ENV_NAME' yet; merge the PR that does, then rerun."
     return 0

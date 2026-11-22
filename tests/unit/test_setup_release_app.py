@@ -173,7 +173,7 @@ def installation(**over: Any) -> dict[str, Any]:
     inst = {
         "id": INST_ID,
         "app_id": APP_ID,
-        "app_slug": "derio-fr-automation",
+        "app_slug": "super-fr-release",
         "repository_selection": "selected",
         "permissions": dict(GOOD_PERMS),
     }
@@ -279,9 +279,9 @@ def sandbox(tmp_path: Path) -> Path:
     _j(
         tmp_path,
         "runs.json",
-        {"workflow_runs": [{"triggering_actor": {"login": "derio-fr-automation[bot]"}}]},
+        {"workflow_runs": [{"triggering_actor": {"login": "super-fr-release[bot]"}}]},
     )
-    _j(tmp_path, "app.json", {"id": APP_ID, "slug": "derio-fr-automation"})
+    _j(tmp_path, "app.json", {"id": APP_ID, "slug": "super-fr-release"})
     _j(tmp_path, "inst_repos.json", {"repositories": [{"full_name": "o/r"}]})
     return tmp_path
 
@@ -406,7 +406,7 @@ def test_dry_run_from_the_half_done_state_prints_every_pending_step_in_order(san
 
 def test_the_app_step_passes_on_selected_and_exact_permissions(sandbox: Path) -> None:
     r = run(sandbox)
-    assert "ok: derio-fr-automation installed" in r.stdout
+    assert "ok: super-fr-release installed" in r.stdout
     assert not any("user/installations" in c for c in calls(sandbox))
 
 
@@ -418,12 +418,15 @@ def test_the_app_step_passes_on_selected_and_exact_permissions(sandbox: Path) ->
         {"repository_selection": "all"},
     ],
 )
-def test_the_app_step_refuses_a_wrong_installation_and_names_the_web_ui(
+def test_the_app_step_refuses_a_wrong_installation_and_never_says_narrow_it(
     sandbox: Path, over: dict[str, Any]
 ) -> None:
+    """A wider app may be another system's app: the hint is a dedicated app, not a narrowing."""
     _j(sandbox, "installations.json", installation(**over))
     r = run(sandbox)
-    assert r.returncode != 0 and "web UI" in r.stderr
+    assert r.returncode != 0
+    assert "its own GitHub App" in r.stderr and "never narrow" in r.stderr
+    assert "Fix it in the web UI" not in r.stderr
     assert writes(sandbox) == []
     assert not any("user/installations" in c for c in calls(sandbox))
 
@@ -647,6 +650,7 @@ def test_a_wrong_repository_list_refuses_stores_nothing_and_revokes(
     _j(sandbox, "inst_repos.json", {"repositories": repos})
     r = run(sandbox, stdin=answers(str(key_pem), "y"))
     assert r.returncode != 0 and "not only o/r" in r.stderr
+    assert "its own GitHub App" in r.stderr and "Fix it in the web UI" not in r.stderr
     assert not any(c.startswith("secret set") for c in calls(sandbox))
     assert (sandbox / "stub" / "revoked.log").read_text().strip() == "revoked"
     assert TOKEN not in r.stdout + r.stderr
@@ -823,6 +827,23 @@ def test_the_variable_is_set_to_the_installations_app_id_once_both_hold(sandbox:
     assert r.returncode == 0, r.stderr
     assert writes(sandbox) == [f"variable set FR_AUTOMATION_APP_ID --body {APP_ID} --repo o/r"]
     assert _read(sandbox, "variables.json")[0]["value"] == str(APP_ID)
+
+
+def test_a_variable_naming_another_app_is_replaced_once_the_secret_exists(sandbox: Path) -> None:
+    """The variable already decides the mode, so a new value is safe before main declares the env."""
+    _j(sandbox, "variables.json", [{"name": "FR_AUTOMATION_APP_ID", "value": "111"}])
+    (sandbox / "stub" / "release_yml.txt").write_text("jobs:\n  prepare:\n    runs-on: x\n")
+    r = run(sandbox, stdin=answers("y"))
+    assert r.returncode == 0, r.stderr
+    assert "FR_AUTOMATION_APP_ID is 111, another app's id" in r.stdout
+    assert writes(sandbox) == [f"variable set FR_AUTOMATION_APP_ID --body {APP_ID} --repo o/r"]
+
+
+def test_a_variable_naming_another_app_waits_for_the_secret(sandbox: Path) -> None:
+    _j(sandbox, "variables.json", [{"name": "FR_AUTOMATION_APP_ID", "value": "111"}])
+    _j(sandbox, "secrets_env.json", [])
+    run(sandbox, stdin=answers("n"))
+    assert "variable set" not in " ".join(writes(sandbox))
 
 
 def test_a_variable_with_the_right_value_is_ok(sandbox: Path) -> None:
@@ -1059,7 +1080,7 @@ def test_installations_are_read_across_every_page(sandbox: Path) -> None:
     _j(sandbox, "installations2.json", {"installations": second["installations"][1:]})
     r = run(sandbox)
     assert r.returncode == 0, r.stderr
-    assert "ok: derio-fr-automation installed" in r.stdout
+    assert "ok: super-fr-release installed" in r.stdout
 
 
 def test_a_user_owned_repo_is_refused_with_the_reason(sandbox: Path) -> None:

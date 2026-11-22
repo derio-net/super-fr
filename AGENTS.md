@@ -667,8 +667,9 @@ read-only and fine to run anywhere. A hand-written `fr_version` floor
 (`>=X.Y.Z,<X.Y.Z` under `packages/*/src`) naming an unreleased version must
 name the predicted one: the base version plus this PR's highest fragment bump.
 
-**Release identity.** `release.yml` pushes as the `derio-fr-automation` GitHub
-App when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
+**Release identity.** `release.yml` pushes as the `super-fr-release` GitHub
+App, which serves this repo alone (installed here only, contents and issues write,
+metadata read; `derio-fr-automation` is frank's app and is never used here), when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
 the `release` environment secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
 step, scoped to this repo with contents and issues write only, never persisted by
 checkout and stripped from the staged test run), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
