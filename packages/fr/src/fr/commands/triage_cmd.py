@@ -57,12 +57,14 @@ from fr.triage.drive_errors import fail_exit
 from fr.triage.driver_record import view_inputs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import moved_notes, resolve_manifest
+from fr.triage.intake import issue_reason
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import (
     Batch,
     CloseoutEvent,
     CursorReader,
     Facts,
+    Issue,
     Judgements,
     Scope,
     issue_key,
@@ -779,6 +781,13 @@ def _load_state(
     return target_dir, facts, judgements
 
 
+def _withheld_line(issue: Issue, why: str) -> str:
+    """An ineligible issue as check prints it: key, URL, author and reason, never its title
+    (2026-11-22-triage-hardening R1)."""
+    author = issue.author or "author not read"
+    return f"{escape(issue.key)}  {escape(issue.url)}  ({escape(author)}: {escape(why)})"
+
+
 @triage_app.command("check")
 def check_command(
     repo: RepoOpt = None,
@@ -880,7 +889,8 @@ def check_command(
         "debt marker, by no trusted author: ignored, never read for figures"
     )
     for i in result.untrusted_digests:
-        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+        why = issue_reason(i, facts) or "carries the debt marker, not by the debt workflow"
+        console.print(f"  {_withheld_line(i, why)}", soft_wrap=True)
     console.print(
         f"[bold]owed[/bold] ({len(result.owed)}) — open, fr:owed: an operator action is owed; "
         "not ranked or proposed"
@@ -889,10 +899,22 @@ def check_command(
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
         f"[bold]untrusted[/bold] ({len(result.untrusted)}) — open, by an author intake does not "
-        "admit: never judged, ranked or batched; label it ready-fr to admit it"
+        "admit: never judged, ranked or batched; an operator admits one with "
+        "`fr triage admit <key>`"
     )
     for i, why in result.untrusted:
-        console.print(f"  {escape(i.key)}  {escape(i.title)} — {escape(why)}", soft_wrap=True)
+        console.print(f"  {_withheld_line(i, why)}", soft_wrap=True)
+    console.print(
+        f"[bold]ignored claims[/bold] ({len(result.ignored_claims)}) — claim markers by an "
+        "account intake does not trust: other hosts ignore its claims"
+    )
+    for c in result.ignored_claims:
+        for login in c.authors:
+            console.print(
+                f"  {escape(c.key)}  {escape(login)}: add {escape(login)} to pr_authors in "
+                f"{escape(c.repo)}'s .fr/triage.yaml",
+                soft_wrap=True,
+            )
     console.print(
         f"[bold]no severity[/bold] ({len(result.no_severity)}) — open, judged, no severity"
     )

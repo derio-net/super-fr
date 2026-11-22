@@ -210,3 +210,10 @@ def test_a_pre_15_facts_file_loads_with_ineligible_text_withheld(tmp_path: Any) 
     assert loaded[2].body == "trusted text" and loaded[2].title == "issue 2"
     assert loaded[3].body == f"intro\n{MARKER}\nmore"
     assert (loaded[4].title, loaded[4].body) == ("", "")  # the label alone no longer admits
+
+
+def test_the_rejection_line_names_the_admit_verb_not_the_label() -> None:
+    from fr.triage.intake import rejection_line
+
+    line = rejection_line([("super-fr#1", "author eve is NONE")])
+    assert "fr triage admit <key>" in line and "labelling" not in line

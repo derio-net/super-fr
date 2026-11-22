@@ -889,3 +889,20 @@ def test_the_board_with_duplicates_is_deterministic() -> None:
         {3: {}, 9: {"duplicate_of": "super-fr#3"}},
     )
     assert render_issues(facts, judgements) == render_issues(facts, judgements)
+
+
+def test_an_issue_row_with_a_withheld_title_shows_the_key_and_a_quiet_note() -> None:
+    """2026-11-22-triage-hardening R1: a page never shows an ineligible issue's title."""
+    from fr.triage.model import Issue
+    from fr.triage.render import TITLE_WITHHELD, _row, issue_title
+
+    issue = Issue(
+        repo="example-org/widgets",
+        number=4,
+        title="",
+        state="open",
+        url="https://github.com/example-org/widgets/issues/4",
+    )
+    row = _row(issue, judgement=None, tier="", order=0, show_repo=True, patterns=[])
+    assert TITLE_WITHHELD in row and "widgets#4" in row
+    assert issue_title("a <b>") == "a &lt;b&gt;"

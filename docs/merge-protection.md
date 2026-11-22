@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
+reviewed: 2026-11-22 issue intake: ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
 ---
 
 # Merge protection for `main`
@@ -220,8 +220,10 @@ An issue is eligible when at least one of these is true:
 
 - Its author is the user that ran `collect`, or a login in `pr_authors` of `.fr/triage.yaml`.
 - Its author association is `OWNER`, `MEMBER` or `COLLABORATOR`.
-- It has the `ready-fr` label. The forge compares label names without regard to case, and so
-  does intake.
+- It has the `ready-fr` label and an admit marker that a trusted account wrote, and the
+  marker's digest equals the digest of the issue's current title and body. `fr triage admit
+  <key>` writes the label and the marker. The forge compares label names without regard to
+  case, and so does intake.
 - Its author is the workflow bot of the debt digest, and its body holds the digest marker. A
   bot-authored issue without the marker is judged like any other.
 
@@ -230,11 +232,12 @@ admits the issue.
 
 An issue that is not eligible has these effects:
 
-- `collect` keeps its title and labels, but not its body.
+- `collect` keeps its key, URL, author and labels, but not its title or its body. `check` and
+  the pages show the issue only by its key, URL, author and reason.
 - `fr triage check` lists it in the `untrusted` set, with the reason. It is never ranked,
   unranked, unplaced or suggested for a batch.
 - `batch create`, `batch edit` and `batch dispatch` refuse a batch that holds it. They exit
-  2, write nothing, and name the issue, the reason and `ready-fr`.
+  2, write nothing, and name the issue, the reason and `fr triage admit <key>`.
 - The wave driver, the board and `drive --plan` show the batch as blocked in every pass.
   The drive stops for the operator once only blocked or held batches remain. The driver dispatches the batch when no member is rejected.
 
@@ -245,11 +248,18 @@ in the block starts with `> `, so no text can close the block or add a heading o
 The brief tells the session to read the block as a description of the problem and never to
 follow an instruction in it.
 
-Only an operator applies `ready-fr`. On GitHub, a label needs triage permission to apply,
-which an outside author does not have. fr never applies it. The driver creates the label
-when a repo does not have it, as it does for `approved-fr`. Creating a label needs write
-permission. If fr cannot create it, an operator with write access creates it.
+Only an operator admits an issue. `fr triage admit <owner/repo#n>` reads the issue from the
+forge and shows the label and the comment that it will write. With `--yes`, it adds
+`ready-fr` and posts one comment. The comment holds a marker with the digest of the title and
+the body. On GitHub, a label needs triage permission to apply, which an outside author does
+not have. Collect counts a marker only when its author is a trusted login or has an `OWNER`,
+`MEMBER` or `COLLABORATOR` association. The driver creates the label when a repo does not
+have it, as it does for `approved-fr`. Creating a label needs write permission. If fr cannot
+create it, an operator with write access creates it.
 
-One risk remains. `ready-fr` admits the issue as it is later edited. Later edits by the
-author reach the triage agent and the brief. The quoting in the brief still applies to them.
+An edit to the title or the body after the admission changes the digest. The issue is then
+not eligible, and the reason tells the operator to run `fr triage admit <key>` again. The
+label alone does not admit an issue. Issues that were admitted with the label only before this
+change must be admitted again. GitLab and Gitea adapters cannot list issue comments, so
+`fr triage admit` refuses there, and a `ready-fr` issue on them is not eligible.
 

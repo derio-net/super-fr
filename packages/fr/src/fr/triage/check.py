@@ -43,9 +43,13 @@ Pure: facts and judgements in, sets out. The command only formats them.
   legacy) as a line of their own, and open `fr:owed` issues (debt-engine R14, R16). Like
   awaiting live they are never ranked, unranked, unplaced or without severity; each
   digest's figures are parsed from its body at check time;
-- **untrusted** — an open issue the intake rule finds ineligible (an outside author, no
-  `ready-fr` label; spec 2026-11-17-triage-intake R4), with its reason. It is never ranked,
-  unranked, unplaced or proposed in a batch, and the skill never judges it;
+- **untrusted** — an open issue the intake rule finds ineligible (an outside author with no
+  admission by `fr triage admit`; spec 2026-11-17-triage-intake R4, 2026-11-22-triage-hardening
+  R4), with its reason. It is shown by key, URL, author and reason only, never by title (R1).
+  It is never ranked, unranked, unplaced or proposed in a batch, and the skill never judges it;
+- **ignored claims** — claim markers collect ignored because their authors are not trusted
+  (2026-11-22-triage-hardening R7), each with the fix: list the account in the repo's
+  `pr_authors`;
 - **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
   proposes as duplicates, with each flagged pair's reasons. A proposal, never a
   verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;
@@ -73,6 +77,7 @@ from fr.triage.intake import issue_reason, untrusted_issues
 from fr.triage.model import (
     Batch,
     Facts,
+    IgnoredClaims,
     Issue,
     IssueClaim,
     Judgements,
@@ -203,6 +208,8 @@ class CheckResult:
     owed: list[Issue] = field(default_factory=list)
     # Open issues intake finds ineligible, with the reason (triage-intake R4).
     untrusted: list[tuple[Issue, str]] = field(default_factory=list)
+    # Claim markers collect ignored as untrusted, per issue (2026-11-22-triage-hardening R7).
+    ignored_claims: list[IgnoredClaims] = field(default_factory=list)
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
@@ -238,9 +245,14 @@ class CheckResult:
             "duplicate_chained": list(self.duplicate_chained),
             "awaiting_live": [row(i) for i in self.awaiting_live],
             "debt_digests": [{**row(i), "figures": issue_figures(i)} for i in self.debt_digests],
-            "untrusted_digests": [row(i) for i in self.untrusted_digests],
+            # Shown by key, URL, author and reason only, never by title (R1).
+            "untrusted_digests": [{**row(i), "title": ""} for i in self.untrusted_digests],
             "owed": [row(i) for i in self.owed],
-            "untrusted": [{**row(i), "reason": why} for i, why in self.untrusted],
+            "untrusted": [{**row(i), "title": "", "reason": why} for i, why in self.untrusted],
+            "ignored_claims": [
+                {"key": c.key, "repo": c.repo, "authors": list(c.authors)}
+                for c in self.ignored_claims
+            ],
             "duplicate_candidates": [
                 {
                     "keys": list(g.keys),
@@ -578,6 +590,7 @@ def classify(
         ],
         owed=[i for i in facts.issues if is_owed(i)],
         untrusted=untrusted_issues(facts),
+        ignored_claims=list(facts.ignored_claims),
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
         claims=(

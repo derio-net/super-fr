@@ -460,6 +460,15 @@ def esc(s: str) -> str:
     return html.escape(s, quote=True)
 
 
+TITLE_WITHHELD = '<span class="quiet">title withheld</span>'
+
+
+def issue_title(title: str) -> str:
+    """An issue's title for a page: escaped, or a quiet "title withheld" where collect
+    withheld it, an ineligible issue's text (2026-11-22-triage-hardening R1)."""
+    return esc(title) if title else TITLE_WITHHELD
+
+
 def inline(text: str, linker: Linker | None = None) -> str:
     """Escape first, then allow exactly `code` and **bold** (spec §3.D), then, with a
     *linker*, link each PR or issue reference outside a code span (triage-pages-ux R11).
@@ -529,7 +538,7 @@ def _duplicates_block(duplicates: Sequence[Nested]) -> str:
         )
         closed = ' <span class="tag">closed</span>' if d.issue.state == "closed" else ""
         cmd = f" <code>{esc(d.command)}</code>" if d.command else ""
-        lines.append(f"<li>{link} {esc(d.issue.title)}{closed}{cmd}</li>")
+        lines.append(f"<li>{link} {issue_title(d.issue.title)}{closed}{cmd}</li>")
     return (
         f'<p class="dupes"><strong>Duplicates</strong></p><ul class="dupes">{"".join(lines)}</ul>'
     )
@@ -659,7 +668,7 @@ def _row(
     return (
         f'<details class="row" {attr_s}>'
         f'<summary><span class="num">{esc(label)}</span>'
-        f'<span class="title">{esc(issue.title)}</span>'
+        f'<span class="title">{issue_title(issue.title)}</span>'
         f'<span class="tags">{"".join(tags)}</span>{cx_chip}'
         f'<span class="pill stage-{stage}">{stage}</span></summary>'
         f'<div class="detail">{"".join(detail)}</div></details>'
@@ -1149,7 +1158,7 @@ def _parked(facts: Facts, judgements: Judgements) -> str:
             original = by_key.get(dup)
             ref = _link(dup, original.url) if original else esc(dup)
             note = f" <em>duplicate of {ref}</em>"
-        lis.append(f"<li>{_link(i.key, i.url)} {esc(i.title)}{note}</li>")
+        lis.append(f"<li>{_link(i.key, i.url)} {issue_title(i.title)}{note}</li>")
     items = "".join(lis)
     return fold("parked", "Parked", len(parked), f"<ul>{items}</ul>")
 
