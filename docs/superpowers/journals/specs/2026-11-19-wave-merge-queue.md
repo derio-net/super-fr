@@ -506,3 +506,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-10 created=2026-11-22T21:26:24+00:00 -->
+### exit-change-10 · decision · exit change: row wave-queue-leave-wave -> strategy live
+
+needs a driver's real forge-read snapshot; CI proves it with the pure planner and the fake forge (Test Plan 22), walked on the next wave after merge
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
