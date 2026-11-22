@@ -1970,11 +1970,11 @@ def drive_pass(snap: Snapshot) -> Pass:
         if _collected_under_way(repo, snap) or item_id in snap.existing:
             continue  # one at a time; a live session of this item is not started twice
         taking = tuple(collecting[repo])
-        if (stale := snap.closeout_waits.get(repo)) is not None:  # gh#1569: owed, not held
-            key = f"closeout-wait\0{repo}\0{stale}"
+        if (migrating := snap.closeout_waits.get(repo)) is not None:  # gh#1569: owed, not held
+            key = f"closeout-wait\0{repo}\0{migrating}"
             if key not in snap.warned:
                 actions.append(Action("warn", taking[0], f"close-out of {', '.join(taking)} "
-                                      f"waits for the release that migrates {stale}",
+                                      f"waits for the release that migrates {migrating}",
                                       head=key))  # fmt: skip
             continue
         actions.append(
@@ -2158,11 +2158,12 @@ def drive_pass(snap: Snapshot) -> Pass:
             items = [batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id)]
             # gh#1494: the collected close-out's session, once its PR merged and every
             # batch it planned or carried is finished (a held one keeps it open).
-            marker = _collected_marker_of(batch, snap.closeouts)
-            if (marker is not None and marker.merged and marker.item not in collected_done
-                    and all(finished(b) for b in {*marker.planned, *marker.members})):  # fmt: skip
-                collected_done.add(marker.item)
-                items.append(marker.item)
+            carrier = _collected_marker_of(batch, snap.closeouts)
+            carried = {*carrier.planned, *carrier.members} if carrier is not None else set()
+            if (carrier is not None and carrier.merged and carrier.item not in collected_done
+                    and all(finished(b) for b in carried)):  # fmt: skip
+                collected_done.add(carrier.item)
+                items.append(carrier.item)
             live = tuple(i for i in items if i in snap.sessions)
             if live:
                 actions.append(Action("close", batch.id, f"sessions {', '.join(live)}", items=live))
