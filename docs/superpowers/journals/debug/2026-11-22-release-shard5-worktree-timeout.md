@@ -20,3 +20,8 @@ Running the test with FR_HARNESS_FR set to the real venv fr still passes (confte
 ### d982011bfda9 · ruled-out · Not reproduced by release shard 5 on macOS
 
 The same shard (durations-plan.json, --splits 6 --group 5, -n 4, -m '') passes locally on macOS: 2881 passed. Linux-specific or runner-specific.
+
+<!-- fr:journal kind=ruled-out scope=debug id=276e24ae2bdc created=2026-11-22T20:40:31+00:00 -->
+### 276e24ae2bdc · ruled-out · Not reproduced on Linux either: the staged release commit's shard 5/6 in Docker passes the test
+
+Cloned staged.bundle (331227f), origin/main pinned to ffb03a7, python 3.11 bookworm, 2 CPUs, -n 4, durations-plan.json: the target test passed (34 other failures are container gaps: no rsync, root user). So the hang needs something about the GitHub runner itself, not only Linux + test order. Also read: release.py strips only forge credentials from the env; the hook's EXIT trap is never replaced and nothing exec's past it.
