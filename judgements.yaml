@@ -9168,6 +9168,13 @@ batches:
     runner: herdr
     handle: w3V:p2
     branch: feat/batch-triage-hardening
+  - kind: red_handback
+    at: '2026-11-22T22:30:40.472862Z'
+    pr: 1630
+    head: 2c5c9f4785af35375acf3286934ec38f226c5bf2
+    checks:
+    - 1 failing check(s)
+    delivered: none
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
