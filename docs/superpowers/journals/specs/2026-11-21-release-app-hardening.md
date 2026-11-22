@@ -225,3 +225,38 @@ run_kind: candidate
 ### dedicated-release-app · decision · The release app is a dedicated super-fr-release app, not frank's derio-fr-automation
 
 decider: operator (2026-11-22). The dry run refused derio-fr-automation (installed on all repos, ten permissions). Reading frank showed it is frank's app: its token generators, gitops push, staging gate and CI-budget jobs use those permissions, and its key is on frank's cluster. Narrowing it would break frank; a bypass for it would reach every holder of that key. The operator chose a new app named super-fr-release. The script's refusals now say to create a dedicated app, never to narrow a shared one, and the variable step replaces a variable that holds another app's id once the environment secret exists.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-22T11:19:25+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Before merge, from the PR branch: `scripts/setup-release-app.sh --dry-run`, then `scripts/setup-release-app.sh`. It finds the half-done state; decline the unset offer. It checks the app, creates `release`, stores the key and checks the repo list with the app's own token. It says the variable waits for the merge, strips the bypass and adds the tag ruleset. It says that `require` waits for an app-pushed release.
+
+Evidence: Operator ran scripts/setup-release-app.sh on the live repo: release environment exists (can_admins_bypass false, one branch policy), key stored as an environment secret, no repo-level FR_* secret, FR_AUTOMATION_APP_ID=5872677; read back on GitHub 2026-11-22. Not independently shown to be pre-merge: the PR comment is the record of that run.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-22T11:19:26+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: Rerun it: every step prints `ok` or the same wait, and nothing is written.
+
+Evidence: Reruns of the script wrote nothing further (PR #1608 comment: later reruns had no key, so no installation recheck); state read back unchanged: rulesets 17365086, 27836375, 27838472 active.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-22T11:19:28+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: Merge the PR. The merge's Release run passes `publish`, and the new `v*` tag's commit has a push-event CI run triggered by `super-fr-release[bot]`. (If the variable is not set, because you unset it in step 1 or the repo never had it, rerun the script first. It sets the variable, and the next release goes out as the app.)
+
+Evidence: PR merged 2026-11-22T10:22:35Z. v8.3.0-rc.7 published 10:47:11Z by super-fr-release[bot]; tag commit 06a75f5fc has CI, acceptance-report and Release runs triggered by super-fr-release[bot], all success. Release run 45012140561 passed on attempt 2 (attempt 1 failed only on flaky test_hooks_worktree.py, #1463).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-22T11:19:29+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: Push a throwaway branch with a workflow that declares `environment: release` and prints whether the secret is empty. The job is refused by the branch policy. Delete the branch.
+
+Evidence: Run 45016349866 on throwaway branch env-check/throwaway-2026-11-22 (event push) concluded failure: job declaring environment: release refused by branch policy before any step ran. Branch deleted.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-22T11:19:31+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: Run the script again: the `require` step creates "require ci-ok". Record the walk on `release-app-setup-live`, and then on `ci-ok-required-on-main` (feature `2026-11-19-local-suite-cost`).
+
+Evidence: Ruleset require ci-ok (27838472) active: required check ci-ok, strict up-to-date, only bypass actor Integration 5872677 (super-fr-release); protect main and protect release tags carry no bypass. Read back via the rulesets API 2026-11-22. No refused merge observed yet.
