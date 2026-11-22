@@ -389,7 +389,7 @@ strategy: candidate
 - wave-queue-devops-barrier: live — needs PR labels and the DevOps stage's forge reads; the CI suite proves it with the fake forge (Test Plan 19).
 - wave-queue-broken-hold: live — needs a remote holding the hold ref and a forge; the CI suite proves it over real bare git remotes (Test Plan 20).
 - wave-queue-operator-loop: live — PR comments and Needs need a forge; the CI suite proves them with the fake forge (Test Plan 21).
-- wave-queue-leave-wave: none — needs a driver's forge-read snapshot; the CI suite proves it with the pure planner and the fake forge (Test Plan 22).
+- wave-queue-leave-wave: live — needs a driver's forge-read snapshot; the CI suite proves it with the pure planner and the fake forge (Test Plan 22).
 - wave-queue-visible: none — the queue line and board read forge state; the CI suite proves them with the fake forge (Test Plan 17).
 - wave-queue-post-merge: none — needs forge merged state and a driver checkout; the CI suite proves it over real bare git remotes (Test Plan 25).
 
