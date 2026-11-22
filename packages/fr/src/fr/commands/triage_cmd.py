@@ -827,7 +827,8 @@ def check_command(
     )
     for state in ("stale", "release-pending", "held"):
         for e in (e for e in result.closed_in_progress if e.state == state):
-            console.print(f"  {escape(e.key)}  {state}  {escape(e.title)}", soft_wrap=True)
+            title = escape(e.title) if e.title else "[dim]title withheld[/dim]"
+            console.print(f"  {escape(e.key)}  {state}  {title}", soft_wrap=True)
     console.print(f"[bold]unranked[/bold] ({len(result.unranked)}) — open, no judgement")
     for i in result.unranked:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
@@ -993,7 +994,9 @@ def clean_labels_command(
     if not yes:
         for t in targets:
             console.print(
-                f"would remove {both} from {t.key}  {t.title}", markup=False, soft_wrap=True
+                f"would remove {both} from {t.key}  {t.title or '(title withheld)'}",
+                markup=False,
+                soft_wrap=True,
             )
         console.print("nothing written; re-run with --yes to write", markup=False)
         return

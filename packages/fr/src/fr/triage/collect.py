@@ -766,8 +766,11 @@ def collect_facts_counted(
                 issue_limit,
                 associations,
             )
-            for raw in issues:
-                comment_facts[(repo, raw["number"])] = _comment_facts(forge, repo, raw, trusted)
+            # Kept local until the repo succeeds: a later claim-read failure skips the repo,
+            # and none of its issues may then reach facts (review p1-r2).
+            repo_comments = {
+                (repo, raw["number"]): _comment_facts(forge, repo, raw, trusted) for raw in issues
+            }
         except TriageError as exc:
             # A forge failure, or a config the repo's owner broke (review r2p-f4):
             # either way that one repo is skipped in org scope, never the collect.
@@ -776,6 +779,7 @@ def collect_facts_counted(
             skipped.append(Skipped(repo=repo, reason=str(exc)))
             continue
         collected.append(repo)
+        comment_facts.update(repo_comments)
         closed_hits.extend(_closed_in_progress(forge, repo, scope, trusted, issue_limit, warnings))
         gated_found, gated_miss = _gated_prs(forge, repo, pr_limit, warnings)
         gated.extend(gated_found)
@@ -1296,7 +1300,10 @@ def _closed_in_progress(
         out.append(
             StaleInProgress(
                 key=issue_key(repo, i["number"]),
-                title=i["title"],
+                # Outside-author text: this list reads no association, so only a trusted
+                # login keeps its title; any other is withheld, as an ineligible issue's is
+                # (2026-11-22-triage-hardening R1, review p1-r1).
+                title=i["title"] if _admitted(i, trusted) else "",
                 url=i["url"],
                 closed_at=i.get("closedAt"),
                 state=state,

@@ -1345,7 +1345,8 @@ def _closed_in_progress(entries: Sequence[StaleInProgress]) -> str:
     if not entries:
         return ""
     items = "".join(
-        f'<li>{_link(e.title, e.url)} <span class="mono">{esc(e.key)}</span> · '
+        f"<li>{_link(e.title, e.url) if e.title else _link(e.key, e.url) + ' ' + TITLE_WITHHELD} "
+        f'<span class="mono">{esc(e.key)}</span> · '
         f"<strong>{esc(e.state)}</strong>"
         + (f" · closed {esc(e.closed_at)}" if e.closed_at else "")
         + "</li>"
