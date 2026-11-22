@@ -15,3 +15,8 @@ Operator chose to keep the batch's single PR: one failing test per defect, then 
 ### rv-1497-sec · finding [fixed] · Approval release hardened after an automated security review of the #1497 commit
 
 Three findings, all fixed: (1) a First verdict could release a held PR the pass never recorded; now only Approved does. (2) Required checks were fetched only when the live head was the recorded one; now for every open head. (3) The verdict read one anchor batch's events; now every approval event of the PR across the marker's batches, oldest first, on both the record and the read side.
+
+<!-- fr:journal kind=decision scope=debug id=51531ee4c24d created=2026-11-22T21:29:28+00:00 -->
+### 51531ee4c24d · decision · #1496 keeps R15(3); the hand-back brief says rebase (operator's choice in the question round)
+
+The hand-back brief told the session to merge origin/<base> in, which can never satisfy exit-gates R15(3) (the recorded head is the only commit past the base). The operator chose, in this session's question round, to keep the trust anchor: the brief tells the session to rebase its one commit and force-push with lease, then re-record. A merged-in head stays closeout-needs-review, which approved-fr (#1497) releases. fr could not verify the answer from the transcript, so this entry does not claim answered_by operator.
