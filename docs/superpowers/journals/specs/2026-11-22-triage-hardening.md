@@ -217,3 +217,6 @@ run_kind: none
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-22-triage-hardening-p3 created=2026-11-22T21:38:05+00:00 -->
 ### phase-split-2026-11-22-triage-hardening-p3 · decision · ask: collect PRs past the limit, snapshot privacy keys and the filter-script guard (R11-R13) are an ask of their own
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-22-triage-hardening-p1 created=2026-11-22T21:38:08+00:00 -->
+### tier-2026-11-22-triage-hardening-p1 · decision · hard: phase 1 changes the intake trust gate every batch dispatch relies on (ready-fr admission, withheld outside-author text) and the facts schema
