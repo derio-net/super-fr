@@ -385,7 +385,7 @@ strategy: candidate
 - wave-queue-wave-exclusive: live — needs forge PR state; the CI suite proves it with the pure planner and the fake forge (Test Plan 9, 18).
 - wave-queue-approval-content: live — needs PR labels and heads; the CI suite proves it over a real git repo and the fake forge (Test Plan 5).
 - wave-queue-eject: live — needs forge checks and sessions; the CI suite proves it with the pure planner and the fake forge (Test Plan 6, 7).
-- wave-queue-one-path: none — needs forge merge state and rules; the CI suite proves it with the fake forge (Test Plan 12, 14, 15, 23, 24).
+- wave-queue-one-path: live — needs forge merge state and rules; the CI suite proves it with the fake forge (Test Plan 12, 14, 15, 23, 24).
 - wave-queue-devops-barrier: none — needs PR labels and the DevOps stage's forge reads; the CI suite proves it with the fake forge (Test Plan 19).
 - wave-queue-broken-hold: none — needs a remote holding the hold ref and a forge; the CI suite proves it over real bare git remotes (Test Plan 20).
 - wave-queue-operator-loop: none — PR comments and Needs need a forge; the CI suite proves them with the fake forge (Test Plan 21).
