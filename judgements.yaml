@@ -8845,6 +8845,15 @@ batches:
     run: 2026-11-19-feat-batch-train-truth
     archive: chore/closeout-2026-11-22-1
     archived: 1629
+  - kind: claims_released
+    at: '2026-11-22T21:40:25.676666Z'
+    keys:
+    - super-fr#1491
+    - super-fr#1492
+    - super-fr#1493
+    - super-fr#1540
+    - super-fr#1541
+    - super-fr#1543
 - id: run-durability
   title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
   ids:
