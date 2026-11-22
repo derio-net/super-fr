@@ -12,6 +12,7 @@ import re
 from collections.abc import Collection, Set
 from dataclasses import dataclass
 
+from fr.gates import TAG_ALTERNATION
 from fr.ops.gap import command_steps, step_apply_parts
 from fr.ops.model import TODO_CHECK
 from fr.spec import _step, test_plan_steps
@@ -20,7 +21,8 @@ SUMMARY_MAX = 80
 """The longest `summary:` a stub carries; a longer step text is clipped with `…`."""
 
 _LEAD_RE = re.compile(
-    r"^(?P<lead>\s*(?:\d+[.)]|[-*])\s+(?:\[(?:devops|tester)\](?:\s+|$))?)(?P<rest>.*)$"
+    r"^(?P<lead>\s*(?:\d+[.)]|[-*])\s+"
+    rf"(?:\[(?:{TAG_ALTERNATION})\](?:\s+|$))?)(?P<rest>.*)$"
 )
 _ITEM_PREFIX = re.compile(r"^\s*(?:\d+[.)]|[-*])\s+")
 
