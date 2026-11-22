@@ -13,9 +13,16 @@ rows:
       with no title or body; admitting it restores the title at the next collect
     origin:
     - spec:2026-11-22-triage-hardening#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py#test_an_outside_authors_issue_is_stored_with_no_title_and_no_body
+      - super-fr:tests/unit/test_triage_collect.py#test_a_schema_15_facts_file_loads_with_titles_and_label_only_text_withheld
+      - super-fr:tests/unit/test_triage_check.py#test_check_prints_and_emits_the_untrusted_set
+      - super-fr:tests/unit/test_triage_render.py#test_an_issue_row_with_a_withheld_title_shows_the_key_and_a_quiet_note
+    status: ci
+    notes: 'CI unit tests: collect withholds an outside author''s title and body, a
+      schema-15 file is withheld on load, check and pages show key, url, author and
+      reason'
     verify: none
   - id: intake-admit-pinned
     capability: triage-intake
