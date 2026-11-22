@@ -384,6 +384,9 @@ def _body(card: Card, scope_args: Sequence[str]) -> str:
     parts = [
         "<h4>Issues</h4><ul>" + "".join(_member(m) for m in card.members) + "</ul>",
     ]
+    closed = [m.key for m in card.members if m.stage == "closed"]
+    if closed and card.column in ("proposed", "waiting"):
+        parts.append(f'<p class="meta">already closed: {esc(", ".join(closed))}</p>')
     if card.pr is not None:
         parts.append(_pr(card.pr))
     parts.append(_lifecycle(card))

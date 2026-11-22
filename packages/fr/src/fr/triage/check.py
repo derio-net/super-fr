@@ -216,6 +216,11 @@ class CheckResult:
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
     closed_in_progress: list[StaleInProgress] = field(default_factory=list)
+    # Never-dispatched batches whose members are all closed or awaiting live (R9): each is
+    # retired with `fr triage batch cancel <id> --yes`.
+    obsolete_batches: list[str] = field(default_factory=list)
+    # Proposed batches with a closed member and an open one: batch id -> the closed keys.
+    stale_members: dict[str, list[str]] = field(default_factory=dict)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     config_ignored: list[tuple[str, list[str]]] = field(default_factory=list)
 
@@ -251,6 +256,8 @@ class CheckResult:
             "untrusted_digests": [{**row(i), "title": ""} for i in self.untrusted_digests],
             "owed": [row(i) for i in self.owed],
             "untrusted": [{**row(i), "title": "", "reason": why} for i, why in self.untrusted],
+            "obsolete_batches": list(self.obsolete_batches),
+            "stale_members": {b: list(keys) for b, keys in self.stale_members.items()},
             "ignored_claims": [
                 {"key": c.key, "repo": c.repo, "authors": list(c.authors)}
                 for c in self.ignored_claims
@@ -459,6 +466,20 @@ def batch_awaits_live(batch: Batch, facts: Facts) -> bool:
     return bool(members) and all(is_awaiting_live(i) for i in members)
 
 
+def stale_members(facts: Facts, judgements: Judgements) -> dict[str, list[str]]:
+    """Each proposed batch with a closed member and a member not closed, by batch id: the
+    closed keys, in member order (R9). A batch whose members are all closed is `obsolete`."""
+    found = {i.key: i for i in facts.issues}
+    out: dict[str, list[str]] = {}
+    for batch in judgements.batches:
+        if derive_batch_stage(batch, facts) != "proposed":
+            continue
+        closed = [k for k in batch.ids if k in found and found[k].state == "closed"]
+        if closed:
+            out[batch.id] = closed
+    return out
+
+
 def awaiting_live_issues(facts: Facts) -> list[Issue]:
     """The awaiting-live set: see the module docstring."""
     return [i for i in facts.issues if is_awaiting_live(i)]
@@ -566,6 +587,10 @@ def classify(
         owed=[i for i in facts.issues if is_owed(i)],
         untrusted=untrusted_issues(facts),
         ignored_claims=list(facts.ignored_claims),
+        obsolete_batches=[
+            b.id for b in judgements.batches if derive_batch_stage(b, facts) == "obsolete"
+        ],
+        stale_members=stale_members(facts, judgements),
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
         claims=(

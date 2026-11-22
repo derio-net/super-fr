@@ -899,6 +899,20 @@ def check_command(
     for i in result.owed:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
+        f"[bold]obsolete batches[/bold] ({len(result.obsolete_batches)}) — never dispatched, "
+        "every member closed or awaiting live: nothing left to do; retire each"
+    )
+    for bid in result.obsolete_batches:
+        console.print(
+            f"  {escape(bid)}  fr triage batch cancel {escape(bid)} --yes", soft_wrap=True
+        )
+    console.print(
+        f"[bold]stale members[/bold] ({len(result.stale_members)}) — proposed batches with a "
+        "member already closed: edit them before they dispatch"
+    )
+    for bid, keys in result.stale_members.items():
+        console.print(f"  {escape(bid)}  closed: {escape(', '.join(keys))}", soft_wrap=True)
+    console.print(
         f"[bold]untrusted[/bold] ({len(result.untrusted)}) — open, by an author intake does not "
         "admit: never judged, ranked or batched; an operator admits one with "
         "`fr triage admit <key>`"

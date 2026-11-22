@@ -81,6 +81,7 @@ Column = Literal[
     "needs-devops",
     "closing-out",
     "partial",
+    "obsolete",
     "done",
 ]
 
@@ -99,6 +100,9 @@ COLUMN_TITLES: Mapping[Column, str] = {
     # A merged batch with a member still open, owed its close-out (gh#985): the driver
     # still acts on it, so it is not Done until that close-out is archived.
     "partial": "Partial",
+    # A never-dispatched batch with nothing left to do (2026-11-22-triage-hardening R8):
+    # the operator retires it with `batch cancel`.
+    "obsolete": "Obsolete",
     "done": "Done",
 }
 """The columns, left to right (R2): the one ordered table every other read derives from."""
@@ -427,6 +431,8 @@ def column_of(
     """R2's table, from `derive_batch_stage`, `dependency_state` and `closeout_state`; a
     batch `lane_of` places is in that Needs-you lane instead (exit-gates R17). *stop* is
     the batch's live merge stop."""
+    if derive_batch_stage(batch, facts) == "obsolete":
+        return "obsolete"
     if not batch.events:
         waiting = any(dependency_state(d, batches, facts) != "satisfied" for d in batch.after)
         return "waiting" if waiting else "proposed"

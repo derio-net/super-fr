@@ -194,7 +194,7 @@ details.batch > .detail { padding: 4px 12px 10px; }
 .pill.bstage-dispatched, .pill.bstage-pr-open { background: var(--live); }
 .pill.bstage-merged { background: var(--accent); }
 .pill.bstage-partial { background: var(--sev-2); }
-.pill.bstage-cancelled, .pill.bstage-abandoned { background: var(--sev-4); }
+.pill.bstage-cancelled, .pill.bstage-abandoned, .pill.bstage-obsolete { background: var(--sev-4); }
 .pill.bstage-proposed { background: transparent; color: var(--muted);
   border: 1px solid var(--line); }
 .merge-order { margin: 8px 0 0; padding-left: 22px; font-size: .9rem; }
@@ -1392,7 +1392,7 @@ def _sections(
     by_key = {i.key: i for i in facts.issues}
     batches_by_key: dict[str, list[str]] = {}
     for b in judgements.batches:
-        if derive_batch_stage(b, facts) != "cancelled":
+        if derive_batch_stage(b, facts) not in {"cancelled", "obsolete"}:
             for key in b.ids:
                 batches_by_key.setdefault(key, []).append(b.id)
     order = 0
