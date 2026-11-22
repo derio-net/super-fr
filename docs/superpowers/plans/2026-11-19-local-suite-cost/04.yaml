@@ -14,10 +14,10 @@ tasks:
   steps:
   - id: P4.T1.S1
     text: |-
-      Operator: run `scripts/configure-main-protection.sh --stage bypass` (see docs/merge-protection.md), and confirm FR_AUTOMATION_APP_ID is set so the next release is pushed by the app.
+      Operator: follow the order in docs/merge-protection.md: run `scripts/setup-release-app.sh` before the release-app-hardening PR merges, then confirm FR_AUTOMATION_APP_ID is set so the next release is pushed by the app.
   - id: P4.T1.S2
     text: |-
-      Operator: after a release pushed by the app, run `scripts/configure-main-protection.sh --stage require`, accepting that every PR must then be up to date with main before it merges.
+      Operator: after a release pushed by the app, run `scripts/setup-release-app.sh` again (its require step), accepting that every PR must then be up to date with main before it merges.
 state:
   steps:
     P4.T1.S1:
