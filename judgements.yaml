@@ -9091,6 +9091,13 @@ batches:
     runner: herdr
     handle: w3V:p1
     branch: fix/batch-closeout-truth
+  - kind: red_handback
+    at: '2026-11-22T22:37:19.345948Z'
+    pr: 1628
+    head: d6d61087940ae03d64f749ae9b0b62d229c96e0f
+    checks:
+    - 1 failing check(s)
+    delivered: none
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
