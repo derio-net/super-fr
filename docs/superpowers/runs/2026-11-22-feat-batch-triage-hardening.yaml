@@ -3,7 +3,7 @@ run: 2026-11-22-feat-batch-triage-hardening
 workflow: fr-goal@1
 branch: feat/batch-triage-hardening
 started: '2026-11-22T21:14:29+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-22-triage-hardening-design.md
   spec-review:
-    state: running
-    at: '2026-11-22T21:28:01+00:00'
+    state: done
+    at: '2026-11-22T21:35:12+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-11-22T21:28:01+00:00'
+          agent: a64281c148b07bb22
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: claude-opus-5-5
           session: 5afe35a7-6e3f-431b-a9ac-cf6dfd3fc3e4
+          returned: '2026-11-22T21:35:10+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a64281c148b07bb22
+          findings: s-r1,s-r2,s-r3,s-r4,s-r5,s-r6,s-r7,s-r8,s-r9,s-r10,s-r11,s-r12,s-r13
   plan:
     state: pending
   plan-review:
