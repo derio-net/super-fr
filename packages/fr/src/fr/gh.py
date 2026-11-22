@@ -416,9 +416,10 @@ def swap_issue_labels(
     No-op if both lists are empty. Failure propagates as GhError, except a REMOVAL gh reports as
     `'<label>' not found` (the repo never defined it, so the issue cannot carry it): that is
     already the wanted end state, so it is dropped and the call retried, at most `len(remove)`
-    times. gh is expected to resolve every label before it mutates anything; if it ever applied
-    part of a refused call first, the retry only repeats an add or a removal, both idempotent. A
-    missing ADD label still fails.
+    times. Correctness does not depend on whether gh resolves every label before it mutates: if a
+    refused call applied part of its change first, the retry only repeats an add or a removal,
+    and a repeated add or removal is idempotent, so the issue ends with exactly the wanted
+    labels. A missing ADD label still fails.
     """
     remaining = list(remove)
     for _ in range(len(remove) + 1):

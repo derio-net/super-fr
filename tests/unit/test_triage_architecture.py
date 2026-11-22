@@ -641,3 +641,21 @@ def test_a_subsystem_card_links_an_issue_only_through_an_https_url() -> None:
     assert item and "<a " not in item.group(1) and "widgets#1" in item.group(1)
     other = re.search(r'<li data-issue="widgets#2">(.*?)</li>', page)
     assert other and 'href="https://github.com/example-org/widgets/issues/2"' in other.group(1)
+
+
+def test_this_repos_architecture_manifest_resolves_with_the_decomposition_fragment() -> None:
+    """Spec 2026-11-16-architecture-review-sweep R13: the repo's own architecture page
+    names no missing file, every fragment it names is valid, and the decomposition
+    fragment sits directly after the pipeline fragment."""
+    from fr.triage.fragments import resolve_manifest, validate_fragment
+
+    page = (
+        Path(__file__).resolve().parents[2] / "docs" / "triage" / "derio-net--super-fr"
+    ) / "architecture"
+    resolved = resolve_manifest(page, GENERATED, MOVED)
+    assert resolved.missing == []
+    for name, text in resolved.fragments.items():
+        validate_fragment(name, text)
+    assert "decomposition.html" in resolved.fragments
+    names = [entry.name for entry in resolved.order]
+    assert names[names.index("pipeline.html") + 1] == "decomposition.html"

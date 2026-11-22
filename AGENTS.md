@@ -76,6 +76,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`CAPABILITIES`, the closed set `requires:` validates against) is a
     sibling of `fr/workflow`, not inside it; `fr_dispatch.capabilities` is
     a two-line re-export kept for import back-compat.
+  - **Gate names** (`fr/gates.py`, 2026-11-16 spec `architecture-review-sweep`): `Gate` is the
+    vocabulary and `PostMergeGate` (`tester`, `devops`) the post-merge subset. The step tag of a Test
+    Plan line (`fr.spec.StepGate`, `_TAG_RE`), the ops stub's leading tag, a strategy manifest's `gate:`
+    and a triage `exit:` remap value all derive from them (`tests/unit/test_gate_vocabulary.py`).
   - **`fr/verification`** (2026-10-06 spec, `verification-strategies`) — how a change
     is proven: `model.py` (`StrategyManifest`, closed placeholders), `resolve.py`
     (repo > env > wheel > marketplace, same order as workflows), `check.py`
@@ -200,6 +204,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     inputs), `snapshot.py` stores/diffs the per-render snapshots (`render.py` reads no clock; the command passes it),
     `components.py` holds the colour tokens, the phone gutter and the one `tabs()` component. `Judgement.kind` and
     `Judgements.features` load on any schema; `check` has an `unplaced` set.
+    **Timestamps:** `timestamps.py`'s `parse_aware` is the one reader of a forge or fact timestamp
+    that must be timezone-aware (`None` for missing, unparseable or naive); a second function with
+    its body fails `tests/unit/test_triage_timestamps.py`.
     **Origins and the architecture page** (same spec, E and F): `fr triage origins {collect,check,render}`
     (`origins.py`; classification is the `fr-origins` skill's) and `fr triage architecture render`
     (`architecture.py`): the snapshot timeline, measured sections (line counts via the `gitseam`
@@ -683,16 +690,21 @@ read-only and fine to run anywhere. A hand-written `fr_version` floor
 (`>=X.Y.Z,<X.Y.Z` under `packages/*/src`) naming an unreleased version must
 name the predicted one: the base version plus this PR's highest fragment bump.
 
-**Release identity.** `release.yml` pushes as the `derio-fr-automation` GitHub
-App when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
-secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
+**Release identity.** `release.yml` pushes as the `super-fr-release` GitHub
+App, which serves this repo alone (installed here only, contents and issues write,
+metadata read; `derio-fr-automation` is frank's app and is never used here), when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
+the `release` environment secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
 step, scoped to this repo with contents and issues write only, never persisted by
 checkout and stripped from the staged test run), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
 way: a `GITHUB_TOKEN` push runs no CI on the release commit, an app push does,
-and `release.yml` then runs once more as a no-op. The app is the ruleset's bypass
-actor once `scripts/configure-main-protection.sh --stage bypass` has run; `--stage
-require` then adds the required `ci-ok` check and refuses until a release was
-pushed by the app. Order and consumer adoption: `docs/merge-protection.md`.
+and `release.yml` then runs once more as a no-op. Only `prepare` and `publish` name
+the `release` environment, whose branch policy allows `main` alone (spec
+`2026-11-21-release-app-hardening`; `test_release_workflow.py` pins it). One script,
+`scripts/setup-release-app.sh`, makes the app check, the environment, the key, the
+variable and three rulesets: `protect main` and `protect release tags` hold no bypass
+actor, and the app is the only bypass actor of `require ci-ok`, which the script
+creates only after a release was pushed by the app. Order, security model and
+consumer adoption: `docs/merge-protection.md`.
 
 On every push to `main`, `.github/workflows/release.yml` runs
 `scripts/release.py` as a **job graph** (spec `2026-11-01-ci-speed` §3.D):
@@ -723,7 +735,7 @@ the push and only tags. To release a specific number, run the workflow by hand
 exits non-zero and prints the `gh workflow run release.yml -f version=<X>` that
 re-dispatches it, since no later run carries the override. `main`'s ruleset
 forbids only force-push and deletion today; **once
-a required-PR or required-checks rule is added (`--stage require`), the app must
+a required-PR or required-checks rule is added (the script's require step), the app must
 be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting the
 variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
 every release fails (release.py reports that refusal
@@ -875,6 +887,15 @@ exists and how it's checked, not a restatement:
   adds tests for an existing row, or ships a surface a `not-implemented` row waits on
   updates the rows in the *same* PR. Gate: `fr acceptance check` via
   `.github/workflows/acceptance-report.yml`. Driver skill: `fr-acceptance`.
+- **import direction** (`tests/unit/test_import_direction.py`) — the package-boundary guard
+  reads imports from the syntax tree (`ast`), so a comma list, an alias or a nested import is
+  seen; dynamic imports and entry-point loading are not judged. An unparseable file fails it.
+- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — the five
+  largest modules (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
+  `triage/batch_drive.py`) may not grow past their budget, and a budget may not sit more than 400
+  lines above its module. When it fails, move the new code into the module the architecture report
+  (`docs/superpowers/audits/2026-11-16-architecture-review.md`) names, or change the budget in the
+  same diff and say why in the PR.
 - **third-party-privacy** (2026-09-19) — live-verification evidence is
   redacted at capture time: hostnames, orgs, repo names and usernames outside
   the `derio-net` org never reach a spec, journal, fixture, matrix note, PR body

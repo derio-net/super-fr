@@ -119,6 +119,7 @@ ActionKind = Literal[
     "export",
     "export-reconcile",
     "export-closed",
+    "conflict-probe",
     "archive-conflict",
     "export-conflict",
     "awaiting-live",
@@ -973,6 +974,15 @@ def held_conflict(batch: Batch) -> ConflictEvent | None:
     return None
 
 
+def conflict_at(batch: Batch, head: str) -> ConflictEvent | None:
+    """The batch's latest `conflict` event at PR head *head*, whatever it delivered
+    (batch-train-truth R18): a PR so recorded is never one to approve."""
+    for event in reversed(batch.events):
+        if isinstance(event, ConflictEvent) and event.head == head:
+            return event
+    return None
+
+
 def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
     """How many fresh conflict sessions the batch started: all of them (the next one's
     number), or only since its latest dispatch (whether one is the message target)."""
@@ -1526,15 +1536,29 @@ def _dispatch_key(batch: Batch) -> tuple[int, int, int, int, str]:
     return (wave is None, wave or 0, order is None, order or 0, batch.id)
 
 
+def _probe_action(bid: str, pr: LivePr) -> Action:
+    return Action("conflict-probe", bid, f"PR #{pr.number} reads conflicting at {pr.head[:12]}",
+                  pr=pr.number, head=pr.head)  # fmt: skip
+
+
+def _red_action(bid: str, pr: LivePr) -> Action:
+    # Said on every pass: the command's recovery (§C) decides whether this pass has
+    # anything new to report, from the recorded events, not from memory.
+    return Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
+                  f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
+                  checks=pr.failing)  # fmt: skip
+
+
 def _member_reports(
     entries: Sequence[QueueEntry], snap: Snapshot
 ) -> tuple[list[Action], list[str], list[str]]:
     """What the pass says about a repo's pr-open batches before the queue takes them (the
     reports the retired merge train made, R22): a failing PR is a red `warn` for the red
-    recovery, wherever it sits; one with no valid approval is *awaiting* it, said by the
-    board; one a pre-merge gate holds is `held` (fr-ops R14: the DevOps stage owns it). A
-    draft is a member only with a valid approval (merge-train-safety §A). The queue itself
-    takes the rest: it plans no merge here."""
+    recovery, wherever it sits, draft or ready, approved or not (batch-train-truth R15);
+    one with no valid approval is *awaiting* it, said by the board; one a pre-merge gate
+    holds is `held` (fr-ops R14: the DevOps stage owns it). A draft is a member only with
+    a valid approval (merge-train-safety §A): an unapproved one is reported red and never
+    awaits approval. The queue itself takes the rest: it plans no merge here."""
     actions: list[Action] = []
     awaiting: list[str] = []
     ready: list[str] = []
@@ -1543,17 +1567,13 @@ def _member_reports(
         pr = snap.live.get(bid)
         verdict = snap.approvals.get(bid)
         approved = verdict is not None and is_approved(verdict)
-        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
-            continue  # not a member
-        if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
-            # Said on every pass: the command's recovery (§C) decides whether this pass
-            # has anything new to report, from the recorded events, not from memory.
-            actions.append(
-                Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
-                       f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
-                       checks=pr.failing)
-            )  # fmt: skip
+        if pr is None or pr.state != "OPEN":
             continue
+        if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
+            actions.append(_red_action(bid, pr))
+            continue
+        if pr.draft and not approved:
+            continue  # not a member
         if not approved:
             awaiting.append(bid)
             continue
@@ -1564,6 +1584,24 @@ def _member_reports(
         if pr.checks == "green":
             ready.append(bid)
     return actions, awaiting, ready
+
+
+def _conflict_probes(
+    entries: Sequence[QueueEntry], snap: Snapshot, slotted: frozenset[str]
+) -> list[Action]:
+    """batch-train-truth R17, on the queue: every open batch PR the forge reads as
+    conflicting, draft or ready, approved or not, is trial-merged early (`conflict-probe`)
+    unless the queue holds it as an entry (*slotted*): the queue's own rebuild and eject
+    own those."""
+    out: list[Action] = []
+    for entry in entries:
+        bid = entry.batch.id
+        pr = snap.live.get(bid)
+        if pr is None or pr.state != "OPEN" or bid in slotted:
+            continue
+        if conflicting(pr.mergeable, pr.merge_state):
+            out.append(_probe_action(bid, pr))
+    return out
 
 
 def _claim_actions(snap: Snapshot) -> list[Action]:
@@ -2027,6 +2065,9 @@ def drive_pass(snap: Snapshot) -> Pass:
     queues = _queue_plans(snap, held_ids, admitted)
     for qplan in queues:
         actions.extend(_queue_reports(qplan))
+    slotted = frozenset(k for q in queues for k in q.entries)
+    for repo in sorted(by_repo):
+        actions.extend(_conflict_probes(by_repo[repo], snap, slotted))
     open_waves = {q.repo: q.wave for q in queues if q.phase == "open"}
 
     # 4. Dispatch.

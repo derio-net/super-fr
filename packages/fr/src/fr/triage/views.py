@@ -47,6 +47,7 @@ from fr.triage.batch_drive import (
     checks_verdict,
     closeout_event,
     closeout_item_id,
+    conflict_at,
     drive_pass,
     fact_ledger_unknown,
     fact_ledgers,
@@ -58,6 +59,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.driver_record import DriverRecord, stopped, stopped_line
 from fr.triage.errors import TriageError
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
@@ -75,6 +77,7 @@ from fr.triage.model import (
 )
 from fr.triage.queue_exec import queue_config
 from fr.triage.scope_config import scope_id
+from fr.triage.timestamps import parse_aware
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -82,19 +85,9 @@ UNWAVED = "none"
 """The key of the pane that holds batches with no `wave`."""
 
 
-def _parse(stamp: str | None) -> datetime | None:
-    if not stamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
 def collected(facts: Facts) -> datetime:
     """The board's "now": when the facts were collected. Never a clock."""
-    parsed = _parse(facts.collected_at)
+    parsed = parse_aware(facts.collected_at)
     if parsed is None:
         raise ValueError(f"facts.collected_at is not an aware timestamp: {facts.collected_at!r}")
     return parsed
@@ -171,7 +164,7 @@ def drive_snapshot(
     for b in batches:
         if stages[b.id] in LANDED and closeout_event(b) is None:
             pr = batch_pr(b, facts)
-            when = _parse(pr.merged_at if pr else None)
+            when = parse_aware(pr.merged_at if pr else None)
             if when is not None:
                 merged_at[b.id] = when
     # The wave merge queue plans offline too, from the judgements' own queue records and the
@@ -235,7 +228,7 @@ class Need:
     #   (a collected close-out PR the driver will not merge unasked, R15)
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr
-    # | archive-conflict
+    # | archive-conflict | driver-stopped (a looping driver stopped on a refusal, R8)
     # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
     # | queue-need (the wave merge queue's own: a halt, a hold, a stall, a barrier, R28)
     kind: str
@@ -257,6 +250,7 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "archive-conflict": "Archive PR conflict",
+    "driver-stopped": "Driver stopped",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
     "gated-unread": "Gate labels unread",
@@ -302,12 +296,16 @@ def needs_you(
     *,
     ci_none: Collection[str] = (),
     stops: Mapping[str, MergeStop] | None = None,
+    driver: DriverRecord | None = None,
+    last_pass: datetime | None = None,
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
     (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is.
     *stops* are the driver's recorded merge stops (`merge_stops.load_stops`): a
-    conflicting export PR's, keyed `export:<repo>`, is a row (merge-truth R12)."""
+    conflicting export PR's, keyed `export:<repo>`, is a row (merge-truth R12). *driver*
+    is the scope's `driver.yaml` and *last_pass* the lease's: a refusal newer than the last
+    pass is a stopped driver, the first row (batch-train-truth R8)."""
     snap = drive_snapshot(facts, judgements, ci_none=ci_none)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
@@ -316,6 +314,8 @@ def needs_you(
         for found in found_all
     }  # fmt: skip
     out: list[Need] = []
+    if (refusal := stopped(driver, last_pass)) is not None:
+        out.append(Need("driver-stopped", refusal.cause, stopped_line(refusal), None))
 
     # The approval gate (merge-train-safety §A, R5): a green batch PR, draft or not,
     # merges only once the operator labels it; a voided label is asked for again.
@@ -328,6 +328,8 @@ def needs_you(
         approval = snap.approvals.get(entry.batch.id)
         if verdict != "green" or (approval is not None and is_approved(approval)):
             continue
+        if conflict_at(entry.batch, live.head if live is not None else pr.head_oid) is not None:
+            continue  # R18: conflicting at its head: handed back, or the merge-conflict need
         was = (
             approval.approved_head
             if isinstance(approval, Void)

@@ -90,6 +90,9 @@ class ClaimOp:
     kind: OpKind
     key: str
     batch: str | None
+    # a release also takes off `fr:in-progress` (the batch's run is over); a batch that
+    # never dispatched never put it there, so its release leaves it (batch-train-truth R21)
+    unlabel: bool = True
 
     def __post_init__(self) -> None:
         if self.batch is None and self.kind != "settle":
@@ -237,7 +240,7 @@ def execute(env: ClaimEnv, ops: Sequence[ClaimOp], now: datetime) -> SyncResult:
                     now=now,
                     trusted=trusted,
                     batch=op.batch,
-                    unlabel=True,
+                    unlabel=op.unlabel,
                 )
         except _WRITE_ERRORS as exc:
             result.failed.append((op, str(exc)))
