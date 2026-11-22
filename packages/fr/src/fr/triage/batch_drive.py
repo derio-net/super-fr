@@ -735,6 +735,16 @@ def closeout_of(batch: Batch, closeouts: Iterable[CollectedCloseout]) -> Closeou
     return None if marker is not None and marker.closed and not marker.merged else event
 
 
+def _collected_marker_of(
+    batch: Batch, closeouts: Iterable[CollectedCloseout]
+) -> CollectedCloseout | None:
+    """The start marker of the collected close-out *batch*'s close-out event names."""
+    event = closeout_event(batch)
+    if event is None or collected_name(event.archive or "") is None:
+        return None
+    return marker_of(event.archive or "", closeouts)
+
+
 def closeout_hold(batch: Batch) -> CloseoutHoldEvent | None:
     """The batch's `closeout_hold` since its last dispatch with no close-out after it (R15):
     the driver never collects it again; only `fr triage batch closeout <id>` retries it."""
@@ -2087,16 +2097,29 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 5. Close the sessions of finished batches. Never work remaining (R10): the
     # summary does not see it.
     if snap.close_sessions:
+        by_id = {b.id: b for b in snap.batches}
+
+        def finished(bid: str) -> bool:
+            b = by_id.get(bid)
+            repo = snap.repos.get(bid, "")
+            return b is not None and is_finished(
+                b, stages.get(bid, "proposed"), snap.archives.get(repo, ())
+            )
+
+        collected_done: set[str] = set()  # gh#1494: each collected session closes once
         for batch in chosen:
             repo = snap.repos.get(batch.id, "")
-            if not is_finished(
-                batch, stages.get(batch.id, "proposed"), snap.archives.get(repo, ())
-            ):
+            if not finished(batch.id):
                 continue
-            live = tuple(
-                i for i in (batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id))
-                if i in snap.sessions
-            )  # fmt: skip
+            items = [batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id)]
+            # gh#1494: the collected close-out's session, once its PR merged and every
+            # batch it planned or carried is finished (a held one keeps it open).
+            marker = _collected_marker_of(batch, snap.closeouts)
+            if (marker is not None and marker.merged and marker.item not in collected_done
+                    and all(finished(b) for b in {*marker.planned, *marker.members})):  # fmt: skip
+                collected_done.add(marker.item)
+                items.append(marker.item)
+            live = tuple(i for i in items if i in snap.sessions)
             if live:
                 actions.append(Action("close", batch.id, f"sessions {', '.join(live)}", items=live))
 

@@ -10,6 +10,7 @@ over the in-memory forge.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from typing import Any
 import pytest
 from fr.triage.batch_drive import (
     attributed,
+    batch_item_id,
     closeout_event,
     collected_item_id,
     drive_pass,
@@ -567,3 +569,48 @@ def test_p6b_r2_a_collected_pr_with_no_check_results_is_never_green(
     code, out = _drive(tmp_path, "--once", "--yes")
 
     assert "pr_merge 900" not in world.calls, out
+
+
+# ------------------------------------- gh#1494: the collected close-out session closes
+
+
+def _closed_out(*bids: str, finished: tuple[str, ...] | None = None, **kw: Any) -> Any:
+    """*bids* collected onto PR #900 on FIRST, merged; the ones in *finished* (default:
+    all) archived. Every batch's and the collected item's session is live."""
+    done = bids if finished is None else finished
+    events = {f"{b}_events": _recorded(**({"archived": 900} if b in done else {})) for b in bids}
+    events.update({k: kw.pop(k) for k in list(kw) if k.endswith("_events")})
+    marker = _anchored(bids, merged=True, planned=list(bids))
+    sessions = frozenset({ITEM, *(batch_item_id(REPO, b) for b in bids)})
+    return _landed(*bids, closeouts=(marker,), close_sessions=True, sessions=sessions,
+                   **events, **kw)  # fmt: skip
+
+
+def test_gh1494_the_collected_closeout_session_closes_with_its_last_finished_batch() -> None:
+    plan = drive_pass(_closed_out("a", "b"))
+    closed = {i for a in plan.actions if a.kind == "close" for i in a.items}
+    assert ITEM in closed
+    assert sum(ITEM in a.items for a in plan.actions if a.kind == "close") == 1
+
+
+def test_gh1494_the_collected_session_stays_while_one_of_its_batches_is_unfinished() -> None:
+    plan = drive_pass(_closed_out("a", "b", finished=("a",)))
+    closed = {i for a in plan.actions if a.kind == "close" for i in a.items}
+    assert ITEM not in closed
+    assert batch_item_id(REPO, "a") in closed
+
+
+def test_gh1494_a_collected_session_whose_pr_is_unmerged_stays() -> None:
+    snap = _closed_out("a")
+    snap = replace(snap, closeouts=(_anchored(("a",), planned=["a"]),))
+    plan = drive_pass(snap)
+    assert ITEM not in {i for a in plan.actions if a.kind == "close" for i in a.items}
+
+
+def test_gh1494_a_held_planned_batch_keeps_the_collected_session() -> None:
+    """A batch the close-out planned but held (closeout_hold) is the operator's to look
+    at through that session: never closed while it is unfinished."""
+    snap = _closed_out("a", "b", finished=("a",), b_events=[_hold()])
+    snap = replace(snap, closeouts=(_anchored(("a",), merged=True, planned=["a", "b"]),))
+    plan = drive_pass(snap)
+    assert ITEM not in {i for a in plan.actions if a.kind == "close" for i in a.items}
