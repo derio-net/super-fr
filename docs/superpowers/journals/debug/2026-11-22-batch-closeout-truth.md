@@ -20,3 +20,8 @@ Three findings, all fixed: (1) a First verdict could release a held PR the pass 
 ### 51531ee4c24d · decision · #1496 keeps R15(3); the hand-back brief says rebase (operator's choice in the question round)
 
 The hand-back brief told the session to merge origin/<base> in, which can never satisfy exit-gates R15(3) (the recorded head is the only commit past the base). The operator chose, in this session's question round, to keep the trust anchor: the brief tells the session to rebase its one commit and force-push with lease, then re-record. A merged-in head stays closeout-needs-review, which approved-fr (#1497) releases. fr could not verify the answer from the transcript, so this entry does not claim answered_by operator.
+
+<!-- fr:journal kind=repro scope=debug id=036d91903681 created=2026-11-22T21:47:21+00:00 -->
+### 036d91903681 · repro · Four reproductions, each a failing test first
+
+#1494 test_gh1494_the_collected_closeout_session_closes_with_its_last_finished_batch (no close for the collected item); #1497 test_gh1497_an_approved_held_closeout_pr_is_merged_at_the_approved_head (Snapshot had no approval for a close-out PR); #1496 test_gh1496_the_markers_own_session_re_records_a_handed_back_head (second run printed 'nothing to close out'); #1569 test_gh1569_a_branch_retry_on_an_ended_closeout_is_refused_with_the_retry_command and test_gh1569_no_collected_closeout_starts_while_the_repos_artifacts_await_a_release.
