@@ -389,3 +389,16 @@ run_kind: candidate
 ### sr-r21-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1603] · resolves sr-r21: Rebase method breaks release.py's first-parent PR cross-check
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1603.
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-1 created=2026-11-22T21:24:59+00:00 -->
+### exit-change-1 · decision · exit change: row wave-queue-speculative-land -> strategy live
+
+only a real wave pushes the speculative landing against GitHub; CI proves it over a fake forge and real bare git remotes (Test Plan 1, 8, 16), walked on the next wave after merge
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
