@@ -55,3 +55,8 @@ Evidence (diag run 45069567075, the release's exact shard 5/6, 3/3 hung): in eve
 ### f-race-drain · finding [fixed] · run_twice drains both copies to files instead of pipes
 
 Failing test first: test_the_race_drains_both_hooks_at_once (two copies each write 200 KB to stderr, then wait for both): hung at its 15 s deadline under the one-at-a-time pipe drain, on macOS too; passes in 0.5 s with stdout/stderr redirected to per-copy files. A hang now fails with the lock holder, the ps table and both full traces (kept from the diagnosis). The hook is unchanged: it serialised correctly in every captured run.
+
+<!-- fr:journal kind=review scope=debug id=debf78c5e946 created=2026-11-22T21:13:47+00:00 -->
+### debf78c5e946 · review · Self-review of the diff: one nit, fixed; no other findings
+
+Read the whole diff (conftest fixture, test_git_cache pair, run_twice and its evidence, the rendezvous test). Nit fixed: the seeding test asserted nothing under a name that claimed a behaviour, renamed test_a_test_may_leave_a_failed_system_config_probe_behind. Checked: per-copy log files live under the test's HOME (tmp_path), no other test in the file scans HOME (27/27 on three -n 4 runs); the hook is untouched; mypy's 3 errors in this file predate the change and CI type-checks packages/ only. Verification: the release's exact shard 5/6 (staged commit, release.py test-shard) hung 3/3 before (run 45069567075) and passed 3/3 with the fix (run 45070367661).
