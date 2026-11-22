@@ -162,8 +162,8 @@ attested. `apply`, `attest` and `seal` run only in an ops profile.
 Every apply result, recorded check, proof and attestation is an `op` entry in the plan's
 journal. The entry has `key: value` lines (`op`, `result`, `identity`, `reason`, `phase`,
 `attested_by`), never secret material. The latest entry per op wins. A `done` entry from
-`apply` gives its `reason`: the check passed after fr ran the apply, or the check already
-passed and the apply did not run. `deliver` renders
+`apply` gives its `reason`. Either the check passed after fr ran the apply, or the check
+passed first and fr did not run the apply. `deliver` renders
 a `## Manual operations` PR-body section from the recorded evidence (no live probe). It
 never stops on an OPEN op, because the DevOps stage owns them.
 
