@@ -58,9 +58,14 @@ rows:
       are never proposed as duplicate candidates
     origin:
     - spec:2026-11-22-triage-hardening#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dedupe.py#test_owed_trackers_with_similar_titles_form_no_group
+      - super-fr:tests/unit/test_triage_dedupe.py#test_debt_digests_and_untrusted_issues_form_no_group
+      - super-fr:tests/unit/test_triage_dedupe.py#test_two_eligible_issues_with_equal_titles_still_group
+    status: ci
+    notes: 'CI unit tests: owed, awaiting-live, debt digest and untrusted issues form
+      no candidate group; two eligible issues still do'
     verify: none
   - id: claim-untrusted-warning
     capability: triage-claims
