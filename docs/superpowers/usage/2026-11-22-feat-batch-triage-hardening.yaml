@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-22-feat-batch-triage-hardening
+captures:
+- host: h-32e1e1e0
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-22T21:27:59+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 5afe35a7-6e3f-431b-a9ac-cf6dfd3fc3e4
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 62
+        cache_write: 158511
+        cache_read: 4500792
+        output: 23837
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 13
+      other:
+        usd: null
+        turns: 5
+      paperwork:
+        usd: null
+        turns: 11
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 100272
+        cache_read: 140643
+        output: 518
+      brainstorm:
+        usd: null
+        turns: 27
+        input: 56
+        cache_write: 58239
+        cache_read: 4360149
+        output: 23319
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 100272
+          cache_read: 140643
+          output: 518
+        brainstorm:
+          usd: null
+          turns: 27
+          input: 56
+          cache_write: 58239
+          cache_read: 4360149
+          output: 23319

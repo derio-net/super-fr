@@ -1,0 +1,96 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-22-triage-hardening
+repo: derio-net/super-fr
+rows:
+  - id: intake-title-withheld
+    capability: triage-intake
+    acceptance: An issue intake finds ineligible reaches facts, check and the pages
+      with no title or body; admitting it restores the title at the next collect
+    origin:
+    - spec:2026-11-22-triage-hardening#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: intake-admit-pinned
+    capability: triage-intake
+    acceptance: ready-fr admits an issue only with a trusted admit marker matching its
+      current title and body; an edit after admission makes it ineligible again until
+      `fr triage admit` re-admits it
+    origin:
+    - spec:2026-11-22-triage-hardening#R2
+    - spec:2026-11-22-triage-hardening#R3
+    - spec:2026-11-22-triage-hardening#R4
+    - spec:2026-11-22-triage-hardening#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: dedupe-set-apart
+    capability: triage-dedupe
+    acceptance: Owed trackers, awaiting-live issues, debt digests and untrusted issues
+      are never proposed as duplicate candidates
+    origin:
+    - spec:2026-11-22-triage-hardening#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: claim-untrusted-warning
+    capability: triage-claims
+    acceptance: A claim marker ignored as untrusted is reported by check with the pr_authors
+      fix
+    origin:
+    - spec:2026-11-22-triage-hardening#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-obsolete-stage
+    capability: triage-batches
+    acceptance: 'A never-dispatched batch whose members are all closed is obsolete:
+      never dispatched, meets its dependents, listed by check for cancelling; a partly-closed
+      proposed batch names its closed members'
+    origin:
+    - spec:2026-11-22-triage-hardening#R8
+    - spec:2026-11-22-triage-hardening#R9
+    - spec:2026-11-22-triage-hardening#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: collect-past-limit-pr
+    capability: triage-collect
+    acceptance: A judged PR past the PR list's limit is recorded with its state after
+      one collect and costs no forge call afterwards once closed or merged
+    origin:
+    - spec:2026-11-22-triage-hardening#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: privacy-snapshot-keys
+    capability: triage-privacy
+    acceptance: The privacy guard refuses a push whose carried snapshots name a private
+      repo's issue to a public state repo
+    origin:
+    - spec:2026-11-22-triage-hardening#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: issues-page-filter-guard
+    capability: triage-pages
+    acceptance: The Issues page's folds and tabs work when its manifest leaves out the
+      filter bar
+    origin:
+    - spec:2026-11-22-triage-hardening#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
