@@ -1,13 +1,120 @@
-# Architecture review of `packages/*/src` (2026-11-16)
+# Architecture review of `packages/*/src`
 
 Issue: derio-net/super-fr#1318. Spec: `docs/superpowers/specs/2026-11-16-architecture-review-sweep-design.md`
 (R1–R7). This report is stage 1 of #1318 (the review) and records which part of stage 2
 (the sweep) landed in the same PR. Everything below is this repository's own code; no
 host, org or repo outside `derio-net` appears in it.
 
-## 1. Scope and method
+## Review update · 22 November 2026
 
-**Commit.** Every file:line below was read at `ab3b3a193168af123a1b2d7946fca0571869d4ee` on
+**Read the status against two trees.** The default branch was [main@396e444d](https://github.com/derio-net/super-fr/commit/396e444d3f313b84df4b96971d9da98719556dbe). The implementation under review was [PR #1525 at 22351abe](https://github.com/derio-net/super-fr/commit/22351abeb7cc9ae506450f00475b2e749d9d45f6). The PR contains the AST import guard, gate and status type changes, and the shared timestamp reader. Main lacks those changes. Main contains subsequent fixes that the PR branch has yet to incorporate. A closed issue alone does not tell the reviewer which code they are reading.
+
+Sections 1–8 retain the original review, source coordinates and decomposition designs. Use the update below for present status and follow-up order. The broader audit's 3.2/5 score, coverage, mutation results, dependency scan and timings describe its November 15 snapshot. This update checks specific claims on both trees and measures the inventories below. It makes no new whole-product score. [Original audit and evidence limits](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924481515)
+
+### Which findings still affect main?
+
+| Finding | Main at `396e444d` | PR at `22351abe` |
+|---|---|---|
+| F01 · duplicate dispatch on failed lookup · #1499 | The generic tick returns with zero submissions and records a failure for each item. [Lookup failure](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr-dispatch/src/fr_dispatch/__init__.py#L515-L531) | Still treats the failed read as an empty set. [PR path](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-dispatch/src/fr_dispatch/__init__.py#L514-L518) |
+| F02 · cursor durability · #1500 | **Still reproducible.** A failed save in a disposable directory shortened a valid 134-byte cursor to 64 bytes. The public loader then raised `RunStateError`. [Save](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr/src/fr/run/model.py#L613-L622) | Same truncating write. [Save](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/run/model.py#L596-L605) |
+| F03 · workspace identity · #1419 | Workspace creation checks the slug holder and lookup checks the recorded branch. Two names can still encode to one path, so the intended outcome is an explicit refusal for the second workspace. [Creation check](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr/src/fr/isolation/local.py#L1233-L1238) · [Lookup and refusal](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr/src/fr/isolation/types.py#L169-L210) | Carries the same protections. The historical example of a lookup returning another branch's state no longer describes either tree. [PR regression cases](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_workspace_identity.py#L33-L59) |
+| F04 · cncd plan files · #1501 | Payload construction rejects a plan-folder entry that is a symlink before reading file contents. The evidence concerns entries in the plan folder. [Reader](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr-cncd/src/fr_cncd/runner.py#L63-L80) | Still reads children selected by `is_file()`. [PR reader](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-cncd/src/fr_cncd/runner.py#L85-L92) |
+| F05 · CLI step limits · #1507 | A manifest CLI step can still run without a timeout and place its captured output in the cursor. No production hang or memory limit was measured. [Execution](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr/src/fr/commands/run_cmd.py#L6619-L6631) | Same execution policy. [PR path](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/commands/run_cmd.py#L6496-L6507) |
+| F06 · install reproducibility · #1508 | The installer tries to constrain dependencies to the release lock and pins the default devcontainer CLI. It explicitly warns and continues unconstrained when lock export or constraints support is unavailable. [Export and fallback](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/scripts/install.sh#L865-L889) · [CLI pin](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/scripts/install.sh#L1102-L1111) | Still installs from the package requirements without the release constraints. [PR installer](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/scripts/install.sh#L873-L907) |
+| F07 · edit-hook decision · #1509 | The hook resolves a JSON parser and emits a fixed denial if it cannot resolve one. [Decision](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/plugins/super-fr/hooks/fr-isolation-required.sh#L45-L64) | The entry point still invokes bare `jq`. [PR hook](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/plugins/super-fr/hooks/fr-isolation-required.sh#L24-L39) |
+| F08 · policy and effects in large commands | Still present. See the pass diagram and the measured module budgets below. | The PR adds the budgets and documents proposed extractions. It leaves the large modules in place. [Budget list](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_tripwire_module_budget.py#L15-L24) |
+| F09 · two previously flagged transitive dependencies · #1510 | The lock now resolves `glob` 14.0.3 and `minimatch` 11.0.4. The four old entries are gone. This comparison is limited to the two historical advisories. [glob](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr-opencode-plugin/bun.lock#L282) · [minimatch](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr-opencode-plugin/bun.lock#L344) | The original direct and nested lock entries remain. [glob](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-opencode-plugin/bun.lock#L294) · [minimatch](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-opencode-plugin/bun.lock#L360) · [nested glob](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-opencode-plugin/bun.lock#L532) · [nested minimatch](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-opencode-plugin/bun.lock#L560) |
+| Concurrent cursor updates · #1511 | Still an open risk. The save path accepts the caller's state without comparing it with the current contents. This refresh did not run two competing processes. [Caller](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr/src/fr/commands/run_cmd.py#L369-L375) | Same distinction between the concurrency risk and the reproduced single-writer F02. [Caller](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/commands/run_cmd.py#L369-L375) |
+
+Keep the cursor durability fix independently reviewable. Verify that the PR integrates the fixes already on main before treating its branch as release evidence. [Bug tracking index](https://github.com/derio-net/super-fr/issues/1318#issuecomment-6924421644)
+
+### Where optional runners enter the application
+
+On the PR, only three core command modules may import the optional dispatch package. Read solid edges as source imports or declared dependencies. The dotted edge shows runtime discovery of an installed package by name.
+
+```mermaid
+flowchart TB
+    subgraph Core["fr · base CLI and engine"]
+        C["apply_cmd · triage_batch_cmd · triage_kanban_cmd"]
+        E["Core types and workflow policy"]
+    end
+    C -->|"uses core policy"| E
+    C -->|"optional imports"| D["fr_dispatch · runner contracts and registry"]
+    D -->|"imports core types"| E
+    A["Runner packages · cncd, herdr, claude-cloud"] -->|"depend on dispatch contracts"| D
+    D -.->|"discovers registered fr.runners entries"| A
+```
+
+Keep optional loading in these commands when moving policy into core modules. The PR's AST guard checks import location and the presence of the availability check. It does not prove every control-flow path passes that check. Registration also differs from construction: the registry can inspect cncd's declared units, while building cncd remains its bridge's responsibility. [Allowed imports](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_import_direction.py#L35-L93) · [Guard implementation](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_import_direction.py#L272-L291) · [Runner registry](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-dispatch/src/fr_dispatch/registry.py#L24-L78) · [Dispatch inputs from core](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr-dispatch/src/fr_dispatch/item_graph.py#L1-L46)
+
+### What a driver extraction must preserve
+
+This is one acting triage pass on the PR, following a dispatch that clears preflight. The pure planner returns ordered actions. The driver owns the lease, current observations and writes. A successful launch makes a failed local save a **recovery** case: the operator needs the live handle.
+
+```mermaid
+sequenceDiagram
+    participant D as Triage driver
+    participant P as Pure drive_pass
+    participant F as Forge
+    participant R as Runner
+    participant S as Triage state
+    D->>D: Take lease if needed and collect snapshot
+    D->>P: Snapshot
+    P-->>D: Ordered actions
+    D->>R: Check eligibility, preflight and existing dispatch
+    D->>F: Ensure approval label and claim members
+    D->>R: Launch batch
+    R-->>D: Handle, or use item ID
+    D->>S: Record dispatch event
+    alt Event saved
+        D->>F: Apply remaining forge updates
+        D->>S: On normal pass return, mark and push leased state
+    else Event save refused after launch
+        D->>D: Report live handle and recovery command
+    end
+```
+
+The post-launch recovery case is distinct from a launch refusal, where the command withdraws the claims it no longer owes. Preserve those outcomes and the order of the effects when reviewing the proposed driver ports. [Lease and pass](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/commands/triage_batch_cmd.py#L7160-L7170) · [Plan and act](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/commands/triage_batch_cmd.py#L5266-L5309) · [Dispatch and recovery](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/commands/triage_batch_cmd.py#L1970-L2014) · [Regression cases](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_triage_batch_dispatch.py#L1105-L1156)
+
+### One consolidation that preserves four different decisions
+
+Main has four local aware-timestamp parsers. On the PR the same consumers call `fr.triage.timestamps.parse_aware`. The arrows show calls to the shared reader. The labels show **what each consumer does with an unknown time**.
+
+```mermaid
+flowchart TB
+    B["Batch matching · keep PR of unknown age"] --> T["parse_aware"]
+    C["Stale check · skip incomparable observations"] --> T
+    V["Board clock · reject invalid collection time"] --> T
+    D["Drive command · use first-seen merge time"] --> T
+    T --> K["Aware time · retain its offset"]
+    T --> U["Missing, malformed or naive time · return None"]
+```
+
+The six input cases cover missing, empty, malformed, naive, UTC and explicit-offset values. The separate body scan catches a renamed copy. The board example concerns its required collection time; other timestamps in the view are optional. The usage and debt readers still have a different contract for naive values. [Main parser example](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr/src/fr/triage/batch.py#L222-L234) · [PR reader and cases](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_triage_timestamps.py#L19-L38) · [Batch matching](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/triage/batch.py#L222-L231) · [Stale check](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/triage/check.py#L405-L427) · [Board clock](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/triage/views.py#L85-L91) · [Merge fallback](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/commands/triage_batch_cmd.py#L4326-L4334)
+
+### Refactor decisions and review order
+
+| Cluster and disposition | Owner and behavior to preserve | Guard and coordination |
+|---|---|---|
+| G01 · in PR only | The three CLI modules retain optional imports. The rest of core remains usable on its own. | Keep the planted import cases and sibling-package scan. Check every command move against the allowed paths. [Guard](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_import_direction.py#L301-L337) |
+| R01 / R02 · in PR only | Gate annotations derive from `fr.gates`; post-merge gates remain a subset. Cloud's `FrStatus` aliases dispatch's `SessionStatus`. Core keeps its own board type. | Exercise gate validation, type identity, board equality and label coverage when changing a vocabulary. [Gate guard](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_gate_vocabulary.py#L136-L154) · [Status guards](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_import_direction.py#L339-L370) |
+| R03 · in PR only | The shared triage reader above owns parsing; callers own the response to missing information. | Retain behavioral and duplicate-body tests. Coordinate the outstanding reader work in #1523 with any triage command move. [Copy detection](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_triage_timestamps.py#L86-L108) |
+| R04 · open, #1512 | Extract duplicate-key detection from the artifact and harness loaders. Each reader retains its grammar and public errors. Lenses and scaffold can stop depending on the private artifact loader. | Exercise both error contracts and source marks. Coordinate changes to `structure.py` with the YAML backend work in #1286. [Artifact loader](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/artifacts/structure.py#L46-L92) · [Harness loader](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/harness/model.py#L153-L195) |
+| R05 / R06 · open, #1513 / #1514 | Share record-file placement across eleven helpers and Git environment setup across six applicable test modules. Keep historical payloads, per-test repositories and the extra archive stub local. | Check that copied setup disappears and temp paths remain independent. Preserve broader isolation fixtures that also set home or create config files. [Record example](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_record_amendments.py#L41-L49) · [Fixture with archive stub](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_status_owed.py#L70-L79) |
+| R07 · budget in PR, extractions open | Move one policy or execution responsibility at a time. Keep the order shown in the pass diagram. Keep CLI refusals at the command boundary. | Extend import and purity guards to every new module. Coordinate cursor work (#1500, #1511) with run writes and CLI-step bounds (#1507) with execution moves. Driver ports (#1520) precede driver moves. |
+| Keep separate · Git default-branch readers | Core resolves local remote-tracking refs; triage can repair a remote HEAD; isolation can consult the forge and fall back to `main`. | A single fallback would change behavior. Retain caller-specific tests for missing or unreadable refs. [Core](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/packages/fr/src/fr/git.py#L272-L316) · [Triage](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/triage/gitseam.py#L465-L488) · [Isolation](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/packages/fr/src/fr/isolation/local.py#L3005-L3022) |
+
+**Before merging the implementation**, reconcile the two command budgets. The PR has 8,931 lines in `run_cmd.py` against 9,000, and 7,422 in `triage_batch_cmd.py` against 7,500. Main has 9,059 and 7,593 respectively. A local Git three-way merge preview produced 9,059 and 7,584 for these two cleanly merged files, **59 and 84 over budget**. Other paths conflicted, so these are provisional counts. Run the guard on the resolved merge and document any budget change there. [Budget test](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/tests/unit/test_tripwire_module_budget.py#L62-L81)
+
+**Inventory changes.** Applying the same AST inventory to tracked Python under `packages/*/src` found 428 files and 148,311 physical lines on main versus 423 and 145,261 on the PR. Main has 133 direct PyYAML loads across 89 files and 45 literal Git-first subprocess calls across 28 files. The PR has 131 across 88 and 44 across 27 respectively. These counts identify inspection targets. The parser and Git examples above explain why few counts by themselves imply an extraction.
+
+**Performance evidence changed.** Main's checked-in timing file now contains 16,989 entries. Its dispatch corpus test carries a 37.61-second weight; the PR still carries 294.19 seconds among 15,182 entries. #1559 changed the test workload and timings. Use the weights for shard planning. They do not measure an application speedup or predict the next CI wall time. [Main weight](https://github.com/derio-net/super-fr/blob/396e444d3f313b84df4b96971d9da98719556dbe/.test_durations#L2693) · [PR weight](https://github.com/derio-net/super-fr/blob/22351abeb7cc9ae506450f00475b2e749d9d45f6/.test_durations#L2243) · [Test-cost change](https://github.com/derio-net/super-fr/pull/1559)
+
+**Verification.** Python 3.13 environments were built separately with each tree's frozen workspace lock. On the PR, 127 tests passed across import direction, gate vocabulary, acceptance labels, triage timestamps, module budgets and batch dispatch, including the failed-event recovery case. On main, 75 passed and one skipped across generic dispatch, workspace identity, the edit hook and installer lock handling. Two installer assertions failed on the initial run. Both passed when the installer fixtures reused the populated uv cache. The devcontainer pin test skipped because the CLI was already installed. The cursor fault used a disposable file with a local size limit. The three Mermaid blocks were rendered locally. Full-suite coverage, mutation effectiveness, a fresh advisory scan and deployed runner behavior were outside this refresh.
+
+## 1. Original review scope and method · 16 November
+
+**Original source coordinates.** Unless a later merge is named explicitly, sections 1–8 use `ab3b3a193168af123a1b2d7946fca0571869d4ee` on
 `feat/gh-1318`. That commit holds the phase 1 changes of this PR (G01, R01, R02, R03 and the
 line budget, commits `dec084335` to `c57126798`) and no other code change; the commits after
 `c57126798` touch only the run cursor and the plan journal.
@@ -41,7 +148,7 @@ differs, this report says what the input said and what the code shows.
 - `gh issue list --search` reads, one search per finding (section 7).
 - No test was run for the review itself; the phase's own tests are listed in the PR.
 
-**Limits.** No defect was reproduced again: F01–F09 and the race are re-checked by reading
+**Original review limits.** At the November 16 review, no defect was reproduced again: F01–F09 and the race are re-checked by reading
 the code, not by executing the audit's reproductions. F09's advisory ranges are the audit's;
 the advisory records were not fetched again, only the lock's versions were compared. Counts
 are syntax inventories, not runtime measurements. `.test_durations` is used as recorded
@@ -53,7 +160,7 @@ found the material; their unverified output needed this reconciliation, which co
 several counts (section 5) and found three copies the reviews missed (R05, R06, and a
 naive-as-UTC pair, section 3).
 
-## 2. Status of earlier findings
+## 2. Historical status at the November 16 review
 
 ### 2.1 The audit (F01–F09 and the cursor race)
 
@@ -61,7 +168,7 @@ F01–F04 are behaviour fixes outside #1318's refactor lane: they change what th
 so each gets its own fix PR with its own contract and regression test. This PR changes none
 of the behaviour they describe.
 
-| Item | Earlier commit | Status now | Tracking |
+| Item | Earlier commit | Status at the original review | Tracking |
 |---|---|---|---|
 | F01 failed dedup lookup permits another dispatch | `f0a45b5b` | present: `fr_dispatch/__init__.py:514-518` catches the lookup failure and sets `existing = set()` | #1499 (behaviour fix) |
 | F02 cursor write destroys the last valid state | `f0a45b5b` | present: `fr/run/model.py:600`, `path.write_text(dump_run_state(state))` | #1500 (behaviour fix) |
@@ -76,7 +183,7 @@ of the behaviour they describe.
 
 ### 2.2 The supplement (G01, R01–R07, and its "preserve" table)
 
-| Item | Earlier commit | Status now | Tracking |
+| Item | Earlier commit | Status at the original review | Tracking |
 |---|---|---|---|
 | G01 import guard reads a line regex | `a4281f85` | landed in this PR, `dec084335` and `c57126798`; guards `test_import_direction.py::test_import_nodes_read_every_spelling` (`:301`) and `::test_soft_point_violations_fire_on_planted_sources` (`:325`) | this PR |
 | R01 gate annotations copy the vocabulary | `a4281f85` | landed in this PR, `95cdcbd0c` and `c57126798`; `fr/gates.py:18` adds `PostMergeGate`; guards `test_gate_vocabulary.py::test_annotations_derive_from_the_vocabulary` (`:136`) and `::test_a_divergent_literal_is_reported` (`:147`) | this PR |
@@ -806,7 +913,7 @@ here; the inventory stays in this report.
 
 ## 8. Issues filed
 
-Every piece of work this PR leaves undone, with the issue that tracks it. "Found" is an
+Issue index recorded at the original review. The November 22 update above gives the later dispositions. "Found" is an
 issue that existed; "filed" is one this review opened.
 
 | Work | Issue | |
