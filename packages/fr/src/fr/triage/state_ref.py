@@ -4,8 +4,9 @@
 The ref points at a commit whose tree is the explicit list `REF_FILES`, not the export
 set: the authored state `fr.triage.state_sync` exports (asserted a subset by the tests),
 plus the merge stops, the lease, the scope's durable settings and the cloud runner's
-mailbox. `facts.json`, the rendered pages, the host-only `scope.yaml` and the host id
-never ride on it: fr rebuilds the first two, and the last two are this host's.
+mailbox. `facts.json`, the rendered pages, the host-only `scope.yaml`, the host id and
+the looping driver's own `driver.yaml` and `driver-failures.yaml` (`fr.triage.driver_record`)
+never ride on it: fr rebuilds the first two, and the rest are this host's.
 
 A push is a compare-and-swap (`--force-with-lease=<ref>:<old>`): a second writer, or a
 lost lease, fails the push (`StateRefConflict`) rather than overwriting. A push the

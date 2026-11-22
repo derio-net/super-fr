@@ -8,7 +8,7 @@ import pytest
 from fr.triage.kanban import COLUMN_TITLES, COLUMNS, build_board, column_of
 from fr.triage.lanes import lane_of
 from fr.triage.merge_stops import MergeStop
-from fr.triage.mergeability import CONFLICT_HINT, conflicting
+from fr.triage.mergeability import CONFLICT_HANDED_BACK_HINT, CONFLICT_HINT, conflicting
 from fr.triage.views import needs_you
 
 from tests.unit.triage_board_fixtures import batch as mk_batch
@@ -456,3 +456,44 @@ def test_p4_r1_the_board_page_shows_unread_repos_and_gated_truncations() -> None
     )
     assert "gate-labelled PRs of example-org/widgets not read: HTTP 502" in page
     assert "gate-labelled merged PR list for example-org/widgets returned exactly its limit" in page
+
+
+# ------------------------------------- batch-train-truth R18: never approve a conflicting PR
+
+
+def _conflict_at(head: str, delivered: str) -> dict[str, Any]:
+    return {"kind": "conflict", "at": "2026-10-01T12:00:00Z", "head": head,
+            "paths": ["src/a.py"], "delivered": delivered}  # fmt: skip
+
+
+def _green(*events: Any, **kw: Any) -> Any:
+    p = pr(11, "feat/batch-a", **kw)
+    f = facts([issue(1, prs=[p])], schema=12)
+    batches = [mk_batch("a", [1], events=[dispatch("a"), *events])]
+    return f, judgements({"widgets#1": j(1)}, batches, schema=5)
+
+
+def _kinds(f: Any, jd: Any) -> list[str]:
+    return [n.kind for n in needs_you(f, jd) if n.ref == "a"]
+
+
+def test_r18_a_green_pr_with_no_conflict_is_asked_for_approval() -> None:
+    assert _kinds(*_green()) == ["approve-pr"]
+
+
+def test_r18_a_delivered_conflict_at_the_head_is_no_approval_and_a_card_hint() -> None:
+    f, jd = _green(_conflict_at("sha-11", "session"))
+    assert _kinds(f, jd) == []
+    assert build_board(f, jd, {}).card("a").hint == CONFLICT_HANDED_BACK_HINT
+    assert CONFLICT_HANDED_BACK_HINT == "conflicting — handed back"
+
+
+def test_r18_a_held_conflict_at_the_head_is_exactly_one_row() -> None:
+    f, jd = _green(_conflict_at("sha-11", "held"))
+    assert _kinds(f, jd) == ["merge-conflict"]
+
+
+def test_r18_a_conflict_at_an_older_head_does_not_suppress_approval() -> None:
+    f, jd = _green(_conflict_at("sha-old", "session"))
+    assert _kinds(f, jd) == ["approve-pr"]
+    assert build_board(f, jd, {}).card("a").hint != CONFLICT_HANDED_BACK_HINT

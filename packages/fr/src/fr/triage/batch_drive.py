@@ -112,6 +112,7 @@ ActionKind = Literal[
     "export-reconcile",
     "export-closed",
     "enqueue",
+    "conflict-probe",
     "archive-conflict",
     "export-conflict",
     "awaiting-live",
@@ -951,6 +952,15 @@ def held_conflict(batch: Batch) -> ConflictEvent | None:
     return None
 
 
+def conflict_at(batch: Batch, head: str) -> ConflictEvent | None:
+    """The batch's latest `conflict` event at PR head *head*, whatever it delivered
+    (batch-train-truth R18): a PR so recorded is never one to approve."""
+    for event in reversed(batch.events):
+        if isinstance(event, ConflictEvent) and event.head == head:
+            return event
+    return None
+
+
 def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
     """How many fresh conflict sessions the batch started: all of them (the next one's
     number), or only since its latest dispatch (whether one is the message target)."""
@@ -1506,6 +1516,39 @@ def enqueue_refusals(batch: Batch, pr: int, head: str) -> list[EnqueueEvent]:
     ]  # fmt: skip
 
 
+def _probe_action(bid: str, pr: LivePr) -> Action:
+    return Action("conflict-probe", bid, f"PR #{pr.number} reads conflicting at {pr.head[:12]}",
+                  pr=pr.number, head=pr.head)  # fmt: skip
+
+
+def _nonmember(
+    entry: QueueEntry,
+    pr: LivePr,
+    stepped: list[str],
+    numbers: dict[str, int],
+    actions: list[Action],
+) -> None:
+    """R15-R17: an unapproved draft is no member, but its failing checks are reported (a
+    `warn` with `red=True`, for the red recovery) and a conflict is probed
+    (`conflict-probe`); either way it is stepped over, never a merge candidate or a stop.
+    A green, clean one yields nothing."""
+    bid = entry.batch.id
+    red = pr.checks == "failing"
+    dirty = conflicting(pr.mergeable, pr.merge_state)
+    if not (red or dirty):
+        return
+    stepped.append(bid)
+    numbers[bid] = pr.number
+    if red:
+        actions.append(
+            Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
+                   f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
+                   checks=pr.failing)
+        )  # fmt: skip
+    if dirty:
+        actions.append(_probe_action(bid, pr))
+
+
 def _walk_queue(
     repo: str, entries: Sequence[QueueEntry], snap: Snapshot
 ) -> tuple[Train | None, list[Action]]:
@@ -1526,17 +1569,23 @@ def _walk_queue(
     numbers: dict[str, int] = {}
     hold = _queue_hold(repo, snap)
     members: list[QueueEntry] = []
+    dirty: list[tuple[str, LivePr]] = []
     for entry in entries:
         pr = snap.live.get(entry.batch.id)
         verdict = snap.approvals.get(entry.batch.id)
         approved = verdict is not None and is_approved(verdict)
-        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
-            continue  # not a member
-        members.append(entry)
+        if pr is None or pr.state != "OPEN":
+            continue
+        if pr.draft and not approved:  # not a member; but red is still reported (R15)
+            _nonmember(entry, pr, stepped, numbers, actions)
+            continue
         numbers[entry.batch.id] = pr.number
-    if not members:
+        members.append(entry)
+        if conflicting(pr.mergeable, pr.merge_state):
+            dirty.append((entry.batch.id, pr))
+    if not members and not stepped:
         return None, actions
-    if hold is not None:
+    if hold is not None and members:
         actions.append(Action("held", members[0].batch.id, hold))
     for entry in members:
         bid = entry.batch.id
@@ -1594,6 +1643,7 @@ def _walk_queue(
             Action("enqueue", bid, f"PR #{pr.number} {why}", pr=pr.number, head=pr.head,
                    train=repo)
         )  # fmt: skip
+    actions.extend(_probe_action(bid, pr) for bid, pr in dirty if bid not in in_queue)
     train = Train(repo, None, (), tuple(queued), tuple(stepped), numbers, tuple(awaiting),
                   tuple(enqueue), tuple(in_queue), True)  # fmt: skip
     return train, actions
@@ -1623,16 +1673,22 @@ def _walk_merge_train(
     waiting: str | None = None
     queued: list[str] = []
     in_queue: list[str] = []
+    dirty: list[tuple[str, LivePr]] = []
     members = 0
     for entry in entries:
         bid = entry.batch.id
         pr = snap.live.get(bid)
         verdict = snap.approvals.get(bid)
         approved = verdict is not None and is_approved(verdict)
-        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
-            continue  # not a member
+        if pr is None or pr.state != "OPEN":
+            continue
+        if pr.draft and not approved:  # not a member; but red is still reported (R15)
+            _nonmember(entry, pr, stepped, numbers, merges)
+            continue
         members += 1
         numbers[bid] = pr.number
+        if conflicting(pr.mergeable, pr.merge_state):
+            dirty.append((bid, pr))
         if snap.queue_inferred:  # facts only: what the events say fr did (§D, R13)
             seen = last_enqueue(entry.batch, pr.number)
             if seen is not None and seen.head == pr.head and seen.outcome == "enqueued":
@@ -1669,7 +1725,9 @@ def _walk_merge_train(
             Action("merge", bid, f"PR #{pr.number} at {pr.head[:12]}", pr=pr.number,
                    head=pr.head, train=repo)
         )  # fmt: skip
-    if not members:
+    # R17: a conflicting member that is not a merge candidate (the merge's own path owns that)
+    merges.extend(_probe_action(bid, pr) for bid, pr in dirty if bid not in candidates)
+    if not members and not stepped:
         return None, merges
     head = candidates[0] if candidates else waiting
     train = Train(
