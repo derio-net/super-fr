@@ -8,6 +8,8 @@ repository the cache cannot fingerprint.
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
@@ -482,6 +484,21 @@ def test_the_system_config_path_is_asked_once_per_process(
             remote_name(work)
     probes = [c for c in git_starts.calls if "--system" in c]
     assert len(probes) == 1, probes
+
+
+def test_a_failed_system_config_probe_is_remembered_for_the_process() -> None:
+    """The memo keeps `_UNKNOWN` on purpose (l-errors-r2): a test that fakes git away
+    leaves exactly this behind. It is the next test's problem, below."""
+    key = (os.path.realpath(shutil.which("git") or "git"), None, None)
+    git_cache._SYSTEM_MEMO[key] = git_cache._UNKNOWN
+
+
+def test_a_test_never_meets_a_previous_tests_system_config_answer() -> None:
+    """`_SYSTEM_MEMO` is process-wide, so one test whose probe failed (a faked git, a
+    stubbed `git_answer`) made every later cached question on that xdist worker decline,
+    and `test_git_cache`'s hit tests failed on whichever worker drew it (PR #1625's CI,
+    worker gw3). `tests/conftest.py` empties it before every test."""
+    assert git_cache._SYSTEM_MEMO == {}
 
 
 def test_a_reftable_repository_is_never_cached(tmp_path: Path, git_starts: GitStarts) -> None:
