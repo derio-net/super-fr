@@ -380,7 +380,7 @@ picks the remedy when enabling the queue.
 
 strategy: candidate
 - wave-queue-live-wave: live — only a real wave on this repo exercises GitHub's merged-by-push detection, the atomic push against the real ruleset, and `release.yml` reading and clearing the hold; every other row is proven pre-merge by the fake forge over real bare git repositories.
-- wave-queue-speculative-land: none — a candidate scenario never reaches a forge; the CI suite proves it over a fake forge and real bare git remotes (Test Plan 1, 8, 16), and wave-queue-live-wave walks it live.
+- wave-queue-speculative-land: live — a candidate scenario never reaches a forge; the CI suite proves it over a fake forge and real bare git remotes (Test Plan 1, 8, 16), and wave-queue-live-wave walks it live.
 - wave-queue-land-methods: none — needs a forge to read merged state; the CI suite proves it over a fake forge and real bare git remotes (Test Plan 2–4), and wave-queue-live-wave walks it live.
 - wave-queue-wave-exclusive: none — needs forge PR state; the CI suite proves it with the pure planner and the fake forge (Test Plan 9, 18).
 - wave-queue-approval-content: none — needs PR labels and heads; the CI suite proves it over a real git repo and the fake forge (Test Plan 5).
