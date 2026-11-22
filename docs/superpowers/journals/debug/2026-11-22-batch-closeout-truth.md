@@ -10,3 +10,8 @@ Read against origin/main 0bca17ec3. (1) #1496: batch_closeout_cmd computes close
 ### b92e0a52b993 · decision · Fix all four defects in the one batch PR
 
 Operator chose to keep the batch's single PR: one failing test per defect, then each fix.
+
+<!-- fr:journal kind=finding scope=debug id=rv-1497-sec created=2026-11-22T21:29:03+00:00 state=fixed -->
+### rv-1497-sec · finding [fixed] · Approval release hardened after an automated security review of the #1497 commit
+
+Three findings, all fixed: (1) a First verdict could release a held PR the pass never recorded; now only Approved does. (2) Required checks were fetched only when the live head was the recorded one; now for every open head. (3) The verdict read one anchor batch's events; now every approval event of the PR across the marker's batches, oldest first, on both the record and the read side.
