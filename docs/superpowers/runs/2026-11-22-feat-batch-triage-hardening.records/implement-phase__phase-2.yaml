@@ -1,0 +1,21 @@
+schema_version: 12
+run: 2026-11-22-feat-batch-triage-hardening
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T2.S4, P2.T3.S1, P2.T3.S2, P2.T3.S3]
+refactor:
+  P2.T3: "check, render and the board share one derive_batch_stage and stale_members helper written in GREEN; nothing left duplicated"
+journal:
+  - kind: discovery
+    id: p2-sets-batch-cycle
+    title: batch.py cannot use triage/sets.py (import cycle), so its awaiting-live test stays
+    body: "sets -> intake -> claims -> batch, so batch._all_closed keeps its own FR_AWAITING_LIVE label test (closed OR labelled, not the open-only is_awaiting_live), and batch_drive.awaiting_unlabelled is the inverse predicate (open and NOT labelled) with a lazy import. Every other copy now reads sets.py (check re-exports; views and render import it directly)."
+    phase: 2
+  - kind: discovery
+    id: p2-obsolete-hold-narrowed
+    title: obsolete takes over the awaiting-live hold for batches whose members are all in facts
+    body: "A never-dispatched batch whose open members all await live and the rest are closed is now obsolete, so AWAITING_LIVE_HOLD only fires when a member is missing from facts. test_triage_awaiting_live's b-live batch gained a member absent from facts to keep exercising the hold, and a new test pins the obsolete precedence. Also extended beyond the spec's list: claims.releasing, the held-by skip, kanban's new Obsolete column and the card's already-closed line, the render batches_by_key and the pill CSS treat obsolete like cancelled."
+    phase: 2
+resolves: []
+evidence: {}
