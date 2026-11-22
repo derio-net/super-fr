@@ -40,3 +40,8 @@ The hand-back brief told the session to merge origin/<base> in, which can never 
 ### 0e3c68741a63 · review · Independent adversarial review: approval path sound; 2 important and 3 nits fixed, 3 nits left
 
 A separate reviewer read the branch's code and tests. Approval path: head binding, fork/foreign PRs, unrecorded First, cross-batch reads and gate order all held. Fixed: (important) the migration wait now reads the fetched origin/<default> in a scratch worktree, the tree the verb archives in, instead of the clone's working tree; (important) release_pending matches the gate's own first line only; (nit) an approval no longer releases a body whose Closes lines differ from the record; (nit) the approved head must equal the live head; (nit) the reopened close-out line says to merge or close it by hand. Left, named in the PR: the re-record trusts the forge's head at the verb's run (bounded by the archive-only, single-commit and Closes checks); a planned batch missing from the state keeps a collected session open; an anchor outside a --named selection is not settled (the PR stays held, safe).
+
+<!-- fr:journal kind=finding scope=debug id=rv-1497-narrowed created=2026-11-22T21:55:19+00:00 state=fixed -->
+### rv-1497-narrowed · finding [fixed] · An unreadable narrowing state no longer lets an approval skip the Closes check
+
+Automated security review: review_reasons skips the body Closes comparison when the members' narrowing decisions cannot be read, so an approval released a body never compared with the record. That reason is now unreleasable too.
