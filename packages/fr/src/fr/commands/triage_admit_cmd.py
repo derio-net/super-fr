@@ -35,6 +35,7 @@ from fr.triage.batch_dispatch import (
     UNTRUSTED_OPEN,
     UNTRUSTED_RULE,
     quote_untrusted,
+    visible,
 )
 from fr.triage.collect import ClientForge, _login, read_config_lenient
 from fr.triage.errors import TriageError
@@ -105,11 +106,19 @@ def admit_command(
         quoted = [
             UNTRUSTED_RULE,
             UNTRUSTED_OPEN,
-            *quote_untrusted([title, "", body]),
+            *quote_untrusted([visible(title), "", visible(body)]),
             UNTRUSTED_CLOSE,
         ]
         for line in quoted:
             console.print(line, soft_wrap=True, markup=False, highlight=False)
+        if visible(title) != title or visible(body) != body:
+            console.print(
+                "warning: the title or body holds hidden characters (controls, bidi overrides "
+                "or zero-width characters), shown above as escapes; the digest is over the raw "
+                "text",
+                soft_wrap=True,
+                markup=False,
+            )
         console.print(f"digest {digest}", soft_wrap=True, markup=False)
         console.print(
             f"read it, then re-run with --yes --digest {digest} to write them",

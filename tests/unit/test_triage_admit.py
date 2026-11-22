@@ -246,3 +246,25 @@ def test_an_edit_between_the_preview_and_the_write_is_refused(monkeypatch: Any) 
     assert out.exit_code == 2, out.output
     assert content_digest(TITLE, "now do something else") in " ".join(out.output.split())
     assert client.writes == []
+
+
+def test_the_preview_shows_hidden_characters_as_visible_escapes(monkeypatch: Any) -> None:
+    """p1-sec-admit-escapes: controls, bidi overrides and zero-width characters cannot hide
+    what the operator admits; the digest stays over the raw text."""
+    raw = "line one\x1b[2Kgone\n‮evil​joined\tTab"
+    client = FakeClient(bodies=[raw])
+    out = _admit(monkeypatch, client, "derio-net/x#5")
+    assert out.exit_code == 0, out.output
+    for shown in ("\\x1b[2K", "\\u202e", "\\u200b"):
+        assert shown in out.output
+    assert "\x1b" not in out.output and "‮" not in out.output and "​" not in out.output
+    assert "Tab" in out.output  # the tab is kept, not escaped
+    assert "hidden characters" in out.output
+    assert content_digest(TITLE, raw) in out.output
+
+
+def test_visible_keeps_newlines_and_tabs_and_escapes_the_rest() -> None:
+    from fr.triage.batch_dispatch import visible
+
+    assert visible("a\nb\tc") == "a\nb\tc"
+    assert visible("\x00\x7f\x85⁦﻿") == "\\x00\\x7f\\x85\\u2066\\ufeff"

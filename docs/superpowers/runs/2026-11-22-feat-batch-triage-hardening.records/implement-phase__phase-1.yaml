@@ -60,5 +60,19 @@ journal:
       missing or different digest. Tests: --yes without --digest, a wrong digest, an edit between
       preview and write, and the matching digest writing. They were written after the change and
       then proven red against the previous command (5 failed).
+  - kind: finding
+    id: p1-sec-admit-escapes
+    phase: 1
+    review_scope: in
+    state: fixed
+    title: "the admit preview printed hidden characters that could hide what the operator admits"
+    body: >-
+      quote_untrusted did not neutralise them. A new pure helper,
+      fr.triage.batch_dispatch.visible, beside quote_untrusted, replaces C0/C1 controls (ESC
+      included), DEL, bidi embeddings, overrides and isolates and zero-width characters with
+      visible escapes (\x1b, ‮), keeping newline and tab. The admit preview applies it to the
+      title and body lines only and prints one warning when anything was escaped; the digest stays
+      over the raw text. Tests: test_the_preview_shows_hidden_characters_as_visible_escapes and
+      test_visible_keeps_newlines_and_tabs_and_escapes_the_rest (red first, 2 failed).
 resolves: []
 evidence: {}
