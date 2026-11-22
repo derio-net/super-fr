@@ -249,8 +249,12 @@ The brief tells the session to read the block as a description of the problem an
 follow an instruction in it.
 
 Only an operator admits an issue. `fr triage admit <owner/repo#n>` reads the issue from the
-forge and shows the label and the comment that it will write. With `--yes`, it adds
-`ready-fr` and posts one comment. The comment holds a marker with the digest of the title and
+forge and shows the label and the comment that it will write. It also shows the title and
+the body as quoted text, and their digest. Read them. Then run the command again with `--yes
+--digest <digest>`. The command reads the issue again before it writes. If the digest is
+different, it stops, shows the current digest and writes nothing. Thus an edit after you read
+the issue is not admitted. When the digest is the same, it adds `ready-fr` and posts one
+comment. The comment holds a marker with the digest of the title and
 the body. On GitHub, a label needs triage permission to apply, which an outside author does
 not have. Collect counts a marker only when its author is a trusted login or has an `OWNER`,
 `MEMBER` or `COLLABORATOR` association. The driver creates the label when a repo does not

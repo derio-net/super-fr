@@ -78,15 +78,12 @@ def _admit_reason(key: str, admit_read: bool, admit_digest: str | None, unread: 
     """Why a `ready-fr` issue is not admitted (2026-11-22-triage-hardening §B)."""
     if not admit_read and unread == ADMIT_UNSUPPORTED:
         return (
-            f"labelled {READY_FR.name}, but {ADMIT_UNSUPPORTED}, so an admit marker cannot "
-            "be read"
+            f"labelled {READY_FR.name}, but {ADMIT_UNSUPPORTED}, so an admit marker cannot be read"
         )
     if not admit_read:
         return f"labelled {READY_FR.name}, comments not read: run fr triage collect again"
     if admit_digest is None:
-        return (
-            f"labelled {READY_FR.name} without a trusted admit marker: run fr triage admit {key}"
-        )
+        return f"labelled {READY_FR.name} without a trusted admit marker: run fr triage admit {key}"
     return f"edited after admission: run fr triage admit {key} again"
 
 

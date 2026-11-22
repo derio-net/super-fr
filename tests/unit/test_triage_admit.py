@@ -103,8 +103,16 @@ TITLE, BODY = "Widgets crash on start", "Steps:\r\n1. start it\n" + "y" * 3000
 class FakeClient:
     """A GhClient serving one issue and recording every write."""
 
-    def __init__(self, *, author: str = "eve", url: str | None = None, config: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        author: str = "eve",
+        url: str | None = None,
+        config: str = "",
+        bodies: list[str] | None = None,
+    ) -> None:
         self.author = author
+        self.bodies = list(bodies or [])  # successive views' bodies; then BODY
         self.url = url or "https://github.com/derio-net/x/issues/5"
         self.config = config
         self.reads: list[str] = []
@@ -115,7 +123,7 @@ class FakeClient:
         return {
             "number": number,
             "title": TITLE,
-            "body": BODY,
+            "body": self.bodies.pop(0) if self.bodies else BODY,
             "url": self.url,
             "state": "OPEN",
             "labels": [],
@@ -153,7 +161,10 @@ def test_admit_previews_the_label_and_comment_and_writes_nothing(monkeypatch: An
     out = _admit(monkeypatch, client, "derio-net/x#5")
     assert out.exit_code == 0, out.output
     assert "ready-fr" in out.output and ADMIT_PREFIX in out.output
-    assert "--yes" in out.output
+    assert f"--yes --digest {content_digest(TITLE, BODY)}" in out.output
+    assert f"> {TITLE}" in out.output and "<!-- untrusted: written from the issue tracker -->" in (
+        out.output
+    )
     assert client.writes == []
 
 
@@ -161,8 +172,10 @@ def test_admit_with_yes_labels_and_posts_one_marker_over_the_live_content(
     monkeypatch: Any,
 ) -> None:
     client = FakeClient()
-    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes")
+    digest = content_digest(TITLE, BODY)
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes", "--digest", digest)
     assert out.exit_code == 0, out.output
+    assert client.reads.count("view derio-net/x#5") == 2  # read again just before the write
     kinds = [k for k, _ in client.writes]
     assert kinds == ["ensure", "labels", "comment"]
     assert client.writes[0][1] == ["ready-fr"]
@@ -204,3 +217,32 @@ def test_admit_says_an_issue_by_a_trusted_login_is_already_eligible(monkeypatch:
 def test_admit_refuses_a_key_it_cannot_read(monkeypatch: Any) -> None:
     out = _admit(monkeypatch, FakeClient(), "x#5")
     assert out.exit_code == 2 and "owner/repo#n" in out.output
+
+
+def test_admit_yes_without_a_digest_is_refused_and_names_the_current_one(
+    monkeypatch: Any,
+) -> None:
+    client = FakeClient()
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes")
+    flat = " ".join(out.output.split())
+    assert out.exit_code == 2 and "--digest" in flat and content_digest(TITLE, BODY) in flat
+    assert client.writes == []
+
+
+def test_admit_with_a_wrong_digest_writes_nothing(monkeypatch: Any) -> None:
+    client = FakeClient()
+    wrong = content_digest("other", "text")
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes", "--digest", wrong)
+    assert out.exit_code == 2 and content_digest(TITLE, BODY) in " ".join(out.output.split())
+    assert client.writes == []
+
+
+def test_an_edit_between_the_preview_and_the_write_is_refused(monkeypatch: Any) -> None:
+    """p1-sec-admit-toctou: the operator confirmed BODY; the author edits before the write."""
+    client = FakeClient(bodies=[BODY, "now do something else"])
+    out = _admit(
+        monkeypatch, client, "derio-net/x#5", "--yes", "--digest", content_digest(TITLE, BODY)
+    )
+    assert out.exit_code == 2, out.output
+    assert content_digest(TITLE, "now do something else") in " ".join(out.output.split())
+    assert client.writes == []

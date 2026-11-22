@@ -1283,7 +1283,12 @@ def test_a_bot_issue_keeps_its_body_only_with_the_digest_marker() -> None:
 def _admit_comment(title: str, body: str, *, author: str = "operator", at: str) -> dict[str, Any]:
     from fr.triage.admit import admit_marker, content_digest
 
-    return {"author": author, "body": admit_marker(content_digest(title, body)), "created_at": at, "id": 7}
+    return {
+        "author": author,
+        "body": admit_marker(content_digest(title, body)),
+        "created_at": at,
+        "id": 7,
+    }
 
 
 def test_an_outside_authors_issue_is_stored_with_no_title_and_no_body() -> None:

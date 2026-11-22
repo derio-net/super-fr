@@ -27,9 +27,9 @@ from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, held_gates
+from fr.triage.admit import content_digest, latest_admit
 from fr.triage.claims import read_claims, to_issue_claim
 from fr.triage.errors import ForgeError, TriageError
-from fr.triage.admit import content_digest, latest_admit
 from fr.triage.intake import ADMIT_UNSUPPORTED, intake_trusted, needs_admit_read, stored_reason
 from fr.triage.model import (
     BATCH_MARKER_PREFIX,

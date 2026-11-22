@@ -140,9 +140,7 @@ APPROVED_FR = LabelDef(
 # an issue that no login or association admits may still be batched when it carries this.
 # Never applied by fr; applying a label needs triage permission on GitHub, which an outside
 # author lacks.
-READY_FR = LabelDef(
-    "ready-fr", "5319E7", "Operator: admitted for batching by fr triage admit"
-)
+READY_FR = LabelDef("ready-fr", "5319E7", "Operator: admitted for batching by fr triage admit")
 
 RUNNER_LABEL_COLOR = "1D76DB"
 

@@ -81,8 +81,7 @@ def test_a_forge_that_cannot_list_comments_is_named_in_the_reason() -> None:
 
     got = intake_reason("bob", "NONE", ["ready-fr"], TRUSTED, admit_unread=ADMIT_UNSUPPORTED)
     assert got == (
-        "labelled ready-fr, but this forge cannot list comments, so an admit marker cannot "
-        "be read"
+        "labelled ready-fr, but this forge cannot list comments, so an admit marker cannot be read"
     )
 
 

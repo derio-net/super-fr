@@ -67,9 +67,7 @@ def parse_admit(body: str) -> str | None:
     return digest if isinstance(digest, str) and _DIGEST_RE.match(digest) else None
 
 
-def latest_admit(
-    comments: Iterable[Mapping[str, object]], trusted: Collection[str]
-) -> str | None:
+def latest_admit(comments: Iterable[Mapping[str, object]], trusted: Collection[str]) -> str | None:
     """The digest of the latest admit marker, by `created_at`, whose comment's author is
     trusted (R4); None when there is none. *trusted* are lowercased logins."""
     allowed = {t.lower() for t in trusted}
