@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-22 issue intake: ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
+reviewed: 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
 ---
 
 # Merge protection for `main`
