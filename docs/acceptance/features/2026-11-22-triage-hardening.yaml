@@ -114,3 +114,9 @@ amendments:
     ref: super-fr:tests/unit/test_triage_batch_verbs.py#test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_nothing
     why: 'renamed: the refusal names fr triage admit, not the label (triage-hardening
       R4)'
+  - row: intake-batch-refuses-untrusted
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_verbs.py#test_create_refuses_an_untrusted_member_naming_it_and_the_admit_verb_and_writes_nothing
+    why: the renamed test
