@@ -532,3 +532,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-12 created=2026-11-22T21:26:41+00:00 -->
+### exit-change-12 · decision · exit change: row wave-queue-post-merge -> strategy live
+
+needs real forge merged state and a driver checkout; CI proves it over real bare git remotes (Test Plan 25), walked on the next wave after merge
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
