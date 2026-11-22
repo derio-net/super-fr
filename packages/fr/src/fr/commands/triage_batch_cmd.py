@@ -202,6 +202,7 @@ from fr.triage.batch_drive import (
     closeout_event,
     closeout_item_id,
     closeout_of,
+    collected_anchor,
     collected_candidate,
     collected_item_id,
     collected_name,
@@ -4520,6 +4521,7 @@ class _Driver:
         narrowed: dict[str, frozenset[str] | None] = {}
         pushed: set[str] = set()
         reopened: dict[str, LivePr] = {}
+        approvals: dict[str, ApprovalVerdict] = {}
         asked: set[str] = set()
         probes: dict[str, list[WorkItem]] = {}
         by_id = {b.id: b for b in judgements.batches}
@@ -4588,6 +4590,10 @@ class _Driver:
                 head = str(view.get("head_oid") or pick.head)
                 pick = replace(pick, head=head)
                 if pick.state == "OPEN":
+                    anchor = collected_anchor(m, judgements.batches)
+                    if anchor is not None:  # gh#1497: read as a batch PR's approval is
+                        approvals[m.item] = approval_verdict(
+                            anchor.events, pick.number, head, view.get("labels"))  # fmt: skip
                     key = (m.repo, pick.number)
                     fact = next((p for p in facts.prs if (p.repo, p.number) == key), None)
                     # p6b-r2: only results for the head that will merge; none is pending
@@ -4625,6 +4631,7 @@ class _Driver:
             "collected_prs": prs, "collected_diff": diff, "collected_commits": commits,
             "collected_body_closes": body_closes, "collected_narrowed": narrowed,
             "collected_pushed": frozenset(pushed), "collected_reopened": reopened,
+            "collected_approvals": approvals,
             "live": frozenset(live), "asked": frozenset(asked),
         }  # fmt: skip
 
@@ -5186,6 +5193,12 @@ class _Driver:
             repo = repos.get(e.batch.id)
             if e.batch.id in chosen and repo is not None and repo not in unread:
                 by_repo.setdefault(repo, []).append((e.batch, e.pr.number))
+        for m in judgements.closeouts:  # gh#1497: an open collected close-out's PR too
+            anchor = collected_anchor(m, judgements.batches)
+            if (m.pr is None or m.merged or m.closed or anchor is None
+                    or anchor.id not in chosen or m.repo in unread):  # fmt: skip
+                continue
+            by_repo.setdefault(m.repo, []).append((anchor, m.pr))
         wrote = False
         voided: set[tuple[str, int]] = set()
         writer = event_writer(self.target, facts, read_errors=True)

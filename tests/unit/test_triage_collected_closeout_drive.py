@@ -492,8 +492,8 @@ def test_p6_r6_a_collected_pr_touching_code_is_never_auto_merged(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _started(
-        world, tmp_path, "b1", checkout=checkout, diff=[*FILES, "A\tscripts/x.sh"]
-    )  # the forge's file list says docs only
+        world, tmp_path, "b1", checkout=checkout, diff=[*FILES, "A\tscripts/x.sh"], labels=[]
+    )  # the forge's file list says docs only; no approved-fr (gh#1497 would release it)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert "pr_merge 900" not in world.calls
     (line,) = _lines(out, "closeout-needs-review")
@@ -648,3 +648,43 @@ def test_gh1497_an_approved_closeout_pr_still_waits_for_green_and_mergeable() ->
                       collected_approvals={ITEM: First("h999")})  # fmt: skip
     kinds = _kinds_of(snap)
     assert "archive" not in kinds and "closeout-needs-review" not in kinds
+
+
+def test_gh1497_the_driver_records_the_approval_and_merges_the_held_pr_at_its_head(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """End to end: the session's push moved the head past the recorded one (gh#1496's
+    state); the operator's approved-fr is recorded at the live head and the PR merges
+    there, once, with its members' close-out bookkeeping."""
+    target = _started(world, tmp_path, "b1", "b2", checkout=checkout, head_oid="sha-901")
+    checkout.status["sha-901"] = frozenset(FILES)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert "approval of PR #900 recorded at sha-901" in out
+    assert world.calls.count("pr_merge 900") == 1
+    judgements = load_judgements(target / "judgements.yaml")
+    (marker,) = judgements.closeouts
+    assert marker.merged
+    approvals = [e for b in judgements.batches for e in b.events if e.kind == "approval"]
+    assert [(e.pr, e.head) for e in approvals] == [(900, "sha-901")]
+
+
+def test_gh1497_a_push_after_the_approval_voids_it_and_the_pr_stays_held(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    target = _started(world, tmp_path, "b1", checkout=checkout, head_oid="sha-901",
+                      mergeable="UNKNOWN")  # fmt: skip
+    checkout.status["sha-901"] = frozenset(FILES)
+    code, out = _drive(tmp_path, "--once", "--yes")  # recorded at sha-901, not yet mergeable
+    assert "approval of PR #900 recorded at sha-901" in out
+    world.prs[900].update(head_oid="sha-902", mergeable="MERGEABLE")  # a foreign push
+    checkout.status["sha-902"] = frozenset(FILES)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "approval of PR #900 at sha-901 voided: head moved to sha-902" in out
+    assert "pr_merge 900" not in world.calls
+    assert _lines(out, "closeout-needs-review")
+    assert load_judgements(target / "judgements.yaml").closeouts[0].merged is False

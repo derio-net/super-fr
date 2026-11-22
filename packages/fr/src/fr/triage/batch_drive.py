@@ -411,6 +411,9 @@ class Snapshot:
     collected_narrowed: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
     collected_pushed: frozenset[str] = frozenset()
     collected_reopened: Mapping[str, LivePr] = field(default_factory=dict)
+    # marker item -> its open PR's approval verdict (gh#1497), read like a batch PR's:
+    # what releases a PR `review_reasons` holds. None is never approved.
+    collected_approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -733,6 +736,13 @@ def closeout_of(batch: Batch, closeouts: Iterable[CollectedCloseout]) -> Closeou
         return event
     marker = marker_of(event.archive or "", closeouts)
     return None if marker is not None and marker.closed and not marker.merged else event
+
+
+def collected_anchor(marker: CollectedCloseout, batches: Iterable[Batch]) -> Batch | None:
+    """The batch whose events carry *marker*'s PR approval (gh#1497): its first recorded
+    member, else its first planned batch. One choice for recording and for reading."""
+    by_id = {b.id: b for b in batches}
+    return next((by_id[b] for b in (*marker.members, *marker.planned) if b in by_id), None)
 
 
 def _collected_marker_of(
@@ -1175,14 +1185,22 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
         return Action("closeout-handback", first, f"close-out PR #{pr.number} {what}; hand "
                       f"it back to {marker.item}", pr=pr.number, head=pr.head, items=members,
                       key=marker.item, checks=checks), "closing"  # fmt: skip
+    head = marker.head
     if why := review_reasons(marker, pr, snap):
-        return Action("closeout-needs-review", first, f"close-out PR #{pr.number} is never "
-                      f"merged without approved-fr: {'; '.join(why)}", pr=pr.number,
-                      items=members, key=marker.item), "blocked"  # fmt: skip
+        # gh#1497: the operator's valid approved-fr, bound to the live head, releases it
+        verdict = snap.collected_approvals.get(marker.item)
+        if verdict is None or not is_approved(verdict) or not pr.head:
+            moved = pr.head != marker.head  # gh#1496: its session can re-record the head
+            again = (f"; or re-record its head: `fr triage batch closeout --branch "
+                     f"{marker.branch} --yes`") if moved else ""  # fmt: skip
+            return Action("closeout-needs-review", first, f"close-out PR #{pr.number} is "
+                          f"never merged without approved-fr: {'; '.join(why)}{again}",
+                          pr=pr.number, items=members, key=marker.item), "blocked"  # fmt: skip
+        head = pr.head
     if pr.checks == "green" and pr.mergeable == "MERGEABLE":
         return Action("archive", first, f"PR #{pr.number} ({pr.head_ref}) for "
-                      f"{', '.join(members)} at {marker.head[:12]}", pr=pr.number,
-                      head=marker.head, items=members, draft=pr.draft,
+                      f"{', '.join(members)} at {head[:12]}", pr=pr.number,
+                      head=head, items=members, draft=pr.draft,
                       key=marker.item), "closing"  # fmt: skip
     return None, "closing"
 
