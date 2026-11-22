@@ -8838,6 +8838,13 @@ batches:
     handle: w3P:pA
     run: 2026-11-19-feat-batch-train-truth
     archive: chore/closeout-2026-11-22-1
+  - kind: closeout
+    at: '2026-11-22T21:36:24.957796Z'
+    runner: herdr
+    handle: w3P:pA
+    run: 2026-11-19-feat-batch-train-truth
+    archive: chore/closeout-2026-11-22-1
+    archived: 1629
 - id: run-durability
   title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
   ids:
@@ -9998,6 +10005,7 @@ closeouts:
   planned:
   - train-truth
   pr: 1629
+  merged: true
   head: 6831476007e887139503fe351d3a6b77253a34a0
   members:
   - train-truth
