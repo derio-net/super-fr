@@ -619,33 +619,34 @@ def test_gh1494_a_held_planned_batch_keeps_the_collected_session() -> None:
 # --------------------------- gh#1497: approved-fr releases a closeout-needs-review PR
 
 
-@pytest.mark.parametrize("verdict", ["first", "approved"])
-def test_gh1497_an_approved_held_closeout_pr_is_merged_at_the_approved_head(verdict: str) -> None:
-    from fr.triage.approval import Approved, First
+def test_gh1497_an_approved_held_closeout_pr_is_merged_at_the_approved_head() -> None:
+    from fr.triage.approval import Approved
 
-    v = First("h999") if verdict == "first" else Approved("h999")
-    snap = _under_way(_shared(head="h999"), "a", "b", collected_approvals={ITEM: v})
+    snap = _under_way(_shared(head="h999"), "a", "b",
+                      collected_approvals={ITEM: Approved("h999")})  # fmt: skip
     plan = drive_pass(snap)
     assert "closeout-needs-review" not in [a.kind for a in plan.actions]
     (merge,) = [a for a in plan.actions if a.kind == "archive"]
     assert (merge.pr, merge.head, merge.items, merge.key) == (900, "h999", ("a", "b"), ITEM)
 
 
-@pytest.mark.parametrize("verdict", ["none", "unlabelled", "void"])
-def test_gh1497_a_held_closeout_pr_without_a_valid_approval_stays_held(verdict: str) -> None:
-    from fr.triage.approval import Unlabelled, Void
+@pytest.mark.parametrize("verdict", ["none", "unlabelled", "void", "first"])
+def test_gh1497_a_held_closeout_pr_without_a_recorded_approval_stays_held(verdict: str) -> None:
+    """`First` too: a label no `--yes` pass recorded never releases a held PR."""
+    from fr.triage.approval import First, Unlabelled, Void
 
-    approvals = {"none": {}, "unlabelled": {ITEM: Unlabelled()}, "void": {ITEM: Void("h900")}}
+    approvals = {"none": {}, "unlabelled": {ITEM: Unlabelled()}, "void": {ITEM: Void("h900")},
+                 "first": {ITEM: First("h999")}}  # fmt: skip
     snap = _under_way(_shared(head="h999"), "a", collected_approvals=approvals[verdict])
     kinds = _kinds_of(snap)
     assert "closeout-needs-review" in kinds and "archive" not in kinds
 
 
 def test_gh1497_an_approved_closeout_pr_still_waits_for_green_and_mergeable() -> None:
-    from fr.triage.approval import First
+    from fr.triage.approval import Approved
 
     snap = _under_way(_shared(head="h999", mergeable="UNKNOWN"), "a",
-                      collected_approvals={ITEM: First("h999")})  # fmt: skip
+                      collected_approvals={ITEM: Approved("h999")})  # fmt: skip
     kinds = _kinds_of(snap)
     assert "archive" not in kinds and "closeout-needs-review" not in kinds
 
@@ -688,3 +689,18 @@ def test_gh1497_a_push_after_the_approval_voids_it_and_the_pr_stays_held(
     assert "pr_merge 900" not in world.calls
     assert _lines(out, "closeout-needs-review")
     assert load_judgements(target / "judgements.yaml").closeouts[0].merged is False
+
+
+def test_gh1497_an_approval_recorded_on_another_member_is_still_read_and_voided() -> None:
+    """The verdict reads every batch the marker names, so moving the anchor (a re-record
+    that drops the first planned batch) never hides an approval or lets a push re-approve."""
+    from fr.triage.batch_drive import collected_approval_events
+    from fr.triage.model import ApprovalEvent
+
+    snap = _under_way(_shared(), "a", "b")
+    at = datetime(2026, 10, 2, 11, 40, tzinfo=UTC)
+    on_b = ApprovalEvent(kind="approval", at=at, pr=900, head="h900")
+    batches = [b.model_copy(update={"events": [*b.events, on_b]}) if b.id == "b" else b
+               for b in snap.batches]  # fmt: skip
+    marker = _anchored(("a",), planned=["a", "b"])
+    assert collected_approval_events(marker, batches) == [on_b]

@@ -203,6 +203,7 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     closeout_of,
     collected_anchor,
+    collected_approval_events,
     collected_candidate,
     collected_item_id,
     collected_name,
@@ -4590,19 +4591,18 @@ class _Driver:
                 head = str(view.get("head_oid") or pick.head)
                 pick = replace(pick, head=head)
                 if pick.state == "OPEN":
-                    anchor = collected_anchor(m, judgements.batches)
-                    if anchor is not None:  # gh#1497: read as a batch PR's approval is
+                    if pick.number == m.pr:  # gh#1497: read as a batch PR's approval is
                         approvals[m.item] = approval_verdict(
-                            anchor.events, pick.number, head, view.get("labels"))  # fmt: skip
+                            collected_approval_events(m, judgements.batches), pick.number,
+                            head, view.get("labels"))  # fmt: skip
                     key = (m.repo, pick.number)
                     fact = next((p for p in facts.prs if (p.repo, p.number) == key), None)
                     # p6b-r2: only results for the head that will merge; none is pending
                     counts = (
                         (fact.checks or {}) if fact is not None and fact.head_oid == head else {}
                     )
-                    required = (
-                        client.pr_required_checks(m.repo, pick.number) if head == m.head else []
-                    )
+                    # every open head: an approved one merges too (gh#1497)
+                    required = client.pr_required_checks(m.repo, pick.number)
                     verdict, failing = checks_verdict(
                         required, counts, ci_none=self._ci_none(m.repo)
                     )
@@ -5198,7 +5198,9 @@ class _Driver:
             if (m.pr is None or m.merged or m.closed or anchor is None
                     or anchor.id not in chosen or m.repo in unread):  # fmt: skip
                 continue
-            by_repo.setdefault(m.repo, []).append((anchor, m.pr))
+            events = collected_approval_events(m, judgements.batches)  # the read's own
+            by_repo.setdefault(m.repo, []).append((anchor.model_copy(update={"events": events}),
+                                                   m.pr))  # fmt: skip
         wrote = False
         voided: set[tuple[str, int]] = set()
         writer = event_writer(self.target, facts, read_errors=True)

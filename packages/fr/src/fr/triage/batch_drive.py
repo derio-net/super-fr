@@ -26,7 +26,7 @@ from typing import Any, Literal
 from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import QueueState
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
-from fr.triage.approval import ApprovalVerdict, is_approved
+from fr.triage.approval import Approved, ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
@@ -41,8 +41,10 @@ from fr.triage.batch_dispatch import title_block
 from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
+    ApprovalEvent,
     ArchiveConflictEvent,
     Batch,
+    BatchEvent,
     CloseoutEvent,
     CloseoutHandbackEvent,
     CloseoutHoldEvent,
@@ -739,10 +741,22 @@ def closeout_of(batch: Batch, closeouts: Iterable[CollectedCloseout]) -> Closeou
 
 
 def collected_anchor(marker: CollectedCloseout, batches: Iterable[Batch]) -> Batch | None:
-    """The batch whose events carry *marker*'s PR approval (gh#1497): its first recorded
-    member, else its first planned batch. One choice for recording and for reading."""
+    """The batch an approval of *marker*'s PR is recorded on (gh#1497): its first recorded
+    member, else its first planned batch."""
     by_id = {b.id: b for b in batches}
     return next((by_id[b] for b in (*marker.members, *marker.planned) if b in by_id), None)
+
+
+def collected_approval_events(
+    marker: CollectedCloseout, batches: Iterable[Batch]
+) -> list[BatchEvent]:
+    """Every approval event of *marker*'s PR on any batch it planned or carried, oldest
+    first: what its verdict is read from, so a change of anchor never hides a recorded
+    approval or its void (gh#1497)."""
+    ids = {*marker.members, *marker.planned}
+    found = [e for b in batches if b.id in ids for e in b.events
+             if isinstance(e, ApprovalEvent) and e.pr == marker.pr]  # fmt: skip
+    return sorted(found, key=lambda e: e.at)
 
 
 def _collected_marker_of(
@@ -1188,8 +1202,10 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
     head = marker.head
     if why := review_reasons(marker, pr, snap):
         # gh#1497: the operator's valid approved-fr, bound to the live head, releases it
+        # Only a RECORDED approval (`Approved`, which the `--yes` pass's settling writes)
+        # releases it: a `First` label nobody recorded never merges a held PR.
         verdict = snap.collected_approvals.get(marker.item)
-        if verdict is None or not is_approved(verdict) or not pr.head:
+        if not isinstance(verdict, Approved) or not pr.head:
             moved = pr.head != marker.head  # gh#1496: its session can re-record the head
             again = (f"; or re-record its head: `fr triage batch closeout --branch "
                      f"{marker.branch} --yes`") if moved else ""  # fmt: skip
