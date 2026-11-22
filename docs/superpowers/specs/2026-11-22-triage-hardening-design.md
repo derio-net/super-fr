@@ -58,132 +58,170 @@ verify by CI tests, gate `developer`.
 
 ## Requirements
 
-R1. When intake finds an issue ineligible, collect stores it in facts with an empty title, as it already stores an empty body. `fr triage check` (text and `--json`), the pages and dedupe show such an issue only by its key, URL, author and reason. When the issue becomes eligible, the next collect stores its title again.
-R2. `fr triage admit <owner/repo#n>` previews, and with `--yes` applies, an admission: it reads the issue's title and body live from the forge, adds the `ready-fr` label, and posts one comment holding an admit marker `<!-- fr-admit:{"v":1,"digest":"sha256:<hex>"} -->` over that title and body, followed by a line saying who may change it. It writes the forge only with `--yes` and only through the `GhClient` adapter; on a forge that cannot, it refuses as batch writes do. For an issue already eligible by author, association or digest it changes nothing and says why.
-R3. The admission digest is sha256 over the title, a blank line and the body, with `\r\n` read as `\n`. One function computes it, and both `admit` and intake call it.
-R4. A `ready-fr` label admits an issue only together with an admit marker from a trusted author (the claim-marker rule: a `claim_trusted` login or an OWNER/MEMBER/COLLABORATOR association) whose digest equals the issue's current digest; the latest such marker by creation time counts. Without one, the issue is ineligible with a reason that says whether no trusted marker exists or the content changed after admission, and names `fr triage admit <key>`. An unread comment list never admits.
-R5. Collect reads the comments of an issue for admit markers only when it carries `ready-fr` and no other clause admits it, and records the latest trusted marker's digest on the issue in facts (facts schema 16). It computes the issue's own digest from the title and body before withholding either.
+R1. When intake finds an issue ineligible, collect stores it in facts with an empty title, as it already stores an empty body. `fr triage check` (text and `--json`, its `untrusted` and `untrusted_digests` sets alike) and the pages show such an issue only by its key, URL, author and reason. When the issue becomes eligible, the next collect stores its title again. A facts file written before this change is withheld the same way when it loads.
+R2. `fr triage admit <owner/repo#n>` previews, and with `--yes` applies, an admission: it reads the issue's title and body live from the forge, adds the `ready-fr` label, and posts one comment holding an admit marker `<!-- fr-admit:{"v":1,"digest":"sha256:<hex>"} -->` over that title and body, followed by a line saying who may change it. It writes the forge only with `--yes` and only through the `GhClient` adapter. It refuses a pull request, and it refuses, before any write, on a forge whose adapter cannot list issue comments (GitLab, Gitea), since no collect there could read the marker. For an issue whose author is already a trusted login it changes nothing and says why.
+R3. The admission digest is sha256 over the full title, a blank line and the full body (never the body as facts truncate it), with `\r\n` read as `\n`. One function computes it, and both `admit` and collect call it.
+R4. A `ready-fr` label admits an issue only together with an admit marker from a trusted author (the claim-marker rule: a `claim_trusted` login or an OWNER/MEMBER/COLLABORATOR association) whose digest equals the issue's current digest; the latest such marker by creation time counts. Without one, the issue is ineligible with a reason that says whether its comments were not read, no trusted marker exists, or the content changed after admission, and names `fr triage admit <key>`; on a forge that cannot list comments the reason says so. An unread comment list never admits. Every operator-facing line that says the label admits an issue says `fr triage admit` instead.
+R5. Collect reads an issue's comments for admit markers only when it carries `ready-fr` and no other clause admits it; the label no longer skips the author-association read. Collect records on the issue in facts (schema 16) the digest of the latest trusted marker and the issue's own content digest, both computed from the full forge record before any truncation or withholding. A failed admit read leaves only that issue ineligible.
 R6. The dedupe universe leaves out every issue `is_set_apart` names (awaiting live, debt digest, owed, untrusted). There is one definition of that set.
 R7. Collect records each claim marker it ignored as untrusted in facts, naming the repo, the issue and the comment's author; `fr triage check` prints it with the fix: list that account in the repo's `.fr/triage.yaml` `pr_authors`. The fr-triage skill tells the operator to list every account that drives a scope in `pr_authors`.
-R8. A batch with no lifecycle event whose members are all in facts and all closed or awaiting live derives the stage `obsolete`. An obsolete batch is closed out: it is never dispatched, holds no wave open, is not shown under Proposed or Waiting, and meets an `after` dependency as `merged` does.
-R9. `fr triage check` lists the obsolete batches, each with its `fr triage batch cancel` command; the Batches page shows them apart from the open stages.
+R8. A batch with no lifecycle event whose members are all in facts and all closed or awaiting live derives the stage `obsolete`, which takes precedence over the awaiting-live hold. An obsolete batch is closed out: it is never dispatched, it finishes its wave as a cancelled batch does, it is not shown under Proposed or Waiting, and it meets an `after` dependency as `merged` does.
+R9. `fr triage check` lists the obsolete batches, each with its `fr triage batch cancel <id> --yes` command, and that command accepts an obsolete batch (appending a cancel event, touching no member); the Batches page shows obsolete batches apart from the open stages.
 R10. A proposed batch with some members closed (and others open) stays proposed, and `fr triage check` and its card on the Batches page name the closed members.
 R11. A judged PR that is not in the PR list is viewed once as a pull request and recorded in facts' `judged_prs` with its state. A later collect carries a closed or merged one from the previous facts with no forge call. `PR_PAST_LIMIT` is no longer recorded for a PR the forge can read; a failed view is still recorded as unreachable with its reason.
-R12. `privacy.state_keys` also returns every issue key held in the carried `snapshots/` files, so the guard refuses a push that would publish them.
+R12. `privacy.state_keys` also returns every issue and PR key held in the carried `snapshots/` files, and the guard also checks the repos their debt figures name, so it refuses a push that would publish any of them. A snapshot file it cannot parse is a refusal, never skipped.
 R13. The Issues page's filter script returns at once when `#q` or `#sort` is absent, and the rest of the page script still runs.
 
 ## Design
 
 ### A. Withheld titles (R1)
 
-`_withhold_untrusted_bodies` (renamed `_withhold_untrusted_text`) clears `title` together with
-`body` when `intake_reason` gives a reason. Intake must judge the issue before the withholding,
-as it already does for the body, so the digest and marker checks (B) see the real title. Every
-reader treats an empty title as "withheld": `check`'s text for the `untrusted` set prints
-`<key> <url> (<author>: <reason>)`, the pages print the key and a quiet "title withheld" in the
-title's place. Dedupe never sees an untrusted issue (C). Carried issues (viewed closed ones, a
-`keep` repo's open ones) pass through the same function, so nothing older holds a title.
+`_withhold_untrusted_bodies` (`collect.py:553-566`, renamed `_withhold_untrusted_text`) clears
+`title` together with `body` when `intake_reason` gives a reason. Intake judges the issue before
+the withholding, as it already does for the body. Readers treat an empty title as withheld:
+`check`'s text for the `untrusted` set (`commands/triage_cmd.py:891-895`) and the
+`untrusted_digests` set (:879-883) prints `<key> <url> (<author>: <reason>)`, the JSON rows keep
+an empty `title`, and the pages print the key and a quiet "title withheld". Carried issues pass
+through the same function. `load_facts` (`model.py:1362-1369`) already re-withholds bodies for a
+file below schema 15; it re-runs the new function for any file below 16, so a schema-15 file's
+titles, and the bodies of issues the label alone used to admit, never reach a reader.
 
 ### B. Admission pinned to content (R2-R5)
 
-New module `fr/triage/admit.py`, pure except for the command:
+New module `fr/triage/admit.py`, pure:
 
 - `content_digest(title, body) -> str` returns `sha256:<hex>` (R3).
-- `ADMIT_MARKER` and `admit_marker(digest)` / `parse_admit(comment_body) -> str | None`, in the
-  style of the claim and batch markers. A malformed marker is ignored.
-- `latest_admit(comments, trusted) -> str | None`: the digest of the latest marker whose comment
-  passes `claims.trusted_author`.
+- `admit_marker(digest)` / `parse_admit(comment_body) -> str | None`, in the style of the
+  claim and batch markers. A malformed marker is ignored.
+- `latest_admit(comments, trusted) -> str | None`: the digest of the latest marker, by
+  `created_at`, whose comment passes `claims.trusted_author`.
 
-`Issue` gains `admit_digest: str | None = None` (the latest trusted marker's digest; `None`
-when no comment was read or none was found) and `admit_read: bool = False` (whether the comment
-list was read). `FACTS_SCHEMA` moves to 16 and keeps reading 3-16; an older facts file loads
-with both defaults, so a `ready-fr` issue in it is ineligible until the next collect, which is
-the fail-closed direction.
+`Issue` gains `content_digest: str | None = None` (computed by collect in `_issue` from the raw,
+untruncated record, `collect.py:452-472`, before `_body` cuts it to `BODY_LIMIT`),
+`admit_digest: str | None = None` and `admit_read: bool = False`. `FACTS_SCHEMA` moves to 16 and
+keeps reading 3-16; an older file loads with the defaults, so a `ready-fr` issue in it is
+ineligible until the next collect.
 
-Collect, for each issue that carries `ready-fr` and that no other clause admits, reads its
-comments (the existing `list_issue_comments`, reused when the claim read already fetched them)
-and sets both fields. A failed read leaves `admit_read: False`.
+Collect: `_admitted` (`collect.py:484-489`) drops its `ready-fr` clause and keeps the login
+clause, so a labelled issue's association is read as any other's (`:516`, `:540`). After the
+association is known, an issue that carries `ready-fr` and that no login, association or digest
+clause admits gets its comments read. `_comment_facts` (`collect.py:1103-1132`) is split: one
+helper fetches the comments, once per issue, when the issue needs the claim read, the admit read
+or both, and returns them; the claim and admit parsers run over that list. When the claim read
+needs the list, a failure keeps today's rule (it raises, and org scope skips the repo); when only
+the admit read needs it, a `ForgeError` (including `UnsupportedForgeOperation` on glab/tea,
+`ghclient.py:579-580`) leaves `admit_read: False` on that issue and nothing else changes.
 
-`intake_reason` keeps its clause order. The `ready-fr` clause now also requires a digest:
-`issue_reason` passes `admit_digest` and `content_digest(title, body)`, computed from the stored
-fields before withholding. Reasons:
+`intake_reason` keeps its clause order. The `ready-fr` clause also requires
+`admit_digest is not None and admit_digest == content_digest`. `issue_reason` passes the stored
+fields. Reasons, each ending with the command:
 
-- `labelled ready-fr, comments not read`
+- `labelled ready-fr, comments not read: run fr triage collect again`
+- `labelled ready-fr, but this forge cannot list comments, so an admit marker cannot be read`
 - `labelled ready-fr without a trusted admit marker: run fr triage admit <key>`
 - `edited after admission: run fr triage admit <key> again`
 
-`rejected_members` and both snapshot builders already go through `issue_reason`, so an edited
-member blocks its batch's dispatch with the same line (intake R6).
+The adapter's kind decides the second reason: collect records `admit_read: False` with a reason
+of its own, so `Issue` also gains `admit_unread: str | None` (the read's failure text, `None` on
+success).
 
-`fr triage admit KEY [--yes]` (`commands/triage_cmd.py`) resolves the repo's client, reads the
-issue live (`view_issue`), computes the digest, refuses a key that is a PR, and prints the
-label and comment it would write. With `--yes` it ensures and adds `ready-fr` and posts the
-comment through `GhClient` (`ghclient.py:184`, :216). It is a forge write in a command group
-that is in `READ_ONLY_COMMANDS`; like `batch dispatch`, it touches no registered artifact.
-Existing admissions made with the label alone stop admitting; the release note and the skill
-say to re-admit them with `fr triage admit`.
+`rejected_members` and both snapshot builders go through `issue_reason`, so an edited member
+blocks its batch's dispatch with the same line (intake R6). The texts that say the label admits
+change to `fr triage admit`: `rejection_line` (`intake.py:102-108`), check's untrusted header
+(`commands/triage_cmd.py:891-893`), the fr-triage skill, `docs/explainers/fr-triage.md:115` and
+`docs/explainers/fr-wave-driver.md:51`. The new verb appears in the generated command tree
+(`docs/reference/cli.md`) and README table through `scripts/sync-readme.py`.
+
+`fr triage admit KEY [--yes]` (`commands/triage_cmd.py`) resolves the repo's client, refuses a
+glab or tea adapter before any read, reads the issue live (`view_issue`, refusing a `/pull/`
+URL), computes the digest over its full title and body, and prints the label and comment it
+would write. When the author is a `claim_trusted` login it prints that the issue is already
+eligible and writes nothing. With `--yes` it ensures and adds `ready-fr` and posts the comment
+(`GhClient.edit_issue_labels`, `ghclient.py:184`; `comment_issue`, :216). The `triage` group
+stays in `READ_ONLY_COMMANDS`: like `batch dispatch`, `admit` writes the forge only. Existing
+admissions made with the label alone stop admitting; the change fragment and the skill say to
+re-admit them with `fr triage admit`.
 
 ### C. Dedupe universe (R6)
 
-`dedupe.candidates` filters its universe with `is_set_apart(issue, facts)`. To keep one
-definition without a `dedupe -> check` import cycle, `is_set_apart` and the predicates it calls
-(`is_awaiting_live`, `is_debt_digest`, `is_owed`) move to a small module
-`fr/triage/sets.py`, which `check` re-exports under the same names.
+`dedupe.candidates` filters its universe with `is_set_apart(issue, facts)`. `check` imports
+`dedupe` (`check.py:71`), so `is_set_apart` and the predicates it calls (`is_awaiting_live`,
+`is_debt_digest`, `is_owed`, `check.py:441-464`) move to a new module `fr/triage/sets.py`, which
+both import; `check` re-exports the names.
 
 ### D. Claim markers ignored as untrusted (R7)
 
-`collect.py:1124` keeps its stderr line and also records an `IgnoredClaims(repo, number,
-authors)` per issue in a new facts field `ignored_claims` (facts schema 16, with B; facts'
-`warnings` holds only `Truncation` records, `model.py:663`), naming the ignored authors by login
-only (`ClaimRead` gains `untrusted_authors: list[str]`). A `keep` repo's entries are carried
-from the previous facts, as its claims are. `check` prints claim warnings in their own
-block, each with `add <login> to pr_authors in <repo>'s .fr/triage.yaml`. The fr-triage skill's
-phase 3 (claims) states the rule, and the OpenCode and Hermes mirrors are regenerated.
+`read_claims` (`claims.py:190-226`) also collects the logins of the untrusted markers it skips,
+in `ClaimRead.untrusted_authors: list[str]`. Collect keeps its stderr line and records an
+`IgnoredClaims(repo, number, authors)` per issue in a new facts field `ignored_claims` (schema
+16; facts' `warnings` holds only `Truncation` records, `model.py:663`). A `keep` repo's entries
+are carried from the previous facts, as its claims are. `check` prints them in their own block,
+each with `add <login> to pr_authors in <repo>'s .fr/triage.yaml`. The fr-triage skill's claims
+phase states the rule, and the OpenCode and Hermes mirrors are regenerated.
 
 ### E. Obsolete batches (R8-R10)
 
-`BatchStage` gains `"obsolete"`, placed in `BATCH_STAGES` after `proposed`. In
-`derive_batch_stage`, the no-event branch returns `obsolete` when every member key is in facts
-and is closed or awaiting live (the `all_closed` test already at `batch.py:342-346`, moved into
-one helper both branches call), else `proposed`. `obsolete` joins `CLOSED_OUT`. Every
-dependency check treats `obsolete` as satisfied, as it does `merged`: the drive pass
-(`batch_drive.py:2039`, :2063), the board's waiting view (`views.py:612`) and the dependency
-state helper in `batch.py`. One predicate, `meets_dependency(stage)`, replaces the three
-`== "merged"` tests. The driver selects only open batches,
-so it never dispatches one. Snapshots store the stage as a string (`snapshot.py:63`), so an
-older reader loads the new value.
+`BatchStage` gains `"obsolete"`, after `proposed` in `BATCH_STAGES`. In `derive_batch_stage`
+(`batch.py:326-348`) the `all_closed` test (:342-347) becomes a helper both branches call; the
+no-event branch returns `obsolete` when it holds, else `proposed`. `obsolete` joins
+`CLOSED_OUT`, so `is_open` releases its members and the driver never selects it.
+
+Readers of the stage:
+
+- **Dependencies.** One predicate, `meets_dependency(stage)` (`merged` or `obsolete`), replaces
+  the `== "merged"` tests at `batch.py:410` (`dependency_state`; its docstring at :405 too),
+  `batch_drive.py:2063` and `views.py:612` (and the "waits for X to merge" wording at :614).
+  `batch_drive.py:2039`, which marks a merging batch `merged`, stays.
+- **Waves.** `finished_waves` (`batch_drive.py:1238-1250`) counts `obsolete` as terminal with
+  `cancelled` and `abandoned`; `preselected_wave` (`views.py:699-702`) adds it to its non-live
+  set; `cancelled_waves` (`views.py:669-679`) counts an all-obsolete wave as delivering nothing,
+  as an all-cancelled one.
+- **Awaiting live.** A never-dispatched batch whose open members all await their walk and whose
+  others are closed is `obsolete`, not held (`batch_awaits_live`, `check.py:468-472`;
+  `AWAITING_LIVE_HOLD`, `batch_drive.py:2045-2047`): it has no work to dispatch. The members stay
+  in the awaiting-live set. The hold still applies to a batch with a lifecycle event.
+- **Cancel.** `batch cancel` (`commands/triage_batch_cmd.py:943-945`) refuses `CLOSED_OUT` stages
+  except `obsolete`; a never-dispatched batch withdraws nothing (:957-959), so cancelling it only
+  appends the cancel event, after which it derives `cancelled`.
+- **Snapshots.** They store the stage as a string (`snapshot.py:63`), so an older reader loads it.
 
 `CheckResult` gains `obsolete_batches: list[str]` and `stale_members: dict[str, list[str]]`
 (batch id -> closed member keys, for proposed batches only). The text output prints each
 obsolete batch with `fr triage batch cancel <id> --yes`, and each partly-closed batch with its
-closed members. The Batches page groups obsolete batches under their own heading with the closed
-stages, and a proposed card lists its closed members.
+closed members. The Batches page groups obsolete batches under a heading of their own beside the
+closed-out stages, and a proposed card lists its closed members.
 
 ### F. Judged PRs past the list limit (R11)
 
-The collect `Forge` protocol gains `view_pr(repo, number) -> dict` (`ClientForge` wraps
-`GhClient.pr_view`, `ghclient.py:315`/:594, both the CLI and REST clients). In the judged-key
-loop:
+The collect `Forge` protocol gains `view_pr(repo, number) -> dict`; `ClientForge` wraps
+`GhClient.pr_view` as it already does for `pr_labels` (`collect.py:213-217`; implementations
+`real_ghclient.py:416`, `real_ghrestclient.py:772`). In the judged-key loop (`collect.py:842-876`):
 
 1. Before any view, a judged key that the previous facts hold in `judged_prs` as `CLOSED` or
-   `MERGED` is carried with no forge call (a collected repo too, unlike today's `keep`-only
-   carry at `collect.py:845-849`).
-2. When `view_issue` returns a `/pull/` URL, collect calls `view_pr` and records a
-   `PullRequest` in `judged_prs`; a failed `view_pr` records `Unviewed` with its error.
+   `MERGED` is carried with no forge call, in a collected repo as in a `keep` one (today only
+   `keep`, :845-849).
+2. When `view_issue` returns a `/pull/` URL, collect calls `view_pr` and builds a `PullRequest`
+   from both records: `number`, `url` and `title` from the issue record, `state`, `is_draft` and
+   `head_ref` from `pr_view`. `merged_at`, `created_at` and `author` stay `None` (never read),
+   which no attribution trusts. A failed `view_pr` records `Unviewed` with its error.
 3. `PR_PAST_LIMIT` is removed. An open past-limit PR is viewed again on each pass, since its
    state can change.
 
 ### G. Snapshot keys in the privacy guard (R12)
 
-`state_keys` loads every `snapshots/*.json` in the state directory with the snapshot reader and
-adds the keys of each one's `issues` map. An unreadable snapshot is a `TriageError`, like the
-other files: what cannot be read cannot be shown safe.
+`state_keys` (`privacy.py:206-220`) reads every `snapshots/*.json` in the state directory with a
+new strict reader in `snapshot.py`, `load_snapshot_strict(path)`, which raises `TriageError` on a
+file it cannot parse (the existing `_readable`/`stored_snapshots`, `snapshot.py:205-229`, skip such
+a file, which would still ride the ref). It adds the keys of each snapshot's `issues` and `prs`
+maps. A new `state_repos(state_dir)` returns the repo names of each snapshot's `debt` map, and
+`guard_state` adds them to the repos whose visibility it checks.
 
 ### H. Filter script guard (R13)
 
-The filter IIFE in `SCRIPT` begins `if (!q || !sort) return;` after it looks the two elements
-up. A test renders the Issues page with a manifest that leaves `backlog-by-tier` out and asserts
-the guard precedes the first `addEventListener` and that `PAGE_SCRIPT` is in the same script.
+The filter IIFE in `SCRIPT` (`render.py:249-320`, lookup at :252) begins `if (!q || !sort) return;` after it
+looks the two elements up. A test renders the Issues page with a manifest that leaves
+`backlog-by-tier` out and asserts the guard precedes the first `addEventListener` and that
+`PAGE_SCRIPT` is in the same script.
 
 ## Verification
 
@@ -191,12 +229,12 @@ strategy: none
 gate: developer
 
 - intake-title-withheld: none — CI unit tests on collect and check over fake forge facts with an outside author
-- intake-admit-pinned: none — CI unit tests on the digest, the marker parser, `intake_reason` (edited, untrusted marker, unread comments) and `fr triage admit` against a fake GhClient
+- intake-admit-pinned: none — CI unit tests on the digest (a body over `BODY_LIMIT`), the marker parser, `intake_reason` (edited, untrusted marker, unread comments, glab), a MEMBER-authored labelled issue with no marker, the v15 load and `fr triage admit` against a fake GhClient
 - dedupe-set-apart: none — CI unit test with owed trackers carrying the template title
 - claim-untrusted-warning: none — CI unit tests on collect's warnings and check's output
-- batch-obsolete-stage: none — CI unit tests on `derive_batch_stage`, dependencies, the drive pass selection, check and the Batches page
+- batch-obsolete-stage: none — CI unit tests on `derive_batch_stage` (incl. an awaiting-live member), dependencies, `finished_waves`/`preselected_wave`, the drive pass selection, `batch cancel` of an obsolete batch, check and the Batches page
 - collect-past-limit-pr: none — CI unit tests counting forge calls over two collects with a fake forge
-- privacy-snapshot-keys: none — CI unit test of `state_keys` and `guard_state` with a snapshot holding a private key
+- privacy-snapshot-keys: none — CI unit tests of `state_keys` and `guard_state` with snapshots holding a private issue key, PR key and debt repo, and an unparseable snapshot
 - issues-page-filter-guard: none — CI unit test rendering the Issues page without `backlog-by-tier`
 
 Every requirement is engine or render behaviour that fakes prove in CI; no released build is
@@ -207,6 +245,7 @@ needed to show any of it.
 - Deduplicating owed trackers by identity (spec, row, step): they leave the universe instead.
 - A per-repo claim trust check that reads the viewer's association live.
 - Driver-side automatic cancellation of obsolete batches: the operator cancels them.
+- Admission on GitLab and Gitea: their adapters cannot list issue comments, so `admit` refuses there and a `ready-fr` issue stays ineligible with that reason until an adapter can.
 
 ## Implementation Plans
 

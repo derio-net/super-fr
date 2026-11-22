@@ -1,0 +1,123 @@
+schema_version: 12
+run: 2026-11-22-feat-batch-triage-hardening
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s-r1
+  title: 'Admission digest can never match for a body over 2000 chars: facts store a truncated body'
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r2
+  title: '`batch cancel` refuses every CLOSED_OUT stage, so the command R9 prints for an obsolete batch fails'
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r3
+  title: '`_admitted` still treats the ready-fr label as admitting, so the association of a labelled issue is never read'
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r4
+  title: A facts file of schema 15 loads with titles, and bodies once admitted by the label, that the new rule withholds
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r5
+  title: '''Holds no wave open'' is not designed: `finished_waves` and `preselected_wave` do not read CLOSED_OUT'
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r6
+  title: Obsolete silently replaces the awaiting-live hold for never-dispatched batches
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r7
+  title: The privacy guard misses private repo keys in the snapshot `prs` map, and a lenient read lets an unparseable snapshot through
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r8
+  title: 'On GitLab/Gitea scopes, admission becomes impossible: admit can write, collect cannot read comments'
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r9
+  title: The operator-facing text still says 'label it ready-fr to admit it'
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r10
+  title: '`pr_view` does not carry what a `PullRequest` needs, and the cited lines are not the CLI and REST clients'
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r11
+  title: R1 says dedupe shows withheld issues by key, but R6/§C remove them from dedupe
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r12
+  title: §E counts `batch_drive.py:2039` as a dependency test; it is an assignment
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: finding
+  id: s-r13
+  title: The admit read reuses the claim read's comments, but `_comment_facts` neither returns them nor tolerates a failure
+  body: See the spec reviewer's return; fixed in the spec (see resolution).
+  review_scope: in
+- kind: review
+  id: spec-review-1
+  title: 'Spec review of 2026-11-22-triage-hardening: 13 findings'
+  body: 'Dispatched fr-spec-reviewer raised s-r1..s-r13, all in scope; every operator decision appears in the spec. All 13 fixed in the spec. Suggested lenses: security (already recorded), tests.'
+- kind: lens
+  lens: tests
+  title: Back-compat loads (v15 facts), forge-call counts and wave predicates are easy to leave untested
+resolves:
+- id: s-r1
+  state: fixed
+  body: 'R3/R5 and §B: collect computes `content_digest` from the full forge record before `_body` truncates it and stores it on `Issue`; intake compares the two stored digests. Test row names a body over
+    BODY_LIMIT.'
+- id: s-r2
+  state: fixed
+  body: 'R9 and §E: `batch cancel` accepts `obsolete` (appends the cancel event only; a never-dispatched batch withdraws nothing).'
+- id: s-r3
+  state: fixed
+  body: 'R5 and §B: `_admitted` drops the ready-fr clause, so the association is read; admit''s already-eligible check is the login clause only. Test row names a MEMBER-authored labelled issue with no marker.'
+- id: s-r4
+  state: fixed
+  body: 'R1 and §A: `load_facts` re-withholds any file below schema 16; test row names the v15 load.'
+- id: s-r5
+  state: fixed
+  body: 'R8 and §E: `finished_waves` counts obsolete terminal, `preselected_wave` treats it non-live, `cancelled_waves` counts an all-obsolete wave as delivering nothing; in the test row.'
+- id: s-r6
+  state: fixed
+  body: 'R8 and §E: obsolete takes precedence over the awaiting-live hold for a never-dispatched batch, stated; the hold still applies to batches with a lifecycle event; in the test row.'
+- id: s-r7
+  state: fixed
+  body: 'R12 and §G: snapshot issue and PR keys plus debt repos are checked; a strict per-file reader refuses an unparseable snapshot.'
+- id: s-r8
+  state: fixed
+  body: 'R2/R4, §B and Out of scope: admit refuses on glab/tea before any write; the intake reason says the forge cannot list comments; GitLab/Gitea admission recorded as out of scope.'
+- id: s-r9
+  state: fixed
+  body: R4 and §B name every operator-facing line to reword (rejection_line, check header, skill, both explainers) and the generated CLI tree/README.
+- id: s-r10
+  state: fixed
+  body: §F builds the PullRequest from the view_issue record (number, url, title) plus pr_view (state, draft, head_ref); merged_at/created_at/author stay None; citations corrected.
+- id: s-r11
+  state: fixed
+  body: R1 drops dedupe and covers the untrusted_digests set too.
+- id: s-r12
+  state: fixed
+  body: §E names batch.py:410, batch_drive.py:2063, views.py:612 (plus the :405 docstring and :614 wording); 2039 stays.
+- id: s-r13
+  state: fixed
+  body: '§B splits `_comment_facts`: one fetch per issue serving claim and admit reads; a claim-read failure keeps today''s repo skip, an admit-only failure stays on that issue (admit_read False). §D: read_claims
+    fills untrusted_authors.'
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a64281c148b07bb22
