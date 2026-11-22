@@ -428,3 +428,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-4 created=2026-11-22T21:25:31+00:00 -->
+### exit-change-4 · decision · exit change: row wave-queue-approval-content -> strategy live
+
+needs real PR labels and heads; CI proves it over a real git repo and the fake forge (Test Plan 5), walked on the next wave after merge
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
