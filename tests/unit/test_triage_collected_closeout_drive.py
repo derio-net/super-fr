@@ -704,3 +704,48 @@ def test_gh1497_an_approval_recorded_on_another_member_is_still_read_and_voided(
                for b in snap.batches]  # fmt: skip
     marker = _anchored(("a",), planned=["a", "b"])
     assert collected_approval_events(marker, batches) == [on_b]
+
+
+# ------------------ gh#1569: a release-pending migration is a wait, never a hold
+
+
+def test_gh1569_no_collected_closeout_starts_while_the_repos_artifacts_await_a_release() -> None:
+    path = "docs/superpowers/runs/r.yaml"
+    plan = drive_pass(_landed("a", "b", closeout_waits={REPO: path}))
+    assert [a for a in plan.actions if a.kind == "closeout"] == []
+    (wait,) = [a for a in plan.actions if a.kind == "warn" and "release" in a.detail]
+    assert path in wait.detail and "a, b" in wait.detail
+    again = drive_pass(_landed("a", "b", closeout_waits={REPO: path},
+                               warned=frozenset({wait.head})))  # fmt: skip
+    assert [a for a in again.actions if a.kind == "warn" and "release" in a.detail] == []
+    assert [a for a in again.actions if a.kind == "closeout"] == []
+
+
+def test_gh1569_the_closeout_starts_once_the_release_migrated_them() -> None:
+    plan = drive_pass(_landed("a", "b", closeout_waits={}))
+    (start,) = [a for a in plan.actions if a.kind == "closeout"]
+    assert start.items == ("a", "b")
+
+
+def test_gh1569_the_driver_reports_the_wait_and_starts_no_session(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.commands import triage_batch_cmd
+
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    stale = "docs/superpowers/runs/r.yaml"
+    monkeypatch.setattr(triage_batch_cmd.collected, "pending_migration", lambda root: stale)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert runner.dispatched == [] and load_judgements(tmp_path / "judgements.yaml").closeouts == []
+    assert f"waits for the release that migrates {stale}" in out
+    assert not any(e.kind == "closeout_hold"
+                   for b in load_judgements(tmp_path / "judgements.yaml").batches
+                   for e in b.events)  # fmt: skip
+    monkeypatch.setattr(triage_batch_cmd.collected, "pending_migration", lambda root: None)
+    code, out = _drive(tmp_path, "--once", "--yes")  # the release migrated it
+    (item,) = runner.dispatched
+    assert item.id == CMD_ITEM

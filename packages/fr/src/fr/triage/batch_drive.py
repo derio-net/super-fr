@@ -416,6 +416,9 @@ class Snapshot:
     # marker item -> its open PR's approval verdict (gh#1497), read like a batch PR's:
     # what releases a PR `review_reasons` holds. None is never approved.
     collected_approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
+    # repo -> an artifact on its default branch a release has yet to migrate (gh#1569):
+    # its close-out would be refused by the migration gate, so none starts until then.
+    closeout_waits: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1967,6 +1970,13 @@ def drive_pass(snap: Snapshot) -> Pass:
         if _collected_under_way(repo, snap) or item_id in snap.existing:
             continue  # one at a time; a live session of this item is not started twice
         taking = tuple(collecting[repo])
+        if (stale := snap.closeout_waits.get(repo)) is not None:  # gh#1569: owed, not held
+            key = f"closeout-wait\0{repo}\0{stale}"
+            if key not in snap.warned:
+                actions.append(Action("warn", taking[0], f"close-out of {', '.join(taking)} "
+                                      f"waits for the release that migrates {stale}",
+                                      head=key))  # fmt: skip
+            continue
         actions.append(
             Action("closeout", taking[0], f"start {collected_item_id(repo, name)} for "
                    f"{', '.join(taking)}", items=taking, key=name)

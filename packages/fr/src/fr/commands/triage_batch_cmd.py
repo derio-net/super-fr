@@ -4401,6 +4401,7 @@ class _Driver:
         live_items, asked_items = reads.pop("live"), reads.pop("asked")
         return Snapshot(
             closeouts=tuple(judgements.closeouts),
+            closeout_waits=self._closeout_waits({repos[b.id] for b in due if b.id in repos}),
             **reads,
             approvals=approvals,
             batches=tuple(judgements.batches),
@@ -5003,6 +5004,20 @@ class _Driver:
             found |= runner.existing_dispatches(probes)
             asked.update(p.id for p in probes)
         return frozenset(found), frozenset(asked)
+
+    def _closeout_waits(self, repos: set[str]) -> dict[str, str]:
+        """gh#1569: per repo with a close-out due, the first artifact of its clone that a
+        migration (a release's) has yet to move; only such a repo waits. An unreadable
+        clone or artifact never waits: the verb's own refusal is then the evidence."""
+        out: dict[str, str] = {}
+        for repo in sorted(repos):
+            try:
+                stale = collected.pending_migration(Path(self._reader(repo).path))
+            except Exception:  # noqa: BLE001 - unknown is no wait
+                continue
+            if stale is not None:
+                out[repo] = stale
+        return out
 
     def _sessions(
         self, facts: Facts, finished: list[Batch], repos: dict[str, str]

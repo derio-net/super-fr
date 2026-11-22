@@ -331,3 +331,30 @@ def test_a_branch_no_run_names_reads_no_run(tmp_path: Any) -> None:
     from fr.triage.ledger import closeout_read
 
     assert closeout_read(_closeout_repo(tmp_path), "origin/main", "fix/x", REPO).run is None
+
+
+def test_gh1569_an_archive_refused_only_by_the_migration_gate_is_transient_never_a_hold() -> None:
+    """`fr archive` refused over stale artifacts a release will migrate: still owed."""
+    from fr.artifacts.trigger import STALE_REFUSAL
+
+    refusal = (f"fr: artifacts in /x {STALE_REFUSAL}\n  HEAD is main\n  detail\n"
+               "  apply:    fr migrate artifacts --yes\n")  # fmt: skip
+    assert STALE_REFUSAL in refusal
+    from fr.triage.batch_closeout import release_pending
+
+    assert release_pending("archive", 2, refusal)
+    assert not release_pending("archive", 1, refusal)
+    assert not release_pending("verify-merge", 2, refusal)
+    assert not release_pending("archive", 2, "fr archive: Test Plan step 2 has no outcome")
+
+
+def test_gh1569_a_batch_whose_archive_awaits_a_release_is_skipped_never_held() -> None:
+    from fr.artifacts.trigger import STALE_REFUSAL
+
+    refusal = f"fr: artifacts in /x {STALE_REFUSAL}\n  apply:    fr migrate artifacts --yes"
+    tree = FakeTree(codes={("archive", "feat/batch-a"): 2},
+                    outs={("archive", "feat/batch-a"): refusal})  # fmt: skip
+    result, recorded = _run([PLAIN], tree, FakeForge())
+    assert HOLDS == [] and recorded == []
+    ((bid, why),) = result.skipped
+    assert bid == "a" and "waits for the release" in why

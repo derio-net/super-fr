@@ -448,6 +448,9 @@ def _sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "home" / ".config"))
     monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
     monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: False)
+    # The fake clone's hand-written cursors carry no stamp; a release-pending migration
+    # (gh#1569) is its own test's to set.
+    monkeypatch.setattr(triage_batch_cmd.collected, "pending_migration", lambda root: None)
 
 
 @pytest.fixture(name="world")

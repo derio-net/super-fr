@@ -32,6 +32,7 @@ import re
 import shlex
 from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Protocol
 
 from fr.labels import held_gates
@@ -302,6 +303,25 @@ def _why(step: Step, code: int, out: str) -> str:
     return f"`{step.line}` exited {code}" + (f": {last}" if last else "")
 
 
+def release_pending(kind: str, code: int, out: str) -> bool:
+    """Whether a close-out step was refused only by the artifact-migration gate (exit 2
+    over stale artifacts): a release's migration fixes it, so the batch stays owed and is
+    never held (gh#1569)."""
+    from fr.artifacts.trigger import STALE_REFUSAL
+
+    return kind == "archive" and code == 2 and STALE_REFUSAL in " ".join(out.split())
+
+
+def pending_migration(root: Path) -> str | None:
+    """The first artifact under *root* a migration (a release's) has yet to move, as a
+    repo-relative path, or None: what the driver's close-out waits for (gh#1569). An
+    artifact that cannot be read is no wait: no release fixes it."""
+    from fr.artifacts.runner import plan_migrations
+
+    actions = plan_migrations(root)
+    return actions[0].path.relative_to(root).as_posix() if actions else None
+
+
 def execute(
     members: Sequence[Member],
     *,
@@ -337,6 +357,9 @@ def execute(
                     "nothing either way, the merged PR stands")  # fmt: skip
                 continue
             why = _why(step, code, out)
+            if release_pending(step.kind, code, out):  # gh#1569: owed, never held
+                why = f"`{step.line}` waits for the release that migrates this repo's artifacts"
+                break
             durable = (step.kind, code) == ("verify-merge", 1) or step.kind == "archive"
             break
         if why:
