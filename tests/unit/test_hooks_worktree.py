@@ -472,26 +472,109 @@ class RaceRun:
     code: int | None
 
 
-def run_twice(script: Path, payload: Path, env: dict[str, str]) -> list[RaceRun]:
+def run_twice(
+    script: Path, payload: Path, env: dict[str, str], *, deadline_s: float = 60
+) -> list[RaceRun]:
     """Start two copies of a hook at once, both traced, and wait for both.
 
     stdin from a file, not a pipe: with pipes, communicate() on the first
     process blocks the second on `input=$(cat)` until the first finishes,
-    so the two never actually overlap and the test proves nothing."""
-    procs = []
-    for _ in range(2):
-        with payload.open() as stdin:
-            procs.append(
-                subprocess.Popen(
-                    ["bash", "-x", str(script)],
-                    stdin=stdin,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env={**env, "PS4": TRACE_PS4},
-                )
+    so the two never actually overlap and the test proves nothing.
+
+    stdout and stderr go to files, not pipes, for the same reason the other way round
+    (gh#1586): `bash -x` writes tens of KiB of xtrace, and a copy whose pipe nobody is
+    reading yet blocks in write(2). When that copy holds the lock, the other waits on it
+    and the test waits on the other: the release's shard hung on exactly that, 3 runs
+    in 3, once its trace grew past one 64 KiB Linux pipe."""
+    logs = Path(env["HOME"]) / "race-logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    procs: list[tuple[subprocess.Popen[bytes], Path, Path]] = []
+    for i in range(2):
+        out_path, err_path = logs / f"{i}.out", logs / f"{i}.err"
+        with payload.open() as stdin, out_path.open("wb") as out, err_path.open("wb") as err:
+            proc = subprocess.Popen(
+                ["bash", "-x", str(script)],
+                stdin=stdin,
+                stdout=out,
+                stderr=err,
+                env={**env, "PS4": TRACE_PS4},
             )
-    return [RaceRun(p.pid, *p.communicate(timeout=60), p.returncode) for p in procs]
+        procs.append((proc, out_path, err_path))
+    deadline = time.monotonic() + deadline_s
+    for proc, _, _ in procs:
+        try:
+            proc.wait(timeout=max(1.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            pytest.fail(_hung_race_evidence(procs, env, deadline_s), pytrace=False)
+    return [
+        RaceRun(proc.pid, _read(out_path), _read(err_path), proc.returncode)
+        for proc, out_path, err_path in procs
+    ]
+
+
+def _read(path: Path) -> str:
+    return path.read_bytes().decode(errors="replace")
+
+
+def _hung_race_evidence(
+    procs: list[tuple[subprocess.Popen[bytes], Path, Path]],
+    env: dict[str, str],
+    deadline_s: float,
+) -> str:
+    """What a race that never finished leaves behind, taken BEFORE anything is killed:
+    which copy is still running, the process table, the lock directory and its pid
+    file; then both are killed and their whole xtrace kept, so a hang names the step it
+    hung on (gh#1586)."""
+    state = [(proc.pid, proc.poll()) for proc, _, _ in procs]
+    parts = [f"--- the race did not finish in {deadline_s:g}s; copies (pid, exit): {state}"]
+    ps = subprocess.run(
+        ["ps", "-eo", "pid,ppid,pgid,stat,etime,args"], capture_output=True, text=True
+    )
+    parts.append("--- ps:\n" + ps.stdout)
+    locks = Path(env["HOME"]) / ".cache" / "fr" / "locks"
+    for lock in sorted(locks.glob("*")) if locks.is_dir() else []:
+        pid = lock / "pid"
+        held = pid.read_text().strip() if pid.exists() else "(none)"
+        parts.append(f"--- lock {lock.name}: pid={held}")
+    for i, (proc, out_path, err_path) in enumerate(procs):
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
+        parts.append(
+            f"--- hook {i}: pid {proc.pid}, exit {proc.returncode}\n"
+            f"--- stdout:\n{_read(out_path)}\n--- stderr:\n{_read(err_path)}"
+        )
+    for suffix in ("", ".trace"):
+        log = Path(env["FR_STUB_LOG"] + suffix)
+        parts.append(f"--- stub log{suffix}:\n{log.read_text() if log.exists() else '(none)'}")
+    return "\n".join(parts)
+
+
+# gh#1586: the release's shard hung here three runs in a row. The hook that won the lock
+# filled its stderr pipe (64 KiB on Linux) with xtrace while run_twice was still draining
+# the OTHER one, which waits on that lock: write(2), the lock and communicate() deadlock.
+# Two copies that each write more than a pipe holds, then wait until both have written,
+# hang every time if run_twice reads one copy's output before the other's.
+LOUD_RENDEZVOUS = r"""#!/bin/bash
+head -c 200000 /dev/zero | tr '\0' x >&2
+touch "$HOME/wrote.$$"
+for _ in $(seq 1 200); do
+  [ "$(ls "$HOME" | grep -c '^wrote\.')" -ge 2 ] && exit 0
+  sleep 0.1
+done
+exit 1
+"""
+
+
+def test_the_race_drains_both_hooks_at_once(tmp_path: Path) -> None:
+    script = tmp_path / "loud.sh"
+    script.write_text(LOUD_RENDEZVOUS)
+    payload = tmp_path / "payload.json"
+    payload.write_text("{}")
+    env = {**os.environ, "HOME": str(tmp_path), "FR_STUB_LOG": str(tmp_path / "fr.log")}
+    runs = run_twice(script, payload, env, deadline_s=15)
+    assert [r.code for r in runs] == [0, 0], [r.err[-300:] for r in runs]
+    assert all(r.err.count("x") >= 200_000 for r in runs)
 
 
 # The traced steps worth reading, matched on the command an xtrace line
