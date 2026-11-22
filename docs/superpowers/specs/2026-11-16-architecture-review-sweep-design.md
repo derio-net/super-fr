@@ -212,9 +212,9 @@ modules, and one check function over (lines, budget) that the tests call both on
 files and on planted numbers. It counts physical lines. Two assertions per module:
 `lines <= budget`, and `budget - lines <= 400`.
 
-Starting budgets are the line counts rounded up to the next 100: 8,900, 7,400, 3,200,
-2,600 and 2,200 at the branch's base. (`main` added 60 lines to `run_cmd.py` while the
-branch was open, so its budget lands as 9,000 by the same rule.) That gives each module between 36 and 70 lines of headroom, so an
+At the rebased implementation the five modules have 9,059, 7,584, 3,168, 2,546 and
+2,141 lines respectively. Rounding each up to the next hundred gives budgets of 9,100,
+7,600, 3,200, 2,600 and 2,200. That leaves 16 to 59 lines of headroom, so an
 ordinary PR that adds a few lines changes no budget and two such PRs do not conflict on the
 table. The lower bound is wide for the same reason: several PRs that each trim a module
 cannot together push the budget out of range, while an extraction slice (the report's
