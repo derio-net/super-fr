@@ -696,6 +696,10 @@ def test_ignored_claim_markers_print_in_their_own_block_with_the_fix(tmp_path: P
     _write(tmp_path, facts, None)
     flat = " ".join(_check(tmp_path).output.split())
     assert "ignored claims (1)" in flat
-    assert f"super-fr#2 peer-host: add peer-host to pr_authors in {REPO}'s .fr/triage.yaml" in flat
+    assert (
+        "super-fr#2 peer-host: claim marker ignored (not a trusted login or member). If "
+        f"peer-host is one of your driving accounts, add it to pr_authors in {REPO}'s "
+        ".fr/triage.yaml (this also admits its issues to batches); otherwise ignore it."
+    ) in flat
     data = json.loads(_check(tmp_path, "--json").output)
     assert data["ignored_claims"] == [{"key": "super-fr#2", "repo": REPO, "authors": ["peer-host"]}]

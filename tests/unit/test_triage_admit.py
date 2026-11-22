@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
+from fr.cli import app
 from fr.triage.admit import (
     ADMIT_PREFIX,
     admit_marker,
@@ -10,6 +13,7 @@ from fr.triage.admit import (
     latest_admit,
     parse_admit,
 )
+from typer.testing import CliRunner
 
 
 def test_the_digest_reads_crlf_as_lf_and_starts_sha256() -> None:
@@ -89,3 +93,114 @@ def test_latest_admit_trusts_a_member_association() -> None:
 def test_latest_admit_is_none_without_a_marker() -> None:
     comments = [{"author": "operator", "body": "lgtm", "created_at": "2026-11-01T00:00:00Z"}]
     assert latest_admit(comments, frozenset({"operator"})) is None
+
+
+# ------------------------------------------------------------- `fr triage admit` (R2)
+
+TITLE, BODY = "Widgets crash on start", "Steps:\r\n1. start it\n" + "y" * 3000
+
+
+class FakeClient:
+    """A GhClient serving one issue and recording every write."""
+
+    def __init__(self, *, author: str = "eve", url: str | None = None, config: str = "") -> None:
+        self.author = author
+        self.url = url or "https://github.com/derio-net/x/issues/5"
+        self.config = config
+        self.reads: list[str] = []
+        self.writes: list[tuple[str, Any]] = []
+
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        self.reads.append(f"view {repo}#{number}")
+        return {
+            "number": number,
+            "title": TITLE,
+            "body": BODY,
+            "url": self.url,
+            "state": "OPEN",
+            "labels": [],
+            "author": {"login": self.author},
+        }
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        self.reads.append(f"read {path}")
+        return self.config
+
+    def viewer_login(self) -> str:
+        return "operator"
+
+    def ensure_labels(self, repo: str, labels: list[Any]) -> None:
+        self.writes.append(("ensure", [getattr(lb, "name", lb) for lb in labels]))
+
+    def edit_issue_labels(
+        self, repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        self.writes.append(("labels", (repo, number, sorted(add), sorted(remove))))
+
+    def comment_issue(self, repo: str, number: int, body: str) -> None:
+        self.writes.append(("comment", (repo, number, body)))
+
+
+def _admit(monkeypatch: Any, client: Any, *args: str) -> Any:
+    from fr.commands import triage_admit_cmd
+
+    monkeypatch.setattr(triage_admit_cmd, "make_client", lambda url: client)
+    return CliRunner().invoke(app, ["triage", "admit", *args])
+
+
+def test_admit_previews_the_label_and_comment_and_writes_nothing(monkeypatch: Any) -> None:
+    client = FakeClient()
+    out = _admit(monkeypatch, client, "derio-net/x#5")
+    assert out.exit_code == 0, out.output
+    assert "ready-fr" in out.output and ADMIT_PREFIX in out.output
+    assert "--yes" in out.output
+    assert client.writes == []
+
+
+def test_admit_with_yes_labels_and_posts_one_marker_over_the_live_content(
+    monkeypatch: Any,
+) -> None:
+    client = FakeClient()
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes")
+    assert out.exit_code == 0, out.output
+    kinds = [k for k, _ in client.writes]
+    assert kinds == ["ensure", "labels", "comment"]
+    assert client.writes[0][1] == ["ready-fr"]
+    assert client.writes[1][1] == ("derio-net/x", 5, ["ready-fr"], [])
+    (_, (_, _, body)) = client.writes[2]
+    assert parse_admit(body) == content_digest(TITLE, BODY)  # the full body, never cut
+    assert len(body.splitlines()) == 2  # the marker, then who may change it
+
+
+def test_admit_refuses_a_pull_request(monkeypatch: Any) -> None:
+    client = FakeClient(url="https://github.com/derio-net/x/pull/5")
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes")
+    assert out.exit_code == 2 and "pull request" in out.output
+    assert client.writes == []
+
+
+def test_admit_refuses_a_forge_that_cannot_list_comments_before_any_read(
+    monkeypatch: Any,
+) -> None:
+    from fr.ghclient import UnsupportedBatchOps
+
+    class Glab(UnsupportedBatchOps, FakeClient):
+        backend = "gitlab"
+
+    client = Glab()
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes")
+    assert out.exit_code == 2 and "cannot list issue comments" in " ".join(out.output.split())
+    assert client.reads == [] and client.writes == []
+
+
+def test_admit_says_an_issue_by_a_trusted_login_is_already_eligible(monkeypatch: Any) -> None:
+    client = FakeClient(author="Release-Bot", config="pr_authors: [release-bot]\n")
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes")
+    assert out.exit_code == 0, out.output
+    assert "already eligible" in out.output
+    assert client.writes == []
+
+
+def test_admit_refuses_a_key_it_cannot_read(monkeypatch: Any) -> None:
+    out = _admit(monkeypatch, FakeClient(), "x#5")
+    assert out.exit_code == 2 and "owner/repo#n" in out.output

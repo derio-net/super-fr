@@ -48,8 +48,9 @@ Pure: facts and judgements in, sets out. The command only formats them.
   R4), with its reason. It is shown by key, URL, author and reason only, never by title (R1).
   It is never ranked, unranked, unplaced or proposed in a batch, and the skill never judges it;
 - **ignored claims** — claim markers collect ignored because their authors are not trusted
-  (2026-11-22-triage-hardening R7), each with the fix: list the account in the repo's
-  `pr_authors`;
+  (2026-11-22-triage-hardening R7). Anyone can post one, so the advice is conditional: a
+  driving account goes in the repo's `pr_authors`, which also admits its issues to batches;
+  any other author is ignored;
 - **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
   proposes as duplicates, with each flagged pair's reasons. A proposal, never a
   verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;

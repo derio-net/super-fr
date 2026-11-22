@@ -906,13 +906,17 @@ def check_command(
         console.print(f"  {_withheld_line(i, why)}", soft_wrap=True)
     console.print(
         f"[bold]ignored claims[/bold] ({len(result.ignored_claims)}) — claim markers by an "
-        "account intake does not trust: other hosts ignore its claims"
+        "account that is not trusted: other hosts ignore its claims"
     )
     for c in result.ignored_claims:
         for login in c.authors:
+            # Anyone can post a claim-shaped marker, and pr_authors also grants intake
+            # trust: the advice is conditional and names its cost (p1-sec-claim-advice).
             console.print(
-                f"  {escape(c.key)}  {escape(login)}: add {escape(login)} to pr_authors in "
-                f"{escape(c.repo)}'s .fr/triage.yaml",
+                f"  {escape(c.key)}  {escape(login)}: claim marker ignored (not a trusted "
+                f"login or member). If {escape(login)} is one of your driving accounts, add "
+                f"it to pr_authors in {escape(c.repo)}'s .fr/triage.yaml (this also admits "
+                "its issues to batches); otherwise ignore it.",
                 soft_wrap=True,
             )
     console.print(
@@ -1239,6 +1243,7 @@ def render_command(
 # helpers above and registers its commands on `batch_app`, so it is imported
 # LAST: whichever of the two modules loads first, every name the other needs
 # already exists.
+import fr.commands.triage_admit_cmd  # noqa: E402, F401
 import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
 import fr.commands.triage_claim_cmd  # noqa: E402, F401
