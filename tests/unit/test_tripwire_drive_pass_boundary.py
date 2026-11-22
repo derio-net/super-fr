@@ -11,15 +11,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-SOURCE = (
-    Path(__file__).resolve().parents[2]
-    / "packages"
-    / "fr"
-    / "src"
-    / "fr"
-    / "commands"
-    / "triage_batch_cmd.py"
-)
+COMMANDS = Path(__file__).resolve().parents[2] / "packages" / "fr" / "src" / "fr" / "commands"
+# The driver and its pass live in the command module; the loop, its waits and its failure
+# boundary in `triage_drive_loop`. The guard reads both, as one.
+SOURCES = (COMMANDS / "triage_batch_cmd.py", COMMANDS / "triage_drive_loop.py")
 GUARDED_FUNCTIONS = frozenset(
     {
         "one_pass",
@@ -75,7 +70,7 @@ def _offences(tree: ast.Module) -> list[str]:
 
 
 def test_no_direct_exit_inside_the_driver_the_loop_or_its_waits() -> None:
-    offences = _offences(ast.parse(SOURCE.read_text(encoding="utf-8")))
+    offences = [o for s in SOURCES for o in _offences(ast.parse(s.read_text(encoding="utf-8")))]
     assert offences == [], (
         "these end the looping driver past its one boundary; raise DriverRefusal or "
         "TransientPassFailure (fr.triage.drive_errors), or let the error propagate, and "
@@ -98,7 +93,10 @@ def test_the_tripwire_sees_both_shapes() -> None:
 
 def test_every_guarded_name_is_still_defined() -> None:
     """A rename moves a body out from under the guard silently (p1a-r6): every guarded name
-    must be a top-level function or class of the module."""
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-    defined = {getattr(top, "name", None) for top in tree.body}
+    must be a top-level function or class of one of the modules."""
+    defined = {
+        getattr(top, "name", None)
+        for s in SOURCES
+        for top in ast.parse(s.read_text(encoding="utf-8")).body
+    }
     assert sorted((GUARDED_FUNCTIONS | GUARDED_CLASSES) - defined) == []

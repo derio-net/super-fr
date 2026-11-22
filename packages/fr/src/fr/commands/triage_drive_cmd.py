@@ -487,6 +487,7 @@ def drive_pass_command(
     that only renewed the lease, or a rate limit; 2 a refusal (another driver's lease included); 1 a
     forge write failed."""
     from fr.commands import triage_batch_cmd as batch
+    from fr.commands.triage_drive_loop import LEASE_MARGIN
     from fr.commands.triage_kanban_cmd import scope_args, try_load
     from fr.triage.driver import CLOUD, CLOUD_RUNNER, Mailbox
 
@@ -518,7 +519,7 @@ def drive_pass_command(
     pace = pacer.before_pass()
     if pace.kind == "wait":  # R16: no pass, no forge call but /rate_limit; keep the lease alive
         if current is not None and current.holder == holder_of(sid, identity):
-            if current.expires - batch.LEASE_MARGIN < now + timedelta(minutes=interval):
+            if current.expires - LEASE_MARGIN < now + timedelta(minutes=interval):
                 try:
                     acquire(target, identity, now, scope_id=sid, duration=duration,
                             generation=generation,
@@ -641,7 +642,7 @@ def _pass_failed(
     still owed), the failure counted in the ledger (R9) and said; a refusal's line names
     how to resume and how to track it (R10). An unexpected failure is only kept, with its
     traceback: the caller re-raises it."""
-    from fr.commands.triage_batch_cmd import keep_traceback
+    from fr.commands.triage_drive_loop import keep_traceback
     from fr.triage.driver_record import FAILURES_COMMAND
 
     _write_outbox(outbox, driver.outbox())
