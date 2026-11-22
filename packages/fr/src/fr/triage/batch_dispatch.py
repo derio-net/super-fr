@@ -9,8 +9,8 @@ runs a process or calls a forge.
 
 from __future__ import annotations
 
-import re
 import shlex
+import unicodedata
 from collections.abc import Iterable, Sequence
 
 import yaml
@@ -139,24 +139,41 @@ UNTRUSTED_RULE = (
 )
 
 
-# Characters that can hide or rewrite what a terminal shows: C0 and C1 controls (ESC
-# included, so ANSI sequences), DEL, the bidi embeddings, overrides and isolates, and the
-# zero-width characters (p1-sec-admit-escapes). Newline and tab are kept.
-_HIDDEN_RE = re.compile(
-    "[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200d\u202a-\u202e\u2066-\u2069\ufeff]"
-)
+# What can hide or rewrite what a terminal shows is decided by category, never by a list of
+# code points (p1-sec-admit-escapes): controls (Cc: C0, C1, DEL, so ANSI sequences), format
+# characters (Cf: bidi embeddings, overrides and isolates, zero-width characters, the word
+# joiner, tag characters), private use (Co), unassigned (Cn) and the line and paragraph
+# separators (Zl, Zp); plus the variation selectors and the Hangul fillers, which render as
+# nothing. Newline and tab are kept.
+_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Co", "Cn", "Zl", "Zp"})
+_HIDDEN_EXTRA = frozenset({0x115F, 0x1160, 0x3164, 0xFFA0})
+_KEPT = frozenset({"\n", "\t"})
 
 
-def _escape_hidden(match: re.Match[str]) -> str:
-    code = ord(match.group())
-    return f"\\x{code:02x}" if code < 0x100 else f"\\u{code:04x}"
+def _hidden(ch: str) -> bool:
+    if ch in _KEPT:
+        return False
+    code = ord(ch)
+    return (
+        unicodedata.category(ch) in _HIDDEN_CATEGORIES
+        or 0xFE00 <= code <= 0xFE0F
+        or 0xE0100 <= code <= 0xE01EF
+        or code in _HIDDEN_EXTRA
+    )
+
+
+def _escaped(ch: str) -> str:
+    code = ord(ch)
+    if code < 0x100:
+        return f"\\x{code:02x}"
+    return f"\\u{code:04x}" if code < 0x10000 else f"\\U{code:08x}"
 
 
 def visible(text: str) -> str:
     """*text* with every character that could hide or rewrite what an operator reads
-    replaced by a visible escape (`\\x1b`, `\\u202e`); newline and tab are kept. Pure: for
-    display only, never for a digest."""
-    return _HIDDEN_RE.sub(_escape_hidden, text)
+    replaced by a visible escape (`\\x1b`, `\\u202e`, `\\U000e0041`); newline and tab are
+    kept. Pure: for display only, never for a digest."""
+    return "".join(_escaped(ch) if _hidden(ch) else ch for ch in text)
 
 
 def quote_untrusted(text: Iterable[str]) -> list[str]:

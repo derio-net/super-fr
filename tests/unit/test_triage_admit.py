@@ -268,3 +268,13 @@ def test_visible_keeps_newlines_and_tabs_and_escapes_the_rest() -> None:
 
     assert visible("a\nb\tc") == "a\nb\tc"
     assert visible("\x00\x7f\x85⁦﻿") == "\\x00\\x7f\\x85\\u2066\\ufeff"
+    assert visible("\U000e0041⁠‎️") == "\\U000e0041\\u2060\\u200e\\ufe0f"
+    assert visible("ㅤﾠᅟᅠ\U000e0100") == ("\\u3164\\uffa0\\u115f\\u1160\\U000e0100")
+    assert visible("  ") == "\\u2028\\u2029\\ue000"
+
+
+def test_visible_keeps_letters_cjk_and_emoji_bases() -> None:
+    from fr.triage.batch_dispatch import visible
+
+    plain = "Ünïcode café 漢字 한국어 \U0001f600 ❤"
+    assert visible(plain) == plain
