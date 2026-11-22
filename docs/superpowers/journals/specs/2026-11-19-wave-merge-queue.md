@@ -415,3 +415,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-3 created=2026-11-22T21:25:23+00:00 -->
+### exit-change-3 · decision · exit change: row wave-queue-wave-exclusive -> strategy live
+
+needs real forge PR state; CI proves it with the pure planner and the fake forge (Test Plan 9, 18), walked on the next wave after merge
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
