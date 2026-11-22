@@ -25,3 +25,8 @@ The hand-back brief told the session to merge origin/<base> in, which can never 
 ### 036d91903681 · repro · Four reproductions, each a failing test first
 
 #1494 test_gh1494_the_collected_closeout_session_closes_with_its_last_finished_batch (no close for the collected item); #1497 test_gh1497_an_approved_held_closeout_pr_is_merged_at_the_approved_head (Snapshot had no approval for a close-out PR); #1496 test_gh1496_the_markers_own_session_re_records_a_handed_back_head (second run printed 'nothing to close out'); #1569 test_gh1569_a_branch_retry_on_an_ended_closeout_is_refused_with_the_retry_command and test_gh1569_no_collected_closeout_starts_while_the_repos_artifacts_await_a_release.
+
+<!-- fr:journal kind=root-cause scope=debug id=3316c050927b created=2026-11-22T21:47:25+00:00 -->
+### 3316c050927b · root-cause · Four defects in the collected close-out's bookkeeping, one per member
+
+#1496: closeout_owed skips a batch whose close-out event names the resuming marker, before the command narrows to that marker's planned batches; and the hand-back brief asked for a merge, which exit-gates R15 (3) can never auto-merge. #1497: _collected_step never consulted an approval and none was collected for a close-out PR. #1494: drive_pass step 5 closed the batch and per-batch close-out ids, never the collected item. #1569: any archive refusal was a durable hold, the migration gate's included; and --branch on a closed marker updated that closed marker, which the driver then read as closed and reopened.
