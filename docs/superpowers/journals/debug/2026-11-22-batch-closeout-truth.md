@@ -30,3 +30,8 @@ The hand-back brief told the session to merge origin/<base> in, which can never 
 ### 3316c050927b · root-cause · Four defects in the collected close-out's bookkeeping, one per member
 
 #1496: closeout_owed skips a batch whose close-out event names the resuming marker, before the command narrows to that marker's planned batches; and the hand-back brief asked for a merge, which exit-gates R15 (3) can never auto-merge. #1497: _collected_step never consulted an approval and none was collected for a close-out PR. #1494: drive_pass step 5 closed the batch and per-batch close-out ids, never the collected item. #1569: any archive refusal was a durable hold, the migration gate's included; and --branch on a closed marker updated that closed marker, which the driver then read as closed and reopened.
+
+<!-- fr:journal kind=finding scope=debug id=fix-closeout-truth created=2026-11-22T21:47:28+00:00 state=fixed -->
+### fix-closeout-truth · finding [fixed] · Fixed test-first, one commit per member
+
+#1494: the finish step also closes the collected item once its PR merged and every batch it planned or carried is finished. #1497: close-out PR approvals are settled like a batch PR's and a recorded Approved verdict merges a held PR at its live head (hardened by rv-1497-sec). #1496: closeout_owed takes resuming=<branch>; the hand-back brief asks for a rebase and --force-with-lease. #1569: release_pending classifies the migration refusal as transient; the driver's closeout_waits (pending_migration on the clone) defers the close-out and warns once; --branch on an ended marker is refused with the retry command. Module budgets raised (+50/+75), split deferred to #1516.
