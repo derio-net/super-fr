@@ -358,3 +358,14 @@ def test_gh1569_a_batch_whose_archive_awaits_a_release_is_skipped_never_held() -
     assert HOLDS == [] and recorded == []
     ((bid, why),) = result.skipped
     assert bid == "a" and "waits for the release" in why
+
+
+def test_gh1569_only_the_gates_own_first_line_counts_never_the_sentence_echoed_later() -> None:
+    from fr.artifacts.trigger import STALE_REFUSAL
+    from fr.triage.batch_closeout import release_pending
+
+    echoed = f"fr archive: plan title 'x {STALE_REFUSAL}' has no outcome\n"
+    assert not release_pending("archive", 2, echoed)
+    assert not release_pending(
+        "archive", 2, f"something first\nfr: artifacts in /x {STALE_REFUSAL}"
+    )

@@ -309,7 +309,12 @@ def release_pending(kind: str, code: int, out: str) -> bool:
     never held (gh#1569)."""
     from fr.artifacts.trigger import STALE_REFUSAL
 
-    return kind == "archive" and code == 2 and STALE_REFUSAL in " ".join(out.split())
+    if kind != "archive" or code != 2:
+        return False
+    # The gate's own first line, never the sentence anywhere in the words (which may echo
+    # repo text): `fr: artifacts in <root> <STALE_REFUSAL>`.
+    first = " ".join(next((ln for ln in out.splitlines() if ln.strip()), "").split())
+    return first.startswith("fr: artifacts in ") and first.endswith(STALE_REFUSAL)
 
 
 def pending_migration(root: Path) -> str | None:

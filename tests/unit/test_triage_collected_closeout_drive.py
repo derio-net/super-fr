@@ -749,3 +749,20 @@ def test_gh1569_the_driver_reports_the_wait_and_starts_no_session(
     code, out = _drive(tmp_path, "--once", "--yes")  # the release migrated it
     (item,) = runner.dispatched
     assert item.id == CMD_ITEM
+
+
+def test_gh1497_an_approval_never_releases_a_body_closing_other_issues() -> None:
+    from fr.triage.approval import Approved
+
+    snap = _under_way(_shared(head="h999"), "a", marker=_anchored(("a",), closes=[f"{REPO}#7"]),
+                      collected_body_closes={ITEM: frozenset({f"{REPO}#7", f"{REPO}#99"})},
+                      collected_approvals={ITEM: Approved("h999")})  # fmt: skip
+    kinds = _kinds_of(snap)
+    assert "closeout-needs-review" in kinds and "archive" not in kinds
+
+
+def test_gh1497_an_approval_of_another_head_never_releases_it() -> None:
+    from fr.triage.approval import Approved
+
+    snap = _under_way(_shared(head="h999"), "a", collected_approvals={ITEM: Approved("h998")})
+    assert "archive" not in _kinds_of(snap)

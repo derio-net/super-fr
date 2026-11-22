@@ -1208,7 +1208,14 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
         # Only a RECORDED approval (`Approved`, which the `--yes` pass's settling writes)
         # releases it: a `First` label nobody recorded never merges a held PR.
         verdict = snap.collected_approvals.get(marker.item)
-        if not isinstance(verdict, Approved) or not pr.head:
+        approved = isinstance(verdict, Approved) and bool(pr.head) and (
+            verdict.approved_head == pr.head
+        )  # fmt: skip
+        # what it closes stays the verb's record even when approved: a body edited after
+        # the approval would otherwise close any issue at merge
+        if any(w.startswith("its body's Closes lines") for w in why):
+            approved = False
+        if not approved:
             moved = pr.head != marker.head  # gh#1496: its session can re-record the head
             again = (f"; or re-record its head: `fr triage batch closeout --branch "
                      f"{marker.branch} --yes`") if moved else ""  # fmt: skip
@@ -1990,7 +1997,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             key = f"reopened\0{marker.item}\0{reopened.number}"
             if key not in snap.warned:
                 said = (f"close-out PR #{reopened.number} was closed and reopened: the driver "
-                        "never merges it; it needs approved-fr like any PR")  # fmt: skip
+                        "never merges it: merge or close it by hand")  # fmt: skip
                 actions.append(Action("closeout-reopened", (marker.planned or [""])[0], said,
                                       pr=reopened.number, key=marker.item, head=key))  # fmt: skip
             continue

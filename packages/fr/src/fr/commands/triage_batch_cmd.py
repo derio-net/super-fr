@@ -5006,13 +5006,20 @@ class _Driver:
         return frozenset(found), frozenset(asked)
 
     def _closeout_waits(self, repos: set[str]) -> dict[str, str]:
-        """gh#1569: per repo with a close-out due, the first artifact of its clone that a
-        migration (a release's) has yet to move; only such a repo waits. An unreadable
-        clone or artifact never waits: the verb's own refusal is then the evidence."""
+        """gh#1569: per repo with a close-out due, the first artifact on its fetched
+        `origin/<default>` (the tree the verb archives in, read in a scratch worktree) that a
+        migration has yet to move; only such a repo waits. An unreadable one never waits:
+        the verb's own refusal is then the evidence."""
         out: dict[str, str] = {}
         for repo in sorted(repos):
+            where = self.target / "closeout-wait" / repo.replace("/", "--")
             try:
-                stale = collected.pending_migration(Path(self._reader(repo).path))
+                checkout = self._fetched_reader(repo)
+                tree = checkout.add_worktree(where, f"origin/{checkout.default_branch()}")
+                try:
+                    stale = collected.pending_migration(Path(tree.path))
+                finally:
+                    checkout.remove_worktree(where)
             except Exception:  # noqa: BLE001 - unknown is no wait
                 continue
             if stale is not None:
