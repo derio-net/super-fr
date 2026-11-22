@@ -30,3 +30,8 @@ Cloned staged.bundle (331227f), origin/main pinned to ffb03a7, python 3.11 bookw
 ### 1d695ea79a55 · hypothesis · PR #1625 test_git_cache misses: a process-wide _UNKNOWN system-config memo poisons every later cached question on that worker
 
 CI run 45065556107, py3.14 shard 4/7: three include tests on worker gw3 fail in _hit (the cached re-ask starts git config + git remote). fr.git_cache._SYSTEM_MEMO is process-global and memoises _UNKNOWN on purpose (l-errors-r2); with _UNKNOWN every scope declines ('git would not name its system config path'). Confirmed: seeding the memo with _UNKNOWN reproduces the exact failure shape on test_an_onbranch_include_flips_with_a_checkout. Open: which earlier test on the worker made the probe fail.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-git-memo created=2026-11-22T20:57:46+00:00 -->
+### rc-git-memo · root-cause · test_git_cache misses: _SYSTEM_MEMO outlives its test, so one failed probe poisons the xdist worker
+
+fr.git_cache._SYSTEM_MEMO is the one process-global fr cache with no autouse reset in tests/conftest.py. A test that fakes git away while a scope is open memoises _UNKNOWN under the real git's key; every later scope on that worker declines ('git would not name its system config path'), and the hit tests count the extra git starts. Production impact: none (a CLI process is short-lived, a decline only loses caching).
