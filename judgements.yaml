@@ -8821,6 +8821,15 @@ batches:
     pr: 1564
     head: 4130cb284bd753c83fc9a6a8aade5053754c603f
     voided_at: 18870d9a29c9e88d99abe43d2d7bc64ef3f9f951
+  - kind: claims_released
+    at: '2026-11-22T21:14:23.977003Z'
+    keys:
+    - super-fr#1491
+    - super-fr#1492
+    - super-fr#1493
+    - super-fr#1540
+    - super-fr#1541
+    - super-fr#1543
 - id: run-durability
   title: 'Run durability: atomic cursor and plan writes, no lost cursor updates, bounded cli steps'
   ids:
@@ -9044,6 +9053,12 @@ batches:
   after:
   - train-truth
   skill: debug
+  events:
+  - kind: dispatch
+    at: '2026-11-22T21:12:18.641582Z'
+    runner: herdr
+    handle: w3V:p1
+    branch: fix/batch-closeout-truth
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
@@ -9115,6 +9130,12 @@ batches:
   wave: 23
   after:
   - train-truth
+  events:
+  - kind: dispatch
+    at: '2026-11-22T21:13:06.366610Z'
+    runner: herdr
+    handle: w3V:p2
+    branch: feat/batch-triage-hardening
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
