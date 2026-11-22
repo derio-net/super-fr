@@ -9,7 +9,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
-from fr.ops.apply import ALREADY_DONE, APPLIED_UNCHECKED, ApplyRefused, apply_ops
+from fr.ops.apply import (
+    ALREADY_DONE,
+    APPLIED_UNCHECKED,
+    FOUND_DONE,
+    ApplyRefused,
+    apply_ops,
+)
 from fr.ops.engine import OrderError, order
 from fr.ops.evidence import OpEvidence
 from fr.ops.identity import IdentityError
@@ -115,7 +121,7 @@ def test_done_ops_are_skipped_and_their_closure_recorded() -> None:
     w = World(done={"a"})
     res = run([op("a")], w)
     assert res.ok and w.ran == []
-    assert w.written == [{"op": "a", "result": "done", "phase": "pre-merge"}]
+    assert w.written == [{"op": "a", "result": "done", "phase": "pre-merge", "reason": FOUND_DONE}]
     assert "already done" in res.steps[0].message and "recorded" in res.steps[0].message
 
 
@@ -147,7 +153,7 @@ def test_p3_r3_a_check_but_no_apply_op_done_by_hand_records_done_once() -> None:
     w = World(done={"a"})
     run_j([lo("a", check="check:a")], w, FakePrompt())
     run_j([lo("a", check="check:a")], w, FakePrompt())
-    assert w.written == [{"op": "a", "result": "done", "phase": "pre-merge"}]
+    assert w.written == [{"op": "a", "result": "done", "phase": "pre-merge", "reason": FOUND_DONE}]
 
 
 def test_apply_runs_in_order_and_records_the_recheck() -> None:
