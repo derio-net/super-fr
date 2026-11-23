@@ -87,3 +87,17 @@ def test_a_proposed_card_lists_its_closed_members() -> None:
     card = re.search(r'<[^>]*data-batch="old".*?</details>', page, re.S)
     assert card is not None
     assert "already closed" in card.group(0) and "widgets#1" in card.group(0)
+
+
+def test_an_obsolete_card_points_at_batch_cancel_and_is_never_cut_off() -> None:
+    from datetime import timedelta
+
+    from fr.triage.kanban import HINT_OBSOLETE, cutoff_hidden_waves
+
+    f = facts([issue(1, state="closed"), issue(2, state="closed")])
+    jd = judgements({"widgets#1": j(), "widgets#2": j()}, [batch("old", [1, 2], wave=3)])
+    board = build_board(f, jd, {})
+    [card] = board.column("obsolete").cards
+    assert card.hint == HINT_OBSOLETE and "batch cancel" in card.hint
+    assert not card.terminal
+    assert cutoff_hidden_waves([card], AT + timedelta(days=365)) == frozenset()

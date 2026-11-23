@@ -151,3 +151,33 @@ def test_the_waiting_view_does_not_list_a_batch_waiting_on_an_obsolete_one() -> 
     rows = next_up(facts, _judgements(*batches))
     assert not [r for r in rows if r.waiting and r.ref == "b"]
     assert not [r for r in rows if r.ref == "a"]
+
+
+# ------------------------------------------------- one awaiting-live rule, claims
+
+
+def test_all_closed_agrees_with_the_set_apart_awaiting_live_predicate() -> None:
+    from fr.labels import FR_AWAITING_LIVE
+    from fr.triage.batch import _all_closed
+    from fr.triage.sets import is_awaiting_live
+
+    shapes = [
+        _issue(1),
+        _issue(1, state="closed"),
+        _issue(1, labels=(FR_AWAITING_LIVE.name,)),
+        _issue(1, state="closed", labels=(FR_AWAITING_LIVE.name,)),
+        _issue(1, labels=("bug",)),
+    ]
+    b = _batch("a", [1])
+    for shape in shapes:
+        expected = shape.state == "closed" or is_awaiting_live(shape)
+        assert _all_closed(b, _facts(shape)) is expected, shape
+
+
+def test_an_obsolete_wave_batch_releases_its_claims() -> None:
+    from fr.triage.claims import owed_claims, releasing
+
+    b = _batch("a", [1, 2], wave=1)
+    assert releasing(b, "obsolete", archived=False)
+    assert owed_claims([b], {"a": "obsolete"}, ()) == []
+    assert owed_claims([b], {"a": "proposed"}, ()) != []

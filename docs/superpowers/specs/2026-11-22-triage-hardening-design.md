@@ -181,7 +181,9 @@ Readers of the stage:
 - **Awaiting live.** A never-dispatched batch whose open members all await their walk and whose
   others are closed is `obsolete`, not held (`batch_awaits_live`, `check.py:468-472`;
   `AWAITING_LIVE_HOLD`, `batch_drive.py:2045-2047`): it has no work to dispatch. The members stay
-  in the awaiting-live set. The hold still applies to a batch with a lifecycle event.
+  in the awaiting-live set. The hold still applies to a never-dispatched batch with a member
+  missing from the facts; a batch with a lifecycle event derives another stage, which the drive
+  never dispatches, so the hold has nothing to stop there.
 - **Cancel.** `batch cancel` (`commands/triage_batch_cmd.py:943-945`) refuses `CLOSED_OUT` stages
   except `obsolete`; a never-dispatched batch withdraws nothing (:957-959), so cancelling it only
   appends the cancel event, after which it derives `cancelled`.

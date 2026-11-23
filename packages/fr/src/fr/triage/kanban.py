@@ -173,6 +173,7 @@ HINT_REVIEW = "awaiting review"
 HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
+HINT_OBSOLETE = "obsolete: every member closed, retire it with batch cancel"
 # A green train member without a valid `approved-fr` label (merge-train-safety R5).
 HINT_AWAITING_APPROVAL = "awaiting approval"
 # A member the base's merge queue already holds (merge-train-safety R13).
@@ -352,7 +353,9 @@ class Card:
     def terminal(self) -> bool:
         """Merged (archived or not), cancelled or abandoned, or a close-out that archived
         (R18): the engine's own stage and close-out state, never the column the card sits
-        in, so a merged batch still owed its close-out is terminal."""
+        in, so a merged batch still owed its close-out is terminal. An `obsolete` batch is
+        not: it waits for the operator's `batch cancel` (2026-11-22-triage-hardening R9), so
+        the cutoff never hides it, though `finished_waves` lets the next wave start."""
         return self.stage in _TERMINAL_STAGES or closeout_state(self.batch) == "archived"
 
     @property
@@ -547,6 +550,8 @@ def fallback_hint(
         return HINT_REVIEW
     if column in ("closing-out", "partial"):
         return HINT_ARCHIVE_PENDING if closeout_event(batch) else HINT_CLOSEOUT_NOT_RECORDED
+    if column == "obsolete":
+        return HINT_OBSOLETE
     return pill_of(batch, facts) or HINT_FINISHED
 
 
