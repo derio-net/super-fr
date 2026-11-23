@@ -124,9 +124,7 @@ def test_other_journal_entries_change_nothing(repo: Path) -> None:
     ("title", "body"),
     [("maybe", "a reason"), ("off", ""), ("off", "   ")],
 )
-def test_a_bad_journal_decision_refuses_naming_the_entry(
-    repo: Path, title: str, body: str
-) -> None:
+def test_a_bad_journal_decision_refuses_naming_the_entry(repo: Path, title: str, body: str) -> None:
     journal = _journal(repo, ("decision", "settle-ci", title, body))
 
     with pytest.raises(SettleRefused, match="settle-ci"):

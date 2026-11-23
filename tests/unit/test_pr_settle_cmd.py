@@ -474,9 +474,7 @@ def test_a_run_spec_settle_line_overrides_the_setting_in_the_verb(
     (repo / spec).write_text(
         "# X\n\n## Verification\n\nsettle.conflicts: off — the base is frozen\n"
     )
-    run = SimpleNamespace(
-        pr=None, steps={"brainstorm": SimpleNamespace(emitted={"spec": spec})}
-    )
+    run = SimpleNamespace(pr=None, steps={"brainstorm": SimpleNamespace(emitted={"spec": spec})})
     monkeypatch.setattr("fr.commands.push_cmd.branch_runs", lambda _root: [run])
     forge = Forge(view={**Forge().view, "mergeable": "CONFLICTING", "merge_state": "DIRTY"})
 
