@@ -13,9 +13,15 @@ rows:
       default fix) in .fr/settings.yaml, and fr settings show and init document them.
     origin:
     - spec:2026-11-23-pr-readiness-wait#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settings_settle.py#test_both_settle_keys_default_to_fix
+      - super-fr:tests/unit/test_settings_settle.py#test_any_other_settle_value_is_refused_naming_the_key
+      - super-fr:tests/unit/test_settings_settle.py#test_show_json_lists_both_settle_keys_at_their_default
+      - super-fr:tests/unit/test_settings_settle.py#test_init_documents_both_settle_keys_with_their_allowed_values
+    status: ci
+    notes: git.settle parses, defaults, refuses and shows in fr settings show and init
+      (phase 1)
     verify: none
   - id: pr-settle-verb
     capability: Settle a delivered draft PR
