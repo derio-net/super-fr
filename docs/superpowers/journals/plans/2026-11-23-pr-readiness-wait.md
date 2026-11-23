@@ -164,3 +164,72 @@ Pre-existing, host-dependent test; not caused by this change.
 ### p1-fast-tier-isolation-bash-resolved · finding [out-of-scope] · resolves p1-fast-tier-isolation-bash: Fast tier's 4 red tests are environmental, not this branch's (phase 1)
 
 Same pre-existing host-dependent isolation test as p1-r10; not caused by this change.
+
+<!-- fr:journal kind=decision scope=plan id=settle-read-shared created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-read-shared · decision · The verb and the deliver witness share one read, fr.settle.read.read_verdict (phase 2)
+
+PR discovery, the first pr_view, the gate set, the poll and the forge-error rule
+(only warn and rate_limit are transient, exit 75; a host refusal, 404 or auth
+failure refuses, exit 2) moved from `pr_cmd.settle_cmd` into `read_verdict`, so
+`fr pr settle` and `fr.settle.witness.settle_witness` (wait 0) cannot drift. The
+witness raises `SettlePending` (exit 75) or `SettleRefused` (exit 2);
+`deliver_witness` maps them to `typer.Exit` and run_cmd calls it after the
+`derive()` block (5 added lines, the module budget holds).
+
+<!-- fr:journal kind=decision scope=plan id=settle-witness-test-stub created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-witness-test-stub · decision · An autouse conftest stub records a fixed settle witness unless a test opts out (phase 2)
+
+Every unit-test `deliver` resolve runs in a clone with no forge, and the real witness
+refuses there (no origin repo). `tests/conftest.py`'s `_settle_witness_reads_no_forge`
+replaces `fr.settle.witness.settle_witness` with `fix/fix:clean/green@stub`; a test
+that requests `real_settle_witness` (`tests/unit/test_run_settle_witness.py`) gets
+the real one over a fake forge. A subprocess-run `deliver` would not see the stub;
+none exists in the suite today.
+
+<!-- fr:journal kind=decision scope=plan id=settle-override-grammar created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-override-grammar · decision · The spec grammar restates SETTLE_MODES instead of importing the settings model (phase 2)
+
+`fr.verification.spec_section.SETTLE_OVERRIDE_MODES` restates
+`fr.settings.model.SETTLE_MODES` so the spec grammar reads no settings model; a test
+pins the two equal. A second `settle.<key>:` line for the same key is an error naming
+the line. `## PR settle` sits after `## Manual operations` in REQUIRED_SECTIONS.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-no-shape-change created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-no-shape-change · discovery · No artifact stamp moved; the new evidence key is a key of an existing dict (phase 2)
+
+`settle` is one more key in `StepRecord.evidence`, the override is a journal
+`decision` entry and a prose line to older spec readers; `fr validate artifacts`
+stays green and `fr/artifacts/registry.py` is unchanged (spec §C).
+
+<!-- fr:journal kind=discovery scope=plan id=settle-deliver-row-skills created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-deliver-row-skills · discovery · Row pr-settle-deliver moved to ci on the witness; its R9/R10 skill text is phase 3's (phase 2)
+
+The row also cites R9 and R10 (the fix rules and fr-debugging's settle step), which
+are skill text phase 3 ships with its own tripwire; that tripwire's test should be
+added to the row's levels then.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-fast-tier-whole-suite created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-fast-tier-whole-suite · discovery · The branch's fast tier is now the whole unit suite, because tests/conftest.py changed (phase 2)
+
+`--fr-scope` selects everything under a changed conftest.py, so the settle witness stub
+puts every test in scope (about 17,000). On this loaded host the `-n 2` run reached 1%
+in five minutes and was stopped with no failure; CI is the suite evidence (`tests: ci`).
+Instead, 106 files that resolve `deliver` or read the evidence lists, sections,
+manifests, spec grammar and settle code ran at `-n 6`: 2988 passed, 10 skipped and 3
+failed, all three pinned deliver evidence lists in test_tripwire_shipped_workflows.py.
+Those were fixed and the file re-ran green (12 passed).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-23T14:01:57+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the settle line is one pattern and one helper beside the gate-line branch; the grammar's other branches were untouched, so nothing was left to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-23T14:01:57+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+effective_modes gained two small readers (spec, journal) behind one precedence rule; the verb's resolution of spec and journal is one helper, nothing duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-23T14:01:57+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+_settle_section is one function over run_modes with one source-label table; nothing to clean
