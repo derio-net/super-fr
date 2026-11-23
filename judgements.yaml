@@ -9222,6 +9222,13 @@ batches:
     - docs/ops.md
     delivered: session
     handle: derio-net/super-fr/run/batch-consumer-followups
+  - kind: red_handback
+    at: '2026-11-23T07:23:07.939280Z'
+    pr: 1583
+    head: 08a91cf6e6e54777a80bb6210f3ebbe62ebfdc63
+    checks:
+    - ci-ok
+    delivered: none
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
