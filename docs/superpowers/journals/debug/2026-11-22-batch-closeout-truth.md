@@ -45,3 +45,12 @@ A separate reviewer read the branch's code and tests. Approval path: head bindin
 ### rv-1497-narrowed · finding [fixed] · An unreadable narrowing state no longer lets an approval skip the Closes check
 
 Automated security review: review_reasons skips the body Closes comparison when the members' narrowing decisions cannot be read, so an approval released a body never compared with the record. That reason is now unreleasable too.
+
+<!-- fr:journal kind=decision scope=debug id=1106d983ffb5 created=2026-11-23T09:21:50+00:00 -->
+### 1106d983ffb5 · decision · Rebased onto the wave merge queue (#1602): each member checked against the new close-out code
+
+Merged origin/main at v9.0.0-rc.1. Per member, against main's code:
+#1497 NOT fixed by #1602: _collected_step still returns closeout-needs-review whenever review_reasons is non-empty and reads no approval (main batch_drive.py _collected_step). Scope change: the approval now uses the queue's own mechanism for non-batch entries, settle_entry_approval with QueueEntryRef(pr, kind=closeout), recorded on the queue's events and pinned to the patch-id (R12, R32), instead of approval events on the member batches; a recorded Approved admits the PR to the queue (Admitted) rather than an archive merge (R32: the driver no longer calls pr_merge). The per-batch helpers collected_anchor/collected_approval_events are removed. The Closes-lines and narrowing checks still hold an approved PR. The approved-head equality check is dropped: R12 deliberately keeps an approval across a diff-neutral move.
+#1494 NOT fixed: main's finish step still closes only the batch and per-batch close-out ids. Kept as is; closeout-merged still archives every member and marks the marker merged under the queue.
+#1496 NOT fixed: main's closeout_owed has no resume branch. Kept. Hand-back brief adapted: main still said 'merge origin/<base> in'; R16 adds the verb's migration commit, so it now asks for a rebase of the close-out's commits.
+#1569 (a) PARTLY fixed by R16: the close-out migrates the stale artifacts it archives (the observed triage-pages case, the batch's own run cursor) before fr archive. The gate still refuses fr archive over any other stale artifact under placement repo (own_feature admits every path), so release_pending stays, and the driver's wait is narrowed to the stale artifacts R16 does not move (batch_closeout.unowned_stale over Worktree.stale_artifacts and archive_moves), so it never contradicts R16. (b) NOT fixed: --branch on an ended marker is still refused by this branch only.
