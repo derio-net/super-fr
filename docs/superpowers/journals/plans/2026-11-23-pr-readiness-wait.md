@@ -411,3 +411,178 @@ Reviewer-tagged out of scope (phase-2 engine); filed as a follow-up at deliver u
 ### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: no cap on repeated exit-75 re-runs (phase 3)
 
 Spec-level choice (§E re-runs on 75 unbounded); not caused by phase 3's change.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · 01-fr-goal.md puts the settle check before the live-body read-back
+
+docs/explainers/01-fr-goal.md:1157-1174 vs run_cmd.py:8080/:8082
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · workflow-shapes.md says settle follows every deliver check
+
+docs/reference/workflow-shapes.md:52; _refuse_missing_emits runs after it
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · --wait nan passes check_wait and the poll never ends
+
+fr/settle/poll.py check_wait
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · _branch_modes drops approval_journal's reason, ignoring an override silently
+
+fr/commands/pr_cmd.py _branch_modes
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · a settle-<unknown key> journal decision is silently skipped
+
+fr/settle/modes.py _journal_overrides
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · every deliver settle refusal suggests recording an override
+
+fr/settle/witness.py deliver_witness
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · a closed or merged recorded PR refuses forever
+
+fr/settle/target.py find_pr, poll.py settle
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · fr pr settle --json prints no JSON on exit 2 or 75
+
+fr/commands/pr_cmd.py settle_cmd
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · committed_at falls back silently to local HEAD or now
+
+fr/settle/target.py committed_at
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r8 · finding [open] (reviewer: in scope) · an unreadable override is rendered into the required PR settle section
+
+fr/record/pr_body.py _settle_section
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · the poll clock never ages the head, pending->missing untested
+
+tests/unit/test_settle_poll.py:80
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · committed_at and local_head untested; no verb test reaches missing
+
+fr/settle/target.py:63-90
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · R4 exit-2 refusals untested at the verb and at deliver
+
+pr_cmd settle_cmd, witness.deliver_witness
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · the deliver forge-failure test mocks forge_error_kind
+
+tests/unit/test_run_settle_witness.py
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · the mode x state table is two 1-D tables, not the product
+
+tests/unit/test_settle_evaluate.py
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · conflicts off alone cannot relax a conflicting PR under ci fix, unsaid; R8 relaxing side untested
+
+fr/settle/evaluate.py raw_conflict
+
+<!-- fr:journal kind=finding scope=plan id=sec-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### sec-r1 · finding [open] (reviewer: in scope) · forge-supplied head sha reaches git fetch/log unvalidated (argument injection)
+
+fr/settle/target.py; automated security review
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-23T17:26:04+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy, errors, tests — 16 findings
+
+Findings raised: l-docs-accuracy-r1, r2; l-errors-r1 … r8; l-tests-r1 … r6; all in scope. Plus sec-r1 from the security review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: 01-fr-goal.md puts the settle check before the live-body read-back
+
+fe121fb3e
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: workflow-shapes.md says settle follows every deliver check
+
+fe121fb3e
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: --wait nan passes check_wait and the poll never ends
+
+c9465349a: finite 0..ceiling only; nan/inf tested.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: _branch_modes drops approval_journal's reason, ignoring an override silently
+
+0eec7bf71, a56c8abce: several journals or a failed lookup warn; no journal is silent; a spec-shadowed decision warns.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: a settle-<unknown key> journal decision is silently skipped
+
+7be584fe9: an unknown settle- key refuses naming the entry.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: every deliver settle refusal suggests recording an override
+
+9ffde6ad2: the override hint only on a failing state; other causes name their own remedy.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: a closed or merged recorded PR refuses forever
+
+c97909932: falls back to the open PR for the head; MERGED is settled; CLOSED names url and remedy.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: fr pr settle --json prints no JSON on exit 2 or 75
+
+333a18b5e: JSON object on exit 2 and 75.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [fixed] · resolves l-errors-r7: committed_at falls back silently to local HEAD or now
+
+0e1e748d1, ae374b434: local sha, one quiet fetch, local HEAD stated as estimated, else unknown (pending, never missing); never now.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r8 -->
+### l-errors-r8-resolved · finding [fixed] · resolves l-errors-r8: an unreadable override is rendered into the required PR settle section
+
+14d3f79fb: the render refuses with the cause and remedy.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: the poll clock never ages the head, pending->missing untested
+
+0e1e748d1: an aging head crosses to missing within a wait.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: committed_at and local_head untested; no verb test reaches missing
+
+0e1e748d1: committed_at on a back-dated commit, the unknown path, and a verb test reaching missing.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: R4 exit-2 refusals untested at the verb and at deliver
+
+acf245bdb (verb), 14d3f79fb (deliver).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: the deliver forge-failure test mocks forge_error_kind
+
+9ffde6ad2: real-shaped gh errors, no classifier mock.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: the mode x state table is two 1-D tables, not the product
+
+8ef765551: full product against an independent R4 table, settled and witness asserted.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: conflicts off alone cannot relax a conflicting PR under ci fix, unsaid; R8 relaxing side untested
+
+a77aac221: the unrunnable hint names relaxing settle.ci; the R8 relaxing side is tested.
+
+<!-- fr:journal kind=finding scope=plan id=sec-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=sec-r1 -->
+### sec-r1-resolved · finding [fixed] · resolves sec-r1: forge-supplied head sha reaches git fetch/log unvalidated (argument injection)
+
+5eb6ea7ae: full object-id fullmatch before any git call, --end-of-options; hostile values make no git call.
