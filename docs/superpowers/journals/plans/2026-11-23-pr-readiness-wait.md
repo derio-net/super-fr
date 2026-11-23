@@ -586,3 +586,8 @@ a77aac221: the unrunnable hint names relaxing settle.ci; the R8 relaxing side is
 ### sec-r1-resolved · finding [fixed] · resolves sec-r1: forge-supplied head sha reaches git fetch/log unvalidated (argument injection)
 
 5eb6ea7ae: full object-id fullmatch before any git call, --end-of-options; hostile values make no git call.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved-2 created=2026-11-23T17:27:32+00:00 phase=3 state=fixed resolves=p3-r7 answered_by=operator -->
+### p3-r7-resolved-2 · finding [fixed] · resolves p3-r7: fr pr settle silently ignores a debug-journal override with zero/several debug journals or a spec run (phase 3)
+
+Same defect as lens finding l-errors-r2, fixed in 0eec7bf71 and a56c8abce (several journals, a failed lookup or a spec-shadowed decision now warn); the operator authorized closing it as fixed.
