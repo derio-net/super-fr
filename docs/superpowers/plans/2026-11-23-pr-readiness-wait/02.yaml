@@ -67,7 +67,7 @@ tasks:
       - Under `forge.pr_body: minimal`, the section is in the durable rendered file.
   - id: P2.T3.S2
     text: |-
-      GREEN: add `_settle_section` to `packages/fr/src/fr/record/pr_body.py`, fed by `effective_modes`, and add the heading to `REQUIRED_SECTIONS`. Update any golden PR-body fixture through its generator, never by hand. The tests pass.
+      GREEN: add `_settle_section` to `packages/fr/src/fr/record/pr_body.py`, fed by `effective_modes`, and add the heading to `REQUIRED_SECTIONS`. Regenerate any golden PR-body fixture through its generator. The tests pass.
 - number: 4
   title: The deliver settle witness (R8)
   steps:
