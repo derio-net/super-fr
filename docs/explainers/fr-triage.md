@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-22 untrusted issues lose their titles, and an operator admits one with fr triage admit, since the label alone no longer admits (triage-hardening); gate names, runner status and timestamp refactors preserve this interface; 2026-11-20 batch train-truth R21 cancel of a never-dispatched batch needs no clone, R24 the driver's failure boundary, supervisor, drive status/log/failures, the Activity panel and the early red and conflict hand-backs; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
+reviewed: 2026-11-22 check lists ignored claims, obsolete batches and stale members; untrusted issues lose their titles, and an operator admits one with fr triage admit, since the label alone no longer admits (triage-hardening); gate names, runner status and timestamp refactors preserve this interface; 2026-11-20 batch train-truth R21 cancel of a never-dispatched batch needs no clone, R24 the driver's failure boundary, supervisor, drive status/log/failures, the Activity panel and the early red and conflict hand-backs; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth)
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -115,6 +115,15 @@ It always exits 0 and prints sets, not verdicts:
   or batch one. An operator admits one with `fr triage admit <key>`. It adds the `ready-fr`
   label and a comment that fixes the issue's current text. If the author edits the issue
   later, the admission no longer counts;
+- **ignored claims**: claim markers written by an account that is not trusted. They hold
+  nothing, so check prints each one. When the account is one of your own hosts running as
+  another forge user, list it in `pr_authors`; that also lets it admit issues, so never list
+  an account you do not run;
+- **obsolete batches**: batches never dispatched whose members are all closed. They no longer
+  hold up a wave or a batch that waits on them. Retire one with
+  `fr triage batch cancel <id> --yes`, which closes nothing;
+- **stale members**: closed members of a batch still proposed, listed by batch, so you can
+  edit them out before you dispatch it;
 - **stale dispatch**, **awaiting live**, **unplaced**, **duplicate candidates**: batches
   that went quiet, issues waiting on a post-merge walk, issues in no batch, and pairs the
   engine proposes as duplicates. A proposal is not a verdict: you judge every group.

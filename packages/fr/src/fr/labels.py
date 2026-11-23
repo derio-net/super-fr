@@ -137,9 +137,10 @@ APPROVED_FR = LabelDef(
 )
 
 # The operator's admission of an outside author's issue (spec 2026-11-17-triage-intake R8):
-# an issue that no login or association admits may still be batched when it carries this.
-# Never applied by fr; applying a label needs triage permission on GitHub, which an outside
-# author lacks.
+# an issue that no login or association admits may still be batched when it carries this
+# together with a trusted `fr-admit` marker pinned to its current text (triage-hardening R2).
+# fr applies it only through `fr triage admit --yes`, as the operator; applying a label needs
+# triage permission on GitHub, which an outside author lacks.
 READY_FR = LabelDef("ready-fr", "5319E7", "Operator: admitted for batching by fr triage admit")
 
 RUNNER_LABEL_COLOR = "1D76DB"
