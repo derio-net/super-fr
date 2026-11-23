@@ -1,0 +1,78 @@
+schema_version: 12
+run: 2026-11-23-feat-pr-readiness-wait
+step: brainstorm
+outcome: done
+journal:
+  - kind: decision
+    id: d-managed-exempt
+    answered_by: operator
+    title: Driver-managed PRs are exempt; settle applies only outside the wave driver
+    body: The wave merge queue admits only driver-managed PRs (batch, collected close-out, archive, export, housekeeping) and already hands conflicts and red combinations back to their sessions. A second fix loop would compete with its hand-backs and void its lease or a close-out's recorded head, so the operator chose to exempt them (enforced in code by branch prefix).
+  - kind: decision
+    id: d-default-fix
+    answered_by: operator
+    title: The repo default is fix
+    body: Outside the driver, the delivering session waits for mergeability and CI and fixes a conflict (merge origin/<base>, never rebase or force-push) or a red check, up to three rounds. Never ready, never merged.
+  - kind: decision
+    id: d-two-keys
+    answered_by: operator
+    title: Two keys, git.settle.conflicts and git.settle.ci, each off|report|fix
+    body: The operator chose separate keys over one.
+  - kind: decision
+    id: d-override-recorded
+    answered_by: operator
+    title: Overrides live in the spec's Verification section or a debug-journal decision, with a reason
+    body: Recorded and reviewable; rendered in the PR body. No hidden CLI flag.
+  - kind: decision
+    id: d-deliver-witness
+    answered_by: operator
+    title: fr-goal enforces settle as a derived deliver witness
+    body: Under fix, deliver refuses while conflicting or red and holds (exit 75) while pending, so fixes land before deliver is done and the tests evidence covers the fixed tree.
+  - kind: decision
+    id: d-verification
+    answered_by: operator
+    title: CI over the fake forge plus one live post-merge walk gated on tester
+    body: Every logic row is proven by the CI suite (strategy none, CI named); row pr-settle-live is walked post-merge on a sandbox PR.
+  - kind: lens
+    lens: errors
+    title: Exit codes and pending/unknown/unsupported handling are the risky part
+acceptance:
+  - id: pr-settle-setting
+    capability: Repo-level PR settle policy
+    acceptance: A repo sets git.settle.conflicts and git.settle.ci (off|report|fix, default fix) in .fr/settings.yaml, and fr settings show and init document them.
+    origin: [spec:2026-11-23-pr-readiness-wait#R1]
+    status: not-implemented
+    verify: none
+  - id: pr-settle-verb
+    capability: Settle a delivered draft PR
+    acceptance: fr pr settle reports a PR's conflict and CI state, polls within a bounded wait, and exits 0, 4 or 75 by the effective modes without ever writing the forge.
+    origin: [spec:2026-11-23-pr-readiness-wait#R2, spec:2026-11-23-pr-readiness-wait#R3, spec:2026-11-23-pr-readiness-wait#R4, spec:2026-11-23-pr-readiness-wait#R11]
+    status: not-implemented
+    verify: none
+  - id: pr-settle-managed
+    capability: Wave-driver PRs are left to the queue
+    acceptance: On a driver-owned branch fr pr settle reads nothing and defers to the wave driver's queue and hand-backs, and dispatch briefs say so.
+    origin: [spec:2026-11-23-pr-readiness-wait#R5]
+    status: not-implemented
+    verify: none
+  - id: pr-settle-override
+    capability: Per-feature and per-bug settle override
+    acceptance: A spec Verification line or a debug-journal decision overrides either key with a required reason, and the PR body lists every override.
+    origin: [spec:2026-11-23-pr-readiness-wait#R6, spec:2026-11-23-pr-readiness-wait#R7]
+    status: not-implemented
+    verify: none
+  - id: pr-settle-deliver
+    capability: Delivery waits for a settled PR
+    acceptance: fr-goal's deliver refuses a conflicting or red PR under fix, holds while pending, and records the settle state; fr-debugging settles its PR as its last step, fixing by merge, never rebase, within three rounds.
+    origin: [spec:2026-11-23-pr-readiness-wait#R8, spec:2026-11-23-pr-readiness-wait#R9, spec:2026-11-23-pr-readiness-wait#R10]
+    status: not-implemented
+    verify: none
+  - id: pr-settle-live
+    capability: Settle against a real forge
+    acceptance: On a real GitHub draft PR, fr pr settle reports a conflict, then a red check, then clean and green as each is fixed.
+    origin: [spec:2026-11-23-pr-readiness-wait#R2, spec:2026-11-23-pr-readiness-wait#R4, spec:2026-11-23-pr-readiness-wait#R9]
+    status: not-implemented
+    verify: live
+emitted:
+  spec: docs/superpowers/specs/2026-11-23-pr-readiness-wait-design.md
+evidence: {}
