@@ -51,9 +51,14 @@ rows:
       wave driver's queue and hand-backs, and dispatch briefs say so.
     origin:
     - spec:2026-11-23-pr-readiness-wait#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settle_managed.py#test_a_driver_branch_is_managed
+      - super-fr:tests/unit/test_settle_managed.py#test_every_driver_brief_carries_the_managed_sentence
+      - super-fr:tests/unit/test_pr_settle_cmd.py#test_a_managed_branch_reads_nothing_and_exits_0
+    status: ci
+    notes: managed branches read nothing and exit 0; every driver brief carries the
+      managed sentence (phase 1)
     verify: none
   - id: pr-settle-override
     capability: Per-feature and per-bug settle override
