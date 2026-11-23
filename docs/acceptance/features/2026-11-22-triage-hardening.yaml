@@ -121,9 +121,12 @@ rows:
       repo's issue to a public state repo
     origin:
     - spec:2026-11-22-triage-hardening#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_snapshot_issue_key_of_a_private_repo_refuses_a_public_state_repo
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_snapshot_debt_repo_that_is_private_refuses_a_public_state_repo
+    status: ci
+    notes: unit tests for snapshot issue, pr and debt keys and an unparseable file
     verify: none
   - id: issues-page-filter-guard
     capability: triage-pages
