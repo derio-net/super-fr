@@ -33,6 +33,10 @@ class SettleRefused(Exception):  # noqa: N818 — a refusal, exit 2 (R4)
     """`fr pr settle` refuses: exit 2 with the message."""
 
 
+class SettleFailing(SettleRefused):
+    """A `fix` concern is in a failing state: the one refusal an override may relax."""
+
+
 class SettlePending(Exception):  # noqa: N818 — a hold, exit 75 (R4, R8)
     """A `fix` concern is still unknown or pending, or a forge read failed transiently:
     exit 75, and the `deliver` witness records nothing."""

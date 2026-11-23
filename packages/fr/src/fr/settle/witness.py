@@ -18,7 +18,13 @@ from typing import Any
 
 from fr._hosts import origin_slug
 from fr.hostclient import client_for
-from fr.settle.model import EXIT_FAILING, EXIT_PENDING, SettlePending, SettleRefused
+from fr.settle.model import (
+    EXIT_FAILING,
+    EXIT_PENDING,
+    SettleFailing,
+    SettlePending,
+    SettleRefused,
+)
 
 
 def _branch(repo_root: Path) -> str:
@@ -58,7 +64,7 @@ def settle_witness(repo_root: Path, state: Any, client: Any = None) -> str:
     )  # fmt: skip
     said = "; ".join(verdict.lines)
     if verdict.exit_code == EXIT_FAILING:
-        raise SettleRefused(f"the PR has not settled: {said}")
+        raise SettleFailing(f"the PR has not settled: {said}")
     if verdict.exit_code == EXIT_PENDING:
         raise SettlePending(f"the PR is still settling: {said}")
     return verdict.witness
@@ -81,11 +87,19 @@ def deliver_witness(key: str, repo_root: Path, state: Any, console: Any) -> str:
             soft_wrap=True,
         )
         raise typer.Exit(EXIT_PENDING) from e
-    except (SettleRefused, SettingsError) as e:
+    except SettleFailing as e:
         console.print(
             f"[red]{key}: refused — settle: {escape(str(e))}. Fix it and push with "
             "`fr push`, or record an override with its reason in the spec's "
             "`## Verification` (`settle.<key>: <mode> — <reason>`).[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    except (SettleRefused, SettingsError) as e:
+        # l-errors-r4: every other cause names its own remedy; an override relaxes none.
+        console.print(
+            f"[red]{key}: refused — settle: {escape(str(e))}. Nothing was recorded: fix "
+            "that, then resolve again.[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2) from e

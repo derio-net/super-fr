@@ -251,26 +251,67 @@ def test_another_derived_refusal_is_reported_before_the_settle_hold(
     assert "still settling" not in out.output
 
 
+class _Failing(Forge):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__()
+        self.exc = exc
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        raise self.exc
+
+
+@pytest.mark.parametrize(
+    ("text", "code"),
+    [
+        # `fr.gh.classify`'s own rules, unpatched (l-tests-r4): a 5xx is `warn`...
+        ("HTTP 502 bad gateway", 75),
+        ("connection reset by peer", 75),
+        # ...a 404 is `info` and bad credentials `unknown`: neither answers on a retry.
+        ("HTTP 404: Not Found", 2),
+        ("HTTP 401: Bad credentials", 2),
+    ],
+)
 def test_a_transient_forge_failure_holds_and_a_permanent_one_refuses(
-    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch, text: str, code: int
 ) -> None:
     from fr.gh import GhError
 
-    class Failing(Forge):
-        def __init__(self, exc: Exception) -> None:
-            super().__init__()
-            self.exc = exc
+    _use(monkeypatch, _Failing(GhError(text)))
 
-        def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-            raise self.exc
-
-    monkeypatch.setattr("fr.hostclient.forge_error_kind", lambda e: str(e))
-    _use(monkeypatch, Failing(GhError("rate_limit")))
-    assert _deliver(at_deliver).exit_code == 75
-    _use(monkeypatch, Failing(GhError("not_found")))
     out = _deliver(at_deliver)
+
+    assert out.exit_code == code, out.output
+    if code == 2:
+        assert "refused the read" in out.output
+        # l-errors-r4: a forge refusal is not a PR that failed to settle.
+        assert "record an override" not in out.output
+
+
+def test_only_a_failing_pr_is_offered_the_override(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "fail"}]))
+
+    out = _deliver(at_deliver)
+
     assert out.exit_code == 2, out.output
-    assert "refused the read" in out.output
+    assert "record an override" in out.output
+
+
+def test_no_open_pr_names_its_own_remedy(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class NoPr(Forge):
+        def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+            return None
+
+    _use(monkeypatch, NoPr())
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 2, out.output
+    assert "fr pr create" in out.output
+    assert "record an override" not in out.output
 
 
 def test_tests_ci_still_refuses_a_conflicting_pr_with_conflicts_off(
