@@ -27,7 +27,9 @@ DELIVER_LINE: Final = (
     f"After the PR body is on the PR and before resolving `deliver`, run "
     f"`fr pr settle --wait {DEFAULT_WAIT}`: {FIX_RULES}. `deliver` stays refused until the "
     "PR settles or a `settle.<key>: <mode> — <reason>` line in the spec's `## Verification` "
-    "relaxes the key. After the `deliver` resolve's push, run it once more under the same "
+    "relaxes the key; CI cannot run on a conflicting PR, so a relaxed `settle.conflicts` "
+    "leaves `settle.ci` `unrunnable` until it is relaxed too or the conflict is resolved. "
+    "After the `deliver` resolve's push, run it once more under the same "
     "loop (a fix then is a commit after `deliver`) and report the result."
 )
 """The `settle` line of the deliver brief (R9, R10)."""

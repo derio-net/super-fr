@@ -171,6 +171,12 @@ def test_report_records_the_states(at_deliver: Path, monkeypatch: pytest.MonkeyP
 def test_a_spec_override_relaxes_the_witness(
     at_deliver: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """R8's relaxing side (l-tests-r6): `settle.ci: report` records a red PR instead of
+    refusing it. The case is a red check inside the set settle reads, with a suite log as
+    the `tests` evidence: no gate set is declared here, so settle reads every check.
+    Under `tests: ci` it cannot be shown, because settle reads the same gate set as the
+    `tests` witness, so a red gate check refuses there whatever the settle modes, and a
+    red check outside that set is ignored by both."""
     _settle_line(at_deliver, "settle.ci: report — the runners are down")
     _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "fail"}]))
 

@@ -74,6 +74,10 @@ _HINTS: Final[dict[tuple[str, str], str]] = {
     ("ci", "unrunnable"): (
         "CI cannot run on a conflicting PR: fix the conflict first, and CI runs on the push"
     ),
+    ("ci", "unrunnable-relaxed"): (
+        "CI cannot run on a conflicting PR, so relaxing `settle.conflicts` alone leaves CI "
+        "`unrunnable`: relax `settle.ci` too, with its reason, or resolve the conflict"
+    ),
     ("ci", "none"): "the repo's services say `ci none`: no CI to wait for",
     ("ci", "head-unknown"): (
         "no check has reported, and the head's commit time could not be read, so fr "
@@ -199,6 +203,8 @@ def evaluate(
         ci_state, failing, hint_key, absent = _ci_state(
             raw_conflict == "conflicting", checks, gate_names, ci_none=ci_none, age=age
         )
+    if hint_key == "unrunnable" and modes.conflicts.mode != "fix":
+        hint_key = "unrunnable-relaxed"  # l-tests-r6: the two keys are coupled
     codes = [_code(modes.conflicts, c_state), _code(modes.ci, ci_state)]
     code = (
         EXIT_FAILING

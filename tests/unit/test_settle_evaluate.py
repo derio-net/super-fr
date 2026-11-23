@@ -312,3 +312,20 @@ def test_every_state_and_mode_pair_against_r4(
     assert v.exit_code == expected
     assert v.settled == (c_state not in UNSETTLED_STATES and ci_state not in UNSETTLED_STATES)
     assert v.witness == f"{c_mode}/{ci_mode}:{c_state}/{ci_state}@{HEAD}"
+
+
+@pytest.mark.parametrize("c_mode", ["off", "report"])
+def test_a_relaxed_conflict_key_names_the_coupling_to_ci(c_mode: str) -> None:
+    """l-tests-r6: CI cannot run on a conflicting PR, so relaxing only conflicts leaves CI
+    `unrunnable` under fix: the line says to relax `settle.ci` too, or merge the base."""
+    v = _eval(CONFLICT_VIEWS["conflicting"], checks=[], modes=_modes(conflicts=c_mode, ci="fix"))
+
+    assert (v.ci_state, v.exit_code) == ("unrunnable", 4)
+    assert "settle.ci" in v.lines[1] and "conflict" in v.lines[1]
+
+
+def test_the_deliver_line_names_the_coupling() -> None:
+    from fr.settle.instructions import DELIVER_LINE
+
+    assert "settle.conflicts" in DELIVER_LINE and "settle.ci" in DELIVER_LINE
+    assert "unrunnable" in DELIVER_LINE
