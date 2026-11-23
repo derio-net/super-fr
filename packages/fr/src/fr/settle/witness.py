@@ -49,11 +49,17 @@ def settle_witness(repo_root: Path, state: Any, client: Any = None) -> str:
     modes = run_modes(repo_root, state)
     if modes.both_off:
         return "off"
-    repo = origin_slug(repo_root)
-    if repo is None:
-        raise SettleRefused("cannot read the forge repository from the origin remote")
     if client is None:
         client = client_for(repo_root)
+    repo = origin_slug(repo_root)
+    if repo is None:
+        # Review p2-r3: a backend that cannot read PRs (glab, tea) is R11's `unsupported`,
+        # asked of the backend below; only a GitHub repo with no parseable origin refuses.
+        from fr.ghclient import UnsupportedBatchOps
+
+        if not isinstance(client, UnsupportedBatchOps):
+            raise SettleRefused("cannot read the forge repository from the origin remote")
+        repo = ""
     verdict = read_verdict(
         repo_root, client, repo, branch, getattr(state, "pr", None), modes,
         wait=0, clock=time.time, sleep=time.sleep,

@@ -385,3 +385,35 @@ def test_a_first_resolve_with_no_pr_gets_the_pr_gates_message(
     assert out.exit_code == 2, out.output
     assert "fr pr create" in out.output
     assert "still settling" not in out.output
+
+
+# --- review p2-r3: an unparseable origin asks the backend before it refuses
+
+
+@pytest.mark.parametrize("cls", ["glab", "tea"])
+def test_no_origin_slug_on_a_glab_or_tea_client_is_unsupported(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch, cls: str
+) -> None:
+    from fr.real_glabclient import RealGlabClient
+    from fr.real_teaclient import RealTeaClient
+
+    client = RealGlabClient() if cls == "glab" else RealTeaClient()
+    monkeypatch.setattr("fr.settle.witness.origin_slug", lambda _root: None)
+    monkeypatch.setattr("fr.settle.witness.client_for", lambda _root: client)
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert (_witness(at_deliver) or "").startswith("fix/fix:unsupported/unsupported@")
+
+
+def test_no_origin_slug_on_a_github_client_refuses(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.settle.witness.origin_slug", lambda _root: None)
+    _use(monkeypatch, Forge())
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 2, out.output
+    assert "cannot read the forge repository" in out.output
