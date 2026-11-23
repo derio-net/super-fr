@@ -180,3 +180,81 @@ def create_cmd(
         repo_root, [run_path(repo_root, state.run)], f"chore(fr): run {state.run} — pr create"
     )
     console.print(f"opened draft PR {url} (recorded on run {state.run})", soft_wrap=True)
+
+
+@pr_app.command("settle")
+def settle_cmd(
+    wait: float = typer.Option(
+        300, "--wait", help="Seconds to poll while a concern is unknown or pending (max 540)."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print the verdict as JSON."),
+) -> None:
+    """Wait for this branch's PR to merge cleanly and its CI to finish; exit by git.settle."""
+    import time
+
+    from fr.commands.push_cmd import branch_context
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.git_policy.push import PushRefusedError
+    from fr.settings import SettingsError
+    from fr.settle import target
+    from fr.settle.evaluate import evaluate, managed_verdict, unsupported_verdict
+    from fr.settle.managed import driver_managed
+    from fr.settle.model import EXIT_PENDING, EXIT_REFUSED, Verdict
+    from fr.settle.modes import effective_modes
+    from fr.settle.poll import SettleRefused, check_wait, settle
+
+    def _out(verdict: Verdict) -> None:
+        if as_json:
+            typer.echo(verdict.model_dump_json())
+        else:
+            for line in verdict.lines:
+                console.print(escape(line), soft_wrap=True, highlight=False)
+        raise typer.Exit(verdict.exit_code)
+
+    repo_root = resolve_repo_root()
+    try:
+        check_wait(wait)
+        branch, _head, _git_dir = branch_context(repo_root)
+        if driver_managed(branch):
+            _out(managed_verdict(branch))
+        modes = effective_modes(repo_root)
+        if modes.both_off:
+            _out(evaluate({}, [], None, modes, ci_none=False, head_committed_at=0, now=0))
+        repo = origin_slug(repo_root)
+        if repo is None:
+            raise SettleRefused("cannot read the forge repository from the origin remote")
+        client = client_for(repo_root)
+        no_ci = target.ci_none(repo_root)
+        try:
+            pr = target.find_pr(repo_root, client, repo, branch)
+            if pr is None:
+                raise SettleRefused(
+                    f"no open pull request for {branch}: open one with `fr pr create` first"
+                )
+            gates = None
+            if modes.ci.mode != "off" and not no_ci:
+                base = str(client.pr_view(repo, pr).get("base_ref") or "")
+                gates = target.gate_names(repo_root, client, repo, base)
+            verdict = settle(
+                client,
+                repo,
+                pr,
+                gate_names=gates,
+                modes=modes,
+                ci_none=no_ci,
+                wait=wait,
+                clock=time.time,
+                sleep=time.sleep,
+                committed_at=lambda sha: target.committed_at(repo_root, sha),
+            )
+        except UnsupportedForgeOperation as e:
+            verdict = unsupported_verdict(modes, backend=e.backend, op=e.op)
+        except FORGE_ERRORS as e:
+            err_console.print(
+                escape(f"fr pr settle: the forge read failed, try again: {e}"), soft_wrap=True
+            )
+            raise typer.Exit(EXIT_PENDING) from e
+    except (SettleRefused, SettingsError, PushRefusedError) as e:
+        err_console.print(escape(f"fr pr settle: {e}"), soft_wrap=True)
+        raise typer.Exit(EXIT_REFUSED) from e
+    _out(verdict)
