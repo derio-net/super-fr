@@ -384,3 +384,23 @@ f98d35bfa: each malformed case fails for one reason (valid 64-hex elsewhere), pl
 ### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: the executing filter-script test was skipped wherever node was missing, CI included
 
 e4a318589: skipped only when node is missing and CI is unset; with CI=1 and no node it fails.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved-2 created=2026-11-23T01:23:36+00:00 phase=3 state=open resolves=p3-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1631 -->
+### p3-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1631] · resolves p3-r5: A carried CLOSED judged PR that is later reopened stays carried as closed (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1631.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved-2 created=2026-11-23T01:23:36+00:00 state=open resolves=l-security-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1632 -->
+### l-security-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1632] · resolves l-security-r5: outside-author PR titles are never withheld (prs, gated_prs, batch_prs, judged_prs)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1632.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6-resolved-2 created=2026-11-23T01:23:36+00:00 state=open resolves=l-security-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1633 -->
+### l-security-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1633] · resolves l-security-r6: the admit digest pins title and body only; later outsider comments reach a worker reading the thread
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1633.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r7-resolved-2 created=2026-11-23T01:23:36+00:00 state=open resolves=l-security-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1634 -->
+### l-security-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1634] · resolves l-security-r7: the privacy guard ignores other state-ref entries (merge-stops.json, history/, issues/, requests/sessions yaml)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1634.
