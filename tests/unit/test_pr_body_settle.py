@@ -60,13 +60,39 @@ def test_an_override_is_named_with_its_source_and_reason(root: Path) -> None:
     assert "The repo setting applies." not in section
 
 
-def test_a_malformed_override_is_said_in_the_section(root: Path) -> None:
+def test_a_malformed_override_refuses_the_render_with_its_remedy(root: Path) -> None:
+    """Review l-errors-r8: an unreadable override is a refusal, never text in the body."""
+    from fr.record.pr_body import PrBodyRefused
+
     (root / SPEC).write_text("# X\n\n## Verification\n\nsettle.ci: off\n")
 
-    section = _section(root, _state())
+    with pytest.raises(PrBodyRefused) as e:
+        render_pr_body(root, _state())  # type: ignore[arg-type]
 
-    assert "could not be read" in section
-    assert "settle.ci: off" in section
+    assert "settle.ci: off" in str(e.value)
+    assert "## Verification" in str(e.value) and "reason" in str(e.value)
+
+
+def test_deliver_refuses_a_malformed_override_and_keeps_the_cursor(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """l-tests-r3: the run's spec `settle.ci: report` with no reason refuses `deliver`."""
+    from tests.unit.record_support import RUN, commit_all
+    from tests.unit.test_deliver_pr_body import _at_deliver, _deliver
+
+    root = _at_deliver(tmp_path)
+    spec = root / "docs" / "spec.md"
+    spec.write_text(spec.read_text() + "\n## Verification\n\nsettle.ci: report\n")
+    commit_all(root, "bad override")
+    (root / "suite.log").write_text("n passed\n")
+    cursor = root / "docs" / "superpowers" / "runs" / f"{RUN}.yaml"
+    before = cursor.read_bytes()
+
+    _rec, out = _deliver(root)
+
+    assert out.exit_code == 2, out.output
+    assert "settle.ci: report" in out.output
+    assert cursor.read_bytes() == before
 
 
 def test_the_heading_is_required_and_a_body_without_it_is_refused() -> None:

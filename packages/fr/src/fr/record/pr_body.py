@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from fr.verification.rows import SpecVerification
 
 __all__ = [
+    "PrBodyRefused",
     "OWED_ROW_STATUSES",
     "DURABLE_PR_BODY_SUFFIX",
     "HEADING_OWED_DISCHARGED",
@@ -1183,17 +1184,31 @@ _SETTLE_SOURCES = {
 }
 
 
+class PrBodyRefused(Exception):  # noqa: N818 — a refusal, like the rest of `deliver`'s
+    """The body cannot be rendered truthfully; the message names the cause and the fix."""
+
+
 def _settle_section(repo_root: Path, state: RunState) -> str:
     """The `## PR settle` body (R7): known before the resolve, so it names the modes, not
-    the PR's state, which is the `settle` witness's value (`fr run status`)."""
+    the PR's state, which is the `settle` witness's value (`fr run status`). An unreadable
+    override or setting refuses the render (l-errors-r8)."""
     from fr.settings import SettingsError
     from fr.settle.model import SettleRefused
     from fr.settle.modes import run_modes
 
     try:
         modes = run_modes(repo_root, state)
-    except (SettleRefused, SettingsError) as e:
-        return f"The settle modes could not be read: {' '.join(str(e).split())}"
+    except SettleRefused as e:
+        raise PrBodyRefused(
+            f"the PR settle modes cannot be read: {' '.join(str(e).split())}. Fix the "
+            "`settle.` line in the spec's `## Verification` (`settle.<conflicts|ci>: "
+            "<off|report|fix> — <reason>`, the reason required), then resolve again"
+        ) from e
+    except SettingsError as e:
+        raise PrBodyRefused(
+            f"the PR settle modes cannot be read: {' '.join(str(e).split())}. Fix "
+            "`git.settle` in `.fr/settings.yaml` on the default branch, then resolve again"
+        ) from e
     lines = []
     for key in ("conflicts", "ci"):
         km = getattr(modes, key)
