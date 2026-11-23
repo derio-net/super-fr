@@ -24,6 +24,7 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
     DriveCheckout,
     World,
     _drive,
+    _opened,
     _pr_open,
     _proposed,
     checkout_fixture,
@@ -221,7 +222,7 @@ def test_once_yes_whose_plan_holds_no_dispatch_acts_without_the_notice(
     _pr_open(world, tmp_path)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert world.merged == [(101, "sha-101", "squash")]
+    assert _opened(world)
     assert "warning:" not in out
 
 

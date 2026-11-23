@@ -1,0 +1,79 @@
+schema_version: 2
+phase:
+  number: 5
+  title: One merge path — other merges as entries, the old train removed (R22, R23,
+    R32)
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - wave-queue-one-path
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/triage/approval.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/queue_exec.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/**/*.py
+  - docs/acceptance/features/2026-11-19-wave-merge-queue.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Close-out, archive, export and housekeeping PRs as entries
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: each of these becomes a queue entry and lands through the queue:
+      - a collected close-out PR that passes `review_reasons`;
+      - an attributed archive PR that passes `archive_allowed`;
+      - a per-wave export PR that passes `_export_row`'s checks;
+      - a housekeeping PR with `approved-fr`, recorded as a queue `approval`.
+      Under `land: push`, neither `_archive` nor `_export_merge` calls `pr_merge` (a fake client asserts it). Export PRs queue between waves (R32).
+  - id: P5.T1.S2
+    text: |-
+      GREEN: make the archive and export steps of `drive_pass` emit queue entries through `wave_queue`, keeping their trust checks as each entry's admission rule. Remove the `pr_merge` calls from `_archive` and `_export_merge`; the forge merge stays only behind `land: merge`.
+- number: 2
+  title: Remove the train and the forge-queue mode; batch merge on the engine
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED:
+      - No driver or `batch merge` path writes an `update` or `enqueue` event (assert it over a full fake wave).
+      - A repo whose `base_rules().merge_queue` is true is `queue-held`, with the reason.
+      - `fr triage batch merge` opens a queue for its named or approved batches and drives it in the foreground until it drains or stops (R22, R23).
+  - id: P5.T2.S2
+    text: |-
+      GREEN: delete `_walk_merge_train`, `_walk_queue`, the `enqueue` executor, `merge_ready`'s update path, `update_failing`, `_reupdate`, `_behind_only_routinely`'s strict exemption, and the enqueue path of `_dequeue_unapproved`. Reading old `update` and `enqueue` events stays. Rewrite `batch_merge_command` on `wave_queue` and `queue_exec`. Delete or rewrite the tests of the removed paths, keeping every behaviour the spec keeps.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR: sweep for dead code (`uv run ruff check`, and `grep -rn "pr_enqueue\|_walk_queue\|merge_ready" packages/` returns only kept readers); docstrings; record the row's level refs; full suite, ruff and mypy green.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-11-20T19:35:29+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-11-20T19:35:29+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-11-20T19:35:29+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-11-20T19:35:29+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-11-20T19:35:29+00:00'
+      note: null
+  completion:
+    at: '2026-11-20T19:35:29+00:00'
+    note: null
+    observed_prs: []
