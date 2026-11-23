@@ -69,6 +69,14 @@ def _commit_time(repo_root: Path, rev: str) -> float | None:
     return float(out) if done.returncode == 0 and out.isdigit() else None
 
 
+def local_head(repo_root: Path) -> str:
+    """The checkout's HEAD sha, or empty when git cannot say."""
+    done = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, text=True, check=False
+    )
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
 def committed_at(repo_root: Path, sha: str) -> float:
     """*sha*'s commit time; HEAD's when *sha* is not local; now when neither reads."""
     for rev in (sha, "HEAD"):

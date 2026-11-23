@@ -65,7 +65,8 @@ def read_verdict(
             first_view=view,
         )
     except UnsupportedForgeOperation as e:
-        head = str(view.get("head_oid") or "")
+        # Review p2-r2: with no head from the forge, the local HEAD, never an empty `@`.
+        head = str(view.get("head_oid") or "") or target.local_head(repo_root)
         return unsupported_verdict(modes, backend=e.backend, op=e.op, head=head)
     except HostRefusedError as e:
         # A host trust refusal does not answer on a retry (run_cmd._ci_tests_witness).

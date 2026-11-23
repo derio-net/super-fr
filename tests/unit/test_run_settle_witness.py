@@ -214,7 +214,11 @@ def test_unsupported_is_recorded_and_refuses_nothing(
     out = _deliver(at_deliver)
 
     assert out.exit_code == 0, out.output
-    assert _witness(at_deliver) == "fix/fix:unsupported/unsupported@"
+    # Review p2-r2: an unsupported pr_view names the local HEAD, never an empty `@`.
+    witness = _witness(at_deliver) or ""
+    prefix, _, sha = witness.partition("@")
+    assert prefix == "fix/fix:unsupported/unsupported"
+    assert len(sha) == 40 and sha in git(at_deliver, "rev-list", "HEAD").split()
 
 
 def test_a_passed_settle_value_is_refused(
