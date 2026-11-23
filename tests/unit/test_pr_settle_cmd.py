@@ -117,7 +117,7 @@ def test_the_pr_comes_from_the_run_cursor_first(
 ) -> None:
     monkeypatch.setattr(
         "fr.commands.push_cmd.branch_runs",
-        lambda _root: [SimpleNamespace(pr=f"https://github.com/{REPO}/pull/42")],
+        lambda _root: [SimpleNamespace(pr=f"https://github.com/{REPO}/pull/42", steps={})],
     )
     forge = Forge()
     assert _run(monkeypatch, forge).exit_code == 0
@@ -145,7 +145,7 @@ def test_a_recorded_pr_that_is_no_longer_open_exits_2(
 ) -> None:
     monkeypatch.setattr(
         "fr.commands.push_cmd.branch_runs",
-        lambda _root: [SimpleNamespace(pr=f"https://github.com/{REPO}/pull/42")],
+        lambda _root: [SimpleNamespace(pr=f"https://github.com/{REPO}/pull/42", steps={})],
     )
     forge = Forge()
     forge.view = {**forge.view, "state": "MERGED"}
@@ -435,3 +435,51 @@ def test_json_prints_the_verdict(repo: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert data["conflict_state"] == "clean" and data["ci_state"] == "green"
     assert data["exit_code"] == 0
     assert data["witness"] == f"fix/fix:clean/green@{'c' * 40}"
+
+
+def test_a_debug_journal_decision_overrides_the_setting_in_the_verb(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry
+
+    path = repo / "docs" / "superpowers" / "journals" / "debug" / "2026-11-23-bug.md"
+    path.parent.mkdir(parents=True)
+    append_journal_entry(
+        path,
+        "2026-11-23-bug",
+        JournalEntry(
+            kind="decision",
+            scope="debug",
+            id="settle-ci",
+            created="2026-11-23T10:00:00+00:00",
+            title="report",
+            body="the forge's runners are down",
+        ),
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "journal")
+    forge = Forge(checks=[{"name": "ci-ok", "bucket": "fail"}])
+
+    result = _run(monkeypatch, forge)
+
+    assert result.exit_code == 0, result.output
+    assert "ci (report, journal: the forge's runners are down): red" in result.output
+
+
+def test_a_run_spec_settle_line_overrides_the_setting_in_the_verb(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = "docs/superpowers/specs/2026-11-23-x-design.md"
+    (repo / spec).parent.mkdir(parents=True)
+    (repo / spec).write_text(
+        "# X\n\n## Verification\n\nsettle.conflicts: off — the base is frozen\n"
+    )
+    run = SimpleNamespace(
+        pr=None, steps={"brainstorm": SimpleNamespace(emitted={"spec": spec})}
+    )
+    monkeypatch.setattr("fr.commands.push_cmd.branch_runs", lambda _root: [run])
+    forge = Forge(view={**Forge().view, "mergeable": "CONFLICTING", "merge_state": "DIRTY"})
+
+    result = _run(monkeypatch, forge)
+
+    assert "conflicts (off, spec: the base is frozen): off" in result.output

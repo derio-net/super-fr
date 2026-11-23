@@ -10,6 +10,7 @@ approval exactly like `fr push`. The PR's url is recorded on the run cursor
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -19,6 +20,9 @@ from fr._hosts import origin_slug
 from fr.commands.common import resolve_repo_root
 from fr.hostclient import FORGE_ERRORS, client_for
 from fr.settle import poll as _settle_poll
+
+if TYPE_CHECKING:
+    from fr.settle.model import Modes
 
 _SETTLE_DEFAULT_WAIT = _settle_poll.DEFAULT_WAIT
 _SETTLE_CEILING = _settle_poll.WAIT_CEILING
@@ -188,6 +192,23 @@ def create_cmd(
     console.print(f"opened draft PR {url} (recorded on run {state.run})", soft_wrap=True)
 
 
+def _branch_modes(repo_root: Path, runs: list[Any]) -> Modes:
+    """The settle modes of this branch's PR: the setting, then the run's spec line, else
+    the branch's one debug journal's decision (R6), found as `approval_journal` finds it."""
+    from fr.commands.push_cmd import approval_journal
+    from fr.journal.model import journal_path
+    from fr.requirements import run_spec
+    from fr.settle.modes import effective_modes
+
+    spec = next((s for s in map(run_spec, runs) if s), None)
+    journal = None
+    if spec is None:
+        found = approval_journal(repo_root)
+        if not isinstance(found, str) and found.scope == "debug":
+            journal = journal_path(repo_root, "debug", found.slug)
+    return effective_modes(repo_root, spec=spec, debug_journal=journal)
+
+
 @pr_app.command("settle")
 def settle_cmd(
     wait: float = typer.Option(
@@ -209,7 +230,6 @@ def settle_cmd(
     from fr.settle.evaluate import evaluate, managed_verdict, unsupported_verdict
     from fr.settle.managed import driver_managed
     from fr.settle.model import EXIT_PENDING, EXIT_REFUSED, SettleRefused, Verdict
-    from fr.settle.modes import effective_modes
 
     def _out(verdict: Verdict) -> None:
         if as_json:
@@ -229,13 +249,13 @@ def settle_cmd(
         branch, _head, _git_dir = branch_context(repo_root)
         if driver_managed(branch):
             _out(managed_verdict(branch))
-        modes = effective_modes(repo_root)
+        runs = branch_runs(repo_root)
+        modes = _branch_modes(repo_root, runs)
         if modes.both_off:
             _out(evaluate({}, [], None, modes, ci_none=False, head_committed_at=0, now=0))
         repo = origin_slug(repo_root)
         if repo is None:
             raise SettleRefused("cannot read the forge repository from the origin remote")
-        runs = branch_runs(repo_root)
         recorded = runs[0].pr if len(runs) == 1 else None
         client = client_for(repo_root)
         no_ci = target.ci_none(repo_root)
