@@ -90,9 +90,21 @@ rows:
     - spec:2026-11-23-pr-readiness-wait#R8
     - spec:2026-11-23-pr-readiness-wait#R9
     - spec:2026-11-23-pr-readiness-wait#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_settle_witness.py#test_fix_refuses_a_conflicting_or_red_pr_naming_settle
+      - super-fr:tests/unit/test_run_settle_witness.py#test_a_pending_pr_exits_75_records_nothing_and_leaves_the_cursor
+      - super-fr:tests/unit/test_run_settle_witness.py#test_report_records_the_states
+      - super-fr:tests/unit/test_run_settle_witness.py#test_both_keys_off_records_off_and_reads_nothing
+      - super-fr:tests/unit/test_run_settle_witness.py#test_a_managed_branch_records_managed
+      - super-fr:tests/unit/test_run_settle_witness.py#test_unsupported_is_recorded_and_refuses_nothing
+      - super-fr:tests/unit/test_run_settle_witness.py#test_a_passed_settle_value_is_refused
+      - super-fr:tests/unit/test_run_settle_witness.py#test_another_derived_refusal_is_reported_before_the_settle_hold
+      - super-fr:tests/unit/test_run_settle_witness.py#test_tests_ci_still_refuses_a_conflicting_pr_with_conflicts_off
+    status: ci
+    notes: the deliver settle witness through fr run resolve over a fake forge, and
+      its interaction with tests ci (phase 2); the R9 and R10 skill text gains its tripwire
+      in phase 3
     verify: none
   - id: pr-settle-live
     capability: Settle against a real forge
