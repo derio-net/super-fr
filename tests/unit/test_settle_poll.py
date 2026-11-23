@@ -158,3 +158,24 @@ def test_the_wait_has_a_default_and_a_ceiling_below_600() -> None:
         check_wait(-1)
     with pytest.raises(SettleRefused, match="540"):
         _settle(ReadOnlyForge([(_view(), GREEN)]), Clock(), _modes(), wait=541)
+
+
+def test_an_unsupported_checks_read_keeps_the_views_head() -> None:
+    class NoChecks(ReadOnlyForge):
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            raise UnsupportedForgeOperation("pr_checks", "gitea")
+
+    v = _settle(NoChecks([(_view(), GREEN)]), Clock(), _modes())
+    assert v.ci_state == "unsupported"
+    assert v.witness.endswith(f"@{HEAD}")
+
+
+def test_a_first_view_is_not_read_again() -> None:
+    forge = ReadOnlyForge([(_view(), GREEN)])
+    clock = Clock()
+    settle(
+        forge, "o/r", 7, gate_names=None, modes=_modes(), ci_none=False, wait=0,
+        clock=clock.now, sleep=clock.sleep, committed_at=lambda _s: clock.t,
+        first_view=_view(),
+    )  # fmt: skip
+    assert forge.views == 0

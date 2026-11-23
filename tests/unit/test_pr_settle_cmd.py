@@ -33,6 +33,7 @@ class Forge:
         required: list[str] | None = None,
         unsupported: str | None = None,
         error: str | None = None,
+        exc: Exception | None = None,
     ) -> None:
         self.open_pr = open_pr
         self.view = view or {
@@ -46,6 +47,7 @@ class Forge:
         self.required = required or []
         self.unsupported = unsupported
         self.error = error
+        self.exc = exc or GhError("HTTP 502 bad gateway")
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
 
     def _call(self, op: str, *args: Any) -> None:
@@ -53,7 +55,7 @@ class Forge:
         if op == self.unsupported:
             raise UnsupportedForgeOperation(op, "glab")
         if op == self.error:
-            raise GhError("HTTP 502 bad gateway")
+            raise self.exc
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         self._call("open_pr_for_head", repo, branch)
@@ -190,16 +192,61 @@ def test_an_unmanaged_branch_is_settled(
     assert "pr_view" in forge.ops
 
 
+MODE_PAIRS = [
+    f"{c}/{ci}"
+    for c in ("off", "report", "fix")
+    for ci in ("off", "report", "fix")
+    if (c, ci) != ("off", "off")
+]
+
+
+def _set_modes(repo: Path, pair: str) -> None:
+    conflicts, ci = pair.split("/")
+    git(repo, "checkout", "-q", "main")
+    land_on_main(repo, f"git:\n  settle:\n    conflicts: '{conflicts}'\n    ci: '{ci}'\n")
+    git(repo, "checkout", "-q", "feat/other")
+
+
+@pytest.mark.parametrize("pair", MODE_PAIRS)
 @pytest.mark.parametrize("op", ["open_pr_for_head", "pr_view", "pr_checks", "required_check_names"])
 def test_an_unsupported_read_is_unsupported_and_exits_0(
-    repo: Path, monkeypatch: pytest.MonkeyPatch, op: str
+    repo: Path, monkeypatch: pytest.MonkeyPatch, op: str, pair: str
 ) -> None:
-    forge = Forge(open_pr=None if op != "open_pr_for_head" else 7, unsupported=op)
-    if op != "open_pr_for_head":
-        forge.open_pr = 7
+    _set_modes(repo, pair)
+    forge = Forge(unsupported=op)
     result = _run(monkeypatch, forge)
     assert result.exit_code == 0, result.output
-    assert "unsupported" in result.output and "glab" in result.output
+    if op in forge.ops:
+        assert "unsupported" in result.output and "glab" in result.output
+    else:  # CI under off: the checks are never read
+        assert pair.endswith("/off") and op in {"pr_checks", "required_check_names"}
+
+
+@pytest.mark.parametrize("pair", MODE_PAIRS)
+@pytest.mark.parametrize("cls", ["glab", "tea"])
+def test_the_real_glab_and_tea_clients_give_unsupported(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, cls: str, pair: str
+) -> None:
+    from fr.real_glabclient import RealGlabClient
+    from fr.real_teaclient import RealTeaClient
+
+    _set_modes(repo, pair)
+    client = RealGlabClient() if cls == "glab" else RealTeaClient()
+    monkeypatch.setattr("fr.commands.pr_cmd.client_for", lambda _root: client)
+    result = runner.invoke(app, ["pr", "settle", "--wait", "0", "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert (data["conflict_state"], data["ci_state"]) == ("unsupported", "unsupported")
+    assert data["exit_code"] == 0
+    assert client.backend in data["lines"][0]
+
+
+def test_unsupported_after_a_view_keeps_the_head(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = _run(monkeypatch, Forge(unsupported="pr_checks"), "--json")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["witness"].endswith("@" + "c" * 40)
 
 
 def test_unsupported_discovery_wins_over_the_no_pr_refusal(
@@ -209,6 +256,30 @@ def test_unsupported_discovery_wins_over_the_no_pr_refusal(
     result = _run(monkeypatch, forge)
     assert result.exit_code == 0
     assert "unsupported" in result.output
+
+
+def test_a_host_refusal_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.gh import GhHostRefusedError
+
+    result = _run(monkeypatch, Forge(error="pr_view", exc=GhHostRefusedError("host not logged in")))
+    assert result.exit_code == 2, result.output
+    assert "host not logged in" in result.output
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["HTTP 404: Not Found (https://api.github.com/repos/o/r/pulls/7)", "HTTP 401: Bad credentials"],
+)
+def test_a_permanent_forge_failure_exits_2(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, message: str
+) -> None:
+    result = _run(monkeypatch, Forge(error="pr_view", exc=GhError(message)))
+    assert result.exit_code == 2, result.output
+
+
+def test_a_rate_limit_exits_75(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exc = GhError("HTTP 403: API rate limit exceeded")
+    assert _run(monkeypatch, Forge(error="pr_checks", exc=exc)).exit_code == 75
 
 
 @pytest.mark.parametrize("op", ["open_pr_for_head", "pr_view", "pr_checks"])
@@ -232,6 +303,53 @@ def test_declared_gates_come_first(repo: Path, monkeypatch: pytest.MonkeyPatch) 
     result = _run(monkeypatch, forge)
     assert result.exit_code == 0, result.output
     assert "required_check_names" not in forge.ops
+
+
+def test_a_malformed_ci_yaml_is_a_refusal(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "ci.yaml").write_text("gate_checks: [unclosed\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "bad gates")
+    result = _run(monkeypatch, Forge())
+    assert result.exit_code == 2, result.output
+    assert "ci.yaml" in result.output
+
+
+def test_the_pr_view_is_read_once_per_poll(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    forge = Forge()
+    assert _run(monkeypatch, forge).exit_code == 0
+    assert forge.ops.count("pr_view") == 1
+
+
+def test_the_default_wait_is_default_wait(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.settle import poll
+
+    seen: dict[str, Any] = {}
+    real = poll.settle
+
+    def spy(*args: Any, **kw: Any) -> Any:
+        seen["wait"] = kw["wait"]
+        return real(*args, **{**kw, "wait": 0})
+
+    monkeypatch.setattr(poll, "settle", spy)
+    monkeypatch.setattr("fr.commands.pr_cmd.client_for", lambda _root: Forge())
+    result = runner.invoke(app, ["pr", "settle"])
+    assert result.exit_code == 0, result.output
+    assert seen["wait"] == poll.DEFAULT_WAIT
+    help_text = runner.invoke(app, ["pr", "settle", "--help"]).output
+    assert str(poll.WAIT_CEILING) in help_text
+
+
+def test_target_does_not_import_the_commands_layer() -> None:
+    import ast
+
+    import fr.settle.target as target_mod
+
+    tree = ast.parse(Path(target_mod.__file__).read_text())
+    names = [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)] + [
+        a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names
+    ]
+    assert not [m for m in names if m.startswith("fr.commands")], names
 
 
 def test_required_checks_come_next(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -13,7 +13,7 @@ from typing import Any, Final
 
 from fr.ghclient import UnsupportedForgeOperation
 from fr.settle.evaluate import evaluate, unsupported_verdict
-from fr.settle.model import Modes, Verdict
+from fr.settle.model import Modes, SettleRefused, Verdict
 
 DEFAULT_WAIT: Final = 300
 WAIT_CEILING: Final = 540
@@ -21,8 +21,7 @@ WAIT_CEILING: Final = 540
 POLL_INTERVAL: Final = 15.0
 
 
-class SettleRefused(Exception):  # noqa: N818 — a refusal, exit 2 (R4)
-    """`fr pr settle` refuses: exit 2 with the message."""
+__all__ = ["DEFAULT_WAIT", "POLL_INTERVAL", "WAIT_CEILING", "SettleRefused", "check_wait", "settle"]
 
 
 def check_wait(wait: float) -> None:
@@ -45,18 +44,26 @@ def settle(
     clock: Callable[[], float],
     sleep: Callable[[float], None],
     committed_at: Callable[[str], float],
+    first_view: dict[str, Any] | None = None,
 ) -> Verdict:
     """Poll PR *pr* of *repo* until it settles or *wait* seconds pass. *committed_at*
-    gives a head sha's commit time (the no-CI wait reads it)."""
+    gives a head sha's commit time (the no-CI wait reads it); *first_view* is a
+    `pr_view` the caller already read, used for the first round instead of a read."""
     check_wait(wait)
     read_checks = modes.ci.mode != "off" and not ci_none
     deadline = clock() + wait
+    pending_view = first_view
     while True:
+        view: dict[str, Any] = {}
         try:
-            view: dict[str, Any] = {} if modes.both_off else client.pr_view(repo, pr)
+            if pending_view is not None:
+                view, pending_view = pending_view, None
+            elif not modes.both_off:
+                view = client.pr_view(repo, pr)
             checks = client.pr_checks(repo, pr) if read_checks else []
         except UnsupportedForgeOperation as e:
-            return unsupported_verdict(modes, backend=e.backend, op=e.op)
+            head = str(view.get("head_oid") or "")
+            return unsupported_verdict(modes, backend=e.backend, op=e.op, head=head)
         state = str(view.get("state") or "OPEN")
         if state != "OPEN":
             raise SettleRefused(f"PR #{pr} is {state}, not open: there is nothing to settle")

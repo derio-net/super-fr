@@ -14,21 +14,21 @@ import time
 from pathlib import Path
 from typing import Any
 
+from fr.settle.model import SettleRefused
+
 _PULL = re.compile(r"/pull/(\d+)/?$")
 
 
-def recorded_pr(repo_root: Path) -> int | None:
-    """The PR number the branch's one run records, None without one."""
-    from fr.commands import push_cmd
-
-    runs = push_cmd.branch_runs(repo_root)
-    url = runs[0].pr if len(runs) == 1 else None
+def pr_number(url: str | None) -> int | None:
+    """The number in a recorded PR url (`.../pull/<n>`), None when it names none."""
     m = _PULL.search(url or "")
     return int(m.group(1)) if m else None
 
 
-def find_pr(repo_root: Path, client: Any, repo: str, branch: str) -> int | None:
-    recorded = recorded_pr(repo_root)
+def find_pr(client: Any, repo: str, branch: str, recorded_url: str | None) -> int | None:
+    """The run cursor's recorded PR (*recorded_url*, which the caller reads), else the
+    open PR whose head is *branch*, else None."""
+    recorded = pr_number(recorded_url)
     if recorded is not None:
         return recorded
     found = client.open_pr_for_head(repo, branch)
@@ -36,10 +36,14 @@ def find_pr(repo_root: Path, client: Any, repo: str, branch: str) -> int | None:
 
 
 def gate_names(repo_root: Path, client: Any, repo: str, base: str) -> list[str] | None:
-    """The gate set, or None to read every check on the head."""
-    from fr.run.ci_evidence import declared_gates
+    """The gate set, or None to read every check on the head. A `.fr/ci.yaml` fr
+    cannot read (malformed, or git unavailable) is a refusal."""
+    from fr.run.ci_evidence import CiEvidenceRefused, declared_gates
 
-    declared = declared_gates(repo_root, base or None)
+    try:
+        declared = declared_gates(repo_root, base or None)
+    except CiEvidenceRefused as e:
+        raise SettleRefused(str(e)) from e
     if declared:
         return declared
     required = list(client.required_check_names(repo, base)) if base else []

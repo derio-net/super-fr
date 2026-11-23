@@ -29,6 +29,10 @@ EXIT_FAILING: Final = 4
 EXIT_PENDING: Final = 75
 
 
+class SettleRefused(Exception):  # noqa: N818 — a refusal, exit 2 (R4)
+    """`fr pr settle` refuses: exit 2 with the message."""
+
+
 class _Closed(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

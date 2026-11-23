@@ -18,6 +18,12 @@ from rich.markup import escape
 from fr._hosts import origin_slug
 from fr.commands.common import resolve_repo_root
 from fr.hostclient import FORGE_ERRORS, client_for
+from fr.settle import poll as _settle_poll
+
+_SETTLE_DEFAULT_WAIT = _settle_poll.DEFAULT_WAIT
+_SETTLE_CEILING = _settle_poll.WAIT_CEILING
+_TRANSIENT_FORGE_KINDS = frozenset({"warn", "rate_limit"})
+"""`forge_error_kind`s a retry may answer: `fr pr settle` exits 75 on them, 2 on the rest."""
 
 pr_app = typer.Typer(help="Pull requests fr opens (always drafts).", no_args_is_help=True)
 err_console = Console(stderr=True)
@@ -185,23 +191,25 @@ def create_cmd(
 @pr_app.command("settle")
 def settle_cmd(
     wait: float = typer.Option(
-        300, "--wait", help="Seconds to poll while a concern is unknown or pending (max 540)."
+        _SETTLE_DEFAULT_WAIT,
+        "--wait",
+        help=f"Seconds to poll while a concern is unknown or pending (max {_SETTLE_CEILING}).",
     ),
     as_json: bool = typer.Option(False, "--json", help="Print the verdict as JSON."),
 ) -> None:
     """Wait until this branch's PR merges cleanly and its CI has finished."""
     import time
 
-    from fr.commands.push_cmd import branch_context
-    from fr.ghclient import UnsupportedForgeOperation
+    from fr.commands.push_cmd import branch_context, branch_runs
+    from fr.ghclient import HostRefusedError, UnsupportedForgeOperation
     from fr.git_policy.push import PushRefusedError
+    from fr.hostclient import forge_error_kind
     from fr.settings import SettingsError
-    from fr.settle import target
+    from fr.settle import poll, target
     from fr.settle.evaluate import evaluate, managed_verdict, unsupported_verdict
     from fr.settle.managed import driver_managed
-    from fr.settle.model import EXIT_PENDING, EXIT_REFUSED, Verdict
+    from fr.settle.model import EXIT_PENDING, EXIT_REFUSED, SettleRefused, Verdict
     from fr.settle.modes import effective_modes
-    from fr.settle.poll import SettleRefused, check_wait, settle
 
     def _out(verdict: Verdict) -> None:
         if as_json:
@@ -211,9 +219,13 @@ def settle_cmd(
                 console.print(escape(line), soft_wrap=True, highlight=False)
         raise typer.Exit(verdict.exit_code)
 
+    def _refuse(message: str, code: int = EXIT_REFUSED) -> typer.Exit:
+        err_console.print(escape(f"fr pr settle: {message}"), soft_wrap=True)
+        return typer.Exit(code)
+
     repo_root = resolve_repo_root()
     try:
-        check_wait(wait)
+        poll.check_wait(wait)
         branch, _head, _git_dir = branch_context(repo_root)
         if driver_managed(branch):
             _out(managed_verdict(branch))
@@ -223,19 +235,23 @@ def settle_cmd(
         repo = origin_slug(repo_root)
         if repo is None:
             raise SettleRefused("cannot read the forge repository from the origin remote")
+        runs = branch_runs(repo_root)
+        recorded = runs[0].pr if len(runs) == 1 else None
         client = client_for(repo_root)
         no_ci = target.ci_none(repo_root)
+        view: dict[str, object] = {}
         try:
-            pr = target.find_pr(repo_root, client, repo, branch)
+            pr = target.find_pr(client, repo, branch, recorded)
             if pr is None:
                 raise SettleRefused(
                     f"no open pull request for {branch}: open one with `fr pr create` first"
                 )
+            view = client.pr_view(repo, pr)
             gates = None
             if modes.ci.mode != "off" and not no_ci:
-                base = str(client.pr_view(repo, pr).get("base_ref") or "")
+                base = str(view.get("base_ref") or "")
                 gates = target.gate_names(repo_root, client, repo, base)
-            verdict = settle(
+            verdict = poll.settle(
                 client,
                 repo,
                 pr,
@@ -246,15 +262,18 @@ def settle_cmd(
                 clock=time.time,
                 sleep=time.sleep,
                 committed_at=lambda sha: target.committed_at(repo_root, sha),
+                first_view=view,
             )
         except UnsupportedForgeOperation as e:
-            verdict = unsupported_verdict(modes, backend=e.backend, op=e.op)
+            head = str(view.get("head_oid") or "")
+            verdict = unsupported_verdict(modes, backend=e.backend, op=e.op, head=head)
+        except HostRefusedError as e:
+            # A host trust refusal does not answer on a retry (run_cmd._ci_tests_witness).
+            raise _refuse(f"the forge refused the host: {e}") from e
         except FORGE_ERRORS as e:
-            err_console.print(
-                escape(f"fr pr settle: the forge read failed, try again: {e}"), soft_wrap=True
-            )
-            raise typer.Exit(EXIT_PENDING) from e
+            if forge_error_kind(e) in _TRANSIENT_FORGE_KINDS:
+                raise _refuse(f"the forge read failed, try again: {e}", EXIT_PENDING) from e
+            raise _refuse(f"the forge refused the read: {e}") from e
     except (SettleRefused, SettingsError, PushRefusedError) as e:
-        err_console.print(escape(f"fr pr settle: {e}"), soft_wrap=True)
-        raise typer.Exit(EXIT_REFUSED) from e
+        raise _refuse(str(e)) from e
     _out(verdict)
