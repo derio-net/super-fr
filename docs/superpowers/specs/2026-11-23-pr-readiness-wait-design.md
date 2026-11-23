@@ -108,12 +108,12 @@ line. The debug-journal form is a `decision` entry with id `settle-conflicts` or
 `fr.record.pr_body` renders `## PR settle` from the effective modes (known before the
 resolve): each key's mode, its source, and each override's reason. The section joins
 `REQUIRED_SECTIONS`, so a live body without it is refused like any other required section.
-The settle state is not part of the body. It is the witness's value (`fr run status`),
+The section is required, unlike `## Review lenses`: a run whose live body an older fr rendered gets one more refuse-and-edit round at `deliver`, whose refusal prints the edit command. That cost is accepted so that an override cannot reach a PR unseen. The settle state is not part of the body. It is the witness's value (`fr run status`),
 because the body is rendered before the witness exists.
 
 **No shape change.** A new evidence key is a key in `StepRecord.evidence: dict[str, str]`
 (`fr/run/model.py`). The `docs` witness added one in 2026-11 without a stamp move. A
-`decision` entry with a fixed id uses an entry kind journal v4 already holds. A `settle.`
+`decision` entry with a fixed id uses an entry kind journal v4 already holds. A section that holds only `settle.` lines counts as no verification section for strategy, walk and gate resolution (`fr.verification.effective`), so adding an override changes no row strategy and owes no walk; only the overrides are read from it. A `settle.`
 line is prose to every released spec reader, which ignores lines outside the grammar. None
 of the three is a shape change under `.claude/rules/artifact-versioning.md`, so no stamp,
 migration or validator ships.
@@ -124,8 +124,7 @@ migration or validator ships.
 `fr-goal-light.yaml`) and the registries every derived witness is listed in:
 `fr.workflow.artifacts.DERIVED_EVIDENCE`, and `run_cmd`'s `_VERIFIABLE_EVIDENCE` and
 `_DERIVED_FROM`. It is not evaluated through `derive()`, because that turns every exit into
-a refusal (exit 2). It is evaluated after the derived witnesses, in the way
-`_ci_tests_witness` is: it calls `fr.settle.evaluate` with no wait, refuses with exit 2 on a
+a refusal (exit 2). It is evaluated after the derived witnesses and after every `deliver` gate (placement, acceptance, leftovers, the PR-body check, the exit guard), and before the label sync, which writes the forge. So a pending CI state holds the unit only once the body is rendered and every hard refusal has printed. It is evaluated in the way `_ci_tests_witness` is: it calls `fr.settle.evaluate` with no wait, refuses with exit 2 on a
 failing `fix` state, and holds with exit 75, recording nothing, on a pending one. A refusal
 of any other witness is reported first.
 
