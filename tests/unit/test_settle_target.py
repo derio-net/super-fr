@@ -7,6 +7,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 from fr.settle.target import HeadTime, committed_at
 
 from tests.unit.settings_repo import git, make_repo
@@ -43,3 +44,44 @@ def test_nothing_readable_is_unknown_never_now(tmp_path: Path) -> None:
     not_a_repo.mkdir()
 
     assert committed_at(not_a_repo, "f" * 40) == HeadTime(None)
+
+
+def test_a_malformed_head_sha_reaches_no_git_call_and_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review sec-r1: a forge-supplied head never reaches git as an option."""
+    import fr.settle.target as target
+
+    repo = make_repo(tmp_path)
+    calls: list[list[str]] = []
+    real = subprocess.run
+
+    def spy(argv: list[str], *a: object, **kw: object) -> object:
+        calls.append(list(argv))
+        return real(argv, *a, **kw)  # type: ignore[call-overload]
+
+    monkeypatch.setattr(target.subprocess, "run", spy)
+    for bad in ("--upload-pack=x", "abc", "F" * 40, "a" * 39, "a" * 40 + "\n"):
+        assert committed_at(repo, bad) == HeadTime(None), bad
+    assert calls == []
+
+
+def test_every_git_call_ends_options_before_the_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.settle.target as target
+
+    repo = make_repo(tmp_path)
+    calls: list[list[str]] = []
+    real = subprocess.run
+
+    def spy(argv: list[str], *a: object, **kw: object) -> object:
+        calls.append(list(argv))
+        return real(argv, *a, **kw)  # type: ignore[call-overload]
+
+    monkeypatch.setattr(target.subprocess, "run", spy)
+    committed_at(repo, "f" * 40)
+
+    assert {c[1] for c in calls} == {"log", "fetch"}
+    for argv in calls:
+        assert argv.index("--end-of-options") < len(argv) - 1

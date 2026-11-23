@@ -17,6 +17,8 @@ from typing import Any
 from fr.settle.model import SettleRefused
 
 _PULL = re.compile(r"/pull/(\d+)/?$")
+_SHA = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
+"""A full SHA-1 or SHA-256 object id: anything else a forge says never reaches git."""
 
 
 def pr_number(url: str | None) -> int | None:
@@ -79,7 +81,7 @@ def ci_none(repo_root: Path) -> bool:
 
 def _commit_time(repo_root: Path, rev: str) -> float | None:
     done = subprocess.run(
-        ["git", "log", "-1", "--format=%ct", rev, "--"],
+        ["git", "log", "-1", "--format=%ct", "--end-of-options", rev, "--"],
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -109,7 +111,7 @@ class HeadTime:
 def _fetch(repo_root: Path, sha: str) -> bool:
     try:
         done = subprocess.run(
-            ["git", "fetch", "--quiet", "--no-tags", "origin", sha],
+            ["git", "fetch", "--quiet", "--no-tags", "origin", "--end-of-options", sha],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -124,7 +126,10 @@ def _fetch(repo_root: Path, sha: str) -> bool:
 def committed_at(repo_root: Path, sha: str) -> HeadTime:
     """*sha*'s commit time: local, else after one quiet fetch of it; else local HEAD's,
     marked estimated; else unknown. Never the clock (l-errors-r7). No forge client offers
-    a commit's time today, so the forge is not asked."""
+    a commit's time today, so the forge is not asked. A *sha* that is not a full object id
+    is unknown with no git call at all (sec-r1)."""
+    if sha and not _SHA.fullmatch(sha):
+        return HeadTime(None)
     if sha:
         found = _commit_time(repo_root, sha)
         if found is None and _fetch(repo_root, sha):
