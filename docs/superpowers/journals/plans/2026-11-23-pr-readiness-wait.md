@@ -601,3 +601,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1636.
 ### p3-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1637] · resolves p3-r8: no cap on repeated exit-75 re-runs (phase 3)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1637.
+
+<!-- fr:journal kind=finding scope=plan id=p1-fast-tier-isolation-bash-resolved-2 created=2026-11-23T17:28:08+00:00 state=open resolves=p1-fast-tier-isolation-bash tracked_by=derio-net/super-fr#1636 -->
+### p1-fast-tier-isolation-bash-resolved-2 · finding [deferred → derio-net/super-fr#1636] · resolves p1-fast-tier-isolation-bash: Fast tier's 4 red tests are environmental, not this branch's
+
+Same host-dependent isolation test as p1-r10, tracked by its issue.
