@@ -137,6 +137,21 @@ class FakeGhClient:
 
     # ---- read methods ----
 
+    def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+        """The raw record: title and body as the forge holds them now."""
+        self.calls.append(("view_issue_record", {"repo": repo, "number": number}))
+        if (repo, number) not in self.issues:
+            raise FakeGhError(f"HTTP 404: issue {repo}#{number} not found")
+        i = self.issues[(repo, number)]
+        return {
+            "number": number,
+            "title": self.issue_titles.get((repo, number), ""),
+            "body": i.body,
+            "state": i.state,
+            "labels": [{"name": n} for n in sorted(i.labels)],
+            "url": f"https://github.com/{repo}/issues/{number}",
+        }
+
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
         if (repo, number) not in self.issues:
             raise FakeGhError(f"HTTP 404: issue {repo}#{number} not found")

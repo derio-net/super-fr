@@ -139,6 +139,16 @@ def issue_reason(issue: Issue, facts: Facts) -> str | None:
     return stored_reason(issue, facts.config_for(issue.repo), facts.viewer)
 
 
+def admit_pinned(issue: Issue, facts: Facts) -> bool:
+    """Whether *issue*'s eligibility rests on its admit marker alone: it carries `ready-fr`
+    and no other clause (a trusted login or association, the debt bot's digest) admits it.
+    `batch dispatch` re-reads such a member live before it starts a batch (§B)."""
+    trusted = intake_trusted(facts.config_for(issue.repo), facts.viewer)
+    return _labelled(issue.labels) and not _admitted_otherwise(
+        issue.author, issue.author_association, trusted, issue.body
+    )
+
+
 def rejected_members(batch: Batch, facts: Facts) -> list[tuple[str, str]]:
     """The members that keep *batch* from going out, as (key, reason) (R6).
 

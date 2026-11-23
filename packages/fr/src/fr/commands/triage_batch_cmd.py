@@ -268,6 +268,7 @@ from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
+from fr.triage.admit_recheck import recheck_admitted
 from fr.triage.intake import (
     NOT_COLLECTED,
     rejected_by_batch,
@@ -1953,6 +1954,10 @@ def dispatch_batch(
             f"{last.handle if last else '?'}). To complete its forge writes, run "
             f"`fr triage batch dispatch {batch.id} --repair --yes`"
         )
+    try:  # §B: an admit-pinned member is read live again; an edit since collect refuses
+        recheck_admitted(batch, facts, client)
+    except TriageError as exc:
+        _fail(f"batch {batch.id!r} cannot be dispatched: {exc}")
     try:
         taken = stage == "proposed" and checkout.remote_branch_exists(branch)
     except TriageError as exc:  # a forge read: the driver's boundary (gh#1025, review)
