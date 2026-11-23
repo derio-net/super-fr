@@ -280,3 +280,74 @@ def test_visible_keeps_letters_cjk_and_emoji_bases() -> None:
 
     plain = "Ünïcode café 漢字 한국어 \U0001f600 ❤"
     assert visible(plain) == plain
+
+
+# ------------------------------------------------- the forge host (lens finding S1)
+
+
+def _admit_recording(monkeypatch: Any, client: Any, *args: str) -> tuple[Any, list[str]]:
+    """`fr triage admit`, recording the URL each client was asked for; *client* None builds
+    the real adapter for that URL, as the command does."""
+    from fr.commands import triage_admit_cmd
+    from fr.hostclient import client_for_url
+
+    urls: list[str] = []
+
+    def make(url: str) -> Any:
+        urls.append(url)
+        return client if client is not None else client_for_url(url)
+
+    monkeypatch.setattr(triage_admit_cmd, "make_client", make)
+    return CliRunner().invoke(app, ["triage", "admit", *args]), urls
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["example-org/x#5", "--host", "gitlab.com"],
+        ["https://gitlab.example.com/example-org/x/-/issues/5"],
+    ],
+)
+def test_admit_on_a_gitlab_host_refuses_before_any_read(monkeypatch: Any, args: list[str]) -> None:
+    out, urls = _admit_recording(monkeypatch, None, *args, "--yes")
+    assert out.exit_code == 2, out.output
+    assert "cannot list issue comments" in " ".join(out.output.split())
+    assert all("github.com" not in u for u in urls)
+
+
+def test_admit_reads_the_host_it_is_given(monkeypatch: Any) -> None:
+    client = FakeClient(url="https://ghe.example.com/example-org/x/issues/5")
+    out, urls = _admit_recording(
+        monkeypatch, client, "example-org/x#5", "--host", "ghe.example.com"
+    )
+    assert out.exit_code == 0, out.output
+    assert urls == ["https://ghe.example.com/example-org/x"]
+    assert "forge host ghe.example.com" in out.output
+
+
+def test_admit_takes_an_issue_url_and_reads_its_host(monkeypatch: Any) -> None:
+    client = FakeClient(url="https://ghe.example.com/example-org/x/issues/5")
+    out, urls = _admit_recording(
+        monkeypatch, client, "https://ghe.example.com/example-org/x/issues/5"
+    )
+    assert out.exit_code == 0, out.output
+    assert urls == ["https://ghe.example.com/example-org/x"]
+    assert client.reads[0] == "view example-org/x#5"
+
+
+def test_admit_without_a_host_reads_github_com_and_says_so(monkeypatch: Any) -> None:
+    out, urls = _admit_recording(monkeypatch, FakeClient(), "derio-net/x#5")
+    assert out.exit_code == 0, out.output
+    assert urls == ["https://github.com/derio-net/x"]
+    assert "forge host github.com" in out.output
+
+
+def test_admit_refuses_a_host_and_a_url_key_that_disagree(monkeypatch: Any) -> None:
+    out, urls = _admit_recording(
+        monkeypatch,
+        FakeClient(),
+        "https://ghe.example.com/example-org/x/issues/5",
+        "--host",
+        "github.com",
+    )
+    assert out.exit_code == 2 and urls == []

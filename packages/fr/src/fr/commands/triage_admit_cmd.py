@@ -11,7 +11,9 @@ needs `--digest`, the digest the operator read in the preview; the issue is read
 before the write, and a missing or different digest is a refusal that prints the current one
 and writes nothing, so an edit between the operator's reading and the write is never pinned
 (p1-sec-admit-toctou). Every forge write goes through the
-`GhClient` adapter. It refuses a pull request, and it refuses, before any read, a forge
+`GhClient` adapter, built for the issue's own forge host: the host of an issue URL key, else
+`--host`, else github.com (`DEFAULT_HOST`, the one host triage collects from); the preview
+prints it. It refuses a pull request, and it refuses, before any read, a forge
 whose adapter cannot list issue comments (GitLab, Gitea): no collect there could read the
 marker. The `triage` group stays read-only for the migration gate (`READ_ONLY_COMMANDS`):
 like `batch dispatch`, `admit` writes the forge only.
@@ -42,6 +44,13 @@ from fr.triage.errors import TriageError
 from fr.triage.model import TriageConfig, claim_trusted
 
 _KEY_RE = re.compile(r"^(?P<repo>[\w.-]+/[\w.-]+)#(?P<number>[1-9]\d*)$")
+_URL_RE = re.compile(
+    r"^https://(?P<host>[\w.-]+(?::\d+)?)/(?P<repo>[\w.-]+/[\w.-]+)(?P<infix>/-)?/issues/"
+    r"(?P<number>[1-9]\d*)/?$"
+)
+DEFAULT_HOST = "github.com"
+"""The host an `owner/repo#n` key is read on without `--host`: triage collects from GitHub
+only (`fr triage collect`'s adapter), and `fr triage batch` falls back to it the same way."""
 
 
 def make_client(url: str) -> GhClient:
@@ -56,7 +65,14 @@ def _fail(message: str) -> NoReturn:
 
 @triage_app.command("admit")
 def admit_command(
-    key: str = typer.Argument(..., help="The issue to admit, as owner/repo#n."),
+    key: str = typer.Argument(
+        ..., help="The issue to admit, as owner/repo#n or as the issue's https URL."
+    ),
+    host_opt: str | None = typer.Option(
+        None,
+        "--host",
+        help="The forge host an owner/repo#n key lives on (default github.com).",
+    ),
     yes: bool = typer.Option(False, "--yes", help="Write the label and the comment."),
     digest_opt: str | None = typer.Option(
         None, "--digest", help="The digest the preview printed; --yes needs it."
@@ -67,11 +83,29 @@ def admit_command(
     Exits 2 on a key it cannot read, a pull request, a forge that cannot list comments, or
     a --digest that is missing or no longer matches the issue.
     """
-    match = _KEY_RE.match(key.strip())
-    if match is None:
-        _fail(f"{key!r} is not an issue key: give it as owner/repo#n")
-    repo, number = match["repo"], int(match["number"])
-    client = make_client(f"https://github.com/{repo}")
+    url_match = _URL_RE.match(key.strip())
+    if url_match is not None:
+        host = url_match["host"]
+        if host_opt is not None and host_opt.lower() != host.lower():
+            _fail(f"--host {host_opt} disagrees with the host of {key}; give one of them")
+        repo, number = url_match["repo"], int(url_match["number"])
+        # GitLab's `/-/issues/` is the one path shape that names its backend; keep it so the
+        # adapter resolves GitLab even on a self-hosted host (`fr._hosts.backend_for_url`)
+        client_url = (
+            f"https://{host}/{repo}/-/issues/{number}"
+            if url_match["infix"]
+            else f"https://{host}/{repo}"
+        )
+    else:
+        match = _KEY_RE.match(key.strip())
+        if match is None:
+            _fail(f"{key!r} is not an issue key: give it as owner/repo#n or as its issue URL")
+        host = (host_opt or DEFAULT_HOST).strip().lower()
+        repo, number = match["repo"], int(match["number"])
+        client_url = f"https://{host}/{repo}"
+    key = f"{repo}#{number}"
+    again = key if host == DEFAULT_HOST else f"{key} --host {host}"
+    client = make_client(client_url)
     if isinstance(client, UnsupportedBatchOps):  # glab/tea: no comment list, no marker read
         _fail(
             f"{repo}: this forge cannot list issue comments, so no collect could read an "
@@ -96,8 +130,9 @@ def admit_command(
         return
     title, body = str(raw.get("title") or ""), str(raw.get("body") or "")
     digest = content_digest(title, body)
-    comment = admit_marker(digest, key=key)
+    comment = admit_marker(digest, key=again)
     if not yes:
+        console.print(f"forge host {host}", soft_wrap=True, markup=False)
         console.print(f"would add label {READY_FR.name} to {escape(key)}", soft_wrap=True)
         console.print("would post this comment:", soft_wrap=True)
         for line in comment.splitlines():
@@ -138,7 +173,7 @@ def admit_command(
             f"{key} does not match --digest {digest_opt}: its current digest is {current}; "
             "preview it again, read it, and re-run with that digest"
         )
-    comment = admit_marker(current, key=key)
+    comment = admit_marker(current, key=again)
     try:
         client.ensure_labels(repo, [READY_FR])
         client.edit_issue_labels(repo, number, add=frozenset({READY_FR.name}), remove=frozenset())
