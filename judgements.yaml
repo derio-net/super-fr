@@ -9214,6 +9214,14 @@ batches:
     - docs/ops.md
     delivered: session
     handle: derio-net/super-fr/run/batch-consumer-followups
+  - kind: conflict
+    at: '2026-11-23T06:40:52.248008Z'
+    head: 3fb470c975b0599ffe474a41470528fe295327a4
+    paths:
+    - docs/explainers/fr-devops-gate.md
+    - docs/ops.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-consumer-followups
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
