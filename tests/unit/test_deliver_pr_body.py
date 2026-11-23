@@ -168,6 +168,7 @@ def test_no_out_of_scope_findings_renders_none(tmp_path: Path) -> None:
         "## Pre-merge verification owed",
         "## Post-merge verification owed",
         "## Manual operations",
+        "## PR settle",
         "## Proportionality",
         "## Cost",
     ]
@@ -217,6 +218,7 @@ def test_the_required_sections_carry_no_input_section() -> None:
         "## Pre-merge verification owed",
         "## Post-merge verification owed",
         "## Manual operations",
+        "## PR settle",
         "## Proportionality",
         "## Cost",
     )

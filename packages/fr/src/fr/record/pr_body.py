@@ -83,6 +83,7 @@ REQUIRED_SECTIONS = (
     "## Pre-merge verification owed",
     "## Post-merge verification owed",
     "## Manual operations",
+    "## PR settle",
     "## Proportionality",
     "## Cost",
 )
@@ -92,7 +93,8 @@ run after merge can move; `Pre-merge verification owed` (spec
 2026-10-06-verification-strategies §D, R12) the operator-driven ones to walk
 before it, each with its exact walk command; `Manual operations` (spec
 2026-10-22-fr-ops R13) the plan's ops with their recorded state, `None.` when
-it has none."""
+it has none; `PR settle` (spec 2026-11-23-pr-readiness-wait R7) each `git.settle` key's
+effective mode, its source and an override's reason."""
 
 HEADING_REVIEW_LENSES = "## Review lenses"
 """Rendered after the findings sections, never required: a live body older than the
@@ -1173,6 +1175,35 @@ def _manual_operations(repo_root: Path, state: RunState) -> str:
     return "\n".join(lines)
 
 
+_SETTLE_SOURCES = {
+    "default": "default",
+    "repo": "repo setting",
+    "spec": "spec override",
+    "journal": "debug-journal override",
+}
+
+
+def _settle_section(repo_root: Path, state: RunState) -> str:
+    """The `## PR settle` body (R7): known before the resolve, so it names the modes, not
+    the PR's state, which is the `settle` witness's value (`fr run status`)."""
+    from fr.settings import SettingsError
+    from fr.settle.model import SettleRefused
+    from fr.settle.modes import run_modes
+
+    try:
+        modes = run_modes(repo_root, state)
+    except (SettleRefused, SettingsError) as e:
+        return f"The settle modes could not be read: {' '.join(str(e).split())}"
+    lines = []
+    for key in ("conflicts", "ci"):
+        km = getattr(modes, key)
+        where = _SETTLE_SOURCES[km.source] + (f": {km.reason}" if km.reason else "")
+        lines.append(f"- `git.settle.{key}`: `{km.mode}` ({where})")
+    if not (modes.conflicts.reason or modes.ci.reason):
+        lines.append("\nThe repo setting applies.")
+    return "\n".join(lines)
+
+
 def _ci_line(repo_root: Path, witness: str) -> str:
     """A `ci:<ci sha>+<base>;tree=<tree>` witness as the PR body says it (spec
     2026-10-07-cloud-triage §I step 6, p2-r8): what CI proved, never a local
@@ -1483,6 +1514,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         _post_merge_owed(repo_root, state),
         "## Manual operations",
         _manual_operations(repo_root, state),
+        "## PR settle",
+        _settle_section(repo_root, state),
         HEADING_OWED_DISCHARGED,
         _owed_discharged(repo_root, state),
     ]
