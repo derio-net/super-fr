@@ -131,8 +131,10 @@ class FakeClient:
         url: str | None = None,
         config: str = "",
         bodies: list[str] | None = None,
+        settings: str | None = None,
     ) -> None:
         self.author = author
+        self.settings = settings  # the repo's .fr/settings.yaml; None: it has none
         self.bodies = list(bodies or [])  # successive views' bodies; then BODY
         self.url = url or "https://github.com/derio-net/x/issues/5"
         self.config = config
@@ -157,6 +159,12 @@ class FakeClient:
 
     def viewer_login(self) -> str:
         return "operator"
+
+    def read_file(self, repo: str, path: str) -> str:
+        self.reads.append(f"read default {path}")
+        if self.settings is None:
+            raise RuntimeError(f"Not Found (HTTP 404): {repo}:{path}")
+        return self.settings
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.writes.append(("ensure", [getattr(lb, "name", lb) for lb in labels]))
@@ -408,3 +416,15 @@ def test_admit_whose_comment_fails_after_the_label_says_the_issue_is_not_admitte
     assert "admit marker was not posted" in flat and "not admitted" in flat
     assert f"fr triage admit derio-net/x#5 --yes --digest {digest}" in flat
     assert "admission not written" not in flat
+
+
+def test_admit_writes_nothing_where_the_repo_turns_labels_or_comments_off(
+    monkeypatch: Any,
+) -> None:
+    digest = content_digest(TITLE, BODY)
+    for kind in ("labels", "comments"):
+        client = FakeClient(settings=f"forge:\n  {kind}: 'off'\n")
+        out = _admit(monkeypatch, client, "derio-net/x#5", "--yes", "--digest", digest)
+        assert out.exit_code == 2, out.output
+        assert f"forge.{kind}: off" in " ".join(out.output.split())
+        assert client.writes == []

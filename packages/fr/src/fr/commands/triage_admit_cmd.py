@@ -175,6 +175,17 @@ def admit_command(
             "preview it again, read it, and re-run with that digest"
         )
     comment = admit_marker(current, key=again)
+    # The repo's own forge policy (R9): `forge.labels`/`forge.comments: off` there means fr
+    # writes no label and no comment to it, and an unreadable policy refuses.
+    from fr.settings import SettingsError
+    from fr.settings.remote import remote_policy
+
+    try:
+        blocked = remote_policy(client, repo).first_block("labels", "comments")
+    except SettingsError as exc:
+        _fail(f"{key}: its forge policy is unknown, so nothing was written: {exc}")
+    if blocked is not None:
+        _fail(f"{key}: nothing was written — {blocked}")
     try:
         client.ensure_labels(repo, [READY_FR])
         client.edit_issue_labels(repo, number, add=frozenset({READY_FR.name}), remove=frozenset())
