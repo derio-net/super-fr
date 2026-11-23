@@ -54,3 +54,113 @@ CI is this repo's suite evidence.
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 managed.py is one predicate over its owners' constants and the brief edits are one line each; the import-cycle split (owners imported inside driver_managed) was settled at GREEN, so nothing was left to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · evaluate.py:117 an unreported gate on a fresh head reads missing at once (phase 1)
+
+Other checks finished, the gate not yet registered: missing/exit 4 regardless of age; R2 says pending until NO_CI_WAIT_SECONDS.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · pr_cmd.py:237 CiEvidenceRefused from declared_gates is uncaught (phase 1)
+
+A malformed .fr/ci.yaml or no git gives a traceback and exit 1, outside R4.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · pr_cmd.py:252 HostRefusedError and permanent forge errors exit 75 (phase 1)
+
+HostRefusedError subclasses the backend error; 404 and auth failures also exit 75, so an R10 loop retries forever.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · change fragment omits the older-fr refusal spec §A requires (phase 1)
+
+.changes/feat-pr-readiness-wait.yaml
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · closeout_brief says no settle loop even for an unmanaged housekeeping PR (phase 1)
+
+batch_drive.py:860; with a run the session's PR is chore/archive-<plan> or chore/closeout-<run>, unmanaged.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · poll.py:59 unsupported verdict drops a known head (phase 1)
+
+The witness ends in a bare @.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · tests miss TP8 every-mode, a real glab/tea client, DRAFT, unrunnable/none cells (phase 1)
+
+test_pr_settle_cmd.py:194, test_settle_evaluate.py:136
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · pr_cmd.py:188 --wait default and ceiling are literals (phase 1)
+
+Not DEFAULT_WAIT/WAIT_CEILING; the constant test does not cover the verb.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · settle/target.py:22 imports fr.commands; pr_view read twice (phase 1)
+
+A cycle once run_cmd calls settle.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=out -->
+### p1-r10 · finding [open] (reviewer: out of scope) · test_isolation_decision_core.py:663 runs bare bash under a PATH of git's dir (phase 1)
+
+Host-dependent (bash in /usr/local/bin); the diff touches neither isolation nor the test (last changed 747e403d1).
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-23T12:34:23+00:00 phase=1 -->
+### review-p1-1 · review · phase 1 code review: 10 findings (phase 1)
+
+Findings raised: p1-r1 … p1-r10; p1-r1–r9 in scope, p1-r10 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: evaluate.py:117 an unreported gate on a fresh head reads missing at once (phase 1)
+
+5a39c9bca: an absent gate is pending until NO_CI_WAIT_SECONDS then missing, own hint; table cells added.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: pr_cmd.py:237 CiEvidenceRefused from declared_gates is uncaught (phase 1)
+
+c8a084af5: CiEvidenceRefused refuses with exit 2; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: pr_cmd.py:252 HostRefusedError and permanent forge errors exit 75 (phase 1)
+
+c8a084af5: HostRefusedError exits 2; only warn and rate_limit forge errors exit 75, 404/401 exit 2; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: change fragment omits the older-fr refusal spec §A requires (phase 1)
+
+3306f6772: the fragment states the older-fr refusal.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: closeout_brief says no settle loop even for an unmanaged housekeeping PR (phase 1)
+
+e365431a5: the sentence only when run is None; spec R5/§E amended to match.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: poll.py:59 unsupported verdict drops a known head (phase 1)
+
+c8a084af5: the unsupported verdict keeps the view's head.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: tests miss TP8 every-mode, a real glab/tea client, DRAFT, unrunnable/none cells (phase 1)
+
+c8a084af5: all 8 mode pairs, real RealGlabClient and RealTeaClient, DRAFT pinned, unrunnable/none cells.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: pr_cmd.py:188 --wait default and ceiling are literals (phase 1)
+
+c8a084af5: --wait default and help from poll.DEFAULT_WAIT/WAIT_CEILING; verb default tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r9 -->
+### p1-r9-resolved · finding [fixed] · resolves p1-r9: settle/target.py:22 imports fr.commands; pr_view read twice (phase 1)
+
+c8a084af5: target.py imports nothing from fr.commands; pr_cmd passes the recorded PR in; one pr_view per poll.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=open resolves=p1-r10 out_of_scope=true -->
+### p1-r10-resolved · finding [out-of-scope] · resolves p1-r10: test_isolation_decision_core.py:663 runs bare bash under a PATH of git's dir (phase 1)
+
+Pre-existing, host-dependent test; not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-fast-tier-isolation-bash-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=open resolves=p1-fast-tier-isolation-bash out_of_scope=true -->
+### p1-fast-tier-isolation-bash-resolved · finding [out-of-scope] · resolves p1-fast-tier-isolation-bash: Fast tier's 4 red tests are environmental, not this branch's (phase 1)
+
+Same pre-existing host-dependent isolation test as p1-r10; not caused by this change.
