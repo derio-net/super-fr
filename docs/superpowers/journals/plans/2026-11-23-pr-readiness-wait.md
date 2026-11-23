@@ -596,3 +596,8 @@ Same defect as lens finding l-errors-r2, fixed in 0eec7bf71 and a56c8abce (sever
 ### p1-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1636] · resolves p1-r10: test_isolation_decision_core.py:663 runs bare bash under a PATH of git's dir (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1636.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved-2 created=2026-11-23T17:27:59+00:00 phase=3 state=open resolves=p3-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1637 -->
+### p3-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1637] · resolves p3-r8: no cap on repeated exit-75 re-runs (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1637.
