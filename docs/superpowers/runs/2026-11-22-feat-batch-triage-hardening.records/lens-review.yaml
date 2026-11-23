@@ -82,7 +82,4 @@ resolves:
   - {id: l-tests-r7, state: fixed, body: "e4a318589: skipped only when node is missing and CI is unset; with CI=1 and no node it fails."}
 evidence:
   review: lens-review-1
-  reviewer:
-    docs-accuracy: aeee697015e40755b
-    security: ad314f7c944567fb4
-    tests: a9e7efc5c62634ba5
+  reviewer: "docs-accuracy=aeee697015e40755b,security=ad314f7c944567fb4,tests=a9e7efc5c62634ba5"
