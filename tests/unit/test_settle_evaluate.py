@@ -256,3 +256,59 @@ def test_an_estimated_commit_time_is_said_on_the_line() -> None:
     assert "estimated from local HEAD" in v.lines[1]
     green = _eval(estimated=True)
     assert "estimated" not in green.lines[1]
+
+
+# ---- the whole product, against R4 restated here (review l-tests-r5) ----------------
+#
+# The expectations below come from the spec's words, written out as tables in this
+# test, never from the engine: R2 says a conflicting PR's CI is `unrunnable` and a
+# `ci none` repo's CI is `none`; R4 says only a `fix` concern decides the code.
+
+R4_FIX_CODE = {
+    "clean": 0, "conflicting": 4, "unknown": 75,
+    "green": 0, "red": 4, "pending": 75, "missing": 4, "unrunnable": 4, "none": 0,
+}  # fmt: skip
+UNSETTLED_STATES = {"unknown", "pending"}
+CI_INPUTS: dict[str, tuple[list[dict[str, Any]], bool]] = {
+    "green": (GREEN, False),
+    "red": ([_check("t", "fail")], False),
+    "pending": ([_check("t", "pending")], False),
+    "missing": ([], False),
+    "none": ([], True),
+}
+MODES = ("off", "report", "fix")
+
+
+def _expected_ci(conflict: str, ci_input: str) -> str:
+    if ci_input == "none":
+        return "none"
+    return "unrunnable" if conflict == "conflicting" else ci_input
+
+
+@pytest.mark.parametrize("conflict", sorted(CONFLICT_VIEWS))
+@pytest.mark.parametrize("ci_input", sorted(CI_INPUTS))
+@pytest.mark.parametrize("c_mode", MODES)
+@pytest.mark.parametrize("ci_mode", MODES)
+def test_every_state_and_mode_pair_against_r4(
+    conflict: str, ci_input: str, c_mode: str, ci_mode: str
+) -> None:
+    checks, ci_none = CI_INPUTS[ci_input]
+    v = _eval(
+        CONFLICT_VIEWS[conflict],
+        checks=checks,
+        ci_none=ci_none,
+        committed=OLD,
+        modes=_modes(conflicts=c_mode, ci=ci_mode),
+    )
+
+    c_state = "off" if c_mode == "off" else conflict
+    ci_state = "off" if ci_mode == "off" else _expected_ci(conflict, ci_input)
+    codes = [
+        R4_FIX_CODE[c_state] if c_mode == "fix" else 0,
+        R4_FIX_CODE[ci_state] if ci_mode == "fix" else 0,
+    ]
+    expected = 4 if 4 in codes else 75 if 75 in codes else 0
+    assert (v.conflict_state, v.ci_state) == (c_state, ci_state)
+    assert v.exit_code == expected
+    assert v.settled == (c_state not in UNSETTLED_STATES and ci_state not in UNSETTLED_STATES)
+    assert v.witness == f"{c_mode}/{ci_mode}:{c_state}/{ci_state}@{HEAD}"
