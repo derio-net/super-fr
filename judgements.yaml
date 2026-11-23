@@ -8901,6 +8901,13 @@ batches:
     paths:
     - docs/reference/cli.md
     delivered: held
+  - kind: conflict
+    at: '2026-11-23T18:32:55.948583Z'
+    head: 0ae940553881598dfed6ff31d23c5cde5364fab5
+    paths:
+    - docs/reference/cli.md
+    - docs/reference/workflow-shapes.md
+    delivered: held
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
