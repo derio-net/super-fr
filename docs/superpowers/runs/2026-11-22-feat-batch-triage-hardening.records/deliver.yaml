@@ -1,0 +1,10 @@
+schema_version: 12
+run: 2026-11-22-feat-batch-triage-hardening
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1630
+evidence:
+  tests: ci
+  walk: none
