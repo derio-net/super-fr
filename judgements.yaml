@@ -9223,6 +9223,16 @@ batches:
     checks:
     - 1 failing check(s)
     delivered: none
+  - kind: conflict
+    at: '2026-11-23T18:49:42.761061Z'
+    head: 50f44efea052a19d34d0232006abb5c17cea3bee
+    paths:
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/explainers/index.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/cli.md
+    delivered: held
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
