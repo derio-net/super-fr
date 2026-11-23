@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-23-feat-pr-readiness-wait
+captures:
+- host: h-b3218cf8
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-23T08:38:56+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 257a78f0-c47d-4de5-bb70-efce56aa1e60
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 62
+        cache_write: 170923
+        cache_read: 4572580
+        output: 27400
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 12
+      other:
+        usd: null
+        turns: 9
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 8
+        cache_write: 94801
+        cache_read: 271488
+        output: 678
+      brainstorm:
+        usd: null
+        turns: 27
+        input: 54
+        cache_write: 76122
+        cache_read: 4301092
+        output: 26722
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 8
+          cache_write: 94801
+          cache_read: 271488
+          output: 678
+        brainstorm:
+          usd: null
+          turns: 27
+          input: 54
+          cache_write: 76122
+          cache_read: 4301092
+          output: 26722
