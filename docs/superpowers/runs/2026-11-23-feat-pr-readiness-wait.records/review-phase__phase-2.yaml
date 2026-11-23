@@ -1,0 +1,23 @@
+schema_version: 12
+run: 2026-11-23-feat-pr-readiness-wait
+step: review-phase
+outcome: done
+journal:
+  - {kind: finding, phase: 2, id: p2-r1, review_scope: in, title: "settle witness runs before the deliver gates", body: "run_cmd.py:2233 inside _verified_evidence (called :8033) precedes the placement/acceptance/leftovers/PR-body/exit-guard gates (:8060-8074): pending CI exits 75 before the body renders; a no-PR first resolve loses the gh#587 render."}
+  - {kind: finding, phase: 2, id: p2-r2, review_scope: in, title: "unsupported pr_view leaves an empty @ in the witness", body: "fr/settle/read.py:69-71; use the local HEAD sha."}
+  - {kind: finding, phase: 2, id: p2-r3, review_scope: in, title: "an unparseable origin refuses before the backend's unsupported verdict", body: "fr/settle/witness.py:51-53 (and the same order in fr pr settle)."}
+  - {kind: finding, phase: 2, id: p2-r4, review_scope: in, title: "conftest stub replaces the whole settle_witness and hides p2-r1", body: "tests/conftest.py:535-550; stub only client_for/origin_slug."}
+  - {kind: finding, phase: 2, id: p2-r5, review_scope: in, title: "required PR settle section's in-flight cost not stated", body: "fr/record/pr_body.py:86 vs the Review lenses precedent."}
+  - {kind: finding, phase: 2, id: p2-r6, review_scope: in, title: "a settle-only Verification section switches rows to the candidate default", body: "spec_section.py:121-123, verification/effective.py:33-40; adding a settle line could owe a walk and change gates."}
+  - {kind: review, phase: 2, id: review-p2-1, title: "phase 2 code review: 6 findings", body: "Findings raised: p2-r1 … p2-r6, all in scope."}
+resolves:
+  - {id: p2-r1, state: fixed, body: "19920bdee: the witness runs only for flat deliver after _deliver_exit_guard and before _deliver_label_sync; tests pin the ordering; spec §D amended."}
+  - {id: p2-r2, state: fixed, body: "fc3911ced: the local HEAD sha stands in."}
+  - {id: p2-r3, state: fixed, body: "1bf128c02 (witness) and 6e212a1d0 (verb): one helper fr.settle.read.forge_repo; glab/tea give unsupported, GitHub refuses."}
+  - {id: p2-r4, state: fixed, body: "e620cd8be: conftest patches only client_for and origin_slug; the real witness runs in every deliver test; both forge tests pass."}
+  - {id: p2-r5, state: fixed, body: "Spec §C states the extra refuse-and-edit round and why it is accepted."}
+  - {id: p2-r6, state: fixed, body: "c9d654dd0: a settle-only section is None to parse_section; settle_overrides reads the lines separately; spec §C amended."}
+evidence:
+  review: review-p2-1
+  reviewer: ac89412b47188d7d6
+  model: claude-opus-5-5
