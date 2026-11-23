@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -931,7 +932,10 @@ def test_the_issues_filter_script_returns_early_when_the_filter_bar_is_absent() 
     assert script.index(SCRIPT) < script.index(PAGE_SCRIPT)
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(
+    shutil.which("node") is None and not os.environ.get("CI"),
+    reason="node is not installed (CI always runs it: a missing node there fails)",
+)
 def test_the_issues_filter_script_runs_without_throwing_when_the_filter_bar_is_absent() -> None:
     """R13, executed: a document with no `q`/`sort` element and whose every other DOM read
     throws. The script must return before touching anything else."""
