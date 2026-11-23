@@ -641,3 +641,24 @@ def test_a_journal_override_the_spec_outranks_is_named(
     assert result.exit_code == 0, result.output
     assert "settle-ci" in result.output and "not applied" in result.output
     assert "ci (fix, default): green" in result.output
+
+
+def test_an_old_head_with_no_check_is_missing_and_exits_4(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-tests-r2: a head committed long ago, no check, not conflicting: `missing`."""
+    import os
+    import subprocess
+
+    (repo / "old.txt").write_text("old\n")
+    git(repo, "add", "-A")
+    env = {**os.environ, "GIT_COMMITTER_DATE": "1700000000 +0000"}
+    subprocess.run(["git", "commit", "-qm", "old"], cwd=repo, env=env, check=True)
+    head = git(repo, "rev-parse", "HEAD").strip()
+    forge = Forge(checks=[])
+    forge.view = {**forge.view, "head_oid": head}
+
+    result = _run(monkeypatch, forge)
+
+    assert result.exit_code == 4, result.output
+    assert "ci (fix, default): missing" in result.output

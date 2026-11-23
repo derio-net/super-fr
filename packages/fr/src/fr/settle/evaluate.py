@@ -60,6 +60,8 @@ _HINTS: Final[dict[tuple[str, str], str]] = {
     ),
     ("ci", "pending"): "checks are still running",
     ("ci", "gate-pending"): "waiting on gate check {absent}, which has not reported yet",
+    ("ci", "gate-awaiting"): "waiting on gate check {absent}, which has not reported yet",
+    ("ci", "awaiting"): "no check has reported on the head yet",
     ("ci", "gate-absent"): (
         "gate check {absent} never reported on the head {minutes} minutes after it was "
         "committed, while the other checks finished; see why its workflow did not run, fix "
@@ -73,8 +75,18 @@ _HINTS: Final[dict[tuple[str, str], str]] = {
         "CI cannot run on a conflicting PR: fix the conflict first, and CI runs on the push"
     ),
     ("ci", "none"): "the repo's services say `ci none`: no CI to wait for",
+    ("ci", "head-unknown"): (
+        "no check has reported, and the head's commit time could not be read, so fr "
+        "cannot tell whether CI is still coming; see the PR's checks page"
+    ),
 }
 """The wording of every printed state line, in one place."""
+
+_AGED: Final = frozenset({"awaiting", "missing", "gate-awaiting", "gate-absent"})
+"""The hints the head's age may have decided."""
+_ESTIMATED: Final = (
+    " (the head's age is estimated from local HEAD: the PR head is not in this clone)"
+)
 
 MANAGED_LINE: Final = (
     "managed: the wave driver's queue and hand-backs own this PR's mergeability and CI; "
@@ -102,9 +114,10 @@ def _ci_state(
     gate_names: Sequence[str] | None,
     *,
     ci_none: bool,
-    age: float,
+    age: float | None,
 ) -> tuple[CiState, tuple[str, ...], str, tuple[str, ...]]:
-    """(state, failing check names, hint key, absent gate names)."""
+    """(state, failing check names, hint key, absent gate names). An unknown *age* never
+    reads as `missing`: CI may still be coming."""
     if ci_none:
         return "none", (), "none", ()
     if is_conflicting:
@@ -117,17 +130,21 @@ def _ci_state(
         return "red", failing, "red", ()
     if any(c.get("bucket") == "pending" for c in relevant):
         return "pending", (), "pending", ()
-    fresh = age < NO_CI_WAIT_SECONDS
+    fresh = age is None or age < NO_CI_WAIT_SECONDS
     if not checks:
-        return ("pending", (), "pending", ()) if fresh else ("missing", (), "missing", ())
+        if age is None:
+            return "pending", (), "head-unknown", ()
+        return ("pending", (), "awaiting", ()) if fresh else ("missing", (), "missing", ())
     reported = {str(c.get("name")) for c in relevant}
     absent = tuple(g for g in gate_names or () if g not in reported)
     if absent:
         # A gate not reported yet: a job waiting on others, or a workflow that has not
         # started; CI finished without it only once the head is past the no-CI wait.
         running = any(c.get("bucket") == "pending" for c in checks)
-        if running or fresh:
+        if running:
             return "pending", (), "gate-pending", absent
+        if fresh:
+            return "pending", (), "gate-awaiting", absent
         return "missing", (), "gate-absent", absent
     return "green", (), "green", ()
 
@@ -162,16 +179,18 @@ def evaluate(
     modes: Modes,
     *,
     ci_none: bool,
-    head_committed_at: float,
+    head_committed_at: float | None,
     now: float,
+    head_time_estimated: bool = False,
 ) -> Verdict:
     """The verdict for one read of the PR (*view* is `GhClient.pr_view`, *checks*
-    `GhClient.pr_checks`; *gate_names* None reads every check)."""
+    `GhClient.pr_checks`; *gate_names* None reads every check). *head_committed_at* is
+    None when it could not be read; *head_time_estimated* when it is local HEAD's."""
     head = str(view.get("head_oid") or "")
     base = str(view.get("base_ref") or "the base")
     raw_conflict = _conflict_state(view)
     c_state: ConflictState = "off" if modes.conflicts.mode == "off" else raw_conflict
-    age = now - head_committed_at
+    age = None if head_committed_at is None else now - head_committed_at
     if modes.ci.mode == "off":
         ci_state: CiState = "off"
         failing: tuple[str, ...] = ()
@@ -197,9 +216,11 @@ def evaluate(
             hint_key,
             failing=", ".join(failing),
             absent=", ".join(absent),
-            minutes=int(age // 60),
+            minutes=int((age or 0) // 60),
         ),
     )
+    if head_time_estimated and hint_key in _AGED:
+        lines = (lines[0], lines[1] + _ESTIMATED)
     settled = c_state not in UNSETTLED and ci_state not in UNSETTLED
     return Verdict(
         conflict_state=c_state,

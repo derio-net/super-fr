@@ -15,6 +15,7 @@ from typing import Any, Final
 from fr.ghclient import UnsupportedForgeOperation
 from fr.settle.evaluate import evaluate, unsupported_verdict
 from fr.settle.model import Modes, SettleRefused, Verdict
+from fr.settle.target import HeadTime
 
 DEFAULT_WAIT: Final = 300
 WAIT_CEILING: Final = 540
@@ -44,7 +45,7 @@ def settle(
     wait: float,
     clock: Callable[[], float],
     sleep: Callable[[float], None],
-    committed_at: Callable[[str], float],
+    committed_at: Callable[[str], HeadTime],
     first_view: dict[str, Any] | None = None,
 ) -> Verdict:
     """Poll PR *pr* of *repo* until it settles or *wait* seconds pass. *committed_at*
@@ -70,13 +71,15 @@ def settle(
             raise SettleRefused(f"PR #{pr} is {state}, not open: there is nothing to settle")
         head = str(view.get("head_oid") or "")
         now = clock()
+        head_time = committed_at(head) if head else HeadTime(None)
         verdict = evaluate(
             view,
             checks,
             gate_names,
             modes,
             ci_none=ci_none,
-            head_committed_at=committed_at(head) if head else now,
+            head_committed_at=head_time.at,
+            head_time_estimated=head_time.estimated,
             now=now,
         )
         left = deadline - now

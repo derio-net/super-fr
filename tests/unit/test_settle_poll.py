@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 from fr.ghclient import UnsupportedForgeOperation
 from fr.settle.model import Modes
+from fr.settle.target import HeadTime
+from fr.run.ci_evidence import NO_CI_WAIT_SECONDS
 from fr.settle.poll import DEFAULT_WAIT, WAIT_CEILING, SettleRefused, check_wait, settle
 
 HEAD = "b" * 40
@@ -66,7 +68,13 @@ def _modes(conflicts: str = "fix", ci: str = "fix") -> Modes:
     return Modes.from_setting(conflicts=conflicts, ci=ci)
 
 
-def _settle(forge: ReadOnlyForge, clock: Clock, modes: Modes, wait: float = 300) -> Any:
+def _settle(
+    forge: ReadOnlyForge,
+    clock: Clock,
+    modes: Modes,
+    wait: float = 300,
+    committed: float | None = None,
+) -> Any:
     return settle(
         forge,
         "o/r",
@@ -77,7 +85,7 @@ def _settle(forge: ReadOnlyForge, clock: Clock, modes: Modes, wait: float = 300)
         wait=wait,
         clock=clock.now,
         sleep=clock.sleep,
-        committed_at=lambda _sha: clock.t - 10,
+        committed_at=lambda _sha: HeadTime(clock.t - 10 if committed is None else committed),
     )
 
 
@@ -175,7 +183,7 @@ def test_a_first_view_is_not_read_again() -> None:
     clock = Clock()
     settle(
         forge, "o/r", 7, gate_names=None, modes=_modes(), ci_none=False, wait=0,
-        clock=clock.now, sleep=clock.sleep, committed_at=lambda _s: clock.t,
+        clock=clock.now, sleep=clock.sleep, committed_at=lambda _s: HeadTime(clock.t),
         first_view=_view(),
     )  # fmt: skip
     assert forge.views == 0
@@ -186,3 +194,15 @@ def test_a_wait_that_is_not_a_finite_bounded_number_is_refused(wait: float) -> N
     """Review l-errors-r1: `nan` compares false against both bounds."""
     with pytest.raises(SettleRefused):
         check_wait(wait)
+
+
+def test_a_head_that_crosses_the_no_ci_wait_during_the_poll_ends_missing() -> None:
+    """l-tests-r1: no check yet, the head 30 s short of the no-CI wait, a 60 s poll."""
+    forge = ReadOnlyForge([(_view(), [])])
+    clock = Clock()
+    start = clock.t
+
+    v = _settle(forge, clock, _modes(), wait=60, committed=start - (NO_CI_WAIT_SECONDS - 30))
+
+    assert forge.views >= 2
+    assert (v.ci_state, v.exit_code) == ("missing", 4)

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -97,10 +97,39 @@ def local_head(repo_root: Path) -> str:
     return done.stdout.strip() if done.returncode == 0 else ""
 
 
-def committed_at(repo_root: Path, sha: str) -> float:
-    """*sha*'s commit time; HEAD's when *sha* is not local; now when neither reads."""
-    for rev in (sha, "HEAD"):
-        found = _commit_time(repo_root, rev) if rev else None
+@dataclass(frozen=True)
+class HeadTime:
+    """A PR head's commit time: `at` None when nothing could be read (age unknown), and
+    `estimated` when it is local HEAD's because the PR head is not in this clone."""
+
+    at: float | None
+    estimated: bool = False
+
+
+def _fetch(repo_root: Path, sha: str) -> bool:
+    try:
+        done = subprocess.run(
+            ["git", "fetch", "--quiet", "--no-tags", "origin", sha],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0
+
+
+def committed_at(repo_root: Path, sha: str) -> HeadTime:
+    """*sha*'s commit time: local, else after one quiet fetch of it; else local HEAD's,
+    marked estimated; else unknown. Never the clock (l-errors-r7). No forge client offers
+    a commit's time today, so the forge is not asked."""
+    if sha:
+        found = _commit_time(repo_root, sha)
+        if found is None and _fetch(repo_root, sha):
+            found = _commit_time(repo_root, sha)
         if found is not None:
-            return found
-    return time.time()
+            return HeadTime(found)
+    head = _commit_time(repo_root, "HEAD")
+    return HeadTime(head, estimated=True) if head is not None else HeadTime(None)

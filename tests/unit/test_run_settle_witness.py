@@ -298,9 +298,7 @@ def test_only_a_failing_pr_is_offered_the_override(
     assert "record an override" in out.output
 
 
-def test_no_open_pr_names_its_own_remedy(
-    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_no_open_pr_names_its_own_remedy(at_deliver: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     class NoPr(Forge):
         def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
             return None

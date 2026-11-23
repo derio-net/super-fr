@@ -43,7 +43,8 @@ def _eval(
     modes: Modes | None = None,
     *,
     ci_none: bool = False,
-    committed: float = OLD,
+    committed: float | None = OLD,
+    estimated: bool = False,
 ) -> Any:
     return evaluate(
         view if view is not None else _view(),
@@ -52,6 +53,7 @@ def _eval(
         modes or _modes(),
         ci_none=ci_none,
         head_committed_at=committed,
+        head_time_estimated=estimated,
         now=NOW,
     )
 
@@ -235,3 +237,22 @@ def test_settled_concerns_say_so() -> None:
     assert v.exit_code == 0
     assert v.settled
     assert not _eval(checks=[_check("t", "pending")]).settled
+
+
+# ---- the head's commit time (review l-errors-r7) ------------------------------------
+
+
+def test_an_unknown_commit_time_is_pending_never_missing() -> None:
+    v = _eval(checks=[], committed=None)
+    assert v.ci_state == "pending"
+    assert "commit time could not be read" in v.lines[1]
+    absent = _eval(checks=[_check("lint", "pass")], gates=["ci-ok"], committed=None)
+    assert absent.ci_state == "pending"
+
+
+def test_an_estimated_commit_time_is_said_on_the_line() -> None:
+    v = _eval(checks=[], committed=OLD, estimated=True)
+    assert v.ci_state == "missing"
+    assert "estimated from local HEAD" in v.lines[1]
+    green = _eval(estimated=True)
+    assert "estimated" not in green.lines[1]
