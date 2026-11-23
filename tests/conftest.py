@@ -79,6 +79,16 @@ def _fresh_checkout_caches() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_git_system_config_memo() -> None:
+    """`fr.git_cache._SYSTEM_MEMO` keeps git's system config path for the process, a
+    failed probe (`_UNKNOWN`) included; a test that fakes git away must not make every
+    later cached question on its xdist worker decline (PR #1625's CI)."""
+    from fr import git_cache
+
+    git_cache._SYSTEM_MEMO.clear()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_forge_policy_cache() -> None:
     """`fr.settings.remote.client_policy` keeps a repo's policy per client for minutes; a
     test's fake client must never meet an answer a previous test's client read."""
@@ -510,6 +520,54 @@ def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
     monkeypatch.delenv("FR_OPENCODE_SESSION_ID", raising=False)
+
+
+class SettledForge:
+    """A read-only forge whose one open PR merges cleanly and has green CI: what `deliver`'s
+    `settle` witness reads in a unit test (spec 2026-11-23-pr-readiness-wait R8). Any
+    method but these four is a write, and fails the test."""
+
+    HEAD = "c" * 40
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, object] | None:
+        return {"number": 1, "url": f"https://github.com/{repo}/pull/1"}
+
+    def pr_view(self, repo: str, number: int) -> dict[str, object]:
+        return {
+            "state": "OPEN",
+            "head_oid": self.HEAD,
+            "base_ref": "main",
+            "mergeable": "MERGEABLE",
+            "merge_state": "CLEAN",
+        }
+
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, object]]:
+        return [{"name": "ci-ok", "bucket": "pass"}]
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        return []
+
+    def __getattr__(self, name: str) -> object:
+        if name.startswith("__"):
+            raise AttributeError(name)
+        raise AssertionError(f"the settle witness called {name}: it may only read")
+
+
+@pytest.fixture(autouse=True)
+def _settle_witness_reads_no_forge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`deliver` derives a `settle` witness from the live PR (R8); a unit test's clone has
+    no forge. Only the witness's forge seams are replaced (review p2-r4), so its ordering,
+    managed and mode logic runs in every `deliver` test; a test replaces them again to
+    serve another PR."""
+    from fr.settle import witness
+
+    monkeypatch.setattr(witness, "client_for", lambda _root: SettledForge())
+    monkeypatch.setattr(witness, "origin_slug", lambda _root: "derio-net/fixture")
+    # A unit test's origin is a local bare repository, which names no forge (R11): every
+    # settle read sees a GitHub origin unless a test serves another.
+    monkeypatch.setattr(
+        "fr.settle.read.origin_url", lambda _root: "https://github.com/derio-net/fixture.git"
+    )
 
 
 @pytest.fixture

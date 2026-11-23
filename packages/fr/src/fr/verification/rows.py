@@ -33,6 +33,7 @@ __all__ = [
     "run_verification",
     "shape_default",
     "spec_section_at",
+    "spec_text_at",
     "spec_verification",
     "unrunnable_strategies",
 ]
@@ -43,13 +44,19 @@ def spec_section_at(repo_root: Path, spec_rel: str | None) -> Section | None:
     there is no spec, no such file, or no section. A spec archived since the
     run started is found at its archive twin. A malformed section raises
     `SectionError` — the caller decides what an unreadable section means."""
+    text = spec_text_at(repo_root, spec_rel)
+    return None if text is None else parse_section(text)
+
+
+def spec_text_at(repo_root: Path, spec_rel: str | None) -> str | None:
+    """The text of the spec at `spec_rel`, or at its archive twin; `None` without one."""
     from fr.acceptance.model import archive_twin
 
     if not spec_rel:
         return None
     for rel in (spec_rel, archive_twin(spec_rel)):
         if rel and emitted_path(repo_root, rel).is_file():
-            return parse_section(emitted_path(repo_root, rel).read_text())
+            return emitted_path(repo_root, rel).read_text()
     return None
 
 

@@ -89,14 +89,51 @@ def test_safe_fr_env_keeps_only_absolute_pythonpath_entries() -> None:
     assert "PYTHONPATH" not in safe_fr_env({})
 
 
+ENV_SAFE_HANDOFF = {
+    "fr/src/fr/commands/triage_drive_loop.py": (
+        "builds the driver's argv and spawns nothing itself: the supervisor's child runs it "
+        "through `safe_spawn.Child` and the post_merge restart through `triage_batch_cmd._exec`"
+    ),
+}
+"""Files that call `fr_argv` but hand the argv to a spawner that builds the env with
+`safe_fr_env`; `test_every_handoff_sink_still_builds_the_safe_env` keeps that true."""
+
+
 def test_every_python_m_fr_spawn_goes_through_the_helper() -> None:
     """The argv lives in ONE place (`fr.safe_spawn.fr_argv`), and every file that spawns
     with it also builds the child env with `safe_fr_env`."""
     stray, unsafe = [], []
     for path in SRC.glob("*/src/**/*.py"):
         text = path.read_text()
+        rel = str(path.relative_to(SRC))
         if path.name != "safe_spawn.py" and re.search(r'"-m",\s*"fr"', text):
-            stray.append(str(path.relative_to(SRC)))
-        if "fr_argv(" in text and "safe_fr_env(" not in text and path.name != "safe_spawn.py":
-            unsafe.append(str(path.relative_to(SRC)))
+            stray.append(rel)
+        if (
+            "fr_argv(" in text
+            and "safe_fr_env(" not in text
+            and path.name != "safe_spawn.py"
+            and rel not in ENV_SAFE_HANDOFF
+        ):
+            unsafe.append(rel)
     assert stray == [] and unsafe == [], (stray, unsafe)
+
+
+def test_every_handoff_sink_still_builds_the_safe_env() -> None:
+    """The spawners ENV_SAFE_HANDOFF relies on: `Child` and `_exec` build the env with
+    `safe_fr_env`, and each listed file still calls `fr_argv`."""
+    import ast
+    import inspect
+
+    from fr.commands import triage_batch_cmd
+    from fr.safe_spawn import Child
+
+    assert "safe_fr_env()" in inspect.getsource(Child)
+    assert "safe_fr_env()" in inspect.getsource(triage_batch_cmd._exec)
+    for rel in ENV_SAFE_HANDOFF:
+        tree = ast.parse((SRC / rel).read_text())
+        calls = {
+            n.func.id
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        }
+        assert "fr_argv" in calls, f"{rel} no longer calls fr_argv: drop its entry"

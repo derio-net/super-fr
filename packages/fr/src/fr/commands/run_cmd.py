@@ -405,7 +405,7 @@ def _note_loaded(state: RunState) -> None:
         writes.loaded_cursor = state.cursor
 
 
-def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) -> list[str]:
+def _closeout_handoff_lines(repo_root: Path, state: RunState, *, committed: bool) -> list[str]:
     """The handoff toward `fr pickup --run` (spec 2026-09-25-fr-goal-closeout-
     defects §3.D.2) — printed once `deliver` resolves `done`, and again on
     every `advance` of an already-finished run.
@@ -423,14 +423,30 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
     The closeout pair comes LAST (#814): the push line is an instruction the
     orchestrator acts on, and printed after the closeout it became the last
     thing acted on while the closeout line went unrelayed.
+
+    gh#1614: for a run whose effective gates include devops, the DevOps stage owns the
+    pre-merge ops and the merge, so the pair names `fr ops gate --run` instead — the
+    same decision (`devops_gated`) `fr pickup --run` makes when it picks its brief.
     """
-    from fr.run.closeout import closeout_checkout
+    from fr.run.closeout import closeout_checkout, devops_gated
 
     base = closeout_checkout(repo_root)
-    closeout = [
-        f"closeout: after the PR merges, start a NEW session in {base} and run",
-        f"  fr pickup --run {run_id}",
-    ]
+    run_id = state.run
+    try:
+        devops = devops_gated(repo_root, state)
+    except Exception:  # noqa: BLE001 — a hand-off line never fails `deliver`; the
+        devops = False  # pickup line stays right: `fr pickup` routes to the DevOps brief
+    if devops:
+        closeout = [
+            "closeout: this run is devops-gated — the DevOps stage owns its pre-merge ops "
+            f"and the merge; at a terminal on the harness host, in {base}, run",
+            f"  fr ops gate --run {run_id}",
+        ]
+    else:
+        closeout = [
+            f"closeout: after the PR merges, start a NEW session in {base} and run",
+            f"  fr pickup --run {run_id}",
+        ]
     if not committed:
         return [
             "cursor NOT committed (see the `fr: not committed` line above) — "
@@ -1679,6 +1695,7 @@ _VERIFIABLE_EVIDENCE = (
     "single-phase",
     "walk",
     "lenses",
+    "settle",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1724,6 +1741,7 @@ _DERIVED_FROM = {
     "lenses": "from the feature's lens set at this resolve and each lens reviewer's return: "
     "per lens, the changed files it examined and the findings it raised (`none` for an "
     "empty set)",
+    "settle": "from the PR's conflict and CI states under `git.settle` (fr.settle.witness)",
 }
 
 
@@ -4039,7 +4057,16 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         **_gated_binding_keys(step),
         **_lens_review_brief(step, state),
         **_tests_brief(resolve_repo_root(), step),
+        **_settle_brief(step),
     }
+
+
+def _settle_brief(step: Step) -> dict[str, str]:
+    """`settle`, the settle loop's one instruction line, for a step that derives
+    `settle` evidence (`deliver`; spec 2026-11-23-pr-readiness-wait R9, R10)."""
+    from fr.settle.instructions import DELIVER_LINE
+
+    return {"settle": DELIVER_LINE} if "settle" in step.evidence else {}
 
 
 def commit_templates_brief(repo_root: Path, issue: int | None) -> dict[str, Any]:
@@ -6507,7 +6534,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         outcome = _commit_run_writes_now()
         for line in _closeout_handoff_lines(
             repo_root,
-            state.run,
+            state,
             committed=outcome is None or outcome.committed or outcome.unchanged,
         ):
             console.print(line, soft_wrap=True)
@@ -7216,6 +7243,7 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.record.pr_body import (
         PR_BODY_NAME,
         REQUIRED_SECTIONS,
+        PrBodyRefused,
         durable_pr_body_path,
         fr_markers,
         missing_sections,
@@ -7232,7 +7260,11 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     else:
         body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(body_path, render_pr_body(repo_root, state))
+    try:
+        write_text_atomic(body_path, render_pr_body(repo_root, state))
+    except PrBodyRefused as e:  # l-errors-r8
+        err_console.print(f"refused: {e}", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
     # Under quiet and stealth the render is under the artifact root, outside the checkout:
     # named by its full path there (lens-pr-body-quiet), committed by the same seam.
     rel = _shown_path(body_path, repo_root)
@@ -8049,6 +8081,13 @@ def _resolve_body(
         )
         _deliver_pr_gate(repo_root, state, pr)
         _deliver_exit_guard(repo_root, state)
+        if "settle" in step.evidence:  # R8: after every hard gate, before the forge write
+            from fr.settle.witness import deliver_witness
+
+            settled = {"settle": deliver_witness(flat_key, repo_root, state, err_console)}
+            state = _with_step(
+                state, step_id, units.with_evidence(state.steps[step_id], flat_key, settled)
+            )
         _deliver_label_sync(repo_root, state, pr, run_id)
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first
@@ -8093,7 +8132,9 @@ def _resolve_body(
         # "push it" line that assumes the commit landed.
         outcome = _commit_run_writes_now()
         for line in _closeout_handoff_lines(
-            repo_root, run_id, committed=outcome is None or outcome.committed or outcome.unchanged
+            repo_root,
+            new_state,
+            committed=outcome is None or outcome.committed or outcome.unchanged,
         ):
             console.print(line, soft_wrap=True)
 

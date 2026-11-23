@@ -76,6 +76,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`CAPABILITIES`, the closed set `requires:` validates against) is a
     sibling of `fr/workflow`, not inside it; `fr_dispatch.capabilities` is
     a two-line re-export kept for import back-compat.
+  - **Gate names** (`fr/gates.py`, 2026-11-16 spec `architecture-review-sweep`): `Gate` is the
+    vocabulary and `PostMergeGate` (`tester`, `devops`) the post-merge subset. The step tag of a Test
+    Plan line (`fr.spec.StepGate`, `_TAG_RE`), the ops stub's leading tag, a strategy manifest's `gate:`
+    and a triage `exit:` remap value all derive from them (`tests/unit/test_gate_vocabulary.py`).
   - **`fr/verification`** (2026-10-06 spec, `verification-strategies`) — how a change
     is proven: `model.py` (`StrategyManifest`, closed placeholders), `resolve.py`
     (repo > env > wheel > marketplace, same order as workflows), `check.py`
@@ -181,7 +185,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-     engine-appended `events` (fr reads schemas 1–12 and writes 12, see
+     engine-appended `events` (fr reads schemas 1–13 and writes 13, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -200,6 +204,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     inputs), `snapshot.py` stores/diffs the per-render snapshots (`render.py` reads no clock; the command passes it),
     `components.py` holds the colour tokens, the phone gutter and the one `tabs()` component. `Judgement.kind` and
     `Judgements.features` load on any schema; `check` has an `unplaced` set.
+    **Timestamps:** `timestamps.py`'s `parse_aware` is the one reader of a forge or fact timestamp
+    that must be timezone-aware (`None` for missing, unparseable or naive); a second function with
+    its body fails `tests/unit/test_triage_timestamps.py`.
     **Origins and the architecture page** (same spec, E and F): `fr triage origins {collect,check,render}`
     (`origins.py`; classification is the `fr-origins` skill's) and `fr triage architecture render`
     (`architecture.py`): the snapshot timeline, measured sections (line counts via the `gitseam`
@@ -209,19 +216,35 @@ uv workspace monorepo, version lockstepped across every manifest (see
     events; schema 7 adds audited `replacement` attempt/success/failure events
     that never change dispatch age or lifecycle; 8 adds `claim_taken`, which makes a
     taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
-    (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); current writers
-     stamp 12 (read 1–12), adding recovery ownership/session audit metadata;
-     11 added `archive_conflict` (merge-truth R12).
+    (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); 11 added
+     `archive_conflict` (merge-truth R12); 12 recovery ownership/session audit metadata;
+     current writers stamp 13 (read 1–13), adding the wave merge queue's `queues:` list,
+     the batch `deferred`/`requeued` events and the `patch_id` of an approval and an update
+     (wave-merge-queue R12, R24).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
-    `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
-    `closeout`, `archive`, `dispatch`, `blocked`, `warn` actions out; no
+    `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,
+    `dispatch`, `blocked`, `warn` actions and one `QueuePlan` per repo out; no
     `fr_dispatch`, no git, no process, the clock passed in); the command
-    re-collects facts each pass (`triage_cmd.collect_into`), executes through
-    `dispatch_batch`/`merge_ready`, fast-forwards and runs the repo's
-    `post_merge` argument list through `gitseam.Checkout`, and starts each
-    close-out as a `unit="run"` item with `payload.kind: closeout`. A
-    `drive.lock` (pid, start time) refuses a second driver.
+    re-collects facts each pass (`triage_cmd.collect_into`), executes the queue
+    through `fr.triage.queue_exec`, dispatches through `dispatch_batch`,
+    fast-forwards and runs the repo's `post_merge` argument list through
+    `gitseam.Checkout`, and starts each close-out as a `unit="run"` item with
+    `payload.kind: closeout`. A `drive.lock` (pid, start time) refuses a second driver.
+    **One merge path** (2026-11-19 spec `wave-merge-queue`, R22, R23, R32): the per-merge
+    train, the forge merge-queue mode, the `enqueue` executor and the update path are
+    gone, and `batch_merge.py` keeps only what the queue shares (the merge method choice,
+    the required-checks rule, `unresolvable`). Every merge is an entry of
+    `fr.triage.wave_queue`: a batch PR, or an `OtherEntry` (a collected close-out, an
+    attributed archive PR, the per-wave export PR, a DevOps housekeeping PR) that the
+    pure pass admits under its own trust rule (`Admitted`: `review_reasons`,
+    `attributed` plus `archive_allowed`, `_export_row`'s checks, or `approved-fr` recorded
+    as a queue `approval`, settled by `approval.settle_entry_approval`); `_archive` and
+    `_export_merge` are gone. A repo with no `queue.ci`, a forge merge queue on its base,
+    or a forge that is glab or tea is `queue-held` with the reason. `fr triage batch merge`
+    drives the same engine in the foreground (`_Driver.queue_only`). Old `update` and
+    `enqueue` events are still read (the approval verdict's `reaches` keeps judging an
+    approval recorded before schema 13); nothing writes them.
   - **`fr/usage`** (2026-09-25 spec, `lean-cost-aware-process` §5.A) — what a
     session or run cost, and on what, reconstructed from the harness's own
     records: `readers/` (one per harness — Claude Code transcripts, OpenCode and
@@ -667,16 +690,21 @@ read-only and fine to run anywhere. A hand-written `fr_version` floor
 (`>=X.Y.Z,<X.Y.Z` under `packages/*/src`) naming an unreleased version must
 name the predicted one: the base version plus this PR's highest fragment bump.
 
-**Release identity.** `release.yml` pushes as the `derio-fr-automation` GitHub
-App when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
-secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
+**Release identity.** `release.yml` pushes as the `super-fr-release` GitHub
+App, which serves this repo alone (installed here only, contents and issues write,
+metadata read; `derio-fr-automation` is frank's app and is never used here), when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
+the `release` environment secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
 step, scoped to this repo with contents and issues write only, never persisted by
 checkout and stripped from the staged test run), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
 way: a `GITHUB_TOKEN` push runs no CI on the release commit, an app push does,
-and `release.yml` then runs once more as a no-op. The app is the ruleset's bypass
-actor once `scripts/configure-main-protection.sh --stage bypass` has run; `--stage
-require` then adds the required `ci-ok` check and refuses until a release was
-pushed by the app. Order and consumer adoption: `docs/merge-protection.md`.
+and `release.yml` then runs once more as a no-op. Only `prepare` and `publish` name
+the `release` environment, whose branch policy allows `main` alone (spec
+`2026-11-21-release-app-hardening`; `test_release_workflow.py` pins it). One script,
+`scripts/setup-release-app.sh`, makes the app check, the environment, the key, the
+variable and three rulesets: `protect main` and `protect release tags` hold no bypass
+actor, and the app is the only bypass actor of `require ci-ok`, which the script
+creates only after a release was pushed by the app. Order, security model and
+consumer adoption: `docs/merge-protection.md`.
 
 On every push to `main`, `.github/workflows/release.yml` runs
 `scripts/release.py` as a **job graph** (spec `2026-11-01-ci-speed` §3.D):
@@ -707,7 +735,7 @@ the push and only tags. To release a specific number, run the workflow by hand
 exits non-zero and prints the `gh workflow run release.yml -f version=<X>` that
 re-dispatches it, since no later run carries the override. `main`'s ruleset
 forbids only force-push and deletion today; **once
-a required-PR or required-checks rule is added (`--stage require`), the app must
+a required-PR or required-checks rule is added (the script's require step), the app must
 be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting the
 variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
 every release fails (release.py reports that refusal
@@ -748,11 +776,33 @@ untagged RC at HEAD (a failed tag push) is tagged on the next run.
 `FR_RELEASE_STATUS_TOKEN` is the workflow's `github.token`, so it also carries
 the `prepare` job's contents and issues write; it reaches only the `gh` read,
 never `fr` or repo code, and `publish` holds only `GH_TOKEN`. Exactly these calls
-authenticate: the `gh` read, the `gh release` and `gh issue` writes, and the two
-pushes. The bump, `uv lock --check`, the migration, `fr`'s decision and every
+authenticate: the `gh` read, the `gh release` and `gh issue` writes, the two pushes
+(the release commit and the tag) and the leased push of a `cleared` merge-queue hold (see
+below; the hold's fetch stays credential-free). The bump, `uv lock --check`, the migration, `fr`'s decision and every
 other git command run credential-free; the suite jobs get a read-only
 `GITHUB_TOKEN`, used only by checkout and never persisted, and no forge token in
 the suite's env.
+**The merge queue's hold** (spec `2026-11-19-wave-merge-queue` R17-R19, R27). A repo whose
+wave queue is landing keeps one ref, `refs/heads/fr-hold/queue`, a commit whose message is
+`fr-hold: <open|drained|cleared> scope <id> wave <N|-> opened <ISO> refreshed <ISO>`
+(`fr.triage.wave_queue.parse_hold`). The driver pushes it (`queue_exec`'s `push_hold`, the one
+leased hold writer): `open` at queue open and refreshed once an hour, `drained` after the last
+landing, `cleared` itself under `queue.release: none`. Every write after the first is a merge
+commit (first parent: the base, or the drained `main`; second: the hold it replaces), so each push
+is a fast-forward; readers read the first parent only. A write the remote refuses is a
+`queue_halt` whose detail starts `hold write refused` (`wave_queue.hold_halt`): the queue lands
+nothing and shows a Need until a hold write succeeds. While it is `open` and was refreshed
+within 24 hours, `release.py` cuts nothing (RC or final; `--version` too) and `fr release
+status` reports the repo held (`fr.release_status.hold_verdict`, from the `hold` key of its
+facts). The run that finishes, `prepare` when it cuts nothing or `publish` after its push,
+clears a `drained` hold its base contains with a leased push of a `cleared` commit (the third
+authenticated push); only a run that finished (`EXIT_OK`) clears, and a superseded, held or
+failed (`EXIT_FLOOR`) one does not. `publish` reads the hold again before its push. `release.yml`
+also runs on pushes to `fr-hold/**`, but there only its `hold-relay` job runs, for a `drained`
+hold's commit message and never for a deletion: it dispatches `release.yml` on `main` with
+`actions: write` alone. `prepare` never runs on the hold ref, so the hold branch's own workflow
+file never reaches the main-only `release` environment, and every drain starts a release.
+
 An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
 `X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one
 parser every script reads both spellings through. `fr_version` floors admit an RC of the
@@ -839,6 +889,15 @@ exists and how it's checked, not a restatement:
   adds tests for an existing row, or ships a surface a `not-implemented` row waits on
   updates the rows in the *same* PR. Gate: `fr acceptance check` via
   `.github/workflows/acceptance-report.yml`. Driver skill: `fr-acceptance`.
+- **import direction** (`tests/unit/test_import_direction.py`) — the package-boundary guard
+  reads imports from the syntax tree (`ast`), so a comma list, an alias or a nested import is
+  seen; dynamic imports and entry-point loading are not judged. An unparseable file fails it.
+- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — the five
+  largest modules (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
+  `triage/batch_drive.py`) may not grow past their budget, and a budget may not sit more than 400
+  lines above its module. When it fails, move the new code into the module the architecture report
+  (`docs/superpowers/audits/2026-11-16-architecture-review.md`) names, or change the budget in the
+  same diff and say why in the PR.
 - **third-party-privacy** (2026-09-19) — live-verification evidence is
   redacted at capture time: hostnames, orgs, repo names and usernames outside
   the `derio-net` org never reach a spec, journal, fixture, matrix note, PR body

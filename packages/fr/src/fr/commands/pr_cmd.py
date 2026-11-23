@@ -9,7 +9,9 @@ approval exactly like `fr push`. The PR's url is recorded on the run cursor
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -18,6 +20,13 @@ from rich.markup import escape
 from fr._hosts import origin_slug
 from fr.commands.common import resolve_repo_root
 from fr.hostclient import FORGE_ERRORS, client_for
+from fr.settle import poll as _settle_poll
+
+if TYPE_CHECKING:
+    from fr.settle.model import Modes
+
+_SETTLE_DEFAULT_WAIT = _settle_poll.DEFAULT_WAIT
+_SETTLE_CEILING = _settle_poll.WAIT_CEILING
 
 pr_app = typer.Typer(help="Pull requests fr opens (always drafts).", no_args_is_help=True)
 err_console = Console(stderr=True)
@@ -180,3 +189,104 @@ def create_cmd(
         repo_root, [run_path(repo_root, state.run)], f"chore(fr): run {state.run} — pr create"
     )
     console.print(f"opened draft PR {url} (recorded on run {state.run})", soft_wrap=True)
+
+
+def _branch_modes(repo_root: Path, runs: list[Any]) -> tuple[Modes, list[str]]:
+    """The settle modes of this branch's PR and the warnings to print first: the setting,
+    then the run's spec line, else the branch's one debug journal's decision (R6). Why no
+    journal was read is said when fr cannot tell (the lookup failed, or more than one); a
+    branch with none, the normal case, says nothing (l-errors-r2b)."""
+    from fr.commands.push_cmd import branch_debug_journals
+    from fr.journal.model import journal_path
+    from fr.requirements import run_spec
+    from fr.settle.modes import effective_modes, journal_settle_ids
+
+    spec = next((s for s in map(run_spec, runs) if s), None)
+    found = branch_debug_journals(repo_root)
+    slugs = found if isinstance(found, list) else []
+    warnings: list[str] = []
+    journal = None
+    if spec is not None:
+        for slug in slugs:
+            for eid in journal_settle_ids(journal_path(repo_root, "debug", slug)):
+                warnings.append(
+                    f"settle: debug journal {slug}'s decision {eid} is not applied: the run's "
+                    "spec decides; put the override in its `## Verification`"
+                )
+    elif isinstance(found, str):
+        warnings.append(f"settle: {found}; the repo setting applies")
+    elif len(slugs) > 1:
+        # l-errors-r2b: fr cannot tell which journal holds this PR's override.
+        warnings.append(
+            f"settle: this branch added {len(slugs)} debug journals ({', '.join(slugs)}); fr "
+            "does not guess which one holds this PR's settle override, so the repo setting "
+            "applies: keep one"
+        )
+    elif slugs:
+        journal = journal_path(repo_root, "debug", slugs[0])
+    return effective_modes(repo_root, spec=spec, debug_journal=journal), warnings
+
+
+@pr_app.command("settle")
+def settle_cmd(
+    wait: float = typer.Option(
+        _SETTLE_DEFAULT_WAIT,
+        "--wait",
+        help=f"Seconds to poll while a concern is unknown or pending (max {_SETTLE_CEILING}).",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print the verdict as JSON."),
+) -> None:
+    """Wait until this branch's PR merges cleanly and its CI has finished."""
+    import time
+
+    from fr.commands.push_cmd import branch_context, branch_runs
+    from fr.git_policy.push import PushRefusedError
+    from fr.settings import SettingsError
+    from fr.settle import poll
+    from fr.settle.evaluate import evaluate, managed_verdict
+    from fr.settle.managed import driver_managed
+    from fr.settle.model import EXIT_PENDING, EXIT_REFUSED, SettlePending, SettleRefused, Verdict
+    from fr.settle.read import forge_repo, no_forge_verdict, read_verdict
+
+    def _out(verdict: Verdict) -> None:
+        if as_json:
+            typer.echo(verdict.model_dump_json())
+        else:
+            for line in verdict.lines:
+                console.print(escape(line), soft_wrap=True, highlight=False)
+        raise typer.Exit(verdict.exit_code)
+
+    def _refuse(message: str, code: int = EXIT_REFUSED) -> typer.Exit:
+        if as_json:  # l-errors-r6: a --json caller reads every outcome from stdout
+            typer.echo(json.dumps({"exit_code": code, "error": message}))
+        err_console.print(escape(f"fr pr settle: {message}"), soft_wrap=True)
+        return typer.Exit(code)
+
+    repo_root = resolve_repo_root()
+    try:
+        poll.check_wait(wait)
+        branch, _head, _git_dir = branch_context(repo_root)
+        if driver_managed(branch):
+            _out(managed_verdict(branch))
+        runs = branch_runs(repo_root)
+        modes, warnings = _branch_modes(repo_root, runs)
+        for line in warnings:
+            err_console.print(escape(line), soft_wrap=True, highlight=False)
+        if modes.both_off:
+            _out(evaluate({}, [], None, modes, ci_none=False, head_committed_at=0, now=0))
+        recorded = runs[0].pr if len(runs) == 1 else None
+        local = no_forge_verdict(repo_root, modes)
+        if local is not None:
+            _out(local)
+        client = client_for(repo_root)
+        repo = forge_repo(origin_slug(repo_root), client)
+        try:
+            verdict = read_verdict(
+                repo_root, client, repo, branch, recorded, modes,
+                wait=wait, clock=time.time, sleep=time.sleep,
+            )  # fmt: skip
+        except SettlePending as e:
+            raise _refuse(str(e), EXIT_PENDING) from e
+    except (SettleRefused, SettingsError, PushRefusedError) as e:
+        raise _refuse(str(e)) from e
+    _out(verdict)

@@ -30,7 +30,8 @@ name: Release
 # 2026-10-11-merge-train-safety §F). Unset: the push uses the GITHUB_TOKEN, and
 # a push made with the GITHUB_TOKEN triggers no workflow, so no CI runs on the
 # release commit. Set: the app-token step mints a token for the
-# derio-fr-automation GitHub App from secret FR_AUTOMATION_APP_KEY and the
+# super-fr-release GitHub App (this repo's alone) from the FR_AUTOMATION_APP_KEY secret of the
+# release environment and the
 # release commit and tag are pushed as the app, so CI runs on the release
 # commit and release.yml runs once more on it, as a no-op. The token is scoped to
 # this repo with contents and issues write only, checkout persists none, and
@@ -47,15 +48,29 @@ name: Release
 # publishes nothing. The suite makes this workflow long; .github/ci-budget.yaml
 # gives it its own budget.
 #
-# Pushing to main works today because main's ruleset forbids only force-push
-# and deletion. If a required-PR or required-checks rule is ever added, the
-# release bot needs a bypass actor on that rule (the app, once
-# scripts/configure-main-protection.sh --stage bypass has run); release.py reports a
-# protection refusal (GH006) as exactly that, never as a lost race.
+# The merge queue's hold (R17-R19; a `drained` push to it dispatches a run on main, through
+# the `hold-relay` job, so the key stays behind the main-only environment): while `refs/heads/fr-hold/queue` reads `open` and was
+# refreshed within 24 hours, release.py cuts nothing, RC or final, and a `--version` run
+# is held too. The run that finishes, `prepare` when it cuts nothing or `publish` after
+# the push, clears a `drained` hold its base contains with a leased push of a `cleared`
+# commit, using the token that job already holds. A superseded or failed run clears nothing.
+#
+# The key is a secret of the `release` environment, not of the repository. Only
+# `prepare` and `publish` name that environment, and its deployment branch
+# policy allows `main` alone, so a run on any other ref gets no key
+# (spec 2026-11-21-release-app-hardening R1, R2). The app's bypass sits only on
+# the "require ci-ok" ruleset (the app is its only bypass actor), never on "protect main", so the key cannot
+# force-push or delete main. `scripts/setup-release-app.sh` makes all of this
+# (environment, key, variable, rulesets); runbook: docs/merge-protection.md.
+# release.py reports a protection refusal (GH006/GH013) as a missing bypass,
+# never as a lost race.
 
 on:
   push:
-    branches: [main]
+    # `fr-hold/**` is the merge queue's hold (spec 2026-11-19-wave-merge-queue R17-R19): the
+    # driver's push of the `drained` hold dispatches the release that follows its wave on main
+    # (`hold-relay`), and a deletion of the hold (an operator clearing it by hand) starts nothing.
+    branches: [main, "fr-hold/**"]
   schedule:
     - cron: "17 6 * * *" # daily: the final follows the last gate pass with no push
   workflow_dispatch:
@@ -98,7 +113,35 @@ concurrency:
 # names the re-dispatch instead, since no later run carries it). A rerun whose
 # release commit already landed skips the push and only tags.
 jobs:
+  # A push to the hold ref runs the workflow file as that branch holds it, and the `release`
+  # environment admits `main` alone, so a hold push never reaches the key. Only the
+  # `drained` push (the driver's, after a wave's last landing) needs a release: this job
+  # dispatches the workflow on `main`, whose run then cuts and clears the hold. It holds no
+  # secret and no environment, only `actions: write` to dispatch; a GITHUB_TOKEN dispatch
+  # does start a run. An open, refresh, cleared or deleted hold push starts nothing.
+  hold-relay:
+    if: >-
+      github.event.deleted != true &&
+      startsWith(github.ref, 'refs/heads/fr-hold/') &&
+      startsWith(github.event.head_commit.message, 'fr-hold: drained')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the release on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+
   prepare:
+    environment: release
+    # Never on a hold push (`hold-relay` above dispatches the run on main instead) and never
+    # on a deletion. Pushes to main, the schedule and a dispatch are unchanged. Every other
+    # job but `hold-relay` needs `prepare`'s `cut` output, so skipping `prepare` skips them.
+    if: >-
+      github.event.deleted != true &&
+      !startsWith(github.ref, 'refs/heads/fr-hold/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -291,6 +334,7 @@ jobs:
   publish:
     needs: [prepare, split-check]
     if: needs.prepare.outputs.cut == 'true'
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

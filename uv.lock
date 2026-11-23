@@ -101,7 +101,7 @@ wheels = [
 
 [[package]]
 name = "fr"
-version = "8.3.0rc6"
+version = "9.0.0rc2"
 source = { editable = "packages/fr" }
 dependencies = [
     { name = "packaging" },
@@ -122,7 +122,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-claude-cloud"
-version = "8.3.0rc6"
+version = "9.0.0rc2"
 source = { editable = "packages/fr-claude-cloud" }
 dependencies = [
     { name = "fr" },
@@ -139,7 +139,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-cncd"
-version = "8.3.0rc6"
+version = "9.0.0rc2"
 source = { editable = "packages/fr-cncd" }
 dependencies = [
     { name = "fr" },
@@ -154,7 +154,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-dispatch"
-version = "8.3.0rc6"
+version = "9.0.0rc2"
 source = { editable = "packages/fr-dispatch" }
 dependencies = [
     { name = "fr" },
@@ -165,7 +165,7 @@ requires-dist = [{ name = "fr", editable = "packages/fr" }]
 
 [[package]]
 name = "fr-herdr"
-version = "8.3.0rc6"
+version = "9.0.0rc2"
 source = { editable = "packages/fr-herdr" }
 dependencies = [
     { name = "fr" },
@@ -511,7 +511,7 @@ wheels = [
 
 [[package]]
 name = "super-fr-workspace"
-version = "8.3.0rc6"
+version = "9.0.0rc2"
 source = { editable = "." }
 dependencies = [
     { name = "fr" },

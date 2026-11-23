@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 cli.py only opens the git-answer cache scope; no command changed. 2026-11-19 batch docs-wording rewrites help first lines to pass STE (shorter, same meaning), escapes bracketed help so it renders, and checks this page under ste (no writing_standard exemption). 2026-11-18 the owed-followups batch changes no command or help text; fr triage backlog and fr triage batches replace render and board, which stay as hidden aliases (triage-pages-ux phase 1); the consumer-delivery phase 2 changes no command or help text. 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd
+reviewed: 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 pr-readiness-wait phase 1 adds `fr pr settle` to the generated tree; 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 changes no command or help text; 2026-11-19 cli.py only opens the git-answer cache scope; no command changed. 2026-11-19 batch docs-wording rewrites help first lines to pass STE (shorter, same meaning), escapes bracketed help so it renders, and checks this page under ste (no writing_standard exemption). 2026-11-18 the owed-followups batch changes no command or help text; fr triage backlog and fr triage batches replace render and board, which stay as hidden aliases (triage-pages-ux phase 1); the consumer-delivery phase 2 changes no command or help text. 2026-11-17 the triage-intake batch changes no command or help line (cancel, dispatch and drive keep their help text); the acceptance-edits batch phase 1 changes no command or help text; the triage-collect fixes change no command or help line (scope retire's first line is unchanged). 2026-11-16 the workspace-identity fixes change no command or help text; owed-archive-side-effects phase 3, `fr archive` gains the `--dry-run` option; the generated tree lists commands only, so it is unchanged. 2026-11-15 the deliver-evidence fixes change no command or help text, and fr gate pass --yes now exits 1 when a tracker close fails with its help line unchanged; phase 1, no help text changed; VK support removed; fr skills drops the runner-operations skill, the apply --to example is cncd; 2026-11-20 wave-merge-queue phase 1 adds no command or help line (the approval gate reads a patch-id); still true; 2026-11-19 cli.py only opens the git-answer cache scope; no command changed
 ---
 
 # The fr command line
@@ -177,11 +177,14 @@ one artifact kind.
     - `fr triage batch create`: Add a proposed batch of judged issues.
     - `fr triage batch edit`: Change a proposed batch; past `proposed`, only --order (and, until it merges, --wave and --after) may change.
     - `fr triage batch cancel`: Withdraw a batch: unlabel and comment on each member, append a cancel event.
+    - `fr triage batch defer`: Take a batch out of its wave's queue and drain; its PR stays open.
+    - `fr triage batch requeue`: Put a batch in a later queue: wave N's, or the next one to open.
+    - `fr triage batch queue-retry`: Let a halted merge queue try again.
     - `fr triage batch suggest`: Print candidate groupings (shared file, theme, pattern).
     - `fr triage batch replace`: Replace a managed batch harness/model in place, or reconcile without replay.
     - `fr triage batch dispatch`: Hand a batch to a runner as one fr-goal run, and mark its issues taken.
     - `fr triage batch adopt`: Put a running session under the wave driver as an existing batch; launches nothing.
-    - `fr triage batch merge`: Merge pr-open batch PRs in the computed order, re-slotting versions.
+    - `fr triage batch merge`: Merge pr-open batch PRs through the wave merge queue, in the foreground.
     - `fr triage batch closeout`: Close out every landed, ungated batch in ONE housekeeping PR.
     - `fr triage batch drive`: Drive batches to completion: merge what is ready, close out what merged, dispatch what may start (wave order, then merge order, then id).
   - `fr triage architecture`: The architecture page: measured sections plus authored fragments.
@@ -200,6 +203,9 @@ one artifact kind.
   - `fr triage drive`: The cloud driver's one pass per wake, and the record of its session results.
     - `fr triage drive pass`: One pass of the cloud driver.
     - `fr triage drive record`: Apply the agent's recorded results to the scope's state, then push the state ref.
+    - `fr triage drive failures`: The wave driver's failure ledger, most frequent cause first.
+    - `fr triage drive status`: Whether a driver holds the scope, read-only.
+    - `fr triage drive log`: Show the last N lines of the scope's `drive.log`, newest last.
   - `fr triage history`: The history page: the snapshot timeline and the finished waves.
     - `fr triage history render`: Write the History page: the snapshot timeline, the finished waves as tabs, then the authored fragments `history/manifest.yaml` places among them.
   - `fr triage origins`: Defect origins: collect issues filed since a date, classify them, render the page.
@@ -255,6 +261,7 @@ one artifact kind.
   - `fr closeout outcome`: Record one outcome for each Test Plan step in --step.
 - `fr pr`: Pull requests fr opens (always drafts).
   - `fr pr create`: Open this run's PR as a draft and record it on the run cursor.
+  - `fr pr settle`: Wait until this branch's PR merges cleanly and its CI has finished.
 <!-- /generated:cli-tree -->
 
 `scripts/sync-readme.py` generates the list above from the command tree. A test fails when

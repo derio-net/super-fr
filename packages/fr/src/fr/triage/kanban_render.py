@@ -40,6 +40,7 @@ from fr.triage.kanban import (
     cutoff_hidden_waves,
 )
 from fr.triage.render import FONTS, _safe_url, esc, noun
+from fr.triage.wave_report import span
 
 if TYPE_CHECKING:
     from fr.triage.quota import Budget
@@ -74,6 +75,12 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
   padding: 10px; min-width: 0; }
 .held { margin-top: 16px; background: color-mix(in srgb, var(--line) 35%, transparent);
   border-radius: 8px; padding: 10px; }
+.activity { margin-top: 16px; background: color-mix(in srgb, var(--line) 35%, transparent);
+  border-radius: 8px; padding: 10px; }
+.activity h2 { display: block; }
+.activity ol { margin: 0; padding: 0; list-style: none; }
+.activity li { margin: 4px 0; font-family: var(--mono); font-size: .8rem;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
 .held ul { margin: 0; padding-left: 18px; }
 .held li { margin: 4px 0; overflow-wrap: anywhere; }
 .count { color: var(--muted); font-weight: 400; }
@@ -460,6 +467,32 @@ def _held(held: Sequence[HeldIssue]) -> str:
     )
 
 
+def _queue_section(board: Board) -> str:
+    """The merge queue's line per repo (R25) and the report of each wave it ran (R28)."""
+    if not board.queue_lines and not board.wave_reports:
+        return ""
+    lines = "".join(f'<li class="queue-line mono">{esc(line)}</li>' for line in board.queue_lines)
+    reports = ""
+    for report in board.wave_reports:
+        which = "between waves" if report.wave is None else f"wave {report.wave}"
+        rows = "".join(
+            f'<tr><td class="mono">{esc(p.key)}</td><td>{esc(p.outcome)}</td>'
+            f"<td>{p.cycles}</td><td>{esc(span(p.wall))}</td><td>{p.approvals}</td>"
+            f"<td>{esc(p.detail)}</td></tr>"
+            for p in report.prs
+        )
+        reports += (
+            f'<div class="wave-report"><h3>{esc(report.repo)}, {which}</h3>'
+            "<table><thead><tr><th>PR</th><th>outcome</th><th>CI cycles</th><th>wall time</th>"
+            f"<th>approvals</th><th>detail</th></tr></thead><tbody>{rows}</tbody></table>"
+            f'<p class="meta">Release: {esc(report.release or "none asked yet")}</p></div>'
+        )
+    return (
+        '<section class="queue"><h2>Merge queue</h2>'
+        f"{'<ul>' + lines + '</ul>' if lines else ''}{reports}</section>"
+    )
+
+
 def _gated_card(g: GatedCard) -> str:
     return (
         f'<div class="card needs-you" data-gated-pr="{esc(g.repo)}#{g.number}">'
@@ -490,6 +523,17 @@ def _column(
     )
 
 
+def _activity(entries: Sequence[str]) -> str:
+    """The Activity panel (R23): the driver's newest log entries, newest first, escaped."""
+    if not entries:
+        return (
+            '<section class="activity"><h2>Activity</h2>'
+            '<p class="meta">no driver has run</p></section>'
+        )
+    items = "".join(f"<li>{esc(e)}</li>" for e in entries)
+    return f'<section class="activity"><h2>Activity</h2><ol>{items}</ol></section>'
+
+
 def render_board(
     board: Board,
     *,
@@ -500,12 +544,14 @@ def render_board(
     budget: Budget | None = None,
     banner: str = "",
     present: Sequence[str] = ("batches",),
+    activity: Sequence[str] = (),
 ) -> str:
     """The board page: same inputs, same bytes. *budget* is the drive's last recorded forge
     budget (quota-pacing R14): the footer says what it was and how old the facts are, so a
     board that stopped moving is told apart from a quiet one. None: no quota clause.
     *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
-    commands carry; *refresh* is the reload interval in seconds, 0 for none."""
+    commands carry; *refresh* is the reload interval in seconds, 0 for none. *activity* is the
+    newest `drive.log` entries, newest first (batch-train-truth R23)."""
     hidden_waves = cutoff_hidden_waves((c for col in board.columns for c in col.cards), rendered_at)
     if board.batch_count or board.gated_count:
         body = (
@@ -545,7 +591,9 @@ def render_board(
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
         f"{page_header('batches', present)}\n{banner}\n"
         f"{_held(board.held)}\n"
+        f"{_queue_section(board)}\n"
         f"{body}\n"
+        f"{_activity(activity)}\n"
         f'<footer class="meta">{quota}Rendered by <code>fr triage batches</code> from facts.json '
         "and judgements.yaml.</footer>\n"
         f"</main>\n<script>{SCRIPT}{PAGE_SCRIPT}</script>\n</body>\n</html>\n"

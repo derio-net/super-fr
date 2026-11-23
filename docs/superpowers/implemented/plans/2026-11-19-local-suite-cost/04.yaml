@@ -1,0 +1,37 @@
+schema_version: 2
+phase:
+  number: 4
+  title: '[manual] Require ci-ok on main (R9)'
+  tag: manual
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - ci-ok-required-on-main
+tasks:
+- number: 1
+  title: Operator sets the required check
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Operator: follow the order in docs/merge-protection.md: run `scripts/setup-release-app.sh` before the release-app-hardening PR merges, then confirm FR_AUTOMATION_APP_ID is set so the next release is pushed by the app.
+  - id: P4.T1.S2
+    text: |-
+      Operator: after a release pushed by the app, run `scripts/setup-release-app.sh` again (its require step), accepting that every PR must then be up to date with main before it merges.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-11-22T18:54:05+00:00'
+      note: Done by the operator (confirmed by them); FR_AUTOMATION_APP_ID set 2026-11-22T10:24Z
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-11-22T18:54:07+00:00'
+      note: Done by the operator (confirmed by them); require ci-ok ruleset 27838472
+        created 2026-11-22T11:12Z
+  completion:
+    at: '2026-11-22T18:54:13+00:00'
+    note: 'Manual phase done by the operator (confirmed by them): app variable set,
+      require-ci-ok ruleset 27838472 active; red-ci-ok block proven by probe PR #1622
+      (closed unmerged).'
+    observed_prs: []
