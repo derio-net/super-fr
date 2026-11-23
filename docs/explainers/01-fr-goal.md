@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-23 deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1153,6 +1153,14 @@ You do not assemble that description, and neither does the agent. Resolving
 holds the findings from both journals, the out-of-scope ones under their own
 heading (or "None."), the proportionality report and the cost table. The agent
 opens the draft pull request with that file.
+
+`deliver` also checks that the pull request has settled. It asks the forge whether
+the pull request merges cleanly into its base and whether its CI has finished, under
+the repository's `git.settle` setting. If the pull request conflicts or a check
+failed, `deliver` refuses. If the forge has no answer yet, `deliver` stops and
+records nothing, and the agent waits with `fr pr settle` and tries again. A feature
+can relax this for its own pull request with a `settle.` line in its specification.
+The description's `## PR settle` section shows that line and its reason.
 
 `deliver` then reads the live
 description back and refuses to finish while any of those sections is missing.
