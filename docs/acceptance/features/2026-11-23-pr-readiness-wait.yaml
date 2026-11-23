@@ -126,7 +126,10 @@ rows:
     origin:
     - spec:2026-11-23-pr-readiness-wait#R9
     - spec:2026-11-23-pr-readiness-wait#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_pr_settle_wording.py
+    status: ci
+    notes: tripwire pins the settle loop and fix rules in fr-goal, fr-debugging, the
+      deliver brief and the close-out brief (Test Plan 9)
     verify: none
