@@ -134,9 +134,11 @@ rows:
       filter bar
     origin:
     - spec:2026-11-22-triage-hardening#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py#test_the_issues_filter_script_returns_early_when_the_filter_bar_is_absent
+    status: ci
+    notes: render test without the filter bar
     verify: none
 amendments:
   - row: intake-trust-eligibility
