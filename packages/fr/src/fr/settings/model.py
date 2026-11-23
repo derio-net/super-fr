@@ -32,6 +32,7 @@ PR_BODIES: Final = frozenset({"full", "minimal"})
 AUTO_ASK: Final = frozenset({"auto", "ask"})
 HISTORIES: Final = frozenset({"keep", "squash-unpushed"})
 PLACEHOLDERS: Final = frozenset({"type", "scope", "summary", "issue"})
+SETTLE_MODES: Final = frozenset({"off", "report", "fix"})
 """The allowed values, stated once: the validators and `fr settings init` both read them."""
 
 
@@ -51,6 +52,13 @@ def _member(vocab: frozenset[str]) -> Callable[[Any], str]:
         return str(v)
 
     return check
+
+
+def _no_bool(v: Any) -> Any:
+    """A settle mode is a word: PyYAML's bare `off` is a bool, and a bool is refused."""
+    if isinstance(v, bool):
+        raise ValueError(f"must be one of fix, off, report (quote it: 'off'), got {v!r}")
+    return v
 
 
 def _choice(default: str, vocab: frozenset[str], description: str) -> Any:
@@ -73,6 +81,7 @@ AskType = Annotated[str, AfterValidator(_member(AUTO_ASK))]
 BodyType = Annotated[str, AfterValidator(_member(PR_BODIES))]
 HistoryType = Annotated[str, AfterValidator(_member(HISTORIES))]
 PlacementType = Annotated[str, AfterValidator(_member(PLACEMENTS))]
+SettleModeType = Annotated[str, BeforeValidator(_no_bool), AfterValidator(_member(SETTLE_MODES))]
 
 
 def _check_template(v: str, *, allow_issue: bool) -> str:
@@ -178,6 +187,21 @@ class Forge(_Closed):
     )
 
 
+class Settle(_Closed):
+    conflicts: SettleModeType = _choice(
+        "fix",
+        SETTLE_MODES,
+        description="Default fix: fr waits for the PR's mergeability and fixes a conflict.\n"
+        "Report: waits and reports it. Off: today's behaviour, nothing is read.",
+    )
+    ci: SettleModeType = _choice(
+        "fix",
+        SETTLE_MODES,
+        description="Default fix: fr waits for the PR's CI and fixes a red or missing run.\n"
+        "Report: waits and reports it. Off: today's behaviour, nothing is read.",
+    )
+
+
 class Git(_Closed):
     push: AskType = _choice(
         "auto",
@@ -201,6 +225,10 @@ class Git(_Closed):
     commit: Commit = Field(
         default_factory=lambda: Commit.model_validate({}),
         description="Commit subject templates (the defaults are today's).",
+    )
+    settle: Settle = Field(
+        default_factory=Settle,
+        description="Whether a delivered PR waits for mergeability and CI (fr pr settle).",
     )
 
 
