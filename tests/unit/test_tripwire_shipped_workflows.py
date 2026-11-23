@@ -176,6 +176,7 @@ def test_shipped_fr_goal_evidence_is_the_4_28_lists_plus_visual() -> None:
             "docs",
             "visual",
             "walk",
+            "settle",
         )
         members = {m.id: m for m in _step(manifest, "implement").steps}
         assert members["review-phase"].agent is None
@@ -193,6 +194,7 @@ def test_shipped_fr_goal_light_evidence_carries_no_input_gate() -> None:
             "docs",
             "visual",
             "walk",
+            "settle",
         )
 
 
@@ -261,4 +263,4 @@ def test_shipped_fr_goal_declares_visual_on_the_three_ui_stages() -> None:
     assert check_workflow(manifest, None) == []
     assert members["implement-phase"].evidence == ("visual",)
     assert members["review-phase"].evidence == ("review", "reviewer", "findings", "visual")
-    assert _step(manifest, "deliver").evidence[-2] == "visual"
+    assert "visual" in _step(manifest, "deliver").evidence
