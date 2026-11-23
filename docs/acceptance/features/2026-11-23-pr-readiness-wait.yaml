@@ -67,9 +67,19 @@ rows:
     origin:
     - spec:2026-11-23-pr-readiness-wait#R6
     - spec:2026-11-23-pr-readiness-wait#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_section_settle.py#test_settle_lines_parse_into_the_section
+      - super-fr:tests/unit/test_spec_section_settle.py#test_a_malformed_settle_line_is_an_error_naming_the_line
+      - super-fr:tests/unit/test_settle_modes.py#test_a_spec_settle_line_overrides_the_setting
+      - super-fr:tests/unit/test_settle_modes.py#test_with_no_spec_a_debug_journal_decision_overrides
+      - super-fr:tests/unit/test_settle_modes.py#test_a_bad_journal_decision_refuses_naming_the_entry
+      - super-fr:tests/unit/test_pr_body_settle.py#test_an_override_is_named_with_its_source_and_reason
+      - super-fr:tests/unit/test_pr_body_settle.py#test_the_heading_is_required_and_a_body_without_it_is_refused
+      - super-fr:tests/unit/test_pr_body_settle.py#test_under_minimal_the_section_is_in_the_durable_render
+    status: ci
+    notes: the settle grammar, override precedence and the required PR settle section
+      over the CI suite (phase 2)
     verify: none
   - id: pr-settle-deliver
     capability: Delivery waits for a settled PR
