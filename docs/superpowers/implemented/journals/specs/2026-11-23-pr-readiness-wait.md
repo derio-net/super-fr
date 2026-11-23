@@ -305,3 +305,8 @@ what: Post-merge, live: in a sandbox repo of the `derio-net` org, open a draft P
 why: live post-merge walk in a derio-net sandbox repo (fr pr create, conflicting base, red check, fix) not yet performed; row pr-settle-live stays walk-owed
 how: fr journal resolve --scope spec --slug 2026-11-23-pr-readiness-wait --id test-plan-step-10 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-23-pr-readiness-wait#step10
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-10-resolved created=2026-11-23T22:59:44+00:00 state=open resolves=test-plan-step-10 filed_as=derio-net/super-fr#1638 -->
+### test-plan-step-10-resolved · finding [filed → derio-net/super-fr#1638] · resolves test-plan-step-10: Test Plan step 10 owed
+
+Filed at archive as derio-net/super-fr#1638; still owed until discharged.
