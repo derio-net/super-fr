@@ -228,3 +228,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-23-pr-readiness-wait-p2 created=2026-11-23T09:01:46+00:00 -->
 ### tier-2026-11-23-pr-readiness-wait-p2 · decision · hard: phase 2 changes deliver's witness path, a gate every fr-goal run relies on, and must keep exit 75 outside derive()
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-23-pr-readiness-wait-p3 created=2026-11-23T09:01:49+00:00 -->
+### phase-split-2026-11-23-pr-readiness-wait-p3 · decision · ask: the skills and close-out brief running the settle loop (R9, R10) are their own ask, at the mechanical tier
