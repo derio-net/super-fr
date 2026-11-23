@@ -9127,6 +9127,18 @@ batches:
     - tests/unit/test_triage_batch_closeout.py
     - tests/unit/test_tripwire_module_budget.py
     delivered: held
+  - kind: conflict
+    at: '2026-11-23T18:36:31.637011Z'
+    head: 445eb5e99a79ab9ccd86c92836ee50fb5875646c
+    paths:
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/explainers/index.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/cli.md
+    - packages/fr/src/fr/triage/batch_closeout.py
+    - packages/fr/src/fr/triage/batch_drive.py
+    delivered: held
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
