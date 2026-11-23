@@ -41,19 +41,40 @@ def test_the_marker_round_trips_through_the_parser() -> None:
     assert parse_admit(body) == digest
 
 
+_HEX = "a" * 64  # a well-formed digest body: each case below is wrong in one way only
+
+
+def test_the_well_formed_marker_the_cases_below_vary_parses() -> None:
+    assert parse_admit(f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}"}} -->') == (
+        f"sha256:{_HEX}"
+    )
+
+
 @pytest.mark.parametrize(
     "body",
     [
         "<!-- fr-admit:{not json} -->",
-        '<!-- fr-admit:{"v":2,"digest":"sha256:ab"} -->',
-        '<!-- fr-admit:{"v":1} -->',
-        '<!-- fr-admit:{"v":1,"digest":"md5:ab"} -->',
-        '<!-- fr-admit:{"v":1,"digest":"sha256:ab"}',
+        f'<!-- fr-admit:{{"v":2,"digest":"sha256:{_HEX}"}} -->',  # the version
+        '<!-- fr-admit:{"v":1} -->',  # no digest
+        f'<!-- fr-admit:{{"v":1,"digest":"md5:{_HEX}"}} -->',  # the algorithm
+        '<!-- fr-admit:{"v":1,"digest":"sha256:ab"} -->',  # the length
+        f'<!-- fr-admit:{{"v":1,"digest":"sha256:{"A" * 64}"}} -->',  # upper-case hex
+        f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}","x":1}} -->',  # an extra key
+        f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}"}}',  # no closing -->
         "just a comment",
     ],
 )
 def test_a_malformed_or_foreign_marker_parses_to_none(body: str) -> None:
     assert parse_admit(body) is None
+
+
+def test_latest_admit_skips_a_marker_with_no_created_at() -> None:
+    digest = content_digest("t", "1")
+    comments = [{"author": "operator", "body": admit_marker(digest)}]
+    assert latest_admit(comments, frozenset({"operator"})) is None
+    older = {**comments[0], "created_at": "2026-11-01T00:00:00Z"}
+    newer_untimed = {"author": "operator", "body": admit_marker(content_digest("t", "2"))}
+    assert latest_admit([older, newer_untimed], frozenset({"operator"})) == digest
 
 
 def _comment(digest: str, author: str, at: str, association: str = "NONE") -> dict[str, object]:
