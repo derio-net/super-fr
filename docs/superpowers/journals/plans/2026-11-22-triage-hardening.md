@@ -80,3 +80,18 @@ c2e91280c: per-repo comment facts merge only after the repo succeeds. Test test_
 ### p1-r3-resolved · finding [fixed] · resolves p1-r3: No test covers admission on the viewed (judged, no longer open) path (phase 1)
 
 c2e91280c: three viewed-path tests (admitted with matching marker; failed admit read local; ineligible viewed title blanked).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-sets-batch-cycle created=2026-11-23T00:10:17+00:00 phase=2 -->
+### p2-sets-batch-cycle · discovery · batch.py cannot use triage/sets.py (import cycle), so its awaiting-live test stays (phase 2)
+
+sets -> intake -> claims -> batch, so batch._all_closed keeps its own FR_AWAITING_LIVE label test (closed OR labelled, not the open-only is_awaiting_live), and batch_drive.awaiting_unlabelled is the inverse predicate (open and NOT labelled) with a lazy import. Every other copy now reads sets.py (check re-exports; views and render import it directly).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-obsolete-hold-narrowed created=2026-11-23T00:10:17+00:00 phase=2 -->
+### p2-obsolete-hold-narrowed · discovery · obsolete takes over the awaiting-live hold for batches whose members are all in facts (phase 2)
+
+A never-dispatched batch whose open members all await live and the rest are closed is now obsolete, so AWAITING_LIVE_HOLD only fires when a member is missing from facts. test_triage_awaiting_live's b-live batch gained a member absent from facts to keep exercising the hold, and a new test pins the obsolete precedence. Also extended beyond the spec's list: claims.releasing, the held-by skip, kanban's new Obsolete column and the card's already-closed line, the render batches_by_key and the pill CSS treat obsolete like cancelled.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-23T00:10:17+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+check, render and the board share one derive_batch_stage and stale_members helper written in GREEN; nothing left duplicated
