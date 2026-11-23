@@ -57,7 +57,9 @@ def test_adding_a_settle_line_changes_no_strategy(before: str) -> None:
     if "## Verification" in before:
         after = before.replace("Prose only.\n", "Prose only.\n\nsettle.ci: report — r\n")
     else:
-        after = before.replace("## Test Plan", "## Verification\n\nsettle.ci: report — r\n\n## Test Plan")
+        after = before.replace(
+            "## Test Plan", "## Verification\n\nsettle.ci: report — r\n\n## Test Plan"
+        )
 
     for text in (before, after):
         section = parse_section(text)

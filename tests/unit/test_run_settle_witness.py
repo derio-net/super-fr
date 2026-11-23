@@ -17,7 +17,7 @@ from tests.unit.test_forge_quiet_pr_body import _land_policy
 
 __all__ = ["live"]
 
-pytestmark = pytest.mark.usefixtures("real_settle_witness", "complete_live_pr")
+pytestmark = pytest.mark.usefixtures("complete_live_pr")
 
 HEAD = "c" * 40
 REPO = "derio-net/super-fr"
@@ -285,3 +285,99 @@ def test_tests_ci_still_refuses_a_conflicting_pr_with_conflicts_off(
 
     assert out.exit_code == 2, out.output
     assert "conflicts with its base" in out.output
+
+
+# --- review p2-r1: the witness runs after every hard deliver gate, before the forge write
+
+
+def test_a_pr_body_refusal_is_reported_before_the_settle_hold(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch, live: dict[str, str]
+) -> None:
+    live["body"] = "## Summary\n\nno fr sections\n"
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 2, out.output
+    assert "lacks required section" in out.output
+    assert "still settling" not in out.output
+
+
+def test_the_exit_guard_refuses_before_the_settle_hold(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import run_cmd
+
+    def refuse(*_a: object) -> None:
+        run_cmd.err_console.print("exit guard: refused for the test")
+        raise typer.Exit(2)
+
+    monkeypatch.setattr(run_cmd, "_deliver_exit_guard", refuse)
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 2, out.output
+    assert "exit guard: refused for the test" in out.output
+    assert "still settling" not in out.output
+
+
+def test_a_pending_pr_holds_before_the_label_sync_writes_the_forge(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import run_cmd
+
+    synced: list[object] = []
+    rendered: list[object] = []
+    real_render = run_cmd._deliver_pr_gate
+
+    def gate(*a: object) -> None:
+        rendered.append(a)
+        real_render(*a)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(run_cmd, "_deliver_pr_gate", gate)
+    monkeypatch.setattr(run_cmd, "_deliver_label_sync", lambda *a: synced.append(a))
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 75, out.output
+    assert rendered, "the PR body is rendered before the hold"
+    assert synced == []
+
+
+def test_a_settled_pr_syncs_labels_after_the_witness(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import run_cmd
+
+    synced: list[object] = []
+    monkeypatch.setattr(run_cmd, "_deliver_label_sync", lambda *a: synced.append(a))
+    _use(monkeypatch, Forge())
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert len(synced) == 1
+    assert _witness(at_deliver) == f"fix/fix:clean/green@{HEAD}"
+
+
+def test_a_first_resolve_with_no_pr_gets_the_pr_gates_message(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr import gh as fr_gh
+    from fr.gh import GhError
+
+    def no_pr(ref: str, *, cwd: Path | None = None) -> str:
+        raise GhError("no pull requests found")
+
+    monkeypatch.setattr(fr_gh, "view_pr_body", no_pr)
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
+    data = {"run": RUN, "step": "deliver", "outcome": "done", "evidence": {"tests": "suite.log"}}
+    rec = write_record(at_deliver, data)
+
+    out = fr(at_deliver, ["run", "resolve", RUN, "--step", "deliver", "--record", str(rec)])
+
+    assert out.exit_code == 2, out.output
+    assert "fr pr create" in out.output
+    assert "still settling" not in out.output

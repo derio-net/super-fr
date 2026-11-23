@@ -2230,10 +2230,6 @@ def _verified_evidence(
         )
     if refused:
         raise typer.Exit(2)
-    if state_value == "done" and "settle" in step.evidence:  # last, never derive(): 75 holds
-        from fr.settle.witness import deliver_witness
-
-        verified["settle"] = deliver_witness(key, repo_root, state, err_console)
     return verified
 
 
@@ -8074,6 +8070,13 @@ def _resolve_body(
         )
         _deliver_pr_gate(repo_root, state, pr)
         _deliver_exit_guard(repo_root, state)
+        if "settle" in step.evidence:  # R8: after every hard gate, before the forge write
+            from fr.settle.witness import deliver_witness
+
+            settled = {"settle": deliver_witness(flat_key, repo_root, state, err_console)}
+            state = _with_step(
+                state, step_id, units.with_evidence(state.steps[step_id], flat_key, settled)
+            )
         _deliver_label_sync(repo_root, state, pr, run_id)
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first
