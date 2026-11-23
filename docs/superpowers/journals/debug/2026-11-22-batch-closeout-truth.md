@@ -54,3 +54,8 @@ Merged origin/main at v9.0.0-rc.1. Per member, against main's code:
 #1494 NOT fixed: main's finish step still closes only the batch and per-batch close-out ids. Kept as is; closeout-merged still archives every member and marks the marker merged under the queue.
 #1496 NOT fixed: main's closeout_owed has no resume branch. Kept. Hand-back brief adapted: main still said 'merge origin/<base> in'; R16 adds the verb's migration commit, so it now asks for a rebase of the close-out's commits.
 #1569 (a) PARTLY fixed by R16: the close-out migrates the stale artifacts it archives (the observed triage-pages case, the batch's own run cursor) before fr archive. The gate still refuses fr archive over any other stale artifact under placement repo (own_feature admits every path), so release_pending stays, and the driver's wait is narrowed to the stale artifacts R16 does not move (batch_closeout.unowned_stale over Worktree.stale_artifacts and archive_moves), so it never contradicts R16. (b) NOT fixed: --branch on an ended marker is still refused by this branch only.
+
+<!-- fr:journal kind=finding scope=debug id=merge-queue-adapt created=2026-11-23T09:21:53+00:00 state=fixed -->
+### merge-queue-adapt · finding [fixed] · Approval, wait and brief re-implemented for the queue; tests moved from archive actions to admissions
+
+gh1497 tests now assert plan.admitted and the queue entry (_queued == closeout#900, no pr_merge, approval on the queue's events); the old 'approval of another head' test is removed (R12 allows a diff-neutral move); test_triage_batch_closeout gains unowned_stale. Module budgets on main moved to 8200/2250; this branch needs 8225/2275.
