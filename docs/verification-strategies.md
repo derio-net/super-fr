@@ -5,7 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/verification/**
-reviewed: 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
+reviewed: 2026-11-23 a `settle.` line in `## Verification` overrides one `git.settle` key for the PR (pr-readiness-wait R6). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
 ---
 
 # Verification strategies
@@ -68,6 +68,14 @@ A repo can remap a kind's gate in `.fr/triage.yaml` (`exit: {gates: {<kind>:
 <gate>}}`). A spec's `## Verification` section can set the run's gate with
 `gate: <gate>`, and one row's gate with `gate: <row-id>=<gate>`. `fr verification exit
 --run <id> | --spec <path>` prints the kinds, gates and gated rows that result.
+
+The same section can change how this feature's PR settles. A line
+`settle.conflicts: <off|report|fix> — <reason>` or `settle.ci: <off|report|fix> — <reason>`
+replaces that key of the repo's `git.settle` setting for this PR only. The reason is
+required. A `settle.` line that breaks this form is an error that names the line. A
+section that holds only `settle.` lines sets no strategy and no gate, but its
+overrides still apply. The PR body's `## PR settle` section
+shows each mode, where it came from and the reason.
 
 The repo's settings (`fr settings show`) can switch this off. Under
 `artifacts.gates: off`, no gate is computed, labelled or held. A spec whose

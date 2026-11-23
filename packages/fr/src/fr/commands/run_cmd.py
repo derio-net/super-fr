@@ -1695,6 +1695,7 @@ _VERIFIABLE_EVIDENCE = (
     "single-phase",
     "walk",
     "lenses",
+    "settle",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1740,6 +1741,7 @@ _DERIVED_FROM = {
     "lenses": "from the feature's lens set at this resolve and each lens reviewer's return: "
     "per lens, the changed files it examined and the findings it raised (`none` for an "
     "empty set)",
+    "settle": "from the PR's conflict and CI states under `git.settle` (fr.settle.witness)",
 }
 
 
@@ -4055,7 +4057,16 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         **_gated_binding_keys(step),
         **_lens_review_brief(step, state),
         **_tests_brief(resolve_repo_root(), step),
+        **_settle_brief(step),
     }
+
+
+def _settle_brief(step: Step) -> dict[str, str]:
+    """`settle`, the settle loop's one instruction line, for a step that derives
+    `settle` evidence (`deliver`; spec 2026-11-23-pr-readiness-wait R9, R10)."""
+    from fr.settle.instructions import DELIVER_LINE
+
+    return {"settle": DELIVER_LINE} if "settle" in step.evidence else {}
 
 
 def commit_templates_brief(repo_root: Path, issue: int | None) -> dict[str, Any]:
@@ -7232,6 +7243,7 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.record.pr_body import (
         PR_BODY_NAME,
         REQUIRED_SECTIONS,
+        PrBodyRefused,
         durable_pr_body_path,
         fr_markers,
         missing_sections,
@@ -7248,7 +7260,11 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     else:
         body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(body_path, render_pr_body(repo_root, state))
+    try:
+        write_text_atomic(body_path, render_pr_body(repo_root, state))
+    except PrBodyRefused as e:  # l-errors-r8
+        err_console.print(f"refused: {e}", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
     # Under quiet and stealth the render is under the artifact root, outside the checkout:
     # named by its full path there (lens-pr-body-quiet), committed by the same seam.
     rel = _shown_path(body_path, repo_root)
@@ -8068,6 +8084,13 @@ def _resolve_body(
         )
         _deliver_pr_gate(repo_root, state, pr)
         _deliver_exit_guard(repo_root, state)
+        if "settle" in step.evidence:  # R8: after every hard gate, before the forge write
+            from fr.settle.witness import deliver_witness
+
+            settled = {"settle": deliver_witness(flat_key, repo_root, state, err_console)}
+            state = _with_step(
+                state, step_id, units.with_evidence(state.steps[step_id], flat_key, settled)
+            )
         _deliver_label_sync(repo_root, state, pr, run_id)
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first

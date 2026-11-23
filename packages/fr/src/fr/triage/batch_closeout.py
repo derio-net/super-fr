@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from fr.labels import held_gates
+from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.batch import derive_batch_stage
 from fr.triage.batch_drive import (
     LANDED,
@@ -301,7 +302,8 @@ def handback_brief(*, pr: int, branch: str, base: str, checks: Sequence[str]) ->
         f"Fix it on {branch}: merge origin/{base} in, resolve, run the failing checks "
         f"locally, and push; then run `fr triage batch closeout --branch {branch} --yes`, "
         f"which records the new head (the driver merges only a head the verb recorded). "
-        f"This is its one hand-back: a second failure goes to the operator."
+        f"This is its one hand-back: a second failure goes to the operator.\n"
+        f"{MANAGED_SENTENCE}"
     )
 
 
