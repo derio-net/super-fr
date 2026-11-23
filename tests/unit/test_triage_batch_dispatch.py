@@ -1416,3 +1416,18 @@ def test_a_one_issue_batch_brief_starts_the_run_with_its_issue() -> None:
 
 def test_a_multi_issue_batch_brief_names_no_run_issue() -> None:
     assert "--issue" not in _brief()
+
+
+def test_dispatch_of_an_obsolete_batch_refuses_and_names_its_cancel_command(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """T3: every member closed; the refusal says so, never "never started twice"."""
+    closed = [_issue(n, state="closed") for n in (577, 575)]
+    _state(tmp_path, _facts(issues=[*closed, _issue(420)]))
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    flat = " ".join(out.split())
+    assert code == 2, out
+    assert "obsolete: every member is closed" in flat
+    assert "fr triage batch cancel lifecycle --yes" in flat
+    assert "never started twice" not in flat and "dispatched to ?" not in flat
+    assert runner.dispatched == [] and _dispatch_writes(gh) == 0

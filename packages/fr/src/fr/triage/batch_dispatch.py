@@ -40,6 +40,15 @@ LIVE_STAGES = frozenset({"dispatched", "pr-open"})
 # `dispatch --yes` may start a batch only from these (§3.C step 6.1).
 DISPATCHABLE = frozenset({"proposed", "cancelled", "abandoned"})
 
+
+def obsolete_refusal(batch_id: str, verb: str) -> str:
+    """Why `batch dispatch` / `batch adopt` refuse an `obsolete` batch, and how to retire it."""
+    return (
+        f"batch {batch_id!r} is obsolete: every member is closed, so there is nothing to "
+        f"{verb}; retire it with `fr triage batch cancel {batch_id} --yes`"
+    )
+
+
 TRIAGE_CONFIG_PATH = ".fr/triage.yaml"
 
 CLOUD_PREFLIGHT_RUNNERS = frozenset({"claude-cloud"})

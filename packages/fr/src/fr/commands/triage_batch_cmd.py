@@ -119,6 +119,7 @@ from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolve
 from fr.services import ServicesError
 from fr.services.resolve import resolve_services
 from fr.triage import batch_closeout as collected
+from fr.triage.admit_recheck import recheck_admitted
 from fr.triage.approval import (
     ApprovalVerdict,
     EventWriter,
@@ -174,6 +175,7 @@ from fr.triage.batch_dispatch import (
     dispatch_comment,
     dispatched_already,
     live_reservations,
+    obsolete_refusal,
     red_brief,
     render_brief,
     worker_remedy,
@@ -268,7 +270,6 @@ from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
-from fr.triage.admit_recheck import recheck_admitted
 from fr.triage.intake import (
     NOT_COLLECTED,
     rejected_by_batch,
@@ -1946,6 +1947,8 @@ def dispatch_batch(
         return
     # Step 6, in the spec's order: every gate before the first backend call.
     stage = derive_batch_stage(batch, facts)
+    if stage == "obsolete":  # never dispatched, every member closed: cancel retires it
+        _fail(obsolete_refusal(batch.id, "dispatch"))
     if stage not in DISPATCHABLE:
         last = last_dispatch(batch)
         _fail(
@@ -2158,6 +2161,8 @@ def adopt_batch(
     recorded = isinstance(last, DispatchEvent) and last.handle == tab and last.branch == new
     if not recorded:
         stage = derive_batch_stage(batch, facts)
+        if stage == "obsolete":
+            _fail(obsolete_refusal(batch.id, "adopt"))
         if stage not in DISPATCHABLE:
             _fail(
                 f"batch {batch.id!r} is {stage}; adopt takes a batch `batch dispatch` would "
