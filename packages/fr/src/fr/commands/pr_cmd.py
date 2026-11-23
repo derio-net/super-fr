@@ -194,11 +194,11 @@ def create_cmd(
 def _branch_modes(repo_root: Path, runs: list[Any]) -> tuple[Modes, list[str]]:
     """The settle modes of this branch's PR and the warnings to print first: the setting,
     then the run's spec line, else the branch's one debug journal's decision (R6). Why no
-    journal was read is said, never dropped (l-errors-r2); more than one refuses."""
+    journal was read is said when fr cannot tell (the lookup failed, or more than one); a
+    branch with none, the normal case, says nothing (l-errors-r2b)."""
     from fr.commands.push_cmd import branch_debug_journals
     from fr.journal.model import journal_path
     from fr.requirements import run_spec
-    from fr.settle.model import SettleRefused
     from fr.settle.modes import effective_modes, journal_settle_ids
 
     spec = next((s for s in map(run_spec, runs) if s), None)
@@ -215,17 +215,14 @@ def _branch_modes(repo_root: Path, runs: list[Any]) -> tuple[Modes, list[str]]:
                 )
     elif isinstance(found, str):
         warnings.append(f"settle: {found}; the repo setting applies")
-    elif not slugs:
-        warnings.append(
-            "settle: this branch has no spec-driven run and added no debug journal; the "
-            "repo setting applies"
-        )
     elif len(slugs) > 1:
-        raise SettleRefused(
-            f"this branch added {len(slugs)} debug journals ({', '.join(slugs)}); fr does not "
-            "guess which one holds this PR's settle override: keep one"
+        # l-errors-r2b: fr cannot tell which journal holds this PR's override.
+        warnings.append(
+            f"settle: this branch added {len(slugs)} debug journals ({', '.join(slugs)}); fr "
+            "does not guess which one holds this PR's settle override, so the repo setting "
+            "applies: keep one"
         )
-    else:
+    elif slugs:
         journal = journal_path(repo_root, "debug", slugs[0])
     return effective_modes(repo_root, spec=spec, debug_journal=journal), warnings
 

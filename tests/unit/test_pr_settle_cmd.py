@@ -606,24 +606,43 @@ def _debug_journal(repo: Path, slug: str, *decisions: tuple[str, str, str]) -> N
     git(repo, "commit", "-qm", f"journal {slug}")
 
 
-def test_no_debug_journal_warns_that_the_setting_applies(
+def test_no_debug_journal_is_the_normal_case_and_prints_nothing(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Review l-errors-r2: the reason no override was looked for is said, never dropped."""
+    """Review l-errors-r2b: most branches add no debug journal; that says nothing."""
     result = _run(monkeypatch, Forge())
 
     assert result.exit_code == 0, result.output
-    assert "no debug journal" in result.output and "repo setting applies" in result.output
+    assert "settle:" not in result.output and "journal" not in result.output
 
 
-def test_two_debug_journals_refuse_naming_both(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_two_debug_journals_warn_and_the_setting_applies(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _debug_journal(repo, "2026-11-23-a")
-    _debug_journal(repo, "2026-11-23-b")
+    _debug_journal(repo, "2026-11-23-b", ("settle-ci", "off", "runners down"))
 
     result = _run(monkeypatch, Forge())
 
-    assert result.exit_code == 2, result.output
+    assert result.exit_code == 0, result.output
     assert "2026-11-23-a" in result.output and "2026-11-23-b" in result.output
+    assert "repo setting applies" in result.output
+    assert "ci (fix, default): green" in result.output
+
+
+def test_a_failed_journal_lookup_warns_and_the_setting_applies(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "fr.commands.push_cmd.branch_debug_journals",
+        lambda _root: "this branch has no spec-driven run, and fr cannot read its debug journals",
+    )
+
+    result = _run(monkeypatch, Forge())
+
+    assert result.exit_code == 0, result.output
+    assert "cannot read its debug journals" in result.output
+    assert "repo setting applies" in result.output
 
 
 def test_a_journal_override_the_spec_outranks_is_named(
