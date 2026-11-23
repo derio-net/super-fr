@@ -1,0 +1,225 @@
+"""The pure settle engine (spec 2026-11-23-pr-readiness-wait R2, R4, R11).
+
+`evaluate` reads one PR view and its checks and returns a `Verdict`. It reaches no forge,
+no git and no clock of its own: the caller passes the head's commit time and `now`.
+
+States (R2). Conflicts: `clean`, `conflicting` (`fr.triage.mergeability.conflicting`:
+`CONFLICTING` or `DIRTY`; `BLOCKED` is branch protection, so clean), `unknown` (the forge
+has not computed mergeability or the merge state yet). CI: `green`, `red` (with the
+failing check names), `pending` (a check has not finished, or none has reported and the
+head is younger than `NO_CI_WAIT_SECONDS`), `missing` (none reported after that, or a gate
+CI finished without), `unrunnable` (a conflicting PR: the forge runs no pull-request
+workflow for it), `none` (the repo's services say `ci none`). A concern under `off` is not
+evaluated and reads `off`.
+
+The exit code (R4), stated once. Only a concern whose mode is `fix` decides it:
+
+    any fix concern conflicting | red | missing | unrunnable   -> 4
+    else any fix concern unknown | pending                     -> 75
+    otherwise                                                  -> 0
+
+A `report` concern's state is printed and never changes the code; an `off` concern is
+not read. `unsupported` (R11) and `managed` (R5) verdicts exit 0 (`unsupported_verdict`,
+`managed_verdict`).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any, Final
+
+from fr.run.ci_evidence import NO_CI_WAIT_SECONDS
+from fr.settle.model import (
+    EXIT_FAILING,
+    EXIT_OK,
+    EXIT_PENDING,
+    FAILING,
+    UNSETTLED,
+    CiState,
+    ConflictState,
+    KeyMode,
+    Modes,
+    Verdict,
+)
+from fr.triage.mergeability import conflicting
+
+_FAILING_BUCKETS: Final = frozenset({"fail", "cancel"})
+_UNKNOWN: Final = frozenset({"", "UNKNOWN"})
+
+_HINTS: Final[dict[tuple[str, str], str]] = {
+    ("conflicts", "clean"): "merges cleanly into {base}",
+    ("conflicts", "conflicting"): (
+        "conflicts with {base}: merge origin/{base} into the branch (never rebase or "
+        "force-push), push with `fr push`, then run `fr pr settle` again"
+    ),
+    ("conflicts", "unknown"): "the forge has not computed mergeability yet",
+    ("ci", "green"): "every check read passed",
+    ("ci", "red"): (
+        "failing: {failing}; fix it with an ordinary commit, push with `fr push`, then run "
+        "`fr pr settle` again"
+    ),
+    ("ci", "pending"): "checks are still running",
+    ("ci", "missing"): (
+        "no check reported on the head {minutes} minutes after it was committed; see why "
+        "no workflow ran (the PR's checks page), fix it and push"
+    ),
+    ("ci", "unrunnable"): (
+        "CI cannot run on a conflicting PR: fix the conflict first, and CI runs on the push"
+    ),
+    ("ci", "none"): "the repo's services say `ci none`: no CI to wait for",
+}
+"""The wording of every printed state line, in one place."""
+
+MANAGED_LINE: Final = (
+    "managed: the wave driver's queue and hand-backs own this PR's mergeability and CI; "
+    "nothing to settle here"
+)
+UNSUPPORTED_LINE: Final = (
+    "unsupported: the {backend} forge cannot report {op}; the PR's mergeability and CI "
+    "are not known, so check them on the forge"
+)
+
+
+def _conflict_state(view: Mapping[str, Any]) -> ConflictState:
+    mergeable = str(view.get("mergeable") or "")
+    merge_state = str(view.get("merge_state") or "")
+    if conflicting(mergeable, merge_state):
+        return "conflicting"
+    if mergeable in _UNKNOWN or merge_state in _UNKNOWN:
+        return "unknown"
+    return "clean"
+
+
+def _ci_state(
+    is_conflicting: bool,
+    checks: Sequence[Mapping[str, Any]],
+    gate_names: Sequence[str] | None,
+    *,
+    ci_none: bool,
+    age: float,
+) -> tuple[CiState, tuple[str, ...]]:
+    if ci_none:
+        return "none", ()
+    if is_conflicting:
+        return "unrunnable", ()
+    relevant = [c for c in checks if not gate_names or c.get("name") in gate_names]
+    failing = tuple(
+        sorted({str(c.get("name")) for c in relevant if c.get("bucket") in _FAILING_BUCKETS})
+    )
+    if failing:
+        return "red", failing
+    if any(c.get("bucket") == "pending" for c in relevant):
+        return "pending", ()
+    reported = {str(c.get("name")) for c in relevant}
+    absent = [g for g in gate_names or () if g not in reported]
+    if not checks:
+        return ("pending", ()) if age < NO_CI_WAIT_SECONDS else ("missing", ())
+    if absent or not relevant:
+        # A gate not reported yet: a job waiting on others still running, else CI
+        # finished without it.
+        running = any(c.get("bucket") == "pending" for c in checks)
+        return ("pending", ()) if running else ("missing", ())
+    return "green", ()
+
+
+def _code(concern: KeyMode, state: str) -> int:
+    if concern.mode != "fix":
+        return EXIT_OK
+    if state in FAILING:
+        return EXIT_FAILING
+    if state in UNSETTLED:
+        return EXIT_PENDING
+    return EXIT_OK
+
+
+def _line(key: str, km: KeyMode, state: str, **fmt: Any) -> str:
+    where = km.source if not km.reason else f"{km.source}: {km.reason}"
+    head = f"{key} ({km.mode}, {where}): {state}"
+    if km.mode == "off":
+        return f"{head} — not read"
+    hint = _HINTS.get((key, state))
+    return f"{head} — {hint.format(**fmt)}" if hint else head
+
+
+def _witness(modes: Modes, c_state: str, ci_state: str, head: str) -> str:
+    return f"{modes.conflicts.mode}/{modes.ci.mode}:{c_state}/{ci_state}@{head}"
+
+
+def evaluate(
+    view: Mapping[str, Any],
+    checks: Sequence[Mapping[str, Any]],
+    gate_names: Sequence[str] | None,
+    modes: Modes,
+    *,
+    ci_none: bool,
+    head_committed_at: float,
+    now: float,
+) -> Verdict:
+    """The verdict for one read of the PR (*view* is `GhClient.pr_view`, *checks*
+    `GhClient.pr_checks`; *gate_names* None reads every check)."""
+    head = str(view.get("head_oid") or "")
+    base = str(view.get("base_ref") or "the base")
+    raw_conflict = _conflict_state(view)
+    c_state: ConflictState = "off" if modes.conflicts.mode == "off" else raw_conflict
+    age = now - head_committed_at
+    if modes.ci.mode == "off":
+        ci_state: CiState = "off"
+        failing: tuple[str, ...] = ()
+    else:
+        ci_state, failing = _ci_state(
+            raw_conflict == "conflicting", checks, gate_names, ci_none=ci_none, age=age
+        )
+    codes = [_code(modes.conflicts, c_state), _code(modes.ci, ci_state)]
+    code = (
+        EXIT_FAILING
+        if EXIT_FAILING in codes
+        else EXIT_PENDING
+        if EXIT_PENDING in codes
+        else EXIT_OK
+    )
+    lines = (
+        _line("conflicts", modes.conflicts, c_state, base=base),
+        _line(
+            "ci",
+            modes.ci,
+            ci_state,
+            failing=", ".join(failing),
+            minutes=int(age // 60),
+        ),
+    )
+    settled = c_state not in UNSETTLED and ci_state not in UNSETTLED
+    return Verdict(
+        conflict_state=c_state,
+        ci_state=ci_state,
+        failing_checks=failing,
+        exit_code=code,
+        lines=lines,
+        head=head,
+        witness=_witness(modes, c_state, ci_state, head),
+        settled=settled,
+    )
+
+
+def managed_verdict(branch: str) -> Verdict:
+    """R5: a driver-managed PR, read nothing, exit 0 whatever the modes."""
+    return Verdict(
+        conflict_state="managed",
+        ci_state="managed",
+        exit_code=EXIT_OK,
+        lines=(f"{branch}: {MANAGED_LINE}",),
+        witness="managed",
+        settled=True,
+    )
+
+
+def unsupported_verdict(modes: Modes, *, backend: str, op: str, head: str = "") -> Verdict:
+    """R11: the forge cannot answer a read; never clean or green, never a refusal."""
+    return Verdict(
+        conflict_state="unsupported",
+        ci_state="unsupported",
+        exit_code=EXIT_OK,
+        lines=(UNSUPPORTED_LINE.format(backend=backend, op=op),),
+        head=head,
+        witness=_witness(modes, "unsupported", "unsupported", head),
+        settled=True,
+    )
