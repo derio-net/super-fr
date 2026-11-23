@@ -9,4 +9,4 @@ emitted:
   pr: https://github.com/derio-net/super-fr/pull/1635
 evidence:
   tests: ci
-  walk: none
+  walk: /Users/derio/.cache/fr/walks/2026-11-23-feat-pr-readiness-wait/20261123T181028Z.log
