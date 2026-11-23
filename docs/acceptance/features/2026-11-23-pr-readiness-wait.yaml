@@ -101,10 +101,10 @@ rows:
       - super-fr:tests/unit/test_run_settle_witness.py#test_a_passed_settle_value_is_refused
       - super-fr:tests/unit/test_run_settle_witness.py#test_another_derived_refusal_is_reported_before_the_settle_hold
       - super-fr:tests/unit/test_run_settle_witness.py#test_tests_ci_still_refuses_a_conflicting_pr_with_conflicts_off
+      - super-fr:tests/unit/test_tripwire_pr_settle_wording.py
     status: ci
-    notes: the deliver settle witness through fr run resolve over a fake forge, and
-      its interaction with tests ci (phase 2); the R9 and R10 skill text gains its tripwire
-      in phase 3
+    notes: the settle witness through fr run resolve (Test Plan 7); its R9/R10 skill
+      text is pinned by the settle wording tripwire
     verify: none
   - id: pr-settle-live
     capability: Settle against a real forge
