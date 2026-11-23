@@ -73,7 +73,8 @@ The same section can change how this feature's PR settles. A line
 `settle.conflicts: <off|report|fix> — <reason>` or `settle.ci: <off|report|fix> — <reason>`
 replaces that key of the repo's `git.settle` setting for this PR only. The reason is
 required. A `settle.` line that breaks this form is an error that names the line. A
-section that holds only `settle.` lines is still read. The PR body's `## PR settle` section
+section that holds only `settle.` lines sets no strategy and no gate, but its
+overrides still apply. The PR body's `## PR settle` section
 shows each mode, where it came from and the reason.
 
 The repo's settings (`fr settings show`) can switch this off. Under
