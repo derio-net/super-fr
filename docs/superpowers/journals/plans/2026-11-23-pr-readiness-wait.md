@@ -591,3 +591,8 @@ a77aac221: the unrunnable hint names relaxing settle.ci; the R8 relaxing side is
 ### p3-r7-resolved-2 · finding [fixed] · resolves p3-r7: fr pr settle silently ignores a debug-journal override with zero/several debug journals or a spec run (phase 3)
 
 Same defect as lens finding l-errors-r2, fixed in 0eec7bf71 and a56c8abce (several journals, a failed lookup or a spec-shadowed decision now warn); the operator authorized closing it as fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved-2 created=2026-11-23T17:27:50+00:00 phase=1 state=open resolves=p1-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1636 -->
+### p1-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1636] · resolves p1-r10: test_isolation_decision_core.py:663 runs bare bash under a PATH of git's dir (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1636.
