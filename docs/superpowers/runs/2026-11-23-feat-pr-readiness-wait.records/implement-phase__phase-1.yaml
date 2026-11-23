@@ -52,5 +52,19 @@ journal:
     body: |
       The run cursor's `pr` can name a merged or closed PR. The poll refuses a view whose state
       is not OPEN ("PR #n is MERGED, not open"), the same exit as no open PR (R4).
+  - kind: finding
+    id: p1-fast-tier-isolation-bash
+    phase: 1
+    review_scope: out
+    title: Fast tier's 4 red tests are environmental, not this branch's
+    body: |
+      `uv run pytest --fr-scope origin/main -n 2 -q --no-cov`: 4 failed, 6276 passed, 2 skipped
+      (1:14:21). All four are
+      `tests/unit/test_isolation_decision_core.py::test_a_relative_path_entry_holding_a_git_is_never_run`
+      (`[bin]`, `[./bin]`, `[]`, `[.]`). They fail on their own with
+      `FileNotFoundError: ... 'bash'`: the test runs `bash` under a relative-entry PATH, and
+      this host cannot resolve it. The branch changes neither that test nor
+      `packages/fr/src/fr/isolation` nor the hooks (`git diff origin/main` is empty there).
+      CI is this repo's suite evidence.
 resolves: []
 evidence: {}
