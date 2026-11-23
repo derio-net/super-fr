@@ -222,3 +222,6 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-23-pr-readiness-wait-p2 created=2026-11-23T09:01:43+00:00 -->
+### phase-split-2026-11-23-pr-readiness-wait-p2 · decision · ask: overrides, the PR settle section and the deliver witness (R6-R8) are their own ask, reviewable apart from the engine
