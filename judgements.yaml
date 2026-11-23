@@ -1,4 +1,4 @@
-schema: 12
+schema: 13
 ranked_at: 2026-11-19
 tiers:
 - n: 1
@@ -8895,6 +8895,12 @@ batches:
     - docs/reference/workflow-shapes.md
     delivered: session
     handle: derio-net/super-fr/run/batch-run-durability
+  - kind: conflict
+    at: '2026-11-23T09:20:21.900465Z'
+    head: c64691079a61cf37ffc3db3c15c23804c2574250
+    paths:
+    - docs/reference/cli.md
+    delivered: held
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
