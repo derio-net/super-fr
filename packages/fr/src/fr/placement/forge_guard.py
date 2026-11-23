@@ -40,8 +40,6 @@ WRITE_METHODS: Final = frozenset(
         "edit_pr_labels",
         "ensure_labels",
         "pr_create",
-        "pr_dequeue",
-        "pr_enqueue",
         "pr_merge",
         "pr_ready",
     }

@@ -136,6 +136,22 @@ APPROVED_FR = LabelDef(
     "Operator approval: fr may merge this PR at its approved head",
 )
 
+# The DevOps stage's two words to the wave merge queue (spec 2026-11-19-wave-merge-queue R26).
+# Stage 2 adds `fr-queue:release` (the operator confirmed the merge; the queue lands the PR as
+# the last entry of its push), stage 4 adds `fr-queue:postmerge-done` (the post-merge ops
+# closed; the queue lands on). Each comes with a marker comment from the stage, and the driver
+# settles the pair into a queue event, as it settles `approved-fr`.
+QUEUE_RELEASE = LabelDef(
+    "fr-queue:release",
+    "0E8A16",
+    "DevOps stage: the queue may land this PR, as the last entry of its push, at its head",
+)
+QUEUE_POSTMERGE_DONE = LabelDef(
+    "fr-queue:postmerge-done",
+    "0E8A16",
+    "DevOps stage: the post-merge ops closed; the queue may land on",
+)
+
 # The operator's admission of an outside author's issue (spec 2026-11-17-triage-intake R8):
 # an issue that no login or association admits may still be batched when it carries this.
 # Never applied by fr; applying a label needs triage permission on GitHub, which an outside
@@ -258,7 +274,7 @@ def awaiting_devops(number: int) -> str:
     held, passed = gate_label("devops").name, gate_label("devops", passed=True).name
     return (
         f"PR #{number} is awaiting DevOps: {held} holds its merge until {passed} "
-        "(the DevOps stage merges it: `fr ops gate --run <id>`)"
+        "(the queue lands it once the DevOps stage released it: `fr ops gate --run <id>`)"
     )
 
 

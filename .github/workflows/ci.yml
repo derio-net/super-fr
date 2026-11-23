@@ -1,9 +1,11 @@
 name: CI
 # push is scoped to main: an unscoped push overlaps pull_request, and every
-# push to a PR branch ran the whole workflow twice (#941).
+# push to a PR branch ran the whole workflow twice (#941). `fr-queue/**` are the wave
+# merge queue's slot branches (wave-merge-queue R7, R21): it lands only a combination whose
+# checks passed there.
 on:
   push:
-    branches: [main]
+    branches: [main, 'fr-queue/**']
   pull_request:
   # A merge queue builds each group on its own branch (merge-train-safety R15).
   merge_group:
@@ -257,8 +259,18 @@ jobs:
       # interactively the gate would have already fixed it. Either way the
       # instruction is the same (`fr migrate artifacts --yes`, committed in the
       # same PR; see .claude/rules/artifact-versioning.md).
-      - name: Every live artifact is structurally valid for this fr
+      #
+      # A pull request and the merge queue's combinations (`fr-queue/**`) accept a stale
+      # artifact that a registered migration moves (`--allow-migratable`, wave-merge-queue
+      # R21): the next release migrates it, and a live run cursor on the default branch
+      # between a feature merge and its close-out read as stale and failed every other PR
+      # (#1564). The default branch itself is held to the strict check.
+      - name: Every live artifact is structurally valid for this fr (the default branch)
+        if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/heads/fr-queue/')
         run: fr validate artifacts
+      - name: Every live artifact is valid, or stale and migratable (pull request, queue)
+        if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/fr-queue/')
+        run: fr validate artifacts --allow-migratable
 
   opencode-plugin-test:
     runs-on: ubuntu-latest

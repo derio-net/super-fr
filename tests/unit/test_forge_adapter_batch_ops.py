@@ -379,6 +379,7 @@ def test_the_protocol_declares_every_batch_operation() -> None:
 # it has its own guard below.
 _BATCH_GLOBS = (
     "packages/fr/src/fr/triage/batch*.py",
+    "packages/fr/src/fr/triage/queue_exec.py",  # the wave merge queue's executor
     "packages/fr/src/fr/commands/triage_batch*.py",
 )
 _FORGE_CLIS = (
@@ -419,7 +420,8 @@ def _batch_modules() -> list[Path]:
 
 def test_the_batch_globs_find_every_batch_module() -> None:
     names = {p.name for p in _batch_modules()}
-    assert {"batch.py", "batch_dispatch.py", "batch_merge.py", "triage_batch_cmd.py"} <= names
+    assert {"batch.py", "batch_dispatch.py", "batch_merge.py", "triage_batch_cmd.py",
+            "queue_exec.py"} <= names  # fmt: skip
     assert "gitseam.py" not in names
 
 
@@ -496,7 +498,12 @@ def test_the_batch_tripwire_catches_each_forbidden_import(tmp_path: Path, source
 # seam's command runners (`_run`, `git`, `git_ok`, `run_declared`) would let a
 # batch module run ANY command through the one module allowed subprocess.
 _SEAM = "fr.triage.gitseam"
-_SEAM_ALLOWED = frozenset({"Checkout", "Worktree", "GitError"})
+# The push refusals are errors too: the queue's executor tells a lost lease, a server
+# without `--atomic` and a protection refusal apart (spec 2026-11-19-wave-merge-queue R10).
+_SEAM_ALLOWED = frozenset(
+    {"Checkout", "Worktree", "GitError", "LeaseLostError", "AtomicUnsupportedError",
+     "PushRefusedError", "TransientPushError"}
+)  # fmt: skip
 _SEAM_RUNNERS = frozenset({"_run", "git", "git_ok", "run_declared"})
 
 
