@@ -326,3 +326,88 @@ passed, 1 skipped). CI is the suite evidence (`tests: ci`).
 ### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
 
 the step's refactor work is the mirror syncs, docs and acceptance move; the code is three constants and a two-line brief helper, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · exit 2 has no instruction in FIX_RULES or the skills (phase 3)
+
+fr/settle/instructions.py:17
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · exit 4 also covers missing/gate-absent/unrunnable, not covered by the fix rules (phase 3)
+
+fr/settle/instructions.py:17
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · the post-deliver settle only says report the result (phase 3)
+
+instructions.py:28, fr-goal SKILL.md:117
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · an fr-debugging override decision is left unpushed (phase 3)
+
+fr-debugging SKILL.md:108 (#871 trap)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · the deliver-brief test uses a synthetic Step, not the shipped manifests (phase 3)
+
+tests/unit/test_tripwire_pr_settle_wording.py:57
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · no-run close-out brief and its pickup brief read as contradictory for a managed head (phase 3)
+
+closeout.py:412, batch_drive.py:859
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=out -->
+### p3-r7 · finding [open] (reviewer: out of scope) · fr pr settle silently ignores a debug-journal override with zero/several debug journals or a spec run (phase 3)
+
+packages/fr/src/fr/commands/pr_cmd.py:192-206 _branch_modes; phase-2 engine code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=out -->
+### p3-r8 · finding [open] (reviewer: out of scope) · no cap on repeated exit-75 re-runs (phase 3)
+
+Spec §E chose an unbounded re-run on 75; a spec-level choice, not a phase-3 defect.
+
+<!-- fr:journal kind=review scope=plan id=review-p3-1 created=2026-11-23T16:31:05+00:00 phase=3 -->
+### review-p3-1 · review · phase 3 code review: 8 findings (phase 3)
+
+Findings raised: p3-r1 … p3-r8; p3-r1–r6 in scope, p3-r7 and p3-r8 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: exit 2 has no instruction in FIX_RULES or the skills (phase 3)
+
+7922c8581: exit 2 is fix-what-it-names and re-run, not a fix round.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: exit 4 also covers missing/gate-absent/unrunnable, not covered by the fix rules (phase 3)
+
+7922c8581: otherwise do what the printed line says.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: the post-deliver settle only says report the result (phase 3)
+
+7922c8581: the post-deliver settle runs the same loop; a fix is a commit after deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: an fr-debugging override decision is left unpushed (phase 3)
+
+7922c8581: fr-debugging pushes the override decision with fr push.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: the deliver-brief test uses a synthetic Step, not the shipped manifests (phase 3)
+
+7922c8581: the test builds the deliver brief from both shipped manifests; removing settle fails it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: no-run close-out brief and its pickup brief read as contradictory for a managed head (phase 3)
+
+7922c8581: CLOSEOUT_LINE says a driver-managed head exits 0 managed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=open resolves=p3-r7 out_of_scope=true -->
+### p3-r7-resolved · finding [out-of-scope] · resolves p3-r7: fr pr settle silently ignores a debug-journal override with zero/several debug journals or a spec run (phase 3)
+
+Reviewer-tagged out of scope (phase-2 engine); filed as a follow-up at deliver unless the operator directs a fix in this PR.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=open resolves=p3-r8 out_of_scope=true -->
+### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: no cap on repeated exit-75 re-runs (phase 3)
+
+Spec-level choice (§E re-runs on 75 unbounded); not caused by phase 3's change.
