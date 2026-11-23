@@ -76,3 +76,15 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: pr-settle-skills
+    capability: Delivering skills settle their PR
+    acceptance: fr-goal, fr-debugging and the hand-run close-out brief run fr pr settle
+      after opening the PR, fix conflicts by merging the base (never rebase) and red
+      checks by commits, within three rounds.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R9
+    - spec:2026-11-23-pr-readiness-wait#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
