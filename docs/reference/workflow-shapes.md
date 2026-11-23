@@ -49,13 +49,16 @@ It records `base_branch` without replacing the run or clearing its steps. The
 same target supplies lens rules, the review diff, delivery docs/proportionality
 checks and draft PR creation. A later `--base` cannot contradict that target.
 
-`deliver` derives its `settle` witness last, after every other witness and every other
-`deliver` check, and before it writes the PR's labels. It reads the
+`deliver` derives its `settle` witness after every other witness and after every
+`deliver` gate on the PR: placement, acceptance, leftovers, the PR body and the exit
+guard. It runs before the label sync. Only the check for emits that were not given
+comes after it. It reads the
 conflict state and the CI state of the PR under the `git.settle` modes, and it does not
 wait. Under `fix`, a failing state refuses the resolve. A state that is not known yet
 stops the resolve with exit 75, and the cursor does not change. Run `fr pr settle --wait
 <seconds>`, then resolve again. The witness is `off` when both keys are `off`, and
-`managed` on a branch that the wave driver owns.
+`managed` on a branch that the wave driver owns. It is `merged` when the run's PR has
+merged and no other PR is open.
 
 `fr workflow check` validates the schema, duplicate step ids, `needs` that point nowhere,
 cycles and unknown capabilities. CI runs it on every shipped shape.
