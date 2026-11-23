@@ -60,5 +60,17 @@ journal:
       The row also cites R9 and R10 (the fix rules and fr-debugging's settle step), which
       are skill text phase 3 ships with its own tripwire; that tripwire's test should be
       added to the row's levels then.
+  - kind: discovery
+    id: settle-fast-tier-whole-suite
+    phase: 2
+    title: The branch's fast tier is now the whole unit suite, because tests/conftest.py changed
+    body: |
+      `--fr-scope` selects everything under a changed conftest.py, so the settle witness stub
+      puts every test in scope (about 17,000). On this loaded host the `-n 2` run reached 1%
+      in five minutes and was stopped with no failure; CI is the suite evidence (`tests: ci`).
+      Instead, 106 files that resolve `deliver` or read the evidence lists, sections,
+      manifests, spec grammar and settle code ran at `-n 6`: 2988 passed, 10 skipped and 3
+      failed, all three pinned deliver evidence lists in test_tripwire_shipped_workflows.py.
+      Those were fixed and the file re-ran green (12 passed).
 resolves: []
 evidence: {}
