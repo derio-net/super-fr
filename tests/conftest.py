@@ -522,6 +522,34 @@ def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FR_OPENCODE_SESSION_ID", raising=False)
 
 
+STUB_SETTLE_WITNESS = "fix/fix:clean/green@stub"
+
+
+@pytest.fixture
+def real_settle_witness() -> None:
+    """Request it to run `deliver`'s real `settle` witness (the autouse stub below steps
+    aside)."""
+
+
+@pytest.fixture(autouse=True)
+def _settle_witness_reads_no_forge(request: pytest.FixtureRequest) -> Iterator[None]:
+    """`deliver` derives a `settle` witness from the live PR (spec
+    2026-11-23-pr-readiness-wait R8); a unit test's clone has no forge to read. Every
+    `deliver` resolve records `STUB_SETTLE_WITNESS` unless the test requests
+    `real_settle_witness`, as `tests/unit/test_run_settle_witness.py` does."""
+    if "real_settle_witness" in request.fixturenames:
+        yield
+        return
+    from fr.settle import witness
+
+    real = witness.settle_witness
+    witness.settle_witness = lambda repo_root, state, client=None: STUB_SETTLE_WITNESS  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        witness.settle_witness = real
+
+
 @pytest.fixture
 def complete_live_pr(monkeypatch: pytest.MonkeyPatch) -> None:
     """Serve a live PR body carrying every required section, so a `deliver`

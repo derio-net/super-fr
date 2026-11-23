@@ -1,0 +1,287 @@
+"""`deliver`'s derived `settle` witness through `fr run resolve --step deliver` over a fake
+forge (spec 2026-11-23-pr-readiness-wait R8, Test Plan 7)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+import typer
+from fr.ghclient import UnsupportedForgeOperation
+from fr.run.model import load_run_state
+
+from tests.unit.record_support import RUN, commit_all, fr, git, write_record
+from tests.unit.test_deliver_pr_body import PR, _at_deliver, live
+from tests.unit.test_forge_quiet_pr_body import _land_policy
+
+__all__ = ["live"]
+
+pytestmark = pytest.mark.usefixtures("real_settle_witness", "complete_live_pr")
+
+HEAD = "c" * 40
+REPO = "derio-net/super-fr"
+
+
+class Forge:
+    """Reads only: any other method fails the test."""
+
+    def __init__(
+        self,
+        *,
+        mergeable: str = "MERGEABLE",
+        merge_state: str = "CLEAN",
+        checks: list[dict[str, Any]] | None = None,
+        unsupported: str | None = None,
+    ) -> None:
+        self.view = {
+            "state": "OPEN",
+            "head_oid": HEAD,
+            "base_ref": "main",
+            "mergeable": mergeable,
+            "merge_state": merge_state,
+        }
+        self.checks = [{"name": "ci-ok", "bucket": "pass"}] if checks is None else checks
+        self.unsupported = unsupported
+        self.ops: list[str] = []
+
+    def _op(self, op: str) -> None:
+        self.ops.append(op)
+        if op == self.unsupported:
+            raise UnsupportedForgeOperation(op, "glab")
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        self._op("open_pr_for_head")
+        return {"number": 1, "url": PR}
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        self._op("pr_view")
+        return self.view
+
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        self._op("pr_checks")
+        return self.checks
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        self._op("required_check_names")
+        return []
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("__"):
+            raise AttributeError(name)
+        raise AssertionError(f"the settle witness called {name}: it may only read")
+
+
+@pytest.fixture
+def at_deliver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = _at_deliver(tmp_path)
+    monkeypatch.setattr("fr.settle.witness.origin_slug", lambda _root: REPO)
+    monkeypatch.setattr("fr.settle.target.ci_none", lambda _root: False)
+    return root
+
+
+def _use(monkeypatch: pytest.MonkeyPatch, forge: Forge) -> Forge:
+    monkeypatch.setattr("fr.settle.witness.client_for", lambda _root: forge)
+    return forge
+
+
+def _deliver(root: Path, **evidence: str) -> Any:
+    data = {
+        "run": RUN, "step": "deliver", "outcome": "done",
+        "emitted": {"pr": PR}, "evidence": {"tests": "suite.log", **evidence},
+    }  # fmt: skip
+    rec = write_record(root, data)
+    return fr(root, ["run", "resolve", RUN, "--step", "deliver", "--record", str(rec)])
+
+
+def _witness(root: Path) -> str | None:
+    record = load_run_state(root, RUN).steps["deliver"]
+    unit = (record.units or {}).get("step/deliver")
+    evidence = (unit.evidence if unit is not None else None) or record.evidence or {}
+    return evidence.get("settle")
+
+
+def _cursor(root: Path) -> bytes:
+    return (root / "docs" / "superpowers" / "runs" / f"{RUN}.yaml").read_bytes()
+
+
+def _settle_line(root: Path, *lines: str) -> None:
+    spec = root / "docs" / "spec.md"
+    spec.write_text(spec.read_text() + "\n## Verification\n\n" + "\n".join(lines) + "\n")
+    commit_all(root, "settle override")
+    (root / "suite.log").write_text("n passed\n")
+
+
+def test_fix_and_a_clean_green_pr_records_the_witness(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge = _use(monkeypatch, Forge())
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert _witness(at_deliver) == f"fix/fix:clean/green@{HEAD}"
+    assert {"pr_view", "pr_checks"} <= set(forge.ops)
+
+
+@pytest.mark.parametrize(
+    ("forge", "said"),
+    [
+        (Forge(mergeable="CONFLICTING", merge_state="DIRTY"), "conflicting"),
+        (Forge(checks=[{"name": "ci-ok", "bucket": "fail"}]), "red"),
+    ],
+)
+def test_fix_refuses_a_conflicting_or_red_pr_naming_settle(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch, forge: Forge, said: str
+) -> None:
+    _use(monkeypatch, forge)
+    before = _cursor(at_deliver)
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 2, out.output
+    assert "settle" in out.output and said in out.output
+    assert _cursor(at_deliver) == before
+
+
+def test_a_pending_pr_exits_75_records_nothing_and_leaves_the_cursor(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
+    before = _cursor(at_deliver)
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 75, out.output
+    assert "settle" in out.output and "Nothing was recorded" in out.output
+    assert _cursor(at_deliver) == before
+    assert load_run_state(at_deliver, RUN).steps["deliver"].state == "running"
+
+
+def test_report_records_the_states(at_deliver: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _land_policy(at_deliver, "git:\n  settle:\n    conflicts: report\n    ci: report\n")
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "fail"}]))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert _witness(at_deliver) == f"report/report:clean/red@{HEAD}"
+
+
+def test_a_spec_override_relaxes_the_witness(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _settle_line(at_deliver, "settle.ci: report — the runners are down")
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "fail"}]))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert _witness(at_deliver) == f"fix/report:clean/red@{HEAD}"
+
+
+def test_both_keys_off_records_off_and_reads_nothing(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _land_policy(at_deliver, "git:\n  settle:\n    conflicts: 'off'\n    ci: 'off'\n")
+    forge = _use(monkeypatch, Forge())
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert _witness(at_deliver) == "off"
+    assert forge.ops == []
+
+
+def test_a_managed_branch_records_managed(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git(at_deliver, "checkout", "-q", "-b", "feat/batch-x")
+    forge = _use(monkeypatch, Forge(mergeable="CONFLICTING", merge_state="DIRTY"))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert _witness(at_deliver) == "managed"
+    assert forge.ops == []
+
+
+def test_unsupported_is_recorded_and_refuses_nothing(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use(monkeypatch, Forge(unsupported="pr_view"))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert _witness(at_deliver) == "fix/fix:unsupported/unsupported@"
+
+
+def test_a_passed_settle_value_is_refused(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use(monkeypatch, Forge())
+
+    out = _deliver(at_deliver, settle="fix/fix:clean/green@x")
+
+    assert out.exit_code == 2, out.output
+    assert "not yours to pass" in out.output and "settle" in out.output
+
+
+def test_another_derived_refusal_is_reported_before_the_settle_hold(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import run_cmd
+
+    def refuse(*_a: object, **_k: object) -> str:
+        run_cmd.err_console.print("proportionality: refused for the test")
+        raise typer.Exit(2)
+
+    monkeypatch.setattr(run_cmd, "_proportionality_witness", refuse)
+    _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 2, out.output
+    assert "proportionality: refused for the test" in out.output
+    assert "still settling" not in out.output
+
+
+def test_a_transient_forge_failure_holds_and_a_permanent_one_refuses(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gh import GhError
+
+    class Failing(Forge):
+        def __init__(self, exc: Exception) -> None:
+            super().__init__()
+            self.exc = exc
+
+        def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+            raise self.exc
+
+    monkeypatch.setattr("fr.hostclient.forge_error_kind", lambda e: str(e))
+    _use(monkeypatch, Failing(GhError("rate_limit")))
+    assert _deliver(at_deliver).exit_code == 75
+    _use(monkeypatch, Failing(GhError("not_found")))
+    out = _deliver(at_deliver)
+    assert out.exit_code == 2, out.output
+    assert "refused the read" in out.output
+
+
+def test_tests_ci_still_refuses_a_conflicting_pr_with_conflicts_off(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.run import ci_evidence
+
+    _settle_line(at_deliver, "settle.conflicts: off — the base is frozen")
+    monkeypatch.setattr(ci_evidence, "_check_services", lambda _root: None)
+    monkeypatch.setattr(ci_evidence, "_check_pushed", lambda _root: ("feat/rec", HEAD))
+    forge = _use(monkeypatch, Forge(mergeable="CONFLICTING", merge_state="DIRTY"))
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: REPO)
+    monkeypatch.setattr("fr.hostclient.client_for", lambda _root: forge)
+
+    out = _deliver(at_deliver, tests="ci")
+
+    assert out.exit_code == 2, out.output
+    assert "conflicts with its base" in out.output

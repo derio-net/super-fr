@@ -33,6 +33,13 @@ class SettleRefused(Exception):  # noqa: N818 — a refusal, exit 2 (R4)
     """`fr pr settle` refuses: exit 2 with the message."""
 
 
+class SettlePending(Exception):  # noqa: N818 — a hold, exit 75 (R4, R8)
+    """A `fix` concern is still unknown or pending, or a forge read failed transiently:
+    exit 75, and the `deliver` witness records nothing."""
+
+    exit_code = EXIT_PENDING
+
+
 class _Closed(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

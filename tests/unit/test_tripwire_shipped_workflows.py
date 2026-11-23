@@ -218,7 +218,7 @@ _WITH_THE_GATES = (
         "\n  - id: plan\n",
     ),
     (
-        "    evidence: [tests, proportionality, docs, visual, walk]\n",
+        "    evidence: [tests, proportionality, docs, visual, walk, settle]\n",
         "    evidence: [tests, proportionality, requirement-rows, visual]\n",
     ),
 )

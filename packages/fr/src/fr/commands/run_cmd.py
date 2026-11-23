@@ -1695,6 +1695,7 @@ _VERIFIABLE_EVIDENCE = (
     "single-phase",
     "walk",
     "lenses",
+    "settle",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1740,6 +1741,7 @@ _DERIVED_FROM = {
     "lenses": "from the feature's lens set at this resolve and each lens reviewer's return: "
     "per lens, the changed files it examined and the findings it raised (`none` for an "
     "empty set)",
+    "settle": "from the PR's conflict and CI states under `git.settle` (fr.settle.witness)",
 }
 
 
@@ -2228,6 +2230,10 @@ def _verified_evidence(
         )
     if refused:
         raise typer.Exit(2)
+    if state_value == "done" and "settle" in step.evidence:  # last, never derive(): 75 holds
+        from fr.settle.witness import deliver_witness
+
+        verified["settle"] = deliver_witness(key, repo_root, state, err_console)
     return verified
 
 
