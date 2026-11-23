@@ -712,3 +712,23 @@ def test_a_run_spec_override_with_no_reason_refuses_naming_the_line(
 
     assert result.exit_code == 2, result.output
     assert "line 5" in result.output and "settle.ci: report" in result.output
+
+
+@pytest.mark.parametrize("url", ["/srv/git/origin.git", "file:///srv/git/origin.git"])
+def test_an_origin_that_names_no_forge_is_unsupported_with_no_client(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    """Spec R11 (amended): recorded, never refused, and no forge client is built."""
+
+    def no_client(_root: Path) -> Any:
+        raise AssertionError("no forge client may be built for a local origin")
+
+    monkeypatch.setattr("fr.settle.read.origin_url", lambda _root: url)
+    monkeypatch.setattr("fr.commands.pr_cmd.client_for", no_client)
+
+    result = runner.invoke(app, ["pr", "settle", "--wait", "0", "--json"])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert (data["conflict_state"], data["ci_state"]) == ("unsupported", "unsupported")
+    assert "names no forge" in data["lines"][0]

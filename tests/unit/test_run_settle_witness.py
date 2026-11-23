@@ -462,3 +462,35 @@ def test_no_origin_slug_on_a_github_client_refuses(
 
     assert out.exit_code == 2, out.output
     assert "cannot read the forge repository" in out.output
+
+
+# --- spec R11 (amended): an origin that names no forge is unsupported, no client
+
+
+@pytest.mark.parametrize("url", ["/srv/git/origin.git", "file:///srv/git/origin.git"])
+def test_an_origin_that_names_no_forge_is_unsupported_with_no_client(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    def no_client(_root: Path) -> Any:
+        raise AssertionError("no forge client may be built for a local origin")
+
+    monkeypatch.setattr("fr.settle.read.origin_url", lambda _root: url)
+    monkeypatch.setattr("fr.settle.witness.client_for", no_client)
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 0, out.output
+    assert (_witness(at_deliver) or "").startswith("fix/fix:unsupported/unsupported@")
+
+
+def test_an_unparseable_github_origin_still_refuses(
+    at_deliver: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.settle.read.origin_url", lambda _root: "https://github.com/")
+    monkeypatch.setattr("fr.settle.witness.origin_slug", lambda _root: None)
+    _use(monkeypatch, Forge())
+
+    out = _deliver(at_deliver)
+
+    assert out.exit_code == 2, out.output
+    assert "cannot read the forge repository" in out.output

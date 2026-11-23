@@ -246,7 +246,7 @@ def settle_cmd(
     from fr.settle.evaluate import evaluate, managed_verdict
     from fr.settle.managed import driver_managed
     from fr.settle.model import EXIT_PENDING, EXIT_REFUSED, SettlePending, SettleRefused, Verdict
-    from fr.settle.read import forge_repo, read_verdict
+    from fr.settle.read import forge_repo, no_forge_verdict, read_verdict
 
     def _out(verdict: Verdict) -> None:
         if as_json:
@@ -275,6 +275,9 @@ def settle_cmd(
         if modes.both_off:
             _out(evaluate({}, [], None, modes, ci_none=False, head_committed_at=0, now=0))
         recorded = runs[0].pr if len(runs) == 1 else None
+        local = no_forge_verdict(repo_root, modes)
+        if local is not None:
+            _out(local)
         client = client_for(repo_root)
         repo = forge_repo(origin_slug(repo_root), client)
         try:

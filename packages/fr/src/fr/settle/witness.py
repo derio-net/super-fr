@@ -47,7 +47,7 @@ def settle_witness(repo_root: Path, state: Any, client: Any = None) -> str:
     `SettingsError` when the setting is unreadable."""
     from fr.settle.managed import driver_managed
     from fr.settle.modes import run_modes
-    from fr.settle.read import forge_repo, read_verdict
+    from fr.settle.read import forge_repo, no_forge_verdict, read_verdict
 
     branch = _branch(repo_root)
     if driver_managed(branch):
@@ -55,6 +55,9 @@ def settle_witness(repo_root: Path, state: Any, client: Any = None) -> str:
     modes = run_modes(repo_root, state)
     if modes.both_off:
         return "off"
+    local = no_forge_verdict(repo_root, modes)
+    if local is not None:
+        return local.witness
     if client is None:
         client = client_for(repo_root)
     repo = forge_repo(origin_slug(repo_root), client)

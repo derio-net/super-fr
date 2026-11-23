@@ -20,6 +20,40 @@ TRANSIENT_FORGE_KINDS: Final = frozenset({"warn", "rate_limit"})
 """`forge_error_kind`s a retry may answer: exit 75 on them, 2 on the rest."""
 
 
+def origin_url(repo_root: Path) -> str | None:
+    """`origin`'s URL as git reports it, or None when there is none or git cannot say."""
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        done = git_answer(repo_root, "remote", "get-url", "origin")
+    except GitUnavailableError:
+        return None
+    url = done.stdout.strip()
+    return url if done.returncode == 0 and url else None
+
+
+def names_no_forge(url: str | None) -> bool:
+    """Whether *url* is a local path or a `file://` URL, which no forge serves. A URL with
+    a scheme, or git's `host:path` form, names a host (spec R11, amended)."""
+    if not url:
+        return False
+    if url.startswith("file://"):
+        return True
+    return "://" not in url and (":" not in url or url.startswith(("/", ".")))
+
+
+def no_forge_verdict(repo_root: Path, modes: Modes) -> Verdict | None:
+    """R11 (amended): `unsupported` for an origin that names no forge — recorded, never
+    refused — decided before any forge client is built; None otherwise."""
+    from fr.settle.evaluate import NO_FORGE_LINE, unsupported_verdict
+    from fr.settle.target import local_head
+
+    if not names_no_forge(origin_url(repo_root)):
+        return None
+    verdict = unsupported_verdict(modes, backend="", op="", head=local_head(repo_root))
+    return verdict.model_copy(update={"lines": (NO_FORGE_LINE,)})
+
+
 def forge_repo(slug: str | None, client: Any) -> str:
     """The forge repo to read: *slug* (the origin's `owner/repo`). With none, a backend
     that cannot read PRs (glab, tea: `UnsupportedBatchOps`) gets `""` and answers with

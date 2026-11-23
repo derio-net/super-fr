@@ -96,6 +96,10 @@ MANAGED_LINE: Final = (
     "managed: the wave driver's queue and hand-backs own this PR's mergeability and CI; "
     "nothing to settle here"
 )
+NO_FORGE_LINE: Final = (
+    "unsupported: the origin remote names no forge (a local path or a file:// URL); the "
+    "PR's mergeability and CI are not known here"
+)
 UNSUPPORTED_LINE: Final = (
     "unsupported: the {backend} forge cannot report {op}; the PR's mergeability and CI "
     "are not known, so check them on the forge"

@@ -563,6 +563,11 @@ def _settle_witness_reads_no_forge(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(witness, "client_for", lambda _root: SettledForge())
     monkeypatch.setattr(witness, "origin_slug", lambda _root: "derio-net/fixture")
+    # A unit test's origin is a local bare repository, which names no forge (R11): every
+    # settle read sees a GitHub origin unless a test serves another.
+    monkeypatch.setattr(
+        "fr.settle.read.origin_url", lambda _root: "https://github.com/derio-net/fixture.git"
+    )
 
 
 @pytest.fixture
