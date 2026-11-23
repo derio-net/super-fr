@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from fr.artifacts.paths import KIND_DIRS
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
+from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
@@ -856,7 +857,7 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
     return (
         f"Close out batch {batch.id}: its PR on {branch} has merged.\n"
         f"In {checkout}, run `{pickup}` and follow the brief it prints, in order.\n"
-        + "\n".join(title_block(batch))
+        f"{MANAGED_SENTENCE}\n" + "\n".join(title_block(batch))
     )
 
 
