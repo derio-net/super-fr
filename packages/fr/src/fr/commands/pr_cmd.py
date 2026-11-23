@@ -9,6 +9,7 @@ approval exactly like `fr push`. The PR's url is recorded on the run cursor
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -237,6 +238,8 @@ def settle_cmd(
         raise typer.Exit(verdict.exit_code)
 
     def _refuse(message: str, code: int = EXIT_REFUSED) -> typer.Exit:
+        if as_json:  # l-errors-r6: a --json caller reads every outcome from stdout
+            typer.echo(json.dumps({"exit_code": code, "error": message}))
         err_console.print(escape(f"fr pr settle: {message}"), soft_wrap=True)
         return typer.Exit(code)
 

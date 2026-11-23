@@ -76,6 +76,8 @@ class Forge:
         return self.required
 
     def __getattr__(self, name: str) -> Any:
+        if name.startswith("__"):
+            raise AttributeError(name)
         raise AssertionError(f"fr pr settle called {name}: it may only read")
 
     @property
@@ -521,3 +523,22 @@ def test_no_origin_slug_on_a_github_client_refuses(
 
     assert result.exit_code == 2, result.output
     assert "cannot read the forge repository" in result.output
+
+
+@pytest.mark.parametrize(
+    ("forge", "code", "said"),
+    [
+        (Forge(open_pr=None), 2, "no open pull request"),
+        (Forge(error="pr_view"), 75, "502"),
+    ],
+)
+def test_json_refusals_and_holds_print_a_json_error(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, forge: Forge, code: int, said: str
+) -> None:
+    """Review l-errors-r6: `--json` callers read every outcome from stdout."""
+    result = _run(monkeypatch, forge, "--json")
+
+    assert result.exit_code == code, result.output
+    data = json.loads(result.stdout)
+    assert data["exit_code"] == code
+    assert said in data["error"]
