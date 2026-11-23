@@ -225,6 +225,19 @@ def managed_verdict(branch: str) -> Verdict:
     )
 
 
+def merged_verdict(url: str, head: str = "") -> Verdict:
+    """l-errors-r5: the run's recorded PR merged and none is open: nothing to settle."""
+    return Verdict(
+        conflict_state="merged",
+        ci_state="merged",
+        exit_code=EXIT_OK,
+        lines=(f"merged: {url} has merged and no other PR is open; nothing to settle",),
+        head=head,
+        witness="merged",
+        settled=True,
+    )
+
+
 def unsupported_verdict(modes: Modes, *, backend: str, op: str, head: str = "") -> Verdict:
     """R11: the forge cannot answer a read; never clean or green, never a refusal."""
     return Verdict(

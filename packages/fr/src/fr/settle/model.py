@@ -9,9 +9,20 @@ from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-ConflictState = Literal["clean", "conflicting", "unknown", "unsupported", "off", "managed"]
+ConflictState = Literal[
+    "clean", "conflicting", "unknown", "unsupported", "off", "managed", "merged"
+]
 CiState = Literal[
-    "green", "red", "pending", "missing", "unrunnable", "none", "unsupported", "off", "managed"
+    "green",
+    "red",
+    "pending",
+    "missing",
+    "unrunnable",
+    "none",
+    "unsupported",
+    "off",
+    "managed",
+    "merged",
 ]
 Mode = Literal["off", "report", "fix"]
 ModeSource = Literal["default", "repo", "spec", "journal"]

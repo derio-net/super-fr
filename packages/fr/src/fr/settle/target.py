@@ -25,14 +25,34 @@ def pr_number(url: str | None) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def find_pr(client: Any, repo: str, branch: str, recorded_url: str | None) -> int | None:
-    """The run cursor's recorded PR (*recorded_url*, which the caller reads), else the
-    open PR whose head is *branch*, else None."""
+def open_pr(
+    client: Any, repo: str, branch: str, recorded_url: str | None
+) -> tuple[int, dict[str, Any]] | str:
+    """`(number, view)` of the PR to settle: the run cursor's recorded PR (*recorded_url*,
+    which the caller reads) while it is open, else the open PR whose head is *branch*.
+    With none open: the recorded url when that PR merged (nothing to settle), else a
+    `SettleRefused` naming what to do (l-errors-r5)."""
     recorded = pr_number(recorded_url)
+    view: dict[str, Any] = {}
     if recorded is not None:
-        return recorded
+        view = client.pr_view(repo, recorded)
+        if str(view.get("state") or "OPEN") == "OPEN":
+            return recorded, view
     found = client.open_pr_for_head(repo, branch)
-    return int(found["number"]) if found else None
+    if found:
+        number = int(found["number"])
+        return number, client.pr_view(repo, number)
+    if recorded is None:
+        raise SettleRefused(
+            f"no open pull request for {branch}: open one with `fr pr create` first"
+        )
+    state = str(view.get("state"))
+    if state == "MERGED":
+        return str(recorded_url)
+    raise SettleRefused(
+        f"the run's PR {recorded_url} is {state} and no PR is open for {branch}: reopen it "
+        "or open a new PR with `fr pr create`"
+    )
 
 
 def gate_names(repo_root: Path, client: Any, repo: str, base: str) -> list[str] | None:

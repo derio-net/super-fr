@@ -50,17 +50,15 @@ def read_verdict(
     from fr.ghclient import HostRefusedError, UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS, forge_error_kind
     from fr.settle import poll, target
-    from fr.settle.evaluate import unsupported_verdict
+    from fr.settle.evaluate import merged_verdict, unsupported_verdict
 
     no_ci = target.ci_none(repo_root)
     view: dict[str, Any] = {}
     try:
-        pr = target.find_pr(client, repo, branch, recorded)
-        if pr is None:
-            raise SettleRefused(
-                f"no open pull request for {branch}: open one with `fr pr create` first"
-            )
-        view = client.pr_view(repo, pr)
+        found = target.open_pr(client, repo, branch, recorded)
+        if isinstance(found, str):
+            return merged_verdict(found, target.local_head(repo_root))
+        pr, view = found
         gates = None
         if modes.ci.mode != "off" and not no_ci:
             gates = target.gate_names(repo_root, client, repo, str(view.get("base_ref") or ""))

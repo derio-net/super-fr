@@ -142,18 +142,62 @@ def test_no_open_pr_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None
     assert "no open pull request" in result.output
 
 
-def test_a_recorded_pr_that_is_no_longer_open_exits_2(
-    repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _recorded(monkeypatch: pytest.MonkeyPatch, number: int = 42) -> None:
     monkeypatch.setattr(
         "fr.commands.push_cmd.branch_runs",
-        lambda _root: [SimpleNamespace(pr=f"https://github.com/{REPO}/pull/42", steps={})],
+        lambda _root: [SimpleNamespace(pr=f"https://github.com/{REPO}/pull/{number}", steps={})],
     )
-    forge = Forge()
-    forge.view = {**forge.view, "state": "MERGED"}
+
+
+class _ByNumber(Forge):
+    """A view per PR number: the recorded one in *state*, any other open."""
+
+    def __init__(self, recorded_state: str, **kw: Any) -> None:
+        super().__init__(**kw)
+        self.recorded_state = recorded_state
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        self._call("pr_view", repo, number)
+        return {**self.view, "state": self.recorded_state if number == 42 else "OPEN"}
+
+
+def test_a_merged_recorded_pr_with_none_open_is_settled(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review l-errors-r5: a merged PR has nothing left to settle."""
+    _recorded(monkeypatch)
+    forge = _ByNumber("MERGED", open_pr=None)
+
     result = _run(monkeypatch, forge)
-    assert result.exit_code == 2
-    assert "MERGED" in result.output
+
+    assert result.exit_code == 0, result.output
+    assert "merged" in result.output and "pull/42" in result.output
+
+
+def test_a_closed_recorded_pr_with_none_open_refuses_with_the_next_step(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _recorded(monkeypatch)
+
+    result = _run(monkeypatch, _ByNumber("CLOSED", open_pr=None))
+
+    assert result.exit_code == 2, result.output
+    assert "pull/42" in result.output and "CLOSED" in result.output
+    assert "reopen it" in result.output and "fr pr create" in result.output
+
+
+@pytest.mark.parametrize("state", ["MERGED", "CLOSED"])
+def test_a_recorded_pr_that_is_not_open_falls_back_to_the_open_one(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    _recorded(monkeypatch)
+    forge = _ByNumber(state, open_pr=7)
+
+    result = _run(monkeypatch, forge)
+
+    assert result.exit_code == 0, result.output
+    assert "ci (fix, default): green" in result.output
+    assert ("pr_view", (REPO, 7)) in forge.calls
 
 
 @pytest.mark.parametrize(
