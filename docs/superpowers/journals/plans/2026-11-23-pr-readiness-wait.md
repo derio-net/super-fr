@@ -233,3 +233,68 @@ effective_modes gained two small readers (spec, journal) behind one precedence r
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 _settle_section is one function over run_modes with one source-label table; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · settle witness runs before the deliver gates (phase 2)
+
+run_cmd.py:2233 inside _verified_evidence (called :8033) precedes the placement/acceptance/leftovers/PR-body/exit-guard gates (:8060-8074): pending CI exits 75 before the body renders; a no-PR first resolve loses the gh#587 render.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · unsupported pr_view leaves an empty @ in the witness (phase 2)
+
+fr/settle/read.py:69-71; use the local HEAD sha.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · an unparseable origin refuses before the backend's unsupported verdict (phase 2)
+
+fr/settle/witness.py:51-53 (and the same order in fr pr settle).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · conftest stub replaces the whole settle_witness and hides p2-r1 (phase 2)
+
+tests/conftest.py:535-550; stub only client_for/origin_slug.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · required PR settle section's in-flight cost not stated (phase 2)
+
+fr/record/pr_body.py:86 vs the Review lenses precedent.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · a settle-only Verification section switches rows to the candidate default (phase 2)
+
+spec_section.py:121-123, verification/effective.py:33-40; adding a settle line could owe a walk and change gates.
+
+<!-- fr:journal kind=review scope=plan id=review-p2-1 created=2026-11-23T16:02:18+00:00 phase=2 -->
+### review-p2-1 · review · phase 2 code review: 6 findings (phase 2)
+
+Findings raised: p2-r1 … p2-r6, all in scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: settle witness runs before the deliver gates (phase 2)
+
+19920bdee: the witness runs only for flat deliver after _deliver_exit_guard and before _deliver_label_sync; tests pin the ordering; spec §D amended.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: unsupported pr_view leaves an empty @ in the witness (phase 2)
+
+fc3911ced: the local HEAD sha stands in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: an unparseable origin refuses before the backend's unsupported verdict (phase 2)
+
+1bf128c02 (witness) and 6e212a1d0 (verb): one helper fr.settle.read.forge_repo; glab/tea give unsupported, GitHub refuses.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: conftest stub replaces the whole settle_witness and hides p2-r1 (phase 2)
+
+e620cd8be: conftest patches only client_for and origin_slug; the real witness runs in every deliver test; both forge tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: required PR settle section's in-flight cost not stated (phase 2)
+
+Spec §C states the extra refuse-and-edit round and why it is accepted.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: a settle-only Verification section switches rows to the candidate default (phase 2)
+
+c9d654dd0: a settle-only section is None to parse_section; settle_overrides reads the lines separately; spec §C amended.
