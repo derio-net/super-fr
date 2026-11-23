@@ -8,6 +8,7 @@ merge. The clock, the sleeper and the head's commit time are injected.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from typing import Any, Final
 
@@ -25,7 +26,7 @@ __all__ = ["DEFAULT_WAIT", "POLL_INTERVAL", "WAIT_CEILING", "SettleRefused", "ch
 
 
 def check_wait(wait: float) -> None:
-    if wait < 0 or wait > WAIT_CEILING:
+    if not (math.isfinite(wait) and 0 <= wait <= WAIT_CEILING):
         raise SettleRefused(
             f"--wait {wait:g} is outside 0..{WAIT_CEILING} seconds: one call must fit in an "
             "agent's shell tool; call `fr pr settle` again to wait longer"

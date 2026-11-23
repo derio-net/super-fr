@@ -428,6 +428,17 @@ def test_a_wait_above_the_ceiling_is_refused(repo: Path, monkeypatch: pytest.Mon
     assert "540" in result.output
 
 
+@pytest.mark.parametrize("wait", ["nan", "inf"])
+def test_a_non_finite_wait_is_refused(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, wait: str
+) -> None:
+    forge = Forge()
+    monkeypatch.setattr("fr.commands.pr_cmd.client_for", lambda _root: forge)
+    result = runner.invoke(app, ["pr", "settle", "--wait", wait])
+    assert result.exit_code == 2, result.output
+    assert forge.calls == []
+
+
 def test_json_prints_the_verdict(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result = _run(monkeypatch, Forge(), "--json")
     assert result.exit_code == 0, result.output

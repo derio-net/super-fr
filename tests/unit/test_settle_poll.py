@@ -179,3 +179,10 @@ def test_a_first_view_is_not_read_again() -> None:
         first_view=_view(),
     )  # fmt: skip
     assert forge.views == 0
+
+
+@pytest.mark.parametrize("wait", [float("nan"), float("inf"), float("-inf"), -1.0])
+def test_a_wait_that_is_not_a_finite_bounded_number_is_refused(wait: float) -> None:
+    """Review l-errors-r1: `nan` compares false against both bounds."""
+    with pytest.raises(SettleRefused):
+        check_wait(wait)
