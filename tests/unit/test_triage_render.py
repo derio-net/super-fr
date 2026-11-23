@@ -947,3 +947,31 @@ def test_the_issues_filter_script_runs_without_throwing_when_the_filter_bar_is_a
         ["node", "-e", stub + SCRIPT], capture_output=True, text=True, timeout=30, check=False
     )
     assert done.returncode == 0, done.stderr
+
+
+def test_a_member_of_an_obsolete_batch_is_not_tagged_in_batch(tmp_path: Path) -> None:
+    """T4: an obsolete batch (every member closed or awaiting its live walk) holds nothing,
+    so its open awaiting-live member carries no "batch" tag; a live batch's member does."""
+
+    def facts_edit(doc: dict[str, Any]) -> None:
+        for issue in doc["issues"]:
+            if issue["number"] == 529:
+                issue["labels"] = [*issue.get("labels", []), "fr:awaiting-live"]
+
+    def judgements_edit(doc: dict[str, Any]) -> None:
+        doc["schema"] = 2
+        doc["batches"] = [
+            {"id": "gone", "title": "gone", "ids": ["super-fr#529"]},
+            {"id": "live", "title": "live", "ids": ["super-fr#333"]},
+        ]
+
+    facts, judgements = _state_with(
+        tmp_path, facts_edit=facts_edit, judgements_edit=judgements_edit
+    )
+    from fr.triage.batch import derive_batch_stage
+
+    stages = {b.id: derive_batch_stage(b, facts) for b in judgements.batches}
+    assert stages == {"gone": "obsolete", "live": "proposed"}
+    page = render_issues(facts, judgements)
+    assert "batch gone" not in _row_block(page, "super-fr#529")
+    assert "batch live" in _row_block(page, "super-fr#333")
