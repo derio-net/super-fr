@@ -1122,6 +1122,27 @@ def test_cancelling_a_waved_proposed_batch_releases_claims_facts_never_saw(
     assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
 
 
+def test_cancelling_an_obsolete_waved_batch_releases_its_written_claims(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    """T2: every member closed (obsolete) but the batch holds a wave, so claims may have been
+    written; cancel releases them rather than skipping the forge."""
+    own = marker(_me(), "lifecycle", expires=FAR)
+    closed = _facts(*[_issue(n, state="closed") for n in (577, 575, 471, 438, 420)])
+    _with6(
+        tmp_path,
+        {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "wave": 1},
+        facts=closed,
+    )
+    put_marker(gh, REPO, 577, own, 7)
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+    assert code == 0, out
+    assert "cancel batch lifecycle (obsolete)" in out
+    assert markers(gh, REPO, 577)[0].released is not None
+    assert "fr:claimed" not in gh.issues[(REPO, 577)].labels
+    assert [e.kind for e in _batches(tmp_path)[0].events] == ["cancel", "claims_released"]
+
+
 def test_cancelling_a_never_dispatched_batch_withdraws_nothing_and_needs_no_clone(
     tmp_path: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

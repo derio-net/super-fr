@@ -181,3 +181,62 @@ def test_an_obsolete_wave_batch_releases_its_claims() -> None:
     assert releasing(b, "obsolete", archived=False)
     assert owed_claims([b], {"a": "obsolete"}, ()) == []
     assert owed_claims([b], {"a": "proposed"}, ()) != []
+
+
+# --------------------------------------------------------- the drive (lens finding T2)
+
+
+def _held_awaiting(n: int, *, awaiting: bool) -> Issue:
+    """Issue *n*, open, claimed by another scope; with *awaiting*, set apart for its walk."""
+    from tests.unit.triage_claim_fixtures import FAR, OTHER, facts_claim, marker
+
+    labels = ["fr:claimed", *(["fr:awaiting-live"] if awaiting else [])]
+    return _issue(n, labels=tuple(labels)).model_copy(
+        update={"claims": [facts_claim(marker(OTHER, "theirs", expires=FAR), 9)]}
+    )
+
+
+def _held_pass(*, awaiting: bool) -> Any:
+    from dataclasses import replace
+
+    from fr.triage.claims import held_map
+
+    batches = [_batch("a", [1, 2], wave=1)]
+    facts = _facts(*_closed(1), _held_awaiting(2, awaiting=awaiting))
+    snap = drive_snapshot(facts, _judgements(*batches))
+    snap = replace(snap, me="s-11111111", held=held_map(facts, "s-11111111"))
+    return snap, drive_pass(snap)
+
+
+def test_a_foreign_held_obsolete_batch_emits_no_held_action() -> None:
+    snap, plan = _held_pass(awaiting=True)
+    assert snap.stages["a"] == "obsolete" and snap.held  # held, and obsolete
+    assert not [a for a in plan.actions if a.kind == "held"]
+    assert plan.held_by == ()
+
+
+def test_a_foreign_held_proposed_batch_still_emits_held() -> None:
+    """The control for the test above: the same hold on a live batch is reported."""
+    snap, plan = _held_pass(awaiting=False)
+    assert snap.stages["a"] == "proposed"
+    assert [a.batch for a in plan.actions if a.kind == "held"] == ["a"]
+
+
+def test_a_wave_of_an_obsolete_and_a_cancelled_batch_reports_its_duplicates_once_finished() -> None:
+    from dataclasses import replace
+
+    cancel = {"kind": "cancel", "at": "2026-09-25T10:00:00Z", "reason": "split"}
+    batches = [_batch("a", [1], wave=1), _batch("b", [2], wave=1, events=[cancel])]
+    facts = _facts(*_closed(1), _issue(2))
+    snap = drive_snapshot(facts, _judgements(*batches))
+    assert snap.stages == {"a": "obsolete", "b": "cancelled"}
+    snap = replace(
+        snap,
+        finished=finished_waves(snap.batches, snap.stages),
+        unfinished_waves=frozenset({"1"}),
+        duplicate_groups=2,
+        dedupe_command="fr triage dedupe",
+    )
+    plan = drive_pass(snap)
+    (dedupe,) = [a for a in plan.actions if a.kind == "dedupe"]
+    assert "after wave 1 finished" in dedupe.detail
