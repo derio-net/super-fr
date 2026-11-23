@@ -251,6 +251,7 @@ SCRIPT = """
 (function () {
   var KEY = "fr-triage:view";
   var q = document.getElementById("q"), sort = document.getElementById("sort");
+  if (!q || !sort) return;
   var chips = Array.prototype.slice.call(document.querySelectorAll(".chip"));
   var rows = Array.prototype.slice.call(document.querySelectorAll("details.row"));
   var TESTS = {

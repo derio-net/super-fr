@@ -549,3 +549,87 @@ def test_guard_write_with_an_unreadable_member_repo_is_unreadable(gh: FakeGhClie
             ["flaky#2"], scope=scope, facts=_facts(), state_repo=REFS,
             client_for=lambda _r: gh,
         )  # fmt: skip
+
+
+# ------------------------------------------------------------------ snapshots (R12)
+
+
+def _snapshot(state: Path, **fields: Any) -> Path:
+    """A `snapshots/<stamp>.json` holding only what the test names."""
+    body = {"schema_version": 2, "batches": {}, "issues": {}, "prs": {}, "figures": {}}
+    body.update(fields)
+    path = state / "snapshots" / "20261101T100000000000Z.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return path
+
+
+def _only_snapshot(tmp_path: Path, **fields: Any) -> Path:
+    state = tmp_path / "state"
+    state.mkdir()
+    _snapshot(state, **fields)
+    return state
+
+
+def test_state_keys_reads_the_snapshots_issue_and_pr_keys(tmp_path: Path) -> None:
+    from fr.triage.privacy import state_keys
+
+    state = _only_snapshot(
+        tmp_path,
+        issues={"secret#3": {"state": "open", "tier": None}},
+        prs={f"{SECRET}#4": {"state": "OPEN", "draft": False, "checks": {}}},
+    )
+
+    assert state_keys(state) == ["example-org/secret#4", "secret#3"]
+
+
+def test_a_snapshot_issue_key_of_a_private_repo_refuses_a_public_state_repo(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    state = _only_snapshot(tmp_path, issues={"secret#3": {"state": "open", "tier": None}})
+
+    with pytest.raises(PrivacyError, match="secret"):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_a_snapshot_pr_key_of_a_private_repo_refuses_a_public_state_repo(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    state = _only_snapshot(
+        tmp_path, prs={f"{SECRET}#4": {"state": "OPEN", "draft": False, "checks": {}}}
+    )
+
+    with pytest.raises(PrivacyError, match="secret"):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_a_snapshot_debt_repo_that_is_private_refuses_a_public_state_repo(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    from fr.triage.privacy import guard_state, state_repos
+
+    gh.visibility[REFS] = "public"
+    state = _only_snapshot(tmp_path, debt={SECRET: {"open_rows": 2}})
+    assert state_repos(state) == [SECRET]
+
+    with pytest.raises(PrivacyError, match="secret"):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_an_unparseable_snapshot_is_a_refusal_not_skipped(tmp_path: Path, gh: FakeGhClient) -> None:
+    from fr.triage.privacy import guard_state, state_keys
+
+    state = _only_snapshot(tmp_path)
+    (state / "snapshots" / "20261102T100000000000Z.json").write_text("{not json", "utf-8")
+
+    with pytest.raises(TriageError, match="snapshot"):
+        state_keys(state)
+    gh.visibility[REFS] = "public"
+    with pytest.raises(TriageError, match="snapshot"):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)

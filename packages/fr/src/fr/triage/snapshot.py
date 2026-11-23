@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from fr.triage.batch import derive_batch_stage
 from fr.triage.check import classify
 from fr.triage.debt import figures_by_repo
+from fr.triage.errors import TriageError
 from fr.triage.stage import IN_FLIGHT
 
 if TYPE_CHECKING:
@@ -227,6 +228,23 @@ def stored_snapshots(state_dir: Path) -> list[tuple[datetime, Snapshot]]:
         except (ValueError, ValidationError, OSError, UnicodeDecodeError):
             continue
     return out
+
+
+def load_snapshot_strict(path: Path) -> Snapshot:
+    """The snapshot at *path*; a file that cannot be read or parsed is a `TriageError`.
+    The privacy guard reads through this: a skipped file would still ride the state ref."""
+    try:
+        return Snapshot.model_validate_json(path.read_text(encoding="utf-8"))
+    except (ValidationError, OSError, UnicodeDecodeError) as exc:
+        raise TriageError(f"snapshot {path.name} cannot be read: {exc}") from exc
+
+
+def strict_snapshots(state_dir: Path) -> list[Snapshot]:
+    """Every `snapshots/*.json` of *state_dir*, parsed strictly (oldest first)."""
+    target = state_dir / SNAPSHOT_DIR
+    if not target.is_dir():
+        return []
+    return [load_snapshot_strict(p) for p in sorted(target.glob("*.json"))]
 
 
 def latest_snapshot(state_dir: Path) -> Snapshot | None:

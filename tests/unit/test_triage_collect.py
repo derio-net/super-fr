@@ -328,13 +328,14 @@ def test_a_judged_key_the_forge_answers_with_a_pr_never_becomes_an_issue() -> No
     """A PR past the PR list's limit is only met through `view_issue`."""
     forge = _super_fr_forge()
     forge.closed = {("derio-net/super-fr", 852): _pull_view(852)}
+    forge.pr_views = {("derio-net/super-fr", 852): {"state": "OPEN", "draft": False}}
 
     facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#852"])
 
     assert forge.called("view_issue") == [{"repo": "derio-net/super-fr", "number": 852}]
     assert all(i.key != "super-fr#852" for i in facts.issues)
-    assert [u.key for u in facts.unviewed] == ["super-fr#852"]
-    assert "pull request" in facts.unviewed[0].reason
+    assert facts.unviewed == []
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(852, "OPEN")]
 
 
 def test_no_view_for_open_keys_or_keys_outside_the_scope() -> None:

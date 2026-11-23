@@ -906,3 +906,24 @@ def test_an_issue_row_with_a_withheld_title_shows_the_key_and_a_quiet_note() -> 
     row = _row(issue, judgement=None, tier="", order=0, show_repo=True, patterns=[])
     assert TITLE_WITHHELD in row and "widgets#4" in row
     assert issue_title("a <b>") == "a &lt;b&gt;"
+
+
+# ------------------------------- the filter script without its bar (triage-hardening R13)
+
+
+def test_the_issues_filter_script_returns_early_when_the_filter_bar_is_absent() -> None:
+    from fr.triage.components import PAGE_SCRIPT
+    from fr.triage.fragments import Entry, Resolved
+    from fr.triage.render import SCRIPT
+
+    from tests.unit.triage_board_fixtures import busy
+
+    page = render_issues(*busy(), resolved=Resolved(order=[Entry("since")]))
+
+    assert 'id="q"' not in page
+    guard = "if (!q || !sort) return;"
+    assert guard in SCRIPT
+    assert SCRIPT.index(guard) < SCRIPT.index("addEventListener")
+    script = page[page.rindex("<script>") : page.rindex("</script>")]
+    assert SCRIPT in script
+    assert script.index(SCRIPT) < script.index(PAGE_SCRIPT)

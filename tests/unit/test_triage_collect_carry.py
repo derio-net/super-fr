@@ -127,7 +127,7 @@ def test_a_truncated_open_list_carries_nothing() -> None:
 
 def test_viewed_counts_failed_views_and_pr_past_limit() -> None:
     pull = {**_view(8), "url": f"https://github.com/{REPO}/pull/8", "state": "OPEN"}
-    forge = _forge(closed={(REPO, 8): pull})
+    forge = _forge(closed={(REPO, 8): pull}, pr_views={(REPO, 8): ForgeError("HTTP 500")})
     # #6 has no entry: FakeForge raises KeyError, so wrap it as a ForgeError.
     real = forge.view_issue
 
@@ -302,3 +302,67 @@ def test_a_duplicate_of_target_in_a_collected_repo_is_viewed(
     triage_cmd.collect_into(SCOPE, tmp_path)
 
     assert sorted(kw["number"] for kw in _viewed(fake)) == [5, 8]
+
+
+# R11 (spec 2026-11-22-triage-hardening §F): a judged PR past the PR list's limit.
+
+
+def _past_limit_forge(state: str = "MERGED") -> FakeForge:
+    pull = {**_view(7), "title": "the pr", "url": f"https://github.com/{REPO}/pull/7"}
+    view = {"state": state, "draft": False, "head_ref": "feat/x"}
+    return _forge(closed={(REPO, 7): pull}, pr_views={(REPO, 7): view})
+
+
+def test_a_judged_pr_past_the_limit_is_viewed_and_recorded() -> None:
+    forge = _past_limit_forge()
+
+    facts, _ = collect_facts_counted(forge, SCOPE, now=NOW, judged=["repo#7"])
+
+    [pr] = facts.judged_prs
+    assert (pr.number, pr.state, pr.title, pr.head_ref, pr.is_draft) == (
+        7,
+        "MERGED",
+        "the pr",
+        "feat/x",
+        False,
+    )
+    assert pr.url == f"https://github.com/{REPO}/pull/7"
+    assert (pr.merged_at, pr.created_at, pr.author) == (None, None, None)
+    assert facts.unviewed == []
+    assert all(i.number != 7 for i in facts.issues)
+
+
+def test_a_closed_judged_pr_is_carried_from_the_previous_facts_without_a_call() -> None:
+    first, _ = collect_facts_counted(_past_limit_forge(), SCOPE, now=NOW, judged=["repo#7"])
+    second = _forge()
+
+    facts, _ = collect_facts_counted(second, SCOPE, now=NOW, judged=["repo#7"], previous=first)
+
+    assert second.called("view_issue") == [] and second.called("view_pr") == []
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(7, "MERGED")]
+
+
+def test_an_open_judged_pr_past_the_limit_is_viewed_again() -> None:
+    first, _ = collect_facts_counted(_past_limit_forge("OPEN"), SCOPE, now=NOW, judged=["repo#7"])
+    second = _past_limit_forge("MERGED")
+
+    facts, _ = collect_facts_counted(second, SCOPE, now=NOW, judged=["repo#7"], previous=first)
+
+    assert len(second.called("view_pr")) == 1
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(7, "MERGED")]
+
+
+def test_a_failed_pr_view_is_recorded_unviewed_with_its_reason() -> None:
+    forge = _past_limit_forge()
+    forge.pr_views[(REPO, 7)] = ForgeError("HTTP 502")
+
+    facts, _ = collect_facts_counted(forge, SCOPE, now=NOW, judged=["repo#7"])
+
+    assert [(u.key, u.reason) for u in facts.unviewed] == [("repo#7", "HTTP 502")]
+    assert facts.judged_prs == []
+
+
+def test_pr_past_limit_no_longer_exists() -> None:
+    import fr.triage.collect as collect
+
+    assert not hasattr(collect, "PR_PAST_LIMIT")

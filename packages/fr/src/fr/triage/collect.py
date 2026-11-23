@@ -111,6 +111,8 @@ class Forge(Protocol):
 
     def pr_labels(self, *, repo: str, number: int) -> list[str]: ...
 
+    def view_pr(self, *, repo: str, number: int) -> dict[str, Any]: ...
+
     def viewer_login(self) -> str: ...
 
     def rate_limit(self) -> dict[str, Any]: ...
@@ -217,6 +219,11 @@ class ClientForge:
         (exit-gates R14), which no list read carries."""
         with _forge_errors():
             return [str(n) for n in self._client.pr_view(repo, number).get("labels") or [] if n]
+
+    def view_pr(self, *, repo: str, number: int) -> dict[str, Any]:
+        """One PR's `pr_view` record: a judged PR past the PR list's limit (R11)."""
+        with _forge_errors():
+            return self._client.pr_view(repo, number)
 
     def viewer_login(self) -> str:
         with _forge_errors():
@@ -571,12 +578,6 @@ def _withhold_untrusted_text(
     return out
 
 
-PR_PAST_LIMIT = (
-    "a pull request, not an issue, and past the PR list's limit: "
-    "re-run `fr triage collect` with a higher --pr-limit"
-)
-
-
 def _judged_elsewhere(
     judged: Iterable[str], open_keys: set[str], repos: list[str]
 ) -> list[tuple[str, int]]:
@@ -847,6 +848,11 @@ def collect_facts_counted(
     viewed = carried_n = 0
     unviewed: list[Unviewed] = []
     judged_prs: list[PullRequest] = []
+    finished_prs = {
+        (p.repo.lower(), p.number): p
+        for p in (previous.judged_prs if previous else [])
+        if p.state != "OPEN"
+    }
     for repo, number in _judged_elsewhere(judged, open_keys, [*collected, *sorted(keep)]):
         if prior is not None and repo in keep:
             known = _carried_judgement(prior, issue_key(repo, number))
@@ -859,6 +865,9 @@ def collect_facts_counted(
                 continue
         if (listed := listed_prs.get(issue_key(repo, number))) is not None:
             judged_prs.append(listed)
+            continue
+        if (done := finished_prs.get((repo.lower(), number))) is not None:
+            judged_prs.append(done)
             continue
         if repo not in truncated and (hit := carry.get((repo.lower(), number))) is not None:
             out.append(
@@ -877,8 +886,23 @@ def collect_facts_counted(
             unviewed.append(Unviewed(key=issue_key(repo, number), reason=str(exc)))
             continue
         if "/pull/" in str(raw.get("url", "")):
-            # A PR past the PR list's limit: `gh issue view` resolves it anyway.
-            unviewed.append(Unviewed(key=issue_key(repo, number), reason=PR_PAST_LIMIT))
+            # A PR past the PR list's limit: `gh issue view` resolves it anyway (R11).
+            try:
+                view = forge.view_pr(repo=repo, number=number)
+            except ForgeError as exc:
+                unviewed.append(Unviewed(key=issue_key(repo, number), reason=str(exc)))
+                continue
+            judged_prs.append(
+                PullRequest(
+                    repo=repo,
+                    number=number,
+                    title=str(raw.get("title", "")),
+                    state=str(view.get("state", "OPEN")).upper(),  # type: ignore[arg-type]
+                    is_draft=bool(view.get("draft")),
+                    url=str(raw["url"]),
+                    head_ref=str(view.get("head_ref") or ""),
+                )
+            )
             continue
         state: IssueState = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
         raw = _with_association(

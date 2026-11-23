@@ -103,6 +103,7 @@ class FakeForge:
         closed_in_progress: dict[str, list[dict[str, Any]]] | None = None,
         closed_listing_failing: dict[str, str] | None = None,
         pr_labels: dict[tuple[str, int], list[str]] | None = None,
+        pr_views: dict[tuple[str, int], dict[str, Any] | Exception] | None = None,
         gated: dict[str, list[dict[str, Any]]] | None = None,
         gated_failing: dict[str, str] | None = None,
         associations: dict[str, dict[int, str]] | None = None,
@@ -120,6 +121,8 @@ class FakeForge:
         self.gated_failing = gated_failing or {}
         # (repo, number) -> the labels a merged batch PR carries (exit-gates §D Facts)
         self.merged_labels = pr_labels or {}
+        # (repo, number) -> what `view_pr` answers (`pr_view`'s shape), or the error it raises
+        self.pr_views = pr_views or {}
         self.closed_in_progress = closed_in_progress or {}
         self.closed_listing_failing = closed_listing_failing or {}
         self.issues = issues
@@ -241,6 +244,13 @@ class FakeForge:
     def pr_labels(self, *, repo: str, number: int) -> list[str]:
         self.calls.append(("pr_labels", {"repo": repo, "number": number}))
         return list(self.merged_labels.get((repo, number), []))
+
+    def view_pr(self, *, repo: str, number: int) -> dict[str, Any]:
+        self.calls.append(("view_pr", {"repo": repo, "number": number}))
+        got = self.pr_views[(repo, number)]
+        if isinstance(got, Exception):
+            raise got
+        return got
 
     def viewer_login(self) -> str:
         self.calls.append(("viewer_login", {}))
