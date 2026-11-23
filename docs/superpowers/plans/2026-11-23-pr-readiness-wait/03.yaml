@@ -1,0 +1,61 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Skills, the close-out brief and mirrors (R9, R10)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - pr-settle-skills
+  tier: mechanical
+  files:
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-debugging/SKILL.md
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - .opencode/**
+  - .hermes/**
+  - tests/**/*.py
+  - docs/**/*.md
+  - docs/acceptance/features/2026-11-23-pr-readiness-wait.yaml
+  estimate_lines: 200
+tasks:
+- number: 1
+  title: Skill text and the close-out brief
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in `tests/unit/test_tripwire_pr_settle_wording.py`, assert the following:
+      - fr-goal's SKILL.md names `fr pr settle`, merging `origin/<base>` (never rebase or force-push), three fix rounds, and the second settle after the deliver resolve.
+      - fr-debugging's SKILL.md names `fr pr settle` as its last step, with the same fix rules.
+      - `fr.run.closeout`'s brief names `fr pr settle --wait` after the housekeeping PR is opened.
+      - The deliver brief carries a `settle` instruction line.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: edit the two canonical SKILL.md files. fr-goal is at its 120-line cap, so compress an existing clause to make room rather than add lines. Add the step to `fr.run.closeout`'s brief and the deliver brief line in run_cmd. The tests pass, the skill line-cap and tool-neutrality tripwires included.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR, in this order:
+      1. Run `scripts/sync-opencode.py` and `scripts/sync-hermes.py`, and commit the regenerated mirrors.
+      2. Run `fr docs check` and fix the fr-goal and fr-debugging explainers, and any page that lists the deliver evidence.
+      3. Set row pr-settle-skills to `ci`, with its level ref.
+      4. Run the fast tier last.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

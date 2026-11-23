@@ -1,0 +1,142 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Overrides, the PR settle section and the deliver witness (R6-R8)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - pr-settle-override
+  - pr-settle-deliver
+  tier: hard
+  files:
+  - packages/fr/src/fr/verification/spec_section.py
+  - packages/fr/src/fr/settle/**
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/workflow/artifacts.py
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - plugins/super-fr/workflows/fr-goal-light.yaml
+  - packages/fr/src/fr/**/*.yaml
+  - tests/**
+  - docs/**/*.md
+  - AGENTS.md
+  - docs/acceptance/features/2026-11-23-pr-readiness-wait.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: settle lines in the Verification grammar (R6)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in `tests/unit/test_spec_section_settle.py`, assert the following:
+      - `settle.ci: report — <reason>` and `settle.conflicts: off — <reason>` parse into `Section.settle`.
+      - A section that holds only settle lines is a grammar section, not None.
+      - A `settle.` line with no reason, an unknown key (`settle.foo:`) or an unknown mode is a spec-section error that names the line.
+      - Existing sections without settle lines parse unchanged.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: extend `packages/fr/src/fr/verification/spec_section.py`:
+      - add a `_SETTLE_LINE` pattern;
+      - make `_is_grammar` true for any stripped line that starts with `settle.`;
+      - add `Section.settle: dict[str, SettleOverride]`, defaulting to empty;
+      - parse strictly, as the test requires.
+      The tests pass.
+- number: 2
+  title: Override precedence (R6)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in `tests/unit/test_settle_modes.py`, assert that `effective_modes(repo_root, spec=..., debug_journal=...)`:
+      - applies the repo setting first, then a spec settle line;
+      - with no spec, applies a debug-journal decision with id `settle-conflicts` or `settle-ci`, whose title is the mode and whose body is the reason;
+      - records the source of each mode.
+      Also assert that a decision whose title is not a mode, or whose body is empty, is an error that names the entry, and that a run whose spec has no settle line, or a branch with no journal, gets the setting.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: extend `fr/settle/modes.py`. Find the run's spec through the cursor's emitted spec, and the debug journal the way `fr.commands.push_cmd.approval_journal` finds it. Wire `fr pr settle` to `effective_modes`. The tests pass.
+- number: 3
+  title: The PR settle section (R7)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in `tests/unit/test_pr_body_settle.py`, assert the following:
+      - `render_pr_body` for a run emits `## PR settle`, which names each key's mode and source and each override's reason, or says "The repo setting applies."
+      - `## PR settle` is in `REQUIRED_SECTIONS`, so the live-body check refuses a body without it.
+      - Under `forge.pr_body: minimal`, the section is in the durable rendered file.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: add `_settle_section` to `packages/fr/src/fr/record/pr_body.py`, fed by `effective_modes`, and add the heading to `REQUIRED_SECTIONS`. Update any golden PR-body fixture through its generator, never by hand. The tests pass.
+- number: 4
+  title: The deliver settle witness (R8)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: in `tests/unit/test_run_settle_witness.py`, through `fr run resolve --step deliver` with a fake client, assert the following:
+      - Under `fix`, a conflicting or red PR exits 2 and names `settle`.
+      - A pending PR exits 75, records nothing, and leaves the cursor where it was.
+      - `report` records `<modes>:<states>@<head>`.
+      - With both keys `off`, it records `off`.
+      - A managed branch records `managed`.
+      - `unsupported` is recorded and refuses nothing.
+      - `--evidence settle=...` is refused, because the witness is derived.
+      - A refusal from another derived witness is reported before settle's hold.
+      - Under `tests: ci` with `settle.conflicts: off`, the `tests` witness still refuses a conflicting PR.
+  - id: P2.T4.S2
+    text: |-
+      GREEN:
+      1. Add `settle` to `fr.workflow.artifacts.DERIVED_EVIDENCE`, to run_cmd's `_VERIFIABLE_EVIDENCE` and `_DERIVED_FROM`, and to `deliver`'s `evidence:` in both shipped manifests and their generated wheel copies. Find the sync script with `grep -rln fr-goal.yaml scripts/`.
+      2. Put the witness logic in `fr/settle/witness.py`: `settle_witness(repo_root, state, client) -> str`, raising a pending exception that carries exit 75.
+      3. Call it from run_cmd after the `derive()` block, not through `derive()`, so that exit 75 reaches the caller.
+      4. Keep the lines added to run_cmd to a minimum, because `tests/unit/test_tripwire_module_budget.py` budgets that module.
+      The tests pass.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR, in this order:
+      1. Confirm that no run, spec or journal stamp moved, as spec §C states: `fr validate artifacts` is green and the registry is unchanged.
+      2. Run `fr docs check` and fix the pages it names (the run and verification pages).
+      3. Set rows pr-settle-override and pr-settle-deliver to `ci`, with level refs.
+      4. Run the fast tier last.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

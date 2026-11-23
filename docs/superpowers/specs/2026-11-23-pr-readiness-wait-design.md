@@ -173,3 +173,4 @@ gate: pr-settle-live=tester
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-11-23-pr-readiness-wait | `derio-net/super-fr` | `2026-11-23-pr-readiness-wait` | — |
