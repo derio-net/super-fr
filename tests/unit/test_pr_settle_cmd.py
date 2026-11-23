@@ -662,3 +662,34 @@ def test_an_old_head_with_no_check_is_missing_and_exits_4(
 
     assert result.exit_code == 4, result.output
     assert "ci (fix, default): missing" in result.output
+
+
+def test_a_bad_setting_on_the_default_ref_refuses_naming_the_key(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l-tests-r3: `on` is no settle mode."""
+    git(repo, "checkout", "-q", "main")
+    land_on_main(repo, "git:\n  settle:\n    ci: 'on'\n")
+    git(repo, "checkout", "-q", "feat/other")
+    forge = Forge()
+
+    result = _run(monkeypatch, forge)
+
+    assert result.exit_code == 2, result.output
+    assert "git.settle.ci" in result.output
+    assert forge.calls == []
+
+
+def test_a_run_spec_override_with_no_reason_refuses_naming_the_line(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = "docs/superpowers/specs/2026-11-23-x-design.md"
+    (repo / spec).parent.mkdir(parents=True)
+    (repo / spec).write_text("# X\n\n## Verification\n\nsettle.ci: report\n")
+    run = SimpleNamespace(pr=None, steps={"brainstorm": SimpleNamespace(emitted={"spec": spec})})
+    monkeypatch.setattr("fr.commands.push_cmd.branch_runs", lambda _root: [run])
+
+    result = _run(monkeypatch, Forge())
+
+    assert result.exit_code == 2, result.output
+    assert "line 5" in result.output and "settle.ci: report" in result.output
