@@ -220,7 +220,7 @@ An issue is eligible when at least one of these is true:
 
 - Its author is the user that ran `collect`, or a login in `pr_authors` of `.fr/triage.yaml`.
 - Its author association is `OWNER`, `MEMBER` or `COLLABORATOR`.
-- It has the `ready-fr` label and an admit marker that a trusted account wrote, and the
+- It has the `ready-fr` label and an admit marker that a trusted account wrote. The
   marker's digest equals the digest of the issue's current title and body. `fr triage admit
   <key>` writes the label and the marker. The forge compares label names without regard to
   case, and so does intake.
