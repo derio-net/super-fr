@@ -406,7 +406,6 @@ def branch_closeout_brief(
         f"'{_commit_message(branch, plan_path)}' && git push -u origin {housekeeping_branch}"
     )
     from fr.hostclient import pr_command  # the forge's own CLI, never `gh` (gh#742)
-
     from fr.settle.instructions import CLOSEOUT_LINE
 
     lines.append(f"  open the housekeeping PR (e.g. `{pr_command(repo_root, 'fill')}`)")
