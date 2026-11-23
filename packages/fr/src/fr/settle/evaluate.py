@@ -6,11 +6,11 @@ no git and no clock of its own: the caller passes the head's commit time and `no
 States (R2). Conflicts: `clean`, `conflicting` (`fr.triage.mergeability.conflicting`:
 `CONFLICTING` or `DIRTY`; `BLOCKED` is branch protection, so clean), `unknown` (the forge
 has not computed mergeability or the merge state yet). CI: `green`, `red` (with the
-failing check names), `pending` (a check has not finished, or none has reported and the
-head is younger than `NO_CI_WAIT_SECONDS`), `missing` (none reported after that, or a gate
-CI finished without), `unrunnable` (a conflicting PR: the forge runs no pull-request
-workflow for it), `none` (the repo's services say `ci none`). A concern under `off` is not
-evaluated and reads `off`.
+failing check names), `pending` (a check has not finished, or none has reported, or a
+declared gate has not, and the head is younger than `NO_CI_WAIT_SECONDS`), `missing` (none
+reported after that, or a gate still absent then, each with its own hint), `unrunnable`
+(a conflicting PR: the forge runs no pull-request workflow for it), `none` (the repo's
+services say `ci none`). A concern under `off` is not evaluated and reads `off`.
 
 The exit code (R4), stated once. Only a concern whose mode is `fix` decides it:
 
@@ -59,6 +59,12 @@ _HINTS: Final[dict[tuple[str, str], str]] = {
         "`fr pr settle` again"
     ),
     ("ci", "pending"): "checks are still running",
+    ("ci", "gate-pending"): "waiting on gate check {absent}, which has not reported yet",
+    ("ci", "gate-absent"): (
+        "gate check {absent} never reported on the head {minutes} minutes after it was "
+        "committed, while the other checks finished; see why its workflow did not run, fix "
+        "it and push"
+    ),
     ("ci", "missing"): (
         "no check reported on the head {minutes} minutes after it was committed; see why "
         "no workflow ran (the PR's checks page), fix it and push"
@@ -97,29 +103,33 @@ def _ci_state(
     *,
     ci_none: bool,
     age: float,
-) -> tuple[CiState, tuple[str, ...]]:
+) -> tuple[CiState, tuple[str, ...], str, tuple[str, ...]]:
+    """(state, failing check names, hint key, absent gate names)."""
     if ci_none:
-        return "none", ()
+        return "none", (), "none", ()
     if is_conflicting:
-        return "unrunnable", ()
+        return "unrunnable", (), "unrunnable", ()
     relevant = [c for c in checks if not gate_names or c.get("name") in gate_names]
     failing = tuple(
         sorted({str(c.get("name")) for c in relevant if c.get("bucket") in _FAILING_BUCKETS})
     )
     if failing:
-        return "red", failing
+        return "red", failing, "red", ()
     if any(c.get("bucket") == "pending" for c in relevant):
-        return "pending", ()
-    reported = {str(c.get("name")) for c in relevant}
-    absent = [g for g in gate_names or () if g not in reported]
+        return "pending", (), "pending", ()
+    fresh = age < NO_CI_WAIT_SECONDS
     if not checks:
-        return ("pending", ()) if age < NO_CI_WAIT_SECONDS else ("missing", ())
-    if absent or not relevant:
-        # A gate not reported yet: a job waiting on others still running, else CI
-        # finished without it.
+        return ("pending", (), "pending", ()) if fresh else ("missing", (), "missing", ())
+    reported = {str(c.get("name")) for c in relevant}
+    absent = tuple(g for g in gate_names or () if g not in reported)
+    if absent:
+        # A gate not reported yet: a job waiting on others, or a workflow that has not
+        # started; CI finished without it only once the head is past the no-CI wait.
         running = any(c.get("bucket") == "pending" for c in checks)
-        return ("pending", ()) if running else ("missing", ())
-    return "green", ()
+        if running or fresh:
+            return "pending", (), "gate-pending", absent
+        return "missing", (), "gate-absent", absent
+    return "green", (), "green", ()
 
 
 def _code(concern: KeyMode, state: str) -> int:
@@ -132,12 +142,12 @@ def _code(concern: KeyMode, state: str) -> int:
     return EXIT_OK
 
 
-def _line(key: str, km: KeyMode, state: str, **fmt: Any) -> str:
+def _line(key: str, km: KeyMode, state: str, hint_key: str = "", **fmt: Any) -> str:
     where = km.source if not km.reason else f"{km.source}: {km.reason}"
     head = f"{key} ({km.mode}, {where}): {state}"
     if km.mode == "off":
         return f"{head} — not read"
-    hint = _HINTS.get((key, state))
+    hint = _HINTS.get((key, hint_key or state))
     return f"{head} — {hint.format(**fmt)}" if hint else head
 
 
@@ -165,8 +175,9 @@ def evaluate(
     if modes.ci.mode == "off":
         ci_state: CiState = "off"
         failing: tuple[str, ...] = ()
+        hint_key, absent = "", tuple[str, ...]()
     else:
-        ci_state, failing = _ci_state(
+        ci_state, failing, hint_key, absent = _ci_state(
             raw_conflict == "conflicting", checks, gate_names, ci_none=ci_none, age=age
         )
     codes = [_code(modes.conflicts, c_state), _code(modes.ci, ci_state)]
@@ -183,7 +194,9 @@ def evaluate(
             "ci",
             modes.ci,
             ci_state,
+            hint_key,
             failing=", ".join(failing),
+            absent=", ".join(absent),
             minutes=int(age // 60),
         ),
     )

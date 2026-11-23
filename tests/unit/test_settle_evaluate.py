@@ -65,6 +65,7 @@ def _eval(
         ("MERGEABLE", "CLEAN", "clean"),
         ("MERGEABLE", "BLOCKED", "clean"),
         ("MERGEABLE", "UNSTABLE", "clean"),
+        ("MERGEABLE", "DRAFT", "clean"),
         ("CONFLICTING", "DIRTY", "conflicting"),
         ("CONFLICTING", "UNKNOWN", "conflicting"),
         ("MERGEABLE", "DIRTY", "conflicting"),
@@ -126,6 +127,24 @@ def test_an_unreported_gate_is_pending_while_ci_runs_and_missing_after() -> None
     assert _eval(checks=[], gates=["ci-ok"], committed=FRESH).ci_state == "pending"
 
 
+def test_an_unreported_gate_on_a_fresh_head_is_pending_while_other_checks_finished() -> None:
+    done = [_check("lint", "pass")]
+    v = _eval(checks=done, gates=["ci-ok"], committed=FRESH)
+    assert v.ci_state == "pending" and v.exit_code == 75
+    assert any("ci-ok" in ln for ln in v.lines)
+    v = _eval(checks=done, gates=["ci-ok"], committed=OLD)
+    assert v.ci_state == "missing" and v.exit_code == 4
+
+
+def test_an_absent_gate_has_its_own_hint() -> None:
+    absent = _eval(checks=[_check("lint", "pass")], gates=["ci-ok"], committed=OLD)
+    nothing = _eval(checks=[], committed=OLD)
+    assert absent.ci_state == nothing.ci_state == "missing"
+    ci_line = next(ln for ln in absent.lines if ln.startswith("ci "))
+    assert "ci-ok" in ci_line and "gate" in ci_line
+    assert ci_line != next(ln for ln in nothing.lines if ln.startswith("ci "))
+
+
 # ---- modes and the exit code (R4) --------------------------------------------------
 
 CONFLICT_VIEWS = {
@@ -138,9 +157,22 @@ CI_CHECKS: dict[str, tuple[list[dict[str, Any]], float]] = {
     "red": ([_check("t", "fail")], OLD),
     "pending": ([_check("t", "pending")], OLD),
     "missing": ([], OLD),
+    "gate-absent-fresh": ([_check("lint", "pass")], FRESH),
+    "gate-absent-old": ([_check("lint", "pass")], OLD),
 }
+CI_STATE = {"gate-absent-fresh": "pending", "gate-absent-old": "missing"}
+CI_GATES = {"gate-absent-fresh": ["ci-ok"], "gate-absent-old": ["ci-ok"]}
 CONFLICT_CODE = {"clean": 0, "conflicting": 4, "unknown": 75}
-CI_CODE = {"green": 0, "red": 4, "pending": 75, "missing": 4}
+CI_CODE = {
+    "green": 0,
+    "red": 4,
+    "pending": 75,
+    "missing": 4,
+    "gate-absent-fresh": 75,
+    "gate-absent-old": 4,
+    "unrunnable": 4,
+    "none": 0,
+}
 
 
 @pytest.mark.parametrize("state", sorted(CONFLICT_VIEWS))
@@ -151,13 +183,19 @@ def test_the_conflict_concern_decides_the_code_only_under_fix(mode: str, state: 
     assert v.conflict_state == ("off" if mode == "off" else state)
 
 
-@pytest.mark.parametrize("state", sorted(CI_CHECKS))
+@pytest.mark.parametrize("state", sorted(CI_CODE))
 @pytest.mark.parametrize("mode", ["off", "report", "fix"])
 def test_the_ci_concern_decides_the_code_only_under_fix(mode: str, state: str) -> None:
-    checks, committed = CI_CHECKS[state]
-    v = _eval(checks=checks, committed=committed, modes=_modes(conflicts="off", ci=mode))
+    modes = _modes(conflicts="off", ci=mode)
+    if state == "unrunnable":
+        v = _eval(CONFLICT_VIEWS["conflicting"], checks=[], modes=modes)
+    elif state == "none":
+        v = _eval(checks=[], ci_none=True, modes=modes)
+    else:
+        checks, committed = CI_CHECKS[state]
+        v = _eval(checks=checks, gates=CI_GATES.get(state), committed=committed, modes=modes)
     assert v.exit_code == (CI_CODE[state] if mode == "fix" else 0)
-    assert v.ci_state == ("off" if mode == "off" else state)
+    assert v.ci_state == ("off" if mode == "off" else CI_STATE.get(state, state))
 
 
 def test_unrunnable_ci_fails_under_fix_and_reports_under_report() -> None:
