@@ -189,7 +189,7 @@ def settle_cmd(
     ),
     as_json: bool = typer.Option(False, "--json", help="Print the verdict as JSON."),
 ) -> None:
-    """Wait for this branch's PR to merge cleanly and its CI to finish; exit by git.settle."""
+    """Wait until this branch's PR merges cleanly and its CI has finished."""
     import time
 
     from fr.commands.push_cmd import branch_context
