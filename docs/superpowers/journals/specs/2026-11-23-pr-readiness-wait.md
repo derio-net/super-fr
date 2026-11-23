@@ -225,3 +225,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-23-pr-readiness-wait-p2 created=2026-11-23T09:01:43+00:00 -->
 ### phase-split-2026-11-23-pr-readiness-wait-p2 · decision · ask: overrides, the PR settle section and the deliver witness (R6-R8) are their own ask, reviewable apart from the engine
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-23-pr-readiness-wait-p2 created=2026-11-23T09:01:46+00:00 -->
+### tier-2026-11-23-pr-readiness-wait-p2 · decision · hard: phase 2 changes deliver's witness path, a gate every fr-goal run relies on, and must keep exit 75 outside derive()
