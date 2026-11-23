@@ -58,9 +58,9 @@ def make_client(url: str) -> GhClient:
     return client_for_url(url)
 
 
-def _fail(message: str) -> NoReturn:
+def _fail(message: str, code: int = 2) -> NoReturn:
     err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
-    raise typer.Exit(2)
+    raise typer.Exit(code)
 
 
 @triage_app.command("admit")
@@ -81,7 +81,8 @@ def admit_command(
     """Admit an outside author's issue for batching: label it ready-fr and pin its content.
 
     Exits 2 on a key it cannot read, a pull request, a forge that cannot list comments, or
-    a --digest that is missing or no longer matches the issue.
+    a --digest that is missing or no longer matches the issue; exits 1 when the label was
+    applied but the marker comment was not (re-running admit finishes it).
     """
     url_match = _URL_RE.match(key.strip())
     if url_match is not None:
@@ -177,9 +178,17 @@ def admit_command(
     try:
         client.ensure_labels(repo, [READY_FR])
         client.edit_issue_labels(repo, number, add=frozenset({READY_FR.name}), remove=frozenset())
-        client.comment_issue(repo, number, comment)
     except Exception as exc:  # noqa: BLE001 — the adapter's own error, reported as a refusal
         _fail(f"{key}: admission not written: {exc}")
+    try:
+        client.comment_issue(repo, number, comment)
+    except Exception as exc:  # noqa: BLE001 — a half-written admission: say exactly what is on
+        _fail(
+            f"{key}: the label {READY_FR.name} was applied, but the admit marker was not "
+            f"posted ({exc}), so the issue is still not admitted; finish it by re-running "
+            f"`fr triage admit {again} --yes --digest {current}`",
+            code=1,
+        )
     console.print(
         f"admitted {escape(key)}: labelled {READY_FR.name}, admit marker {escape(current)} posted",
         soft_wrap=True,

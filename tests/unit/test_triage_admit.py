@@ -372,3 +372,39 @@ def test_admit_refuses_a_host_and_a_url_key_that_disagree(monkeypatch: Any) -> N
         "github.com",
     )
     assert out.exit_code == 2 and urls == []
+
+
+# ------------------------------------------------- failed reads and writes (T6)
+
+
+def test_admit_whose_read_fails_exits_2_and_writes_nothing(monkeypatch: Any) -> None:
+    from fr.gh import GhError
+
+    class Unreadable(FakeClient):
+        def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
+            raise GhError("HTTP 502: bad gateway")
+
+    client = Unreadable()
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes", "--digest", "sha256:" + "a" * 64)
+    assert out.exit_code == 2, out.output
+    assert "502" in out.output
+    assert client.writes == []
+
+
+def test_admit_whose_comment_fails_after_the_label_says_the_label_is_on_and_the_issue_is_not_admitted(
+    monkeypatch: Any,
+) -> None:
+    class NoComment(FakeClient):
+        def comment_issue(self, repo: str, number: int, body: str) -> None:
+            raise RuntimeError("HTTP 500: comment refused")
+
+    client = NoComment()
+    digest = content_digest(TITLE, BODY)
+    out = _admit(monkeypatch, client, "derio-net/x#5", "--yes", "--digest", digest)
+    flat = " ".join(out.output.split())
+    assert out.exit_code == 1, out.output
+    assert [k for k, _ in client.writes] == ["ensure", "labels"]
+    assert "label ready-fr was applied" in flat
+    assert "admit marker was not posted" in flat and "not admitted" in flat
+    assert f"fr triage admit derio-net/x#5 --yes --digest {digest}" in flat
+    assert "admission not written" not in flat
