@@ -59,3 +59,8 @@ Merged origin/main at v9.0.0-rc.1. Per member, against main's code:
 ### merge-queue-adapt · finding [fixed] · Approval, wait and brief re-implemented for the queue; tests moved from archive actions to admissions
 
 gh1497 tests now assert plan.admitted and the queue entry (_queued == closeout#900, no pr_merge, approval on the queue's events); the old 'approval of another head' test is removed (R12 allows a diff-neutral move); test_triage_batch_closeout gains unowned_stale. Module budgets on main moved to 8200/2250; this branch needs 8225/2275.
+
+<!-- fr:journal kind=review scope=debug id=700cae263254 created=2026-11-23T09:41:10+00:00 -->
+### 700cae263254 · review · Independent review of the queue adaptation: approval path sound; 1 important and 1 nit fixed
+
+A separate reviewer read the merged branch. Sound: only trusted PRs reach _closeout_approval; settle_entry_approval filters events by PR and kind closeout; only a recorded Approved admits; Closes/narrowing reasons still hold; the queue builds and lands the approved head (pr_merge head_sha guard); dry runs write nothing; the closeout#<pr> key is shared with the unapproved admission by design. Fixed: (important) the migration wait now counts as blocked and shows a Need naming the file and the remedy, retried each pass, instead of one warn while the drive polled silently; (nit) a leftover closeout-wait worktree is removed before the read. Left: an approval is recorded even for a PR review_reasons would admit (benign); a dry run shows needs-review for a first label a --yes pass records (matches housekeeping); a writer error in _closeout_approval aborts the snapshot like _housekeeping_reads; the Closes reasons are matched by prefix, pinned by the two end-to-end tests.
