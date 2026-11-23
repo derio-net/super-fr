@@ -138,3 +138,11 @@ def test_a_missing_journal_or_spec_gets_the_setting(repo: Path) -> None:
 
     assert modes.ci.source == "default"
     assert modes.conflicts.source == "repo"
+
+
+def test_a_settle_decision_with_an_unknown_key_refuses_naming_it(repo: Path) -> None:
+    """Review l-errors-r3: `settle-cl` is a typo of an override, never ignored."""
+    journal = _journal(repo, ("decision", "settle-cl", "off", "a reason"))
+
+    with pytest.raises(SettleRefused, match="settle-cl"):
+        effective_modes(repo, debug_journal=journal)

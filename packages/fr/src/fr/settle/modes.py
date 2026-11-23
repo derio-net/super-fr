@@ -42,8 +42,13 @@ def _journal_overrides(journal: Path) -> dict[str, dict[str, str]]:
     out: dict[str, dict[str, str]] = {}
     for entry in entries:
         key = entry.id.removeprefix("settle-")
-        if entry.kind != "decision" or not entry.id.startswith("settle-") or key not in KEYS:
+        if entry.kind != "decision" or not entry.id.startswith("settle-"):
             continue
+        if key not in KEYS:
+            raise SettleRefused(
+                f"{journal.name}: decision {entry.id!r} names no settle key: an override's id "
+                f"is one of {', '.join(f'settle-{k}' for k in KEYS)}"
+            )
         mode, reason = entry.title.strip(), entry.body.strip()
         if mode not in SETTLE_MODES or not reason:
             raise SettleRefused(
