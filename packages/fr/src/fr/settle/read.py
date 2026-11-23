@@ -20,6 +20,19 @@ TRANSIENT_FORGE_KINDS: Final = frozenset({"warn", "rate_limit"})
 """`forge_error_kind`s a retry may answer: exit 75 on them, 2 on the rest."""
 
 
+def forge_repo(slug: str | None, client: Any) -> str:
+    """The forge repo to read: *slug* (the origin's `owner/repo`). With none, a backend
+    that cannot read PRs (glab, tea: `UnsupportedBatchOps`) gets `""` and answers with
+    R11's `unsupported` when asked; any other refuses (review p2-r3)."""
+    from fr.ghclient import UnsupportedBatchOps
+
+    if slug is not None:
+        return slug
+    if isinstance(client, UnsupportedBatchOps):
+        return ""
+    raise SettleRefused("cannot read the forge repository from the origin remote")
+
+
 def read_verdict(
     repo_root: Path,
     client: Any,

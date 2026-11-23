@@ -41,7 +41,7 @@ def settle_witness(repo_root: Path, state: Any, client: Any = None) -> str:
     `SettingsError` when the setting is unreadable."""
     from fr.settle.managed import driver_managed
     from fr.settle.modes import run_modes
-    from fr.settle.read import read_verdict
+    from fr.settle.read import forge_repo, read_verdict
 
     branch = _branch(repo_root)
     if driver_managed(branch):
@@ -51,15 +51,7 @@ def settle_witness(repo_root: Path, state: Any, client: Any = None) -> str:
         return "off"
     if client is None:
         client = client_for(repo_root)
-    repo = origin_slug(repo_root)
-    if repo is None:
-        # Review p2-r3: a backend that cannot read PRs (glab, tea) is R11's `unsupported`,
-        # asked of the backend below; only a GitHub repo with no parseable origin refuses.
-        from fr.ghclient import UnsupportedBatchOps
-
-        if not isinstance(client, UnsupportedBatchOps):
-            raise SettleRefused("cannot read the forge repository from the origin remote")
-        repo = ""
+    repo = forge_repo(origin_slug(repo_root), client)
     verdict = read_verdict(
         repo_root, client, repo, branch, getattr(state, "pr", None), modes,
         wait=0, clock=time.time, sleep=time.sleep,

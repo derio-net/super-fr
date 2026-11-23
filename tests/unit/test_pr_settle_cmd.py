@@ -481,3 +481,32 @@ def test_a_run_spec_settle_line_overrides_the_setting_in_the_verb(
     result = _run(monkeypatch, forge)
 
     assert "conflicts (off, spec: the base is frozen): off" in result.output
+
+
+@pytest.mark.parametrize("cls", ["glab", "tea"])
+def test_no_origin_slug_on_a_glab_or_tea_client_is_unsupported(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, cls: str
+) -> None:
+    """Review p2-r3: the backend is asked before an unparseable origin refuses."""
+    from fr.real_glabclient import RealGlabClient
+    from fr.real_teaclient import RealTeaClient
+
+    client = RealGlabClient() if cls == "glab" else RealTeaClient()
+    monkeypatch.setattr("fr.commands.pr_cmd.origin_slug", lambda _root: None)
+    monkeypatch.setattr("fr.commands.pr_cmd.client_for", lambda _root: client)
+
+    result = runner.invoke(app, ["pr", "settle", "--wait", "0"])
+
+    assert result.exit_code == 0, result.output
+    assert "unsupported" in result.output
+
+
+def test_no_origin_slug_on_a_github_client_refuses(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.commands.pr_cmd.origin_slug", lambda _root: None)
+
+    result = _run(monkeypatch, Forge())
+
+    assert result.exit_code == 2, result.output
+    assert "cannot read the forge repository" in result.output
