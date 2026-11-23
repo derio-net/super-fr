@@ -2,10 +2,7 @@ schema_version: 12
 run: 2026-11-23-feat-pr-readiness-wait
 step: plan
 outcome: done
-journal:
-  - {kind: decision, id: phase-split-2026-11-23-pr-readiness-wait-p2, title: "ask: overrides, the PR settle section and the deliver witness (R6-R8) are their own ask, reviewable apart from the engine", body: "Phase 2 changes deliver's gate path in run_cmd and the spec grammar every run reads; it builds on phase 1's evaluate."}
-  - {kind: decision, id: tier-2026-11-23-pr-readiness-wait-p2, title: "hard: phase 2 changes deliver's witness path, a gate every fr-goal run relies on, and must keep exit 75 outside derive()", body: "A mistake here refuses or wrongly passes every run's deliver."}
-  - {kind: decision, id: phase-split-2026-11-23-pr-readiness-wait-p3, title: "ask: the skills and close-out brief running the settle loop (R9, R10) are their own ask, at the mechanical tier", body: "Prose edits, mirrors and docs, after the witness exists."}
+journal: []
 emitted:
   plan: docs/superpowers/plans/2026-11-23-pr-readiness-wait
 evidence: {}
