@@ -854,10 +854,13 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
     """The close-out work item's brief: the `fr pickup` instruction for the batch."""
     branch = recorded_branch(batch)
     pickup = f"fr pickup --run {run}" if run else f"fr pickup --branch {branch}"
+    # Without a run the PR head is the managed `chore/closeout-<batch branch>`; with one
+    # it is the unmanaged archive head, which the pickup brief settles.
+    managed = f"{MANAGED_SENTENCE}\n" if run is None else ""
     return (
         f"Close out batch {batch.id}: its PR on {branch} has merged.\n"
         f"In {checkout}, run `{pickup}` and follow the brief it prints, in order.\n"
-        f"{MANAGED_SENTENCE}\n" + "\n".join(title_block(batch))
+        f"{managed}" + "\n".join(title_block(batch))
     )
 
 

@@ -121,3 +121,15 @@ def test_every_driver_brief_carries_the_managed_sentence(name: str) -> None:
     from fr.settle.managed import MANAGED_SENTENCE
 
     assert MANAGED_SENTENCE in _driver_briefs()[name]
+
+
+def test_a_run_closeout_brief_does_not_carry_the_managed_sentence() -> None:
+    # With a run, the session's housekeeping PR (chore/archive-<plan>, chore/closeout-<run>)
+    # is unmanaged: its pickup brief settles it.
+    from fr.settle.managed import MANAGED_SENTENCE
+    from fr.triage.batch_drive import closeout_brief
+    from fr.triage.model import Batch
+
+    b = Batch.model_validate({"id": "b1", "title": "one", "ids": ["super-fr#1"]})
+    assert MANAGED_SENTENCE not in closeout_brief(b, run="2026-11-23-r", checkout=Path("/w"))
+    assert MANAGED_SENTENCE in closeout_brief(b, run=None, checkout=Path("/w"))
