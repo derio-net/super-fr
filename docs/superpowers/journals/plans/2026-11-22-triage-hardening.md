@@ -95,3 +95,64 @@ A never-dispatched batch whose open members all await live and the rest are clos
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 check, render and the board share one derive_batch_stage and stale_members helper written in GREEN; nothing left duplicated
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-11-23T00:16:17+00:00 phase=2 -->
+### p2-review · review · Phase 2 review: no blocking bug; four in-scope findings, one spec sentence (phase 2)
+
+Separate reviewer (read-only) over 795a43043..4aa4fca42 against R6, R8-R10. Confirmed: a
+dispatched batch never derives obsolete; a member missing from facts keeps it proposed;
+every stage reader handles obsolete. Findings p2-r1..p2-r5 below; each verified against the code.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-23T00:16:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · kanban: obsolete is not a terminal stage, so an all-obsolete wave is never hidden by the cutoff (phase 2)
+
+kanban.py _TERMINAL_STAGES / Card.terminal omit obsolete while finished_waves counts it finished.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-23T00:16:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · kanban: an Obsolete-column card falls through to the 'finished' hint (phase 2)
+
+fallback_hint had no obsolete branch; the card read "finished" with no pointer to batch cancel.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-23T00:16:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · batch._all_closed's awaiting-live test duplicates sets.is_awaiting_live with no test pinning them (phase 2)
+
+The import cycle keeps the copy; nothing failed if the two drifted.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-23T00:16:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · claims.releasing / owed_claims treating obsolete like cancelled had no test (phase 2)
+
+Dropping "obsolete" from releasing left the suite green.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-23T00:16:17+00:00 phase=2 state=open review_scope=out -->
+### p2-r5 · finding [open] (reviewer: out of scope) · Spec §E says the awaiting-live hold still applies to a batch with a lifecycle event; the code never reaches it (phase 2)
+
+The drive only dispatches stage proposed, and any batch with a lifecycle event derives another stage.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-23T00:16:17+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: kanban: obsolete is not a terminal stage, so an all-obsolete wave is never hidden by the cutoff (phase 2)
+
+Kept obsolete non-terminal on purpose: R9 wants the operator to see it and run batch cancel, and a
+cutoff would hide exactly that card. Card.terminal's docstring now says so, and
+test_an_obsolete_card_points_at_batch_cancel_and_is_never_cut_off pins that an obsolete wave
+card is never cut off a year later.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-23T00:16:17+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: kanban: an Obsolete-column card falls through to the 'finished' hint (phase 2)
+
+New HINT_OBSOLETE ("obsolete: every member closed, retire it with batch cancel") for the
+obsolete column; the same test fails without it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-23T00:16:17+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: batch._all_closed's awaiting-live test duplicates sets.is_awaiting_live with no test pinning them (phase 2)
+
+test_all_closed_agrees_with_the_set_apart_awaiting_live_predicate checks _all_closed against "closed or sets.is_awaiting_live" over five issue shapes.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-23T00:16:17+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: claims.releasing / owed_claims treating obsolete like cancelled had no test (phase 2)
+
+test_an_obsolete_wave_batch_releases_its_claims pins releasing() and owed_claims() for an obsolete wave batch against a proposed one.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-23T00:16:17+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Spec §E says the awaiting-live hold still applies to a batch with a lifecycle event; the code never reaches it (phase 2)
+
+The spec sentence now says the hold applies to a never-dispatched batch with a member missing from the facts, and why a batch with a lifecycle event needs none.
