@@ -141,7 +141,8 @@ def test_viewed_counts_failed_views_and_pr_past_limit() -> None:
 
     facts, stats = collect_facts_counted(forge, SCOPE, now=NOW, judged=["repo#6", "repo#8"])
 
-    assert stats == CollectStats(viewed=2, carried=0)
+    # #6's failed view, #8's view_issue and #8's failed view_pr: three single reads.
+    assert stats == CollectStats(viewed=3, carried=0)
     assert len(facts.unviewed) == 2
 
 

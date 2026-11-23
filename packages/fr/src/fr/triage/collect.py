@@ -600,8 +600,9 @@ class CollectStats:
     """What one collect cost in single-issue reads (gh#911).
 
     *viewed* counts every `view_issue` call, failures and PR-past-limit answers
-    included; *carried* counts judged closed issues taken from the previous
-    facts instead of being viewed.
+    included, plus the `view_pr` call each PR past the list limit then costs (R11);
+    *carried* counts judged closed issues taken from the previous facts instead of
+    being viewed.
     """
 
     viewed: int = 0
@@ -887,6 +888,7 @@ def collect_facts_counted(
             continue
         if "/pull/" in str(raw.get("url", "")):
             # A PR past the PR list's limit: `gh issue view` resolves it anyway (R11).
+            viewed += 1  # the second single read this PR costs
             try:
                 view = forge.view_pr(repo=repo, number=number)
             except ForgeError as exc:

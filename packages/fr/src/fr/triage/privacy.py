@@ -48,8 +48,20 @@ class VisibilityUnreadable(PrivacyError):  # noqa: N818 - named by the spec
     still refuses."""
 
 
+DEBT_KEY_SUFFIX = "#debt"
+"""The suffix of the key a snapshot's debt repo enters the guard under (triage-hardening R12):
+`<owner/repo>#debt`, which can never be an issue key, so `refusal` words it as debt."""
+
+
 def refusal(issue: str, repo: str, state_repo: str) -> str:
     """THE refusal line, shared by every call site (P3.T4.S4)."""
+    if issue.endswith(DEBT_KEY_SUFFIX):
+        return (
+            f"a carried snapshot holds debt figures of {repo}, which is not public, and this "
+            f"scope's state repo {state_repo} is public: its state ref and exports would leak "
+            "them. Drop those snapshots, or move the scope's state to a private repo "
+            "(cloud-triage R8)"
+        )
     return (
         f"{issue} is an issue of {repo}, which is not public, and this scope's state repo "
         f"{state_repo} is public: its state ref and exports would leak it. Keep {issue} out, "
@@ -253,7 +265,7 @@ def guard_state(state_dir: Path, *, scope: Scope, state_repo: str, client_for: C
             facts = None  # unusable facts: every repo is read live instead
     repos = key_repos(state_keys(state_dir), scope, facts)
     # A debt repo is a repo, not a key: it enters as its own name (`owner/repo`).
-    repos.update({f"{r.lower()}#debt": r for r in state_repos(state_dir)})
+    repos.update({f"{r.lower()}{DEBT_KEY_SUFFIX}": r for r in state_repos(state_dir)})
     vis: dict[str, str | None] = dict(facts.visibility) if facts else {}
     vis[state_repo] = now
     _fill(vis, repos.values(), client_for)

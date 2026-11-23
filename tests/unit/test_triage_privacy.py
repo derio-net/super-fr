@@ -633,3 +633,42 @@ def test_an_unparseable_snapshot_is_a_refusal_not_skipped(tmp_path: Path, gh: Fa
     gh.visibility[REFS] = "public"
     with pytest.raises(TriageError, match="snapshot"):
         guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_a_debt_only_leak_is_worded_as_debt_not_as_an_issue(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    state = _only_snapshot(tmp_path, debt={SECRET: {"open_rows": 2}})
+
+    with pytest.raises(PrivacyError) as err:
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+    assert f"debt figures of {SECRET}" in str(err.value)
+    assert "is an issue of" not in str(err.value)
+
+
+def test_a_snapshot_pr_key_of_a_repo_outside_the_scope_is_read_not_skipped(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    from fr.triage.privacy import guard_state
+
+    other = "example-org/elsewhere"
+    gh.visibility[REFS] = "public"
+    gh.visibility[other] = "private"
+    state = _only_snapshot(
+        tmp_path, prs={f"{other}#9": {"state": "OPEN", "draft": False, "checks": {}}}
+    )
+
+    with pytest.raises(PrivacyError, match="elsewhere"):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_no_snapshots_directory_adds_no_key_and_no_repo(tmp_path: Path) -> None:
+    from fr.triage.privacy import state_keys, state_repos
+
+    state = tmp_path / "state"
+    state.mkdir()
+
+    assert state_keys(state) == [] and state_repos(state) == []

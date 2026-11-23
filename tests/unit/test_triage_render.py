@@ -11,6 +11,8 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
+import shutil
+import subprocess
 from collections.abc import Callable
 from html.parser import HTMLParser
 from pathlib import Path
@@ -927,3 +929,21 @@ def test_the_issues_filter_script_returns_early_when_the_filter_bar_is_absent() 
     script = page[page.rindex("<script>") : page.rindex("</script>")]
     assert SCRIPT in script
     assert script.index(SCRIPT) < script.index(PAGE_SCRIPT)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_the_issues_filter_script_runs_without_throwing_when_the_filter_bar_is_absent() -> None:
+    """R13, executed: a document with no `q`/`sort` element and whose every other DOM read
+    throws. The script must return before touching anything else."""
+    from fr.triage.render import SCRIPT
+
+    stub = (
+        "function boom(){ throw new Error('touched the DOM past the guard'); }\n"
+        "var document = { getElementById: function(){ return null; },"
+        " querySelectorAll: boom, addEventListener: boom };\n"
+        "var window = { addEventListener: boom }; var localStorage = { getItem: boom };\n"
+    )
+    done = subprocess.run(
+        ["node", "-e", stub + SCRIPT], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert done.returncode == 0, done.stderr
