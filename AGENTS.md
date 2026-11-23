@@ -798,8 +798,10 @@ facts). The run that finishes, `prepare` when it cuts nothing or `publish` after
 clears a `drained` hold its base contains with a leased push of a `cleared` commit (the third
 authenticated push); only a run that finished (`EXIT_OK`) clears, and a superseded, held or
 failed (`EXIT_FLOOR`) one does not. `publish` reads the hold again before its push. `release.yml`
-also runs on pushes to `fr-hold/**`, but `prepare` runs only for a `drained` hold's commit message
-and never for a deletion, so every drain starts a release and no other hold write does.
+also runs on pushes to `fr-hold/**`, but there only its `hold-relay` job runs, for a `drained`
+hold's commit message and never for a deletion: it dispatches `release.yml` on `main` with
+`actions: write` alone. `prepare` never runs on the hold ref, so the hold branch's own workflow
+file never reaches the main-only `release` environment, and every drain starts a release.
 
 An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
 `X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one

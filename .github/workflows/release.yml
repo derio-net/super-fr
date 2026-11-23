@@ -48,7 +48,8 @@ name: Release
 # publishes nothing. The suite makes this workflow long; .github/ci-budget.yaml
 # gives it its own budget.
 #
-# The merge queue's hold (R17-R19; only a `drained` push to it starts a run): while `refs/heads/fr-hold/queue` reads `open` and was
+# The merge queue's hold (R17-R19; a `drained` push to it dispatches a run on main, through
+# the `hold-relay` job, so the key stays behind the main-only environment): while `refs/heads/fr-hold/queue` reads `open` and was
 # refreshed within 24 hours, release.py cuts nothing, RC or final, and a `--version` run
 # is held too. The run that finishes, `prepare` when it cuts nothing or `publish` after
 # the push, clears a `drained` hold its base contains with a leased push of a `cleared`
@@ -67,8 +68,8 @@ name: Release
 on:
   push:
     # `fr-hold/**` is the merge queue's hold (spec 2026-11-19-wave-merge-queue R17-R19): the
-    # driver's push of the `drained` hold starts the release that follows its wave, and a
-    # deletion of the hold (an operator clearing it by hand) starts nothing (`prepare`'s guard).
+    # driver's push of the `drained` hold dispatches the release that follows its wave on main
+    # (`hold-relay`), and a deletion of the hold (an operator clearing it by hand) starts nothing.
     branches: [main, "fr-hold/**"]
   schedule:
     - cron: "17 6 * * *" # daily: the final follows the last gate pass with no push
@@ -112,17 +113,35 @@ concurrency:
 # names the re-dispatch instead, since no later run carries it). A rerun whose
 # release commit already landed skips the push and only tags.
 jobs:
-  prepare:
-    environment: release
-    # A deleted hold ref is a push event too: it is no reason to release. Every push to the
-    # hold ref is one, but only the `drained` one (the driver's, after a wave's last landing)
-    # needs a run; an open, refresh or cleared push starts none. Pushes to main, the schedule
-    # and a dispatch are unchanged. Every other job needs `prepare`'s `cut` output, so
-    # skipping `prepare` skips them all.
+  # A push to the hold ref runs the workflow file as that branch holds it, and the `release`
+  # environment admits `main` alone, so a hold push never reaches the key. Only the
+  # `drained` push (the driver's, after a wave's last landing) needs a release: this job
+  # dispatches the workflow on `main`, whose run then cuts and clears the hold. It holds no
+  # secret and no environment, only `actions: write` to dispatch; a GITHUB_TOKEN dispatch
+  # does start a run. An open, refresh, cleared or deleted hold push starts nothing.
+  hold-relay:
     if: >-
       github.event.deleted != true &&
-      (!startsWith(github.ref, 'refs/heads/fr-hold/') ||
-      startsWith(github.event.head_commit.message, 'fr-hold: drained'))
+      startsWith(github.ref, 'refs/heads/fr-hold/') &&
+      startsWith(github.event.head_commit.message, 'fr-hold: drained')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the release on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+
+  prepare:
+    environment: release
+    # Never on a hold push (`hold-relay` above dispatches the run on main instead) and never
+    # on a deletion. Pushes to main, the schedule and a dispatch are unchanged. Every other
+    # job but `hold-relay` needs `prepare`'s `cut` output, so skipping `prepare` skips them.
+    if: >-
+      github.event.deleted != true &&
+      !startsWith(github.ref, 'refs/heads/fr-hold/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

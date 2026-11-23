@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening); 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
+reviewed: 2026-11-23 a drained hold push starts the release on main through hold-relay, so the hold branch never reaches the release environment; 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening); 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
 ---
 
 # Merge protection for `main`
@@ -107,6 +107,9 @@ It is never persisted in the checkout's git config.
 `release.py` strips every forge token from the staged test run.
 The token authenticates the two `git push` calls and the `gh release` and `gh issue` writes.
 It also authenticates a third push, which clears a drained merge queue hold.
+A push to the hold branch never gets the key.
+The `hold-relay` job of that push holds no secret.
+It only starts the release workflow on `main`.
 Every other git command runs credential-free, and that includes the fetch of the hold.
 
 ## Operator steps, in order
