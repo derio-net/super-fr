@@ -52,7 +52,9 @@ resolves:
       card is never cut off a year later.
   - id: p2-r2
     state: fixed
-    body: New HINT_OBSOLETE ("obsolete: every member closed, retire it with batch cancel") for the obsolete column; the same test fails without it.
+    body: |
+      New HINT_OBSOLETE ("obsolete: every member closed, retire it with batch cancel") for the
+      obsolete column; the same test fails without it.
   - id: p2-r3
     state: fixed
     body: test_all_closed_agrees_with_the_set_apart_awaiting_live_predicate checks _all_closed against "closed or sets.is_awaiting_live" over five issue shapes.
