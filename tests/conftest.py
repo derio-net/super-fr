@@ -79,6 +79,16 @@ def _fresh_checkout_caches() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_git_system_config_memo() -> None:
+    """`fr.git_cache._SYSTEM_MEMO` keeps git's system config path for the process, a
+    failed probe (`_UNKNOWN`) included; a test that fakes git away must not make every
+    later cached question on its xdist worker decline (PR #1625's CI)."""
+    from fr import git_cache
+
+    git_cache._SYSTEM_MEMO.clear()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_forge_policy_cache() -> None:
     """`fr.settings.remote.client_policy` keeps a repo's policy per client for minutes; a
     test's fake client must never meet an answer a previous test's client read."""

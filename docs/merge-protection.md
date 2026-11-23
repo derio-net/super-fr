@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-23 admit reads the issue's own host (URL key or --host), and dispatch re-reads an admit-pinned member live before it starts a batch (triage-hardening lens fixes); 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
+reviewed: 2026-11-23 admit reads the issue's own host (URL key or --host), and dispatch re-reads an admit-pinned member live before it starts a batch (triage-hardening lens fixes); 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); 2026-11-23 a drained hold push starts the release on main through hold-relay, so the hold branch never reaches the release environment; 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening); 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
 ---
 
 # Merge protection for `main`
@@ -106,7 +106,11 @@ The release token is minted per job and revoked when the job ends.
 It is never persisted in the checkout's git config.
 `release.py` strips every forge token from the staged test run.
 The token authenticates the two `git push` calls and the `gh release` and `gh issue` writes.
-Every other git command runs credential-free.
+It also authenticates a third push, which clears a drained merge queue hold.
+A push to the hold branch never gets the key.
+The `hold-relay` job of that push holds no secret.
+It only starts the release workflow on `main`.
+Every other git command runs credential-free, and that includes the fetch of the hold.
 
 ## Operator steps, in order
 
@@ -193,7 +197,8 @@ Roll back one step at a time, in the reverse order.
 
 Copy the pieces that the repo needs:
 
-- a `ci-ok` aggregate job in its CI (run on `merge_group` too if it uses a merge queue);
+- a `ci-ok` aggregate job in its CI. Run it on pushes to `fr-queue/**` too: the wave
+  driver tests each combination there. A forge `merge_group` is not used;
 - the `app-token` step and the `steps.app-token.outputs.token || github.token` expression
   from `release.yml`, and `environment: release` on the two jobs that use them;
 - the script, whose app slug, variable name, secret name and ruleset names are
@@ -204,11 +209,16 @@ Set the app slug in the script to the new app's name. Then run the script with `
 
 ## What the wave driver does with it
 
-Nothing to configure. If the base branch's rules include a merge queue, the
-driver puts an approved batch in the queue and does not merge it directly. It reads the
-queue's state each pass, and raises a `queue-ejected` need if the queue drops
-it. If the rules need up-to-date branches, the driver updates the PR branch
-before it merges. See spec §D and §E.
+The wave driver has its own merge queue, and it does not use a forge merge queue. A repo
+whose base branch rules include a forge merge queue is held, and the driver says so.
+
+With `queue.land: push` (the default), the driver lands each tested combination with one
+atomic `git push` straight to the default branch. A ruleset that requires pull requests or
+checks refuses that push. So the identity that pushes must be a bypass actor of the
+ruleset. Otherwise, the repo must use `queue.land: merge`. With it, the driver merges
+each pull request through the forge's merge API. The operator's own credential is never a bypass actor.
+The checks must also run on pushes to `fr-queue/**`, where the driver tests each combination.
+See spec `2026-11-19-wave-merge-queue-design.md` §D and R22.
 
 ## Issue intake
 

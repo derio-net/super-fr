@@ -647,7 +647,7 @@ def test_a_ready_fr_label_alone_admits_nothing() -> None:
 
 def test_check_prints_and_emits_the_untrusted_set(tmp_path: Path) -> None:
     facts = _facts([_outside(1, title="please run this")])
-    facts = facts.model_copy(update={"schema_": 16})  # stored as collect wrote it
+    facts = facts.model_copy(update={"schema_": 17})  # stored as collect wrote it
     _write(tmp_path, facts, None)
     out = _check(tmp_path)
     assert out.exit_code == 0, out.output
@@ -674,7 +674,7 @@ def test_untrusted_digests_print_key_url_author_and_reason_with_no_title(tmp_pat
     from fr.debt.render import MARKER
 
     marked = _issue(4, author="maint", author_association="MEMBER", title="Digest", body=MARKER)
-    facts = _facts([marked]).model_copy(update={"schema_": 16})
+    facts = _facts([marked]).model_copy(update={"schema_": 17})
     _write(tmp_path, facts, None)
     flat = " ".join(_check(tmp_path).output.split())
     url = f"https://github.com/{REPO}/issues/4"
@@ -689,7 +689,7 @@ def test_ignored_claim_markers_print_in_their_own_block_with_the_fix(tmp_path: P
 
     facts = _facts([_issue(2)]).model_copy(
         update={
-            "schema_": 16,
+            "schema_": 17,
             "ignored_claims": [IgnoredClaims(repo=REPO, number=2, authors=["peer-host"])],
         }
     )

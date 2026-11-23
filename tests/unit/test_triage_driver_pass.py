@@ -215,7 +215,7 @@ def test_the_pass_makes_the_decisions_the_host_loop_makes_for_the_same_facts(
     assert passed.exit_code == 0, passed.output
     host_plan, cloud_plan = plans
     assert [a.kind for a in host_plan].count("dispatch") == 2
-    assert [a.kind for a in host_plan].count("merge") == 1
+    assert [a.kind for a in host_plan].count("merge") == 0  # R22: the queue merges, no action does
     assert cloud_plan == host_plan
 
 
@@ -231,7 +231,7 @@ def test_a_pass_acts_writes_the_runners_requests_to_the_outbox_and_exits_0(
     result = _pass(state, outbox, "--statuses", str(statuses))
 
     assert result.exit_code == 0, result.output
-    assert world.merged and world.merged[0][0] == 103  # forge actions: fr's own
+    assert any(a.kind == "queue-open" for a in world.queue_plans)  # forge actions: fr's own
     cloud = runners.cloud
     assert cloud.opened[0] == (state, {"derio-net/super-fr/run/batch-b3": "working"})
     requests = json.loads(outbox.read_text())["requests"]

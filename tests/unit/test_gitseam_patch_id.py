@@ -1,0 +1,410 @@
+"""`Checkout.patch_id`: the content an approval is pinned to (spec
+2026-11-19-wave-merge-queue R12, §E), against a real throwaway repo."""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+from fr.triage.gitseam import Checkout
+
+
+def _git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _commit(cwd: Path, message: str, *, empty: bool = False) -> str:
+    _git(cwd, "add", "-A")
+    _git(cwd, "commit", "--quiet", *(["--allow-empty"] if empty else []), "-m", message)
+    return _git(cwd, "rev-parse", "HEAD")
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Path:
+    """`main` with two files, and `feat` branched from it with one code change."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init", "--quiet", "--initial-branch=main")
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(root, "config", k, v)
+    (root / "code.py").write_text("def f():\n    return 1\n")
+    (root / "other.txt").write_text("other\n")
+    _commit(root, "seed")
+    _git(root, "checkout", "--quiet", "-b", "feat")
+    (root / "code.py").write_text("def f():\n    return 2\n")
+    _commit(root, "feat: change f")
+    return root
+
+
+def test_a_conflict_free_merge_of_main_keeps_the_patch_id(repo: Path) -> None:
+    checkout = Checkout(repo)
+    before = checkout.patch_id("feat", "main")
+    _git(repo, "checkout", "--quiet", "main")
+    (repo / "other.txt").write_text("other, moved on main\n")
+    _commit(repo, "main moves")
+    _git(repo, "checkout", "--quiet", "feat")
+    _git(repo, "merge", "--quiet", "--no-edit", "main")
+
+    assert before
+    assert checkout.patch_id("feat", "main") == before
+
+
+def test_an_empty_commit_keeps_the_patch_id(repo: Path) -> None:
+    checkout = Checkout(repo)
+    before = checkout.patch_id("feat", "main")
+    _commit(repo, "nothing", empty=True)
+
+    assert checkout.patch_id("feat", "main") == before
+
+
+def test_a_code_edit_changes_the_patch_id(repo: Path) -> None:
+    checkout = Checkout(repo)
+    before = checkout.patch_id("feat", "main")
+    (repo / "code.py").write_text("def f():\n    return 3\n")
+    _commit(repo, "edit")
+
+    assert checkout.patch_id("feat", "main") != before
+
+
+def test_a_whitespace_only_edit_changes_the_patch_id(repo: Path) -> None:
+    checkout = Checkout(repo)
+    before = checkout.patch_id("feat", "main")
+    (repo / "code.py").write_text("def f():\n    return 2 \n")
+    _commit(repo, "trailing space")
+
+    assert checkout.patch_id("feat", "main") != before
+
+
+def test_a_binary_edit_changes_the_patch_id(repo: Path) -> None:
+    checkout = Checkout(repo)
+    (repo / "blob.bin").write_bytes(bytes(range(256)))
+    _commit(repo, "add a binary")
+    before = checkout.patch_id("feat", "main")
+    (repo / "blob.bin").write_bytes(bytes(reversed(range(256))))
+    _commit(repo, "edit the binary")
+
+    assert checkout.patch_id("feat", "main") != before
+
+
+def test_an_empty_diff_has_an_empty_patch_id(repo: Path) -> None:
+    assert Checkout(repo).patch_id("main", "main") == ""
+
+
+# ------------------------------------------------------------------ the command's reader
+
+
+def _clone_with_a_pr(tmp_path: Path) -> tuple[Path, Path, str]:
+    """A bare origin with `main` and `feat` (the PR), and a clone that fetched only `main`:
+    the PR's head is unknown to it."""
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--quiet", "--bare", "--initial-branch=main", str(origin))
+    work = tmp_path / "work"
+    _git(tmp_path, "clone", "--quiet", str(origin), str(work))
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(work, "config", k, v)
+    _git(work, "checkout", "--quiet", "-b", "main")
+    (work / "code.py").write_text("x = 1\n")
+    _commit(work, "seed")
+    _git(work, "push", "--quiet", "origin", "main")
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "--quiet", "--branch", "main", str(origin), str(clone))
+    _git(work, "checkout", "--quiet", "-b", "feat")
+    (work / "code.py").write_text("x = 2\n")
+    head = _commit(work, "feat")
+    _git(work, "push", "--quiet", "origin", "feat")
+    return work, clone, head
+
+
+def test_the_reader_fetches_the_pr_branch_and_reads_against_origin_default(
+    tmp_path: Path,
+) -> None:
+    from fr.commands.triage_batch_cmd import patch_id_reader
+
+    work, clone, head = _clone_with_a_pr(tmp_path)
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+
+    assert reader(7, head) == Checkout(work).patch_id(head, "main") != ""
+
+
+def test_the_reader_says_none_when_git_cannot(tmp_path: Path) -> None:
+    from fr.commands.triage_batch_cmd import patch_id_reader
+
+    _, clone, head = _clone_with_a_pr(tmp_path)
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+
+    assert reader(8, head) is None  # no branch known for the PR
+    assert reader(7, "f" * 40) is None  # a head the branch does not hold
+
+
+# ------------------------------------------------------------------ position (l-security-r1)
+
+
+def _plain_repo(tmp_path: Path, name: str) -> Path:
+    root = tmp_path / name
+    root.mkdir()
+    _git(root, "init", "--quiet", "--initial-branch=main")
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(root, "config", k, v)
+    return root
+
+
+def test_a_moved_identical_hunk_keeps_the_patch_id_but_not_the_succession(tmp_path: Path) -> None:
+    """`git patch-id` drops hunk line numbers, so a change that moves an otherwise identical
+    hunk keeps the id; `clean_succession` is what refuses it, so the approval is void."""
+    root = _plain_repo(tmp_path, "moved")
+    block = ["a", "b", "c", "X", "d", "e", "f"]
+    filler = [f"line {n}" for n in range(20)]
+    (root / "f.txt").write_text("\n".join([*block, *filler, *block]) + "\n")
+    _commit(root, "seed")
+    _git(root, "checkout", "--quiet", "-b", "feat")
+    edited = ["a", "b", "c", "Y", "d", "e", "f"]
+    (root / "f.txt").write_text("\n".join([*edited, *filler, *block]) + "\n")
+    approved = _commit(root, "edit the first copy")
+    checkout = Checkout(root)
+    before = checkout.patch_id("feat", "main")
+    (root / "f.txt").write_text("\n".join([*block, *filler, *edited]) + "\n")
+    moved = _commit(root, "move the edit to the second copy")
+
+    assert before and checkout.patch_id("feat", "main") == before
+    assert checkout.clean_succession(approved, moved) is False
+
+
+def test_a_clean_merge_of_main_and_an_empty_commit_keep_the_succession(repo: Path) -> None:
+    checkout = Checkout(repo)
+    approved = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "--quiet", "main")
+    (repo / "other.txt").write_text("other, moved on main\n")
+    _commit(repo, "main moves")
+    _git(repo, "checkout", "--quiet", "feat")
+    _git(repo, "merge", "--quiet", "--no-edit", "main")
+    _commit(repo, "nothing", empty=True)
+    head = _git(repo, "rev-parse", "HEAD")
+
+    assert checkout.clean_succession(approved, approved) is True
+    assert checkout.clean_succession(approved, head) is True
+
+
+def test_a_merge_with_a_hand_edited_resolution_voids_the_succession(repo: Path) -> None:
+    checkout = Checkout(repo)
+    approved = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "--quiet", "main")
+    (repo / "other.txt").write_text("other, moved on main\n")
+    _commit(repo, "main moves")
+    _git(repo, "checkout", "--quiet", "feat")
+    _git(repo, "merge", "--quiet", "--no-commit", "--no-ff", "main")
+    (repo / "code.py").write_text("def f():\n    return 99\n")  # an edit inside the merge
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "--quiet", "-m", "merge main (edited)")
+    head = _git(repo, "rev-parse", "HEAD")
+
+    assert checkout.clean_succession(approved, head) is False
+
+
+def test_a_head_that_does_not_descend_from_the_approved_one_is_no_succession(
+    repo: Path,
+) -> None:
+    checkout = Checkout(repo)
+    approved = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "reset", "--quiet", "--hard", "HEAD~1")
+    (repo / "code.py").write_text("def f():\n    return 2\n")
+    rewritten = _commit(repo, "same change, rewritten", empty=False)
+
+    assert checkout.clean_succession(approved, rewritten) is False
+
+
+def test_a_commit_that_changes_a_tree_after_the_approval_is_no_succession(repo: Path) -> None:
+    checkout = Checkout(repo)
+    approved = _git(repo, "rev-parse", "HEAD")
+    (repo / "code.py").write_text("def f():\n    return 3\n")
+    head = _commit(repo, "edit")
+
+    assert checkout.clean_succession(approved, head) is False
+
+
+# ------------------------------------------------------------------ host-independent (p1-r2)
+
+
+def _hostile(repo: Path) -> None:
+    """Diff configuration a host may carry, each of which would change porcelain `git
+    diff`'s output: none of it may change the patch-id."""
+    for k, v in (
+        ("diff.noprefix", "true"),
+        ("diff.mnemonicPrefix", "true"),
+        ("diff.renames", "copies"),
+        ("diff.algorithm", "histogram"),
+        ("diff.context", "9"),
+        ("diff.interHunkContext", "20"),
+        ("diff.indentHeuristic", "false"),
+        ("diff.suppressBlankEmpty", "true"),
+        ("diff.external", "false"),
+        ("diff.orderFile", str(repo / "order")),
+        ("core.quotePath", "false"),
+        ("patchid.stable", "true"),
+    ):
+        _git(repo, "config", k, v)
+    (repo / "order").write_text("other.txt\ncode.py\n")
+
+
+def test_hostile_diff_configuration_does_not_change_the_patch_id(repo: Path) -> None:
+    (repo / "other.txt").write_text("other, on feat\n")
+    (repo / "naïve.txt").write_text("x\n")
+    _commit(repo, "two more files")
+    plain = Checkout(repo).patch_id("feat", "main")
+    _hostile(repo)
+
+    assert plain
+    assert Checkout(repo).patch_id("feat", "main") == plain
+
+
+def test_a_textconv_attribute_does_not_hide_a_binary_edit(repo: Path) -> None:
+    """A textconv driver that maps every blob to the same text (as a size-only or
+    metadata-only converter would) must not make a same-size binary edit look unchanged."""
+    _git(repo, "config", "diff.same.textconv", "sh -c 'echo same'")
+    _git(repo, "config", "diff.same.binary", "false")
+    info = repo / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "attributes").write_text("*.bin diff=same\n")
+    (repo / "blob.bin").write_bytes(bytes(range(256)))
+    _commit(repo, "add a binary")
+    checkout = Checkout(repo)
+    before = checkout.patch_id("feat", "main")
+    (repo / "blob.bin").write_bytes(bytes(reversed(range(256))))
+    _commit(repo, "same size, other bytes")
+
+    assert checkout.patch_id("feat", "main") != before
+
+
+def test_an_external_diff_driver_is_never_run(repo: Path, tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    _git(repo, "config", "diff.external", f"sh -c 'touch {marker}'")
+    _git(repo, "config", "diff.ext.command", f"sh -c 'touch {marker}'")
+    info = repo / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "attributes").write_text("*.py diff=ext\n")
+
+    assert Checkout(repo).patch_id("feat", "main")
+    assert not marker.exists()
+
+
+# ------------------------------------------------------------------ a stale default branch (p1-r3)
+
+
+def test_a_pr_that_merged_a_newer_main_is_read_against_a_refetched_default(
+    tmp_path: Path,
+) -> None:
+    """The clone's `origin/main` predates a `main` the PR has since merged cleanly: read
+    against the stale copy, the merge base is old and `main`'s own change counts as the
+    PR's. The gate reads once more after fetching the default branch, and the approval
+    recorded before the merge holds."""
+    from datetime import UTC, datetime
+
+    from fr.commands.triage_batch_cmd import patch_id_reader
+    from fr.labels import APPROVED_FR
+    from fr.triage.approval import Approved, approval_verdict, judge_approval
+    from fr.triage.model import ApprovalEvent
+
+    work, clone, head = _clone_with_a_pr(tmp_path)
+    approved = Checkout(work).patch_id(head, "main")
+    _git(work, "checkout", "--quiet", "main")
+    (work / "other.txt").write_text("main moves on\n")
+    _commit(work, "main moves")
+    _git(work, "push", "--quiet", "origin", "main")
+    _git(work, "checkout", "--quiet", "feat")
+    _git(work, "merge", "--quiet", "--no-edit", "main")
+    merged = _git(work, "rev-parse", "HEAD")
+    _git(work, "push", "--quiet", "origin", "feat")
+    events = [
+        ApprovalEvent(
+            kind="approval", at=datetime(2026, 11, 19, 11, tzinfo=UTC), pr=7, head=head,
+            patch_id=approved,
+        )
+    ]  # fmt: skip
+    labels = [APPROVED_FR.name]
+
+    stale = patch_id_reader(Checkout(clone), {7: "feat"})(7, merged)
+    assert stale is not None and stale != approved  # the stale base's verdict would void
+    assert approval_verdict(events, 7, merged, labels, patch_id=stale) != Approved(head)
+
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+    verdict, read = judge_approval(events, 7, merged, labels, reader)
+
+    assert (verdict, read) == (Approved(head), approved)
+
+
+def test_a_real_change_still_voids_after_the_refetch(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from fr.commands.triage_batch_cmd import patch_id_reader
+    from fr.labels import APPROVED_FR
+    from fr.triage.approval import Void, judge_approval
+    from fr.triage.model import ApprovalEvent
+
+    work, clone, head = _clone_with_a_pr(tmp_path)
+    approved = Checkout(work).patch_id(head, "main")
+    (work / "code.py").write_text("x = 3\n")
+    edited = _commit(work, "a real change")
+    _git(work, "push", "--quiet", "origin", "feat")
+    events = [
+        ApprovalEvent(
+            kind="approval", at=datetime(2026, 11, 19, 11, tzinfo=UTC), pr=7, head=head,
+            patch_id=approved,
+        )
+    ]  # fmt: skip
+
+    reader = patch_id_reader(Checkout(clone), {7: "feat"})
+    verdict, read = judge_approval(events, 7, edited, [APPROVED_FR.name], reader)
+
+    assert verdict == Void(head) and read not in (None, approved)
+
+
+def test_a_moved_hunk_voids_the_approval_through_the_judge(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from fr.commands.triage_batch_cmd import patch_id_reader
+    from fr.labels import APPROVED_FR
+    from fr.triage.approval import Void, judge_approval
+    from fr.triage.model import ApprovalEvent
+
+    work, clone, head = _clone_with_a_pr(tmp_path)
+    block = ["a", "b", "c", "X", "d", "e", "f"]
+    filler = [f"line {n}" for n in range(20)]
+    edited = ["a", "b", "c", "Y", "d", "e", "f"]
+    _git(work, "checkout", "--quiet", "main")
+    (work / "f.txt").write_text("\n".join([*block, *filler, *block]) + "\n")
+    _commit(work, "add f")
+    _git(work, "push", "--quiet", "origin", "main")
+    _git(work, "checkout", "--quiet", "-B", "feat2", "main")
+    (work / "f.txt").write_text("\n".join([*edited, *filler, *block]) + "\n")
+    first = _commit(work, "edit first")
+    _git(work, "push", "--quiet", "origin", "feat2")
+    approved = Checkout(work).patch_id(first, "main")
+    (work / "f.txt").write_text("\n".join([*block, *filler, *edited]) + "\n")
+    moved = _commit(work, "edit second")
+    _git(work, "push", "--quiet", "origin", "feat2")
+    events = [ApprovalEvent(kind="approval", at=datetime(2026, 11, 19, 11, tzinfo=UTC), pr=7,
+                            head=first, patch_id=approved)]  # fmt: skip
+
+    reader = patch_id_reader(Checkout(clone), {7: "feat2"})
+    verdict, read = judge_approval(events, 7, moved, [APPROVED_FR.name], reader)
+
+    assert read == approved and verdict == Void(first)
+
+
+def test_an_unreadable_patch_id_holds_the_approval_instead_of_voiding_it() -> None:
+    from datetime import UTC, datetime
+
+    from fr.labels import APPROVED_FR
+    from fr.triage.approval import Held, judge_approval
+    from fr.triage.model import ApprovalEvent
+
+    events = [ApprovalEvent(kind="approval", at=datetime(2026, 11, 19, 11, tzinfo=UTC), pr=7,
+                            head="a" * 40, patch_id="pid")]  # fmt: skip
+
+    verdict, read = judge_approval(
+        events, 7, "b" * 40, [APPROVED_FR.name], lambda pr, head, fresh=False: None
+    )
+
+    assert isinstance(verdict, Held) and read is None
