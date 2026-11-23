@@ -18,14 +18,14 @@ KEYS = ("conflicts", "ci")
 
 
 def _spec_overrides(repo_root: Path, spec: str) -> dict[str, dict[str, str]]:
-    from fr.verification.rows import spec_section_at
-    from fr.verification.spec_section import SectionError
+    from fr.verification.rows import spec_text_at
+    from fr.verification.spec_section import SectionError, settle_overrides
 
+    text = spec_text_at(repo_root, spec)
     try:
-        section = spec_section_at(repo_root, spec)
+        found = settle_overrides(text) if text is not None else {}
     except SectionError as e:
         raise SettleRefused(f"{spec}: {e}") from e
-    found = section.settle if section is not None else {}
     return {k: {"mode": o.mode, "source": "spec", "reason": o.reason} for k, o in found.items()}
 
 

@@ -4,7 +4,13 @@ R6, Test Plan 6)."""
 from __future__ import annotations
 
 import pytest
-from fr.verification.spec_section import SectionError, SettleOverride, parse_section
+from fr.verification.effective import effective_strategy
+from fr.verification.spec_section import (
+    SectionError,
+    SettleOverride,
+    parse_section,
+    settle_overrides,
+)
 
 
 def _spec(*lines: str) -> str:
@@ -31,13 +37,44 @@ def test_settle_lines_parse_into_the_section() -> None:
     assert "row-a" in s.rows
 
 
-def test_a_section_holding_only_settle_lines_is_a_grammar_section() -> None:
-    s = parse_section(_spec("Prose.", "", "settle.ci: fix — re-enable after the override"))
+def test_a_section_holding_only_settle_lines_is_no_verification_section() -> None:
+    """Review p2-r6: settle lines change no strategy, gate or walk; only the override
+    reader sees them."""
+    text = _spec("Prose.", "", "settle.ci: fix — re-enable after the override")
 
-    assert s is not None
-    assert s.settle == {"ci": SettleOverride("fix", "re-enable after the override")}
-    assert s.strategy is None
-    assert s.rows == {}
+    assert parse_section(text) is None
+    assert settle_overrides(text) == {"ci": SettleOverride("fix", "re-enable after the override")}
+
+
+@pytest.mark.parametrize(
+    "before",
+    [
+        "# T\n\n## Test Plan\n\n1. x\n",
+        "# T\n\n## Verification\n\nProse only.\n\n## Test Plan\n\n1. x\n",
+    ],
+)
+def test_adding_a_settle_line_changes_no_strategy(before: str) -> None:
+    if "## Verification" in before:
+        after = before.replace("Prose only.\n", "Prose only.\n\nsettle.ci: report — r\n")
+    else:
+        after = before.replace("## Test Plan", "## Verification\n\nsettle.ci: report — r\n\n## Test Plan")
+
+    for text in (before, after):
+        section = parse_section(text)
+        assert section is None
+        assert effective_strategy(None, "row-a", section, "candidate") is None
+    assert settle_overrides(after) == {"ci": SettleOverride("report", "r")}
+    assert settle_overrides(before) == {}
+
+
+def test_a_mixed_section_keeps_its_settle_lines() -> None:
+    text = _spec("strategy: candidate", "settle.conflicts: off — frozen base")
+
+    section = parse_section(text)
+    assert section is not None and section.settle == {
+        "conflicts": SettleOverride("off", "frozen base")
+    }
+    assert settle_overrides(text) == section.settle
 
 
 @pytest.mark.parametrize(
@@ -53,16 +90,22 @@ def test_a_section_holding_only_settle_lines_is_a_grammar_section() -> None:
     ],
 )
 def test_a_malformed_settle_line_is_an_error_naming_the_line(line: str) -> None:
-    with pytest.raises(SectionError) as e:
-        parse_section(_spec("strategy: candidate", line))
+    for read in (parse_section, settle_overrides):
+        with pytest.raises(SectionError) as e:
+            read(_spec("strategy: candidate", line))
 
-    assert "line 6" in str(e.value)
-    assert line.strip() in str(e.value)
+        assert "line 6" in str(e.value)
+        assert line.strip() in str(e.value)
+
+
+def test_a_malformed_settle_line_alone_is_still_an_override_error() -> None:
+    with pytest.raises(SectionError, match="line 5"):
+        settle_overrides(_spec("settle.ci: report"))
 
 
 def test_a_key_given_twice_is_an_error() -> None:
     with pytest.raises(SectionError, match="line 6"):
-        parse_section(_spec("settle.ci: report — one", "settle.ci: off — two"))
+        settle_overrides(_spec("settle.ci: report — one", "settle.ci: off — two"))
 
 
 def test_sections_without_settle_lines_parse_unchanged() -> None:

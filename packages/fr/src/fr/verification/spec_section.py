@@ -27,7 +27,9 @@ spec is one of them must deliver unchanged, not fail closed.
 
 A `settle.` line overrides one key of the repo's `git.settle` for this feature's PR. Its
 reason is required, and any line that starts with `settle.` and breaks the grammar is an
-error: an override is never ignored.
+error: an override is never ignored. Settle lines are not strategy grammar (review p2-r6):
+a section holding only them (and prose) is still no `## Verification` section to
+`parse_section`, so no strategy, gate or walk changes; `settle_overrides` reads them.
 """
 
 from __future__ import annotations
@@ -118,9 +120,9 @@ def _section_lines(text: str) -> list[tuple[int, str]] | None:
 
 
 def _is_grammar(line: str) -> bool:
-    """Does `line` belong to the grammar: any `strategy:`, `gate:` or `settle.` line,
-    or a bullet the row grammar accepts?"""
-    return line.startswith(("strategy:", "gate:", "settle.")) or _ROW_LINE.match(line) is not None
+    """Does `line` belong to the strategy grammar: any `strategy:` or `gate:` line, or a
+    bullet the row grammar accepts? A `settle.` line does not (`settle_overrides`)."""
+    return line.startswith(("strategy:", "gate:")) or _ROW_LINE.match(line) is not None
 
 
 def _settle_line(n: int, raw: str, settle: dict[str, SettleOverride]) -> None:
@@ -189,6 +191,16 @@ def parse_section(text: str) -> Section | None:
                 raise SectionError(f"line {n}: row {m['row']!r} appears more than once")
             rows[m["row"]] = RowLine(m["strategy"], m["reason"])
     return Section(strategy=strategy, rows=rows, gate=gate, row_gates=row_gates, settle=settle)
+
+
+def settle_overrides(text: str) -> dict[str, SettleOverride]:
+    """The section's `settle.` lines, whether or not it holds strategy grammar; empty
+    without a section. A malformed one raises `SectionError` naming the line."""
+    settle: dict[str, SettleOverride] = {}
+    for n, raw in _section_lines(text) or []:
+        if raw.strip().startswith("settle."):
+            _settle_line(n, raw, settle)
+    return settle
 
 
 _NO_SECTION = (
