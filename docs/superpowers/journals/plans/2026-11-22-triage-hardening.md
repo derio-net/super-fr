@@ -156,3 +156,23 @@ test_an_obsolete_wave_batch_releases_its_claims pins releasing() and owed_claims
 ### p2-r5-resolved · finding [fixed] · resolves p2-r5: Spec §E says the awaiting-live hold still applies to a batch with a lifecycle event; the code never reaches it (phase 2)
 
 The spec sentence now says the hold applies to a never-dispatched batch with a member missing from the facts, and why a batch with a lifecycle event needs none.
+
+<!-- fr:journal kind=decision scope=plan id=p3-snapshot-pr-keys created=2026-11-23T00:51:53+00:00 phase=3 -->
+### p3-snapshot-pr-keys · decision · key_repos resolves OWNER/REPO#n keys (snapshot PR keys) as the repo named in full (phase 3)
+
+A snapshot's prs map is keyed owner/repo#n while issues use name#n. key_repos now maps a slash name to the scope member of that name (else the name itself), so the visibility read targets the right repo. Debt repos enter guard_state as their own repo names under a synthetic key.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-previous-for-carry created=2026-11-23T00:51:53+00:00 phase=3 -->
+### p3-previous-for-carry · discovery · the finished judged-PR carry reads previous facts on full collects too (phase 3)
+
+collect_facts_counted already receives previous on every collect (only is None means no partial); the carry map of CLOSED/MERGED judged_prs is built from it once before the judged loop, independent of keep.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-23T00:51:53+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+snapshot reading and key extraction were written once in GREEN (strict_snapshots); nothing duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-23T00:51:53+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+a one-line guard in a constant script; nothing to clean
