@@ -240,11 +240,22 @@ def load_snapshot_strict(path: Path) -> Snapshot:
 
 
 def strict_snapshots(state_dir: Path) -> list[Snapshot]:
-    """Every `snapshots/*.json` of *state_dir*, parsed strictly (oldest first)."""
+    """Every `snapshots/*.json` of *state_dir*, parsed strictly (oldest first).
+
+    The state ref carries every file under `snapshots/`, recursively (`state_ref`), so an
+    entry this reader would not parse (a nested directory or file, a non-`.json` file,
+    anything but a regular top-level `.json` file) is a `TriageError`, never skipped."""
     target = state_dir / SNAPSHOT_DIR
     if not target.is_dir():
         return []
-    return [load_snapshot_strict(p) for p in sorted(target.glob("*.json"))]
+    entries = sorted(target.rglob("*"))
+    for entry in entries:
+        if entry.parent != target or entry.suffix != ".json" or not entry.is_file():
+            raise TriageError(
+                f"snapshot entry {entry.relative_to(state_dir)} is not a snapshots/*.json file; "
+                "it would ride the state ref unread: remove it"
+            )
+    return [load_snapshot_strict(p) for p in entries]
 
 
 def latest_snapshot(state_dir: Path) -> Snapshot | None:
