@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 from fr.ghclient import UnsupportedForgeOperation
-from fr.settle.model import Modes
-from fr.settle.target import HeadTime
 from fr.run.ci_evidence import NO_CI_WAIT_SECONDS
+from fr.settle.model import Modes
 from fr.settle.poll import DEFAULT_WAIT, WAIT_CEILING, SettleRefused, check_wait, settle
+from fr.settle.target import HeadTime
 
 HEAD = "b" * 40
 READS = frozenset({"pr_view", "pr_checks"})
