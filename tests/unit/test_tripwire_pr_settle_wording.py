@@ -34,6 +34,9 @@ def _assert_fix_rules(text: str, where: str) -> None:
         "merging `origin/<base>`",
         "never rebase or force-push",
         "ordinary commit",
+        "printed line says",
+        "exit 2",
+        "not a fix round",
         "fr push",
         "three fix rounds",
     ):
@@ -45,6 +48,7 @@ def test_fr_goal_settles_before_deliver_and_once_more_after_its_push() -> None:
     _assert_fix_rules(text, "fr-goal")
     assert "before resolving `deliver`" in text
     assert "after the `deliver` resolve's push" in text
+    assert "under the same loop" in text
     assert "settle.<key>: <mode> — <reason>" in text
 
 
@@ -53,6 +57,9 @@ def test_fr_debugging_settles_as_its_last_step() -> None:
     _assert_fix_rules(text, "fr-debugging")
     assert "last step" in text
     assert "settle-conflicts" in text and "settle-ci" in text
+    # p3-r4: the override decision is a journal commit; left unpushed it is #871.
+    override = text[text.index("settle-conflicts") :]
+    assert "fr push" in override[: override.index(".") + 200]
     # The settle step comes after `fr pr create`.
     assert text.index("fr pr settle --wait") > text.index("fr pr create")
 
@@ -69,6 +76,39 @@ def test_the_deliver_brief_carries_one_settle_instruction() -> None:
     _assert_fix_rules(line, "the deliver brief's settle line")
     assert "before resolving `deliver`" in line
     assert "after the `deliver` resolve's push" in line
+    assert "under the same loop" in line
+
+
+@pytest.mark.parametrize("manifest", ["fr-goal.yaml", "fr-goal-light.yaml"])
+def test_the_shipped_deliver_brief_carries_the_settle_line(
+    manifest: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p3-r5: built by the real brief builder from the SHIPPED manifest, so a
+    manifest that drops `settle` from deliver's evidence fails here."""
+    import subprocess
+
+    from fr.commands.run_cmd import _build_brief
+    from fr.run.model import RunState
+    from fr.settle.instructions import DELIVER_LINE
+    from fr.workflow.model import parse_manifest
+
+    shape = parse_manifest(
+        (REPO_ROOT / "plugins" / "super-fr" / "workflows" / manifest).read_text()
+    )
+    (deliver,) = [s for s in shape.steps if s.id == "deliver"]
+    git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "init"], check=True)
+    monkeypatch.chdir(tmp_path)
+    state = RunState(
+        run="r1",
+        workflow=f"{shape.workflow}@1",
+        branch="b",
+        started="2026-11-23T00:00:00Z",
+        cursor="deliver",
+        steps={},
+    )
+    assert _build_brief(deliver, state)["settle"] == DELIVER_LINE
 
 
 def test_a_step_with_no_settle_evidence_gets_no_settle_line() -> None:
@@ -94,3 +134,4 @@ def test_the_closeout_brief_settles_the_housekeeping_pr_after_it_opens(
     _assert_fix_rules(text, "the close-out brief")
     assert text.index("fr pr settle --wait") > text.index("open the housekeeping pr")
     assert "no override" in text
+    assert "exits 0 `managed`" in text

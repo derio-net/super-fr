@@ -149,6 +149,7 @@ searchable. `fr journal render --scope debug --slug <slug>` prints it as Markdow
    pushes with `fr push` and runs the command again. After three fix rounds it stops and
    reports. To relax a concern for this fix, add a debug-journal decision named
    `settle-conflicts` or `settle-ci`, with the mode as its title and the reason as its body.
+   Then push it with `fr push`, because a journal entry is a local commit.
 7. **Hand off.** The skill ends by relaying the close-out command,
    `fr pickup --branch <branch>`, as the last line of its message. After the merge, a new
    session runs it from the base clone.

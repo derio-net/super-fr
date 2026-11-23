@@ -1167,8 +1167,9 @@ So before it resolves `deliver`, the agent runs `fr pr settle --wait <s>`. If it
 into the branch, never by rebase or force-push, so the history and any approval stay as
 they were. A red check is fixed by an ordinary commit. The agent pushes with `fr push`
 and runs the command again. After three fix rounds it stops and reports to you. When
-the `deliver` resolve has pushed, the agent runs the command once more and reports what
-it said.
+the `deliver` resolve has pushed, the agent runs the same loop once more and reports
+what it said. A fix at that point is a commit after `deliver`. If the command exits 2, it
+names what to fix, such as a missing pull request. That fix does not count as a round.
 
 `deliver` then reads the live
 description back and refuses to finish while any of those sections is missing.
