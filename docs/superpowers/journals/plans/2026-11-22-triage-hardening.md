@@ -241,3 +241,146 @@ collect now counts the view_pr read too; the CollectStats docstring and the coun
 ### p3-r5-resolved · finding [out-of-scope] · resolves p3-r5: A carried CLOSED judged PR that is later reopened stays carried as closed (phase 3)
 
 Not caused by this change; a carried closed issue already behaved this way, and R11 asks for the carry.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-23T01:22:03+00:00 -->
+### lens-review-1 · review · Lens review: docs-accuracy, security and tests over the whole feature diff
+
+Three separate read-only reviewers, one per lens, over 0bca17ec3..031bc27b8. docs-accuracy: 2
+findings; security: 4 in, 3 out; tests: 7 in. Each verified against the code before fixing;
+fixes in 031bc27b8 and f3a179dea..1e93a0598.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · labels.py READY_FR comment still said 'Never applied by fr'; fr triage admit applies it
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · fr-triage explainer's check list omitted ignored claims, obsolete batches and stale members
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · fr triage admit hardcoded github.com: the glab/tea refusal never fired and a same-named github.com repo was read and written
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · admission was checked only at collect; batch dispatch judged stored or carried facts, so an edit since the last collect dispatched
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · privacy guard parsed only top-level snapshots/*.json while the state ref carries all of snapshots/
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-security-r4 · finding [open] (reviewer: in scope) · an outside author closing all their admitted members makes a batch obsolete, which meets after-dependencies
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5 created=2026-11-23T01:22:03+00:00 state=open review_scope=out -->
+### l-security-r5 · finding [open] (reviewer: out of scope) · outside-author PR titles are never withheld (prs, gated_prs, batch_prs, judged_prs)
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6 created=2026-11-23T01:22:03+00:00 state=open review_scope=out -->
+### l-security-r6 · finding [open] (reviewer: out of scope) · the admit digest pins title and body only; later outsider comments reach a worker reading the thread
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r7 created=2026-11-23T01:22:03+00:00 state=open review_scope=out -->
+### l-security-r7 · finding [open] (reviewer: out of scope) · the privacy guard ignores other state-ref entries (merge-stops.json, history/, issues/, requests/sessions yaml)
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · privacy snapshot tests asserted only refusals; an over-refusing guard stayed green
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · obsolete cancel with a wave and claims, the drive's held exclusion and its wave finish were untested
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · no test that dispatch/adopt refuses an obsolete batch; its refusal text spoke of a prior dispatch
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · the Issues page's obsolete exclusion from batch tags was untested
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · malformed admit-marker cases all failed the digest regex, so the version/extra-key checks were not isolated
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · admit failure paths untested; a label-then-comment failure said 'admission not written'
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-23T01:22:03+00:00 state=open review_scope=in -->
+### l-tests-r7 · finding [open] (reviewer: in scope) · the executing filter-script test was skipped wherever node was missing, CI included
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: labels.py READY_FR comment still said 'Never applied by fr'; fr triage admit applies it
+
+031bc27b8: the comment says fr applies it only through fr triage admit --yes, with a trusted fr-admit marker.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-triage explainer's check list omitted ignored claims, obsolete batches and stale members
+
+031bc27b8: the list gains the three sets, the cancel command and the pr_authors caution; reviewed stamp names it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: fr triage admit hardcoded github.com: the glab/tea refusal never fired and a same-named github.com repo was read and written
+
+f3a179dea: admit takes an issue URL (its host; GitLab's /-/issues/ path keeps the GitLab adapter, which
+refuses before any read) or --host; a URL that disagrees with --host refuses; the preview prints the
+host. A bare owner/repo#n still means github.com, the convention _host_of and collect already follow,
+and the preview now says so. Tests test_admit_on_a_gitlab_host_refuses_before_any_read and four more.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: admission was checked only at collect; batch dispatch judged stored or carried facts, so an edit since the last collect dispatched
+
+41ca88d6f: fr/triage/admit_recheck.recheck_admitted re-reads each member admitted by its marker alone and
+recomputes the digest in dispatch_batch, after the stage gate and before any forge write or event (the
+driver dispatches through it). A mismatch or a failed read refuses. Spec R2 and §B amended.
+test_dispatch_yes_refuses_an_admitted_member_edited_or_unreadable_since_collect fails with the call removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: privacy guard parsed only top-level snapshots/*.json while the state ref carries all of snapshots/
+
+5bb13b9f1: strict_snapshots refuses any snapshots/ entry that is not a top-level .json file; test_a_snapshots_entry_the_strict_reader_does_not_parse_refuses[json.bak|old/a.json].
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-23T01:22:03+00:00 state=refuted resolves=l-security-r4 -->
+### l-security-r4-resolved · finding [refuted] · resolves l-security-r4: an outside author closing all their admitted members makes a batch obsolete, which meets after-dependencies
+
+The operator's recorded round-1 decision (d-obsolete-stage) is that an obsolete batch meets its
+dependencies. A batch whose members are all closed has no work left to wait for: the dependent batch's
+ordering is about that work, and fr triage check lists every obsolete batch for the operator.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved created=2026-11-23T01:22:03+00:00 state=open resolves=l-security-r5 out_of_scope=true -->
+### l-security-r5-resolved · finding [out-of-scope] · resolves l-security-r5: outside-author PR titles are never withheld (prs, gated_prs, batch_prs, judged_prs)
+
+PR titles were never withheld before this change; the intake trust boundary this spec moves is issues'. Needs its own design.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6-resolved created=2026-11-23T01:22:03+00:00 state=open resolves=l-security-r6 out_of_scope=true -->
+### l-security-r6-resolved · finding [out-of-scope] · resolves l-security-r6: the admit digest pins title and body only; later outsider comments reach a worker reading the thread
+
+Comments were never pinned; the spec pins the issue's content (title and body) by decision. A separate design question.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r7-resolved created=2026-11-23T01:22:03+00:00 state=open resolves=l-security-r7 out_of_scope=true -->
+### l-security-r7-resolved · finding [out-of-scope] · resolves l-security-r7: the privacy guard ignores other state-ref entries (merge-stops.json, history/, issues/, requests/sessions yaml)
+
+Those ref entries were unchecked before this change; R12 named snapshots only.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: privacy snapshot tests asserted only refusals; an over-refusing guard stayed green
+
+5bb13b9f1: test_a_snapshot_naming_only_public_repos_passes_a_public_state_repo and test_a_private_state_repo_passes_a_snapshot_naming_private_repos.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: obsolete cancel with a wave and claims, the drive's held exclusion and its wave finish were untested
+
+b2182e1e9: test_cancelling_an_obsolete_waved_batch_releases_its_written_claims, test_a_foreign_held_obsolete_batch_emits_no_held_action (with a proposed control), test_a_wave_of_an_obsolete_and_a_cancelled_batch_reports_its_duplicates_once_finished.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: no test that dispatch/adopt refuses an obsolete batch; its refusal text spoke of a prior dispatch
+
+c0a318308: batch_dispatch.obsolete_refusal for dispatch and adopt names the cancel command; two tests pin it.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: the Issues page's obsolete exclusion from batch tags was untested
+
+b4b04955c: test_a_member_of_an_obsolete_batch_is_not_tagged_in_batch, with a proposed control.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: malformed admit-marker cases all failed the digest regex, so the version/extra-key checks were not isolated
+
+f98d35bfa: each malformed case fails for one reason (valid 64-hex elsewhere), plus upper-case, extra-key and length cases and test_latest_admit_skips_a_marker_with_no_created_at.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: admit failure paths untested; a label-then-comment failure said 'admission not written'
+
+6fda19416: a failed read exits 2 writing nothing; a comment failure after the label exits 1 saying the label is on, the issue is not admitted, and the exact re-run.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-23T01:22:03+00:00 state=fixed resolves=l-tests-r7 -->
+### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: the executing filter-script test was skipped wherever node was missing, CI included
+
+e4a318589: skipped only when node is missing and CI is unset; with CI=1 and no node it fails.
