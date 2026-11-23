@@ -191,3 +191,4 @@ steps:
           session: 257a78f0-c47d-4de5-bb70-efce56aa1e60
 driver: standalone
 fr_version: 9.0.0rc1
+pr: https://github.com/derio-net/super-fr/pull/1635
