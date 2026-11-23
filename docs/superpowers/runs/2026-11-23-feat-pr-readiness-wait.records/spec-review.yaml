@@ -1,0 +1,48 @@
+schema_version: 12
+run: 2026-11-23-feat-pr-readiness-wait
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s-r1, review_scope: in, title: "R5's managed prefix list misses driver branches and over-exempts hand-run close-outs", body: "Driver prefixes live in batch_drive.py (ARCHIVE_PREFIXES :84, HOUSEKEEPING_PREFIX :85, EXPORT_PREFIX :88, collected :719); fr.run.closeout._housekeeping_branch (closeout.py:239) gives hand-run close-outs the same chore/closeout-* names."}
+  - {kind: finding, id: s-r2, review_scope: in, title: "The brief's close-out case gets no settle step", body: "Background names hand-run archive/close-out; no requirement, design item or test runs settle there."}
+  - {kind: finding, id: s-r3, review_scope: in, title: "A derived witness cannot exit 75: derive() maps every exit to refusal 2", body: "run_cmd.py:2142-2148, :2229-2230; CiPending holds only because _ci_tests_witness is called outside derive(). Registries: DERIVED_EVIDENCE, _VERIFIABLE_EVIDENCE, _DERIVED_FROM."}
+  - {kind: finding, id: s-r4, review_scope: in, title: "Under tests: ci verify_ci already refuses conflicting/red, so report/off cannot pass deliver", body: "ci_evidence.py:281-299 refuses CONFLICTING; Background claim wrong; interaction undefined."}
+  - {kind: finding, id: s-r5, review_scope: in, title: "Conflicting PR runs no CI and not-yet-reported checks read as none", body: "Pending could last forever under conflicts off + ci fix; empty checks right after push undefined."}
+  - {kind: finding, id: s-r6, review_scope: in, title: "Per-mode wait/exit rules ambiguous; forge read error has no exit code", body: "R3/R4/R8 disagree on off/report polling and 75; FORGE_ERRORS unmapped (cf. run_cmd.py:3427-3454, gh#1395)."}
+  - {kind: finding, id: s-r7, review_scope: in, title: "glab/tea methods raise UnsupportedForgeOperation, PR discovery included", body: "ghclient.py:530-593; open_pr_for_head raises before pr_view; witness value for unsupported unstated."}
+  - {kind: finding, id: s-r8, review_scope: in, title: "R9's finding route does not move the witness; three-round limit is prose only", body: "Nothing in R8 reads a finding; override means editing the reviewed spec at deliver."}
+  - {kind: finding, id: s-r9, review_scope: in, title: "A Verification section of only settle lines parses as no section", body: "spec_section.py:100-111 _is_grammar; :61-65 Section has no field."}
+  - {kind: finding, id: s-r10, review_scope: in, title: "ci_evidence reads gates via declared_gates and refuses on no gates", body: "ci_evidence.py:220-229, :302-316; settle's third fallback differs."}
+  - {kind: finding, id: s-r11, review_scope: in, title: "Close-out briefs are not in batch_dispatch", body: "batch_drive.closeout_brief :852; batch_closeout.handback_brief :291."}
+  - {kind: finding, id: s-r12, review_scope: in, title: "Artifact-versioning question is answerable now: no shape change", body: "evidence is dict[str,str] (run/model.py:236); docs witness precedent; decision kind exists in journal v4; unknown spec lines are prose."}
+  - {kind: finding, id: s-r13, review_scope: in, title: "PR body is rendered before the witness exists and PR settle is not required", body: "run_cmd.py:7217-7304; pr_body.py:80-87 REQUIRED_SECTIONS; minimal undefined."}
+  - {kind: finding, id: s-r14, review_scope: in, title: "Test Plan 9 has no Verification row", body: "R9/R10 wording pin uncited."}
+  - {kind: finding, id: s-r15, review_scope: in, title: "The post-deliver chore(fr) push gap stays open", body: "The witness reads the PR before deliver's own commit and push."}
+  - {kind: review, id: spec-review-1, title: "independent spec review: 15 findings", body: "Findings raised: s-r1 … s-r15, all in scope. Suggested lenses: errors, tests."}
+  - {kind: lens, lens: tests, title: "A mode x state x forge table with an injected clock needs table-driven coverage of every cell"}
+resolves:
+  - {id: s-r1, state: fixed, body: "R5 and §B managed.py now list every driver-only name from its owner (batch prefixes, collected regex, chore/closeout-<batch slug>, EXPORT_PREFIX, HOUSEKEEPING_PREFIX) and state that chore/archive-<plan> and chore/closeout-<run-id> stay unmanaged, with why; Test Plan 5 covers each."}
+  - {id: s-r2, state: fixed, body: "R10 and §E add the settle step to the hand-run close-out brief (fr.run.closeout); R6 states it has no override; Background narrowed to its housekeeping PR."}
+  - {id: s-r3, state: fixed, body: "§D: the settle witness is evaluated outside derive(), after the derived witnesses, like _ci_tests_witness, so 75 holds; the three registries are named."}
+  - {id: s-r4, state: fixed, body: "Background corrected; R8 states that under tests: ci the tests witness still refuses conflicting/red whatever the settle modes, that overrides relax only the settle witness, and that a local full-suite log remains accepted; Test Plan 7 covers it."}
+  - {id: s-r5, state: fixed, body: "R2 adds unrunnable (conflicting PR) and missing (no check after NO_CI_WAIT_SECONDS); empty checks on a CI repo are pending until then; R4 makes both failing under fix; Test Plan 2 covers them."}
+  - {id: s-r6, state: fixed, body: "R3: off is neither read nor polled, report and fix are polled. R4: only fix concerns decide the exit code; transient forge failure exits 75. Test Plan 3 and 4 cover the cells."}
+  - {id: s-r7, state: fixed, body: "R11: UnsupportedForgeOperation from any read, PR discovery included, is unsupported, before the no-open-PR refusal; R8 records it and refuses nothing."}
+  - {id: s-r8, state: fixed, body: "R9 drops the finding route; the escape is an override with its reason (R6 allows the line after spec-review, R7 shows it); R9 states the three-round limit is skill text, not counted by fr."}
+  - {id: s-r9, state: fixed, body: "R6 and §C: _is_grammar recognises any line starting settle., Section gains the overrides, a settle-only section is a grammar section; Test Plan 6 covers it."}
+  - {id: s-r10, state: fixed, body: "R2 and §B name declared_gates and state the departure from _gate_names on the third fallback."}
+  - {id: s-r11, state: fixed, body: "§E names batch_dispatch render_brief/red_brief/conflict_brief/archive_conflict_brief, batch_drive.closeout_brief and batch_closeout.handback_brief."}
+  - {id: s-r12, state: fixed, body: "§C states, with evidence, that none of the three is a shape change; no stamp, migration or validator ships."}
+  - {id: s-r13, state: fixed, body: "R7 and §C: ## PR settle is rendered from the effective modes known before resolve, joins REQUIRED_SECTIONS, lives in the durable file under minimal; the state is the witness value, not the body."}
+  - {id: s-r14, state: fixed, body: "Added Verification row pr-settle-skills citing Test Plan 9, and its acceptance row."}
+  - {id: s-r15, state: fixed, body: "R10 and §E: fr-goal runs fr pr settle once more after the deliver resolve's push; stated as skill text, not a witness."}
+acceptance:
+  - id: pr-settle-skills
+    capability: Delivering skills settle their PR
+    acceptance: fr-goal, fr-debugging and the hand-run close-out brief run fr pr settle after opening the PR, fix conflicts by merging the base (never rebase) and red checks by commits, within three rounds.
+    origin: [spec:2026-11-23-pr-readiness-wait#R9, spec:2026-11-23-pr-readiness-wait#R10]
+    status: not-implemented
+    verify: none
+evidence:
+  review: spec-review-1
+  reviewer: a3da9d9e4fc72d6b3

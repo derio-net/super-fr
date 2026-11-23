@@ -3,7 +3,7 @@
 ## Background
 
 When super-fr delivers a draft PR outside the wave driver (fr-goal's `deliver`, the end
-of fr-debugging, an archive or close-out opened by hand), the session stops as soon as
+of fr-debugging, the housekeeping PR of a close-out run by hand), the session stops as soon as
 the PR exists. Nothing checks whether the PR merges cleanly into its base or whether its
 CI ends green. The operator finds out later, and by then the session that could fix it
 has ended.
@@ -14,7 +14,8 @@ What exists today:
   open a PR. It always opens a draft and records the PR on the run cursor (`RunState.pr`).
 - Under `tests: ci` (`.fr/ci.yaml`), `deliver` calls `fr.run.ci_evidence.verify_ci`.
   That call proves the gate checks are green on the code tree (exit 75, `CiPending`, while
-  they run). It is test evidence only: it does not look at mergeability, and nothing checks
+  they run). It is test evidence: it refuses a conflicting PR (CI cannot run on one) and red
+  gate checks, but only in a `tests: ci` repo, only as test evidence, and nothing checks
   again after the last body edit or `chore(fr):` push.
 - `GhClient.pr_view` returns `mergeable` and `merge_state`, and
   `fr.triage.mergeability.conflicting` is the one predicate for "this PR conflicts"
@@ -37,92 +38,120 @@ to PRs outside the driver's concerns.
 ## Requirements
 
 R1. A repo setting `git.settle` has two keys, `conflicts` and `ci`, each `off`, `report` or `fix`, both defaulting to `fix`. It is read from the default branch like every key of `.fr/settings.yaml`, shown by `fr settings show`, and documented by `fr settings init` from the schema.
-R2. `fr pr settle` reads this branch's open PR through the repo's forge adapter and reports two states. The conflict state is `clean`, `conflicting` (by `fr.triage.mergeability.conflicting`) or `unknown` (the forge has not computed it yet). The CI state is `green`, `red` with the failing check names, `pending` or `none`. The checks read are `.fr/ci.yaml`'s `gate_checks` when declared, else the base's required checks, else every check on the head. A repo whose services report `ci none` has CI state `none`.
-R3. `fr pr settle --wait <seconds>` polls until no state it reports is `unknown` or `pending`, or until the wait ends. The wait has a default and a ceiling, both below 600 seconds, so one call fits in an agent's shell tool. It never pushes, edits a PR, marks a PR ready or merges.
-R4. Under the effective modes, `fr pr settle` exits 0 when every concern is settled and not failing under `fix` (a concern under `report` or `off` never fails). It exits 4 when a concern under `fix` is `conflicting` or `red`, and prints what to do. It exits 75 when a state is still `unknown` or `pending` when the wait ends. It exits 2 on a refusal (no open PR, unreadable settings or override). Under `report` a bad state is printed and never changes the exit code.
-R5. A PR on a branch the wave driver owns (`feat/batch-*`, `fix/batch-*`, `chore/closeout-*`) is driver-managed. For it, `fr pr settle` reads nothing from the forge, prints that the wave driver's queue and hand-backs own the PR, and exits 0, whatever the modes. The batch and close-out dispatch briefs say the same.
-R6. One feature or one bug can override either key for its own PR, and the override is recorded. For a run with a spec, it is a `settle.conflicts: <mode> — <reason>` or `settle.ci: <mode> — <reason>` line in the spec's `## Verification` section. For an fr-debugging session, it is a debug-journal decision with id `settle-conflicts` or `settle-ci` whose title is the mode and whose body is the reason. The reason is required. The override takes precedence over the repo setting. A malformed override is an error that names the line, never ignored.
-R7. The PR body fr renders at `deliver` lists every override in force, with its reason, under the run's settle state. A run with no override says the repo setting applies.
-R8. fr-goal's `deliver` derives a `settle` witness itself; it is never passed in. Under `fix`, resolve refuses while the PR is `conflicting` or `red`, and holds the unit with exit 75 while a state is `unknown` or `pending`, so fixes land before `deliver` is done and the run's `tests` evidence covers the fixed tree. Under `report`, the witness records the state and refuses nothing. Under `off` it records `off`. For a driver-managed PR it records `managed`.
-R9. A fix keeps the PR's history and its approval as the queue reads them. A conflict is fixed by merging `origin/<base>` into the branch, never by rebase or force-push. A red check is fixed by an ordinary commit. fr-goal and fr-debugging allow at most three fix rounds. After that the session stops and reports, and the PR stays as it is. The only ways forward are an override with its reason (R6) or a finding filed through the journal.
-R10. fr-debugging runs `fr pr settle` as its last step, after `fr pr create`, under the same modes and the same fix rules.
-R11. A forge whose client cannot read a PR's mergeability or checks (glab and tea today) gives the state `unsupported`. That state is printed and recorded, never read as `clean` or `green`, and never a refusal.
+R2. `fr pr settle` reads this branch's open PR through the repo's forge adapter and reports two states. The conflict state is `clean`, `conflicting` (by `fr.triage.mergeability.conflicting`) or `unknown` (the forge has not computed it yet). The CI state is `green`, `red` with the failing check names, `pending`, `missing`, `unrunnable` or `none`. The checks read are the declared gate set (`fr.run.ci_evidence.declared_gates`: `.fr/ci.yaml`'s `gate_checks` at the base and at HEAD), else the base's required checks, else every check on the head. With no check reported yet on a repo that has CI, the state is `pending` until `NO_CI_WAIT_SECONDS` after the head was committed, then `missing`. A conflicting PR's CI state is `unrunnable`, because the forge runs no pull-request workflow for it. A repo whose services report `ci none` has CI state `none`.
+R3. `fr pr settle --wait <seconds>` polls the concerns whose mode is `report` or `fix` until none of them is `unknown` or `pending`, or until the wait ends. A concern under `off` is neither read nor polled. The wait has a default and a ceiling, both below 600 seconds, so one call fits in an agent's shell tool. The verb never pushes, edits a PR, marks a PR ready or merges.
+R4. Only a concern under `fix` decides the exit code. The verb exits 4 when a `fix` concern is `conflicting`, `red`, `missing` or `unrunnable`, and prints what to do. It exits 75 when a `fix` concern is still `unknown` or `pending` at the end of the wait, or when a forge read fails transiently. It exits 2 on a refusal (no open PR, unreadable settings or override). Otherwise it exits 0. A `report` concern's state, settled or not, is printed and never changes the exit code.
+R5. A PR whose branch only the wave driver produces is driver-managed: `feat/batch-*`, `fix/batch-*`, a collected close-out `chore/closeout-<YYYY-MM-DD>-<n>`, a legacy per-batch archive `chore/closeout-feat-batch-*` or `chore/closeout-fix-batch-*`, a state export `chore/triage-state-*`, and a DevOps housekeeping PR `chore/ops-*`. For such a PR, `fr pr settle` reads nothing from the forge, prints that the wave driver's queue and hand-backs own the PR, and exits 0 whatever the modes. Every brief the driver gives a session (the batch brief, the red and conflict hand-back briefs, the close-out brief and the collected close-out hand-back brief) says the session runs no settle loop. Any other branch is not driver-managed. That includes `chore/archive-<plan>` and `chore/closeout-<run-id>`, which a hand-run close-out also produces.
+R6. One feature or one bug can override either key for its own PR, and the override is recorded. For a run with a spec, it is a `settle.conflicts: <mode> — <reason>` or `settle.ci: <mode> — <reason>` line in the spec's `## Verification` section. Adding or changing such a line after spec-review is allowed. For an fr-debugging session, it is a debug-journal decision with id `settle-conflicts` or `settle-ci` whose title is the mode and whose body is the reason. The reason is required. The override takes precedence over the repo setting. Any line of the section that starts with `settle.` and breaks the grammar is an error that names the line, never ignored. A section that holds only settle lines is a grammar section. A hand-run close-out has no override: the repo setting applies.
+R7. The PR body fr renders at `deliver` carries a required `## PR settle` section. It names the effective mode of each key and where the mode came from, and it lists every override with its reason. Under `forge.pr_body: minimal`, the section is in the durable rendered file, as every fr section is.
+R8. fr-goal's `deliver` derives a `settle` witness itself; it is never passed in. The witness is evaluated without a wait, after every other witness. Under `fix`, a failing state refuses the resolve (exit 2, naming it), and an `unknown` or `pending` state (or a transient forge failure) holds the unit with exit 75 and records nothing. Otherwise the witness records `<conflicts mode>/<ci mode>:<conflict state>/<ci state>@<head sha>`. It records `off` when both keys are `off`, and `managed` for a driver-managed PR. An `unsupported` state is recorded and refuses nothing. Under `tests: ci` the `tests` witness still needs a non-conflicting PR and green gate checks, whatever the settle modes, because CI does not run on a conflicting PR. In such a repo, a `report` or `off` override relaxes only the settle witness. A local full-suite log remains an accepted `tests` evidence.
+R9. A fix keeps the PR's history and its approval as the queue reads them. A conflict is fixed by merging `origin/<base>` into the branch, never by rebase or force-push. A red check is fixed by an ordinary commit. fr-goal, fr-debugging and the hand-run close-out allow at most three fix rounds. That limit is skill text, not counted by fr. After the third round, the session stops and reports. For fr-goal, `deliver` stays refused until the PR settles or an override with its reason (R6) relaxes the key, and the override is then visible in the PR body (R7).
+R10. Three flows run `fr pr settle --wait` under the same modes and fix rules. fr-debugging runs it as its last step, after `fr pr create`. The hand-run close-out brief (`fr pickup --run`) runs it after the housekeeping PR is opened. fr-goal runs it before resolving `deliver`, and once more after the `deliver` resolve's own push. The check after the resolve is skill text, not a witness, and any fix it leads to is a commit after `deliver`.
+R11. A forge read that raises `UnsupportedForgeOperation` (glab and tea today, PR discovery included) gives the state `unsupported`. It takes effect before the no-open-PR refusal. It is printed and recorded, never read as `clean` or `green`, never a refusal, and exits 0.
 
 ## Design
 
 ### A. The setting (R1)
 
-`fr.settings.model.Git` gains `settle: Settle`, a closed model with `conflicts` and `ci`,
-each a closed-vocabulary field over `SETTLE_MODES = {"off", "report", "fix"}` with the
-two-line `description=` every field carries. `fr settings show` lists
-`git.settle.conflicts` and `git.settle.ci`. `.fr/settings.yaml` is not an artifact kind,
-so no stamp moves. But `Settings` is `extra="forbid"`, so a repo that writes `git.settle`
-makes an `fr` older than this change refuse its settings. That is how every new key has
-worked since the settings spec, and the change fragment says so.
+`fr.settings.model.Git` (`packages/fr/src/fr/settings/model.py`) gains `settle: Settle`, a
+closed model with `conflicts` and `ci`. Each is a closed-vocabulary field over
+`SETTLE_MODES = {"off", "report", "fix"}`, with the two-line `description=` every field
+carries. `fr settings show` lists `git.settle.conflicts` and `git.settle.ci`.
+`.fr/settings.yaml` is not an artifact kind, so no stamp moves. But `Settings` is
+`extra="forbid"`, so a repo that writes `git.settle` makes an `fr` older than this change
+refuse its settings. That is how every new key has worked since the settings spec, and the
+change fragment says so.
 
 ### B. The engine (R2–R5, R11)
 
 A new package, `fr/settle/`:
 
-- `model.py`: `ConflictState`, `CiState`, `Modes`, `Verdict` (states, failing checks,
-  effective modes with their source, exit code, the lines to print).
-- `evaluate.py`: `evaluate(view, checks, gate_names, modes, *, ci_none) -> Verdict`. It is
-  pure, so every mode × state pair is a table test. `unknown` covers both GitHub's
-  `mergeable: UNKNOWN` and a merge state it has not computed.
-- `managed.py`: `driver_managed(branch) -> bool`, using the prefixes from
-  `fr.triage.batch` (`BRANCH_PREFIX`, `FIX_BRANCH_PREFIX`) and the close-out prefix, so the
-  names live in one place.
-- `modes.py`: `effective_modes(repo_root, *, spec, debug_journal) -> Modes`, which applies
-  the setting, then the override (R6), and records where each mode came from.
-- `poll.py`: the bounded poll over an injected clock and sleeper. It re-reads the view and
-  checks until nothing is `unknown` or `pending` or the wait ends.
+- `model.py`: `ConflictState`, `CiState`, `Modes` (each mode with its source: setting,
+  spec line, journal decision), and `Verdict` (states, failing checks, exit code, lines to
+  print, witness value).
+- `evaluate.py`: `evaluate(view, checks, gate_names, modes, *, ci_none, head_committed_at,
+  now) -> Verdict`. It is pure, so every mode × state cell is a table test. `unknown`
+  covers GitHub's `mergeable: UNKNOWN` and an uncomputed merge state. A conflicting PR's
+  CI state is `unrunnable`. With no reported check on a CI repo, the state is `pending`
+  until `ci_evidence.NO_CI_WAIT_SECONDS` after the head commit, then `missing`.
+- `managed.py`: `driver_managed(branch) -> bool`. It takes every prefix from its owner and
+  writes no name of its own: `fr.triage.batch.BRANCH_PREFIX` and `FIX_BRANCH_PREFIX`, the
+  collected close-out pattern behind `batch_drive.collected_name` (`chore/closeout-<date>-<n>`),
+  `chore/closeout-` plus a batch prefix with `/` as `-` (the legacy per-batch archive
+  head, `batch_drive.housekeeping_branch` with no run), `batch_drive.EXPORT_PREFIX` and
+  `batch_drive.HOUSEKEEPING_PREFIX`. `chore/archive-<plan>` and `chore/closeout-<run-id>`
+  stay unmanaged. The driver can tell those apart only by the files a PR touches
+  (`batch_drive.attributed`), and a branch name cannot. So a legacy per-batch archive PR on
+  one of those names is settled by its session like a hand-run one. The session is busy
+  while it settles, and the driver hands work back only to an idle session.
+- `modes.py`: `effective_modes(repo_root, *, spec, debug_journal) -> Modes`. It applies the
+  setting, then the override (R6). The debug journal is found the way
+  `push_cmd.approval_journal` finds it, as the branch's one debug journal.
+- `poll.py`: the bounded poll over an injected clock and sleeper.
 
 The verb is `fr pr settle [--wait <s>] [--json]` in `pr_cmd.py`. It finds the PR from the
-run cursor's `pr` when there is a run, else from the forge's open PR for the branch. It
-reads check names the way `ci_evidence` does (`load_gate_checks`, then
-`required_check_names`), and asks `fr services` for `ci none`. A client without
-`pr_view` or checks gives `unsupported` (R11).
+run cursor's `pr`, else with `open_pr_for_head`. It reads checks with `pr_checks` and the
+gate set with `declared_gates`, then `required_check_names`. It departs from
+`ci_evidence._gate_names` on the third fallback: with neither declared nor required checks,
+it reads every check on the head and does not refuse. `fr services` decides `ci none`. A
+read that raises `UnsupportedForgeOperation` gives `unsupported` (R11). A `FORGE_ERRORS`
+failure exits 75, as `_ci_tests_witness` maps it (gh#1395).
 
-### C. Overrides (R6, R7)
+### C. Overrides and the PR body (R6, R7)
 
-`fr.verification.spec_section` accepts two more grammar lines in `## Verification`:
-`settle.conflicts: <mode> — <reason>` and `settle.ci: <mode> — <reason>`. Like every
-grammar line, a line that looks like one of them but breaks it is an error naming the
-line. A missing reason is an error. The debug-journal form is a `decision` entry with id
-`settle-conflicts` or `settle-ci`, read from the branch's one debug journal. The plan
-finds out whether either form is a shape change of the `spec` or `journal` kind under
-`.claude/rules/artifact-versioning.md`. If it is, the same PR ships the stamp bump, the
-migration and the validator.
+`fr.verification.spec_section`: `_is_grammar` recognises a line that starts with
+`settle.`. `Section` gains `settle: dict[str, SettleOverride]` (mode and reason). A
+malformed `settle.` line, an unknown key or mode, or a missing reason is an error naming the
+line. The debug-journal form is a `decision` entry with id `settle-conflicts` or
+`settle-ci`.
 
-`fr.record.pr_body` renders a `## PR settle` section: the effective modes with their
-source, every override with its reason, and the state the witness recorded.
+`fr.record.pr_body` renders `## PR settle` from the effective modes (known before the
+resolve): each key's mode, its source, and each override's reason. The section joins
+`REQUIRED_SECTIONS`, so a live body without it is refused like any other required section.
+The settle state is not part of the body. It is the witness's value (`fr run status`),
+because the body is rendered before the witness exists.
+
+**No shape change.** A new evidence key is a key in `StepRecord.evidence: dict[str, str]`
+(`fr/run/model.py`). The `docs` witness added one in 2026-11 without a stamp move. A
+`decision` entry with a fixed id uses an entry kind journal v4 already holds. A `settle.`
+line is prose to every released spec reader, which ignores lines outside the grammar. None
+of the three is a shape change under `.claude/rules/artifact-versioning.md`, so no stamp,
+migration or validator ships.
 
 ### D. The `deliver` witness (R8)
 
-`settle` joins `deliver`'s `evidence:` in both shipped workflow manifests
-(`fr-goal.yaml`, `fr-goal-light.yaml`), as a derived witness next to `docs` and
-`proportionality` in `run_cmd`. Its value is `<mode-pair>:<state-pair>@<head>`, or `off`
-or `managed`. It reuses `fr.settle.evaluate` with no wait. A pending state exits 75 with the
-unit held, as `CiPending` does. The plan finds out whether a new evidence name is a
-shape change of the `run` kind, and handles it under the artifact-versioning rule if so.
+`settle` joins `deliver`'s `evidence:` in both shipped workflow manifests (`fr-goal.yaml`,
+`fr-goal-light.yaml`) and the registries every derived witness is listed in:
+`fr.workflow.artifacts.DERIVED_EVIDENCE`, and `run_cmd`'s `_VERIFIABLE_EVIDENCE` and
+`_DERIVED_FROM`. It is not evaluated through `derive()`, because that turns every exit into
+a refusal (exit 2). It is evaluated after the derived witnesses, in the way
+`_ci_tests_witness` is: it calls `fr.settle.evaluate` with no wait, refuses with exit 2 on a
+failing `fix` state, and holds with exit 75, recording nothing, on a pending one. A refusal
+of any other witness is reported first.
 
-### E. Skills (R5, R9, R10)
+### E. Skills and briefs (R5, R9, R10)
 
-- fr-goal: in `deliver`, after the PR body is on the PR, run `fr pr settle --wait <s>`. On
-  exit 4, fix under R9 and push with `fr push`. On exit 75, call it again. Then resolve.
-  `fr-goal/SKILL.md` is at its line cap, so the text is a compressed clause, and the
-  details live in the brief that `deliver` prints.
-- fr-debugging: the same loop as its last step (R10).
-- The batch and close-out dispatch briefs (`fr.triage.batch_dispatch`) say that the
-  driver owns the PR and that the session never runs a settle loop.
+- fr-goal: before resolving `deliver`, after the PR body is on the PR, run
+  `fr pr settle --wait <s>`. On exit 4, fix under R9 and push with `fr push`. On exit 75,
+  call it again. After the `deliver` resolve's push, call it once more and report the
+  result. `fr-goal/SKILL.md` is at its line cap, so the text is a compressed clause, and the
+  detail lives in the brief that `deliver` prints.
+- fr-debugging: the same loop as its last step.
+- The hand-run close-out: `fr.run.closeout`'s brief adds the settle step after the
+  housekeeping PR is opened.
+- Driver briefs: `fr.triage.batch_dispatch` (`render_brief`, `red_brief`, `conflict_brief`,
+  `archive_conflict_brief`), `fr.triage.batch_drive.closeout_brief` and
+  `fr.triage.batch_closeout.handback_brief` each carry one sentence: the wave driver owns
+  this PR's mergeability and CI, so run no settle loop.
 
 ## Verification
 
 - pr-settle-setting: none — the CI suite proves it with the settings model and `fr settings show` (Test Plan 1).
-- pr-settle-verb: none — the CI suite proves every mode × state pair and the exit codes over the fake forge (Test Plan 2, 3, 4, 8).
-- pr-settle-managed: none — the CI suite proves the exemption over the fake forge (Test Plan 5).
-- pr-settle-override: none — the CI suite proves the grammar, precedence and PR-body render (Test Plan 6).
-- pr-settle-deliver: none — the CI suite proves the derived witness through `fr run resolve` (Test Plan 7).
+- pr-settle-verb: none — the CI suite proves every mode × state cell and the exit codes over the fake forge (Test Plan 2, 3, 4, 8).
+- pr-settle-managed: none — the CI suite proves the exemption and the brief sentences over the fake forge (Test Plan 5).
+- pr-settle-override: none — the CI suite proves the grammar, precedence and the required PR-body section (Test Plan 6).
+- pr-settle-deliver: none — the CI suite proves the witness through `fr run resolve`, and its interaction with `tests: ci` (Test Plan 7).
+- pr-settle-skills: none — the CI suite pins the settle step and the fix rules in fr-goal, fr-debugging and the close-out brief (Test Plan 9).
 - pr-settle-live: live — only a real GitHub PR shows `mergeable: UNKNOWN` timing and real check runs; the CI suite proves the logic over the fake forge.
 
 gate: pr-settle-live=tester
@@ -130,15 +159,15 @@ gate: pr-settle-live=tester
 ## Test Plan
 
 1. `git.settle.conflicts` and `git.settle.ci` default to `fix`, accept `off`, `report` and `fix`, refuse any other value naming the key, and appear in `fr settings show --json` and in the file `fr settings init` writes. (R1)
-2. Over the fake forge, `fr pr settle` reports `clean`/`conflicting`/`unknown` and `green`/`red`/`pending`/`none` correctly. `BLOCKED` is not a conflict. Checks come from `gate_checks`, else required checks, else all checks. A `ci none` repo is `none`. (R2)
-3. With an injected clock, `--wait` polls until settled or until the wait ends, then exits 75. A wait above the ceiling is refused. The verb makes no write call on the fake forge. (R3)
-4. Exit codes over the mode × state table: 0, 4 under `fix` for `conflicting` or `red`, 75 for pending, 2 with no open PR. `report` never changes the exit code. (R4)
-5. On `feat/batch-x`, `fix/batch-x` and `chore/closeout-…` the verb reads nothing from the forge, prints the managed line and exits 0 under every mode. The batch and close-out briefs carry the managed sentence. (R5)
-6. A spec `settle.ci: report — <reason>` line and a debug-journal `settle-conflicts` decision each override the repo setting. A line with no reason, or with an unknown mode, is an error naming the line. The rendered PR body lists each override with its reason, or says the repo setting applies. (R6, R7)
-7. `fr run resolve --step deliver` under `fix` refuses on a conflicting or red PR and exits 75 while pending. Under `report` it records the state. Under `off` it records `off`. On a managed branch it records `managed`. A passed `settle` evidence value is refused. (R8)
-8. On a glab or tea client the state is `unsupported`, the exit code is 0 under every mode, and the line says so. (R11)
-9. fr-goal's and fr-debugging's skill text names `fr pr settle`, merge-not-rebase, and the three-round limit. A tripwire pins the wording. (R9, R10)
-10. Post-merge, live: in a sandbox repo of the `derio-net` org, open a draft PR through `fr pr create`, push a conflicting change to its base, and run `fr pr settle --wait 300`. It reports `conflicting` and exits 4. Merge the base, push a failing test, and it reports `red` with the check name. Fix the test, and it ends `clean`/`green`, exit 0. Record the walk with `fr acceptance set-status --walk`. (R2, R3, R4, R9; row `pr-settle-live`)
+2. Over the fake forge: `clean`, `conflicting` and `unknown`. `BLOCKED` is not a conflict. `green`, `red` with names, `pending`, `none` under `ci none`, `unrunnable` on a conflicting PR, and no reported check giving `pending` before `NO_CI_WAIT_SECONDS` and `missing` after. Checks come from `declared_gates`, else required checks, else every check, with no refusal on the third fallback. (R2)
+3. With an injected clock, `--wait` polls only `report` and `fix` concerns until they settle or the wait ends. An `off` concern is never read. A wait above the ceiling is refused. The verb makes no write call on the fake forge. (R3)
+4. Exit-code table over modes × states: 4 for each failing `fix` state; 75 for a pending `fix` state at the end of the wait and for a transient forge failure; 2 with no open PR; 0 otherwise. A `report` concern, pending or failing, never changes the code. (R4)
+5. Each managed name gets the managed line and exit 0 with no forge read under every mode: `feat/batch-x`, `fix/batch-x`, `chore/closeout-2026-11-23-1`, `chore/closeout-feat-batch-x`, `chore/triage-state-s-wave-2` and `chore/ops-p`. `chore/archive-p`, `chore/closeout-<run-id>` and `feat/other` are settled normally. Every driver brief named in §E carries the sentence. (R5)
+6. A spec `settle.ci: report — <reason>` line and a debug-journal `settle-conflicts` decision each override the repo setting. A section with only settle lines is read. A `settle.` line with no reason, an unknown key or an unknown mode is an error naming the line. The rendered body's `## PR settle` names modes, sources and reasons, and a live body without the section is refused. (R6, R7)
+7. `fr run resolve --step deliver`: under `fix`, a conflicting or red PR is refused (2), and a pending one exits 75 with nothing recorded. `report` records the state. `off` records `off`. A managed branch records `managed`. `unsupported` is recorded and refuses nothing. A passed `settle` value is refused. Under `tests: ci` with `settle.conflicts: off`, a conflicting PR is still refused by the `tests` witness. (R8)
+8. On a glab or tea client, PR discovery included, the state is `unsupported`, the exit code is 0 under every mode, and the line says so. (R11)
+9. fr-goal's and fr-debugging's skill text and the close-out brief name `fr pr settle`, merge-not-rebase and the three-round limit. fr-goal names the second settle after `deliver`. A tripwire pins the wording. (R9, R10)
+10. Post-merge, live: in a sandbox repo of the `derio-net` org, open a draft PR through `fr pr create`, push a conflicting change to its base, and run `fr pr settle --wait 300`. It reports `conflicting` (CI `unrunnable`) and exits 4. Merge the base, push a failing test, and it reports `red` with the check name. Fix the test, and it ends `clean`/`green`, exit 0. Record the walk with `fr acceptance set-status --walk`. (R2, R3, R4, R9; row `pr-settle-live`)
 
 ## Implementation Plans
 
