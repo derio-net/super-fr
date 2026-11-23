@@ -59,7 +59,7 @@ steps:
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-23T09:02:15+00:00'
           agent_type: super-fr:fr-phase-executor
@@ -77,6 +77,10 @@ steps:
           tier: standard
           bound: sonnet
           session: 257a78f0-c47d-4de5-bb70-efce56aa1e60
+          returned: '2026-11-23T10:49:50+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   lens-review:
