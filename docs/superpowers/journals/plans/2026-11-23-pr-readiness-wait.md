@@ -298,3 +298,31 @@ Spec §C states the extra refuse-and-edit round and why it is accepted.
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: a settle-only Verification section switches rows to the candidate default (phase 2)
 
 c9d654dd0: a settle-only section is None to parse_section; settle_overrides reads the lines separately; spec §C amended.
+
+<!-- fr:journal kind=decision scope=plan id=settle-instructions-constants created=2026-11-23T16:20:49+00:00 phase=3 -->
+### settle-instructions-constants · decision · The settle loop's brief text lives in fr.settle.instructions, shared by deliver and the close-out (phase 3)
+
+`FIX_RULES` (merge `origin/<base>`, never rebase or force-push; an ordinary commit
+for a red check; `fr push`; exit 75 re-run; three fix rounds) is one constant that
+`DELIVER_LINE` (the deliver brief's `settle` key, emitted by `run_cmd._settle_brief`
+for a step whose evidence names `settle`) and `CLOSEOUT_LINE` (after the housekeeping
+PR in `branch_closeout_brief`) both embed, with `DEFAULT_WAIT` as the wait. run_cmd
+grew 9 lines (9095 of a 9100 budget). The two SKILL.md files restate the rules inside
+existing lines, so both stay at 120 lines.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-skills-fast-tier-targeted created=2026-11-23T16:20:49+00:00 phase=3 -->
+### settle-skills-fast-tier-targeted · discovery · The fast tier still spans the whole suite (phase 2's conftest change), so a targeted set ran instead (phase 3)
+
+`--fr-scope` selects every test under the changed `tests/conftest.py`. A first
+targeted set that included test_install_sh.py and whole triage/run files reached 6%
+in four minutes on a loaded host and was stopped with no failure. Two narrower sets
+ran at `-n 6` instead: skill, mirror, readme, module-budget, explainer and wording
+tripwires, writing standards, build-site, closeout, pickup, settle witness, managed,
+lens-review and docs tests and the brief key-set test (803 passed, 105 skipped), then
+the batch, wave and herdr close-out, tracking-none, placement and archive tests (322
+passed, 1 skipped). CI is the suite evidence (`tests: ci`).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-23T16:20:49+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the step's refactor work is the mirror syncs, docs and acceptance move; the code is three constants and a two-line brief helper, nothing to clean
