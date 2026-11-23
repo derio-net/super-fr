@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
+reviewed: 2026-11-23 admit reads the issue's own host (URL key or --host), and dispatch re-reads an admit-pinned member live before it starts a batch (triage-hardening lens fixes); 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening)
 ---
 
 # Merge protection for `main`
@@ -266,4 +266,13 @@ not eligible, and the reason tells the operator to run `fr triage admit <key>` a
 label alone does not admit an issue. Issues that were admitted with the label only before this
 change must be admitted again. GitLab and Gitea adapters cannot list issue comments, so
 `fr triage admit` refuses there, and a `ready-fr` issue on them is not eligible.
+
+`fr triage admit` reads an `owner/repo#n` key on github.com. For an issue on a different host,
+give the issue URL or `--host <host>`. The preview shows the host.
+
+The facts that `batch dispatch` reads can be older than the issue. Thus, before `batch dispatch
+--yes` or the wave driver starts a batch, it reads each member again when only an admit marker
+makes that member eligible. If the digest of the title and the body changed, or fr cannot read
+the issue, the dispatch stops. It writes nothing, and it names the issue and `fr triage admit
+<owner/repo#n>`.
 

@@ -391,7 +391,7 @@ def test_admit_whose_read_fails_exits_2_and_writes_nothing(monkeypatch: Any) -> 
     assert client.writes == []
 
 
-def test_admit_whose_comment_fails_after_the_label_says_the_label_is_on_and_the_issue_is_not_admitted(
+def test_admit_whose_comment_fails_after_the_label_says_the_issue_is_not_admitted(
     monkeypatch: Any,
 ) -> None:
     class NoComment(FakeClient):
