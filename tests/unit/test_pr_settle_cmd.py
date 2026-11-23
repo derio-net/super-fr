@@ -237,7 +237,7 @@ def test_the_real_glab_and_tea_clients_give_unsupported(
     monkeypatch.setattr("fr.commands.pr_cmd.client_for", lambda _root: client)
     result = runner.invoke(app, ["pr", "settle", "--wait", "0", "--json"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert (data["conflict_state"], data["ci_state"]) == ("unsupported", "unsupported")
     assert data["exit_code"] == 0
     assert client.backend in data["lines"][0]
@@ -248,7 +248,7 @@ def test_unsupported_after_a_view_keeps_the_head(
 ) -> None:
     result = _run(monkeypatch, Forge(unsupported="pr_checks"), "--json")
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output)["witness"].endswith("@" + "c" * 40)
+    assert json.loads(result.stdout)["witness"].endswith("@" + "c" * 40)
 
 
 def test_unsupported_discovery_wins_over_the_no_pr_refusal(
@@ -444,7 +444,7 @@ def test_a_non_finite_wait_is_refused(
 def test_json_prints_the_verdict(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result = _run(monkeypatch, Forge(), "--json")
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["conflict_state"] == "clean" and data["ci_state"] == "green"
     assert data["exit_code"] == 0
     assert data["witness"] == f"fix/fix:clean/green@{'c' * 40}"
@@ -542,3 +542,58 @@ def test_json_refusals_and_holds_print_a_json_error(
     data = json.loads(result.stdout)
     assert data["exit_code"] == code
     assert said in data["error"]
+
+
+def _debug_journal(repo: Path, slug: str, *decisions: tuple[str, str, str]) -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry
+
+    path = repo / "docs" / "superpowers" / "journals" / "debug" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for eid, title, body in decisions or (("note", "a note", "b"),):
+        append_journal_entry(
+            path,
+            slug,
+            JournalEntry(
+                kind="decision", scope="debug", id=eid,
+                created="2026-11-23T10:00:00+00:00", title=title, body=body,
+            ),
+        )  # fmt: skip
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", f"journal {slug}")
+
+
+def test_no_debug_journal_warns_that_the_setting_applies(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review l-errors-r2: the reason no override was looked for is said, never dropped."""
+    result = _run(monkeypatch, Forge())
+
+    assert result.exit_code == 0, result.output
+    assert "no debug journal" in result.output and "repo setting applies" in result.output
+
+
+def test_two_debug_journals_refuse_naming_both(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _debug_journal(repo, "2026-11-23-a")
+    _debug_journal(repo, "2026-11-23-b")
+
+    result = _run(monkeypatch, Forge())
+
+    assert result.exit_code == 2, result.output
+    assert "2026-11-23-a" in result.output and "2026-11-23-b" in result.output
+
+
+def test_a_journal_override_the_spec_outranks_is_named(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = "docs/superpowers/specs/2026-11-23-x-design.md"
+    (repo / spec).parent.mkdir(parents=True)
+    (repo / spec).write_text("# X\n\n## Verification\n\nstrategy: candidate\n")
+    _debug_journal(repo, "2026-11-23-bug", ("settle-ci", "off", "runners down"))
+    run = SimpleNamespace(pr=None, steps={"brainstorm": SimpleNamespace(emitted={"spec": spec})})
+    monkeypatch.setattr("fr.commands.push_cmd.branch_runs", lambda _root: [run])
+
+    result = _run(monkeypatch, Forge())
+
+    assert result.exit_code == 0, result.output
+    assert "settle-ci" in result.output and "not applied" in result.output
+    assert "ci (fix, default): green" in result.output

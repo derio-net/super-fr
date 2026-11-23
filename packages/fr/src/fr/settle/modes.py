@@ -60,6 +60,17 @@ def _journal_overrides(journal: Path) -> dict[str, dict[str, str]]:
     return out
 
 
+def journal_settle_ids(journal: Path) -> list[str]:
+    """The ids of *journal*'s `settle-*` decisions (an unreadable journal holds none)."""
+    from fr.journal.model import JournalParseError, parse_journal
+
+    try:
+        entries = parse_journal(journal.read_text())
+    except (OSError, UnicodeDecodeError, JournalParseError):
+        return []
+    return [e.id for e in entries if e.kind == "decision" and e.id.startswith("settle-")]
+
+
 def effective_modes(
     repo_root: Path, *, spec: str | None = None, debug_journal: Path | None = None
 ) -> Modes:

@@ -191,21 +191,43 @@ def create_cmd(
     console.print(f"opened draft PR {url} (recorded on run {state.run})", soft_wrap=True)
 
 
-def _branch_modes(repo_root: Path, runs: list[Any]) -> Modes:
-    """The settle modes of this branch's PR: the setting, then the run's spec line, else
-    the branch's one debug journal's decision (R6), found as `approval_journal` finds it."""
-    from fr.commands.push_cmd import approval_journal
+def _branch_modes(repo_root: Path, runs: list[Any]) -> tuple[Modes, list[str]]:
+    """The settle modes of this branch's PR and the warnings to print first: the setting,
+    then the run's spec line, else the branch's one debug journal's decision (R6). Why no
+    journal was read is said, never dropped (l-errors-r2); more than one refuses."""
+    from fr.commands.push_cmd import branch_debug_journals
     from fr.journal.model import journal_path
     from fr.requirements import run_spec
-    from fr.settle.modes import effective_modes
+    from fr.settle.model import SettleRefused
+    from fr.settle.modes import effective_modes, journal_settle_ids
 
     spec = next((s for s in map(run_spec, runs) if s), None)
+    found = branch_debug_journals(repo_root)
+    slugs = found if isinstance(found, list) else []
+    warnings: list[str] = []
     journal = None
-    if spec is None:
-        found = approval_journal(repo_root)
-        if not isinstance(found, str) and found.scope == "debug":
-            journal = journal_path(repo_root, "debug", found.slug)
-    return effective_modes(repo_root, spec=spec, debug_journal=journal)
+    if spec is not None:
+        for slug in slugs:
+            for eid in journal_settle_ids(journal_path(repo_root, "debug", slug)):
+                warnings.append(
+                    f"settle: debug journal {slug}'s decision {eid} is not applied: the run's "
+                    "spec decides; put the override in its `## Verification`"
+                )
+    elif isinstance(found, str):
+        warnings.append(f"settle: {found}; the repo setting applies")
+    elif not slugs:
+        warnings.append(
+            "settle: this branch has no spec-driven run and added no debug journal; the "
+            "repo setting applies"
+        )
+    elif len(slugs) > 1:
+        raise SettleRefused(
+            f"this branch added {len(slugs)} debug journals ({', '.join(slugs)}); fr does not "
+            "guess which one holds this PR's settle override: keep one"
+        )
+    else:
+        journal = journal_path(repo_root, "debug", slugs[0])
+    return effective_modes(repo_root, spec=spec, debug_journal=journal), warnings
 
 
 @pr_app.command("settle")
@@ -250,7 +272,9 @@ def settle_cmd(
         if driver_managed(branch):
             _out(managed_verdict(branch))
         runs = branch_runs(repo_root)
-        modes = _branch_modes(repo_root, runs)
+        modes, warnings = _branch_modes(repo_root, runs)
+        for line in warnings:
+            err_console.print(escape(line), soft_wrap=True, highlight=False)
         if modes.both_off:
             _out(evaluate({}, [], None, modes, ci_none=False, head_committed_at=0, now=0))
         recorded = runs[0].pr if len(runs) == 1 else None
