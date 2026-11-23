@@ -231,3 +231,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-23-pr-readiness-wait-p3 created=2026-11-23T09:01:49+00:00 -->
 ### phase-split-2026-11-23-pr-readiness-wait-p3 · decision · ask: the skills and close-out brief running the settle loop (R9, R10) are their own ask, at the mechanical tier
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-23-pr-readiness-wait-p3-1 created=2026-11-23T09:02:06+00:00 -->
+### phase-split-2026-11-23-pr-readiness-wait-p3-1 · decision · tier: the skill text, close-out brief and mirror regeneration are mechanical edits, while phase 2 is hard
