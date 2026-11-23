@@ -9104,6 +9104,22 @@ batches:
     checks:
     - 1 failing check(s)
     delivered: none
+  - kind: conflict
+    at: '2026-11-23T09:24:52.526625Z'
+    head: d6d61087940ae03d64f749ae9b0b62d229c96e0f
+    paths:
+    - .hermes/skills/fr/fr-triage/SKILL.md
+    - .opencode/skills/fr-triage/SKILL.md
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/explainers/index.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/cli.md
+    - packages/fr/src/fr/triage/batch_drive.py
+    - plugins/super-fr/skills/fr-triage/SKILL.md
+    - tests/unit/test_triage_batch_closeout.py
+    - tests/unit/test_tripwire_module_budget.py
+    delivered: held
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
