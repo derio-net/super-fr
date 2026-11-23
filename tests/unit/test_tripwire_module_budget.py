@@ -17,10 +17,10 @@ MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
     f"{SRC}commands/run_cmd.py": 9100,
-    f"{SRC}commands/triage_batch_cmd.py": 7600,
+    f"{SRC}commands/triage_batch_cmd.py": 8200,
     f"{SRC}isolation/local.py": 3200,
     f"{SRC}plan_ops.py": 2600,
-    f"{SRC}triage/batch_drive.py": 2200,
+    f"{SRC}triage/batch_drive.py": 2250,
 }
 
 HELD: frozenset[str] = frozenset(

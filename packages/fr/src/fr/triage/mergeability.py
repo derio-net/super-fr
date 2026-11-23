@@ -7,7 +7,7 @@ unapproved PR.
 
 from __future__ import annotations
 
-CONFLICT_HINT = "conflicting — the driver updates it or hands it back"
+CONFLICT_HINT = "conflicting — the queue ejects it and hands it back to its session"
 CONFLICT_HANDED_BACK_HINT = "conflicting — handed back"
 """A batch PR whose conflict at its current head went to its session (batch-train-truth R18)."""
 

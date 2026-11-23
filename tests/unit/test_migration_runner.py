@@ -1008,3 +1008,63 @@ def test_every_shipped_schema_migration_but_the_matrix_split_keeps_stamping() ->
     ]
     assert retiring == [("matrix", 5, 6)]
     assert [k for k, kind in ARTIFACT_KINDS.items() if kind.retired] == ["matrix"]
+
+
+# --- wave-merge-queue R16: a per-file run (`only`) -----------------------
+
+
+def test_only_migrates_the_named_files_and_leaves_a_second_stale_one_as_it_was(
+    tmp_path: Path,
+) -> None:
+    reg = _registry(current_version=2)
+    reg.register(SchemaMigration("plan", 1, 2, _append("moved")))
+    named = _plan(tmp_path, "a", version=1)
+    other = _plan(tmp_path, "b", version=1)
+    before = _freeze(other)
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg, only=[named])
+
+    assert report.ok and report.changed_paths == (named,)
+    assert read_version("plan", named) == 2
+    assert _unchanged(other, before) and read_version("plan", other) == 1
+
+
+def test_only_a_dry_run_names_just_the_named_files(tmp_path: Path) -> None:
+    reg = _registry(current_version=2)
+    reg.register(SchemaMigration("plan", 1, 2, _append("moved")))
+    named = _plan(tmp_path, "a", version=1)
+    _plan(tmp_path, "b", version=1)
+    report = run_migrations(tmp_path, dry_run=True, registry=reg, only=[named])
+    assert [a.path for a in report.applied] == [named]
+
+
+def test_only_refuses_a_retiring_hop_before_writing_anything(tmp_path: Path) -> None:
+    from fr.artifacts.runner import PartialMigrationError
+
+    reg = _registry(current_version=2)
+    reg.register(SchemaMigration("plan", 1, 2, _retiring(tmp_path / "moved.yaml"), retires=True))
+    meta = _plan(tmp_path, "a", version=1)
+    before = _freeze(meta)
+    with pytest.raises(PartialMigrationError, match="not per file"):
+        run_migrations(tmp_path, dry_run=False, registry=reg, only=[meta])
+    assert _unchanged(meta, before) and not (tmp_path / "moved.yaml").exists()
+
+
+def test_only_refuses_a_file_that_is_no_live_artifact(tmp_path: Path) -> None:
+    from fr.artifacts.runner import PartialMigrationError
+
+    reg = _registry(current_version=2)
+    reg.register(SchemaMigration("plan", 1, 2, _append("moved")))
+    archived = _archived_plan(tmp_path, "old")
+    live = _plan(tmp_path, "a", version=1)
+    before = _freeze(live)
+    with pytest.raises(PartialMigrationError, match="not a live artifact"):
+        run_migrations(tmp_path, dry_run=False, registry=reg, only=[live, archived])
+    assert _unchanged(live, before)
+
+
+def test_only_reads_none_of_the_archive_repairs(tmp_path: Path) -> None:
+    reg = _registry(current_version=1)
+    named = _plan(tmp_path, "a", version=1)
+    report = run_migrations(tmp_path, dry_run=False, registry=reg, only=[named])
+    assert report.applied == () and report.unrepairable == ()

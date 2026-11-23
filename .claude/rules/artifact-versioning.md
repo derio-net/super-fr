@@ -227,7 +227,12 @@ The moment a kind's `current_version` moves, every live artifact of that kind
 in *this* repo is stale — and `.github/workflows/acceptance-report.yml`
 installs `fr` from this checkout and runs `fr acceptance check` with `CI=true`.
 That now migrates in place and passes, but `fr validate artifacts` is exempt from
-the gate, so the `validate-artifacts` job still fails a stale tree. So:
+the gate, so the `validate-artifacts` job still fails a stale tree on `main`. On a pull
+request and on the merge queue's `fr-queue/**` pushes it runs with `--allow-migratable`
+(wave-merge-queue R21): a stale stamp that a registered migration moves passes and prints
+`stale, migratable`, so a live artifact that merged before a shape change no longer fails
+every other PR (#1564). One whose migration refuses, one no migration reaches and one newer
+than this fr still fail. The PR that moves the version still migrates its own artifacts. So:
 
 **Any PR that moves a kind's `current_version` runs `fr migrate artifacts --yes`
 and commits the result in the same PR.**
