@@ -108,9 +108,12 @@ rows:
       one collect and costs no forge call afterwards once closed or merged
     origin:
     - spec:2026-11-22-triage-hardening#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_closed_judged_pr_is_carried_from_the_previous_facts_without_a_call
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_judged_pr_past_the_limit_is_viewed_and_recorded
+    status: ci
+    notes: unit tests for the view, the carry and the failed view
     verify: none
   - id: privacy-snapshot-keys
     capability: triage-privacy
