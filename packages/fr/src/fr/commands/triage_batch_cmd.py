@@ -5312,6 +5312,8 @@ class _Driver:
             try:
                 checkout = self._fetched_reader(repo)
                 ref = f"origin/{checkout.default_branch()}"
+                if where.exists():  # a crashed pass's leftover would turn the wait off
+                    checkout.remove_worktree(where)
                 tree = checkout.add_worktree(where, ref)
                 try:
                     stale = tree.stale_artifacts()

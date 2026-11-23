@@ -768,17 +768,18 @@ def test_gh1497_a_push_that_changes_the_diff_voids_the_approval_and_the_pr_stays
 def test_gh1569_no_collected_closeout_starts_while_an_artifact_it_does_not_archive_is_stale() -> (
     None
 ):
+    """Owed, never held: retried every pass, and a Need while it waits (nothing may migrate
+    it unless someone does), so the drive never polls silently."""
     path = "docs/superpowers/runs/r.yaml"
     plan = drive_pass(_landed("a", "b", closeout_waits={REPO: path}))
     assert [a for a in plan.actions if a.kind == "closeout"] == []
-    (wait,) = [a for a in plan.actions if a.kind == "warn" and "waits for a migration" in a.detail]
-    assert path in wait.detail and "a, b" in wait.detail
-    again = drive_pass(_landed("a", "b", closeout_waits={REPO: path},
-                               warned=frozenset({wait.head})))  # fmt: skip
-    assert [
-        a for a in again.actions if a.kind == "warn" and "waits for a migration" in a.detail
-    ] == []
-    assert [a for a in again.actions if a.kind == "closeout"] == []
+    (wait,) = [
+        a for a in plan.actions if a.kind == "blocked" and "waits for a migration" in a.detail
+    ]
+    assert path in wait.detail and "a, b" in wait.detail and "fr migrate artifacts" in wait.detail
+    assert plan.summary.blocked >= 1
+    again = drive_pass(_landed("a", "b", closeout_waits={REPO: path}))
+    assert [a.kind for a in again.actions if "waits for a migration" in a.detail] == ["blocked"]
 
 
 def test_gh1569_the_closeout_starts_once_nothing_it_leaves_alone_is_stale() -> None:

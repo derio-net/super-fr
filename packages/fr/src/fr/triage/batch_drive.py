@@ -1985,11 +1985,13 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue  # one at a time; a live session of this item is not started twice
         taking = tuple(collecting[(repo, group)])
         if (migrating := snap.closeout_waits.get(repo)) is not None:  # gh#1569: owed, not held
-            key = f"closeout-wait\0{repo}\0{migrating}"
-            if key not in snap.warned:
-                actions.append(Action("warn", taking[0], f"close-out of {', '.join(taking)} "
-                                      f"waits for a migration of {migrating}, which it does "
-                                      "not archive", head=key))  # fmt: skip
+            # retried every pass, but a Need: nothing may migrate it unless someone does
+            closing -= len(taking)
+            closeouts_held += 1
+            actions.append(Action("blocked", taking[0], f"close-out of {', '.join(taking)} "
+                                  f"waits for a migration of {migrating}, which it does not "
+                                  "archive: a release migrates it, or `fr migrate artifacts "
+                                  "--yes` on a branch"))  # fmt: skip
             continue
         started.add(repo)
         actions.append(
