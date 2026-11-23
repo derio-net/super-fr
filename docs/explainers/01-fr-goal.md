@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-23 deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-23 the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1161,6 +1161,14 @@ failed, `deliver` refuses. If the forge has no answer yet, `deliver` stops and
 records nothing, and the agent waits with `fr pr settle` and tries again. A feature
 can relax this for its own pull request with a `settle.` line in its specification.
 The description's `## PR settle` section shows that line and its reason.
+
+So before it resolves `deliver`, the agent runs `fr pr settle --wait <s>`. If it exits
+4, the agent fixes the pull request. A conflict is fixed by merging `origin/<base>`
+into the branch, never by rebase or force-push, so the history and any approval stay as
+they were. A red check is fixed by an ordinary commit. The agent pushes with `fr push`
+and runs the command again. After three fix rounds it stops and reports to you. When
+the `deliver` resolve has pushed, the agent runs the command once more and reports what
+it said.
 
 `deliver` then reads the live
 description back and refuses to finish while any of those sections is missing.

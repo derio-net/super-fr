@@ -407,7 +407,10 @@ def branch_closeout_brief(
     )
     from fr.hostclient import pr_command  # the forge's own CLI, never `gh` (gh#742)
 
+    from fr.settle.instructions import CLOSEOUT_LINE
+
     lines.append(f"  open the housekeeping PR (e.g. `{pr_command(repo_root, 'fill')}`)")
+    lines.append(CLOSEOUT_LINE)  # spec 2026-11-23-pr-readiness-wait R10
     lines.append(f"  fr isolation down --branch {branch}")
     # gh#825: the brief brought the housekeeping workspace up, so it takes it
     # down too — after that PR merges, since `down` refuses unlanded work.

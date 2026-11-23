@@ -4057,7 +4057,16 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         **_gated_binding_keys(step),
         **_lens_review_brief(step, state),
         **_tests_brief(resolve_repo_root(), step),
+        **_settle_brief(step),
     }
+
+
+def _settle_brief(step: Step) -> dict[str, str]:
+    """`settle`, the settle loop's one instruction line, for a step that derives
+    `settle` evidence (`deliver`; spec 2026-11-23-pr-readiness-wait R9, R10)."""
+    from fr.settle.instructions import DELIVER_LINE
+
+    return {"settle": DELIVER_LINE} if "settle" in step.evidence else {}
 
 
 def commit_templates_brief(repo_root: Path, issue: int | None) -> dict[str, Any]:

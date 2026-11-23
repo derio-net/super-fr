@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
+reviewed: 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
 ---
 
 ## Why is "just try something" the expensive path?
@@ -142,7 +142,14 @@ searchable. `fr journal render --scope debug --slug <slug>` prints it as Markdow
 5. **Push on the host**, and confirm that `git rev-list --count @{u}..HEAD` prints `0`.
    Every journal entry is a local commit that nothing pushes. Left unpushed, the PR merges
    without its review record.
-6. **Hand off.** The skill ends by relaying the close-out command,
+6. **Wait for the PR to settle.** The last step is `fr pr settle --wait <s>`. It waits
+   until the PR merges cleanly into its base and its CI has finished. If it exits 4, the
+   agent fixes the PR. A conflict is fixed by merging `origin/<base>` into the branch,
+   never by rebase or force-push. A red check is fixed by an ordinary commit. The agent
+   pushes with `fr push` and runs the command again. After three fix rounds it stops and
+   reports. To relax a concern for this fix, add a debug-journal decision named
+   `settle-conflicts` or `settle-ci`, with the mode as its title and the reason as its body.
+7. **Hand off.** The skill ends by relaying the close-out command,
    `fr pickup --branch <branch>`, as the last line of its message. After the merge, a new
    session runs it from the base clone.
 
