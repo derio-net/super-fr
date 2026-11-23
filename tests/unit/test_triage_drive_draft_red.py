@@ -1,17 +1,16 @@
-"""R15/R16: an unapproved draft batch PR with failing checks is reported red by both walks
-(merge train and queue mode), sits in `Train.stepped`, and is never a member, merge
-candidate or stop. An unapproved green draft stays invisible."""
+"""batch-train-truth R15-R17, on the wave merge queue: an unapproved draft batch PR with
+failing checks is reported red, never awaits approval and is never ready for the queue; a
+batch PR the forge reads as conflicting, draft or ready, approved or not, is probed early
+unless the queue holds it as an entry. An unapproved green draft stays invisible."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
 
-import pytest
-from fr.ghclient import QueueState
 from fr.triage.approval import Approved, Unlabelled
 from fr.triage.batch import QueueEntry
-from fr.triage.batch_drive import LivePr, Pass, Snapshot, drive_pass, train_line
+from fr.triage.batch_drive import LivePr, Pass, Snapshot, _conflict_probes, drive_pass
 from fr.triage.model import Batch, PullRequest
 
 REPO = "derio-net/super-fr"
@@ -39,7 +38,7 @@ def _pr(n: int, bid: str, head: str) -> PullRequest:
     )  # fmt: skip
 
 
-def walk(rows: list[tuple[str, bool, str, Any]], *, queue: bool = False, **live_extra: Any) -> Pass:
+def _snap(rows: list[tuple[str, bool, str, Any]], **live_extra: Any) -> Snapshot:
     """*rows*: (batch id, draft, checks, approval verdict)."""
     batches = [_batch(bid) for bid, *_ in rows]
     entries = tuple(
@@ -52,14 +51,7 @@ def walk(rows: list[tuple[str, bool, str, Any]], *, queue: bool = False, **live_
         )
         for i, (b, r) in enumerate(zip(batches, rows, strict=True))
     }  # fmt: skip
-    extra: dict[str, Any] = {}
-    if queue:
-        extra = {
-            "queue_repos": frozenset({REPO}),
-            "queue_states": {b.id: QueueState(False, False) for b in batches},
-            "bases": {REPO: "base-2"},
-        }
-    snap = Snapshot(
+    return Snapshot(
         batches=tuple(batches),
         stages={b.id: "pr-open" for b in batches},
         queue=entries,
@@ -67,43 +59,38 @@ def walk(rows: list[tuple[str, bool, str, Any]], *, queue: bool = False, **live_
         repos={b.id: REPO for b in batches},
         now=NOW,
         approvals={r[0]: r[3] for r in rows},
-        **extra,
     )
-    return drive_pass(snap)
 
 
-@pytest.mark.parametrize("queue", [False, True])
-def test_a_red_unapproved_draft_alone_is_reported_and_stepped_over(queue: bool) -> None:
-    plan = walk([("a", True, "failing", Unlabelled())], queue=queue)
+def walk(rows: list[tuple[str, bool, str, Any]], **live_extra: Any) -> Pass:
+    return drive_pass(_snap(rows, **live_extra))
+
+
+def reds(plan: Pass) -> list[str]:
+    return [a.batch for a in plan.actions if a.kind == "warn" and a.red]
+
+
+def test_a_red_unapproved_draft_alone_is_reported_and_stepped_over() -> None:
+    """Reported red for the red recovery, and stepped over: never awaiting approval, never
+    ready for the queue (the name the acceptance row `drive-red-drafts` cites)."""
+    plan = walk([("a", True, "failing", Unlabelled())])
     (warn,) = [a for a in plan.actions if a.kind == "warn"]
     assert warn.red and warn.batch == "a" and warn.pr == 100 and warn.head == "h-a"
     assert warn.checks == ("ci",)
-    (train,) = plan.trains
-    assert train.stepped == ("a",) and train.head is None and train.candidates == ()
-    assert "a (#100)" in train_line(train)
+    assert "a" not in plan.awaiting and "a" not in plan.ready
 
 
-@pytest.mark.parametrize("queue", [False, True])
-def test_a_red_draft_beside_members_never_becomes_a_candidate_or_a_stop(queue: bool) -> None:
-    plan = walk(
-        [("a", True, "failing", Unlabelled()), ("b", False, "green", Approved("h-b"))],
-        queue=queue,
-    )
-    kinds = [(a.kind, a.batch) for a in plan.actions]
-    assert ("warn", "a") in kinds
-    assert ("enqueue" if queue else "merge", "b") in kinds
-    (train,) = plan.trains
-    assert train.stepped == ("a",) and train.numbers["a"] == 100
-    assert train.queued == ()
-    if not queue:
-        assert train.head == "b" and train.candidates == ("b",)
+def test_a_red_draft_beside_a_ready_member_never_becomes_ready() -> None:
+    plan = walk([("a", True, "failing", Unlabelled()), ("b", False, "green", Approved("h-b"))])
+    assert reds(plan) == ["a"]
+    assert plan.ready == frozenset({"b"}) and "a" not in plan.awaiting
 
 
-@pytest.mark.parametrize("queue", [False, True])
-def test_a_green_or_pending_unapproved_draft_yields_nothing_new(queue: bool) -> None:
+def test_a_green_or_pending_unapproved_draft_yields_nothing_new() -> None:
     for checks in ("green", "pending"):
-        plan = walk([("a", True, checks, Unlabelled())], queue=queue)
-        assert plan.actions == () and plan.trains == ()
+        plan = walk([("a", True, checks, Unlabelled())])
+        assert reds(plan) == [] and plan.awaiting == frozenset() and plan.ready == frozenset()
+        assert [a for a in plan.actions if a.kind == "conflict-probe"] == []
 
 
 # ------------------------------------------------------------ R17: the conflict probe
@@ -115,44 +102,45 @@ def probes(plan: Pass) -> list[str]:
     return [a.batch for a in plan.actions if a.kind == "conflict-probe"]
 
 
-@pytest.mark.parametrize("queue", [False, True])
-def test_a_conflicting_unapproved_draft_is_probed_whatever_its_checks(queue: bool) -> None:
+def test_a_conflicting_unapproved_draft_is_probed_whatever_its_checks() -> None:
     for checks in ("green", "pending", "failing"):
-        plan = walk([("a", True, checks, Unlabelled())], queue=queue, a=DIRTY)
+        plan = walk([("a", True, checks, Unlabelled())], a=DIRTY)
         assert probes(plan) == ["a"], checks
         (probe,) = [a for a in plan.actions if a.kind == "conflict-probe"]
         assert (probe.pr, probe.head) == (100, "h-a")
-    plan = walk([("a", True, "failing", Unlabelled())], queue=queue, a=DIRTY)
-    assert [a.kind for a in plan.actions] == ["warn", "conflict-probe"]  # red AND conflicting
-    (train,) = plan.trains
-    assert train.stepped == ("a",)
+    plan = walk([("a", True, "failing", Unlabelled())], a=DIRTY)
+    assert reds(plan) == ["a"] and probes(plan) == ["a"]  # red AND conflicting
 
 
-def test_a_conflicting_member_that_is_not_the_candidate_is_probed() -> None:
+def test_a_conflicting_ready_pr_approved_or_not_is_probed() -> None:
     plan = walk(
-        [
-            ("a", False, "green", Approved("h-a")),
-            ("b", False, "green", Unlabelled()),  # awaiting approval
-            ("c", False, "green", Approved("h-c")),  # queued behind the head
-        ],
+        [("a", False, "green", Approved("h-a")), ("b", False, "green", Unlabelled())],
+        a=DIRTY,
         b=DIRTY,
-        c=DIRTY,
     )
-    assert [a.batch for a in plan.actions if a.kind == "merge"] == ["a", "c"]
-    assert probes(plan) == ["b"]  # c is a candidate too: the merge path owns it
+    assert probes(plan) == ["a", "b"]
 
 
-def test_the_merge_candidate_and_clean_prs_are_never_probed() -> None:
+def test_clean_and_unknown_prs_are_never_probed() -> None:
     plan = walk(
         [("a", False, "green", Approved("h-a")), ("b", True, "green", Unlabelled())],
-        a=DIRTY,
         b={"mergeable": "MERGEABLE", "merge_state": "CLEAN"},
     )
     assert probes(plan) == []
     unknown = walk([("a", True, "green", Unlabelled())], a={"mergeable": "UNKNOWN"})
-    assert probes(unknown) == [] and unknown.trains == ()
+    assert probes(unknown) == []
 
 
-def test_a_conflicting_member_stepped_over_red_is_probed() -> None:
+def test_a_conflicting_pr_stepped_over_red_is_probed() -> None:
     plan = walk([("a", False, "failing", Approved("h-a"))], a=DIRTY)
-    assert [a.kind for a in plan.actions] == ["warn", "conflict-probe"]
+    assert reds(plan) == ["a"] and probes(plan) == ["a"]
+
+
+def test_an_entry_the_queue_holds_is_left_to_the_queue() -> None:
+    snap = _snap(
+        [("a", False, "green", Approved("h-a")), ("b", False, "green", Approved("h-b"))],
+        a=DIRTY,
+        b=DIRTY,
+    )
+    out = _conflict_probes(snap.queue, snap, frozenset({"a"}))
+    assert [a.batch for a in out] == ["b"]

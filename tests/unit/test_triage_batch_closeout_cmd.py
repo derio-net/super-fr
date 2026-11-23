@@ -426,6 +426,6 @@ def test_gh1496_the_hand_back_brief_asks_for_a_rebase_never_a_merge() -> None:
 
     brief = handback_brief(pr=900, branch=BRANCH, base="main", checks=("lint",))
     flat = " ".join(brief.split())
-    assert "rebase its one commit onto origin/main" in flat and "--force-with-lease" in flat
+    assert "rebase its commits onto origin/main" in flat and "--force-with-lease" in flat
     assert "merge origin/main in," not in flat
     assert f"fr triage batch closeout --branch {BRANCH} --yes" in flat

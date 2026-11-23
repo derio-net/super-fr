@@ -144,8 +144,8 @@ def test_the_merge_confirmation_shows_the_live_state(ops_root: Path) -> None:
     gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True)
     host.how["mut"] = "checked"
     run(gate)
-    merge_q = next(a for a in prompt.asked if a.startswith("MERGE"))
-    assert "pre: DONE" in merge_q and "mut: DONE" in merge_q
+    release_q = next(a for a in prompt.asked if a.startswith("RELEASE"))
+    assert "pre: DONE" in release_q and "mut: DONE" in release_q
 
 
 def test_a_pre_committed_attestation_closes_nothing(ops_root: Path) -> None:
@@ -306,7 +306,7 @@ def test_a_failed_push_leaves_the_stage_not_done(ops_root: Path) -> None:
     tree.push_error = "rejected"
     result = run(gate)
     assert result.failed == 3 and "rejected" in result.why
-    assert 3 not in _host(ops_root).stages() and {1, 2} <= _host(ops_root).stages()
+    assert 3 not in _host(ops_root).stages() and {1} <= _host(ops_root).stages()
     tree.push_error = None
     from fr.ops.gate import Gate
 
@@ -417,7 +417,7 @@ def test_nothing_is_pushed_before_the_merge_and_the_rebase(ops_root: Path) -> No
     calls = [k for k, _ in tree.calls]
     assert "push" in calls
     assert calls.index("push") > calls.index("rebase")
-    assert 1 in _host(ops_root).stages() and 2 in _host(ops_root).stages()
+    assert 1 in _host(ops_root).stages() and 2 not in _host(ops_root).stages()  # R26
 
 
 def test_pushes_carry_a_lease_on_the_last_pushed_sha(ops_root: Path) -> None:

@@ -24,8 +24,17 @@ from fr.journal.model import (
 )
 from fr.ops import gate as gate_mod
 from fr.ops.evidence import record_op
-from fr.ops.gate import Gate, GateTarget, HostGateState, JournalLedger, preview, run
+from fr.ops.gate import (
+    Gate,
+    GateResult,
+    GateTarget,
+    HostGateState,
+    JournalLedger,
+    preview,
+    run,
+)
 from fr.run.model import RunState, StepRecord, save_run_state
+from fr.triage.approval import release_marker
 
 from tests.unit.requirements_support import row, write_matrix
 
@@ -175,6 +184,8 @@ class FakeHost:
         self.stale: dict[str, list[str]] = {}
         self.tip: str | None = TIP
         self.origin_default: str | None = "main"
+        self.queue = True  # `.fr/triage.yaml` declares a `queue:` block
+        self.patch: str | None = "ab12cd"  # the verified head's patch-id; None: unreadable
         self.how: dict[str, str] = {}
         self.materialised: list[Path] = []
         # `fr ops status <id> --json`, scripted per op: each call pops (exit, rows | text)
@@ -210,6 +221,12 @@ class FakeHost:
 
     def origin_head(self) -> str | None:
         return self.origin_default
+
+    def patch_id(self, head: str, default: str) -> str | None:
+        return self.patch
+
+    def queue_configured(self, default: str) -> bool:
+        return self.queue
 
     def fetch(self, ref: str) -> None:
         self.calls.append((["fetch", ref], False))
@@ -255,7 +272,12 @@ class FakeHost:
 
 
 class FakeForge:
-    def __init__(self, *, state: str = "OPEN", unsupported: bool = False) -> None:
+    def __init__(
+        self, *, state: str = "OPEN", unsupported: bool = False, queue_lands: bool = True
+    ) -> None:
+        # `queue_lands`: the merge queue lands a released PR before the stage next reads the
+        # forge, so one run goes on to stage 3; False leaves it to `land()` between two runs.
+        self.queue_lands = queue_lands
         self.pr = {"state": state, "head_oid": HEAD, "head_ref": "feat/x", "base_ref": "main",
                    "labels": ["gate:devops", "gate:tester"]}  # fmt: skip
         self.required: list[dict[str, Any]] = [{"name": "ci", "bucket": "pass"}]
@@ -263,6 +285,7 @@ class FakeForge:
         self.unsupported = unsupported
         self.open_prs: dict[str, int] = {}
         self.default = "main"
+        self.comments: list[dict[str, Any]] = []
 
     def default_branch(self, *, cwd: Path, run: Any = None) -> str | None:
         return self.default
@@ -277,13 +300,37 @@ class FakeForge:
     def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.required)
 
-    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
-        return {"default": "squash", "allowed": ["squash"]}
+    def pr_merge(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("the DevOps stage calls no pr_merge: the merge queue lands the PR")
 
-    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+    def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         if self.unsupported:
-            raise UnsupportedForgeOperation("pr_merge", "gitlab")
-        self.calls.append(("merge", (number, head_sha, method)))
+            raise UnsupportedForgeOperation("ensure_labels", "gitlab")
+        self.calls.append(("ensure_labels", [label.name for label in labels]))
+
+    def edit_pr_labels(
+        self, repo: str, pr: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        self.calls.append(("labels", (pr, sorted(add), sorted(remove))))
+        self.pr["labels"] = [*self.pr["labels"], *sorted(add)]
+        if self.queue_lands and "fr-queue:release" in add:
+            self.land()
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return [dict(c) for c in self.comments]
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self.calls.append(("comment", body))
+        self.comments.append({"association": "OWNER", "id": len(self.comments) + 1, "body": body})
+
+    def edit_issue_comment(self, repo: str, comment_id: int, body: str) -> None:
+        self.calls.append(("edit_comment", body))
+        for c in self.comments:
+            if c["id"] == comment_id:
+                c["body"] = body
+
+    def land(self) -> None:
+        """What the merge queue does between two runs of the stage."""
         self.pr["state"] = "MERGED"
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
@@ -323,7 +370,8 @@ def _gate(
     host = FakeHost(tree, up=up)
     if live_closed:  # the pre-merge ops' LIVE status rows read DONE (p4-r2)
         host.live.update(pre="DONE", mut="DONE")
-    forge = forge or FakeForge()
+    # a recorded stage 3 means the PR merged: the queue landed it, which only the forge says
+    forge = forge or FakeForge(state="MERGED" if 3 in _host(ops_root).stages() else "OPEN")
     prompt = prompt or FakePrompt()
     said: list[str] = []
     target = GateTarget(run=_state(), repo=REPO, pr=5, plan_rel=PLAN, profile="ops",
@@ -332,6 +380,21 @@ def _gate(
         _host(ops_root).set_cut(HEAD)
     gate = Gate(target, host, forge, prompt, said.append, _host(ops_root))
     return gate, host, tree, forge, prompt, said
+
+
+def _labelled(forge: FakeForge, label: str) -> bool:
+    return ("labels", (5, [label], [])) in forge.calls
+
+
+def _through_the_queue(
+    ops_root: Path, gate: Gate, forge: FakeForge, host: FakeHost
+) -> tuple[GateResult, GateResult]:
+    """Run the stage to its stop at stage 2, let the queue land the PR, and run it again
+    on a fresh gate (a new command run reads the forge afresh)."""
+    first = run(gate)
+    forge.land()
+    again = Gate(gate.target, host, forge, FakePrompt(), [].append, _host(ops_root))
+    return first, run(again)
 
 
 def _host(root: Path) -> HostGateState:
@@ -364,8 +427,8 @@ def test_preview_lists_the_eight_stages_and_changes_nothing(ops_root: Path) -> N
 
 
 def test_preview_marks_recorded_stages_done(ops_root: Path) -> None:
-    _record_stages(ops_root, 1, 2)
-    gate, *_ = _gate(ops_root, up=True)
+    _record_stages(ops_root, 1)
+    gate, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))  # stage 2: the forge's
     text = "\n".join(preview(gate))
     assert "[done] 1." in text and "[done] 2." in text and "[next] 3." in text
 
@@ -374,11 +437,12 @@ def test_preview_marks_recorded_stages_done(ops_root: Path) -> None:
 
 
 def test_a_full_run_walks_every_stage_in_order(ops_root: Path) -> None:
-    gate, host, tree, forge, prompt, said = _gate(ops_root)
-    result = run(gate)
+    gate, host, tree, forge, prompt, said = _gate(ops_root, forge=FakeForge(queue_lands=False))
+    first, result = _through_the_queue(ops_root, gate, forge, host)
+    assert first.waiting and first.ran == (1, 2) and not first.ok and first.code == 0
     assert result.ok, said
-    assert result.ran == (1, 2, 3, 4, 5, 6, 7, 8)
-    assert _host(ops_root).stages() == set(range(1, 9))
+    assert result.ran == (3, 4, 5, 6, 7, 8)
+    assert _host(ops_root).stages() == {1, 3, 4, 5, 6, 7, 8}  # stage 2 is never recorded
 
     argvs = [a for a, _ in host.calls]
     # stage 1: the ops workspace is cut from the PR head on the ops profile
@@ -390,10 +454,14 @@ def test_a_full_run_walks_every_stage_in_order(ops_root: Path) -> None:
     assert _exec("ops", "apply", "mut", "--plan", PLAN, "--yes", "--yes-mutating") in argvs
     assert _exec("ops", "apply", "post", "--plan", PLAN, "--yes") in argvs
     assert any("MUTATING" in a and "rewrites it" in a for a in prompt.asked)
-    # stage 2: its own confirmation names the PR, the head sha and the pre-merge state
-    merge_q = next(a for a in prompt.asked if a.startswith("MERGE"))
-    assert "#5" in merge_q and HEAD in merge_q and "pre-merge state" in merge_q
-    assert ("merge", (5, HEAD, "squash")) in forge.calls
+    # stage 2: its own confirmation names the PR, the head sha and the pre-merge state; it
+    # adds the release label and merges nothing (R26)
+    release_q = next(a for a in prompt.asked if a.startswith("RELEASE"))
+    assert "#5" in release_q and HEAD in release_q and "pre-merge state" in release_q
+    assert ("ensure_labels", ["fr-queue:release"]) in forge.calls
+    assert _labelled(forge, "fr-queue:release")
+    # stage 4's completion lifts the queue's barrier
+    assert _labelled(forge, "fr-queue:postmerge-done")
     # stage 3: verify-merge, then the ops branch rebased onto the default branch
     assert ["isolation", "verify-merge", "--repo", str(PRIMARY), "--branch", "feat/x",
             "--default-branch", "main"] in argvs  # fmt: skip
@@ -454,8 +522,9 @@ def test_each_stage_commits_its_evidence_on_the_ops_branch(ops_root: Path) -> No
     gate, host, tree, *_ = _gate(ops_root)
     run(gate)
     commits = [m for k, m in tree.calls if k == "commit"]
-    for n in range(1, 9):
+    for n in (1, 3, 4, 5, 6, 7, 8):
         assert any(f"DevOps stage {n}" in m for m in commits), commits
+    assert not any("DevOps stage 2" in m for m in commits)  # stage 2 records nothing (R26)
 
 
 # --------------------------------------------------------------------- the merge
@@ -466,8 +535,8 @@ def test_the_merge_refuses_while_a_pre_merge_op_is_open(ops_root: Path) -> None:
     gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True)
     result = run(gate)
     assert result.failed == 2 and "pre-merge ops are still open" in result.why
-    assert not [c for c in forge.calls if c[0] == "merge"]
-    assert not any(a.startswith("MERGE") for a in prompt.asked)
+    assert not _labelled(forge, "fr-queue:release")
+    assert not any(a.startswith("RELEASE") for a in prompt.asked)
 
 
 def test_the_merge_refuses_on_red_required_checks(ops_root: Path) -> None:
@@ -479,7 +548,7 @@ def test_the_merge_refuses_on_red_required_checks(ops_root: Path) -> None:
     gate, *_ = _gate(ops_root, up=True, live_closed=True, forge=forge)
     result = run(gate)
     assert result.failed == 2 and "failing" in result.why and "ci" in result.why
-    assert not [c for c in forge.calls if c[0] == "merge"]
+    assert not _labelled(forge, "fr-queue:release")
 
 
 def test_a_declined_merge_merges_nothing(ops_root: Path) -> None:
@@ -490,19 +559,19 @@ def test_a_declined_merge_merges_nothing(ops_root: Path) -> None:
         ops_root, up=True, live_closed=True, prompt=FakePrompt([False])
     )
     result = run(gate)
-    assert result.failed == 2 and "not confirmed" in result.why
-    assert not [c for c in forge.calls if c[0] == "merge"]
+    assert result.failed == 2 and "not confirmed" in result.why and "nothing released" in result.why
+    assert not _labelled(forge, "fr-queue:release")
     assert 2 not in _host(ops_root).stages()
 
 
-def test_a_non_github_forge_names_the_manual_merge(ops_root: Path) -> None:
+def test_a_forge_that_cannot_label_names_the_manual_label(ops_root: Path) -> None:
     _record_stages(ops_root, 1)
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
     gate, *_ = _gate(ops_root, up=True, live_closed=True, forge=FakeForge(unsupported=True))
     result = run(gate)
     assert result.failed == 2
-    assert "by hand" in result.why and "#5" in result.why and HEAD in result.why
+    assert "by hand" in result.why and "#5" in result.why and "fr-queue:release" in result.why
 
 
 def test_a_forge_merged_pr_counts_as_stage_2_done(ops_root: Path) -> None:
@@ -510,8 +579,158 @@ def test_a_forge_merged_pr_counts_as_stage_2_done(ops_root: Path) -> None:
     gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
     result = run(gate)
     assert result.ok and 2 not in result.ran and result.ran[0] == 3
-    assert not any(a.startswith("MERGE") for a in prompt.asked)
-    assert not [c for c in forge.calls if c[0] == "merge"]
+    assert not any(a.startswith("RELEASE") for a in prompt.asked)
+    assert not _labelled(forge, "fr-queue:release")
+
+
+def test_stage_2_never_merges_and_waits_for_the_queue(ops_root: Path) -> None:
+    """R26: the stage adds `fr-queue:release` and stops; `pr_merge` raises if it is called."""
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    gate, host, tree, forge, prompt, said = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    result = run(gate)
+    assert result.waiting and not result.ok and result.code == 0 and result.ran == (2,)
+    assert _labelled(forge, "fr-queue:release") and 2 not in _host(ops_root).stages()
+    assert not any(a[:2] == ["isolation", "verify-merge"] for a, _ in host.calls)  # no stage 3
+    assert any("waits for the PR to be merged" in line for line in said)
+    # p6-r2: the marker names what stage 2 verified, written before the label
+    assert forge.calls.index(("comment", release_marker(HEAD, "ab12cd"))) < forge.calls.index(
+        ("labels", (5, ["fr-queue:release"], []))
+    )
+
+
+def test_forge_labels_off_refuses_the_release_and_names_the_label(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R9: the queue is told by label, so `forge.labels: off` stops the stage."""
+    monkeypatch.setattr(
+        "fr.settings.ledger_block",
+        lambda root, kind: "forge.labels is off" if kind == "labels" else None,
+    )
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True)
+    result = run(gate)
+    assert result.failed == 2 and "forge.labels is off" in result.why
+    assert "fr-queue:release" in result.why and not [c for c in forge.calls if c[0] == "labels"]
+
+
+def test_a_rerun_while_released_asks_nothing_and_waits_again(ops_root: Path) -> None:
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    forge.pr["labels"].append("fr-queue:release")
+    forge.comments.append({"association": "OWNER", "id": 1, "body": release_marker(HEAD, "ab12cd")})
+    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    result = run(gate)
+    assert result.waiting and prompt.asked == []
+    assert not [c for c in forge.calls if c[0] == "labels"]
+
+
+def test_a_released_pr_whose_marker_names_another_diff_is_released_again(ops_root: Path) -> None:
+    """p6-r2: a label whose marker is not what the stage verified now is not a release."""
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    forge.pr["labels"].append("fr-queue:release")
+    forge.comments.append({"association": "OWNER", "id": 1, "body": release_marker("0ld", "0ld")})
+    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    result = run(gate)
+    assert result.waiting and len(prompt.asked) == 1
+    assert ("edit_comment", release_marker(HEAD, "ab12cd")) in forge.calls  # in place
+    assert not [c for c in forge.calls if c[0] == "labels"]  # the label is already on
+
+
+def test_an_unreadable_patch_id_releases_nothing(ops_root: Path) -> None:
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True)
+    host.patch = None
+    result = run(gate)
+    assert result.failed == 2 and "patch-id" in result.why and forge.calls == []
+
+
+def test_a_repo_with_no_queue_is_told_to_merge_by_hand_and_a_hand_merge_completes_stage_2(
+    ops_root: Path,
+) -> None:
+    """p6-r4: the gate never merges; with no `queue:` it says so and waits for the forge."""
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    gate, host, tree, forge, prompt, said = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    host.queue = False
+    result = run(gate)
+    assert result.waiting and prompt.asked == [] and forge.calls == []
+    assert any("does not serve" in line and "merge PR #5 by hand" in line for line in said)
+    forge.land()  # the operator merges it
+    again = Gate(gate.target, host, forge, FakePrompt(), [].append, _host(ops_root))
+    assert run(again).ran[0] == 3 and 2 not in run(again).ran
+
+
+def test_stage_4_under_labels_off_finishes_when_the_label_was_added_by_hand(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p6-r3: the label already on is enough; nothing is written, so labels off cannot refuse."""
+    monkeypatch.setattr(
+        "fr.settings.ledger_block",
+        lambda root, kind: "forge.labels is off" if kind == "labels" else None,
+    )
+    forge = FakeForge(state="MERGED")
+    forge.pr["labels"].append("fr-queue:postmerge-done")
+    gate, host, tree, forge, *_ = _gate(ops_root, forge=forge)
+    result = run(gate)
+    assert 4 in result.ran and 4 in _host(ops_root).stages()
+    assert not [c for c in forge.calls if c[0] == "labels"]
+
+
+def test_stage_4_writes_the_postmerge_marker_before_the_label(ops_root: Path) -> None:
+    """l-security-r2: the label alone lifts nothing, so the marker comes first."""
+    from fr.triage.approval import postmerge_marker
+
+    forge = FakeForge(state="MERGED")
+    gate, host, tree, forge, *_ = _gate(ops_root, forge=forge)
+    result = run(gate)
+    assert 4 in result.ran
+    assert forge.calls.index(("comment", postmerge_marker(HEAD))) < forge.calls.index(
+        ("labels", (5, ["fr-queue:postmerge-done"], []))
+    )
+
+
+def test_a_marker_is_edited_only_when_it_is_trusted_and_its_own_form(ops_root: Path) -> None:
+    """l-security-r3: a stranger's comment that starts like the marker is never overwritten;
+    the stage posts a new one."""
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    forge = FakeForge(queue_lands=False)
+    forge.comments.append({"association": "NONE", "id": 1, "body": release_marker("0ld", "0ld")})
+    forge.comments.append(
+        {"association": "OWNER", "id": 2, "body": "see " + release_marker("x", "y")}
+    )
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True, forge=forge)
+    run(gate)
+    assert not [c for c in forge.calls if c[0] == "edit_comment"]
+    assert ("comment", release_marker(HEAD, "ab12cd")) in forge.calls
+
+
+def test_a_recorded_stage_2_no_longer_skips_the_wait(ops_root: Path) -> None:
+    """A host record from before the queue named stage 2 done: the forge's word is the only
+    one, so an unmerged PR is released again rather than rebased and post-merge-applied."""
+    _record_stages(ops_root, 1, 2)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, *_ = _gate(
+        ops_root, up=True, live_closed=True, forge=FakeForge(queue_lands=False)
+    )
+    result = run(gate)
+    assert result.waiting and not any(c[0] == "rebase" for c in tree.calls)
 
 
 # ------------------------------------------------------------- resume and failure
@@ -532,12 +751,12 @@ def test_it_stops_at_the_first_failure_naming_the_stage_then_resumes(ops_root: P
     first = run(gate)
     assert not first.ok and first.failed == 4
     assert "stage 4 (post-merge ops) failed" in first.why and "op post" in first.why
-    assert _host(ops_root).stages() == {1, 2, 3}
+    assert _host(ops_root).stages() == {1, 3}  # stage 2 is the forge's MERGED, never recorded
     host.fail_apply = set()
     gate2 = Gate(gate.target, host, forge, FakePrompt(), [].append, _host(ops_root))
     second = run(gate2)
     assert second.ok and second.ran == (4, 5, 6, 7, 8)
-    assert len([c for c in forge.calls if c[0] == "merge"]) == 1
+    assert sum(c[0] == "labels" and "fr-queue:release" in c[1][1] for c in forge.calls) == 1
 
 
 def test_a_ready_probe_that_fails_stops_stage_3(ops_root: Path) -> None:
@@ -617,8 +836,8 @@ def test_a_head_that_moved_after_stage_1_is_refused_and_nothing_merges(ops_root:
     result = run(gate)
     assert result.failed == 2 and result.code == 2
     assert old in result.why and HEAD in result.why and "fr isolation down" in result.why
-    assert not [c for c in forge.calls if c[0] == "merge"]
-    assert not any(a.startswith("MERGE") for a in prompt.asked)
+    assert not _labelled(forge, "fr-queue:release")
+    assert not any(a.startswith("RELEASE") for a in prompt.asked)
 
 
 def test_the_merge_and_the_rebase_carry_the_recorded_head(ops_root: Path) -> None:
@@ -636,7 +855,7 @@ def test_the_merge_and_the_rebase_carry_the_recorded_head(ops_root: Path) -> Non
 
     forge.pr_view = view  # type: ignore[method-assign]
     assert run(gate).ok
-    assert ("merge", (5, HEAD, "squash")) in forge.calls
+    assert _labelled(forge, "fr-queue:release")
     assert ("rebase", ("origin/main", HEAD)) in tree.calls
 
 
@@ -682,7 +901,7 @@ def test_a_journal_planted_head_is_ignored(ops_root: Path) -> None:
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
     gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True)
     assert run(gate).ok
-    assert ("merge", (5, HEAD, "squash")) in forge.calls
+    assert _labelled(forge, "fr-queue:release")
 
 
 def test_a_malformed_recorded_sha_is_refused(ops_root: Path) -> None:
@@ -694,7 +913,7 @@ def test_a_malformed_recorded_sha_is_refused(ops_root: Path) -> None:
     gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True)
     result = run(gate)
     assert result.failed == 2 and result.code == 2 and "sha" in result.why
-    assert not [c for c in forge.calls if c[0] == "merge"]
+    assert not _labelled(forge, "fr-queue:release")
 
 
 def test_stage_1_refuses_a_malformed_forge_head(ops_root: Path) -> None:

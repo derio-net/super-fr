@@ -37,6 +37,7 @@ forge: {type: github}
 tracking: {type: none}
 YAML
 printf 'env_passthrough: [MARKS]\n' > .fr/ops.yaml
+printf 'queue: {ci: none}\n' > .fr/triage.yaml  # the wave merge queue serves this repo
 matrix_fragment <<'YAML'
 org: derio-net
 repo: fixture
@@ -145,17 +146,17 @@ class Forge:
     def pr_checks(self, repo, n):
         return [{"name": "ci", "bucket": "pass"}]
 
-    def repo_merge_methods(self, repo):
-        return {"default": "merge", "allowed": ["merge"]}
-
     def pr_merge(self, repo, n, *, head_sha, method):
+        raise AssertionError("the DevOps stage calls no pr_merge: the merge queue lands the PR")
+
+    def _queue_lands(self, n):
+        """What the wave merge queue does once the stage released the PR (R26)."""
         p = self._pr(n)
-        assert p["head_oid"] == head_sha, "merged a head the stage did not pin"
         subprocess.run(["git", "--git-dir", os.environ["ORIGIN"], "update-ref",
-                        "refs/heads/main", head_sha], check=True)
+                        "refs/heads/main", p["head_oid"]], check=True)
         p["state"] = "MERGED"
         p.setdefault("events", []).append("merged")
-        save()
+        print(f"FAKE-QUEUE landed #{n}")
 
     def open_pr_for_head(self, repo, branch):
         return prs.get("housekeeping", {}).get(branch)
@@ -179,16 +180,29 @@ class Forge:
     def edit_pr_labels(self, repo, n, *, add, remove):
         p = self._pr(n)
         p["labels"] = sorted((set(p["labels"]) | set(add)) - set(remove))
+        if "fr-queue:release" in add:
+            self._queue_lands(n)
         save()
 
     def list_issue_comments(self, repo, n):
-        return []
+        return list(self._pr(n).get("comments", []))
 
-    def ensure_labels(self, repo, names):
+    def edit_issue_comment(self, repo, comment_id, body):
+        for p in prs.values():
+            for c in p.get("comments", []) if isinstance(p, dict) else []:
+                if c["id"] == comment_id:
+                    c["body"] = body
+        save()
+
+    def ensure_labels(self, repo, labels):
         pass
 
     def comment_pr(self, repo, n, body):
         print(f"FAKE-FORGE comment #{n}: {body}")
+        p = self._pr(n)
+        comments = p.setdefault("comments", [])
+        comments.append({"association": "OWNER", "id": len(comments) + 1, "body": body})
+        save()
 
 
 class Prompt:
@@ -249,8 +263,8 @@ expect_grep 'terminal' "$out" "a non-interactive context is refused"
 gate run-p y y y
 require_exit 1 "$OUT"
 expect_grep 'stage 1 \(pre-merge ops\): done' "$OUT" "stage 1 completes"
-expect_grep 'PROMPT MERGE PR #5' "$OUT" "the merge asks its own confirmation"
-expect_grep 'stage 2 \(merge\): done' "$OUT" "stage 2 merges"
+expect_grep 'PROMPT RELEASE PR #5' "$OUT" "the release asks its own confirmation"
+expect_grep 'FAKE-QUEUE landed #5' "$OUT" "the queue lands the released PR, not the stage"
 expect_grep 'stage 3 \(verify-merge, rebase, ready\): done' "$OUT" "stage 3 verifies and rebases"
 expect_grep 'stage 4 \(post-merge ops\) failed' "$OUT" "stage 4 stops, naming the stage"
 [ -f "$MARKS/pre-p" ] || fail "the pre-merge op was not applied"
@@ -262,7 +276,7 @@ touch "$MARKS/allow-p"
 gate run-p y "ran walked it"
 require_exit 0 "$OUT"
 refuse_grep 'stage [123] \(' "$OUT" "a resume re-ran a recorded stage"
-refuse_grep 'PROMPT MERGE' "$OUT" "a resume asked to merge again"
+refuse_grep 'PROMPT RELEASE' "$OUT" "a resume asked to release again"
 expect_grep 'stage 4 \(post-merge ops\): done' "$OUT" "stage 4 resumes"
 expect_grep 'ASK Test Plan step 1 \(devops\)' "$OUT" "stage 5 asks for the devops step"
 expect_grep 'stage 6 \(gate pass\): done' "$OUT" "stage 6 passes the gate"

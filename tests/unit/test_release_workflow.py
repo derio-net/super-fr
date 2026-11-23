@@ -65,10 +65,95 @@ TOKEN_JOBS = ("prepare", "publish")
 CREDENTIAL_FREE_JOBS = ("collect", "test")
 
 
-def test_triggers_on_push_to_main_with_no_path_filter() -> None:
+def test_triggers_on_push_to_main_and_the_merge_queue_hold_with_no_path_filter() -> None:
     push = _on()["push"]
-    assert push["branches"] == ["main"]
+    # `fr-hold/**` is the merge queue's hold ref (spec 2026-11-19-wave-merge-queue R19): a
+    # drain, by landing, forge merge or deferral, starts a release through its push
+    assert push["branches"] == ["main", "fr-hold/**"]
     assert "paths" not in push  # every merge may carry a fragment
+
+
+def _job_runs(job: str, **event: object) -> bool:
+    """*job*'s `if:` evaluated for a push event: *ref*, *deleted*, *message*."""
+    import re
+
+    expr = _jobs()[job]["if"]
+    py = re.sub(r"!(?!=)", " not ", expr.replace("&&", " and ").replace("||", " or "))
+    py = py.replace("github.event.deleted", "deleted").replace("github.ref", "ref")
+    py = py.replace("github.event.head_commit.message", "message").replace("true", "True")
+    return bool(
+        eval(  # noqa: S307 - the workflow's own expression, over four names
+            py,
+            {"startsWith": lambda a, b: str(a).startswith(b)},
+            {"ref": "refs/heads/main", "deleted": False, "message": "", **event},
+        )
+    )
+
+
+def _prepare_runs(**event: object) -> bool:
+    return _job_runs("prepare", **event)
+
+
+def _relay_runs(**event: object) -> bool:
+    return _job_runs("hold-relay", **event)
+
+
+HOLD = "refs/heads/fr-hold/queue"
+DRAINED = "fr-hold: drained scope s wave 1 opened x refreshed y"
+
+
+def test_a_deleted_hold_starts_no_release() -> None:
+    """R19: deleting the hold is the operator clearing it by hand; neither `prepare` nor the
+    relay runs, and every job but the relay needs `prepare`'s `cut` output."""
+    assert not _prepare_runs(ref=HOLD, deleted=True, message="")
+    assert not _relay_runs(ref=HOLD, deleted=True, message=DRAINED)
+    for name, job in _jobs().items():
+        if name not in ("prepare", "hold-relay"):
+            assert "needs.prepare.outputs.cut" in str(job.get("if", "")), name
+
+
+def test_only_a_drained_hold_push_dispatches_a_release_on_main() -> None:
+    """p4-r2: the hold is pushed at open, refreshed hourly and cleared, and only the drain
+    needs a release; it is relayed as a dispatch on main, never run on the hold ref."""
+    for state in ("open", "cleared"):
+        msg = f"fr-hold: {state} scope s wave 1 opened x"
+        assert not _relay_runs(ref=HOLD, message=msg)
+        assert not _prepare_runs(ref=HOLD, message=msg)
+    assert _relay_runs(ref=HOLD, message=DRAINED)
+    assert not _prepare_runs(ref=HOLD, message=DRAINED)
+    # main pushes, the schedule and a dispatch are unchanged (no head commit message for the
+    # last two), and the relay never runs off the hold ref
+    assert _prepare_runs(ref="refs/heads/main", message="feat: a change (#1)")
+    assert _prepare_runs(ref="refs/heads/main", message="")
+    assert not _prepare_runs(ref="refs/heads/main", deleted=True)
+    assert not _relay_runs(ref="refs/heads/main", message="fr-hold: drained x")
+
+
+def test_the_hold_relay_holds_no_secret_and_dispatches_on_main() -> None:
+    """Spec 2026-11-21-release-app-hardening R1/R2: a hold push runs the hold branch's own
+    workflow file, so it must never reach the `release` environment. The relay names no
+    environment, holds only `actions: write`, reads no secret and dispatches on main."""
+    job = _jobs()["hold-relay"]
+    assert "environment" not in job
+    assert job["permissions"] == {"actions": "write"}
+    text = yaml.safe_dump(job)
+    assert "secrets." not in text and "app-token" not in text
+    (step,) = job["steps"]
+    assert step["run"] == 'gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main'
+    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    for name in TOKEN_JOBS:
+        assert _jobs()[name]["environment"] == "release"
+
+
+def test_the_hold_is_cleared_by_the_job_that_ends_the_run_with_the_token_it_holds() -> None:
+    """R18: the clear is release.py's last step, in `prepare` (it cuts nothing) or `publish`
+    (after the push), the two jobs that hold the token; no credential-free job runs it."""
+    for name in TOKEN_JOBS:
+        (step,) = [s for s in _release_py_steps(name)]
+        assert "GH_TOKEN" in step["env"]
+    for name in CREDENTIAL_FREE_JOBS:
+        for step in _release_py_steps(name):
+            assert "publish" not in str(step["run"]) and "prepare" not in str(step["run"])
 
 
 def test_manual_dispatch_takes_an_optional_version() -> None:
@@ -165,8 +250,12 @@ def test_app_token_is_scoped_to_this_repo_with_contents_and_issues_write_only() 
 
 
 def test_checkout_persists_no_credential() -> None:
-    """Every job's checkout, not the first one `next()` finds (spec 2026-11-01 §E2)."""
+    """Every job's checkout, not the first one `next()` finds (spec 2026-11-01 §E2). The
+    hold relay checks nothing out."""
+    assert not any("checkout" in str(s.get("uses", "")) for s in _job_steps("hold-relay"))
     for name in _jobs():
+        if name == "hold-relay":
+            continue
         assert _checkout(name)["with"]["persist-credentials"] is False, name
 
 
@@ -193,7 +282,9 @@ def test_the_staged_suite_jobs_hold_no_token(  # R9
 
 def test_the_release_is_a_six_job_graph_gated_on_prepares_cut() -> None:
     jobs = _jobs()
-    assert set(jobs) == {"prepare", "collect", "test", "split-check", "publish"}
+    # plus `hold-relay`, which runs only on a drained hold push and needs nothing
+    assert set(jobs) == {"hold-relay", "prepare", "collect", "test", "split-check", "publish"}
+    assert "needs" not in jobs["hold-relay"]
     assert jobs["test"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
     assert jobs["test"]["strategy"]["fail-fast"] is False
     assert {"collect", "test"} <= set(jobs["split-check"]["needs"])
@@ -206,7 +297,14 @@ def test_the_release_is_a_six_job_graph_gated_on_prepares_cut() -> None:
 
 
 def test_every_release_job_has_its_timeout() -> None:  # R12
-    expected = {"prepare": 10, "collect": 10, "test": 20, "split-check": 5, "publish": 10}
+    expected = {
+        "hold-relay": 5,
+        "prepare": 10,
+        "collect": 10,
+        "test": 20,
+        "split-check": 5,
+        "publish": 10,
+    }
     assert {n: j.get("timeout-minutes") for n, j in _jobs().items()} == expected
 
 
