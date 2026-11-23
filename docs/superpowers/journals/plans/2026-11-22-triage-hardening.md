@@ -176,3 +176,68 @@ snapshot reading and key extraction were written once in GREEN (strict_snapshots
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 a one-line guard in a constant script; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-11-23T00:56:56+00:00 phase=3 -->
+### p3-review · review · Phase 3 review: no blocking defect; four in-scope findings, one out (phase 3)
+
+Separate reviewer (read-only) over 3cf55f53c..682755ad4 against R11-R13. Confirmed: an OPEN
+judged PR is re-viewed, never carried; no PR is viewed in a skipped repo; a failed view_pr is
+recorded unviewed; an unreadable snapshot raises, a missing snapshots dir reads empty; the
+key_repos full-name path and the debt key never fail open. Each finding verified against the code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-23T00:56:56+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · A debt-only privacy refusal reads '<repo>#debt is an issue of <repo>' (phase 3)
+
+privacy.refusal worded the synthetic debt key as an issue that does not exist.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-23T00:56:56+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · The R13 test only string-checks the guard and never runs the script (phase 3)
+
+A guard that no longer returns early, or a DOM read moved above it, would stay green.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-23T00:56:56+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · Thin R12 tests: no out-of-scope full PR key, no missing snapshots dir (phase 3)
+
+The member-repo PR key is already covered (the existing PR test uses a member repo). Missing:
+a full key of a repo outside the scope, and a state dir with no snapshots/. A malformed debt key
+reaches client_for, which is the pre-existing path for every repo and still refuses.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-23T00:56:56+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · CollectStats.viewed counts a past-limit PR once though it costs two single reads (phase 3)
+
+The stat is documented as what a collect cost in single reads; view_pr was not counted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-23T00:56:56+00:00 phase=3 state=open review_scope=out -->
+### p3-r5 · finding [open] (reviewer: out of scope) · A carried CLOSED judged PR that is later reopened stays carried as closed (phase 3)
+
+The same holds for carried closed issues before this change; the spec chose the carry.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-23T00:56:56+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: A debt-only privacy refusal reads '<repo>#debt is an issue of <repo>' (phase 3)
+
+privacy.DEBT_KEY_SUFFIX names the synthetic key, and refusal() words it as "a carried snapshot
+holds debt figures of <repo>". test_a_debt_only_leak_is_worded_as_debt_not_as_an_issue.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-23T00:56:56+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: The R13 test only string-checks the guard and never runs the script (phase 3)
+
+test_the_issues_filter_script_runs_without_throwing_when_the_filter_bar_is_absent runs SCRIPT
+under node against a document whose every other DOM read throws; it fails with the guard
+removed. Skipped where node is absent (GitHub's runners have it).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-23T00:56:56+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: Thin R12 tests: no out-of-scope full PR key, no missing snapshots dir (phase 3)
+
+Added test_a_snapshot_pr_key_of_a_repo_outside_the_scope_is_read_not_skipped and
+test_no_snapshots_directory_adds_no_key_and_no_repo. The malformed debt key keeps the old
+client_for path, which refuses (not fail-open).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-23T00:56:56+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: CollectStats.viewed counts a past-limit PR once though it costs two single reads (phase 3)
+
+collect now counts the view_pr read too; the CollectStats docstring and the count test say three reads.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-23T00:56:56+00:00 phase=3 state=open resolves=p3-r5 out_of_scope=true -->
+### p3-r5-resolved · finding [out-of-scope] · resolves p3-r5: A carried CLOSED judged PR that is later reopened stays carried as closed (phase 3)
+
+Not caused by this change; a carried closed issue already behaved this way, and R11 asks for the carry.
