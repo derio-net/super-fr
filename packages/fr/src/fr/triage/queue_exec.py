@@ -199,6 +199,12 @@ def _mirror_failed(entry: EntryInput, paths: Sequence[str], words: str) -> Mirro
     )  # fmt: skip
 
 
+def _unsafe_path(rel: str) -> bool:
+    """A path no mirror may hand back: absolute, or with a `.git` or `..` component."""
+    parts = rel.replace("\\", "/").split("/")
+    return rel.startswith(("/", "\\")) or any(p in (".git", "..") for p in parts)
+
+
 def _regenerate(
     wt: Worktree, regen: Regen, entry: EntryInput, paths: Sequence[str], abort: Callable[[], None]
 ) -> None:
@@ -206,7 +212,8 @@ def _regenerate(
     worktree's tracked files are exported to a fresh directory with no `.git`; each command
     runs there (`gitseam.run_mirror`: a named environment, an empty HOME, its process group
     killed when it ends). Then the entry is handed back when one failed, a file keeps
-    conflict markers, a changed path is not a regular file, or a change lies outside the
+    conflict markers, a changed path is git metadata (a `.git` or `..` component, or
+    absolute), a changed path is not a regular file, or a change lies outside the
     `generated:` files and blocks; otherwise only those changed paths are copied back and
     staged."""
     with tempfile.TemporaryDirectory(prefix="fr-mirror-") as where:
@@ -224,13 +231,17 @@ def _regenerate(
         if marked:
             abort()
             raise _mirror_failed(entry, marked, "conflict markers are left after the mirrors ran")
+        changed = sorted(p for p in {*before, *after} if before.get(p) != after.get(p))
+        unsafe = [p for p in changed if _unsafe_path(p)]
+        if unsafe:  # whatever the globs say: fnmatch's `*` spans `/` (review #1647)
+            abort()
+            raise _mirror_failed(entry, unsafe, "the mirrors wrote a git metadata path")
         stray = outside_generated(dict(before), dict(after), regen.generated)
         if stray:
             abort()
             raise _mirror_failed(
                 entry, stray, "the mirrors changed it outside the generated files and blocks"
             )
-        changed = sorted(p for p in {*before, *after} if before.get(p) != after.get(p))
         odd = [p for p in changed if (after.get(p) or "").startswith(IRREGULAR)]
         if odd:
             abort()

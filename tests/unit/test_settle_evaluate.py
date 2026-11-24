@@ -348,3 +348,18 @@ def test_a_cancelled_check_counts_as_running_while_a_gate_is_absent() -> None:
     state, _, hint, absent = _ci_state(False, checks, ["ci-ok"], ci_none=False,
                                        age=NO_CI_WAIT_SECONDS + 1)  # fmt: skip
     assert (state, hint, absent) == ("pending", "gate-pending", ("ci-ok",))
+
+
+def test_only_cancelled_checks_pending_name_them_and_say_re_run() -> None:
+    """Review #1647: a cancelled check no newer run replaces is named, with the remedy,
+    never reported as still running; the verdict stays pending (exit 75)."""
+    v = _eval(checks=[_check("test (1)", "cancel"), _check("ok", "pass")])
+    assert v.ci_state == "pending" and v.exit_code == 75 and not v.settled
+    ci_line = v.lines[1]
+    assert "test (1)" in ci_line and "cancelled" in ci_line and "re-run" in ci_line
+    assert "still running" not in ci_line
+
+
+def test_a_running_check_beside_a_cancelled_one_is_still_running() -> None:
+    v = _eval(checks=[_check("test (1)", "cancel"), _check("lint", "pending")])
+    assert v.ci_state == "pending" and "still running" in v.lines[1]

@@ -235,6 +235,41 @@ def test_a_cancelled_gate_nothing_replaces_is_refused_naming_a_rerun(tmp_path: P
     assert "ci-ok" in words and "cancelled" in words and "re-run" in words and url in words
 
 
+def test_a_cancelled_gate_replaced_by_a_green_one_of_its_workflow_passes(
+    tmp_path: Path,
+) -> None:
+    """Review #1647: a cancelled `ci-ok` beside a successful `ci-ok` of the same workflow
+    on the sha (a client that does not keep only the latest run per workflow and name) is
+    replaced, so the gate passes rather than waiting on nothing. DERIVED from the
+    captured green head with a cancelled copy of `ci-ok` added."""
+    repo, client, head = _world(tmp_path)
+    records = _captured("green-head")
+    gate = next(r for r in records if r["name"] == "ci-ok")
+    records.insert(0, {**gate, "conclusion": "cancelled"})
+    client.commit_checks_by_sha[(REPO, head)] = records
+
+    assert verify_ci(repo, client).startswith(f"ci:{head}+")
+
+
+def test_a_cancelled_gate_of_another_workflow_beside_a_green_one_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Review #1647: a same-named check of another workflow replaces nothing (as
+    `queue_exec._unreplaced` reads it), and once nothing on the sha runs nothing will:
+    the wait is bounded by a refusal naming the re-run, never pending forever. DERIVED
+    from the captured green head with a cancelled `ci-ok` of another workflow added."""
+    repo, client, head = _world(tmp_path)
+    records = _captured("green-head")
+    gate = next(r for r in records if r["name"] == "ci-ok")
+    records.append({**gate, "workflow": "Other", "conclusion": "cancelled"})
+    client.commit_checks_by_sha[(REPO, head)] = records
+
+    with pytest.raises(CiEvidenceRefused) as exc:
+        verify_ci(repo, client)
+
+    assert "ci-ok" in str(exc.value) and "re-run" in str(exc.value)
+
+
 def test_an_absent_gate_on_a_finished_head_is_refused(tmp_path: Path) -> None:
     """DERIVED: the captured green head (`green-head/`) without its `ci-ok` record."""
     repo, client, head = _world(tmp_path)

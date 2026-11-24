@@ -515,7 +515,8 @@ def snapshot_export(
     regular file's text, `IRREGULAR` plus a kind for anything else, symlinks never followed.
     A new path or directory the repo's ignore rules exclude (*ignored*, asked of the scratch
     worktree with paths relative to *root*) is left out, so a `.venv` or `__pycache__` the
-    commands made is not a change."""
+    commands made is not a change. A path with a `.git` component is never asked and always
+    kept, so the caller sees a mirror that wrote git metadata."""
     known = set(tracked)
     known_dirs = {str(parent) for t in known for parent in Path(t).parents}
     out: dict[str, str] = {}
@@ -526,7 +527,9 @@ def snapshot_export(
         fresh = [
             d
             for d in dirnames
-            if prefix + d not in known_dirs and not os.path.islink(os.path.join(top, d))
+            if prefix + d not in known_dirs
+            and not os.path.islink(os.path.join(top, d))
+            and d != ".git"  # never asked of the ignore rules: always seen (review #1647)
         ]
         asked = ignored([prefix + d + "/" for d in fresh]) if fresh else ()
         dropped = {d.rstrip("/") for d in asked}
@@ -541,7 +544,8 @@ def snapshot_export(
                 out[rel] = f"{IRREGULAR}special"
             if rel not in known:
                 new.append(rel)
-    for rel in ignored(new) if new else ():
+    asked_new = [rel for rel in new if ".git" not in rel.split("/")]
+    for rel in ignored(asked_new) if asked_new else ():
         out.pop(rel, None)
     return out
 

@@ -59,6 +59,10 @@ _HINTS: Final[dict[tuple[str, str], str]] = {
         "`fr pr settle` again"
     ),
     ("ci", "pending"): "checks are still running",
+    ("ci", "cancelled"): (
+        "cancelled with no newer run: {cancelled}; re-run the workflow (the PR's checks "
+        "page), then run `fr pr settle` again"
+    ),
     ("ci", "gate-pending"): "waiting on gate check {absent}, which has not reported yet",
     ("ci", "gate-awaiting"): "waiting on gate check {absent}, which has not reported yet",
     ("ci", "awaiting"): "no check has reported on the head yet",
@@ -124,8 +128,9 @@ def _ci_state(
     ci_none: bool,
     age: float | None,
 ) -> tuple[CiState, tuple[str, ...], str, tuple[str, ...]]:
-    """(state, failing check names, hint key, absent gate names). An unknown *age* never
-    reads as `missing`: CI may still be coming."""
+    """(state, failing check names, hint key, the names the hint carries: the absent
+    gates, or the cancelled checks). An unknown *age* never reads as `missing`: CI may
+    still be coming."""
     if ci_none:
         return "none", (), "none", ()
     if is_conflicting:
@@ -136,7 +141,12 @@ def _ci_state(
     )
     if failing:
         return "red", failing, "red", ()
-    if any(bucket_verdict(c.get("bucket")) == "pending" for c in relevant):
+    pending = [c for c in relevant if bucket_verdict(c.get("bucket")) == "pending"]
+    if pending:
+        if all(c.get("bucket") == "cancel" for c in pending):
+            # No newer run replaced them, and none is running: name them and the remedy.
+            cancelled = tuple(sorted({str(c.get("name")) for c in pending}))
+            return "pending", (), "cancelled", cancelled
         return "pending", (), "pending", ()
     fresh = age is None or age < NO_CI_WAIT_SECONDS
     if not checks:
@@ -202,9 +212,9 @@ def evaluate(
     if modes.ci.mode == "off":
         ci_state: CiState = "off"
         failing: tuple[str, ...] = ()
-        hint_key, absent = "", tuple[str, ...]()
+        hint_key, named = "", tuple[str, ...]()
     else:
-        ci_state, failing, hint_key, absent = _ci_state(
+        ci_state, failing, hint_key, named = _ci_state(
             raw_conflict == "conflicting", checks, gate_names, ci_none=ci_none, age=age
         )
     if hint_key == "unrunnable" and modes.conflicts.mode != "fix":
@@ -225,7 +235,8 @@ def evaluate(
             ci_state,
             hint_key,
             failing=", ".join(failing),
-            absent=", ".join(absent),
+            absent=", ".join(named),
+            cancelled=", ".join(named),
             minutes=int((age or 0) // 60),
         ),
     )

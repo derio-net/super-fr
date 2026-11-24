@@ -305,3 +305,24 @@ def test_only_the_generated_changes_are_copied_back(tmp_path: Path) -> None:
     files = set(git(w.origin, "ls-tree", "-r", "--name-only", two.sha).split())
     assert "gen/new.txt" in files and not any(f.startswith("build/") for f in files)
     assert _show(w, two.sha, "gen/out.txt") == "one=A two=B"
+
+
+GIT_CONFIG_OUT = (PY, "-c", "import pathlib; pathlib.Path('gen/.git').mkdir(); "
+                  "pathlib.Path('gen/.git/config').write_text('[core]\\n')")  # fmt: skip
+
+
+@pytest.mark.parametrize("ignore", ["", "gen/.git/\n"])
+def test_a_mirror_writing_git_metadata_hands_the_entry_back(tmp_path: Path, ignore: str) -> None:
+    """Review #1647: `gen/*` matches `gen/.git/config` (fnmatch's `*` spans `/`), so the
+    glob alone would copy it back and stage it. A changed path with a `.git` component
+    hands the entry back whatever the globs say, and the repo's ignore rules never hide
+    it from the snapshot."""
+    w = world(tmp_path)
+    w.move_main({"scripts/regen.py": REGEN, ".gitignore": ignore, **_outputs("a", "b")})
+    w.pr(1, _outputs("A", "b"))
+    w.pr(2, {k: v for k, v in _outputs("a", "B").items() if k != "src/one.txt"})
+    w.fetch()
+    with pytest.raises(MergeConflictError) as raised:
+        _build(w, regen=Regen(mirrors=(*MIRRORS, GIT_CONFIG_OUT), generated=("gen/*",)))
+    assert raised.value.paths == ("gen/.git/config",)
+    assert "the mirrors wrote a git metadata path" in str(raised.value)

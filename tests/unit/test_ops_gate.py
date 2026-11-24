@@ -1311,4 +1311,47 @@ def test_the_merges_check_read_reports_a_cancelled_check_pending_not_failed() ->
     gate = SimpleNamespace(target=SimpleNamespace(repo=REPO, pr=5), forge=Forge())
     with pytest.raises(StageFailed) as exc:
         _checks_green(gate)  # type: ignore[arg-type]
-    assert "pending" in str(exc.value) and "failing" not in str(exc.value)
+    assert "failing" not in str(exc.value)
+
+
+@pytest.mark.parametrize("required", [False, True])
+def test_the_merges_check_read_names_cancelled_unreplaced_checks(required: bool) -> None:
+    """Review #1647: nothing still runs and a check was cancelled with no newer run: the
+    stage says so by name, with the remedy, never "checks are pending"."""
+    from types import SimpleNamespace
+
+    from fr.ops.gate import StageFailed, _checks_green
+
+    checks = [{"name": "test (1)", "bucket": "cancel"}, {"name": "x", "bucket": "pass"}]
+
+    class Forge:
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return checks
+
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return checks if required else []
+
+    gate = SimpleNamespace(target=SimpleNamespace(repo=REPO, pr=5), forge=Forge())
+    with pytest.raises(StageFailed) as exc:
+        _checks_green(gate)  # type: ignore[arg-type]
+    assert str(exc.value) == (
+        "PR #5's checks were cancelled with no newer run: test (1); re-run the workflow"
+    )
+
+
+def test_the_merges_check_read_says_pending_while_a_check_still_runs() -> None:
+    from types import SimpleNamespace
+
+    from fr.ops.gate import StageFailed, _checks_green
+
+    class Forge:
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return [{"name": "a", "bucket": "cancel"}, {"name": "b", "bucket": "pending"}]
+
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return []
+
+    gate = SimpleNamespace(target=SimpleNamespace(repo=REPO, pr=5), forge=Forge())
+    with pytest.raises(StageFailed) as exc:
+        _checks_green(gate)  # type: ignore[arg-type]
+    assert "checks are pending" in str(exc.value)

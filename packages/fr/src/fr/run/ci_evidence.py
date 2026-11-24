@@ -354,6 +354,19 @@ def _superseded(check: dict[str, Any]) -> bool:
     return _finished(check) and is_superseded(str(check.get("conclusion") or ""))
 
 
+def _unreplaced(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """*checks* judged by the latest per (workflow, name): a cancelled check another
+    check of its workflow and name replaces is dropped (review #1647), as
+    `fr.triage.queue_exec._unreplaced` reads a combination. A same-named check of
+    another workflow replaces nothing."""
+
+    def key(c: dict[str, Any]) -> tuple[str, str]:
+        return str(c.get("workflow") or ""), str(c.get("name"))
+
+    live = {key(c) for c in checks if not _superseded(c)}
+    return [c for c in checks if not (_superseded(c) and key(c) in live)]
+
+
 def _where(unfinished: list[dict[str, Any]], checks_page: str) -> str:
     """§I step 5 (p2-r6): each unfinished check's URL, or the PR's checks page
     when none has reported, so the orchestrator can say where to look."""
@@ -413,6 +426,7 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
             f"{', '.join(gates)} absent on {head[:12]}: CI finished without "
             f"reporting {'it' if len(gates) == 1 else 'them'}."
         )
+    checks = _unreplaced(checks)
     by_gate = {g: [c for c in checks if c.get("name") == g] for g in gates}
     unfinished = [c for c in checks if not _finished(c)]
     # A failed gate whose own workflow is still running is a re-run in flight:
@@ -436,9 +450,18 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
     # A cancelled gate is owed a run, not failed (spec 2026-11-24-ci-economy R3). While
     # anything on the sha still runs, a replacement may be on its way: wait. Once nothing
     # runs, nothing will replace it: refuse, naming it, rather than wait forever (p1-r1).
-    stranded = [g for g, cs in by_gate.items() if cs and all(_superseded(c) for c in cs)]
+    # A gate holding any unreplaced cancelled check is stranded, not only an all-cancelled
+    # one: beside a green check of another workflow it would otherwise wait on nothing.
+    stranded = [g for g, cs in by_gate.items() if any(_superseded(c) for c in cs)]
     if stranded and not unfinished and not rerunning:
-        urls = sorted({str(c.get("url")) for g in stranded for c in by_gate[g] if c.get("url")})
+        urls = sorted(
+            {
+                str(c.get("url"))
+                for g in stranded
+                for c in by_gate[g]
+                if _superseded(c) and c.get("url")
+            }
+        )
         raise CiEvidenceRefused(
             f"tests: ci — gate check(s) {', '.join(stranded)} on {ci_sha[:12]} were cancelled "
             "and no run replaced them: re-run the workflow"
