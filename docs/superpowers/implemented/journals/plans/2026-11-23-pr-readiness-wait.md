@@ -1,0 +1,608 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-23-pr-readiness-wait
+
+<!-- fr:journal kind=decision scope=plan id=settle-yaml-bool-refused created=2026-11-23T10:49:48+00:00 phase=1 -->
+### settle-yaml-bool-refused · decision · A YAML bool for git.settle is refused, with a quote-it hint (phase 1)
+
+Per P1.T2.S1, `git.settle.ci: off` unquoted (PyYAML reads `false`) is refused rather
+than mapped to `off` as the on/off keys do. The message says `quote it: 'off'`, so the
+operator sees the fix. `fr settings init` documents the words.
+
+<!-- fr:journal kind=decision scope=plan id=settle-off-concern-state created=2026-11-23T10:49:48+00:00 phase=1 -->
+### settle-off-concern-state · decision · An off concern reads `off` in the verdict and witness; both off reads nothing (phase 1)
+
+`evaluate` reports a concern under `off` as state `off` (witness
+`off/fix:off/green@<head>`). With both keys off the verb makes no forge read at all and
+exits 0. With only conflicts off, `pr_view` is still read, because the CI state needs the
+head and whether the PR conflicts (`unrunnable`); the conflict state is not evaluated.
+
+<!-- fr:journal kind=decision scope=plan id=settle-poll-committed-at created=2026-11-23T10:49:48+00:00 phase=1 -->
+### settle-poll-committed-at · decision · The poll takes a committed_at(sha) callable beside the plan's signature (phase 1)
+
+The no-CI wait needs the PR head's commit time, which the plan's `settle(...)` signature
+did not carry. `poll.settle` takes `committed_at: Callable[[str], float]`; the verb passes
+`fr.settle.target.committed_at` (the sha's time, else HEAD's, else now). PR discovery,
+gate names and `ci none` live in `fr/settle/target.py`, keeping `settle_cmd` thin.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-acceptance-via-set-status created=2026-11-23T10:49:48+00:00 phase=1 -->
+### settle-acceptance-via-set-status · discovery · implement-phase records cannot carry acceptance; rows moved with set-status (phase 1)
+
+The shipped `implement-phase` step emits only `journal:plan` and `plan:ticks`, so its
+record has no `acceptance:` section. Rows pr-settle-setting, pr-settle-verb and
+pr-settle-managed were moved to `ci` with `fr acceptance set-status` (three
+`chore(fr): acceptance` commits) with level refs on the new test names.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-recorded-pr-state created=2026-11-23T10:49:48+00:00 phase=1 -->
+### settle-recorded-pr-state · discovery · A recorded PR that is no longer open is a refusal (exit 2) (phase 1)
+
+The run cursor's `pr` can name a merged or closed PR. The poll refuses a view whose state
+is not OPEN ("PR #n is MERGED, not open"), the same exit as no open PR (R4).
+
+<!-- fr:journal kind=finding scope=plan id=p1-fast-tier-isolation-bash created=2026-11-23T10:49:48+00:00 phase=1 state=open review_scope=out -->
+### p1-fast-tier-isolation-bash · finding [open] (reviewer: out of scope) · Fast tier's 4 red tests are environmental, not this branch's (phase 1)
+
+`uv run pytest --fr-scope origin/main -n 2 -q --no-cov`: 4 failed, 6276 passed, 2 skipped
+(1:14:21). All four are
+`tests/unit/test_isolation_decision_core.py::test_a_relative_path_entry_holding_a_git_is_never_run`
+(`[bin]`, `[./bin]`, `[]`, `[.]`). They fail on their own with
+`FileNotFoundError: ... 'bash'`: the test runs `bash` under a relative-entry PATH, and
+this host cannot resolve it. The branch changes neither that test nor
+`packages/fr/src/fr/isolation` nor the hooks (`git diff origin/main` is empty there).
+CI is this repo's suite evidence.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t4 created=2026-11-23T10:49:48+00:00 phase=1 -->
+### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
+
+managed.py is one predicate over its owners' constants and the brief edits are one line each; the import-cycle split (owners imported inside driver_managed) was settled at GREEN, so nothing was left to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · evaluate.py:117 an unreported gate on a fresh head reads missing at once (phase 1)
+
+Other checks finished, the gate not yet registered: missing/exit 4 regardless of age; R2 says pending until NO_CI_WAIT_SECONDS.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · pr_cmd.py:237 CiEvidenceRefused from declared_gates is uncaught (phase 1)
+
+A malformed .fr/ci.yaml or no git gives a traceback and exit 1, outside R4.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · pr_cmd.py:252 HostRefusedError and permanent forge errors exit 75 (phase 1)
+
+HostRefusedError subclasses the backend error; 404 and auth failures also exit 75, so an R10 loop retries forever.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · change fragment omits the older-fr refusal spec §A requires (phase 1)
+
+.changes/feat-pr-readiness-wait.yaml
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · closeout_brief says no settle loop even for an unmanaged housekeeping PR (phase 1)
+
+batch_drive.py:860; with a run the session's PR is chore/archive-<plan> or chore/closeout-<run>, unmanaged.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · poll.py:59 unsupported verdict drops a known head (phase 1)
+
+The witness ends in a bare @.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · tests miss TP8 every-mode, a real glab/tea client, DRAFT, unrunnable/none cells (phase 1)
+
+test_pr_settle_cmd.py:194, test_settle_evaluate.py:136
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · pr_cmd.py:188 --wait default and ceiling are literals (phase 1)
+
+Not DEFAULT_WAIT/WAIT_CEILING; the constant test does not cover the verb.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · settle/target.py:22 imports fr.commands; pr_view read twice (phase 1)
+
+A cycle once run_cmd calls settle.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-11-23T12:34:23+00:00 phase=1 state=open review_scope=out -->
+### p1-r10 · finding [open] (reviewer: out of scope) · test_isolation_decision_core.py:663 runs bare bash under a PATH of git's dir (phase 1)
+
+Host-dependent (bash in /usr/local/bin); the diff touches neither isolation nor the test (last changed 747e403d1).
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-23T12:34:23+00:00 phase=1 -->
+### review-p1-1 · review · phase 1 code review: 10 findings (phase 1)
+
+Findings raised: p1-r1 … p1-r10; p1-r1–r9 in scope, p1-r10 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: evaluate.py:117 an unreported gate on a fresh head reads missing at once (phase 1)
+
+5a39c9bca: an absent gate is pending until NO_CI_WAIT_SECONDS then missing, own hint; table cells added.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: pr_cmd.py:237 CiEvidenceRefused from declared_gates is uncaught (phase 1)
+
+c8a084af5: CiEvidenceRefused refuses with exit 2; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: pr_cmd.py:252 HostRefusedError and permanent forge errors exit 75 (phase 1)
+
+c8a084af5: HostRefusedError exits 2; only warn and rate_limit forge errors exit 75, 404/401 exit 2; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: change fragment omits the older-fr refusal spec §A requires (phase 1)
+
+3306f6772: the fragment states the older-fr refusal.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: closeout_brief says no settle loop even for an unmanaged housekeeping PR (phase 1)
+
+e365431a5: the sentence only when run is None; spec R5/§E amended to match.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: poll.py:59 unsupported verdict drops a known head (phase 1)
+
+c8a084af5: the unsupported verdict keeps the view's head.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: tests miss TP8 every-mode, a real glab/tea client, DRAFT, unrunnable/none cells (phase 1)
+
+c8a084af5: all 8 mode pairs, real RealGlabClient and RealTeaClient, DRAFT pinned, unrunnable/none cells.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: pr_cmd.py:188 --wait default and ceiling are literals (phase 1)
+
+c8a084af5: --wait default and help from poll.DEFAULT_WAIT/WAIT_CEILING; verb default tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=fixed resolves=p1-r9 -->
+### p1-r9-resolved · finding [fixed] · resolves p1-r9: settle/target.py:22 imports fr.commands; pr_view read twice (phase 1)
+
+c8a084af5: target.py imports nothing from fr.commands; pr_cmd passes the recorded PR in; one pr_view per poll.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=open resolves=p1-r10 out_of_scope=true -->
+### p1-r10-resolved · finding [out-of-scope] · resolves p1-r10: test_isolation_decision_core.py:663 runs bare bash under a PATH of git's dir (phase 1)
+
+Pre-existing, host-dependent test; not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-fast-tier-isolation-bash-resolved created=2026-11-23T12:34:23+00:00 phase=1 state=open resolves=p1-fast-tier-isolation-bash out_of_scope=true -->
+### p1-fast-tier-isolation-bash-resolved · finding [out-of-scope] · resolves p1-fast-tier-isolation-bash: Fast tier's 4 red tests are environmental, not this branch's (phase 1)
+
+Same pre-existing host-dependent isolation test as p1-r10; not caused by this change.
+
+<!-- fr:journal kind=decision scope=plan id=settle-read-shared created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-read-shared · decision · The verb and the deliver witness share one read, fr.settle.read.read_verdict (phase 2)
+
+PR discovery, the first pr_view, the gate set, the poll and the forge-error rule
+(only warn and rate_limit are transient, exit 75; a host refusal, 404 or auth
+failure refuses, exit 2) moved from `pr_cmd.settle_cmd` into `read_verdict`, so
+`fr pr settle` and `fr.settle.witness.settle_witness` (wait 0) cannot drift. The
+witness raises `SettlePending` (exit 75) or `SettleRefused` (exit 2);
+`deliver_witness` maps them to `typer.Exit` and run_cmd calls it after the
+`derive()` block (5 added lines, the module budget holds).
+
+<!-- fr:journal kind=decision scope=plan id=settle-witness-test-stub created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-witness-test-stub · decision · An autouse conftest stub records a fixed settle witness unless a test opts out (phase 2)
+
+Every unit-test `deliver` resolve runs in a clone with no forge, and the real witness
+refuses there (no origin repo). `tests/conftest.py`'s `_settle_witness_reads_no_forge`
+replaces `fr.settle.witness.settle_witness` with `fix/fix:clean/green@stub`; a test
+that requests `real_settle_witness` (`tests/unit/test_run_settle_witness.py`) gets
+the real one over a fake forge. A subprocess-run `deliver` would not see the stub;
+none exists in the suite today.
+
+<!-- fr:journal kind=decision scope=plan id=settle-override-grammar created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-override-grammar · decision · The spec grammar restates SETTLE_MODES instead of importing the settings model (phase 2)
+
+`fr.verification.spec_section.SETTLE_OVERRIDE_MODES` restates
+`fr.settings.model.SETTLE_MODES` so the spec grammar reads no settings model; a test
+pins the two equal. A second `settle.<key>:` line for the same key is an error naming
+the line. `## PR settle` sits after `## Manual operations` in REQUIRED_SECTIONS.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-no-shape-change created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-no-shape-change · discovery · No artifact stamp moved; the new evidence key is a key of an existing dict (phase 2)
+
+`settle` is one more key in `StepRecord.evidence`, the override is a journal
+`decision` entry and a prose line to older spec readers; `fr validate artifacts`
+stays green and `fr/artifacts/registry.py` is unchanged (spec §C).
+
+<!-- fr:journal kind=discovery scope=plan id=settle-deliver-row-skills created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-deliver-row-skills · discovery · Row pr-settle-deliver moved to ci on the witness; its R9/R10 skill text is phase 3's (phase 2)
+
+The row also cites R9 and R10 (the fix rules and fr-debugging's settle step), which
+are skill text phase 3 ships with its own tripwire; that tripwire's test should be
+added to the row's levels then.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-fast-tier-whole-suite created=2026-11-23T14:01:57+00:00 phase=2 -->
+### settle-fast-tier-whole-suite · discovery · The branch's fast tier is now the whole unit suite, because tests/conftest.py changed (phase 2)
+
+`--fr-scope` selects everything under a changed conftest.py, so the settle witness stub
+puts every test in scope (about 17,000). On this loaded host the `-n 2` run reached 1%
+in five minutes and was stopped with no failure; CI is the suite evidence (`tests: ci`).
+Instead, 106 files that resolve `deliver` or read the evidence lists, sections,
+manifests, spec grammar and settle code ran at `-n 6`: 2988 passed, 10 skipped and 3
+failed, all three pinned deliver evidence lists in test_tripwire_shipped_workflows.py.
+Those were fixed and the file re-ran green (12 passed).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-23T14:01:57+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the settle line is one pattern and one helper beside the gate-line branch; the grammar's other branches were untouched, so nothing was left to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-23T14:01:57+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+effective_modes gained two small readers (spec, journal) behind one precedence rule; the verb's resolution of spec and journal is one helper, nothing duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-23T14:01:57+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+_settle_section is one function over run_modes with one source-label table; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · settle witness runs before the deliver gates (phase 2)
+
+run_cmd.py:2233 inside _verified_evidence (called :8033) precedes the placement/acceptance/leftovers/PR-body/exit-guard gates (:8060-8074): pending CI exits 75 before the body renders; a no-PR first resolve loses the gh#587 render.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · unsupported pr_view leaves an empty @ in the witness (phase 2)
+
+fr/settle/read.py:69-71; use the local HEAD sha.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · an unparseable origin refuses before the backend's unsupported verdict (phase 2)
+
+fr/settle/witness.py:51-53 (and the same order in fr pr settle).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · conftest stub replaces the whole settle_witness and hides p2-r1 (phase 2)
+
+tests/conftest.py:535-550; stub only client_for/origin_slug.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · required PR settle section's in-flight cost not stated (phase 2)
+
+fr/record/pr_body.py:86 vs the Review lenses precedent.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-23T16:02:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · a settle-only Verification section switches rows to the candidate default (phase 2)
+
+spec_section.py:121-123, verification/effective.py:33-40; adding a settle line could owe a walk and change gates.
+
+<!-- fr:journal kind=review scope=plan id=review-p2-1 created=2026-11-23T16:02:18+00:00 phase=2 -->
+### review-p2-1 · review · phase 2 code review: 6 findings (phase 2)
+
+Findings raised: p2-r1 … p2-r6, all in scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: settle witness runs before the deliver gates (phase 2)
+
+19920bdee: the witness runs only for flat deliver after _deliver_exit_guard and before _deliver_label_sync; tests pin the ordering; spec §D amended.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: unsupported pr_view leaves an empty @ in the witness (phase 2)
+
+fc3911ced: the local HEAD sha stands in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: an unparseable origin refuses before the backend's unsupported verdict (phase 2)
+
+1bf128c02 (witness) and 6e212a1d0 (verb): one helper fr.settle.read.forge_repo; glab/tea give unsupported, GitHub refuses.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: conftest stub replaces the whole settle_witness and hides p2-r1 (phase 2)
+
+e620cd8be: conftest patches only client_for and origin_slug; the real witness runs in every deliver test; both forge tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: required PR settle section's in-flight cost not stated (phase 2)
+
+Spec §C states the extra refuse-and-edit round and why it is accepted.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-23T16:02:18+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: a settle-only Verification section switches rows to the candidate default (phase 2)
+
+c9d654dd0: a settle-only section is None to parse_section; settle_overrides reads the lines separately; spec §C amended.
+
+<!-- fr:journal kind=decision scope=plan id=settle-instructions-constants created=2026-11-23T16:20:49+00:00 phase=3 -->
+### settle-instructions-constants · decision · The settle loop's brief text lives in fr.settle.instructions, shared by deliver and the close-out (phase 3)
+
+`FIX_RULES` (merge `origin/<base>`, never rebase or force-push; an ordinary commit
+for a red check; `fr push`; exit 75 re-run; three fix rounds) is one constant that
+`DELIVER_LINE` (the deliver brief's `settle` key, emitted by `run_cmd._settle_brief`
+for a step whose evidence names `settle`) and `CLOSEOUT_LINE` (after the housekeeping
+PR in `branch_closeout_brief`) both embed, with `DEFAULT_WAIT` as the wait. run_cmd
+grew 9 lines (9095 of a 9100 budget). The two SKILL.md files restate the rules inside
+existing lines, so both stay at 120 lines.
+
+<!-- fr:journal kind=discovery scope=plan id=settle-skills-fast-tier-targeted created=2026-11-23T16:20:49+00:00 phase=3 -->
+### settle-skills-fast-tier-targeted · discovery · The fast tier still spans the whole suite (phase 2's conftest change), so a targeted set ran instead (phase 3)
+
+`--fr-scope` selects every test under the changed `tests/conftest.py`. A first
+targeted set that included test_install_sh.py and whole triage/run files reached 6%
+in four minutes on a loaded host and was stopped with no failure. Two narrower sets
+ran at `-n 6` instead: skill, mirror, readme, module-budget, explainer and wording
+tripwires, writing standards, build-site, closeout, pickup, settle witness, managed,
+lens-review and docs tests and the brief key-set test (803 passed, 105 skipped), then
+the batch, wave and herdr close-out, tracking-none, placement and archive tests (322
+passed, 1 skipped). CI is the suite evidence (`tests: ci`).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-23T16:20:49+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the step's refactor work is the mirror syncs, docs and acceptance move; the code is three constants and a two-line brief helper, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · exit 2 has no instruction in FIX_RULES or the skills (phase 3)
+
+fr/settle/instructions.py:17
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · exit 4 also covers missing/gate-absent/unrunnable, not covered by the fix rules (phase 3)
+
+fr/settle/instructions.py:17
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · the post-deliver settle only says report the result (phase 3)
+
+instructions.py:28, fr-goal SKILL.md:117
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · an fr-debugging override decision is left unpushed (phase 3)
+
+fr-debugging SKILL.md:108 (#871 trap)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · the deliver-brief test uses a synthetic Step, not the shipped manifests (phase 3)
+
+tests/unit/test_tripwire_pr_settle_wording.py:57
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · no-run close-out brief and its pickup brief read as contradictory for a managed head (phase 3)
+
+closeout.py:412, batch_drive.py:859
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=out -->
+### p3-r7 · finding [open] (reviewer: out of scope) · fr pr settle silently ignores a debug-journal override with zero/several debug journals or a spec run (phase 3)
+
+packages/fr/src/fr/commands/pr_cmd.py:192-206 _branch_modes; phase-2 engine code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-23T16:31:05+00:00 phase=3 state=open review_scope=out -->
+### p3-r8 · finding [open] (reviewer: out of scope) · no cap on repeated exit-75 re-runs (phase 3)
+
+Spec §E chose an unbounded re-run on 75; a spec-level choice, not a phase-3 defect.
+
+<!-- fr:journal kind=review scope=plan id=review-p3-1 created=2026-11-23T16:31:05+00:00 phase=3 -->
+### review-p3-1 · review · phase 3 code review: 8 findings (phase 3)
+
+Findings raised: p3-r1 … p3-r8; p3-r1–r6 in scope, p3-r7 and p3-r8 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: exit 2 has no instruction in FIX_RULES or the skills (phase 3)
+
+7922c8581: exit 2 is fix-what-it-names and re-run, not a fix round.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: exit 4 also covers missing/gate-absent/unrunnable, not covered by the fix rules (phase 3)
+
+7922c8581: otherwise do what the printed line says.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: the post-deliver settle only says report the result (phase 3)
+
+7922c8581: the post-deliver settle runs the same loop; a fix is a commit after deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: an fr-debugging override decision is left unpushed (phase 3)
+
+7922c8581: fr-debugging pushes the override decision with fr push.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: the deliver-brief test uses a synthetic Step, not the shipped manifests (phase 3)
+
+7922c8581: the test builds the deliver brief from both shipped manifests; removing settle fails it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: no-run close-out brief and its pickup brief read as contradictory for a managed head (phase 3)
+
+7922c8581: CLOSEOUT_LINE says a driver-managed head exits 0 managed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=open resolves=p3-r7 out_of_scope=true -->
+### p3-r7-resolved · finding [out-of-scope] · resolves p3-r7: fr pr settle silently ignores a debug-journal override with zero/several debug journals or a spec run (phase 3)
+
+Reviewer-tagged out of scope (phase-2 engine); filed as a follow-up at deliver unless the operator directs a fix in this PR.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-23T16:31:05+00:00 phase=3 state=open resolves=p3-r8 out_of_scope=true -->
+### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: no cap on repeated exit-75 re-runs (phase 3)
+
+Spec-level choice (§E re-runs on 75 unbounded); not caused by phase 3's change.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · 01-fr-goal.md puts the settle check before the live-body read-back
+
+docs/explainers/01-fr-goal.md:1157-1174 vs run_cmd.py:8080/:8082
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · workflow-shapes.md says settle follows every deliver check
+
+docs/reference/workflow-shapes.md:52; _refuse_missing_emits runs after it
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · --wait nan passes check_wait and the poll never ends
+
+fr/settle/poll.py check_wait
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · _branch_modes drops approval_journal's reason, ignoring an override silently
+
+fr/commands/pr_cmd.py _branch_modes
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · a settle-<unknown key> journal decision is silently skipped
+
+fr/settle/modes.py _journal_overrides
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · every deliver settle refusal suggests recording an override
+
+fr/settle/witness.py deliver_witness
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · a closed or merged recorded PR refuses forever
+
+fr/settle/target.py find_pr, poll.py settle
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · fr pr settle --json prints no JSON on exit 2 or 75
+
+fr/commands/pr_cmd.py settle_cmd
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · committed_at falls back silently to local HEAD or now
+
+fr/settle/target.py committed_at
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-errors-r8 · finding [open] (reviewer: in scope) · an unreadable override is rendered into the required PR settle section
+
+fr/record/pr_body.py _settle_section
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · the poll clock never ages the head, pending->missing untested
+
+tests/unit/test_settle_poll.py:80
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · committed_at and local_head untested; no verb test reaches missing
+
+fr/settle/target.py:63-90
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · R4 exit-2 refusals untested at the verb and at deliver
+
+pr_cmd settle_cmd, witness.deliver_witness
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · the deliver forge-failure test mocks forge_error_kind
+
+tests/unit/test_run_settle_witness.py
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · the mode x state table is two 1-D tables, not the product
+
+tests/unit/test_settle_evaluate.py
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · conflicts off alone cannot relax a conflicting PR under ci fix, unsaid; R8 relaxing side untested
+
+fr/settle/evaluate.py raw_conflict
+
+<!-- fr:journal kind=finding scope=plan id=sec-r1 created=2026-11-23T17:26:04+00:00 state=open review_scope=in -->
+### sec-r1 · finding [open] (reviewer: in scope) · forge-supplied head sha reaches git fetch/log unvalidated (argument injection)
+
+fr/settle/target.py; automated security review
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-23T17:26:04+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy, errors, tests — 16 findings
+
+Findings raised: l-docs-accuracy-r1, r2; l-errors-r1 … r8; l-tests-r1 … r6; all in scope. Plus sec-r1 from the security review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: 01-fr-goal.md puts the settle check before the live-body read-back
+
+fe121fb3e
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: workflow-shapes.md says settle follows every deliver check
+
+fe121fb3e
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: --wait nan passes check_wait and the poll never ends
+
+c9465349a: finite 0..ceiling only; nan/inf tested.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: _branch_modes drops approval_journal's reason, ignoring an override silently
+
+0eec7bf71, a56c8abce: several journals or a failed lookup warn; no journal is silent; a spec-shadowed decision warns.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: a settle-<unknown key> journal decision is silently skipped
+
+7be584fe9: an unknown settle- key refuses naming the entry.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: every deliver settle refusal suggests recording an override
+
+9ffde6ad2: the override hint only on a failing state; other causes name their own remedy.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: a closed or merged recorded PR refuses forever
+
+c97909932: falls back to the open PR for the head; MERGED is settled; CLOSED names url and remedy.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: fr pr settle --json prints no JSON on exit 2 or 75
+
+333a18b5e: JSON object on exit 2 and 75.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [fixed] · resolves l-errors-r7: committed_at falls back silently to local HEAD or now
+
+0e1e748d1, ae374b434: local sha, one quiet fetch, local HEAD stated as estimated, else unknown (pending, never missing); never now.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-errors-r8 -->
+### l-errors-r8-resolved · finding [fixed] · resolves l-errors-r8: an unreadable override is rendered into the required PR settle section
+
+14d3f79fb: the render refuses with the cause and remedy.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: the poll clock never ages the head, pending->missing untested
+
+0e1e748d1: an aging head crosses to missing within a wait.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: committed_at and local_head untested; no verb test reaches missing
+
+0e1e748d1: committed_at on a back-dated commit, the unknown path, and a verb test reaching missing.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: R4 exit-2 refusals untested at the verb and at deliver
+
+acf245bdb (verb), 14d3f79fb (deliver).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: the deliver forge-failure test mocks forge_error_kind
+
+9ffde6ad2: real-shaped gh errors, no classifier mock.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: the mode x state table is two 1-D tables, not the product
+
+8ef765551: full product against an independent R4 table, settled and witness asserted.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: conflicts off alone cannot relax a conflicting PR under ci fix, unsaid; R8 relaxing side untested
+
+a77aac221: the unrunnable hint names relaxing settle.ci; the R8 relaxing side is tested.
+
+<!-- fr:journal kind=finding scope=plan id=sec-r1-resolved created=2026-11-23T17:26:04+00:00 state=fixed resolves=sec-r1 -->
+### sec-r1-resolved · finding [fixed] · resolves sec-r1: forge-supplied head sha reaches git fetch/log unvalidated (argument injection)
+
+5eb6ea7ae: full object-id fullmatch before any git call, --end-of-options; hostile values make no git call.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved-2 created=2026-11-23T17:27:32+00:00 phase=3 state=fixed resolves=p3-r7 answered_by=operator -->
+### p3-r7-resolved-2 · finding [fixed] · resolves p3-r7: fr pr settle silently ignores a debug-journal override with zero/several debug journals or a spec run (phase 3)
+
+Same defect as lens finding l-errors-r2, fixed in 0eec7bf71 and a56c8abce (several journals, a failed lookup or a spec-shadowed decision now warn); the operator authorized closing it as fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved-2 created=2026-11-23T17:27:50+00:00 phase=1 state=open resolves=p1-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1636 -->
+### p1-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1636] · resolves p1-r10: test_isolation_decision_core.py:663 runs bare bash under a PATH of git's dir (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1636.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved-2 created=2026-11-23T17:27:59+00:00 phase=3 state=open resolves=p3-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1637 -->
+### p3-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1637] · resolves p3-r8: no cap on repeated exit-75 re-runs (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1637.
+
+<!-- fr:journal kind=finding scope=plan id=p1-fast-tier-isolation-bash-resolved-2 created=2026-11-23T17:28:08+00:00 state=open resolves=p1-fast-tier-isolation-bash tracked_by=derio-net/super-fr#1636 -->
+### p1-fast-tier-isolation-bash-resolved-2 · finding [deferred → derio-net/super-fr#1636] · resolves p1-fast-tier-isolation-bash: Fast tier's 4 red tests are environmental, not this branch's
+
+Same host-dependent isolation test as p1-r10, tracked by its issue.

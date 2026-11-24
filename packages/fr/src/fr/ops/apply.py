@@ -21,6 +21,7 @@ from fr.ops.engine import Journal, Runner, StatusRow, order, runner_secrets, sta
 from fr.ops.engine import OrderError as OrderError  # re-export for callers
 from fr.ops.evidence import recorded_close
 from fr.ops.identity import IdentityError, IdentityResolver
+from fr.ops.lint import print_only
 from fr.ops.load import LoadedOp
 from fr.ops.mask import last_line, sanitise_reason
 from fr.ops.model import UndoNone
@@ -28,6 +29,13 @@ from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_interactive,
 
 ALREADY_DONE = "already done, nothing written"
 
+
+FOUND_DONE = "found done by its check; apply not run"
+"""The reason on a `done` entry written for an op whose check already passed, so no
+apply ran (gh#1614): the entry must not read as if fr performed the action."""
+
+APPLIED_DONE = "applied by fr ops apply; check passed after"
+"""The reason on a `done` entry written after fr ran the op's apply and its check passed."""
 
 APPLIED_UNCHECKED = "applied; no check — attest it"
 """The reason recorded when an op with `apply:` and no `check:` was applied: status
@@ -241,7 +249,11 @@ def apply_ops(
 
     if not prompt.has_terminal():  # nothing may be refused halfway through the run
         for lo in ordered:
-            if row_of(lo).state in ("DONE", "N/A", "CANNOT-VERIFY") or not lo.op.apply:
+            if (
+                row_of(lo).state in ("DONE", "N/A", "CANNOT-VERIFY")
+                or not lo.op.apply
+                or print_only(lo.op.apply)  # gh#1614: a manual step, never run
+            ):
                 continue
             if lo.op.interactive:
                 raise ApplyRefused(f"op {lo.op.id!r} is interactive and needs a terminal")
@@ -257,7 +269,10 @@ def apply_ops(
         if row.state in ("DONE", "N/A"):
             if recorded_close(lo, journal.latest(op.id, runbook=lo.runbook)) is None:
                 # R7: record the closure observed, once; a rerun then writes nothing.
-                record(op=op.id, result="done" if row.state == "DONE" else "na", phase=op.phase)
+                if row.state == "DONE":
+                    record(op=op.id, result="done", phase=op.phase, reason=FOUND_DONE)
+                else:
+                    record(op=op.id, result="na", phase=op.phase)
                 step(op.id, "skipped", f"{op.id}: {row.label} — already done; recorded it")
             else:
                 step(op.id, "skipped", f"{op.id}: {row.label} — {ALREADY_DONE}")
@@ -280,6 +295,16 @@ def apply_ops(
                 op.id,
                 "manual",
                 f"{op.id}: no apply — do it by hand" + (f": {by_hand}" if by_hand else ""),
+            )
+            break
+        if print_only(op.apply):
+            # gh#1614: an echo exits 0 and changes nothing; counting it applied would
+            # let the ledger say an action happened that never did.
+            step(
+                op.id,
+                "manual",
+                f"{op.id}: its apply only prints, so it changes nothing — do it by hand "
+                f"(or give the op a real apply): {op.apply.strip()}",
             )
             break
         if op.interactive and not prompt.has_terminal():
@@ -331,7 +356,7 @@ def apply_ops(
 
         after = row_of(lo)
         if after.state == "DONE":
-            record(op=op.id, result="done", phase=op.phase)
+            record(op=op.id, result="done", phase=op.phase, reason=APPLIED_DONE)
             step(op.id, "applied", f"{op.id}: applied; {after.label}")
         elif after.state == "UNVERIFIABLE":
             record(op=op.id, result="open", phase=op.phase, reason=APPLIED_UNCHECKED)

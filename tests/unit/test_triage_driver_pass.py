@@ -23,7 +23,7 @@ from fr.triage import batch_drive
 from fr.triage.lease import driver_identity, holder_of, lease_duration, load_lease, take_or_renew
 from fr.triage.model import Scope, load_judgements
 from fr.triage.scope_config import scope_id
-from fr.triage.state_ref import ref_name
+from fr.triage.state_ref import StateRefConflict, StateRefPushRefused, ref_name
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_dispatch import FakeRunner
@@ -215,7 +215,7 @@ def test_the_pass_makes_the_decisions_the_host_loop_makes_for_the_same_facts(
     assert passed.exit_code == 0, passed.output
     host_plan, cloud_plan = plans
     assert [a.kind for a in host_plan].count("dispatch") == 2
-    assert [a.kind for a in host_plan].count("merge") == 1
+    assert [a.kind for a in host_plan].count("merge") == 0  # R22: the queue merges, no action does
     assert cloud_plan == host_plan
 
 
@@ -231,7 +231,7 @@ def test_a_pass_acts_writes_the_runners_requests_to_the_outbox_and_exits_0(
     result = _pass(state, outbox, "--statuses", str(statuses))
 
     assert result.exit_code == 0, result.output
-    assert world.merged and world.merged[0][0] == 103  # forge actions: fr's own
+    assert any(a.kind == "queue-open" for a in world.queue_plans)  # forge actions: fr's own
     cloud = runners.cloud
     assert cloud.opened[0] == (state, {"derio-net/super-fr/run/batch-b3": "working"})
     requests = json.loads(outbox.read_text())["requests"]
@@ -729,3 +729,68 @@ def test_sigterm_releases_the_host_drivers_lease_and_restores_the_handler(
     assert result.exit_code != 0
     assert load_lease(state) is None, "released on SIGTERM"
     assert signal.getsignal(signal.SIGTERM) == before
+
+
+# ------------------------------------- the pass's one boundary (batch-train-truth R6)
+
+
+@pytest.mark.parametrize(
+    ("failure", "code", "cause"),
+    [
+        (lambda: StateRefConflict("another writer moved the ref"), 2, "state-ref-conflict"),
+        (lambda: StateRefPushRefused("the remote refused the push"), 2, "push-refused"),
+        (lambda: ValueError("an fr bug"), 1, "unexpected:ValueError"),
+        (
+            lambda: triage_batch_cmd.ForgeReadError("the forge timed out", code=2),
+            2,
+            "forge-read",
+        ),
+    ],
+)
+def test_a_failed_pass_writes_its_outbox_and_exits_with_the_carried_code(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Any,
+    code: int,
+    cause: str,
+) -> None:
+    from fr.triage.driver_record import load_ledger
+
+    state = tmp_path / "state"
+    _world(world, state)
+    outbox = tmp_path / "outbox.json"
+    real = triage_batch_cmd.one_pass
+
+    def failing(driver: Any, **kw: Any) -> Any:
+        real(driver, **kw)  # the pass asked the runner for sessions, then failed
+        raise failure()
+
+    monkeypatch.setattr(triage_batch_cmd, "one_pass", failing)
+    result = _pass(state, outbox)
+
+    assert result.exit_code == code, result.output
+    if cause.startswith("unexpected:"):  # R6: an fr bug keeps its traceback and exit 1
+        from fr.triage.drive_log import TRACEBACK_FILE
+
+        assert isinstance(result.exception, ValueError)
+        assert "an fr bug" in (state / TRACEBACK_FILE).read_text()
+    else:
+        assert str(failure()) in " ".join(result.output.split())
+    requests = json.loads(outbox.read_text())["requests"]
+    assert [r["item"] for r in requests] == [
+        "derio-net/super-fr/run/batch-b1",
+        "derio-net/super-fr/run/batch-b2",
+    ]
+    entry = load_ledger(state).causes[cause]
+    assert entry.count == 1
+    assert entry.message == str(failure())
+    refused = cause == "state-ref-conflict"
+    assert entry.kind == ("refusal" if refused else "transient")
+    flat = " ".join(result.output.split())
+    if refused:  # R10: a refusal's exit output names how to track it, and how to resume
+        assert "fr triage drive failures --file --yes" in flat
+        assert "resume:" in flat

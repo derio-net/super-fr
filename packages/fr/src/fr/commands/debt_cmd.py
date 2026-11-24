@@ -445,7 +445,7 @@ def _held(root: Path, name: str) -> list[str]:
     rel = Path(KIND_DIRS["plan"]) / name
     try:
         return outcome_hold(root, parse(root / rel), rel)
-    except (PlanSchemaError, OSError, ValueError, KeyError, TypeError):
+    except PlanSchemaError, OSError, ValueError, KeyError, TypeError:
         # A plan fr cannot read has no hold to report here; `fr archive` itself
         # then refuses it and the sweep lists it as not archived.
         return []

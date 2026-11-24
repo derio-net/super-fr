@@ -183,7 +183,7 @@ def _up_target(repo: Path, branch: str) -> Target:
     takes the env's target and `carried_state` replaces the record with a warning."""
     try:
         existing = load_state(repo.resolve(), branch)
-    except (ValueError, OSError):
+    except ValueError, OSError:
         existing = None
     return _target(repo) if existing is None else _target_for(repo, existing)
 

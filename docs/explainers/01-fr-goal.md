@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1160,6 +1160,27 @@ That refusal exists because one pull request did ship without its out-of-scope
 section. A section that someone must remember is a section that someone will
 eventually forget.
 
+Last, after that read-back and every other check, `deliver` makes sure the pull request
+has settled. It asks the forge whether
+the pull request merges cleanly into its base and whether its CI has finished, under
+the repository's `git.settle` setting. If the pull request conflicts or a check
+failed, `deliver` refuses. If the forge has no answer yet, `deliver` stops and
+records nothing, and the agent waits with `fr pr settle` and tries again. A feature
+can relax this for its own pull request with a `settle.` line in its specification.
+The description's `## PR settle` section shows that line and its reason.
+
+So before it resolves `deliver`, the agent runs `fr pr settle --wait <s>`. If it exits
+4, the agent fixes the pull request. A conflict is fixed by merging `origin/<base>`
+into the branch, never by rebase or force-push, so the history and any approval stay as
+they were. A red check is fixed by an ordinary commit. The agent pushes with `fr push`
+and runs the command again. After three fix rounds it stops and reports to you. When
+the `deliver` resolve has pushed, the agent runs the same loop once more and reports
+what it said. A fix at that point is a commit after `deliver`. If the command exits 2, it
+names what to fix, such as a missing pull request. That fix does not count as a round.
+If the run's pull request has merged already and no other is open, there is nothing to
+settle, and the command exits 0 and says so. A closed one is refused: reopen it, or open
+a new one with `fr pr create`.
+
 The specification may ask for a pre-merge `candidate` verification. Delivery
 then owes one more piece of evidence besides the test log: a **walk**. The
 agent runs `fr verification walk` as a plain command, never wrapped in a pipe
@@ -1236,8 +1257,9 @@ operations belong to the DevOps stage described next.
 ### 9. How does the run confirm the merge and close out?
 
 A run whose plan carries manual operations, or whose specification declares
-`gate: devops`, closes out differently. Its `fr pickup --run <run-id>` brief
-is a **DevOps brief** with one command, `fr ops gate --run <run-id>`. You run
+`gate: devops`, closes out differently. Resolving `deliver` ends with
+`fr ops gate --run <run-id>` instead of the close-out line below, and its
+`fr pickup --run <run-id>` brief is a **DevOps brief** with that one command. You run
 it yourself at a terminal. It refuses anywhere else, so an agent cannot run it
 for you. It works through eight recorded stages:
 

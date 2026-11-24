@@ -7,7 +7,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ParamSpec, TypeVar
+from typing import TYPE_CHECKING
 
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 
@@ -17,11 +17,8 @@ if TYPE_CHECKING:
     from fr.parser import Plan
     from fr.states import GhState, RenderedState
 
-P = ParamSpec("P")
-R = TypeVar("R")
 
-
-def models_errors_exit(fn: Callable[P, R]) -> Callable[P, R]:
+def models_errors_exit[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
     """Command decorator: a broken models.yaml (`fr.models.ModelsError`) is
     reported as `fr: <message>` on stderr and exit 2, never a traceback. One
     handler at the command entry, so no `load_models` call site swallows it
@@ -72,7 +69,7 @@ def resolve_repo_root(cwd: Path | None = None) -> Path:
             cwd=cwd,
         )
         return Path(result.stdout.strip()).resolve()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return (cwd or Path.cwd()).resolve()
 
 

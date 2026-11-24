@@ -211,7 +211,7 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
             continue
         try:
             entries = parse_journal(text)
-        except (JournalParseError, ValueError):
+        except JournalParseError, ValueError:
             entries = []
         break
     decisions = split_decisions(entries, plan_slug)
@@ -411,7 +411,7 @@ def _justifiers(repo_root: Path, plan: Plan) -> list[JournalEntry]:
         return []
     try:
         entries = parse_journal(text)
-    except (JournalParseError, ValueError):
+    except JournalParseError, ValueError:
         return []
     return [
         e

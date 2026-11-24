@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from fr.ghclient import HostRefusedError
@@ -25,8 +25,6 @@ from fr.labels import LabelDef
 
 if TYPE_CHECKING:
     from fr.real_ghrestclient import RealGhRestClient
-
-T = TypeVar("T")
 
 
 def _rest() -> RealGhRestClient | None:
@@ -43,7 +41,7 @@ def _rest() -> RealGhRestClient | None:
     return RealGhRestClient(host=_HOST.get())
 
 
-def _stealth_refuses(fn: Callable[..., T]) -> Callable[..., T]:
+def _stealth_refuses[T](fn: Callable[..., T]) -> Callable[..., T]:
     """A forge write helper refused under stealth, before any call (review p4-r5)."""
     import functools
 
@@ -120,7 +118,7 @@ def known_hosts() -> frozenset[str]:
 
     try:
         data = yaml.safe_load(_hosts_yml().read_text())
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+    except OSError, UnicodeDecodeError, yaml.YAMLError:
         return frozenset()
     if not isinstance(data, dict):
         return frozenset()
@@ -416,9 +414,10 @@ def swap_issue_labels(
     No-op if both lists are empty. Failure propagates as GhError, except a REMOVAL gh reports as
     `'<label>' not found` (the repo never defined it, so the issue cannot carry it): that is
     already the wanted end state, so it is dropped and the call retried, at most `len(remove)`
-    times. gh is expected to resolve every label before it mutates anything; if it ever applied
-    part of a refused call first, the retry only repeats an add or a removal, both idempotent. A
-    missing ADD label still fails.
+    times. Correctness does not depend on whether gh resolves every label before it mutates: if a
+    refused call applied part of its change first, the retry only repeats an add or a removal,
+    and a repeated add or removal is idempotent, so the issue ends with exactly the wanted
+    labels. A missing ADD label still fails.
     """
     remaining = list(remove)
     for _ in range(len(remove) + 1):
@@ -826,7 +825,7 @@ def is_transient(err: GhError) -> bool:
     return any(p in text for p in _TRANSIENT_PATTERNS)
 
 
-def with_retry(
+def with_retry[T](
     op: Callable[[], T],
     *,
     max_attempts: int = 3,

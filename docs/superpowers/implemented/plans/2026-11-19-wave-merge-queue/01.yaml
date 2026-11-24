@@ -1,0 +1,100 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Queue state model and approval by content (R12, R24)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - wave-queue-approval-content
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/approval.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - AGENTS.md
+  - tests/**/*.py
+  - .changes/feat-wave-merge-queue.yaml
+  - docs/acceptance/features/2026-11-19-wave-merge-queue.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Smoke
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke: add `tests/unit/test_wave_queue_smoke.py` with one trivial test importing `fr.triage.model` and asserting `JUDGEMENTS_SCHEMA` is an int; add the change fragment `.changes/feat-wave-merge-queue.yaml` (`bump: minor`, summary: "The wave driver merges through its own forge-independent merge queue"); run the full suite (`uv run pytest -q --no-cov -n auto`) and confirm green.
+- number: 2
+  title: Judgements schema 13 — queues list and event kinds
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_triage_queue_model.py`, assert that a judgements file at schema 13 round-trips a `queues:` record (repo, wave or null, scope, base, events) holding each kind of spec R24: `queue_open`, `queue_built`, `queue_eject`, `queue_land`, `queue_drain`, `queue_cleared`, `queue_release`, `queue_postmerge_done`, and `approval` for a non-batch entry whose entry names `{pr, kind}`. Also assert a batch's `deferred` and `requeued` events round-trip, a schema-12 file still loads, a schema-13 kind in a file stamped 12 is refused through `_EVENT_SCHEMAS`, and writing stamps 13.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in `packages/fr/src/fr/triage/model.py`, bump `JUDGEMENTS_SCHEMA` to 13 (read 1–13). Add closed-world `QueueRecord`, `QueueEntryRef` and the event models with snake_case `kind` literals, register each in `_EVENT_SCHEMAS` at 13, add `Judgements.queues: list[QueueRecord] = []`, and add `DeferredEvent` and `RequeuedEvent` to the batch event union. Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: give each model a docstring naming spec 2026-11-19-wave-merge-queue R24; update AGENTS.md's triage paragraph to say that fr reads schemas 1–13 and writes 13; ruff and mypy green.
+- number: 3
+  title: Patch-id and the content-pinned verdict
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in a real temporary git repo (`tests/unit/test_gitseam_patch_id.py`), `Checkout.patch_id(head, default)` returns the same id after a conflict-free merge of the default branch and after an empty commit. It returns a different id after a code edit, a whitespace-only edit and a binary-file edit.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `Checkout.patch_id(head: str, ref: str) -> str` to `packages/fr/src/fr/triage/gitseam.py`. It runs exactly `git diff --binary --full-index --no-color <merge-base> <head> | git patch-id --verbatim` and returns the first field ("" for an empty diff). Tests pass.
+  - id: P1.T3.S3
+    text: |-
+      RED: in `tests/unit/test_triage_approval.py`, `approval_verdict(events, pr, head, labels, patch_id=…)` is `Approved` when the recorded `ApprovalEvent.patch_id` equals the live one at a different head, and `Void` when it differs. It falls back to `reaches()` for an event with no `patch_id`. `settle_approvals` records the patch-id it is given for a `First` verdict, and voids on a patch-id change: the label is removed and the void is recorded.
+  - id: P1.T3.S4
+    text: |-
+      GREEN: add an optional `patch_id` to `ApprovalEvent` (model.py). Thread a `patch_id_of(pr, head)` callable through `approval_verdict` and `settle_approvals`, so approval.py runs no git. Compute the patch-id in `triage_batch_cmd._settle_approvals` and in the snapshot's verdict through `Checkout.patch_id`. Existing approval tests keep passing.
+  - id: P1.T3.S5
+    text: |-
+      REFACTOR: state the verdict rule once in `approval.py`'s module docstring (spec R12); in the step record, add row wave-queue-approval-content's level refs on the new test names and set status `ci`; full suite, ruff and mypy green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+    P1.T3.S5:
+      state: x
+      ticked_at: '2026-11-20T02:39:16+00:00'
+      note: null
+  completion:
+    at: '2026-11-20T02:39:16+00:00'
+    note: null
+    observed_prs: []

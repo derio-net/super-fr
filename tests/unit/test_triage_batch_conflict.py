@@ -1,6 +1,6 @@
 """Conflict hand-back (spec 2026-10-06-verification-strategies §G; R19-R22).
 
-The structured conflict `batch_merge._update` raises, the `conflict` event and the
+The `conflict` event and the
 judgements schema that carries it, and the pure decision the driver takes on it.
 Nothing here reaches a forge, a runner or a clone.
 """
@@ -8,12 +8,10 @@ Nothing here reaches a forge, a runner or a clone.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import pytest
 from fr.triage.batch_drive import ConflictDecision, conflict_decision
-from fr.triage.batch_merge import MergeConflictError, MergeContext, MergeStopError, Slot, _update
 from fr.triage.model import (
     JUDGEMENTS_READS,
     JUDGEMENTS_SCHEMA,
@@ -25,70 +23,6 @@ from fr.triage.model import (
 from pydantic import ValidationError
 
 AT = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
-
-
-# ------------------------------------------------------- MergeConflictError (R19)
-
-
-class _Wt:
-    def __init__(self, path: Path, conflicted: list[str]) -> None:
-        self.path, self.conflicted, self.log = path, conflicted, []
-
-    def merge(self, ref: str) -> list[str]:
-        self.log.append(f"merge {ref}")
-        return list(self.conflicted)
-
-    def abort_merge(self) -> None:
-        self.log.append("abort")
-
-
-class _Checkout:
-    path = Path("/clone")
-
-    def __init__(self, conflicted: list[str]) -> None:
-        self.conflicted = conflicted
-        self.worktrees: list[_Wt] = []
-
-    def default_branch(self) -> str:
-        return "main"
-
-    def add_worktree(self, where: Path, ref: str) -> _Wt:
-        wt = _Wt(where, self.conflicted)
-        self.worktrees.append(wt)
-        return wt
-
-
-def _slot(batch_id: str = "b1", number: int = 101) -> Slot:
-    from types import SimpleNamespace
-
-    pr = SimpleNamespace(number=number, head_ref=f"feat/batch-{batch_id}")
-    step = SimpleNamespace(pr=pr, batch=SimpleNamespace(id=batch_id))
-    return Slot(step=step, head="sha-101", slot=None)  # type: ignore[arg-type]
-
-
-def test_an_unresolvable_conflict_is_a_structured_merge_stop(tmp_path: Path) -> None:
-    checkout = _Checkout(["src/a.py", "docs/b.md"])
-    ctx = MergeContext(
-        client=None,  # type: ignore[arg-type]
-        checkout=checkout,  # type: ignore[arg-type]
-        repo="derio-net/super-fr",
-        version=None,
-        scratch_root=tmp_path,
-        method="squash",
-        say=lambda line: None,
-    )
-    with pytest.raises(MergeConflictError) as raised:
-        _update(ctx, _slot(), "sha-101", True, None)
-    exc = raised.value
-    assert isinstance(exc, MergeStopError)
-    assert (exc.batch, exc.head, exc.paths) == ("b1", "sha-101", ("src/a.py", "docs/b.md"))
-    where = tmp_path / "feat/batch-b1"
-    assert str(exc) == (
-        "PR #101 (batch b1) conflicts with origin/main in a change merge will not resolve: "
-        "src/a.py, docs/b.md (only a version file whose PR change is the version alone is "
-        f"resolved). The scratch worktree is kept for inspection at {where}"
-    )
-    assert checkout.worktrees[0].log == ["merge origin/main", "abort"]
 
 
 # ------------------------------------------------------- ConflictEvent, schema 5
@@ -118,8 +52,8 @@ def _judgements(schema: int, *events: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_the_writer_writes_schema_5_and_the_reader_reads_1_to_5() -> None:
-    assert JUDGEMENTS_SCHEMA == 12
-    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+    assert JUDGEMENTS_SCHEMA == 13
+    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
     assert Judgements.model_validate({"schema": 5}).schema_ == 5
 
 

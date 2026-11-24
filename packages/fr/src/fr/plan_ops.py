@@ -1508,6 +1508,7 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # silently ignoring its ops.
     issues.extend(_ops_floor_issues(plan))
     issues.extend(_ops_gap_issues(plan))
+    issues.extend(_ops_print_only_issues(plan))
 
     # The refactor-or-justify gate moved to `fr run resolve` (spec 2026-09-25
     # §5.C.2.2, `fr.record.gates.refactor_gaps`): at plan time "nothing to
@@ -1754,7 +1755,7 @@ def _test_plan_heading_issues(plan: Plan) -> list[ReviewIssue]:
         return []
     try:
         heading = find_test_plan_heading(_plan_spec_file(plan, root).read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return []  # an unreadable spec is reported by the checks that need it
     if heading is None or heading.exact:
         return []
@@ -1936,11 +1937,11 @@ def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
     try:  # `SectionError` is a ValueError, as an undecodable spec's error is
         spec_file = _plan_spec_file(plan, root)
         spec_text = spec_file.read_text() if spec_file.is_file() else ""
-    except (ValueError, OSError):
+    except ValueError, OSError:
         return []
     try:
         gap = ops_gap(root, spec_rel, plan.dir, exit_for_spec(root, spec_rel).gates)
-    except (ValueError, OSError, AcceptanceError, OpsLoadError, TestPlanHeadingError):
+    except ValueError, OSError, AcceptanceError, OpsLoadError, TestPlanHeadingError:
         gap = []  # a near-miss heading is `_test_plan_heading_issues`' error
     if gap:
         issues.append(ReviewIssue(severity="warn", message=gap_message(gap, has_plan=True)))
@@ -1976,6 +1977,32 @@ def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
                 )
             )
     return issues
+
+
+def _ops_print_only_issues(plan: Plan) -> list[ReviewIssue]:
+    """gh#1614: an error per op whose `apply:` only prints (`fr.ops.lint.print_only`).
+    Such an apply exits 0 and changes nothing, so the op would look applied while the
+    real action never happened. Instructions for a person belong in `commands:`. An
+    unreadable carrier is the ops floor's error, not this one's."""
+    from fr.ops.lint import print_only
+    from fr.ops.load import OpsLoadError, load_ops
+
+    try:
+        ops = load_ops(plan.dir, plan.repo_root or plan.dir).ops
+    except OpsLoadError:
+        return []
+    return [
+        ReviewIssue(
+            severity="error",
+            message=(
+                f"op `{lo.op.id}` ({lo.where}) has an `apply:` that only prints, so applying "
+                "it changes nothing — make it perform the action, or drop `apply:` and put "
+                "the instructions in `commands:` so the op is done by hand"
+            ),
+        )
+        for lo in ops
+        if lo.op.apply and print_only(lo.op.apply)
+    ]
 
 
 def _version_floor_issue(
