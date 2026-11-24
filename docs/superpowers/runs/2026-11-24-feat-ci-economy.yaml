@@ -213,11 +213,17 @@ steps:
           lenses: docs-accuracy=15:l-docs-accuracy-r1,l-docs-accuracy-r2;errors=7:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4;security=7:l-security-r1,l-security-r2,l-security-r3;tests=5:l-tests-r1,l-tests-r2,l-tests-r3
   deliver:
     state: running
-    at: '2026-11-24T21:56:02+00:00'
+    at: '2026-11-24T21:56:12+00:00'
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-11-24T21:56:02+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5298f630-96b9-45ed-a6d1-f7ca784f0b34
+          returned: '2026-11-24T21:56:12+00:00'
+          outcome: abandoned
+        - dispatched: '2026-11-24T21:56:12+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 5298f630-96b9-45ed-a6d1-f7ca784f0b34
