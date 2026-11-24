@@ -123,7 +123,8 @@ def test_the_pin_is_one_full_sha_and_no_workflow_names_it() -> None:
 def test_ci_builds_the_site_on_every_pull_request() -> None:
     ci = yaml.safe_load(CI.read_text())
     job = ci["jobs"]["site-build"]
-    assert "if" not in job
+    # Every lane but `landed` (ci-economy R5), which only a push to main takes.
+    assert job["if"] == "needs.classify.outputs.lane != 'landed'"
     _pin_wiring(job["steps"])
     runs = [s["run"] for s in job["steps"] if "run" in s]
     assert any("scripts/build-site.py" in r and "--blog-craft .blog-craft" in r for r in runs)

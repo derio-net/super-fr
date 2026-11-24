@@ -6,6 +6,7 @@ pull-request-only (the PR already passed it, and `ci-ok` treats a skip as a pass
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -40,10 +41,18 @@ def test_the_pull_request_and_push_triggers_are_kept(name: str) -> None:
 
 def test_change_fragment_stays_pull_request_only() -> None:
     job = _load("ci.yml")["jobs"]["change-fragment"]
-    assert job["if"] == "github.event_name == 'pull_request'"
+    # ci-economy R5 adds the lane rule after its own condition, never in place of it.
+    assert job["if"].startswith("github.event_name == 'pull_request' && ")
 
 
 def test_ci_ok_treats_a_skipped_change_fragment_as_a_pass() -> None:
     ci_ok = _load("ci.yml")["jobs"]["ci-ok"]
     assert "change-fragment" in ci_ok["needs"] and ci_ok["if"] == "always()"
-    assert "skipped" in str(ci_ok["steps"])
+    # The verdict (scripts/ci_lane.py, ci-economy R17) allows a job skipped by its own
+    # condition in the full lane, which is the lane of every merge group.
+    sys.path.insert(0, str(WORKFLOWS.parents[1] / "scripts"))
+    import ci_lane
+
+    needs = {job: {"result": "success"} for job in ci_ok["needs"]}
+    needs["scoped-tests"] = needs["change-fragment"] = {"result": "skipped"}
+    assert ci_lane.verdict("full", needs)[0]
