@@ -9171,6 +9171,11 @@ batches:
     - packages/fr/src/fr/triage/batch_closeout.py
     - packages/fr/src/fr/triage/batch_drive.py
     delivered: held
+  - kind: approval
+    at: '2026-11-24T21:55:41.561316Z'
+    pr: 1628
+    head: 2ddb8ead0bdeeb61ffa0a5241a0dc658a38ad19b
+    patch_id: 053b4b8efd81e07e220c55c712e9491e3d52d2d8
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
@@ -10260,3 +10265,10 @@ queues:
   - kind: queue_cleared
     at: '2026-11-24T20:46:34.209505Z'
     detail: the release cleared the hold
+- repo: derio-net/super-fr
+  wave: 23
+  scope: s-f7ea4061
+  base: b0ea33e38dee4429bf0fa765d16034c65c8899e8
+  events:
+  - kind: queue_open
+    at: '2026-11-24T21:56:03.048608Z'
