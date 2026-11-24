@@ -10,5 +10,5 @@ def test_the_judgements_schema_is_an_int() -> None:
 
 
 def test_the_judgements_schema_is_pinned_to_the_queues_version() -> None:
-    """l-tests-r4: spec R24 writes schema 13; a bump is a decision, made here on purpose."""
-    assert model.JUDGEMENTS_SCHEMA == 13
+    """l-tests-r4: spec R24 wrote schema 13, wave-queue-gaps R16 writes 14; a bump is a decision, made here on purpose."""
+    assert model.JUDGEMENTS_SCHEMA == 14
