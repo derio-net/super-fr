@@ -10377,3 +10377,9 @@ queues:
     patch_id: 8b13139d47c0bafcee24b574855d2ad0a5268efa
     base: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
     parent: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+  - kind: queue_land
+    at: '2026-11-24T23:29:55.903778Z'
+    main: b24df489646f55d774cb3d470fea328f1c0be701
+    entries:
+    - pr: 1681
+      kind: closeout
