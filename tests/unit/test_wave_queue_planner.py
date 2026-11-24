@@ -29,6 +29,8 @@ from fr.triage.wave_queue import (
     queue_phase,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = "derio-net/super-fr"
 ME = "s-11111111"
 OTHER = "s-22222222"

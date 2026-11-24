@@ -26,6 +26,8 @@ from fr.version_floor import CEILING_VERSION
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 runner = CliRunner()
 

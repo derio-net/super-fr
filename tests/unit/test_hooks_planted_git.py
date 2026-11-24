@@ -23,9 +23,12 @@ from pathlib import Path
 import pytest
 
 REAL_GIT = shutil.which("git")
-pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None or REAL_GIT is None, reason="hooks need jq and git"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        shutil.which("jq") is None or REAL_GIT is None, reason="hooks need jq and git"
+    ),
+    pytest.mark.own_artifacts,
+]
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "hooks"
 PLANTED = '#!/bin/sh\nprintf "%s\\n" "$*" >> "$GIT_PLANTED_MARK"\nexit 1\n'

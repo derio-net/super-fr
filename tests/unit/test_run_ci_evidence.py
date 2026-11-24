@@ -30,6 +30,8 @@ from fr.run.code_tree import code_tree
 from tests.unit.fakes import FakeGhClient
 from tests.unit.test_commit_checks import BASE, MomentGh, _sha
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = "derio-net/super-fr"
 BRANCH = "feat/x"
 

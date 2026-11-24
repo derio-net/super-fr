@@ -22,7 +22,10 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq"),
+    pytest.mark.own_artifacts,
+]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOKS_DIR = REPO_ROOT / "plugins" / "super-fr" / "hooks"

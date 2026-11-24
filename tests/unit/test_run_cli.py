@@ -30,6 +30,8 @@ from typer.testing import CliRunner
 
 from tests.unit.requirements_support import seed_requirements
 
+pytestmark = pytest.mark.own_artifacts
+
 # --- reading a cursor by MEANING, never by storage ---------------------------
 #
 # These tests were written against three maps (`StepRecord.items`,

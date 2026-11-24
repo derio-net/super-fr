@@ -21,7 +21,10 @@ import pytest
 
 from tests.unit.test_statusline_segment import World, _git, world_fixture  # noqa: F401
 
-pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="status line requires jq")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("jq") is None, reason="status line requires jq"),
+    pytest.mark.own_artifacts,
+]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "scripts" / "fr-statusline-claude.sh"

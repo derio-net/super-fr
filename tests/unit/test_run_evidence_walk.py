@@ -17,6 +17,8 @@ from fr.workflow.model import Step
 
 from tests.unit.test_verification_walk import RUN, SPEC, _git, _home, _logs, _repo, _walk
 
+pytestmark = pytest.mark.own_artifacts
+
 __all__ = ["_home"]
 
 DELIVER = Step(id="deliver", kind="agent", evidence=("tests", "walk"))

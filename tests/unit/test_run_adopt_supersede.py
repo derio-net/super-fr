@@ -46,6 +46,8 @@ from tests.unit.test_run_adopt import (
     _write_spec,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 NOW = "2026-10-06T12:00:00+00:00"
 OLD_RUN = "2019-03-04-feat-widget-machinery"
 

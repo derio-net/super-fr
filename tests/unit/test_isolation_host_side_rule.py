@@ -27,6 +27,8 @@ from typer.testing import CliRunner
 
 from tests.unit.test_hooks_guard import decision, payload, run_hook, write_sentinel
 
+pytestmark = pytest.mark.own_artifacts
+
 runner = CliRunner()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

@@ -41,6 +41,8 @@ from fr.triage.batch_drive import (
 from fr.triage.model import Batch, Export, PullRequest
 from fr.triage.wave_queue import QueueConfig
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = "derio-net/super-fr"
 SID = "s-11111111"  # this scope's id: the export head names it (gh#1101)
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)

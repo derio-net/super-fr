@@ -22,6 +22,8 @@ from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record.model import parse_record
 
+pytestmark = pytest.mark.own_artifacts
+
 _V1_RECORD = """\
 run: r1
 step: implement-phase

@@ -12,6 +12,8 @@ from fr.record.pr_body import REQUIRED_SECTIONS, missing_sections, render_pr_bod
 from tests.unit.settings_repo import land_on_main, make_repo
 from tests.unit.test_deliver_pr_body import live
 
+pytestmark = pytest.mark.own_artifacts
+
 __all__ = ["live"]
 
 HEADING = "## PR settle"

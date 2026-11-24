@@ -36,6 +36,8 @@ from fr.cli import app
 from fr.record.model import RECORD_SCHEMA_VERSION
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 runner_cli = CliRunner()
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

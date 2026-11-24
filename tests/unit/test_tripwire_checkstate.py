@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 from fr.checkstate import FAILED_STATES
 
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "packages" / "fr" / "src"
 EXEMPT = {

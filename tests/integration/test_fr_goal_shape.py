@@ -37,6 +37,8 @@ from typer.testing import CliRunner
 from tests.unit.requirements_support import seed_requirements, write_phase_splits
 from tests.unit.spec_review_support import spec_review_evidence
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_WORKFLOWS_DIR = REPO_ROOT / "plugins" / "super-fr" / "workflows"
 SKILL_MD = REPO_ROOT / "plugins" / "super-fr" / "skills" / "fr-goal" / "SKILL.md"

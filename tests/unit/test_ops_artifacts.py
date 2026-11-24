@@ -37,6 +37,8 @@ from packaging.version import InvalidVersion, Version
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 runner = CliRunner()
 REPO = Path(__file__).resolve().parents[2]
 

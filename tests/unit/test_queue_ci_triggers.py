@@ -11,6 +11,8 @@ from typing import Any
 import pytest
 import yaml
 
+pytestmark = pytest.mark.own_artifacts
+
 WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 QUEUE_BRANCHES = "fr-queue/**"
 

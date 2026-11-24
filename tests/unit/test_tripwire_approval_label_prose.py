@@ -22,6 +22,8 @@ import pytest
 from fr.triage.batch_dispatch import NO_APPROVAL_LINE, conflict_brief, render_brief
 from fr.triage.model import Batch, Facts, Judgements
 
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 
 SHIPPED_GLOBS = (

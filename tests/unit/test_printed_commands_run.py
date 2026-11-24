@@ -20,6 +20,8 @@ from tests.unit.fakes import FakeGhClient, FakeGhError
 from tests.unit.gatebackfill_fixtures import ME, STRANGER, commit_at, git, row, write_matrix
 from tests.unit.test_merge_evidence import _write_plan
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def t_marker(body: str) -> tuple[str, str, int] | None:
     from fr.gatebackfill.trackers import fr_adopt_marker

@@ -8,7 +8,10 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("ci_budget", REPO / "scripts" / "ci_budget.py")

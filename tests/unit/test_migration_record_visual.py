@@ -10,9 +10,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record.model import RECORD_SCHEMA_VERSION, parse_record
+
+pytestmark = pytest.mark.own_artifacts
 
 _V3_RECORD = """\
 schema_version: 3

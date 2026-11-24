@@ -32,8 +32,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 from pytest_split.algorithms import LeastDurationAlgorithm
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_YAML = REPO_ROOT / ".github" / "workflows" / "ci.yml"

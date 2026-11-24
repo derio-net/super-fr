@@ -10,6 +10,8 @@ from typing import Any
 import pytest
 import yaml
 
+pytestmark = pytest.mark.own_artifacts
+
 CI = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
 WORKFLOW: dict[str, Any] = yaml.safe_load(CI.read_text("utf-8"))
 JOBS: dict[str, Any] = WORKFLOW["jobs"]

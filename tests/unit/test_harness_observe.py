@@ -28,6 +28,8 @@ from fr.harness.observe import (
 )
 from fr.hermes import snippet_entries
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 HOOKS_REL = Path("plugins/super-fr/hooks")

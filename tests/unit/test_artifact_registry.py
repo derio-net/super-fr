@@ -24,6 +24,8 @@ from fr.artifacts.registry import (
     write_version,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 EXPECTED_KINDS = {
     "plan",
     "journal",

@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts"))
 

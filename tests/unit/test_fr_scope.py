@@ -28,6 +28,8 @@ from tests.fr_scope import (
     unreached,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 
 FILES = {

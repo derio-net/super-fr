@@ -5,6 +5,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 SKILL = Path(__file__).resolve().parents[2] / "plugins/super-fr/skills/fr-triage/SKILL.md"
 HEADING = "Runner constraints and session upkeep"
 

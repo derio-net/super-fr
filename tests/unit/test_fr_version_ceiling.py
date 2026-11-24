@@ -30,6 +30,8 @@ from fr.parser import INSTALLED_FR_VERSION, PlanSchemaError, parse
 from packaging.version import Version
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("floors", REPO / "scripts" / "floors.py")
 assert _spec and _spec.loader

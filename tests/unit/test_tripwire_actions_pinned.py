@@ -22,7 +22,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 TRIAGE_SKILL = REPO / "plugins" / "super-fr" / "skills" / "fr-triage" / "SKILL.md"
 ORIGINS_SKILL = REPO / "plugins" / "super-fr" / "skills" / "fr-origins" / "SKILL.md"

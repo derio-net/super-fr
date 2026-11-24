@@ -20,6 +20,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = sorted((ROOT / "packages").glob("*/src/**/*.py"))
 

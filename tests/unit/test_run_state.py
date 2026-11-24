@@ -21,6 +21,8 @@ from fr.run.model import (
     run_path,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _sample_state() -> RunState:
     return RunState(

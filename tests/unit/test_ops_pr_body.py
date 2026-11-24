@@ -14,6 +14,8 @@ from fr.run.model import RunState, StepRecord, load_run_state
 from tests.unit.record_support import PLAN_REL, RUN, commit_all
 from tests.unit.test_deliver_pr_body import _at_deliver, _body, _deliver
 
+pytestmark = pytest.mark.own_artifacts
+
 OPS = """schema_version: 1
 ops:
   - id: create-key
