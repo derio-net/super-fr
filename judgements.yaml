@@ -8933,6 +8933,13 @@ batches:
     handle: w3P:pB
     archive: chore/closeout-2026-11-24-1
     archived: 1662
+  - kind: claims_released
+    at: '2026-11-24T20:38:51.355632Z'
+    keys:
+    - super-fr#1500
+    - super-fr#1524
+    - super-fr#1511
+    - super-fr#1507
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
