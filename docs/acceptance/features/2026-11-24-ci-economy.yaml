@@ -66,9 +66,20 @@ rows:
     origin:
     - spec:2026-11-24-ci-economy#R3
     - spec:2026-11-24-ci-economy#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_checkstate.py#test_cancelled_unfinished_and_unknown_states_are_pending
+      - super-fr:tests/unit/test_checkstate.py#test_failed_states_fail
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_checks_verdict_reads_a_cancelled_required_check_as_pending
+      - super-fr:tests/unit/test_settle_evaluate.py#test_a_cancelled_check_is_pending_never_red
+      - super-fr:tests/unit/test_triage_collect.py#test_collect_buckets_a_cancelled_check_as_pending
+      - super-fr:tests/unit/test_queue_exec.py#test_a_cancelled_required_check_is_pending_and_late_after_the_wait
+      - super-fr:tests/unit/test_run_ci_evidence.py#test_a_cancelled_gate_is_pending_never_refused
+      - super-fr:tests/unit/test_tripwire_checkstate.py#test_no_module_grows_its_own_cancelled_check_rule
+    status: ci
+    notes: fr.checkstate is the one rule; each reader's unit test reads CANCELLED as
+      pending and TIMED_OUT/STALE as failing, the check-state tripwire holds, and slot_check
+      reports a cancelled check late after wait_minutes (ci-economy phase 1)
     verify: none
   - id: queue-regenerates-generated
     capability: triage-queue
