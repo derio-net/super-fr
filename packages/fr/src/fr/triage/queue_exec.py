@@ -205,12 +205,27 @@ def _regenerate(
     entry back when one fails, a file keeps conflict markers, or they changed a tracked path
     that is neither generated nor inside a generated block."""
     before = wt.snapshot_tracked()
-    for argv in regen.mirrors:
-        try:
+    guarded = wt.git_state()
+    failed: GitError | None = None
+    try:
+        for argv in regen.mirrors:
             wt.run_argv(argv, regen.timeout)
-        except GitError as exc:
-            abort()
-            raise _mirror_failed(entry, paths, str(exc)) from exc
+    except GitError as exc:
+        failed = exc
+    finally:
+        wt.harden()  # security review: no hook or fsmonitor a mirror planted runs from here
+    now = wt.git_state()
+    if now != guarded:
+        wt.restore_git_state(guarded, now)
+        abort()
+        touched = sorted(p for p in {*guarded, *now} if guarded.get(p) != now.get(p))
+        raise _mirror_failed(
+            entry, paths, f"the mirrors changed git's own config or hooks ({', '.join(touched)}); "
+            "fr restored them, and builds nothing from this tree",
+        )  # fmt: skip
+    if failed is not None:
+        abort()
+        raise _mirror_failed(entry, paths, str(failed)) from failed
     wt.stage_all()
     after = wt.snapshot_tracked()
     marked = [p for p in paths if "\n<<<<<<< " in "\n" + (after.get(p) or "")]

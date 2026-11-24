@@ -22,8 +22,13 @@ with no markers is real, so it is handed back rather than written as it stands.
 **Trust boundary.** The mirrors are the BASE's `mirrors:` (the `.fr/triage.yaml` collected
 from the default branch), never the merged tree's, but the scripts they run are the merged
 tree's, so they run code from the queued PRs. The queue already trusts that code to the
-level it tests it: CI runs the same combination. The executor runs them with a scrubbed
-environment (`fr.triage.gitseam.mirror_env`): no forge token, no fr setting, no SSH agent.
+level it tests it: CI runs the same combination, and an entry is in the queue only once the
+operator approved it or its trust rule attributed it. The executor adds defence in depth,
+not a sandbox (`fr.triage.queue_exec._regenerate`): the commands get a named environment
+(`fr.triage.gitseam.mirror_env`: no forge token, no fr setting, no SSH agent, no index URL,
+an empty HOME, no global git config); a change to the git dir's config or hooks is undone and
+hands the entry back; and every later git call on that worktree runs with hooks and
+fsmonitor off. A mirror still runs as the driver's user, on the driver's host.
 """
 
 from __future__ import annotations

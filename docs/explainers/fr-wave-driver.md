@@ -99,8 +99,10 @@ is true now, not from what it remembers. In order, a pass:
     `.fr/triage.yaml`, and the files those commands write in whole are listed as
     `generated:`. The commands come from the base branch, but the scripts they run come
     from the pull requests in the combination. The queue trusts that code as far as it
-    tests it, so the commands run with no forge token and no SSH agent. If a command fails,
-    or it changes any other file, the pull request goes back to its session. A repo whose
+    tests it. The commands still get no forge token, no SSH agent and an empty home folder,
+    and git runs no hook in that tree after them. This keeps a mistake small, but it is not
+    a sandbox: the commands run as your user. If a command fails, changes git's own settings
+    or hooks, or changes any other file, the pull request goes back to its session. A repo whose
     base branch requires a forge merge queue, or that has not said how its checks run on the
     combinations (`queue.ci` in `.fr/triage.yaml`), is held, and the driver says what to add.
     A pull request that `gate:devops` holds before merge is a barrier. The DevOps stage

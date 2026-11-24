@@ -9,6 +9,7 @@ so the outputs conflict while the sources do not.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -215,3 +216,73 @@ def test_a_mirror_runs_with_no_forge_credential_or_ssh_agent(
     assert not seen & {"GH_TOKEN", "GITHUB_TOKEN", "FR_FORGE_API", "SSH_AUTH_SOCK",
                        "UV_INDEX_X_PASSWORD"}  # fmt: skip
     assert {"PATH", "HOME", "UV_CACHE_DIR"} <= seen
+
+
+# ------------------------------- security review: what a mirror may reach (round two)
+
+
+def test_mirror_env_names_its_variables_and_swaps_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.gitseam import mirror_env
+
+    real = tmp_path / "real-home"
+    for name, value in {"HOME": str(real), "GH_TOKEN": "t", "SSH_AUTH_SOCK": "s",
+                        "FR_FORGE_API": "rest", "UV_INDEX_URL": "https://example.invalid/simple",
+                        "UV_EXTRA_INDEX_URL": "x", "UV_NO_PROGRESS": "1"}.items():  # fmt: skip
+        monkeypatch.setenv(name, value)
+    for name in ("UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+        monkeypatch.delenv(name, raising=False)
+    home = tmp_path / "empty"
+    env = mirror_env(home)
+    assert env["HOME"] == str(home) and env["XDG_CONFIG_HOME"].startswith(str(home))
+    assert env["XDG_DATA_HOME"].startswith(str(home))
+    assert env["GIT_CONFIG_GLOBAL"] == os.devnull and env["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert env["UV_CACHE_DIR"] == str(real / ".cache" / "uv")  # resolved before the swap
+    assert env["UV_PYTHON_INSTALL_DIR"] == str(real / ".local" / "share" / "uv" / "python")
+    assert env["UV_NO_PROGRESS"] == "1"
+    for gone in ("GH_TOKEN", "SSH_AUTH_SOCK", "FR_FORGE_API", "UV_INDEX_URL",
+                 "UV_EXTRA_INDEX_URL"):  # fmt: skip
+        assert gone not in env
+
+
+def _common_dir(w: World) -> Path:
+    return Path(git(w.clone, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+
+
+PLANT_HOOK = (PY, "-c", "import pathlib, subprocess; d = subprocess.check_output(['git', "
+              "'rev-parse', '--path-format=absolute', '--git-common-dir'], text=True).strip(); "
+              "h = pathlib.Path(d, 'hooks'); h.mkdir(exist_ok=True); "
+              "(h / 'post-commit').write_text('#!/bin/sh\\ntouch planted\\n')")  # fmt: skip
+PLANT_CONFIG = (PY, "-c", "import subprocess; subprocess.check_call(['git', 'config', "
+                "'core.fsmonitor', 'touch planted'])")  # fmt: skip
+
+
+@pytest.mark.parametrize("plant", [PLANT_HOOK, PLANT_CONFIG], ids=["hook", "config"])
+def test_a_mirror_that_touches_git_config_or_hooks_hands_back_and_is_undone(
+    tmp_path: Path, plant: tuple[str, ...]
+) -> None:
+    from fr.triage.queue_exec import slot_ref
+
+    w = _generated_world(tmp_path)
+    config_before = (_common_dir(w) / "config").read_bytes()
+    with pytest.raises(MergeConflictError) as raised:
+        _build(w, regen=Regen(mirrors=(*MIRRORS, plant), generated=("gen/*",)))
+    assert "git's own config or hooks" in str(raised.value)
+    assert not (_common_dir(w) / "hooks" / "post-commit").exists()
+    assert (_common_dir(w) / "config").read_bytes() == config_before
+    assert w.checkout.remote_sha(slot_ref(SCOPE, 2)) is None  # nothing built from that tree
+
+
+def test_no_hook_runs_on_the_scratch_worktree_after_a_mirror(tmp_path: Path) -> None:
+    """The rebase's own commit after the mirrors ran carries `core.hooksPath=/dev/null`: a
+    hook already in the clone runs for the pick before them and not for the one after."""
+    w = _generated_world(tmp_path)
+    marker = tmp_path / "hook-ran"
+    hook = _common_dir(w) / "hooks" / "post-commit"
+    hook.parent.mkdir(exist_ok=True)
+    hook.write_text(f"#!/bin/sh\ngit log -1 --format=%s >> {marker}\n")
+    hook.chmod(0o755)
+    _build(w, "rebase", Regen(mirrors=MIRRORS, generated=("gen/*",)))
+    ran = marker.read_text().splitlines() if marker.exists() else []
+    assert not any("pr 2" in line for line in ran), ran
