@@ -187,3 +187,33 @@ def test_a_path_whose_stages_are_not_two_regular_blobs_is_real(stages: dict[int,
 def test_a_whole_generated_path_ours_deleted_is_real() -> None:
     got = classify_conflicts(["gen/a"], ["gen/*"], lambda p: None, lambda p: {3: "100644"})
     assert got.real == ("gen/a",) and got.whole == ()
+
+
+# ----------------------------------------------------------- review p4-r1, p4-r2
+
+
+def test_an_unclosed_block_makes_every_hunk_after_it_real() -> None:
+    text = "<!-- generated:x -->\n| a |\n" + _hunk("ours\n", "entry\n") + "prose\n"
+    assert resolve_hunks(text) is None
+
+
+def test_outside_generated_compares_a_file_with_an_unclosed_block_whole() -> None:
+    before = {"README.md": "<!-- generated:a -->\nrow\nprose\n"}
+    after = {"README.md": "<!-- generated:a -->\nrow\nchanged prose\n"}
+    assert outside_generated(before, after, []) == ["README.md"]
+
+
+def test_a_crlf_file_keeps_its_line_endings_through_a_resolution() -> None:
+    text = _readme(_hunk("| ours |\n", "| entry |\n")).replace("\n", "\r\n")
+    assert resolve_hunks(text) == _readme("| ours |\n").replace("\n", "\r\n")
+
+
+def test_the_worktree_reads_and_writes_crlf_unchanged(tmp_path, monkeypatch) -> None:
+    from fr.triage import gitseam
+
+    monkeypatch.setattr(gitseam, "git", lambda *a, **k: "")  # no repo needed to stage
+    wt = gitseam.Worktree(tmp_path)
+    (tmp_path / "a.md").write_bytes(b"one\r\ntwo\r\n")
+    assert wt.read("a.md") == "one\r\ntwo\r\n"
+    wt.write_resolved("a.md", "one\r\nthree\r\n")
+    assert (tmp_path / "a.md").read_bytes() == b"one\r\nthree\r\n"

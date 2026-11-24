@@ -1201,7 +1201,8 @@ class Worktree:
 
     def read(self, file: str) -> str | None:
         target = self.path / file
-        return target.read_text(encoding="utf-8") if target.is_file() else None
+        # newline="": a CRLF file keeps its line endings through a hunk resolution.
+        return target.read_text(encoding="utf-8", newline="") if target.is_file() else None
 
     def run(self, command: str, **fields: str) -> None:
         run_declared(command, self.path, **fields)
@@ -1229,7 +1230,7 @@ class Worktree:
 
     def write_resolved(self, path: str, text: str) -> None:
         """Write *path*'s resolved *text* (no conflict markers left) and stage it."""
-        (self.path / path).write_text(text, encoding="utf-8")
+        (self.path / path).write_text(text, encoding="utf-8", newline="")
         git(["add", "--", path], self.path)
 
     def export_tracked(self, dest: Path) -> list[str]:

@@ -126,6 +126,8 @@ def _resolve(text: str) -> _Resolution | None:
             regenerate = True
         else:
             return None
+    if block is not None:
+        return None  # an unclosed block: no hunk in it can be judged inside one
     return _Resolution("".join(out), regenerate, hunks)
 
 
@@ -203,6 +205,8 @@ def _skeleton(text: str) -> list[str]:
         elif closed and closed.group(1) == block:
             out.append(line)
             block = None
+    if block is not None:
+        return text.splitlines()  # unbalanced: compare the whole file, hide nothing
     return out
 
 

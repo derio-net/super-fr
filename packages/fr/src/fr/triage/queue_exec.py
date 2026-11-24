@@ -211,15 +211,15 @@ def _regenerate(
     staged."""
     with tempfile.TemporaryDirectory(prefix="fr-mirror-") as where:
         export = Path(where)
-        tracked = wt.export_tracked(export)
-        before = wt.snapshot_export(export, tracked)
         try:
+            tracked = wt.export_tracked(export)
+            before = wt.snapshot_export(export, tracked)
             for argv in regen.mirrors:
                 wt.run_mirror(argv, export, regen.timeout)
-        except GitError as exc:
+            after = wt.snapshot_export(export, tracked)
+        except (GitError, OSError) as exc:  # an unreadable or vanished file hands back too
             abort()
             raise _mirror_failed(entry, paths, str(exc)) from exc
-        after = wt.snapshot_export(export, tracked)
         marked = [p for p in paths if "\n<<<<<<< " in "\n" + (after.get(p) or "")]
         if marked:
             abort()
@@ -237,7 +237,7 @@ def _regenerate(
             raise _mirror_failed(entry, odd, "the mirrors left it as something other than a file")
         try:
             wt.take_generated(export, changed)
-        except GitError as exc:
+        except (GitError, OSError) as exc:
             abort()
             raise _mirror_failed(entry, changed, str(exc)) from exc
     wt.stage_all()
