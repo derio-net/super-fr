@@ -26,3 +26,33 @@ I want to make super-fr a-la-carte and event-driven. With event driven I mean, t
 - D13 super-fr's shipped defaults (workflows, verifications, lenses, later stations) get one home and one wheel copy, one sync, one resolver.
 - D14 Triage state follows the unit under triage; the triage branch is the wave-driver Router's space.
 - D15 Triage branch location: repo scope -> fr-triage/<scope-id> in the repo; org scope -> the org's state repo; stealth -> the tracking repo; a repo may name a state repo in .fr/settings.yaml; the privacy guard is unchanged.
+
+<!-- fr:journal kind=decision scope=spec id=q-fr-dir-follows-space created=2026-11-24T20:06:43+00:00 decided_by=operator -->
+### q-fr-dir-follows-space · decision · The whole .fr/ follows the space (repo checkout, fr branch, tracking target dir)
+
+Operator separated three concepts: repo configuration (.fr/, moves into stealth too), super-fr's shipped defaults (their own home, never docs/superpowers), and triage state (follows the unit under triage). Product CI cannot read .fr/ under quiet/stealth; accepted. Spec Part II R1-R4, R16.
+
+<!-- fr:journal kind=decision scope=spec id=q-triage-state-repo created=2026-11-24T20:06:43+00:00 decided_by=operator -->
+### q-triage-state-repo · decision · Triage branch location derived from the scope, overridable in .fr/settings.yaml; privacy guard as is
+
+Option C: repo scope -> the repo; org scope -> org state repo; stealth -> tracking repo; triage.state_repo overrides. Spec R13-R15.
+
+<!-- fr:journal kind=decision scope=spec id=q-spec-is-s1-only created=2026-11-24T20:06:43+00:00 decided_by=operator -->
+### q-spec-is-s1-only · decision · The spec builds S1 only; the epic architecture lives in epic issue #1652 until fr has first-class epics (#1658)
+
+Operator: a spec that carries the design of other specs is a workaround; epics need their own artifact and an Architect skill, and fr-brainstorming stays reserved for features. Split approved: S1 #1653, S2 #1654, S3 #1655, S4 #1656, #1657 split tracking, #1651 cncd, #1658 epics and the Architect skill.
+
+<!-- fr:journal kind=decision scope=spec id=q-verification created=2026-11-24T20:06:43+00:00 decided_by=operator -->
+### q-verification · decision · Strategy candidate for every S1 row; gate developer
+
+The repo has an executable .fr/candidate-install and tests/scenarios/; every S1 behaviour is observable in fixture repos with the installed candidate, so nothing is post-merge. Spec ## Verification.
+
+<!-- fr:journal kind=decision scope=spec id=q-r9-transition created=2026-11-24T20:06:43+00:00 decided_by=operator -->
+### q-r9-transition · decision · Old config paths are read with a notice for one minor release, then refused
+
+Operator chose one minor release over until-next-major or never-refuse (AskUserQuestion round 1, question 1). Spec R9.
+
+<!-- fr:journal kind=decision scope=spec id=q-scope-id-s4 created=2026-11-24T20:06:43+00:00 decided_by=operator -->
+### q-scope-id-s4 · decision · The host-dependent triage scope id is filed for S4, not fixed in S1
+
+Operator chose to file it under #1656 (AskUserQuestion round 1, question 2): changing the id moves every scope's branch and belongs with the Router and lease design. Spec section F.

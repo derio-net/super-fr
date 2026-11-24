@@ -1,0 +1,91 @@
+schema_version: 2
+run: 2026-11-19-feat-event-driven-a-la-carte
+captures:
+- host: h-505ac2ce
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-24T20:06:45+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: eff5ea4a-9355-4349-88a2-473612f38e60
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 452
+        cache_write: 1165376
+        cache_read: 28621663
+        output: 148668
+        usd: 11.8286154
+        usd_source: exact
+      claude-haiku-5-5:
+        input: 4
+        cache_write: 8726
+        cache_read: 4308
+        output: 1490
+        usd: 0.0013617
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 2.4206754056464685
+        turns: 59
+      other:
+        usd: 6.396535467587086
+        turns: 102
+      paperwork:
+        usd: 3.0127662267664506
+        turns: 42
+    steps:
+      (outside run):
+        usd: 0.3799399680893425
+        turns: 2
+        input: 4
+        cache_write: 82458
+        cache_read: 141211
+        output: 578
+      brainstorm:
+        usd: 11.450037131910662
+        turns: 198
+        input: 452
+        cache_write: 1091644
+        cache_read: 28484760
+        output: 149580
+    steps_by_role:
+      main:
+        (outside run):
+          usd: 0.3799399680893425
+          turns: 2
+          input: 4
+          cache_write: 82458
+          cache_read: 141211
+          output: 578
+        brainstorm:
+          usd: 8.999012836934984
+          turns: 122
+          input: 300
+          cache_write: 719350
+          cache_read: 23226976
+          output: 109481
+      subagent:
+        brainstorm:
+          usd: 2.4510242949756784
+          turns: 76
+          input: 152
+          cache_write: 372294
+          cache_read: 5257784
+          output: 40099
+    units:
+      (unattributed):
+        subagent:
+          usd: 2.4510242949756784
+          turns: 76
+          input: 152
+          cache_write: 372294
+          cache_read: 5257784
+          output: 40099
+    briefs:
+      aaeb8e6a4ab132f26: 2508
+      ad6e82ae303f8d080: 1656
+      a865eb5795a094100: 1795
+      a272cbe298b303c27: 1209
+      ae2a9a0596bf6001d: 554

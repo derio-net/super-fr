@@ -1,0 +1,81 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-event-driven-a-la-carte
+repo: derio-net/super-fr
+rows:
+  - id: s1-config-root
+    capability: settings
+    acceptance: fr reads every repo-configuration file from .fr/ at the root of the
+      run's space (product checkout, fr branch, stealth tracking target dir) through
+      one resolver, and says once per command when a product checkout's own .fr/ is
+      ignored
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R1
+    - spec:2026-11-19-event-driven-a-la-carte#R2
+    - spec:2026-11-19-event-driven-a-la-carte#R4
+    - spec:2026-11-19-event-driven-a-la-carte#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: s1-migration
+    capability: settings
+    acceptance: fr migrate artifacts --yes moves workflows, verifications, models, trackers,
+      plan-config, the profile declarations, the isolation allowlist and the placement
+      settings into .fr/ with git mv in one commit, refuses a file present at both paths,
+      and until the next minor release reads an unmigrated file with one notice
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R5
+    - spec:2026-11-19-event-driven-a-la-carte#R6
+    - spec:2026-11-19-event-driven-a-la-carte#R7
+    - spec:2026-11-19-event-driven-a-la-carte#R8
+    - spec:2026-11-19-event-driven-a-la-carte#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: s1-switch-moved
+    capability: placement
+    acceptance: The quiet switch and settings are read from .fr/settings.yaml on the
+      fr branch and the stealth settings from <target-dir>/.fr/settings.yaml, by fr
+      and by the edit gate on every harness; the old location is accepted for one minor
+      release and two disagreeing switches are refused
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R3
+    - spec:2026-11-19-event-driven-a-la-carte#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: s1-shipped-defaults
+    capability: workflows
+    acceptance: super-fr's default workflows, verification strategies and lenses are
+      resolved from one shipped defaults tree, a repo's .fr/ entry of the same name
+      wins, and one environment variable redirects the tree
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R10
+    - spec:2026-11-19-event-driven-a-la-carte#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: s1-triage-state-home
+    capability: triage
+    acceptance: A triage scope keeps its working state in the host cache and its durable
+      state on its fr-triage branch by default (the repo itself, the org's state repo,
+      or the stealth tracking repo), a repo can name another state repo in .fr/settings.yaml,
+      an existing .fr/triage-state is moved unless a live driver holds it, and the privacy
+      guard still refuses a private issue in a public state repo
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R12
+    - spec:2026-11-19-event-driven-a-la-carte#R13
+    - spec:2026-11-19-event-driven-a-la-carte#R14
+    - spec:2026-11-19-event-driven-a-la-carte#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
