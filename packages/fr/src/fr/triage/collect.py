@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from fr import real_ghclient
 from fr.artifacts.paths import KIND_DIRS
+from fr.config.space import forge_ref, rel
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, READY_FR, held_gates
@@ -66,7 +67,7 @@ ORIGINS_ISSUE_LIST_FIELDS = (
     real_ghclient.ORIGINS_ISSUE_LIST_FIELDS
 )  # origins' own, wider issue fields
 BODY_LIMIT = 2000
-CONFIG_PATH = ".fr/triage.yaml"
+CONFIG_PATH = rel("triage")
 # GitHub's contents API resolves HEAD to the default branch (verified live
 # 2026-09-25), so the config read needs no default-branch lookup first.
 DEFAULT_BRANCH_REF = "HEAD"
@@ -1089,7 +1090,8 @@ def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, t
     and skips just that repo in org scope (review r2p-f4). Any other forge failure
     propagates like the list calls' do."""
     try:
-        body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=DEFAULT_BRANCH_REF)
+        ref = forge_ref(forge, repo) or DEFAULT_BRANCH_REF
+        body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=ref)
     except ForgeError as exc:
         if _NOT_FOUND in str(exc):
             return None, ()

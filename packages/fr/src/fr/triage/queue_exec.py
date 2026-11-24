@@ -743,8 +743,17 @@ class ChecksForge(Protocol):
 
 def required_names(client: ChecksForge, checkout: Checkout, repo: str, default: str) -> list[str]:
     """The checks that gate *default* (R7): `.fr/ci.yaml`'s `gate_checks` at
-    `origin/<default>`, else the base's `required_check_names`."""
-    declared = gate_checks_of(checkout.show(f"origin/{default}", ".fr/ci.yaml"))
+    `origin/<default>`, else the base's `required_check_names`. Under quiet and stealth
+    `ci.yaml` is the configuration branch's (`fr.config.space.at_default`)."""
+    from fr.config.space import config_space, rel
+
+    space = config_space(checkout.path)
+    text = (
+        checkout.show(f"origin/{default}", rel("ci"))
+        if space.ref is None
+        else space.at_default("ci")
+    )
+    declared = gate_checks_of(text)
     return declared if declared is not None else list(client.required_check_names(repo, default))
 
 

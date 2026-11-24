@@ -13,10 +13,11 @@ import yaml
 from pydantic import ValidationError
 
 from fr import git as fr_git
+from fr.config.space import config_space, rel
 from fr.docs.globs import match
 from fr.docs.model import DocsConfig, Page, PageError, parse_page
 
-CONFIG_PATH = ".fr/docs.yaml"
+CONFIG_PATH = rel("docs")
 
 
 class DocsEnvError(Exception):
@@ -25,7 +26,7 @@ class DocsEnvError(Exception):
 
 def load_config(root: Path) -> DocsConfig | None:
     """The strict config, or None when the repo has no `.fr/docs.yaml` (R1)."""
-    path = root / CONFIG_PATH
+    path = config_space(root).file(CONFIG_PATH)
     if not path.is_file():
         return None
     try:

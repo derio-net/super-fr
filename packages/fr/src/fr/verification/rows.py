@@ -60,6 +60,11 @@ def spec_text_at(repo_root: Path, spec_rel: str | None) -> str | None:
     return None
 
 
+def _shown(path: Path, repo_root: Path) -> str:
+    """*path* relative to *repo_root* when below it (the `repo` space), else in full."""
+    return path.relative_to(repo_root).as_posix() if path.is_relative_to(repo_root) else str(path)
+
+
 def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
     """The repo's gate remap (`.fr/triage.yaml`'s `exit: {gates: {...}}`, spec
     2026-10-14 R4) and why it could not be read, if it could not. Lenient: an
@@ -67,15 +72,16 @@ def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
     import yaml
     from pydantic import ValidationError
 
+    from fr.config.space import config_space
     from fr.triage.model import parse_triage_config
 
-    path = repo_root / ".fr" / "triage.yaml"
+    path = config_space(repo_root).file("triage")
     if not path.is_file():
         return {}, None
     try:
         config, _ = parse_triage_config(yaml.safe_load(path.read_text()) or {})
     except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError) as e:
-        return {}, f"{path.relative_to(repo_root)} is not valid triage config: {e}"
+        return {}, f"{_shown(path, repo_root)} is not valid triage config: {e}"
     return (dict(config.exit.gates) if config.exit else {}), None
 
 

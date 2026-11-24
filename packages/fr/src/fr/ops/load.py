@@ -22,10 +22,11 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
 
+from fr.config.space import config_space, rel
 from fr.ops.model import LegacyOp, LegacyState, Op
 
 OPS_FILE = "ops.yaml"
-CONFIG_REL = Path(".fr/ops.yaml")
+CONFIG_REL = Path(rel("ops"))
 MARKER = "# manual-operation"
 
 
@@ -98,7 +99,7 @@ class OpsConfig(BaseModel):
 
 def load_ops_config(repo_root: Path) -> OpsConfig:
     """The repo's `.fr/ops.yaml`, or an empty config when there is none."""
-    path = repo_root / CONFIG_REL
+    path = config_space(repo_root).file(CONFIG_REL.as_posix())
     if not path.is_file():
         return OpsConfig()
     data = _safe_load(path.read_text(), path, 0)
@@ -318,7 +319,8 @@ def _runbook(repo_root: Path, config: OpsConfig) -> list[LoadedOp]:
         return []
     path = repo_root / config.runbook
     if not path.is_file():
-        raise OpsLoadError(f"{repo_root / CONFIG_REL}:1: runbook {config.runbook} does not exist")
+        config_file = config_space(repo_root).file(CONFIG_REL.as_posix())
+        raise OpsLoadError(f"{config_file}:1: runbook {config.runbook} does not exist")
     text = path.read_text()
     root = _compose(text, path)
     data = _safe_load(text, path, 0)

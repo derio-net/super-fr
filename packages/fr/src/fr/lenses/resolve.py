@@ -15,9 +15,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr import _shipped
+from fr.config.space import config_space, rel
 from fr.lenses.model import Lens, LensConfig, LensError, parse_config, parse_lens, read_text
 
-REPO_CONFIG_REL = Path(".fr") / "lenses.yaml"
+REPO_CONFIG_REL = Path(rel("lenses"))
 PLUGIN_LENSES_REL = Path("plugins") / "super-fr" / "lenses"
 PACKAGED_LENSES_DIRNAME = "lens_manifests"
 SHIPPED_ENV_VAR = "FR_SHIPPED_LENSES_DIR"
@@ -59,7 +60,7 @@ def shipped_lenses() -> dict[str, Lens]:
 
 def load_config(root: Path) -> LensConfig:
     """`.fr/lenses.yaml` from the working tree; absent is an empty config. Raises `LensError`."""
-    path = root / REPO_CONFIG_REL
+    path = config_space(root).file(REPO_CONFIG_REL.as_posix())
     if not path.is_file():
         return LensConfig()
     source = str(REPO_CONFIG_REL)

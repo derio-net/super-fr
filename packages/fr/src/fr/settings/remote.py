@@ -73,10 +73,15 @@ def _not_found(exc: BaseException) -> bool:
 
 
 def remote_settings_text(client: Any, repo: str) -> str | None:
-    """*repo*'s `.fr/settings.yaml` at its default branch, None when it has none."""
+    """*repo*'s `.fr/settings.yaml` at its default branch (at `fr-config` when that branch
+    carries a quiet switch, `fr.config.space.forge_ref`), None when it has none."""
+    from fr.config.space import forge_ref
     from fr.settings.load import SETTINGS_PATH
 
     try:
+        ref = forge_ref(client, repo)
+        if ref is not None:
+            return str(client.read_file_at_ref(repo=repo, path=SETTINGS_PATH, ref=ref))
         return str(client.read_file(repo, SETTINGS_PATH))
     except Exception as exc:  # noqa: BLE001 — every backend's error; only a 404 is "absent"
         if _not_found(exc):
