@@ -259,3 +259,18 @@ run_kind: candidate
 ### s-r13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1552] · resolves s-r13: The isolation gate and the pipeline sentinel also judge in the plugin's directory
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1552.
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-2 created=2026-11-24T19:28:26+00:00 -->
+### test-plan-step-2 · owed · Test Plan step 2 owed
+
+what: In a Gitea consumer repo, run `fr acceptance init --refresh-ci` with the debt job on, dispatch the workflow with `debt: true`, and see the "Technical debt" issue upserted and the archive branch pushed. In a GitLab consumer repo, `fr acceptance init --refresh-ci` prints the `technical-debt` job to paste into `.gitlab-ci.yml`; paste it, then run a web pipeline with `DEBT=true` once with `FR_DEBT_TOKEN` unset (the job fails with the one-line remedy) and once with it set (issue upserted, branch pushed). (Row `debt-credentials-gitea-gitlab`.)
+why: Needs live Gitea and GitLab consumer repos; walked post-merge by the operator
+how: fr journal resolve --scope spec --slug 2026-11-18-consumer-delivery --id test-plan-step-2 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-18-consumer-delivery#step2
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-24T19:31:36+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: On a machine with OpenCode 2, run the released `scripts/install.sh`. In a consumer repo, start a session and ask the agent to quote the first heading of `fr-isolation-required`; it answers from its system prompt. Ask again on a later turn, and from a child (subagent) session, and check the rule text appears once in the request, not twice. (Row `opencode-rules-delivered`.)
+
+Evidence: OpenCode 2.3.2 on this host, plugin delivered by released fr 9.0.0-rc.5 (rules/ holds 5 shipped rules), scratch consumer repo with no instructions of its own: turn 1 quoted the first heading "fr-isolation Required — Edit/Write Enforcement (Org-Wide)" from the system prompt with no tools; turn 2 counted it 1 time; a child (general subagent) session quoted it and counted it once. Count is model self-report, not a request capture.
