@@ -197,3 +197,9 @@ gate: show-me-live-run=tester
 - pre-merge — CI: PR-body and deliver tests cover the section's four bodies, the minimal-body durable render, both refusals and an in-flight run whose spec has no section (R9–R11, R18); lens-review brief tests cover the `shape` key and the return-rule sentence (R16) (row `pr-shape-section`).
 - pre-merge — CI: archive, trust and adopt-supersede tests (R12, R17) (row `shape-file-archived`); a text test pins the reviewer's instruction (R13) (row `spec-reviewer-checks-shape`).
 - post-merge — operator-driven: run fr-goal on a real goal with the released build; its spec has a `## Design shape` that matches the code, and its PR shows a `## Shape of the change` that matches the diff (R13, R14) (row `show-me-live-run`).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-24-show-me-visuals | `derio-net/super-fr` | `2026-11-24-show-me-visuals` | — |

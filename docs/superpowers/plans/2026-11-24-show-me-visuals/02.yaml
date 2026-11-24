@@ -1,0 +1,134 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr-show-me skill, pipeline prose, spec reviewer, docs (R1-R5, R13-R15)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - show-me-skill
+  - spec-reviewer-checks-shape
+  tier: standard
+  files:
+  - plugins/super-fr/skills/fr-show-me/SKILL.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - plugins/super-fr/agents/fr-spec-reviewer.md
+  - packages/fr/src/fr/agents/**
+  - packages/fr/src/fr/agents/__init__.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/agents_kind.py
+  - packages/fr/src/fr/artifacts/*.py
+  - .claude/agents/*.md
+  - .opencode/**
+  - .hermes/**
+  - README.md
+  - docs/**/*.md
+  - tests/**/*.py
+  - docs/acceptance/features/2026-11-24-show-me-visuals.yaml
+  - .changes/feat-show-me-visuals.yaml
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: The fr-show-me skill (spec §A, R1-R5)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_show_me_skill.py: plugins/super-fr/skills/fr-show-me/SKILL.md exists with front matter `name: fr-show-me` and a description naming "show me", "visualize"/"draw" and the spec and PR uses; no `disable-model-invocation` key (R2); the body names each view (pseudocode, call tree, file tree, component tree, structure-diff, whole target shape, mermaid), the "smallest view" rule, the shape-block forms (fenced block, `none — <reason>`), `## Design shape` and `<run-id>.shape.md`, the third-party privacy rule, and credits HumanLayer's `show-me` (MIT); it contains no `.html` route and no `open ` command (R3). Run it: red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: write the skill per spec §A — adapted, not copied: the ranked menu, each view with a short example drawn from fr itself (an annotated packages/fr/src/fr/ tree, a structure-diff of a workflow's step list, a mermaid sequence of resolve → advance → brief); "use one or several, never all; keep only what the question needs; place each visual next to the short text it supports"; a visual is a claim about the code; redact third parties (point at the third-party privacy rule by name, not a harness path). Run `uv run --no-project python scripts/sync-opencode.py`, `uv run --no-project python scripts/sync-hermes.py`, `uv run --no-project python scripts/sync-readme.py`. Re-run test_show_me_skill.py, tests/unit/test_skill_validation.py, tests/unit/test_tripwire_skill_tool_neutrality.py, tests/unit/test_tripwire_opencode_skills_sync.py, tests/unit/test_tripwire_hermes_skills_sync.py, tests/unit/test_tripwire_readme_sync.py and the install-copies tests (grep `test_install_copies`): green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: reread the skill for length and plain wording (keep it under ~150 lines); re-run the neutrality tripwire.
+- number: 2
+  title: Pipeline prose in fr-goal and fr-brainstorming (spec §F, R14)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_show_me_pipeline_prose.py: plugins/super-fr/skills/fr-brainstorming/SKILL.md §2 tells the author the spec carries `## Design shape` written with `fr-show-me`'s vocabulary (a shape block, `none — <reason>` allowed); plugins/super-fr/skills/fr-goal/SKILL.md tells the agent (a) the spec needs `## Design shape`, (b) to write and commit `<run-id>.shape.md` with `fr-show-me` before dispatching the lens reviewers, (c) to give each lens reviewer the brief's `shape` path, and (d) that `deliver` renders `## Shape of the change` from it and refuses without it; the light-path paragraph says the same applies. Run it: red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: one or two sentences each in fr-brainstorming §2, fr-goal §1 (spec), §7a (shape file before the lens dispatch; pass `shape`), §8 (the rendered section, the refusal) and the light-path paragraph. Re-sync the OpenCode and Hermes mirrors. Re-run the RED file, the neutrality tripwire, both sync tripwires and tests/unit/test_tripwire_fr_goal_question_rounds.py: green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: check the added fr-goal sentences don't repeat each other; keep §7a and §8 consistent with the `shape` brief key built in phase 1.
+- number: 3
+  title: The spec reviewer checks the shape, and the agents kind moves (spec §F, R13)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_show_me_pipeline_prose.py gains a test that plugins/super-fr/agents/fr-spec-reviewer.md instructs the reviewer to check `## Design shape` against the codebase (every named file, function or module exists or the spec creates it) and against the spec's Design, reporting a mismatch as a finding. Run it: red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: add the check to fr-spec-reviewer.md. Then follow AGENTS.md "Skills/rules: canonical source vs. generated mirrors" for an agent edit exactly: `uv run --no-project python scripts/sync-agents-data.py`; bump the `agents` kind's `current_version` in packages/fr/src/fr/artifacts/registry.py by one; update `fr.agents.CANONICAL_SHA256` (both entries as the tripwire reports) and `PINNED_AT_VERSION`; register the new hop's `fr.artifacts.agents_kind.rerender_migration` into `MIGRATIONS` the way the previous hop is registered; `uv run fr migrate artifacts --yes` (re-renders .claude/agents/); `uv run --no-project python scripts/sync-opencode.py`. Re-run the RED file, tests/unit/test_tripwire_agents_data.py, tests/unit/test_opencode_agent_mirror.py, the agents-kind migration tests (grep `agents_kind` in tests/unit) and tests/unit/test_validate_artifacts.py: green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: confirm `uv run fr validate artifacts` is clean and the agents chain test (if any asserts every hop) covers the new hop.
+- number: 4
+  title: Docs, fragment, rows (spec §G, R15)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: run `uv run fr docs check --base origin/main`: it fails with `must_cover` naming plugins/super-fr/skills/fr-show-me/SKILL.md and the pages whose covered paths changed (01-fr-goal.md, fr-brainstorming-and-plan.md, and any covering pr_body.py, run_cmd.py, archive.py, trust or lenses). Record the list.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: write docs/explainers/fr-show-me.md (front matter `title`, `tldr`, `standalone_style: broadsheet`, `covers:` [plugins/super-fr/skills/fr-show-me/SKILL.md, packages/fr/src/fr/shape.py], `reviewed: 2026-11-24 <note>`; plain-language standard): why a picture, the views and the smallest-view rule, the spec's `## Design shape`, the run shape file and the PR's `## Shape of the change`, how lens reviewers check it, and HumanLayer's credit. Update each page `fr docs check` named where the change makes it untrue, else bump its `reviewed` stamp with a note. Add `.changes/feat-show-me-visuals.yaml` (`bump: minor`, one-line summary). Re-run `uv run fr docs check --base origin/main` (exit 0), tests/unit/test_tripwire_explainers_fresh.py, tests/unit/test_build_site.py and `uv run --no-project python scripts/check-change-fragment.py origin/main`: green.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR + quality gate: ruff format/check, mypy over the five trees; move show-me-skill and spec-reviewer-checks-shape to `unwired` with their level refs via `fr acceptance set-status --notes ...`; commit, then run the fast tier from the brief LAST.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
