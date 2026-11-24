@@ -10252,3 +10252,6 @@ queues:
   - kind: queue_drain
     at: '2026-11-24T20:35:45.452819Z'
     main: 34023f157224e7157b03e72ee3d43ead94ba53ea
+  - kind: queue_cleared
+    at: '2026-11-24T20:46:34.209505Z'
+    detail: the release cleared the hold
