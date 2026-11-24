@@ -274,3 +274,8 @@ owed_key: spec:2026-11-18-consumer-delivery#step2
 Step: On a machine with OpenCode 2, run the released `scripts/install.sh`. In a consumer repo, start a session and ask the agent to quote the first heading of `fr-isolation-required`; it answers from its system prompt. Ask again on a later turn, and from a child (subagent) session, and check the rule text appears once in the request, not twice. (Row `opencode-rules-delivered`.)
 
 Evidence: OpenCode 2.3.2 on this host, plugin delivered by released fr 9.0.0-rc.5 (rules/ holds 5 shipped rules), scratch consumer repo with no instructions of its own: turn 1 quoted the first heading "fr-isolation Required — Edit/Write Enforcement (Org-Wide)" from the system prompt with no tools; turn 2 counted it 1 time; a child (general subagent) session quoted it and counted it once. Count is model self-report, not a request capture.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved created=2026-11-24T19:33:37+00:00 state=open resolves=test-plan-step-2 filed_as=derio-net/super-fr#1660 -->
+### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1660] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Filed at archive as derio-net/super-fr#1660; still owed until discharged.
