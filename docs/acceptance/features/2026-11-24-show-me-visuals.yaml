@@ -76,9 +76,9 @@ rows:
       - super-fr:tests/unit/test_archive_cmd.py#test_archive_moves_run_state_file_alongside_its_plan
       - super-fr:tests/unit/test_ops_trust.py#test_the_run_shape_file_is_fr_bookkeeping
       - super-fr:tests/unit/test_run_adopt_supersede.py#test_supersede_moves_the_shape_file_with_the_run
-    status: unwired
-    notes: unit tests run the archive, the trust predicate and adopt --supersede over
-      a run with a shape file; ci once this PR's CI runs them
+    status: ci
+    notes: 'its unit tests run in CI''s sharded test job on every PR (feat/show-me-visuals,
+      #1641)'
   - id: spec-reviewer-checks-shape
     capability: shape accuracy review
     acceptance: fr-spec-reviewer is instructed to check the spec's design shape against
