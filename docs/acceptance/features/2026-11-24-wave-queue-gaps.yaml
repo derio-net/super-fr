@@ -17,7 +17,7 @@ rows:
     - spec:2026-11-24-wave-queue-gaps#R1
     - spec:2026-11-24-wave-queue-gaps#R2
     - spec:2026-11-24-wave-queue-gaps#R3
-    - spec:2026-11-24-wave-queue-gaps#R5
+    - spec:2026-11-24-wave-queue-gaps#R6
     levels: {}
     status: not-implemented
     notes: ''
