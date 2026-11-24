@@ -215,3 +215,9 @@ gate: wave-queue-gaps-live=tester
 ## Test Plan
 
 1. Post-merge, live: in the next wave on this repo, a conflict hand-back names `fr-queue/<scope>/slot-<j>`; after the session merges it, the PR lands with no second hand-back; a PR added with `fr triage queue add` lands in the same wave and is in the release the drain starts. (row `wave-queue-gaps-live`)
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-24-wave-queue-gaps | `derio-net/super-fr` | `2026-11-24-wave-queue-gaps` | — |

@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Hand-backs name the stack target, re-issue free, refuse a stale carry (R1-R6,
+    R16 for conflict fields)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - wave-queue-handback-slot
+  - wave-queue-handback-carry
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/queue_handback.py
+  - packages/fr/src/fr/triage/handback_rules.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/triage/queue_exec.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/operator_entries.py
+  - tests/**/*.py
+  - tests/scenarios/fixtures/*.json
+  - .changes/feat-wave-queue-gaps.yaml
+  - AGENTS.md
+  - docs/**/*.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke and room
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke: create `packages/fr/src/fr/triage/queue_handback.py` with only a module docstring naming spec 2026-11-24-wave-queue-gaps R1-R6, and `tests/unit/test_queue_handback.py` with one test importing it and asserting the docstring names the spec. Add the change fragment `.changes/feat-wave-queue-gaps.yaml` (`bump: minor`, summary: "Wave merge queue: conflict hand-backs name the commit ahead and are re-issued when it moves, wave overlaps are reported, and `fr triage queue add/remove` puts any trusted PR into the queue"). `uv run pytest tests/unit/test_queue_handback.py -q --no-cov` green.
+  - id: P1.T1.S2
+    text: |-
+      Room (spec §E): move `handbacks_since`, `conflict_decision` (with `ConflictDecision`, `HANDBACKS_PER_DISPATCH`), `red_decision` (with `RED_HANDBACKS_PER_DISPATCH`, `RedDecisionKind`) and `held_conflict` from `batch_drive.py` into a new `fr/triage/handback_rules.py`, re-exported from `batch_drive` by name so every existing import keeps working; move `_Driver._housekeeping_reads`'s body from `triage_batch_cmd.py` into a function `housekeeping_reads(driver, facts, judgements, repos, skip)` in a new `fr/triage/operator_entries.py`, the method becoming a one-line delegate. No behaviour change: the existing tests of conflict/red decisions and housekeeping admission pass unchanged, and `tests/unit/test_tripwire_module_budget.py` passes with both files further below budget (do not lower a budget beyond its 400-line headroom rule; lower one only if the tripwire demands it).
+- number: 2
+  title: Schema 14 for the conflict event (R16, part)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in the judgements model tests, a `ConflictEvent` gains optional `onto: str | None = None` and `reissue: bool = False`; a file stamped 13 carrying a conflict event with `onto` or `reissue: true` is refused with a message naming schema 14; a file stamped 14 round-trips; files stamped 1-13 still load. `JUDGEMENTS_SCHEMA == 14`.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in `model.py` move `JUDGEMENTS_SCHEMA` to 14, widen the read literal to 1-14, add the fields and the below-14 refusal beside the existing `queues:`/`patch_id` checks (model.py:1598-1628); update the schema comment block and AGENTS.md's "reads schemas 1–13 and writes 13" sentence to 1–14 / 14. Fix any test or scenario fixture that pins 13 as the written stamp. Tests pass.
+- number: 3
+  title: The stack target and the lineage-aware skip (R1-R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED (pure, `tests/unit/test_queue_handback.py`): `stack_target(rep)` returns the last standing combination's sha and slot after this pass's ejections, else `(base, None)`; `brief_mode(config, method)` is `slot` only for `land: push` with method `merge` or `squash`, else `main`; the lineage-aware skip: a head whose latest `conflict` event has `onto` and `leads[key] is True` is skipped, one with `leads[key] is False` gets `reissue`, one whose event has no `onto` is skipped (today's rule); `handbacks_since` counts no `reissue` event, so two re-issues after one hand-back leave the budget at one spent.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement `stack_target`, `brief_mode`, `reissue_due` in `queue_handback.py`; in `handback_rules.conflict_decision` take an optional `leads: bool | None` and return a new kind `reissue` when the latest conflict event at the head names an `onto` and `leads is False`; exclude `reissue` events in `handbacks_since`'s conflict predicate. Tests pass.
+  - id: P1.T3.S3
+    text: |-
+      RED: brief tests: `conflict_brief` (moved into `queue_handback`, re-exported from `batch_dispatch`) given `onto=<sha>, onto_ref="fr-queue/<scope>/slot-2"` tells the session to `git fetch origin fr-queue/<scope>/slot-2` and `git merge <sha>`, says that commit is what `main` becomes when the entries ahead land, and says to stop and wait for a re-issued brief if the fetched ref no longer contains the sha; with `onto_ref="origin/<default>"` (mode `main`) it reads as today. Existing `conflict_brief` callers' tests still pass.
+  - id: P1.T3.S4
+    text: |-
+      GREEN: move and extend `conflict_brief`; keep the probe path (`_probe_conflict`) on mode `main`. Tests pass.
+- number: 4
+  title: Planner and executor carry onto, leads and carries (R1, R2, R4, R5)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED (pure planner, `tests/unit/test_wave_queue*.py` style): with `QueueSnapshot.leads` and `QueueSnapshot.carries` (new fields, default empty), (a) a conflict ejection's `queue-eject` action carries `base`=stack target sha and `slots`=(its slot,) or () for the base; (b) an entry ejected earlier, still at its ejected head, whose `leads` is False yields one `queue-reissue` action naming the new stack target; (c) an entry whose `carries` is a non-empty tuple is not in the build window and yields one `queue-carry` action; (d) `carries` None or `leads` None drops the entry from the window with a `queue-warn` (R5); (e) under `land: merge` or method `rebase` none of these fire and the eject names the base.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `queue-reissue` and `queue-carry` to `QueueActionKind`, the snapshot fields, and the planning in `_plan_open` through `queue_handback` helpers (keep `wave_queue.py` growth small; logic lives in `queue_handback`). `MergeConflictError` (batch_merge.py:42) and `BuildConflict` gain `onto`; `queue_exec.build` sets it to `prev`. Tests pass.
+  - id: P1.T4.S3
+    text: |-
+      RED (real git, `tests/integration/`, reuse `tests/integration/queue_git.py`): `gitseam.Checkout.carried(head, target, built)` returns the built shas in `git rev-list <head> ^<target>`; a head that merged a combination which later landed mid-push (an ancestor of `main`) or was fresh-rebuilt into main's history carries nothing; a head that merged a combination of an ejected entry carries it; an unknown object raises `GitError`. `Checkout.leads(onto, target)` is `merge-base --is-ancestor`.
+  - id: P1.T4.S4
+    text: |-
+      GREEN: implement both reads in `gitseam.py`; in the driver (via a function in `queue_handback` or `operator_entries`, not new bulk in `triage_batch_cmd.py`) compute `leads` and `carries` once per pass per entry from every `queue_built` sha of this scope's records for the repo, cached per `(head, target)` on the driver, mapping a `GitError` to None. Tests pass.
+- number: 5
+  title: Delivery of the slot brief, re-issue and carry (R1-R4, R6)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED (fake forge + driver, as the existing queue hand-back tests do): a conflict ejection under push+squash hands the batch session a brief naming `fr-queue/<scope>/slot-<j>` and its sha and writes `ConflictEvent(onto=<sha>)`; after an ejection ahead (leads False) the next pass sends one re-issued brief and writes `ConflictEvent(reissue=True, onto=<new>)`, the budget unchanged, and a third pass sends nothing; a carrying head gets one carry brief per head that names the reset head (the newest conflict-event head with an empty carry), the cherry-pick of later non-merge commits, the merge of the stack target and `git push --force-with-lease`; with no clean hand-back head it is held with a Need; a non-batch entry gets a `queue-need` line naming the commit (R6).
+  - id: P1.T5.S2
+    text: |-
+      GREEN: thread `onto`/`onto_ref` from the `queue-eject` action through `_queue_hand_back` → `_conflict` → `_hand_back` into `conflict_brief`; handle `queue-reissue` and `queue-carry` in the queue executor's dispatch to the driver's hand-back port; add `carry_brief` in `queue_handback`; record events through the existing `_conflict_event`. Keep `triage_batch_cmd.py` within its budget by putting new logic in `queue_handback`. Tests pass.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR + quality gate: ruff, ruff format, mypy on the touched packages; update `docs/explainers/fr-wave-driver.md` (and any page `fr docs check` names for the touched paths) to describe the slot brief, the re-issue and the carry hold; run the fast tier `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

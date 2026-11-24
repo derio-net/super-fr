@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Overlap-aware waves (R7-R10)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - wave-queue-overlap-report
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/wave_overlap.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/**/*.py
+  - docs/**/*.md
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: Merge PR
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Precondition: PR #1669 (branch `feat/ci-economy`) has landed on `origin/main` (check `gh pr view 1669 --json state`). If it has, `git fetch origin && git merge origin/main` (resolve conflicts keeping both sides; never rebase or force-push) and run the fast tier. If it has not, return outcome `blocked` naming #1669, so the orchestrator stops: this phase reads its `TriageConfig.generated`.
+  - id: P3.T1.S2
+    text: |-
+      RED (`tests/unit/test_wave_overlap.py`, pure over fixture facts): `expected_paths` uses the PR's changed files when the batch has a PR, else `cited_paths` of members' judgement details and trusted issue bodies (an untrusted body skipped); paths matching `generated:` or `version.files` are left out; `wave_overlaps` reports an unordered pair of open batches in one wave sharing a path, by suffix match (`tests/x.py` vs `x.py`), none across waves, none for closed batches, and with `only=` just that batch's pairs; `overlap_line` names the wave, both batches, the paths and both remedies with the next wave number.
+  - id: P3.T1.S3
+    text: |-
+      GREEN: implement `fr/triage/wave_overlap.py` reusing `batch.cited_paths`, `batch._same_file` (make it public as `same_file` if needed), `batch.is_open` and `batch_pr`. Tests pass.
+- number: 2
+  title: Surfaces (R8-R10)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED (CLI): `batch suggest` prints the overlap lines after its groupings (and "no suggestions" only when neither exists); `batch create --wave` and `batch edit --wave` write the batch and then print each pair it forms, exit 0; the dispatch brief of a batch overlapping another open batch of its wave carries R10's line naming that batch and the paths and saying whichever lands second gets the hand-back.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: print from the three commands through one small helper in `wave_overlap` (so `triage_batch_cmd.py` grows by call lines only); append the brief lines in `batch_dispatch`'s brief builder. Tests pass.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR + quality gate: ruff, ruff format, mypy; mention the overlap report in `docs/explainers/fr-wave-driver.md` or the fr-triage page `fr docs check` names; fast tier `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

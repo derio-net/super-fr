@@ -1,0 +1,112 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Operator entries — queue add/remove, preapproval, drain (R11-R16)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - wave-queue-operator-entry
+  - wave-queue-operator-preapproval
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/queue_requests.py
+  - packages/fr/src/fr/triage/operator_entries.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/approval.py
+  - packages/fr/src/fr/commands/triage_queue_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/**/*.py
+  - README.md
+  - docs/reference/cli.md
+  - docs/**/*.md
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: State (R16, R11's events)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: model tests for `QueueAddEvent` (`kind: queue_add`, `at`, `repo`, `scope`, `pr`, `by`, `preapproved: bool = False`) and `QueueRemoveEvent` (`kind: queue_remove`, same minus `preapproved`), `Judgements.queue_requests: list[...] = []`, refused below schema 14 with a message naming 14; `QueueEntryKind` includes `operator`. Pure fold tests in `tests/unit/test_queue_requests.py`: `added(requests, repo, scope)` returns each PR whose latest event is an add with its preapproval, add time and adder, ignores other repos/scopes, and a remove after an add drops it.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement the models in `model.py` and `fr/triage/queue_requests.py`. Tests pass.
+- number: 2
+  title: The verb (R11)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED (CLI over a fake forge, as other triage command tests do): `fr triage queue add --pr N` with the scope options records one `queue_add` with `by` = the client's `viewer_login` and prints what it changed; it refuses (exit 2, nothing written) a closed PR, a base that is not the default branch, a cross-repo head, a disallowed author, an already-added PR, and a PR that is a close-out/export/archive/housekeeping entry; a batch PR is refused without `--preapproved` and with it records a preapproval-only add; `remove` refuses a PR not added and records `queue_remove`; a write the state refuses exits 2 saying to run the command again.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: new `commands/triage_queue_cmd.py` with a `queue` Typer group registered on the triage app (next to `batch`), reusing `_load_state`/`_write`-style helpers (import them, do not copy) and the allowed-author read `_housekeeping_reads` uses. Tests pass.
+- number: 3
+  title: Driver reads and preapproval (R12, R13)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED (fake forge): `operator_entries.operator_reads` admits an added same-repo PR by an allowed author with a valid `approved-fr` settled as a queue `approval` with `QueueEntryRef(pr=N, kind="operator")` and green own-head checks; voids on a diff-changing push; skips PRs already entries. Preapproval with `--yes`: adds `approved-fr` and an audit comment naming head and patch-id only when the adder is an allowed author, own-head checks are green, the forge does not read it as conflicting, and no queue conflict is recorded at that head; renews at the next such head after a void; does nothing in a dry run; for a preapproved batch PR it adds only the label (the batch's own settle records the approval).
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement `operator_reads` in `operator_entries.py`, returning admitted `(LivePr, at)` pairs and pending entries; wire it into the driver's queue reads (a `queue_operator` snapshot field beside `queue_housekeeping`) and `drive_pass` step 3 as `Admitted("operator", …)`, with `"operator"` in `Admitted.kind`. Keep `batch_drive.py` and `triage_batch_cmd.py` within budget. Tests pass.
+- number: 4
+  title: Planner (R12, R14, R15)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED (pure planner): an `operator` other entry takes the open queue's wave in `_cands`; while idle, a ready operator entry opens a between-waves queue although a wave is unfinished, unless the lowest unfinished wave has a ready entry, in which case that wave opens and the operator entry joins it; a wave queue does not drain while `QueueSnapshot.pending_operator` names an entry, and gives the stall Need naming `fr triage queue remove --pr N` after `stall_hours` counted from the later of the add and the last `queue_land`; a between-waves queue drains by its existing rule; a removed entry in a combination gets `queue-eject` with reason `operator`.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement in `wave_queue.py` (`_cands`, `_plan_idle_open`, `_drained`, the stall Need) with a new `pending_operator` snapshot field (key -> since) and a `removed` set for the eject. Tests pass.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR + quality gate: ruff, ruff format, mypy; document `fr triage queue add/remove` and preapproval in `plugins/super-fr/skills/fr-triage/SKILL.md` (one short paragraph), run `scripts/sync-opencode.py` and `scripts/sync-hermes.py`, `scripts/sync-readme.py`; update `docs/explainers/fr-wave-driver.md`; `fr docs check` clean for the touched paths; fast tier `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
